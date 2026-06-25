@@ -44,6 +44,12 @@ export interface Property {
 
 // --- The thing being sold --------------------------------------------------
 
+/**
+ * What a sellable unit is. Hotels/apartments sell whole units; hostels sell beds, so a "bed" unit
+ * counts beds in `totalInventory` and controls availability per bed.
+ */
+export type UnitKind = "room" | "bed" | "apartment";
+
 /** The physical product — e.g. "Deluxe Double", 12 of them exist. */
 export interface RoomType {
   id: RoomTypeId;
@@ -51,7 +57,8 @@ export interface RoomType {
   name: string;
   /** Short internal reference, e.g. "DDR". */
   code: string;
-  /** How many physical rooms of this type exist. */
+  unitKind: UnitKind;
+  /** How many physical rooms (or beds, for hostels) of this type exist. */
   totalInventory: number;
   maxGuests: number;
   active: boolean;
@@ -65,6 +72,8 @@ export interface RatePlan {
   propertyId: PropertyId;
   name: string;
   code: string;
+  /** Arbitrary labels for orientation, e.g. ["breakfast","non-refundable"]. */
+  tags: string[];
   linkedRoomTypeIds: RoomTypeId[];
   priceLogic: PriceLogic;
   /** Present when priceLogic === "derived". */

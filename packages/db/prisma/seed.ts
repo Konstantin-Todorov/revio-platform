@@ -27,7 +27,16 @@ function currentMonday(): Date {
 
 async function main() {
   console.log("Resetting demo data…");
-  await prisma.tenant.deleteMany(); // cascades to everything
+  // Truncate everything in one statement so FK order doesn't matter (re-runnable seed).
+  const tables = [
+    "AuditEntry", "ErrorItem", "SyncEvent", "ReservationLine", "Reservation",
+    "RestrictionRule", "DailyCell", "RatePrice", "ProductMapping", "OccupancyAdjustment",
+    "RatePlanRoomType", "RatePlan", "MealPlan", "CancellationPolicy", "RoomType",
+    "Channel", "Property", "User", "Tenant",
+  ];
+  await prisma.$executeRawUnsafe(
+    `TRUNCATE TABLE ${tables.map((n) => `"${n}"`).join(", ")} RESTART IDENTITY CASCADE;`,
+  );
 
   // --- Tenant + operator user ---------------------------------------------
   const tenant = await prisma.tenant.create({
@@ -75,19 +84,19 @@ async function main() {
 
   // --- Room types (6 → ×7 rate plans = 42 active products, matches dashboard) ---
   const roomTypeSpec = [
-    { name: "Deluxe Double Room", code: "DDR", totalInventory: 12, maxGuests: 2, basePrice: 12000 },
-    { name: "Superior Twin Room", code: "STR", totalInventory: 8, maxGuests: 2, basePrice: 11000 },
-    { name: "Family Room", code: "FAM", totalInventory: 4, maxGuests: 4, basePrice: 17000 },
-    { name: "Suite", code: "SUI", totalInventory: 3, maxGuests: 3, basePrice: 24000 },
-    { name: "Standard Single", code: "SSR", totalInventory: 6, maxGuests: 1, basePrice: 8000 },
-    { name: "Studio Apartment", code: "APT", totalInventory: 5, maxGuests: 3, basePrice: 15000 },
+    { name: "Deluxe Double Room", code: "DDR", unitKind: "room", totalInventory: 12, maxGuests: 2, basePrice: 12000 },
+    { name: "Superior Twin Room", code: "STR", unitKind: "room", totalInventory: 8, maxGuests: 2, basePrice: 11000 },
+    { name: "Family Room", code: "FAM", unitKind: "room", totalInventory: 4, maxGuests: 4, basePrice: 17000 },
+    { name: "Suite", code: "SUI", unitKind: "room", totalInventory: 3, maxGuests: 3, basePrice: 24000 },
+    { name: "Standard Single", code: "SSR", unitKind: "room", totalInventory: 6, maxGuests: 1, basePrice: 8000 },
+    { name: "Studio Apartment", code: "APT", unitKind: "apartment", totalInventory: 5, maxGuests: 3, basePrice: 15000 },
   ];
   const roomTypes = [];
   for (let i = 0; i < roomTypeSpec.length; i++) {
     const s = roomTypeSpec[i]!;
     roomTypes.push(
       await prisma.roomType.create({
-        data: { ...t, name: s.name, code: s.code, totalInventory: s.totalInventory, maxGuests: s.maxGuests, sortOrder: i },
+        data: { ...t, name: s.name, code: s.code, unitKind: s.unitKind, totalInventory: s.totalInventory, maxGuests: s.maxGuests, sortOrder: i },
       }),
     );
   }
@@ -96,17 +105,22 @@ async function main() {
 
   // --- Rate plans: Standard (manual) + 6 derived -------------------------
   const standard = await prisma.ratePlan.create({
-    data: { ...t, name: "Standard Rate", code: "BAR", priceLogic: "manual", cancellationPolicyId: fc1.id, mealPlanId: roomOnly.id, defMinLos: 1, sortOrder: 0 },
+    data: { ...t, name: "Standard Rate", code: "BAR", tags: ["flexible", "best-available"], priceLogic: "manual", cancellationPolicyId: fc1.id, mealPlanId: roomOnly.id, defMinLos: 1, sortOrder: 0 },
   });
 
-  type DerivedSpec = { name: string; code: string; cfg: Omit<DerivedRateConfig, "parentRatePlanId">; policy: string; meal: string };
+  // Occupancy pricing: Standard Rate is quoted for 2 guests; 1 guest pays €10 less.
+  await prisma.occupancyAdjustment.create({
+    data: { tenantId, ratePlanId: standard.id, occupancy: 1, adjustmentType: "fixed", direction: "decrease", value: 1000, rounding: "none" },
+  });
+
+  type DerivedSpec = { name: string; code: string; tags: string[]; cfg: Omit<DerivedRateConfig, "parentRatePlanId">; policy: string; meal: string };
   const derivedSpecs: DerivedSpec[] = [
-    { name: "Non Refundable", code: "NR", cfg: { adjustmentType: "percent", direction: "decrease", value: 10, rounding: "none" }, policy: nrPolicy.id, meal: roomOnly.id },
-    { name: "Breakfast Rate", code: "BRF", cfg: { adjustmentType: "fixed", direction: "increase", value: 1800, rounding: "none" }, policy: fc1.id, meal: breakfastIncl.id },
-    { name: "Long Stay Rate", code: "LSR", cfg: { adjustmentType: "percent", direction: "decrease", value: 15, rounding: "end_99" }, policy: fc3.id, meal: roomOnly.id },
-    { name: "Trip.com Rate", code: "TRP", cfg: { adjustmentType: "percent", direction: "decrease", value: 5, rounding: "end_99", floorMinor: 5000 }, policy: fc1.id, meal: roomOnly.id },
-    { name: "Corporate Rate", code: "COR", cfg: { adjustmentType: "percent", direction: "decrease", value: 8, rounding: "none" }, policy: fc3.id, meal: breakfastIncl.id },
-    { name: "Early Booker", code: "EB", cfg: { adjustmentType: "percent", direction: "decrease", value: 12, rounding: "end_99" }, policy: nrPolicy.id, meal: roomOnly.id },
+    { name: "Non Refundable", code: "NR", tags: ["non-refundable"], cfg: { adjustmentType: "percent", direction: "decrease", value: 10, rounding: "none" }, policy: nrPolicy.id, meal: roomOnly.id },
+    { name: "Breakfast Rate", code: "BRF", tags: ["breakfast", "BB"], cfg: { adjustmentType: "fixed", direction: "increase", value: 1800, rounding: "none" }, policy: fc1.id, meal: breakfastIncl.id },
+    { name: "Long Stay Rate", code: "LSR", tags: ["long-stay", "weekly"], cfg: { adjustmentType: "percent", direction: "decrease", value: 15, rounding: "end_99" }, policy: fc3.id, meal: roomOnly.id },
+    { name: "Trip.com Rate", code: "TRP", tags: ["channel", "trip.com"], cfg: { adjustmentType: "percent", direction: "decrease", value: 5, rounding: "end_99", floorMinor: 5000 }, policy: fc1.id, meal: roomOnly.id },
+    { name: "Corporate Rate", code: "COR", tags: ["corporate", "negotiated"], cfg: { adjustmentType: "percent", direction: "decrease", value: 8, rounding: "none" }, policy: fc3.id, meal: breakfastIncl.id },
+    { name: "Early Booker", code: "EB", tags: ["advance-purchase"], cfg: { adjustmentType: "percent", direction: "decrease", value: 12, rounding: "end_99" }, policy: nrPolicy.id, meal: roomOnly.id },
   ];
   const ratePlans = [standard];
   for (let i = 0; i < derivedSpecs.length; i++) {
@@ -114,7 +128,7 @@ async function main() {
     ratePlans.push(
       await prisma.ratePlan.create({
         data: {
-          ...t, name: s.name, code: s.code, priceLogic: "derived",
+          ...t, name: s.name, code: s.code, tags: s.tags, priceLogic: "derived",
           parentRatePlanId: standard.id,
           derivedType: s.cfg.adjustmentType, derivedDirection: s.cfg.direction, derivedValue: s.cfg.value,
           derivedRounding: s.cfg.rounding ?? "none", derivedFloorMinor: s.cfg.floorMinor ?? null, derivedCeilingMinor: s.cfg.ceilingMinor ?? null,

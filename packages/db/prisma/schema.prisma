@@ -78,6 +78,9 @@ model RoomType {
   propertyId     String
   name           String
   code           String
+  // room | bed | apartment. Hotels/apartments sell whole units; hostels sell beds, so a "bed"
+  // unitKind means totalInventory counts beds and availability is controlled per bed.
+  unitKind       String  @default("room")
   totalInventory Int
   maxGuests      Int
   description    String?
@@ -127,6 +130,8 @@ model RatePlan {
   propertyId String
   name       String
   code       String
+  // Arbitrary labels the hotel uses for orientation, e.g. ["breakfast","non-refundable","corporate"].
+  tags       String[]
   priceLogic String @default("manual") // manual | derived
 
   // Derived-rate config (when priceLogic = derived) — consumed by @revio/core deriveRate().
@@ -162,8 +167,27 @@ model RatePlan {
   mappings           ProductMapping[]
   ratePrices         RatePrice[]
   resLines           ReservationLine[]
+  occupancyAdjustments OccupancyAdjustment[]
 
   @@index([propertyId])
+}
+
+// Occupancy-based pricing: a price delta applied for a given guest count, relative to the rate plan's
+// base (max-occupancy) price. Implements "price for 2 guests − €10 = price for 1 guest".
+model OccupancyAdjustment {
+  id             String @id @default(cuid())
+  tenantId       String
+  ratePlanId     String
+  occupancy      Int    // number of guests this price applies to
+  adjustmentType String // percent | fixed
+  direction      String // increase | decrease
+  value          Int    // percent (0-100) or minor units
+  rounding       String @default("none")
+
+  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+
+  @@unique([ratePlanId, occupancy])
+  @@index([ratePlanId])
 }
 
 // Room Type x Rate Plan = a sellable Product.
