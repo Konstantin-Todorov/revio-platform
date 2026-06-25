@@ -1,0 +1,31 @@
+{
+  "name": "@revio/channel-manager",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "typecheck": "tsc --noEmit",
+    "db:seed": "pnpm --filter @revio/db db:seed"
+  },
+  "dependencies": {
+    "@revio/core": "workspace:*",
+    "@revio/db": "workspace:*",
+    "@revio/ui": "workspace:*",
+    "lucide-react": "^0.460.0",
+    "next": "^15.1.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.16",
+    "typescript": "^5.6.0"
+  }
+}

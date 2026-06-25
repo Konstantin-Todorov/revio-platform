@@ -1,0 +1,209 @@
+import "server-only";
+import { prisma } from "@revio/db";
+import { deriveRate, type DerivedRateConfig } from "@revio/core";
+
+const DAY = 86_400_000;
+function utcDate(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getTime() + n * DAY);
+}
+function currentMonday(): Date {
+  const today = utcDate(new Date());
+  return addDays(today, -((today.getUTCDay() + 6) % 7));
+}
+
+/** The single demo property (first tenant's first property). */
+export async function getProperty() {
+  const property = await prisma.property.findFirstOrThrow({
+    include: { tenant: true },
+    orderBy: { name: "asc" },
+  });
+  return property;
+}
+
+export async function getDashboard() {
+  const property = await getProperty();
+  const propertyId = property.id;
+
+  const [channels, ratePlanLinks, mappings, reservations, syncEvents, errorItems, dailyStopSells] =
+    await Promise.all([
+      prisma.channel.findMany({ where: { propertyId }, orderBy: { name: "asc" } }),
+      prisma.ratePlanRoomType.count({ where: { ratePlan: { propertyId, active: true } } }),
+      prisma.productMapping.count({ where: { roomType: { propertyId }, status: { not: "complete" } } }),
+      prisma.reservation.findMany({
+        where: { propertyId },
+        include: { channel: true, lines: { include: { roomType: true } } },
+        orderBy: { importedAt: "desc" },
+        take: 6,
+      }),
+      prisma.syncEvent.findMany({ where: { propertyId }, include: { channel: true }, orderBy: { createdAt: "desc" }, take: 6 }),
+      prisma.errorItem.findMany({ where: { propertyId, resolved: false }, include: { channel: true } }),
+      prisma.dailyCell.count({ where: { propertyId, stopSell: true } }),
+    ]);
+
+  const connected = channels.filter((c) => c.status === "connected").length;
+  const pending = channels.reduce((s, c) => s + c.pendingCount, 0);
+  const failed = channels.reduce((s, c) => s + c.errorCount, 0);
+  const lastSync = channels.map((c) => c.lastSyncAt).filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0] ?? null;
+  const currencyWarnings = channels.filter((c) => c.currency !== property.baseCurrency).length;
+
+  return {
+    property,
+    stats: {
+      connectedChannels: connected,
+      totalChannels: channels.length,
+      activeProducts: ratePlanLinks,
+      unmappedProducts: mappings,
+      pendingUpdates: pending,
+      failedSyncs: failed,
+      lastSync,
+      stopSold: dailyStopSells,
+      currencyWarnings,
+    },
+    channels,
+    reservations,
+    syncEvents,
+    errorItems,
+  };
+}
+
+export type CalendarRow = {
+  key: string;
+  label: string;
+  kind: "availability" | "price" | "restriction" | "flag";
+  cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean }[];
+};
+
+export async function getCalendar(roomTypeCode?: string, days = 7) {
+  const property = await getProperty();
+  const propertyId = property.id;
+
+  const roomTypes = await prisma.roomType.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
+  const roomType = roomTypes.find((r) => r.code === roomTypeCode) ?? roomTypes[0]!;
+
+  const start = currentMonday();
+  const dates = Array.from({ length: days }, (_, i) => addDays(start, i));
+  const end = addDays(start, days - 1);
+
+  const standard = await prisma.ratePlan.findFirstOrThrow({ where: { propertyId, code: "BAR" } });
+  const derived = await prisma.ratePlan.findMany({
+    where: { propertyId, priceLogic: "derived", code: { in: ["NR", "BRF"] } },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  const [prices, cells] = await Promise.all([
+    prisma.ratePrice.findMany({
+      where: { roomTypeId: roomType.id, ratePlanId: standard.id, date: { gte: start, lte: end } },
+    }),
+    prisma.dailyCell.findMany({ where: { roomTypeId: roomType.id, date: { gte: start, lte: end } } }),
+  ]);
+
+  const priceByDate = new Map(prices.map((p) => [p.date.toISOString().slice(0, 10), p.priceMinor]));
+  const cellByDate = new Map(cells.map((c) => [c.date.toISOString().slice(0, 10), c]));
+
+  const cur = property.baseCurrency;
+  const fmt = (m: number | undefined) => (m === undefined ? "—" : (m / 100).toLocaleString("en-US"));
+
+  const rows: CalendarRow[] = [];
+
+  rows.push({
+    key: "availability", label: "Availability", kind: "availability",
+    cells: dates.map((d) => {
+      const k = d.toISOString().slice(0, 10);
+      const cell = cellByDate.get(k);
+      const avail = cell?.availabilityOverride ?? roomType.totalInventory;
+      return { date: k, value: String(avail) };
+    }),
+  });
+
+  rows.push({
+    key: "standard", label: "Standard Rate", kind: "price",
+    cells: dates.map((d) => {
+      const k = d.toISOString().slice(0, 10);
+      return { date: k, value: fmt(priceByDate.get(k)) };
+    }),
+  });
+
+  for (const dp of derived) {
+    const cfg: DerivedRateConfig = {
+      parentRatePlanId: standard.id,
+      adjustmentType: (dp.derivedType as "percent" | "fixed") ?? "percent",
+      direction: (dp.derivedDirection as "increase" | "decrease") ?? "decrease",
+      value: dp.derivedValue ?? 0,
+      rounding: (dp.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
+      ...(dp.derivedFloorMinor != null ? { floorMinor: dp.derivedFloorMinor } : {}),
+      ...(dp.derivedCeilingMinor != null ? { ceilingMinor: dp.derivedCeilingMinor } : {}),
+    };
+    rows.push({
+      key: dp.code, label: dp.name, kind: "price",
+      cells: dates.map((d) => {
+        const k = d.toISOString().slice(0, 10);
+        const parent = priceByDate.get(k);
+        return { date: k, value: parent === undefined ? "—" : fmt(deriveRate(parent, cfg)), muted: true };
+      }),
+    });
+  }
+
+  rows.push({
+    key: "minlos", label: "Min LOS", kind: "restriction",
+    cells: dates.map((d) => {
+      const k = d.toISOString().slice(0, 10);
+      return { date: k, value: cellByDate.get(k)?.minLos ? String(cellByDate.get(k)!.minLos) : "—" };
+    }),
+  });
+  rows.push({
+    key: "ctd", label: "CTD", kind: "flag",
+    cells: dates.map((d) => {
+      const k = d.toISOString().slice(0, 10);
+      const on = cellByDate.get(k)?.ctd ?? false;
+      return { date: k, value: on ? "✕" : "·", ...(on ? { flag: "ctd" as const } : {}) };
+    }),
+  });
+  rows.push({
+    key: "stopsell", label: "Stop Sell", kind: "flag",
+    cells: dates.map((d) => {
+      const k = d.toISOString().slice(0, 10);
+      const on = cellByDate.get(k)?.stopSell ?? false;
+      return { date: k, value: on ? "●" : "·", ...(on ? { flag: "stop" as const } : {}) };
+    }),
+  });
+
+  return { property, roomTypes, roomType, dates: dates.map((d) => d.toISOString().slice(0, 10)), rows, currency: cur };
+}
+
+export async function getReservations() {
+  const property = await getProperty();
+  return prisma.reservation.findMany({
+    where: { propertyId: property.id },
+    include: { channel: true, lines: { include: { roomType: true, ratePlan: true } } },
+    orderBy: { importedAt: "desc" },
+  });
+}
+
+export async function getRoomsAndRates() {
+  const property = await getProperty();
+  const [roomTypes, ratePlans] = await Promise.all([
+    prisma.roomType.findMany({ where: { propertyId: property.id }, orderBy: { sortOrder: "asc" } }),
+    prisma.ratePlan.findMany({
+      where: { propertyId: property.id },
+      include: { cancellationPolicy: true, mealPlan: true, parent: true, _count: { select: { roomTypeLinks: true } } },
+      orderBy: { sortOrder: "asc" },
+    }),
+  ]);
+  return { property, roomTypes, ratePlans };
+}
+
+export async function getChannels() {
+  const property = await getProperty();
+  const channels = await prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } });
+  const totalProducts = await prisma.ratePlanRoomType.count({ where: { ratePlan: { propertyId: property.id } } });
+  const mapStats = await Promise.all(
+    channels.map(async (c) => {
+      const complete = await prisma.productMapping.count({ where: { channelId: c.id, status: "complete" } });
+      return { channelId: c.id, complete, total: totalProducts };
+    }),
+  );
+  return { property, channels, mapStats };
+}
