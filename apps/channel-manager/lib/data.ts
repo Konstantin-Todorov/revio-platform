@@ -75,6 +75,9 @@ export type CalendarRow = {
   kind: "availability" | "price" | "restriction" | "flag";
   /** Derived/secondary rows render in a muted style. */
   muted?: boolean;
+  /** Which DailyCell/RatePrice field this row edits (absent ⇒ read-only, e.g. derived rates). */
+  field?: "availability" | "price" | "minLos" | "ctd" | "stopSell";
+  editable?: boolean;
   cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean }[];
 };
 
@@ -111,7 +114,7 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
   const rows: CalendarRow[] = [];
 
   rows.push({
-    key: "availability", label: "Availability", kind: "availability",
+    key: "availability", label: "Availability", kind: "availability", field: "availability", editable: true,
     cells: dates.map((d) => {
       const k = d.toISOString().slice(0, 10);
       const cell = cellByDate.get(k);
@@ -121,7 +124,7 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
   });
 
   rows.push({
-    key: "standard", label: "Standard Rate", kind: "price",
+    key: "standard", label: "Standard Rate", kind: "price", field: "price", editable: true,
     cells: dates.map((d) => {
       const k = d.toISOString().slice(0, 10);
       return { date: k, value: fmt(priceByDate.get(k)) };
@@ -149,14 +152,14 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
   }
 
   rows.push({
-    key: "minlos", label: "Min LOS", kind: "restriction",
+    key: "minlos", label: "Min LOS", kind: "restriction", field: "minLos", editable: true,
     cells: dates.map((d) => {
       const k = d.toISOString().slice(0, 10);
       return { date: k, value: cellByDate.get(k)?.minLos ? String(cellByDate.get(k)!.minLos) : "—" };
     }),
   });
   rows.push({
-    key: "ctd", label: "CTD", kind: "flag",
+    key: "ctd", label: "CTD", kind: "flag", field: "ctd", editable: true,
     cells: dates.map((d) => {
       const k = d.toISOString().slice(0, 10);
       const on = cellByDate.get(k)?.ctd ?? false;
@@ -164,7 +167,7 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
     }),
   });
   rows.push({
-    key: "stopsell", label: "Stop Sell", kind: "flag",
+    key: "stopsell", label: "Stop Sell", kind: "flag", field: "stopSell", editable: true,
     cells: dates.map((d) => {
       const k = d.toISOString().slice(0, 10);
       const on = cellByDate.get(k)?.stopSell ?? false;
@@ -208,4 +211,46 @@ export async function getChannels() {
     }),
   );
   return { property, channels, mapStats };
+}
+
+export async function getRestrictions() {
+  const property = await getProperty();
+  const [rules, roomTypes, channels] = await Promise.all([
+    prisma.restrictionRule.findMany({ where: { propertyId: property.id }, orderBy: [{ active: "desc" }, { priority: "desc" }] }),
+    prisma.roomType.findMany({ where: { propertyId: property.id }, orderBy: { sortOrder: "asc" } }),
+    prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } }),
+  ]);
+  // Attach a readable room-type name to each rule.
+  const rtName = new Map(roomTypes.map((r) => [r.id, r.name]));
+  const withNames = rules.map((r) => ({ ...r, roomTypeName: r.roomTypeId ? rtName.get(r.roomTypeId) ?? "—" : "All rooms" }));
+  return { property, rules: withNames, roomTypes, channels };
+}
+
+export async function getMapping(channelCode?: string) {
+  const property = await getProperty();
+  const channels = await prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } });
+  const channel = channels.find((c) => c.code === channelCode) ?? channels[0]!;
+  const mappings = await prisma.productMapping.findMany({
+    where: { channelId: channel.id },
+    include: { roomType: true, ratePlan: true },
+    orderBy: [{ roomType: { sortOrder: "asc" } }, { ratePlan: { sortOrder: "asc" } }],
+  });
+  return { property, channels, channel, mappings };
+}
+
+export async function getSettings() {
+  const property = await getProperty();
+  const users = await prisma.user.findMany({ where: { tenantId: property.tenantId }, orderBy: { name: "asc" } });
+  return { property, users };
+}
+
+/** Options for the "simulate a booking" dialog. */
+export async function getBookingOptions() {
+  const property = await getProperty();
+  const [channels, roomTypes, ratePlans] = await Promise.all([
+    prisma.channel.findMany({ where: { propertyId: property.id, status: "connected" }, orderBy: { name: "asc" } }),
+    prisma.roomType.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.ratePlan.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" } }),
+  ]);
+  return { property, channels, roomTypes, ratePlans };
 }

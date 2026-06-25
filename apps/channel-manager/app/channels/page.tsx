@@ -1,5 +1,6 @@
 import { getChannels } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { ChannelSettingsDialog, AddChannelDialog } from "@/components/channels/ChannelDialogs";
 import { relativeTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function ChannelsPage() {
       <PageHeader
         title="Channels"
         subtitle="Connected OTAs, mapping health and per-channel settings"
-        action={<button className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">+ Connect Channel</button>}
+        action={<AddChannelDialog connectedCodes={channels.map((c) => c.code)} />}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -35,7 +36,10 @@ export default async function ChannelsPage() {
                     {ch.currency} · {ch.commissionPct}% commission · synced {relativeTime(ch.lastSyncAt)}
                   </div>
                 </div>
-                {ch.errorCount > 0 && <StatusPill tone="danger">{ch.errorCount} error</StatusPill>}
+                <div className="flex items-center gap-1.5">
+                  {ch.errorCount > 0 && <StatusPill tone="danger">{ch.errorCount} error</StatusPill>}
+                  <ChannelSettingsDialog channel={ch} />
+                </div>
               </div>
 
               <div className="mt-4">

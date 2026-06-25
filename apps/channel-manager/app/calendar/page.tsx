@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { getCalendar } from "@/lib/data";
+import { getCalendar, getBookingOptions } from "@/lib/data";
 import { PageHeader } from "@/components/ui/primitives";
+import { EditableCell } from "@/components/calendar/EditableCell";
+import { BookingDialog } from "@/components/booking/BookingDialog";
 import { weekday, dayMonth, isWeekend, ymd } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +17,7 @@ export default async function CalendarPage({
   const sp = await searchParams;
   const days = VIEWS.includes(Number(sp.days)) ? Number(sp.days) : 7;
   const { property, roomTypes, roomType, dates, rows, currency } = await getCalendar(sp.rt, days);
+  const bookingOptions = await getBookingOptions();
 
   const todayKey = ymd(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())));
   const dateObjs = dates.map((d) => new Date(d + "T00:00:00Z"));
@@ -32,18 +35,21 @@ export default async function CalendarPage({
         title="Calendar"
         subtitle={`${property.name} · availability, rates & restrictions`}
         action={
-          <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
-            {VIEWS.map((v) => (
-              <Link
-                key={v}
-                href={`/calendar?rt=${roomType.code}&days=${v}`}
-                className={`rounded px-2.5 py-1 text-[12.5px] font-semibold transition-colors ${
-                  days === v ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"
-                }`}
-              >
-                {v}d
-              </Link>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
+              {VIEWS.map((v) => (
+                <Link
+                  key={v}
+                  href={`/calendar?rt=${roomType.code}&days=${v}`}
+                  className={`rounded px-2.5 py-1 text-[12.5px] font-semibold transition-colors ${
+                    days === v ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"
+                  }`}
+                >
+                  {v}d
+                </Link>
+              ))}
+            </div>
+            <BookingDialog options={bookingOptions} defaultRoomTypeId={roomType.id} />
           </div>
         }
       />
@@ -117,33 +123,31 @@ export default async function CalendarPage({
                 {row.cells.map((cell, i) => {
                   const d = dateObjs[i]!;
                   const today = ymd(d) === todayKey;
-                  const base = `tnum border-b border-r border-surface-border px-2 py-2 text-center text-[13px] transition-colors last:border-r-0 cursor-pointer hover:bg-brand-50/70 ${
+                  const base = `tnum border-b border-r border-surface-border text-center text-[13px] last:border-r-0 ${
                     isWeekend(d) ? "bg-warning-50/30" : ""
                   } ${today ? "ring-1 ring-inset ring-brand-600/20" : ""}`;
 
-                  if (row.kind === "availability") {
-                    const n = Number(cell.value);
-                    const tone = n <= 0 ? "text-danger-500" : n <= 5 ? "text-warning-600" : "text-success-600";
-                    return <td key={cell.date} className={`${base} font-bold ${tone}`}>{cell.value}</td>;
-                  }
-                  if (row.kind === "price") {
+                  if (row.editable && row.field) {
                     return (
-                      <td key={cell.date} className={`${base} ${row.muted ? "text-ink-400" : "font-semibold text-ink-900"}`}>
-                        {cell.value === "—" ? "—" : `€${cell.value}`}
+                      <td key={cell.date} className={`${base} px-1 py-1`}>
+                        <EditableCell
+                          roomTypeId={roomType.id}
+                          date={cell.date}
+                          field={row.field}
+                          kind={row.kind}
+                          value={cell.value}
+                          {...(cell.flag ? { flag: cell.flag } : {})}
+                          prefix={row.kind === "price" ? "€" : ""}
+                        />
                       </td>
                     );
                   }
-                  if (row.kind === "flag") {
-                    if (!cell.flag) return <td key={cell.date} className={`${base} text-ink-300`}>·</td>;
-                    const dot = cell.flag === "stop" ? "bg-danger-500" : cell.flag === "ctd" ? "bg-accent-500" : "bg-brand-600";
-                    return (
-                      <td key={cell.date} className={base}>
-                        <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} />
-                      </td>
-                    );
-                  }
-                  // restriction (min los)
-                  return <td key={cell.date} className={`${base} ${cell.value === "—" ? "text-ink-300" : "font-semibold text-ink-700"}`}>{cell.value}</td>;
+                  // Derived / read-only price row.
+                  return (
+                    <td key={cell.date} className={`${base} px-2 py-2 ${row.muted ? "text-ink-400" : "font-semibold text-ink-900"}`}>
+                      {cell.value === "—" ? "—" : `€${cell.value}`}
+                    </td>
+                  );
                 })}
               </tr>
             ))}

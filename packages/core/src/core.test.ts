@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bookableForChannel, computeAvailability, isOverbooking } from "./inventory/availability.js";
 import { applyRounding, deriveRate } from "./rates/derive.js";
+import { occupancyPrice } from "./rates/occupancy.js";
 import { resolveRestriction } from "./restrictions/resolve.js";
 
 describe("availability", () => {
@@ -40,6 +41,32 @@ describe("derived rates", () => {
   it("rounds to .99", () => {
     expect(applyRounding(12000, "end_99")).toBe(11999);
     expect(applyRounding(12050, "end_99")).toBe(12099);
+  });
+});
+
+describe("occupancy pricing", () => {
+  it("1 guest = base − €10 (price for 2 minus 10)", () => {
+    expect(occupancyPrice(12000, { occupancy: 1, adjustmentType: "fixed", direction: "decrease", value: 1000 })).toBe(11000);
+  });
+  it("no adjustment returns the base price", () => {
+    expect(occupancyPrice(12000, undefined)).toBe(12000);
+  });
+  it("supports a percentage occupancy discount", () => {
+    expect(occupancyPrice(10000, { occupancy: 1, adjustmentType: "percent", direction: "decrease", value: 20 })).toBe(8000);
+  });
+});
+
+describe("booking loop invariants", () => {
+  it("a booking decrements availability and a cancellation restores it", () => {
+    const before = computeAvailability({ totalInventory: 8, confirmedUnits: 0 });
+    const afterBooking = computeAvailability({ totalInventory: 8, confirmedUnits: 2 });
+    const afterCancel = computeAvailability({ totalInventory: 8, confirmedUnits: 0 });
+    expect(before).toBe(8);
+    expect(afterBooking).toBe(6);
+    expect(afterCancel).toBe(before);
+  });
+  it("a booking onto a sold-out date is flagged as overbooking", () => {
+    expect(isOverbooking(computeAvailability({ totalInventory: 3, confirmedUnits: 3 }))).toBe(true);
   });
 });
 

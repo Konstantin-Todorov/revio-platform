@@ -1,18 +1,16 @@
-import { SlidersHorizontal } from "lucide-react";
-import { Placeholder } from "@/components/ui/Placeholder";
+import { getRoomsAndRates } from "@/lib/data";
+import { PageHeader } from "@/components/ui/primitives";
+import { BulkUpdateForm } from "@/components/bulk/BulkUpdateForm";
 
-export default function Page() {
+export const dynamic = "force-dynamic";
+
+export default async function Page() {
+  const { roomTypes } = await getRoomsAndRates();
+  const today = new Date().toISOString().slice(0, 10);
   return (
-    <Placeholder
-      title="Bulk Update"
-      subtitle="Change rates, availability and restrictions across many dates, rooms and channels at once"
-      icon={<SlidersHorizontal className="h-7 w-7" />}
-      points={[
-        "Date range, days of week, room types, rate plans, channels",
-        "Set exact price, ±amount, ±%, copy from another plan, rounding",
-        "Availability, Min/Max LOS, CTA, CTD, Stop Sell, Advance Purchase",
-        "Preview before apply — writes through @revio/core",
-      ]}
-    />
+    <div>
+      <PageHeader title="Bulk Update" subtitle="Change rates, availability and restrictions across many dates and rooms at once" />
+      <BulkUpdateForm roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))} today={today} />
+    </div>
   );
 }

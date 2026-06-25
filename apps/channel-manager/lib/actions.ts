@@ -3,46 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@revio/db";
 import { getProperty } from "./data";
+import { logAudit, recordPush, str, int } from "./mutation-helpers";
 
 export type ActionResult = { ok: boolean; error?: string };
-
-// --- shared helpers --------------------------------------------------------
-
-/** Record an Audit Log entry. Every hand-made change is permanent and attributable. */
-async function logAudit(
-  propertyId: string,
-  tenantId: string,
-  entry: { entity: string; field?: string; oldValue?: string; newValue?: string; source?: string },
-) {
-  await prisma.auditEntry.create({
-    data: {
-      tenantId, propertyId,
-      entity: entry.entity,
-      field: entry.field ?? null,
-      oldValue: entry.oldValue ?? null,
-      newValue: entry.newValue ?? null,
-      source: entry.source ?? "manual",
-      channelCode: "all",
-      syncResult: "success",
-    },
-  });
-}
-
-/** Record a push to every connected channel (mock connectivity) so the Sync Center shows activity. */
-async function recordPush(propertyId: string, tenantId: string, summary: string) {
-  const channels = await prisma.channel.findMany({ where: { propertyId, status: "connected" } });
-  await prisma.syncEvent.create({
-    data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: `Pushed to ${channels.length} channels` },
-  });
-}
-
-function str(fd: FormData, key: string): string {
-  return String(fd.get(key) ?? "").trim();
-}
-function int(fd: FormData, key: string, fallback = 0): number {
-  const n = Number(fd.get(key));
-  return Number.isFinite(n) ? Math.trunc(n) : fallback;
-}
 
 // --- Room Types ------------------------------------------------------------
 
