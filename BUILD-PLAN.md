@@ -18,15 +18,16 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 - Verified: derived engine yields the screenshot's exact NR/Breakfast rows; current week matches
   availability `12,12,10,8,6,6,8`, Friday stop-sell, Saturday CTD.
 
-## Phase 2 — Channel Manager app shell
-- Next.js app `@revio/channel-manager`: navy chrome, top bar with property selector, left nav, routing
-  for all screens. Tailwind wired to `@revio/ui` tokens.
+## ✅ Phase 2 — Channel Manager app shell (done)
+- Next.js `@revio/channel-manager` (RevioLink) on `localhost:3000`. Navy chrome, property selector,
+  sectioned left nav, all 12 routes wired. Tailwind + Hanken Grotesk + Atlas tokens. All routes 200.
 
-## Phase 3 — Core screens (the demo spine)
-- **Dashboard** (distribution health cards + recent activity + quick actions) — matches screenshot.
-- **Calendar** (ARI grid, inline edit, cell actions) — the centerpiece.
-- **Rooms & Rates** (room types, rate plans, derived rates, policies, meal plans).
-- **Channels + Mapping** (connected channels, add channel, mapping screen, channel settings).
+## 🟡 Phase 3 — Core screens (the demo spine) — mostly done
+- ✅ **Dashboard** (health cards + channel status + recent activity + quick actions + reservations).
+- ✅ **Calendar** (ARI grid, room-type tabs, 7/14/30d, derived rates computed live, flags) — read-only.
+- ✅ **Rooms & Rates**, ✅ **Channels** (mapping %), ✅ **Reservations**, ✅ Sync/Error/Audit (read).
+- 🟦 Remaining: **inline cell editing** on the Calendar; Bulk Update / Restrictions / Mapping / Settings
+  forms (currently wired-to-data placeholders).
 
 ## Phase 4 — Operational screens
 - **Reservations** (read-only imports), **Sync Center**, **Error Center**, **Audit Log**,

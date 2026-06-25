@@ -73,6 +73,8 @@ export type CalendarRow = {
   key: string;
   label: string;
   kind: "availability" | "price" | "restriction" | "flag";
+  /** Derived/secondary rows render in a muted style. */
+  muted?: boolean;
   cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean }[];
 };
 
@@ -137,7 +139,7 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
       ...(dp.derivedCeilingMinor != null ? { ceilingMinor: dp.derivedCeilingMinor } : {}),
     };
     rows.push({
-      key: dp.code, label: dp.name, kind: "price",
+      key: dp.code, label: dp.name, kind: "price", muted: true,
       cells: dates.map((d) => {
         const k = d.toISOString().slice(0, 10);
         const parent = priceByDate.get(k);
