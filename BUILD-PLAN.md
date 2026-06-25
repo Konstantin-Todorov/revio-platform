@@ -9,13 +9,14 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 - `@revio/ui`: design tokens from the Atlas palette.
 - Architecture & decisions recorded.
 
-## Phase 1 — Data layer & demo seed
-- Prisma schema for the core entities (Property, RoomType, RatePlan, Product, Channel, Mapping,
-  Reservation, Restriction rules, Audit entries), `tenant_id` everywhere, RLS policies.
-- Seed = the reference screenshot: **Hotel Sofia**, room types (Deluxe Double, Superior Twin, Family,
-  Suite), rate plans (Standard, Non-Refundable derived −10%, Breakfast derived +€12), channels
-  (Booking.com, Expedia, Trip.com, Agoda) with mappings, and a stream of imported reservations.
-- A small `DemoSyncRunner` that drives the mock adapters so Sync Center / Error Center have live data.
+## ✅ Phase 1 — Data layer & demo seed (done)
+- `@revio/db`: Prisma schema for all core entities + monitoring (Sync/Error/Audit), `tenantId`
+  everywhere. Pushed to local Postgres 16 (`revio_dev`). *(RLS policies: raw-SQL migration, pending.)*
+- Seed reproduces the **reference screenshot on live dates**: Hotel Sofia, 6 room types, 7 rate plans
+  (Standard manual; Non-Refundable/Breakfast/Long-Stay/Trip.com/Corporate/Early-Booker derived via
+  `@revio/core`), 4 channels + 168 mappings (5 unmapped), 720 daily prices, reservations, sync/error/audit.
+- Verified: derived engine yields the screenshot's exact NR/Breakfast rows; current week matches
+  availability `12,12,10,8,6,6,8`, Friday stop-sell, Saturday CTD.
 
 ## Phase 2 — Channel Manager app shell
 - Next.js app `@revio/channel-manager`: navy chrome, top bar with property selector, left nav, routing

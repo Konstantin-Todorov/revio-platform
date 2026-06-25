@@ -1,0 +1,390 @@
+// Revio persistence schema. Every tenant-owned row carries tenantId (RLS added via raw-SQL migration).
+// Domain math lives in @revio/core; this schema only stores and retrieves.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Tenancy ---------------------------------------------------------------
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  // Entitlements: which products this hotel account bought ("sold separately").
+  hasChannelManager Boolean @default(true)
+  hasReservation    Boolean @default(false)
+  hasPms            Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  properties Property[]
+  users      User[]
+}
+
+model User {
+  id       String @id @default(cuid())
+  tenantId String
+  name     String
+  email    String @unique
+  role     String // owner | admin | revenue_manager | distribution_manager | read_only
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// --- Property & sellable products -----------------------------------------
+
+model Property {
+  id              String @id @default(cuid())
+  tenantId        String
+  name            String
+  timezone        String @default("Europe/Sofia")
+  baseCurrency    String @default("EUR")
+  defaultLanguage String @default("en")
+  syncHorizonDays Int    @default(365)
+  address         String?
+  contactEmail    String?
+  phone           String?
+  checkInTime     String @default("14:00")
+  checkOutTime    String @default("12:00")
+  status          String @default("active")
+
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roomTypes           RoomType[]
+  ratePlans           RatePlan[]
+  channels            Channel[]
+  cancellationPolicies CancellationPolicy[]
+  mealPlans           MealPlan[]
+  ratePrices          RatePrice[]
+  dailyCells          DailyCell[]
+  restrictionRules    RestrictionRule[]
+  reservations        Reservation[]
+  syncEvents          SyncEvent[]
+  errorItems          ErrorItem[]
+  auditEntries        AuditEntry[]
+
+  @@index([tenantId])
+}
+
+model RoomType {
+  id             String  @id @default(cuid())
+  tenantId       String
+  propertyId     String
+  name           String
+  code           String
+  totalInventory Int
+  maxGuests      Int
+  description    String?
+  active         Boolean @default(true)
+  sortOrder      Int     @default(0)
+
+  property      Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  ratePlanLinks RatePlanRoomType[]
+  mappings      ProductMapping[]
+  ratePrices    RatePrice[]
+  dailyCells    DailyCell[]
+  resLines      ReservationLine[]
+
+  @@index([propertyId])
+}
+
+model CancellationPolicy {
+  id          String @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  name        String
+  code        String
+  description String?
+
+  property  Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  ratePlans RatePlan[]
+
+  @@index([propertyId])
+}
+
+model MealPlan {
+  id         String @id @default(cuid())
+  tenantId   String
+  propertyId String
+  name       String
+  code       String
+
+  property  Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  ratePlans RatePlan[]
+
+  @@index([propertyId])
+}
+
+model RatePlan {
+  id         String @id @default(cuid())
+  tenantId   String
+  propertyId String
+  name       String
+  code       String
+  priceLogic String @default("manual") // manual | derived
+
+  // Derived-rate config (when priceLogic = derived) — consumed by @revio/core deriveRate().
+  parentRatePlanId String?
+  derivedType      String? // percent | fixed
+  derivedDirection String? // increase | decrease
+  derivedValue     Int? // percent (0-100) or minor units
+  derivedRounding  String? // none | nearest_minor_1 | nearest_minor_50 | end_99
+  derivedFloorMinor   Int?
+  derivedCeilingMinor Int?
+
+  cancellationPolicyId String?
+  mealPlanId           String?
+
+  // Default restriction baseline (fallback when nothing more specific applies).
+  defStopSell          Boolean @default(false)
+  defMinLos            Int?
+  defMaxLos            Int?
+  defCta               Boolean @default(false)
+  defCtd               Boolean @default(false)
+  defAdvancePurchaseMin Int?
+  defAdvancePurchaseMax Int?
+
+  active    Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  property           Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  parent             RatePlan?           @relation("Derivation", fields: [parentRatePlanId], references: [id])
+  children           RatePlan[]          @relation("Derivation")
+  cancellationPolicy CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
+  mealPlan           MealPlan?           @relation(fields: [mealPlanId], references: [id])
+  roomTypeLinks      RatePlanRoomType[]
+  mappings           ProductMapping[]
+  ratePrices         RatePrice[]
+  resLines           ReservationLine[]
+
+  @@index([propertyId])
+}
+
+// Room Type x Rate Plan = a sellable Product.
+model RatePlanRoomType {
+  ratePlanId String
+  roomTypeId String
+
+  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@id([ratePlanId, roomTypeId])
+  @@index([roomTypeId])
+}
+
+// --- Channels & mapping ----------------------------------------------------
+
+model Channel {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  propertyId          String
+  code                String // booking | expedia | trip | agoda
+  name                String
+  status              String   @default("connected") // connected|not_connected|pending|error|disabled
+  externalPropertyId  String?
+  currency            String   @default("EUR")
+  commissionPct       Float    @default(15)
+  conversionType      String   @default("none") // none|manual|auto|channel_override
+  markupPct           Float    @default(0)
+  rounding            String   @default("none")
+  supportedRestrictions String[]
+  lastSyncAt          DateTime?
+  errorCount          Int      @default(0)
+  pendingCount        Int      @default(0)
+
+  property Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  mappings ProductMapping[]
+  reservations Reservation[]
+  syncEvents SyncEvent[]
+  errorItems ErrorItem[]
+
+  @@index([propertyId])
+}
+
+model ProductMapping {
+  id             String @id @default(cuid())
+  tenantId       String
+  channelId      String
+  roomTypeId     String
+  ratePlanId     String
+  externalRoomId String?
+  externalRateId String?
+  status         String @default("complete") // complete|incomplete|missing_room|missing_rate|channel_error|disabled|pending_confirmation
+
+  channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, roomTypeId, ratePlanId])
+  @@index([channelId])
+}
+
+// --- Calendar data ---------------------------------------------------------
+
+// Daily price for a (room type, rate plan). Only stored for manual rates; derived computed on read.
+model RatePrice {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  roomTypeId String
+  ratePlanId String
+  date       DateTime @db.Date
+  priceMinor Int
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+
+  @@unique([roomTypeId, ratePlanId, date])
+  @@index([propertyId, date])
+}
+
+// Per-(room type, date) availability override + restriction flags shown in the Calendar grid.
+model DailyCell {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  propertyId          String
+  roomTypeId          String
+  date                DateTime @db.Date
+  availabilityOverride Int?
+  minLos              Int?
+  maxLos              Int?
+  cta                 Boolean  @default(false)
+  ctd                 Boolean  @default(false)
+  stopSell            Boolean  @default(false)
+  advancePurchaseMin  Int?
+  advancePurchaseMax  Int?
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([roomTypeId, date])
+  @@index([propertyId, date])
+}
+
+// --- Restrictions ----------------------------------------------------------
+
+model RestrictionRule {
+  id           String   @id @default(cuid())
+  tenantId     String
+  propertyId   String
+  name         String
+  type         String // stop_sell|min_los|max_los|cta|ctd|advance_purchase_min|advance_purchase_max|channel_allocation
+  roomTypeId   String?
+  ratePlanId   String?
+  channelCodes String[]
+  dateFrom     DateTime @db.Date
+  dateTo       DateTime @db.Date
+  daysOfWeek   String   @default("all")
+  valueInt     Int?
+  valueBool    Boolean?
+  priority     Int      @default(0)
+  active       Boolean  @default(true)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+// --- Reservations ----------------------------------------------------------
+
+model Reservation {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  channelId  String
+  externalId String
+  guestName  String
+  status     String   @default("confirmed") // confirmed|modified|cancelled|failed_import|overbooked
+  totalMinor Int
+  currency   String   @default("EUR")
+  importedAt DateTime @default(now())
+  syncStatus String   @default("imported")
+
+  property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  channel  Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  lines    ReservationLine[]
+
+  @@index([propertyId])
+  @@index([channelId])
+}
+
+model ReservationLine {
+  id            String   @id @default(cuid())
+  reservationId String
+  roomTypeId    String
+  ratePlanId    String
+  quantity      Int      @default(1)
+  checkIn       DateTime @db.Date
+  checkOut      DateTime @db.Date
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  roomType    RoomType    @relation(fields: [roomTypeId], references: [id])
+  ratePlan    RatePlan    @relation(fields: [ratePlanId], references: [id])
+
+  @@index([reservationId])
+}
+
+// --- Monitoring: Sync / Error / Audit -------------------------------------
+
+model SyncEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  channelId  String?
+  kind       String // push | pull
+  status     String // pending | success | failed
+  summary    String
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  channel  Channel? @relation(fields: [channelId], references: [id])
+
+  @@index([propertyId, createdAt])
+}
+
+model ErrorItem {
+  id                String   @id @default(cuid())
+  tenantId          String
+  propertyId        String
+  channelId         String?
+  severity          String // info | warning | critical
+  code              String
+  message           String
+  productLabel      String?
+  dateAffected      DateTime? @db.Date
+  recommendedAction String?
+  resolved          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  channel  Channel? @relation(fields: [channelId], references: [id])
+
+  @@index([propertyId, resolved])
+}
+
+model AuditEntry {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  userId     String?
+  entity     String
+  field      String?
+  oldValue   String?
+  newValue   String?
+  source     String // manual | api | bulk | rule
+  channelCode String?
+  syncResult String?
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, createdAt])
+}

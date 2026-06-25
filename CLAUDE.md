@@ -11,12 +11,15 @@ each module "knows it belongs to something bigger" while keeping its own boundar
 
 ## The products
 
-| App | What it does | Sold to |
-| --- | --- | --- |
-| `apps/channel-manager` | Push availability/rates/restrictions to OTAs, pull bookings back, keep them in sync. **First product, the demo, the priority sale.** | A hotel that already has a PMS |
-| `apps/reservation` | Direct booking engine, folio, guests, payments, reports. *(Phase 2)* | A small property with no OTA needs |
-| `apps/pms` | Front desk, housekeeping, minibar, operations. *(Phase 3)* | An operations layer over a foreign system |
-| `apps/operator` | **Our** admin console: all hotels, billing, integration keys, entitlements, sync health. | Internal (the SaaS operator) |
+The **platform brand is Revio**; each product has a market name. Engineering paths stay descriptive
+(`@revio/core`, `apps/channel-manager`) — product names live in the UI and docs, not deep code paths.
+
+| App (folder) | Product name | What it does | Sold to |
+| --- | --- | --- | --- |
+| `apps/channel-manager` | **RevioLink** | Push availability/rates/restrictions to OTAs, pull bookings back, keep them in sync. **First product, the demo, the priority sale.** | A hotel that already has a PMS |
+| `apps/reservation` | **RevioCRS** | Direct booking engine, folio, guests, payments, reports. *(Phase 2)* | A small property with no OTA needs |
+| `apps/pms` | **RevioPMS** | Front desk, housekeeping, minibar, operations. *(Phase 3)* | An operations layer over a foreign system |
+| `apps/operator` | **Revio Operator** | **Our** admin console: all hotels, billing, integration keys, entitlements, sync health. | Internal (the SaaS operator) |
 
 ## The one rule that governs everything
 

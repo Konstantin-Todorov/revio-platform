@@ -1,6 +1,7 @@
-# App: Channel Manager (`@revio/channel-manager`)
+# App: Channel Manager — product name **RevioLink** (`@revio/channel-manager`)
 
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. This file narrows scope to CM.
+> The UI brands this app as **RevioLink**; the codebase calls it channel-manager.
 
 **This is the first product, the sales demo, and the priority.** It is a pure distribution tool:
 inventory out, bookings in, nothing else. It reads/writes inventory **only** through `@revio/core`.

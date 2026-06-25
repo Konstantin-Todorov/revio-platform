@@ -28,6 +28,10 @@ export const colors = {
   accent: { 600: "#5b3fb0", 500: "#7c5cdb", "050": "#efe9fb" },
 } as const;
 
+export const fontFamily = {
+  sans: '"Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
+} as const;
+
 export const radius = { sm: "6px", md: "10px", lg: "14px" } as const;
 
 export const space = {

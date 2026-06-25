@@ -42,6 +42,9 @@
   --revio-accent-500: #7c5cdb;
   --revio-accent-050: #efe9fb;
 
+  /* Typography — Atlas direction */
+  --revio-font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
   /* Radius & spacing scale */
   --revio-radius-sm: 6px;
   --revio-radius-md: 10px;
