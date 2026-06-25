@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@revio/db";
 import { deriveRate, type DerivedRateConfig } from "@revio/core";
+import { getSession } from "./session";
 
 const DAY = 86_400_000;
 function utcDate(d: Date): Date {
@@ -14,13 +15,14 @@ function currentMonday(): Date {
   return addDays(today, -((today.getUTCDay() + 6) % 7));
 }
 
-/** The single demo property (first tenant's first property). */
+/** The active property for the current session — scoped to the session's tenant. Every read/write in
+ *  this app resolves the property through here, so a hotel can only ever touch its own data. */
 export async function getProperty() {
-  const property = await prisma.property.findFirstOrThrow({
+  const session = await getSession();
+  return prisma.property.findUniqueOrThrow({
+    where: { id: session.activePropertyId },
     include: { tenant: true },
-    orderBy: { name: "asc" },
   });
-  return property;
 }
 
 export async function getDashboard() {

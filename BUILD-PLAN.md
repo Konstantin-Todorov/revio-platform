@@ -29,13 +29,17 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 - 🟦 Remaining: **inline cell editing** on the Calendar; Bulk Update / Restrictions / Mapping / Settings
   forms (currently wired-to-data placeholders).
 
-## Phase 4 — Operational screens
-- **Reservations** (read-only imports), **Sync Center**, **Error Center**, **Audit Log**,
-  **Bulk Update**, **Restrictions**, **Settings**.
+## ✅ Phase 4 — Operational + editable screens (done)
+- CRUD: **Rooms & Rates** (room types, rate plans incl. derived config + tags), **Restrictions**
+  (rule builder), **Mapping** (per-channel + auto-fix), **Channel Settings** + connect channel,
+  **Settings** (property form + users). **Bulk Update** (mass edits). Calendar **inline cell editing**.
+- **Reservations** (read-only + cancel), **Sync Center**, **Error Center**, **Audit Log** render data.
+- Every mutation: server action → `@revio/core`/`@revio/db` → Audit entry → mock push (Sync Center).
 
-## Phase 5 — Make the loop live
-- Wire edit → derive → push (mock) → emit booking → pull → availability drop → re-push, so the demo
-  visibly behaves like a real channel manager end to end.
+## ✅ Phase 5 — Live loop (done)
+- "Simulate booking" → import (pull) → availability drops → re-push; cancel restores; overbooking
+  onto a sold-out date is flagged + raised in the Error Center. Verified end-to-end in the browser.
+- Tests: core 18/18 (vitest) + `@revio/db` integration 3/3 against `revio_test`.
 
 ## Phase 6 — Operator console (thin) + Railway deploy
 - Operator app: tenant list, entitlements toggle, cross-tenant sync health.

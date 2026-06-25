@@ -303,6 +303,51 @@ async function main() {
     ],
   });
 
+  // --- Second tenant: Black Sea Resort (proves tenant isolation) ----------
+  const tenant2 = await prisma.tenant.create({
+    data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true,
+      users: { create: [{ name: "Resort Owner", email: "owner@blacksea.demo", role: "owner" }] } },
+  });
+  const property2 = await prisma.property.create({
+    data: { tenantId: tenant2.id, name: "Black Sea Resort", timezone: "Europe/Sofia", baseCurrency: "EUR", syncHorizonDays: 365 },
+  });
+  const t2 = { tenantId: tenant2.id, propertyId: property2.id };
+  const rt2spec = [
+    { name: "Sea View Double", code: "SVD", unitKind: "room", inv: 20, max: 2, base: 16000 },
+    { name: "Garden Bungalow", code: "GBL", unitKind: "apartment", inv: 10, max: 4, base: 22000 },
+    { name: "Beach Suite", code: "BST", unitKind: "room", inv: 5, max: 3, base: 30000 },
+  ];
+  const rt2: { id: string; code: string }[] = [];
+  for (let i = 0; i < rt2spec.length; i++) {
+    const s = rt2spec[i]!;
+    rt2.push(await prisma.roomType.create({ data: { ...t2, name: s.name, code: s.code, unitKind: s.unitKind, totalInventory: s.inv, maxGuests: s.max, sortOrder: i } }));
+  }
+  const std2 = await prisma.ratePlan.create({ data: { ...t2, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 } });
+  const plans2 = [std2];
+  plans2.push(await prisma.ratePlan.create({ data: { ...t2, name: "Non Refundable", code: "NR", tags: ["non-refundable"], priceLogic: "derived", parentRatePlanId: std2.id, derivedType: "percent", derivedDirection: "decrease", derivedValue: 12, derivedRounding: "none", sortOrder: 1 } }));
+  plans2.push(await prisma.ratePlan.create({ data: { ...t2, name: "Half Board", code: "HB", tags: ["half-board"], priceLogic: "derived", parentRatePlanId: std2.id, derivedType: "fixed", derivedDirection: "increase", derivedValue: 2500, derivedRounding: "none", sortOrder: 2 } }));
+  for (const rp of plans2) for (const rt of rt2) await prisma.ratePlanRoomType.create({ data: { ratePlanId: rp.id, roomTypeId: rt.id } });
+
+  const ch2: { id: string; code: string }[] = [];
+  for (const c of [{ code: "booking", name: "Booking.com", cur: "EUR" }, { code: "expedia", name: "Expedia", cur: "USD" }]) {
+    ch2.push(await prisma.channel.create({ data: { ...t2, code: c.code, name: c.name, status: "connected", currency: c.cur, supportedRestrictions: ["stop_sell", "min_los", "cta"], lastSyncAt: minsAgo(2), pendingCount: 2, externalPropertyId: `${c.code.toUpperCase()}-BSR` } }));
+  }
+  for (const ch of ch2) for (const rt of rt2) for (const rp of plans2)
+    await prisma.productMapping.create({ data: { tenantId: tenant2.id, channelId: ch.id, roomTypeId: rt.id, ratePlanId: rp.id, externalRoomId: `${ch.code}-r-${rt.code}`, externalRateId: `${ch.code}-rp-${rp.code}`, status: "complete" } });
+
+  const prices2: any[] = [];
+  for (const rt of rt2) {
+    const base = rt2spec.find((s) => s.code === rt.code)!.base;
+    for (let i = 0; i < 60; i++) {
+      const d = addDays(horizonStart, i);
+      const weekend = d.getUTCDay() === 5 || d.getUTCDay() === 6;
+      prices2.push({ ...t2, roomTypeId: rt.id, ratePlanId: std2.id, date: d, priceMinor: Math.round((base * (weekend ? 1.2 : 1)) / 100) * 100 });
+    }
+  }
+  await prisma.ratePrice.createMany({ data: prices2 });
+  await prisma.reservation.create({ data: { ...t2, channelId: ch2[0]!.id, externalId: "BS-7714", guestName: "Ivan Petrov", status: "confirmed", totalMinor: 48000, currency: "EUR", importedAt: minsAgo(7), lines: { create: [{ roomTypeId: rt2[0]!.id, ratePlanId: std2.id, quantity: 1, checkIn: monday, checkOut: addDays(monday, 3) }] } } });
+  await prisma.syncEvent.create({ data: { ...t2, channelId: ch2[0]!.id, kind: "pull", status: "success", summary: "New reservation imported (Booking.com)", createdAt: minsAgo(7) } });
+
   // --- Report ------------------------------------------------------------
   const counts = {
     roomTypes: roomTypes.length,

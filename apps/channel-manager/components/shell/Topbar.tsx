@@ -1,6 +1,22 @@
-import { Bell, ChevronDown, Search, Building2 } from "lucide-react";
+import { Bell, Search } from "lucide-react";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
-export function Topbar({ propertyName }: { propertyName: string }) {
+type Property = { id: string; name: string; tenantName: string };
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Owner", admin: "Admin", revenue_manager: "Revenue Mgr",
+  distribution_manager: "Distribution", read_only: "Read-only",
+};
+
+export function Topbar({
+  properties, activeId, activeName, role,
+}: {
+  properties: Property[];
+  activeId: string;
+  activeName: string;
+  role: string;
+}) {
+  const initials = ROLE_LABEL[role] === "Owner" ? "OW" : "AD";
   return (
     <header className="sticky top-0 z-20 flex h-[60px] items-center gap-4 border-b border-surface-border bg-white/95 px-6 backdrop-blur">
       <div className="relative hidden flex-1 md:block">
@@ -13,14 +29,9 @@ export function Topbar({ propertyName }: { propertyName: string }) {
         />
       </div>
 
-      <button
-        type="button"
-        className="ml-auto flex items-center gap-2.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[13px] font-semibold text-ink-900 transition-colors hover:bg-surface-muted"
-      >
-        <Building2 className="h-4 w-4 text-brand-600" />
-        {propertyName}
-        <ChevronDown className="h-4 w-4 text-ink-400" />
-      </button>
+      <div className="ml-auto">
+        <WorkspaceSwitcher properties={properties} activeId={activeId} activeName={activeName} />
+      </div>
 
       <button
         type="button"
@@ -33,11 +44,11 @@ export function Topbar({ propertyName }: { propertyName: string }) {
 
       <div className="flex items-center gap-2.5">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-800 text-[12px] font-bold text-white">
-          AD
+          {initials}
         </div>
         <div className="hidden leading-tight sm:block">
           <div className="text-[12.5px] font-semibold text-ink-900">Admin</div>
-          <div className="text-[11px] text-ink-400">Distribution</div>
+          <div className="text-[11px] text-ink-400">{ROLE_LABEL[role] ?? role}</div>
         </div>
       </div>
     </header>
