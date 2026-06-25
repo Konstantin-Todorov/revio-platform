@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="bg"><head><meta charset="UTF-8"><title>Структура на проекта</title>
+<style>
+:root{--navy:#0E1B33;--ink:#16233f;--indigo:#3B5BDB;--teal:#0CA678;--amber:#E8A317;--slate:#5b6b86;--line:#dfe4ec;--panel:#f6f8fc;--soft:#eef1fe;--tealsoft:#e6f7f1;--ambersoft:#fdf4e1;}
+*{box-sizing:border-box;}html,body{margin:0;padding:0;}
+body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);font-size:11px;line-height:1.5;}
+@page{size:A4;margin:15mm 13mm;}
+.page{page-break-after:always;}.page:last-child{page-break-after:auto;}
+h1,h2,h3{color:var(--navy);margin:0 0 .3em;line-height:1.18;}
+h2{font-size:18px;border-bottom:3px solid var(--indigo);padding-bottom:5px;margin-top:2px;}
+h2 .n{color:var(--indigo);font-weight:800;margin-right:7px;}
+h3{font-size:12.5px;color:var(--indigo);margin-top:13px;}
+p{margin:.35em 0;}ul{margin:.3em 0;padding-left:17px;}li{margin:.15em 0;}
+strong{color:var(--navy);}
+pre{background:#0E1B33;color:#dfe7fb;border-radius:9px;padding:13px 15px;font-family:"SF Mono",Menlo,Consolas,monospace;font-size:9.4px;line-height:1.5;white-space:pre;overflow:hidden;margin:9px 0;}
+pre .c{color:#7f93c9;}/*comment*/ pre .k{color:#ffb27a;font-weight:600;}/*key*/ pre .g{color:#5fd0a6;}/*green*/
+.cover{height:266mm;display:flex;flex-direction:column;justify-content:center;background:linear-gradient(160deg,#0E1B33,#1c2f5a 60%,#3B5BDB 135%);color:#fff;margin:-15mm -13mm;padding:0 22mm;}
+.cover .k{letter-spacing:3px;text-transform:uppercase;font-size:11px;color:#8fa6e6;font-weight:700;}
+.cover h1{color:#fff;font-size:40px;line-height:1.08;margin:12px 0 8px;}
+.cover .s{font-size:15px;color:#c5d2f2;max-width:82%;}
+.cover .m{margin-top:34px;font-size:11px;color:#9fb0db;border-top:1px solid rgba(255,255,255,.18);padding-top:14px;}
+.box{border-radius:8px;padding:10px 13px;margin:9px 0;border:1px solid var(--line);background:var(--panel);}
+.box .t{font-weight:700;display:block;margin-bottom:2px;}
+.note{background:var(--soft);border-color:#cdd6fb;}.note .t{color:var(--indigo);}
+.win{background:var(--tealsoft);border-color:#bfe8d8;}.win .t{color:var(--teal);}
+.warn{background:var(--ambersoft);border-color:#f0dcae;}.warn .t{color:#9a6a00;}
+table{width:100%;border-collapse:collapse;margin:8px 0;font-size:9.8px;}
+th,td{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top;}
+th{background:var(--navy);color:#fff;}tr:nth-child(even) td{background:var(--panel);}
+.lead{font-size:11.5px;color:var(--slate);margin-bottom:8px;}
+.pill{display:inline-block;background:var(--soft);color:var(--indigo);border-radius:5px;padding:1px 7px;font-size:9px;font-weight:600;}
+</style></head><body>
+
+<div class="page"><div class="cover">
+<div class="k">Project Structure · v0.1 · работна карта</div>
+<h1>Hotel SaaS Platform<br>Структура на проекта</h1>
+<div class="s">Как виждаме продуктите, връзките между тях и основата — на база попълнения въпросник.</div>
+<div class="m">Каналният мениджър е първи · composable · директни OTA връзки · multi-tenant · EN/BG · пилот България<br>2026 · за обсъждане и итерация</div>
+</div></div>
+
+<!-- principles + ecosystem -->
+<div class="page">
+<h2><span class="n">0</span>Водещи принципи</h2>
+<ul>
+<li><strong>Composable, не монолит:</strong> всеки продукт е самостоятелен и продаваем сам, но се свързва с останалите през публикуван договор.</li>
+<li><strong>Каналният мениджър е първи</strong> (демо + първа продажба) — лек и фокусиран, без Booking Engine/фолио/счетоводство.</li>
+<li><strong>Двупосочна съвместимост:</strong> CM работи и с чужди PMS/CRS; резервационната система работи и с чужди CM.</li>
+<li><strong>Директни OTA връзки</strong> зад адаптерна абстракция (без агрегатор); демо през OTA sandbox.</li>
+<li><strong>API-first, multi-tenant</strong> (споделена база + Row-Level Security); наличността е единственият източник на истина.</li>
+</ul>
+
+<h2 style="margin-top:14px;"><span class="n">1</span>Продуктова екосистема</h2>
+<pre><span class="k">Hotel SaaS Platform</span>
+│
+├─ <span class="k">ПРОДУКТ 1 · Channel Manager (CM)</span>        <span class="c">← демо / първи за продажба · самостоятелен</span>
+│     <span class="c">свързва се с: наши + ЧУЖДИ PMS/CRS · всички OTA канали</span>
+│
+├─ <span class="k">ПРОДУКТ 2 · Reservation System / CRS</span>    <span class="c">← фаза 2 · самостоятелен</span>
+│     ├─ Booking Engine (директни резервации + плащания)
+│     ├─ Folio (сметка на гост)
+│     └─ свързва се с: наши + ЧУЖДИ Channel Managers
+│
+├─ <span class="k">ПРОДУКТ 3 · PMS (operations)</span>            <span class="c">← фаза 3 · самостоятелен</span>
+│     ├─ Front desk · check-in/out · профили
+│     ├─ Housekeeping (+ мобилен/PWA достъп)
+│     └─ Поддръжка · минибар → фолио
+│
+└─ <span class="g">ОБЩА ОСНОВА (под трите продукта)</span>
+      ├─ Core Domain ........ Properties · Rooms/Units · Rate Plans · Inventory · Reservations · Guests
+      ├─ Connectivity ....... OTA адаптери (Booking, Expedia, Trip.com, Airbnb, Hotelbeds, HRS, WebBeds)
+      ├─ Sync Engine ........ опашка · retry · реконсилиация · realtime + 15–30 мин пълен синхрон
+      ├─ Identity & RBAC .... роли · scopes · multi-tenant изолация
+      ├─ Integration Contract  вътрешен API + webhooks (готов за публично API към чужди PMS/CM)
+      └─ Platform ........... одит лог · бекъпи/репликация · мониторинг · нотификации</pre>
+<div class="box note"><span class="t">Защо това подреждане</span>Отговорите ти на въпросника заковават composable модела: CM трябва да работи и с чужди системи, значи „договорът за свързване“ е продуктово изискване, не само вътрешна граница. Затова го изваждам като отделен елемент в основата.</div>
+</div>
+
+<!-- CM MVP -->
+<div class="page">
+<h2><span class="n">2</span>Channel Manager — MVP (демо продукт)</h2>
+<p class="lead">Екраните от въпросника + невидимите ядра, които ги захранват.</p>
+<pre><span class="k">Channel Manager (MVP)</span>
+├─ <span class="k">Dashboard</span>
+│   ├─ Продукция по канал (ден / седмица / месец / тримесечие)   <span class="c">← „wow“ за демото</span>
+│   ├─ Резервации (последни) · Приходи по канал
+│   ├─ Статус на синхронизациите
+│   └─ Известия и предупреждения
+├─ <span class="k">Products &amp; Inventory</span>
+│   ├─ Типове/категории помещения · Капацитет (възрастни, деца, доп. легла)
+│   ├─ Тарифни планове (произволни имена/тагове)
+│   ├─ Политики за анулация и плащане · Хранене/услуги
+│   └─ Свързване стаи ↔ тарифи
+├─ <span class="k">Calendar</span>
+│   ├─ Наличности · Цени
+│   ├─ Ограничения (Min/Max LOS, CTA, CTD, Stop-Sell, Advance Purchase)
+│   └─ Масови редакции
+├─ <span class="k">Channel Management</span>
+│   ├─ Активиране/деактивиране · Връзки с OTA партньори
+│   └─ Статус на интеграциите · Диагностика
+├─ <span class="k">Channel Mapping</span>            <span class="c">(self-service за хотела)</span>
+│   ├─ Мапинг на стаи · Мапинг на тарифни планове
+│   └─ Проверка за липсващи/невалидни мапинги
+├─ <span class="k">Reservations</span>            (всички от каналите · филтри · история)
+├─ <span class="k">Sync &amp; Activity Logs</span>     (синхрон успех/неуспех · одит лог)
+├─ <span class="k">Reports</span>                  (резервации/приходи/представяне по канал)
+└─ <span class="k">Settings</span>                 (хотел · потребители/роли · OTA · API)
+
+<span class="g">── НЕВИДИМИ ЯДРА (захранват екраните) ──</span>
+• <span class="g">Rate Derivation Engine</span> — формули/зависимости между тарифи (±%, ±сума) и по настаняване
+• <span class="g">Restriction Engine</span> — Min/Max LOS, CTA/CTD, Advance Purchase
+• <span class="g">Reservation Ingestion</span> — приема дори при 0 наличност, маркира конфликт
+• <span class="g">Overbooking Guard</span> — транзакционна наличност + реконсилиация + аларми</pre>
+<div class="box win"><span class="t">Какво ни отличава от изброените конкуренти</span>Чист модерен интерфейс · прозрачен статус на синхрон · self-service мапинг · силен механизъм за производни цени (формули + по настаняване) · директни връзки. Това са точките, по които биете YieldPlanet/SiteMinder/D-Edge в очите на независимия хотел.</div>
+</div>
+
+<!-- inventory + connectivity -->
+<div class="page">
+<h2><span class="n">3</span>Модел на наличност</h2>
+<pre><span class="k">Property</span>
+├─ Хотел / Апартамент   → Room Category → N × Unit        <span class="c">наличност на ниво категория</span>
+└─ Хостел               → Dorm/Room    → Bed inventory     <span class="c">наличност на ниво легло</span>
+        ↑ обща абстракция <span class="g">„Sellable Unit“</span> — хостелите не са bolt-on</pre>
+<div class="box warn"><span class="t">Решение, което взимаме сега</span>Хостелите (легла) се различават достатъчно, че да заложим гъвкава единица за продажба от ден 1. Ако ги добавим по-късно върху „само стаи“, излиза скъпо. Затова ядрото моделира и двете.</div>
+
+<h2 style="margin-top:14px;"><span class="n">4</span>Connectivity (адаптерен модел)</h2>
+<pre>CM/Core  →  <span class="k">Connectivity Abstraction</span>  (единен модел: ARI push · reservation pull · mapping)
+                 ├─ BookingAdapter      ├─ AirbnbAdapter     ├─ HRSAdapter
+                 ├─ ExpediaAdapter      ├─ HotelbedsAdapter  └─ WebBedsAdapter
+                 └─ TripAdapter
+   <span class="c">Демо: срещу sandbox/test акаунти. Продукция: след сертификация, канал по канал.</span></pre>
+<div class="box warn"><span class="t">Честно за директните връзки (твоето предпочитание)</span>Съгласен съм — за продукт, чиято стойност е каналният мениджър, директните връзки са стратегически правилни (собствен контрол, по-добър съпорт, без чужд марж). Цената е време за сертификация: започваме от нула, Booking има изчакване, Airbnb е само с покана. <strong>Демото обаче не чака това</strong> — работи срещу OTA sandbox. Адаптерният модел значи: добавяме канали един по един, без да пипаме ядрото; ако някога потрябва временен агрегатор за конкретен канал, влиза като още един адаптер.</div>
+</div>
+
+<!-- phases + reservation/pms + repo + roles -->
+<div class="page">
+<h2><span class="n">5</span>Резервационна система и PMS (следващи фази)</h2>
+<table>
+<tr><th style="width:50%">Reservation System / CRS · фаза 2</th><th style="width:50%">PMS · фаза 3</th></tr>
+<tr><td>Booking Engine (директни резервации)<br>Плащания: Stripe / myPOS / SumUp / VivaWallet<br>Folio · фактуриране<br>Отчети: заетост · RevPAR · Revenue · ADR · разходи · add-ons<br>Импорт от стара система<br>Конектор към ЧУЖДИ Channel Managers</td>
+<td>Front desk · check-in/out · профили · плащания<br>Housekeeping: статуси, задачи, supervisor, мобилен/PWA<br>Минибар/доставки → начисления към фолио<br>Поддръжка/задачи (базово)<br>Интеграция с брави — по тип на хотела</td></tr>
+</table>
+
+<h2 style="margin-top:14px;"><span class="n">6</span>Кодова база (предложен monorepo)</h2>
+<pre>hotel-saas-platform/
+├─ apps/        channel-manager-web · reservation-web · pms-web (вкл. PWA за хаускийпинг)
+├─ services/    core · connectivity · sync-engine · identity · api-gateway
+├─ packages/    споделени типове · договор за интеграция · UI kit
+├─ db/          схема · миграции · RLS политики
+└─ docs/        този проект</pre>
+
+<h2 style="margin-top:14px;"><span class="n">7</span>Роли</h2>
+<table>
+<tr><th>Роля</th><th>Достъп</th></tr>
+<tr><td>Super-admin (оператор)</td><td>Много хотели, договори, billing, токени, мониторинг</td></tr>
+<tr><td>Hotel owner</td><td>Пълен в рамките на своя хотел</td></tr>
+<tr><td>Manager</td><td>Операции + персонал; чувствителни действия с лог</td></tr>
+<tr><td>Receptionist</td><td>Резервации, настаняване, плащания, сметки</td></tr>
+<tr><td>Housekeeping</td><td>Статуси на стаи, минибар (мобилен достъп)</td></tr>
+<tr><td>Accountant</td><td>Фактури, плащания, финансови отчети</td></tr>
+</table>
+<p class="muted" style="font-size:9.5px;color:#5b6b86;">Чувствителни действия (цени, refund, права) → ролево ограничени + одитен лог. Без многостепенен approval за v1.</p>
+
+<h2 style="margin-top:14px;"><span class="n">8</span>Фазиране до растеж</h2>
+<pre><span class="k">Фаза 0</span>  Основа: tenancy + RLS, auth, RBAC, core inventory скелет
+<span class="k">Фаза 1</span>  Inventory core: категории/units/легла, тарифи + Rate Derivation, ограничения
+<span class="k">Фаза 2</span>  CM: connectivity абстракция + 1–2 канала (sandbox), мапинг, push/pull
+<span class="k">Фаза 3</span>  Демо UI: Dashboard + Calendar + Mapping + Sync status  →  затваряне на клиенти
+<span class="k">Фаза 4</span>  Останали канали (продукция, канал по канал) + надеждност
+<span class="k">Фаза 5</span>  Reservation System / CRS (Booking Engine, плащания, фолио, отчети)
+<span class="k">Фаза 6</span>  PMS (front desk, housekeeping мобилен, минибар)</pre>
+</div>
+
+</body></html>

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<title>Hotel SaaS Platform — Архитектурна основа</title>
+<style>
+  :root{
+    --navy:#0E1B33; --ink:#16233f; --indigo:#3B5BDB; --indigo-soft:#eef1fe;
+    --teal:#0CA678; --teal-soft:#e6f7f1; --amber:#E8A317; --amber-soft:#fdf4e1;
+    --red:#E03131; --red-soft:#fdecec; --slate:#5b6b86; --line:#dfe4ec;
+    --bg:#ffffff; --panel:#f6f8fc;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink); font-size:11.2px; line-height:1.55; background:var(--bg);
+    -webkit-font-smoothing:antialiased;
+  }
+  @page{ size:A4; margin:16mm 14mm; }
+  .page{ page-break-after:always; }
+  .page:last-child{ page-break-after:auto; }
+  h1,h2,h3,h4{ color:var(--navy); margin:0 0 .35em; line-height:1.2; }
+  h2{ font-size:19px; border-bottom:3px solid var(--indigo); padding-bottom:6px; margin-top:4px;}
+  h2 .num{ color:var(--indigo); font-weight:800; margin-right:8px;}
+  h3{ font-size:13.5px; margin-top:16px; color:var(--indigo);}
+  h4{ font-size:11.5px; margin-top:10px; color:var(--ink);}
+  p{ margin:.4em 0;}
+  ul{ margin:.4em 0; padding-left:18px;} li{ margin:.2em 0;}
+  strong{ color:var(--navy);}
+  code{ background:var(--panel); padding:1px 5px; border-radius:4px; font-family:"SF Mono",Menlo,Consolas,monospace; font-size:10px; color:#2b3a5c;}
+  .muted{ color:var(--slate);}
+  table{ width:100%; border-collapse:collapse; margin:10px 0; font-size:10.2px;}
+  th,td{ border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top;}
+  th{ background:var(--navy); color:#fff; font-weight:600;}
+  tr:nth-child(even) td{ background:var(--panel);}
+
+  /* COVER */
+  .cover{ height:262mm; display:flex; flex-direction:column; justify-content:center;
+    background:linear-gradient(160deg,#0E1B33 0%,#1c2f5a 55%,#3B5BDB 130%); color:#fff;
+    margin:-16mm -14mm; padding:0 22mm; border-radius:0;}
+  .cover .kicker{ letter-spacing:3px; text-transform:uppercase; font-size:12px; color:#8fa6e6; font-weight:700;}
+  .cover h1{ color:#fff; font-size:42px; line-height:1.08; margin:14px 0 8px; font-weight:800;}
+  .cover .sub{ font-size:16px; color:#c5d2f2; max-width:80%;}
+  .cover .meta{ margin-top:40px; font-size:12px; color:#9fb0db; border-top:1px solid rgba(255,255,255,.18); padding-top:16px;}
+  .cover .chips{ margin-top:26px;}
+  .cover .chip{ display:inline-block; background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.22);
+    color:#dde6fb; padding:5px 12px; border-radius:20px; font-size:11px; margin:0 6px 8px 0;}
+
+  /* callouts */
+  .box{ border-radius:8px; padding:11px 14px; margin:10px 0; border:1px solid var(--line); background:var(--panel);}
+  .box .t{ font-weight:700; display:block; margin-bottom:3px;}
+  .risk{ background:var(--red-soft); border-color:#f3c6c6;} .risk .t{ color:var(--red);}
+  .win{ background:var(--teal-soft); border-color:#bfe8d8;} .win .t{ color:var(--teal);}
+  .note{ background:var(--indigo-soft); border-color:#cdd6fb;} .note .t{ color:var(--indigo);}
+  .warn{ background:var(--amber-soft); border-color:#f0dcae;} .warn .t{ color:#9a6a00;}
+
+  /* diagram blocks */
+  .stack{ border:1px solid var(--line); border-radius:10px; overflow:hidden; margin:12px 0;}
+  .layer{ padding:9px 12px; border-bottom:1px solid var(--line);}
+  .layer:last-child{ border-bottom:none;}
+  .layer .lh{ font-weight:700; color:var(--navy); font-size:11px;}
+  .layer.admin{ background:#fdf4e1;}
+  .layer.core{ background:#eef1fe;}
+  .layer.mods{ background:#fff;}
+  .layer.sync{ background:#e6f7f1;}
+  .layer.ext{ background:#f1f3f8;}
+  .cols{ display:flex; gap:8px; margin-top:7px;}
+  .cell{ flex:1; background:#fff; border:1px solid var(--line); border-radius:7px; padding:7px 9px; font-size:9.6px;}
+  .cell b{ display:block; color:var(--navy); font-size:10.2px; margin-bottom:2px;}
+  .flowrow{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:8px 0;}
+  .node{ background:#fff; border:1.5px solid var(--indigo); border-radius:8px; padding:6px 10px; font-size:10px; font-weight:600; color:var(--navy);}
+  .node.alt{ border-color:var(--teal);} .node.ext{ border-color:var(--slate); color:var(--slate); border-style:dashed;}
+  .arrow{ color:var(--indigo); font-weight:800; font-size:14px;}
+
+  .two{ display:flex; gap:14px;} .two>div{ flex:1;}
+  .pill{ display:inline-block; background:var(--indigo-soft); color:var(--indigo); border-radius:5px; padding:1px 7px; font-size:9.5px; font-weight:600; margin:1px 0;}
+  .foot{ position:fixed; bottom:-10mm; left:0; right:0; text-align:center; font-size:8.5px; color:var(--slate);}
+  .lead{ font-size:12px; color:var(--slate); margin-bottom:10px;}
+  .tag{ font-size:8.5px; text-transform:uppercase; letter-spacing:1.5px; color:var(--indigo); font-weight:700;}
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="page">
+  <div class="cover">
+    <div class="kicker">Architecture Foundation · v0.1 · Draft за обсъждане</div>
+    <h1>Multi-Tenant<br>Хотелска SaaS Платформа</h1>
+    <div class="sub">Channel Manager · Резервационна система · PMS — обединени около един source of truth за наличност и цени.</div>
+    <div class="chips">
+      <span class="chip">Multi-tenant · Shared DB + RLS</span>
+      <span class="chip">Inventory Core = single source of truth</span>
+      <span class="chip">OTA: aggregator-first hybrid</span>
+      <span class="chip">RBAC</span>
+      <span class="chip">Demo-first delivery</span>
+    </div>
+    <div class="meta">
+      Изготвено за: Konstantin / Weber BG &nbsp;·&nbsp; Статус: основа преди техническия промпт &nbsp;·&nbsp; 2026<br>
+      Цел: най-стабилната, най-гъвкавата и най-добре изглеждащата система на пазара.
+    </div>
+  </div>
+</div>
+
+<!-- 1. VISION -->
+<div class="page">
+  <h2><span class="num">01</span>Визия и стратегия на доставка</h2>
+  <p class="lead">Какво строим, защо точно така, и как стигаме най-бързо до момент, в който можем да показваме реално демо и да затваряме клиенти.</p>
+
+  <h3>Продуктът с едно изречение</h3>
+  <p>Централизирана платформа, в която <strong>един оператор (ти) управлява много изолирани хотелски профили</strong>; всеки хотел вижда само своите данни и работи с три модула — канален мениджър, резервации и PMS — захранвани от общо ядро за наличност и цени, със сигурна изолация на твоите бизнес данни (договори, плащания, маржове, интеграционни токени).</p>
+
+  <h3>Трите стратегически избора (фиксирани)</h3>
+  <table>
+    <tr><th style="width:26%">Решение</th><th>Избор</th><th style="width:34%">Защо</th></tr>
+    <tr><td><strong>Изолация на данни</strong></td><td>Shared DB + Row-Level Security (<code>tenant_id</code> на всеки ред, наложен на ниво база)</td><td>Индустриален стандарт. Скалира до стотици хотели, евтини миграции, силна изолация без оперативния ад на „БД на хотел".</td></tr>
+    <tr><td><strong>Първи модул</strong></td><td>Channel Manager + Inventory Core</td><td>Това е сърцето и източникът на най-скъпите грешки (overbooking). Изградим ли го правилно, всичко друго е проекция върху него.</td></tr>
+    <tr><td><strong>Доставка</strong></td><td>Demo-first вертикален срез</td><td>Бизнес целта е да тестваме → показваме демо → затваряме клиенти. Затова правим тесен, но реален и красив срез, не цялата платформа наведнъж.</td></tr>
+  </table>
+
+  <div class="box note"><span class="t">Принцип №1, който определя всичко останало</span>
+  <strong>Нашата система държи истината за наличността.</strong> Booking, Airbnb, Trip.com и директните резервации са само проекции на това състояние. Всеки бъг в тази система = овербукинг = загубен клиент. Целият дизайн долу е подчинен на това.</div>
+
+  <h3>Защо „demo-first", а не „пълна платформа"</h3>
+  <p>Пълният канал-мениджър + PMS + резервации са 12–18 месеца работа. За да затваряш клиенти не ти трябва всичко — трябва ти <strong>един хотел, реално свързан с Booking + Airbnb, с безупречен интерфейс и нула овербукинг</strong>. Това е постижимо за седмици, не месеци, и е достатъчно убедително за демо. Останалото се наслагва върху същата архитектура, без преписване.</p>
+</div>
+
+<!-- 2. ARCHITECTURE OVERVIEW -->
+<div class="page">
+  <h2><span class="num">02</span>Архитектура на високо ниво</h2>
+  <p class="lead">Слоеста архитектура. Започваме като <strong>модулен монолит</strong> (един deploy, ясни вътрешни граници), не микросървиси — за да сме бързи сега и да можем да разделяме по-късно без болка.</p>
+
+  <div class="stack">
+    <div class="layer admin">
+      <span class="lh">⬛ CENTRAL ADMIN — твоят слой (хотелът НИКОГА не го вижда)</span>
+      <div class="cols">
+        <div class="cell"><b>Tenants</b>хотели, статус, onboarding</div>
+        <div class="cell"><b>Договори & Billing</b>абонаменти, фактури, маржове</div>
+        <div class="cell"><b>Integration vault</b>OTA токени, ключове, секрети</div>
+        <div class="cell"><b>Платформен мониторинг</b>sync здраве, инциденти, логове</div>
+      </div>
+    </div>
+    <div class="layer core">
+      <span class="lh">🟦 CORE DOMAIN — единен source of truth · <code>tenant_id</code> + RLS на всеки ред</span>
+      <div class="cols">
+        <div class="cell"><b>Properties</b>хотели, обекти</div>
+        <div class="cell"><b>Rooms / Room Types</b>стаи, типове, units</div>
+        <div class="cell"><b>Rate Plans</b>тарифи, derived rates</div>
+        <div class="cell"><b>Inventory</b>наличност по дата</div>
+        <div class="cell"><b>Reservations</b>резервации, гости</div>
+      </div>
+    </div>
+    <div class="layer mods">
+      <span class="lh">🟩 МОДУЛИ — потребителски функции върху ядрото</span>
+      <div class="cols">
+        <div class="cell"><b>Channel Manager</b>мапинг стаи↔OTA, ARI push, pull на резервации, parity</div>
+        <div class="cell"><b>Резервации & Финанси</b>календари, фолио, плащания, отчети</div>
+        <div class="cell"><b>PMS Операции</b>housekeeping, минибар, доставки, статуси на стаи</div>
+      </div>
+    </div>
+    <div class="layer sync">
+      <span class="lh">🟧 SYNC ENGINE — gateway към външния свят</span>
+      <div class="cols">
+        <div class="cell"><b>Job queue</b>idempotent, retry с backoff</div>
+        <div class="cell"><b>Cron / scheduler</b>pull на резервации, refresh</div>
+        <div class="cell"><b>Reconciliation</b>сверка наличност, anti-overbooking</div>
+        <div class="cell"><b>Audit log</b>всеки push/pull, пълна следа</div>
+      </div>
+    </div>
+    <div class="layer ext">
+      <span class="lh">⬜ ВЪНШНИ СИСТЕМИ</span>
+      <div class="cols">
+        <div class="cell">Booking.com Connectivity API</div>
+        <div class="cell">Airbnb API</div>
+        <div class="cell">Trip.com / Expedia / др.</div>
+        <div class="cell">Payment provider · PSP</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="box win"><span class="t">Защо модулен монолит, а не микросървиси (засега)</span>
+  Микросървисите въвеждат разпределени транзакции, мрежови грешки и DevOps тежест — точно нещата, които убиват скоростта на стартиращ продукт. Модулният монолит с <strong>ясни вътрешни граници</strong> (всеки модул говори с ядрото през дефиниран интерфейс, не директно в чужди таблици) ти дава 90% от ползите. Когато конкретен модул (напр. Sync Engine) поиска отделно скалиране, го изваждаш — границите вече са там.</p></div>
+</div>
+
+<!-- 3. MULTI-TENANCY -->
+<div class="page">
+  <h2><span class="num">03</span>Multi-tenancy и изолация на данни</h2>
+
+  <h3>Моделът: Shared DB + Row-Level Security</h3>
+  <p>Всяка таблица с хотелски данни носи <code>tenant_id</code>. PostgreSQL <strong>Row-Level Security политики</strong> налагат на ниво база, че заявка в контекста на хотел A физически не може да върне ред на хотел B — дори при бъг в приложния код. Това е разликата между „надяваме се да филтрираме правилно" и „базата отказва да изтече данни".</p>
+
+  <div class="two">
+    <div>
+      <h4>Двата изолационни периметъра</h4>
+      <table>
+        <tr><th>Между хотелите</th><th>Хотел ↔ твоите данни</th></tr>
+        <tr><td>RLS по <code>tenant_id</code></td><td>Отделен Admin модул/схема</td></tr>
+        <tr><td>Хотел A не вижда хотел B</td><td>Хотелът не вижда договори, маржове, токени</td></tr>
+        <tr><td>На ниво база</td><td>На ниво роля + сервиз</td></tr>
+      </table>
+    </div>
+    <div>
+      <h4>Как се налага в практиката</h4>
+      <ul>
+        <li>Всяка заявка минава с <code>SET app.tenant_id</code> в транзакцията.</li>
+        <li>RLS политика: <code>USING (tenant_id = current_setting('app.tenant_id'))</code>.</li>
+        <li>Admin операциите ползват отделна роля, която <em>заобикаля</em> RLS — но само в Admin модула.</li>
+        <li>Интеграционните токени се пазят криптирани в отделно хранилище, не в хотелските таблици.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="box warn"><span class="t">Уговорка за бъдеще (без преписване)</span>
+  Ако дойде enterprise клиент с регулаторно изискване за физическа изолация, добавяме <strong>schema-per-tenant</strong> или отделна БД само за него — същият код, различен connection routing. Започваме с shared+RLS за масата; не правим отделна БД на всеки хотел (оперативно скъпо и ненужно за 99% от случаите).</div>
+
+  <h3>Noisy-neighbor защита</h3>
+  <p>Един хотел с огромен трафик не бива да задушава останалите. Затова: rate limiting per tenant на API; sync job-овете са на опашка с per-tenant квоти; тежките отчети се изпълняват асинхронно. Това го залагаме рано — добавено по-късно е болезнено.</p>
+</div>
+
+<!-- 4. INVENTORY CORE -->
+<div class="page">
+  <h2><span class="num">04</span>Inventory Core — сърцето на системата</h2>
+  <p class="lead">Тук живеят всички пари и всички овербукинги. Това е модулът, който задълбаваме първи.</p>
+
+  <h3>Доменният модел (опростено)</h3>
+  <div class="flowrow">
+    <span class="node">Property</span><span class="arrow">→</span>
+    <span class="node">Room Type</span><span class="arrow">→</span>
+    <span class="node">Rate Plan</span><span class="arrow">→</span>
+    <span class="node alt">Inventory / ден</span><span class="arrow">→</span>
+    <span class="node alt">Restrictions</span>
+  </div>
+  <ul>
+    <li><strong>Room Type</strong> (напр. „Двойна стая") с <em>N броя физически units</em> — наличността е на ниво тип, не на конкретна стая (както го правят Booking/Airbnb).</li>
+    <li><strong>Rate Plan</strong> — цена + политика (закуска, отмяна). Поддържаме <strong>derived rates</strong> (напр. „non-refundable = base − 10%") — задължително за конкурентност.</li>
+    <li><strong>Inventory per ден</strong> — наличен брой, цена, и <strong>restrictions</strong>: min/max stay, CTA (closed to arrival), CTD (closed to departure), stop-sell.</li>
+  </ul>
+
+  <h3>Анатомия на овербукинга — и как го убиваме</h3>
+  <table>
+    <tr><th style="width:34%">Сценарий</th><th>Защита</th></tr>
+    <tr><td>Две OTA продават последната стая едновременно</td><td>Атомарен <code>decrement</code> на наличност в транзакция с заключване на реда; никога „read-then-write" без lock.</td></tr>
+    <tr><td>OTA праща резервация след като сме спрели продажба</td><td>Pull на резервации често (Booking препоръчва ~30 сек); приемаме резервацията дори при 0 наличност, после маркираме конфликт за човешка намеса — никога мълчаливо отхвърляне.</td></tr>
+    <tr><td>Нашата наличност и тази в OTA се разминат</td><td>Периодична <strong>reconciliation</strong>: сверяваме какво ние мислим vs какво OTA мисли, и алармираме при дрифт.</td></tr>
+    <tr><td>Двоен push / повторен webhook</td><td>Idempotency ключове — същото съобщение приложено два пъти дава същия резултат.</td></tr>
+  </table>
+
+  <div class="box risk"><span class="t">Подводен камък №1 — наличността не е просто число</span>
+  Наивната реализация държи „брой свободни стаи" и го намалява. Това гарантирано чупи при конкурентни резервации. Правилно: наличността е <strong>деривирана</strong> от (общо units) − (потвърдени резервации, които застъпват датата), изчислена транзакционно. По-бавно, но коректно. Никога не оптимизирай това за сметка на коректността.</div>
+</div>
+
+<!-- 5. OTA CONNECTIVITY -->
+<div class="page">
+  <h2><span class="num">05</span>OTA свързаност — стратегия</h2>
+  <p class="lead">Тук е най-голямата стратегическа развилка и най-подценяваният риск в плана.</p>
+
+  <h3>Реалността на достъпа (проверено)</h3>
+  <table>
+    <tr><th>Канал</th><th>Достъп</th><th>Латентност</th></tr>
+    <tr><td><strong>Booking.com</strong></td><td>Connectivity Partner програма — sandbox → продукция след сертификация. Изисква одобрение на компанията; индустрията съобщава за периоди на пауза/изчакване за нови провайдъри. Тежки изисквания: ARI 12 мес. напред, само delta updates.</td><td>pull на резервации ~всеки 30 сек</td></tr>
+    <tr><td><strong>Airbnb</strong></td><td><strong>Invite-only.</strong> Не приемат публични заявки — те канят партньори. Privileged webhooks само за Preferred+ тира (Hostaway, Guesty, Hospitable).</td><td>webhooks (Preferred+) или polling 5–15 мин</td></tr>
+    <tr><td>Trip.com / Expedia</td><td>Собствени партньорски програми, подобни изисквания</td><td>варира</td></tr>
+  </table>
+
+  <div class="box risk"><span class="t">Подводен камък №2 — директната сертификация е чужд критичен път</span>
+  Ако демото зависи от собствена сертификация с Booking/Airbnb, <strong>датата на демо я определя чужд approval екип</strong>, не ти. Airbnb може изобщо да не покани скоро. Това е най-вероятната причина проектът да закъсне с месеци.</div>
+
+  <h3>Препоръка: aggregator-first hybrid зад собствена абстракция</h3>
+  <div class="flowrow">
+    <span class="node">Наш Channel модул</span><span class="arrow">→</span>
+    <span class="node">Connectivity Abstraction<br><span class="muted" style="font-weight:400">(наш интерфейс)</span></span><span class="arrow">→</span>
+    <span class="node alt">Adapter: Channex</span><span class="arrow">→</span>
+    <span class="node ext">Booking / Airbnb / Trip.com</span>
+  </div>
+  <div class="flowrow" style="margin-top:2px;">
+    <span class="muted" style="font-size:9.5px;">по-късно, паралелно:&nbsp;</span>
+    <span class="node">Connectivity Abstraction</span><span class="arrow">→</span>
+    <span class="node alt">Adapter: Direct Booking</span><span class="arrow">→</span>
+    <span class="node ext">Booking.com</span>
+  </div>
+  <ul>
+    <li><strong>Channex</strong> е white-label connectivity-as-a-service: REST API, готов room/rate mapping iframe, вече сертифициран с 50+ канала, 99.9% SLA. Демото работи с <em>реални</em> Booking/Airbnb връзки от ден 1.</li>
+    <li>Нашият код говори само с <strong>нашата абстракция</strong>. Channex е първият адаптер зад нея.</li>
+    <li>Паралелно кандидатстваме за директни сертификации. Когато ни одобрят, добавяме <code>DirectBookingAdapter</code> зад същата абстракция и сменяме маршрута per канал — <strong>нула промяна за хотела, нула преписване</strong>.</li>
+  </ul>
+
+  <div class="box note"><span class="t">Ключово архитектурно правило</span>
+  Каквото и да решим за бекенда, <strong>никога не пишем OTA-специфична логика директно в модулите</strong>. Всичко минава през Connectivity Abstraction с унифициран модел (ARI update, reservation, cancellation). Така смяната на доставчик е смяна на адаптер, не хирургия в цялата система.</div>
+</div>
+
+<!-- 6. SYNC ENGINE + RBAC -->
+<div class="page">
+  <h2><span class="num">06</span>Sync Engine и роли</h2>
+
+  <h3>Sync Engine — задължителни свойства</h3>
+  <div class="two">
+    <div>
+      <ul>
+        <li><strong>Опашка с retry + exponential backoff</strong> — OTA API-та падат; никога не губим update.</li>
+        <li><strong>Idempotency</strong> — повторно приложено съобщение = същото състояние.</li>
+        <li><strong>Delta-only push</strong> — пращаме само промени (Booking го изисква).</li>
+        <li><strong>Reconciliation job</strong> — периодична сверка наличност/цени.</li>
+        <li><strong>Пълен audit log</strong> — кой, кога, какво, какъв отговор. Това е и debug инструмент, и доверие пред клиента.</li>
+        <li><strong>Dead-letter queue</strong> — неуспели след N опита отиват за човешки преглед, не изчезват.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="box warn"><span class="t">Подводен камък №3 — тихите грешки</span>
+      Най-лошият channel manager е този, който се проваля мълчаливо (XML polling на 30 мин, без логове). Хотелът разбира за проблема от ядосан гост. Нашето конкурентно предимство: <strong>видим sync статус и алармиране</strong> — хотелът винаги знае дали е синхронизиран.</div>
+    </div>
+  </div>
+
+  <h3>RBAC — ролево-базиран достъп (не хардкоднати роли)</h3>
+  <table>
+    <tr><th>Роля</th><th>Вижда</th><th>Може</th><th>НЕ вижда</th></tr>
+    <tr><td><strong>Super-admin (ти)</strong></td><td>Всички хотели, договори, billing, токени</td><td>Всичко, платформена администрация</td><td>—</td></tr>
+    <tr><td><strong>Hotel owner</strong></td><td>Само своя хотел, всички модули</td><td>Управлява персонал, вижда финанси на хотела</td><td>Твоите маржове, договори, други хотели</td></tr>
+    <tr><td><strong>Manager</strong></td><td>Резервации, цени, отчети, PMS</td><td>Променя цени/наличност, отчети</td><td>Billing към теб, токени</td></tr>
+    <tr><td><strong>Receptionist</strong></td><td>Календар, резервации, гости</td><td>Чек-ин/аут, нова резервация</td><td>Финансови отчети, цени конфигурация</td></tr>
+    <tr><td><strong>Housekeeping</strong></td><td>Статуси на стаи, задачи</td><td>Маркира стая чиста/мръсна, минибар</td><td>Резервации, финанси, гости детайли</td></tr>
+  </table>
+  <p class="muted">Реализация: <strong>permissions като scopes</strong> (напр. <code>reservations:write</code>, <code>rates:write</code>, <code>billing:read</code>), ролите са просто набори от scopes. Така добавяш нова роля или custom права без да пипаш код.</p>
+</div>
+
+<!-- 7. STACK + SECURITY -->
+<div class="page">
+  <h2><span class="num">07</span>Технологичен стек и сигурност</h2>
+
+  <h3>Препоръчан стек (за обсъждане)</h3>
+  <table>
+    <tr><th>Слой</th><th>Препоръка</th><th>Защо</th></tr>
+    <tr><td>База данни</td><td><strong>PostgreSQL</strong></td><td>Native RLS (нашата изолация), транзакции, надеждност, JSON за гъвкавост.</td></tr>
+    <tr><td>Backend</td><td>Node/TypeScript (NestJS) <em>или</em> Python (FastAPI/Django)</td><td>Силен типов модел за домейна; голям talent pool. Изборът зависи от твоя екип.</td></tr>
+    <tr><td>Job queue</td><td>Redis + BullMQ / Celery</td><td>Sync Engine — retry, scheduling, dead-letter.</td></tr>
+    <tr><td>Frontend</td><td><strong>React + TypeScript</strong>, дизайн система</td><td>Уникалният интерфейс е конкурентно предимство — заслужава първокласен фронтенд.</td></tr>
+    <tr><td>Connectivity</td><td>Channex (адаптер #1)</td><td>Реални OTA връзки без чакане на сертификация.</td></tr>
+    <tr><td>Hosting</td><td>Управляван Postgres + контейнери</td><td>По-малко DevOps, повече продукт.</td></tr>
+  </table>
+
+  <h3>Сигурност — базови изисквания</h3>
+  <div class="two">
+    <div><ul>
+      <li><strong>RLS</strong> като последна линия на изолация между хотели.</li>
+      <li><strong>Криптирани интеграционни токени</strong> (vault / KMS), никога в plain text, никога видими за хотела.</li>
+      <li><strong>OAuth-стил токени</strong> за API достъп; кратко живеещи access + refresh.</li>
+      <li><strong>Audit log</strong> на чувствителни действия (промяна на цени, достъп до гости).</li>
+    </ul></div>
+    <div><ul>
+      <li><strong>GDPR</strong> — гостите са лични данни (имена, имейл, понякога документи). Нужни: retention политики, право на изтриване, data processing agreement.</li>
+      <li><strong>Плащания → не пипаме карти директно.</strong> Tokenization през PSP (Stripe и под.); PCI обхватът ни остава минимален.</li>
+      <li><strong>Rate limiting</strong> per tenant (noisy-neighbor).</li>
+      <li><strong>Backups + point-in-time recovery</strong> от ден 1.</li>
+    </ul></div>
+  </div>
+
+  <div class="box risk"><span class="t">Подводен камък №4 — GDPR и плащания не са „по-късно"</span>
+  Хотелските данни включват лични данни на гости и (понякога) картови данни. Ако ги дизайннем грешно от старта, преработката е скъпа и рискова. Решение от ден 1: гостите са отделен, контролиран домейн с retention; картови данни никога не докосват нашата база — само токени от PSP.</div>
+</div>
+
+<!-- 8. PITFALLS + EDGE -->
+<div class="page">
+  <h2><span class="num">08</span>Какво ме притеснява — и какво ще ни направи №1</h2>
+
+  <h3>Подводните камъни, обобщено</h3>
+  <table>
+    <tr><th style="width:30%">Риск</th><th>Влияние</th><th style="width:34%">Митигиране</th></tr>
+    <tr><td>Овербукинг при конкурентни резервации</td><td>Загубени клиенти, репутация</td><td>Транзакционна, деривирана наличност + reconciliation</td></tr>
+    <tr><td>Зависимост от чужда OTA сертификация</td><td>Демото закъснява с месеци</td><td>Aggregator-first зад собствена абстракция</td></tr>
+    <tr><td>Тихи sync грешки</td><td>Загуба на доверие</td><td>Видим статус, алармиране, dead-letter queue</td></tr>
+    <tr><td>GDPR / картови данни сбъркани рано</td><td>Скъпа преработка, правен риск</td><td>Гости-домейн + PSP tokenization от старта</td></tr>
+    <tr><td>Преждевременни микросървиси</td><td>Бавно, скъпо, крехко</td><td>Модулен монолит с ясни граници</td></tr>
+    <tr><td>Vendor lock-in в Channex</td><td>Зависимост, маржове</td><td>Абстракция → лесна смяна/добавяне на директни адаптери</td></tr>
+    <tr><td>Mapping грешки (стая↔OTA)</td><td>Грешни цени/наличност</td><td>Контролиран mapping UI + валидации + dry-run преди go-live</td></tr>
+    <tr><td>Скоуп пълзене (всичко наведнъж)</td><td>Никога не стигаме до демо</td><td>Demo-first вертикален срез</td></tr>
+  </table>
+
+  <h3>Какво ще ни направи най-добрите (не просто „поредния channel manager")</h3>
+  <div class="two">
+    <div>
+      <div class="box win"><span class="t">Доверие чрез прозрачност</span>Видим sync статус в реално време, ясни логове, „последно синхронизирано преди X" на всеки канал. Конкурентите крият това.</div>
+      <div class="box win"><span class="t">Уникален интерфейс</span>Един календар, в който наличност, цени и резервации от всички канали се виждат и редактират на едно място, с моментален визуален feedback. Това е продуктовото предимство.</div>
+    </div>
+    <div>
+      <div class="box win"><span class="t">Нула-овербукинг гаранция</span>Архитектурно гарантирана коректност на наличността — продаваме спокойствие, не просто софтуер.</div>
+      <div class="box win"><span class="t">Гъвкавост за бъдеще</span>Адаптерна connectivity + RBAC scopes + модулни граници = добавяме канали, роли и модули без преписване. „Непробиваемо и гъвкаво" = тези три неща.</div>
+    </div>
+  </div>
+</div>
+
+<!-- 9. ROADMAP + QUESTIONS -->
+<div class="page">
+  <h2><span class="num">09</span>Пътна карта до демо и отворени въпроси</h2>
+
+  <h3>Фазиран план (demo-first)</h3>
+  <table>
+    <tr><th style="width:14%">Фаза</th><th>Какво</th><th>Резултат</th></tr>
+    <tr><td><strong>0 · Основа</strong></td><td>Postgres + RLS scaffold, auth, RBAC scopes, tenant модел</td><td>Сигурен multi-tenant скелет</td></tr>
+    <tr><td><strong>1 · Inventory Core</strong></td><td>Room types, rate plans, derived rates, транзакционна наличност, restrictions</td><td>Source of truth работи и е коректен</td></tr>
+    <tr><td><strong>2 · Channel (1 хотел)</strong></td><td>Connectivity Abstraction + Channex адаптер, mapping, ARI push, pull на резервации</td><td>Реални Booking+Airbnb връзки</td></tr>
+    <tr><td><strong>3 · UI за демо</strong></td><td>Уникалният унифициран календар + dashboard, sync статус</td><td>Красиво, убедително демо → клоузваме</td></tr>
+    <tr><td><strong>4 · Резервации/Финанси</strong></td><td>Фолио, плащания (PSP), отчети</td><td>Пълен резервационен цикъл</td></tr>
+    <tr><td><strong>5 · PMS</strong></td><td>Housekeeping, минибар, доставки</td><td>Операции в хотела</td></tr>
+    <tr><td><strong>6 · Скалиране</strong></td><td>Директни OTA адаптери, повече хотели, enterprise изолация при нужда</td><td>Растеж без преписване</td></tr>
+  </table>
+
+  <h3>Въпроси, на които да отговорим преди техническия промпт</h3>
+  <ol>
+    <li><strong>Тип имоти</strong> — класически хотели (room types с много units) или и апартаменти/къщи (Airbnb стил, 1 unit)? Това променя модела на наличност.</li>
+    <li><strong>Стек</strong> — какъв е твоят/екипният опит: Node/TS или Python? Това определя backend избора.</li>
+    <li><strong>Плащания</strong> — приемаме ли плащания в платформата (PSP, фолио) или само следим? Влияе на PCI/финансовия модул.</li>
+    <li><strong>Channex</strong> — окей ли е като пръв connectivity бекенд (потвърждение), и ползваме ли техния mapping iframe или собствен UI?</li>
+    <li><strong>Мащаб на демото</strong> — 1 хотел + Booking + Airbnb достатъчно ли е за първото демо, или трябва и Trip.com?</li>
+    <li><strong>Multi-property вериги</strong> — един „хотел owner" управлява ли няколко обекта, или 1:1? Влияе на tenant модела.</li>
+    <li><strong>Език/локализация</strong> — само BG, или и EN/мулти-валута от старта (за международни хотели)?</li>
+  </ol>
+
+  <div class="box note"><span class="t">Следваща стъпка</span>
+  Като пуснеш 3-те документа, ще обединя тяхната конкретика с тази основа и ще ти дам <strong>топ технически промпт</strong> + ще довършим тези въпроси, преди да започнем изграждането. Този PDF е скелетът, върху който всичко се наслагва.</div>
+</div>
+
+</body>
+</html>

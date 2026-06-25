@@ -1,0 +1,21 @@
+{
+  "name": "revio-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Revio — composable hotel software platform (Channel Manager, Reservation/CRS, PMS) on one shared inventory core.",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @revio/channel-manager dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "db:seed": "pnpm --filter @revio/channel-manager db:seed"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

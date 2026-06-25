@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  .rv-mark { display:inline-flex; align-items:baseline; font-family:'Hanken Grotesk',sans-serif; font-weight:700; letter-spacing:-0.035em; line-height:1; white-space:nowrap; }
+  .rv-i { display:inline-block; position:relative; }
+  .rv-i > .stem { visibility:hidden; }
+  .rv-i > svg { position:absolute; left:50%; transform:translateX(-50%); }
+</style>
+</helmet>
+<div style="min-height:100vh; box-sizing:border-box; padding:56px; background:#e7e5df; font-family:'Hanken Grotesk',sans-serif;">
+
+  <div style="margin-bottom:6px; font-size:13px; letter-spacing:0.14em; text-transform:uppercase; color:#8a8780; font-weight:600;">Revio · Logo system</div>
+  <h1 style="margin:0 0 6px; font-size:32px; font-weight:800; color:#2b2a26; letter-spacing:-0.02em;">One mark, one gesture</h1>
+  <p style="margin:0 0 40px; font-size:15px; color:#6f6c64; max-width:680px; line-height:1.55;">The upward arrow is drawn from the actual "i" — same weight, same rhythm as the letterforms — so it reads as part of the word, not stuck on top. The icon is that same gesture, distilled.</p>
+
+  <!-- HERO LOCKUP -->
+  <div style="display:flex; gap:28px; flex-wrap:wrap; margin-bottom:28px;">
+    <div style="flex:1; min-width:440px; background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:80px 56px; display:flex; align-items:center; justify-content:center;">
+      <span class="rv-mark" style="font-size:80px; color:#15366a;">Rev<span class="rv-i"><span class="stem">i</span><svg width="0.30em" height="0.20em" viewBox="0 0 28 18" fill="none" style="bottom:0.50em;"><path d="M3.5 14.5 L14 4 L24.5 14.5" stroke="#e0a23b" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg width="0.082em" height="0.52em" viewBox="0 0 8 52" style="bottom:0;"><rect x="0.8" y="0.8" width="6.4" height="50.4" rx="3.2" fill="#15366a"/></svg></span>o</span>
+    </div>
+    <div style="flex:1; min-width:440px; background:#0e1f3a; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:80px 56px; display:flex; align-items:center; justify-content:center;">
+      <span class="rv-mark" style="font-size:80px; color:#ffffff;">Rev<span class="rv-i"><span class="stem">i</span><svg width="0.30em" height="0.20em" viewBox="0 0 28 18" fill="none" style="bottom:0.50em;"><path d="M3.5 14.5 L14 4 L24.5 14.5" stroke="#f0b550" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg width="0.082em" height="0.52em" viewBox="0 0 8 52" style="bottom:0;"><rect x="0.8" y="0.8" width="6.4" height="50.4" rx="3.2" fill="#ffffff"/></svg></span>o</span>
+    </div>
+  </div>
+
+  <!-- ICON CONCEPTS -->
+  <div style="background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:30px 36px 36px; margin-bottom:28px;">
+    <div style="font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:#9a978f; font-weight:600; margin-bottom:6px;">App icon — three takes on the same gesture</div>
+    <div style="font-size:14px; color:#6f6c64; margin-bottom:26px;">Pick one. Each is a single rounded stroke, weight-matched to the wordmark.</div>
+
+    <div style="display:flex; gap:40px; flex-wrap:wrap;">
+      <!-- 1 the i-mark -->
+      <div style="text-align:center;">
+        <div style="width:96px; height:96px; border-radius:26px; background:#15366a; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(21,54,106,.26);">
+          <svg width="44" height="52" viewBox="0 0 44 52" fill="none">
+            <path d="M8 22 L22 7 L36 22" stroke="#e0a23b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="18.5" y="20" width="7" height="26" rx="3.5" fill="#ffffff"/>
+          </svg>
+        </div>
+        <div style="font-size:12.5px; font-weight:600; color:#2b2a26; margin-top:12px;">The i-mark</div>
+        <div style="font-size:11.5px; color:#9a978f; margin-top:2px;">Literally the logo's "i"</div>
+      </div>
+      <!-- 2 ascend arrow -->
+      <div style="text-align:center;">
+        <div style="width:96px; height:96px; border-radius:26px; background:#15366a; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(21,54,106,.26);">
+          <svg width="46" height="46" viewBox="0 0 46 46" fill="none">
+            <path d="M23 38 L23 11 M11 23 L23 10 L35 23" stroke="#e0a23b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div style="font-size:12.5px; font-weight:600; color:#2b2a26; margin-top:12px;">Ascend</div>
+        <div style="font-size:11.5px; color:#9a978f; margin-top:2px;">Clean single arrow</div>
+      </div>
+      <!-- 3 momentum -->
+      <div style="text-align:center;">
+        <div style="width:96px; height:96px; border-radius:26px; background:#15366a; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(21,54,106,.26);">
+          <svg width="46" height="46" viewBox="0 0 46 46" fill="none">
+            <path d="M12 27 L23 15 L34 27" stroke="#e0a23b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 36 L23 24 L34 36" stroke="#e0a23b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+          </svg>
+        </div>
+        <div style="font-size:12.5px; font-weight:600; color:#2b2a26; margin-top:12px;">Momentum</div>
+        <div style="font-size:11.5px; color:#9a978f; margin-top:2px;">Rising / accelerating</div>
+      </div>
+
+      <!-- standalone + monochrome -->
+      <div style="margin-left:auto; display:flex; gap:16px; align-items:center; padding-left:28px; border-left:1px solid #eceae5;">
+        <div style="text-align:center;">
+          <div style="display:flex; gap:10px; align-items:flex-end; justify-content:center;">
+            <div style="width:48px; height:48px; border-radius:13px; background:#15366a; display:flex; align-items:center; justify-content:center;"><svg width="22" height="26" viewBox="0 0 44 52" fill="none"><path d="M8 22 L22 7 L36 22" stroke="#e0a23b" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="18.5" y="20" width="7" height="26" rx="3.5" fill="#ffffff"/></svg></div>
+            <div style="width:30px; height:30px; border-radius:8px; background:#15366a; display:flex; align-items:center; justify-content:center;"><svg width="14" height="16" viewBox="0 0 44 52" fill="none"><path d="M8 22 L22 7 L36 22" stroke="#e0a23b" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/><rect x="18.5" y="20" width="7" height="26" rx="3.5" fill="#ffffff"/></svg></div>
+            <div style="width:18px; height:18px; border-radius:5px; background:#15366a; display:flex; align-items:center; justify-content:center;"><svg width="9" height="11" viewBox="0 0 44 52" fill="none"><path d="M8 22 L22 7 L36 22" stroke="#e0a23b" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><rect x="18" y="20" width="8" height="26" rx="4" fill="#ffffff"/></svg></div>
+          </div>
+          <div style="font-size:11.5px; color:#9a978f; margin-top:12px;">Favicon scales</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MONOCHROME / ACCENT -->
+  <div style="display:flex; gap:28px; flex-wrap:wrap;">
+    <div style="flex:1; min-width:300px; background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:28px 32px;">
+      <div style="font-size:12px; letter-spacing:0.1em; text-transform:uppercase; color:#9a978f; font-weight:600; margin-bottom:20px;">Works in one colour</div>
+      <div style="display:flex; flex-direction:column; gap:22px;">
+        <span class="rv-mark" style="font-size:40px; color:#15366a;">Rev<span class="rv-i"><span class="stem">i</span><svg width="0.30em" height="0.20em" viewBox="0 0 28 18" fill="none" style="bottom:0.50em;"><path d="M3.5 14.5 L14 4 L24.5 14.5" stroke="#15366a" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg width="0.082em" height="0.52em" viewBox="0 0 8 52" style="bottom:0;"><rect x="0.8" y="0.8" width="6.4" height="50.4" rx="3.2" fill="#15366a"/></svg></span>o</span>
+        <span class="rv-mark" style="font-size:40px; color:#1a1916;">Rev<span class="rv-i"><span class="stem">i</span><svg width="0.30em" height="0.20em" viewBox="0 0 28 18" fill="none" style="bottom:0.50em;"><path d="M3.5 14.5 L14 4 L24.5 14.5" stroke="#1a1916" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg width="0.082em" height="0.52em" viewBox="0 0 8 52" style="bottom:0;"><rect x="0.8" y="0.8" width="6.4" height="50.4" rx="3.2" fill="#1a1916"/></svg></span>o</span>
+      </div>
+    </div>
+    <div style="flex:1; min-width:300px; background:#0e1f3a; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); padding:28px 32px; display:flex; align-items:center;">
+      <span class="rv-mark" style="font-size:40px; color:#ffffff;">Rev<span class="rv-i"><span class="stem">i</span><svg width="0.30em" height="0.20em" viewBox="0 0 28 18" fill="none" style="bottom:0.50em;"><path d="M3.5 14.5 L14 4 L24.5 14.5" stroke="#ffffff" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg width="0.082em" height="0.52em" viewBox="0 0 8 52" style="bottom:0;"><rect x="0.8" y="0.8" width="6.4" height="50.4" rx="3.2" fill="#ffffff"/></svg></span>o</span>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

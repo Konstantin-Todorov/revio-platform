@@ -1,0 +1,55 @@
+/* Revio design tokens — derived from the Atlas direction (matches the reference screenshot).
+   Single source of truth for color/space/radius. No hardcoded hex in app code. */
+
+:root {
+  /* Brand — deep navy chrome */
+  --revio-brand-900: #0e1f3a;
+  --revio-brand-800: #15366a;
+  --revio-brand-700: #1d4ea0;
+  --revio-brand-600: #2563c9;
+  --revio-brand-050: #e7eefb;
+
+  /* Ink & slate text */
+  --revio-ink-900: #1c2733;
+  --revio-ink-700: #3f4753;
+  --revio-ink-500: #5b6675;
+  --revio-ink-400: #7d8aa3;
+  --revio-ink-300: #9aa3b1;
+
+  /* Surfaces */
+  --revio-surface: #ffffff;
+  --revio-surface-muted: #f1f3f6;
+  --revio-surface-sunken: #e7eaef;
+  --revio-border: #dde4ee;
+
+  /* Semantic — status colors used across Dashboard / Sync / Error */
+  --revio-success-600: #0f7a52;
+  --revio-success-500: #1f9d6b;
+  --revio-success-050: #e3f4ec;
+
+  --revio-warning-600: #e0822b;
+  --revio-warning-500: #e0a23b;
+  --revio-warning-050: #fbf1e0;
+
+  --revio-danger-600: #b53528;
+  --revio-danger-500: #d6493b;
+  --revio-danger-050: #fbe9e7;
+
+  --revio-info-500: #0d9aa8;
+
+  /* Accent — purple (brand teaser / highlights) */
+  --revio-accent-600: #5b3fb0;
+  --revio-accent-500: #7c5cdb;
+  --revio-accent-050: #efe9fb;
+
+  /* Radius & spacing scale */
+  --revio-radius-sm: 6px;
+  --revio-radius-md: 10px;
+  --revio-radius-lg: 14px;
+  --revio-space-1: 4px;
+  --revio-space-2: 8px;
+  --revio-space-3: 12px;
+  --revio-space-4: 16px;
+  --revio-space-6: 24px;
+  --revio-space-8: 32px;
+}
