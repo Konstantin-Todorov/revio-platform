@@ -6,9 +6,11 @@
  * reservations, sync/error/audit rows. Run: `pnpm --filter @revio/db db:seed`.
  */
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import { deriveRate, type DerivedRateConfig } from "@revio/core";
 
 const prisma = new PrismaClient();
+const DEMO_PASSWORD = "revio1234";
 
 // --- date helpers ----------------------------------------------------------
 const DAY = 86_400_000;
@@ -37,6 +39,13 @@ async function main() {
   await prisma.$executeRawUnsafe(
     `TRUNCATE TABLE ${tables.map((n) => `"${n}"`).join(", ")} RESTART IDENTITY CASCADE;`,
   );
+  await prisma.operatorUser.deleteMany();
+  const pw = await bcrypt.hash(DEMO_PASSWORD, 10);
+
+  // Operator login (us): operator@revio.app
+  await prisma.operatorUser.create({
+    data: { name: "Revio Operator", email: "operator@revio.app", role: "super_admin", passwordHash: pw },
+  });
 
   // --- Tenant + operator user ---------------------------------------------
   const tenant = await prisma.tenant.create({
@@ -48,8 +57,8 @@ async function main() {
       hasPms: false,
       users: {
         create: [
-          { name: "Admin", email: "admin@hotelsofia.demo", role: "owner" },
-          { name: "Lena Koch", email: "lena@hotelsofia.demo", role: "distribution_manager" },
+          { name: "Admin", email: "admin@hotelsofia.demo", role: "owner", passwordHash: pw },
+          { name: "Lena Koch", email: "lena@hotelsofia.demo", role: "distribution_manager", passwordHash: pw },
         ],
       },
     },
@@ -306,7 +315,7 @@ async function main() {
   // --- Second tenant: Black Sea Resort (proves tenant isolation) ----------
   const tenant2 = await prisma.tenant.create({
     data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true,
-      users: { create: [{ name: "Resort Owner", email: "owner@blacksea.demo", role: "owner" }] } },
+      users: { create: [{ name: "Resort Owner", email: "owner@blacksea.demo", role: "owner", passwordHash: pw }] } },
   });
   const property2 = await prisma.property.create({
     data: { tenantId: tenant2.id, name: "Black Sea Resort", timezone: "Europe/Sofia", baseCurrency: "EUR", syncHorizonDays: 365 },

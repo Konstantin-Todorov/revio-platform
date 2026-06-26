@@ -37,7 +37,7 @@ export function WorkspaceSwitcher({ properties, activeId, activeName }: { proper
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-72 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
           <div className="border-b border-surface-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-            Workspace · demo view-as
+            Your properties
           </div>
           <div className="max-h-80 overflow-y-auto py-1">
             {Object.entries(byTenant).map(([tenant, items]) => (

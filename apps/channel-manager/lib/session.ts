@@ -1,18 +1,18 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { prisma } from "@revio/db";
+import { readSessionToken, verifySessionToken } from "./auth";
 
 export type Perimeter = "operator" | "hotel";
 export type Role = "owner" | "admin" | "revenue_manager" | "distribution_manager" | "read_only";
 
 export interface Session {
   perimeter: Perimeter;
-  /** null ⇒ operator (all tenants). */
-  tenantId: string | null;
+  tenantId: string;
   userId: string;
+  userName: string;
   role: Role;
   entitlements: { channelManager: boolean; reservation: boolean; pms: boolean };
-  /** The property currently in view (within the session's tenant). */
   activePropertyId: string;
   tenantName: string;
 }
@@ -20,34 +20,30 @@ export interface Session {
 export const ACTIVE_PROPERTY_COOKIE = "revio_property";
 
 /**
- * THE single identity choke point. Every read/write resolves access through here.
- *
- * Dev resolver: the active property comes from a cookie (set by the workspace switcher), defaulting to
- * the first property. Real auth (login/SSO) replaces only this function — nothing downstream changes.
+ * THE single identity choke point. Resolves the logged-in hotel user → their tenant.
+ * Returns null when not authenticated; protected routes redirect to /login.
  */
-export async function getSession(): Promise<Session> {
-  const jar = await cookies();
-  const cookieProp = jar.get(ACTIVE_PROPERTY_COOKIE)?.value;
+export async function getSession(): Promise<Session | null> {
+  const token = await readSessionToken();
+  if (!token) return null;
+  const payload = await verifySessionToken(token);
+  if (!payload || payload.kind !== "hotel") return null;
 
-  const active =
-    (cookieProp
-      ? await prisma.property.findUnique({ where: { id: cookieProp }, include: { tenant: true } })
-      : null) ??
-    // Default to the oldest tenant's property (the flagship demo hotel, Hotel Sofia).
-    (await prisma.property.findFirst({ include: { tenant: true }, orderBy: { tenant: { createdAt: "asc" } } }));
+  const user = await prisma.user.findUnique({ where: { id: payload.sub }, include: { tenant: true } });
+  if (!user || user.tenant.status !== "active") return null;
+  const tenant = user.tenant;
 
-  if (!active) throw new Error("No property exists — seed the database.");
-
-  const tenant = active.tenant;
-  const user =
-    (await prisma.user.findFirst({ where: { tenantId: tenant.id, role: "owner" } })) ??
-    (await prisma.user.findFirst({ where: { tenantId: tenant.id } }));
+  const properties = await prisma.property.findMany({ where: { tenantId: tenant.id }, orderBy: { name: "asc" } });
+  if (properties.length === 0) return null;
+  const cookieProp = (await cookies()).get(ACTIVE_PROPERTY_COOKIE)?.value;
+  const active = properties.find((p) => p.id === cookieProp) ?? properties[0]!;
 
   return {
     perimeter: "hotel",
     tenantId: tenant.id,
-    userId: user?.id ?? "dev",
-    role: (user?.role as Role) ?? "owner",
+    userId: user.id,
+    userName: user.name,
+    role: (user.role as Role) ?? "owner",
     entitlements: {
       channelManager: tenant.hasChannelManager,
       reservation: tenant.hasReservation,
@@ -58,11 +54,11 @@ export async function getSession(): Promise<Session> {
   };
 }
 
-/** Properties the workspace switcher may offer. Dev: all properties (labelled by tenant) so isolation
- *  is demonstrable. In production a hotel session only lists its own tenant's properties. */
-export async function getSwitchableProperties() {
+/** Properties the signed-in user may switch between — only their own tenant's (a chain's hotels). */
+export async function getSwitchableProperties(tenantId: string) {
   return prisma.property.findMany({
+    where: { tenantId },
     include: { tenant: { select: { name: true } } },
-    orderBy: [{ tenant: { name: "asc" } }, { name: "asc" }],
+    orderBy: { name: "asc" },
   });
 }

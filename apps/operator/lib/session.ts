@@ -1,10 +1,8 @@
 import "server-only";
+import { prisma } from "@revio/db";
+import { readSessionToken, verifySessionToken } from "./auth";
 
-/**
- * Operator perimeter — sees ALL tenants. This is the SaaS operator (us), not a hotel.
- * Dev resolver: a fixed operator identity. Real auth (staff SSO) replaces only this function.
- * There is intentionally no tenantId here: the operator is cross-tenant by design.
- */
+/** Operator perimeter — sees ALL tenants. Resolves the logged-in operator staff user. */
 export interface OperatorSession {
   perimeter: "operator";
   userId: string;
@@ -12,6 +10,13 @@ export interface OperatorSession {
   role: "super_admin" | "support";
 }
 
-export async function getOperatorSession(): Promise<OperatorSession> {
-  return { perimeter: "operator", userId: "op-dev", name: "Revio Operator", role: "super_admin" };
+export async function getOperatorSession(): Promise<OperatorSession | null> {
+  const token = await readSessionToken();
+  if (!token) return null;
+  const payload = await verifySessionToken(token);
+  if (!payload || payload.kind !== "operator") return null;
+
+  const op = await prisma.operatorUser.findUnique({ where: { id: payload.sub } });
+  if (!op) return null;
+  return { perimeter: "operator", userId: op.id, name: op.name, role: op.role as OperatorSession["role"] };
 }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@revio/db";
+import { hashPassword } from "./auth";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -40,10 +41,14 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
   let slug = slugify(name);
   if (await prisma.tenant.findUnique({ where: { slug } })) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
 
+  // Demo: give the Owner the shared demo password so the new hotel can log in immediately.
+  // Production: send an invite link and let the Owner set their own password (passwordHash stays null).
+  const passwordHash = await hashPassword("revio1234");
+
   await prisma.tenant.create({
     data: {
       name, slug, plan, status: "active", ...entitlements,
-      users: { create: [{ name: ownerName, email: ownerEmail, role: "owner" }] },
+      users: { create: [{ name: ownerName, email: ownerEmail, role: "owner", passwordHash }] },
       properties: { create: [{ name: propertyName, baseCurrency: "EUR", timezone: "Europe/Sofia" }] },
     },
   });

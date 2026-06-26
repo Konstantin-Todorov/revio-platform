@@ -30,15 +30,26 @@ model Tenant {
 }
 
 model User {
-  id       String @id @default(cuid())
-  tenantId String
-  name     String
-  email    String @unique
-  role     String // owner | admin | revenue_manager | distribution_manager | read_only
+  id           String  @id @default(cuid())
+  tenantId     String
+  name         String
+  email        String  @unique
+  role         String // owner | admin | revenue_manager | distribution_manager | read_only
+  passwordHash String? // null until the invited Owner sets their password
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+}
+
+// Operator staff (us). Cross-tenant by design — NOT tied to any tenant.
+model OperatorUser {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  role         String   @default("super_admin") // super_admin | support
+  passwordHash String
+  createdAt    DateTime @default(now())
 }
 
 // --- Property & sellable products -----------------------------------------

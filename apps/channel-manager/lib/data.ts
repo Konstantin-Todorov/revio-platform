@@ -1,4 +1,5 @@
 import "server-only";
+import { redirect } from "next/navigation";
 import { prisma } from "@revio/db";
 import { deriveRate, type DerivedRateConfig } from "@revio/core";
 import { getSession } from "./session";
@@ -19,6 +20,7 @@ function currentMonday(): Date {
  *  this app resolves the property through here, so a hotel can only ever touch its own data. */
 export async function getProperty() {
   const session = await getSession();
+  if (!session) redirect("/login");
   return prisma.property.findUniqueOrThrow({
     where: { id: session.activePropertyId },
     include: { tenant: true },
