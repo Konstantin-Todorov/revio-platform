@@ -260,8 +260,11 @@ function getMappingRows(channelId: string) {
 
 export async function getSettings() {
   const property = await getProperty();
-  const users = await prisma.user.findMany({ where: { tenantId: property.tenantId }, orderBy: { name: "asc" } });
-  return { property, users };
+  const [users, properties] = await Promise.all([
+    prisma.user.findMany({ where: { tenantId: property.tenantId }, orderBy: { name: "asc" } }),
+    prisma.property.findMany({ where: { tenantId: property.tenantId }, orderBy: { name: "asc" } }),
+  ]);
+  return { property, users, properties };
 }
 
 /** Options for the "simulate a booking" dialog. */
