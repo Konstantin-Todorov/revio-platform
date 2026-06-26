@@ -91,13 +91,16 @@ design/      Atlas/Haven/Pulse handoff prototypes + Revio brand
 ## Deployment
 
 - **Repo:** https://github.com/Konstantin-Todorov/revio-platform (branch `main`).
-- **Live — RevioLink:** https://channel-manager-production-59bb.up.railway.app
+- **Live — RevioLink (CM):** https://channel-manager-production-59bb.up.railway.app
+- **Live — Operator Console:** https://operator-production-5eed.up.railway.app
 - **Railway project:** `revio-platform` — one Postgres shared by all services; each app is its own web
-  service. Build/start config in `railway.json` (Nixpacks → `prisma migrate deploy` → `next start` on `$PORT`).
-- **Auto-deploy:** the `channel-manager` service tracks `main` — **every `git push` builds and deploys
-  automatically.** Migrations run on each deploy; the DB is never reset. Don't run manual `railway up`
-  unless the GitHub source is disconnected.
-- **Adding an app** (Operator/CRS/PMS): a new Railway service on the same Postgres; see `DEPLOY.md`.
+  service. **Each service defines its own build/start via Railway config** (NOT a root `railway.json` —
+  that applied to every service and was removed): build = Nixpacks `pnpm install → db:generate → next
+  build` for its own `--filter`; start = `prisma migrate deploy` → `next start` on `$PORT`.
+- **Auto-deploy:** both services track `main` — **every `git push` builds and deploys both
+  automatically.** Migrations run on each deploy; the DB is never reset.
+- **Adding an app** (CRS/PMS): `railway add --service <name>`, set `DATABASE_URL=${{Postgres.DATABASE_URL}}`,
+  patch its build/start to its own `--filter`, set source repo. See `DEPLOY.md`.
 - Local: `pnpm --filter @revio/<app> dev`. Seed/inspect the remote DB from this machine via
   Postgres's `DATABASE_PUBLIC_URL` (the internal `DATABASE_URL` isn't reachable off-Railway).
 

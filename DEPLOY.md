@@ -7,8 +7,12 @@ sharing that database.
 
 - **Repo:** https://github.com/Konstantin-Todorov/revio-platform (`main`)
 - **RevioLink (Channel Manager):** https://channel-manager-production-59bb.up.railway.app
-- **Railway project `revio-platform`:** services `channel-manager` (app) + `Postgres` (db).
-- **Auto-deploy is ON:** `channel-manager` tracks `main`; every `git push origin main` builds + deploys.
+- **Operator Console:** https://operator-production-5eed.up.railway.app
+- **Railway project `revio-platform`:** services `channel-manager`, `operator`, `Postgres` (one shared DB).
+- **No root `railway.json`** — it applied to every service. Each app service sets its **own** build/start
+  via Railway config (`railway environment edit --json` with `build.buildCommand` + `deploy.startCommand`
+  using that app's `--filter`). Both target `prisma migrate deploy` → `next start` on `$PORT`.
+- **Auto-deploy is ON:** both services track `main`; every `git push origin main` builds + deploys both.
   No manual `railway up` needed. Migrations run on each deploy; the DB is never reset.
 - **Seed/inspect the remote DB from local** with Postgres's public URL (internal `DATABASE_URL` isn't
   reachable off-Railway):
