@@ -1,7 +1,10 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { prisma } from "@revio/db";
+import { forSystem } from "@revio/db";
 import { readSessionToken, verifySessionToken } from "./auth";
+
+// Identity resolution runs before a tenant context exists, so it bypasses RLS (app.bypass=on).
+const prisma = forSystem();
 
 export type Perimeter = "operator" | "hotel";
 export type Role = "owner" | "admin" | "revenue_manager" | "distribution_manager" | "read_only";

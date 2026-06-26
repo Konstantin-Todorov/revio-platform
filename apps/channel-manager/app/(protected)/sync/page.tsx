@@ -13,6 +13,7 @@ export default async function Page() {
       <PageHeader title="Sync Center" subtitle="Live push / pull activity across channels" />
       <Card>
         <CardHeader title="Recent sync activity" />
+        <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
@@ -31,6 +32,7 @@ export default async function Page() {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );

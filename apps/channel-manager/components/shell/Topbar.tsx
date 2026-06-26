@@ -1,5 +1,6 @@
 import { Bell, Search, LogOut } from "lucide-react";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { MobileMenuButton } from "./MobileMenuButton";
 import { logout } from "@/lib/actions-auth";
 
 type Property = { id: string; name: string; tenantName: string };
@@ -23,7 +24,8 @@ export function Topbar({
   userName: string;
 }) {
   return (
-    <header className="sticky top-0 z-20 flex h-[60px] items-center gap-4 border-b border-surface-border bg-white/95 px-6 backdrop-blur">
+    <header className="sticky top-0 z-20 flex h-[60px] items-center gap-3 border-b border-surface-border bg-white/95 px-4 backdrop-blur lg:gap-4 lg:px-6">
+      <MobileMenuButton />
       <div className="relative hidden flex-1 md:block">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
         <input

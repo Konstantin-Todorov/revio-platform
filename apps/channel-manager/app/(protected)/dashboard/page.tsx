@@ -66,6 +66,7 @@ export default async function DashboardPage() {
         {/* Channel status */}
         <Card className="lg:col-span-2">
           <CardHeader title="Channel Status" action={<a href="/channels" className="text-[12px] font-semibold text-brand-600 hover:underline">View all</a>} />
+          <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
@@ -98,6 +99,7 @@ export default async function DashboardPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
 
         {/* Quick actions */}

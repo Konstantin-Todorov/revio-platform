@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, X } from "lucide-react";
 import { Logo } from "./Logo";
+import { useShell } from "./ShellContext";
 
 const SECTIONS: { title?: string; items: { href: string; label: string; icon: typeof LayoutDashboard }[] }[] = [
   { items: [
@@ -20,14 +21,36 @@ const SECTIONS: { title?: string; items: { href: string; label: string; icon: ty
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { open, setOpen } = useShell();
   return (
-    <aside className="flex h-screen w-[248px] shrink-0 flex-col bg-brand-900 text-white/90">
+    <>
+      {/* Backdrop — mobile only, closes the drawer on tap */}
+      <div
+        onClick={() => setOpen(false)}
+        className={`fixed inset-0 z-30 bg-brand-900/50 backdrop-blur-sm transition-opacity duration-200 lg:hidden ${
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        aria-hidden="true"
+      />
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] shrink-0 transform flex-col bg-brand-900 text-white/90 transition-transform duration-200 lg:static lg:translate-x-0 lg:transition-none ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
       <div className="flex items-center gap-2.5 px-5 py-[18px]">
         <Logo className="h-8 w-8" />
         <div className="leading-none">
           <div className="text-[15px] font-bold tracking-tight text-white">Revio</div>
           <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-warning-500">Operator</div>
         </div>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Close menu"
+          className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-4">
@@ -43,6 +66,7 @@ export function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => setOpen(false)}
                   className={`group relative mb-0.5 flex items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium transition-colors duration-150 ${
                     active ? "bg-white/[0.13] text-white" : "text-white/65 hover:bg-white/[0.07] hover:text-white"
                   }`}
@@ -58,6 +82,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">All hotels · super-admin</div>
-    </aside>
+      </aside>
+    </>
   );
 }

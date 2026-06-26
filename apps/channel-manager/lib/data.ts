@@ -1,6 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
-import { prisma } from "@revio/db";
+import { prisma } from "./db";
 import { deriveRate, type DerivedRateConfig } from "@revio/core";
 import { getSession } from "./session";
 

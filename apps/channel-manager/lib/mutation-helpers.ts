@@ -1,5 +1,5 @@
 import "server-only";
-import { prisma } from "@revio/db";
+import { prisma } from "./db";
 
 /** Record an Audit Log entry. Every hand-made change is permanent and attributable. */
 export async function logAudit(

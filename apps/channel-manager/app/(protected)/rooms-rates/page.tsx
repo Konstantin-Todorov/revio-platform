@@ -27,6 +27,7 @@ export default async function RoomsRatesPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader title="Room Types" action={<RoomTypeDialog />} />
+          <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
@@ -53,10 +54,12 @@ export default async function RoomsRatesPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
 
         <Card>
           <CardHeader title="Rate Plans" action={<RatePlanDialog parents={parents} />} />
+          <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
@@ -88,6 +91,7 @@ export default async function RoomsRatesPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       </div>
 

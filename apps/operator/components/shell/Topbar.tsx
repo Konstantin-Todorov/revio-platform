@@ -1,4 +1,5 @@
 import { Globe, Bell, LogOut } from "lucide-react";
+import { MobileMenuButton } from "./MobileMenuButton";
 import { logout } from "@/lib/actions-auth";
 
 const ROLE_LABEL: Record<string, string> = { super_admin: "Super-admin", support: "Support" };
@@ -6,7 +7,8 @@ const ROLE_LABEL: Record<string, string> = { super_admin: "Super-admin", support
 export function Topbar({ name, role }: { name: string; role: string }) {
   const initials = name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase() || "RO";
   return (
-    <header className="sticky top-0 z-20 flex h-[60px] items-center gap-4 border-b border-surface-border bg-white/95 px-6 backdrop-blur">
+    <header className="sticky top-0 z-20 flex h-[60px] items-center gap-3 border-b border-surface-border bg-white/95 px-4 backdrop-blur lg:gap-4 lg:px-6">
+      <MobileMenuButton />
       <div className="flex items-center gap-2 rounded-md bg-surface-muted px-3 py-1.5 text-[12.5px] font-semibold text-ink-700">
         <Globe className="h-4 w-4 text-brand-600" /> All hotels
       </div>

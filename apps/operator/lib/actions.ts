@@ -1,8 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@revio/db";
+import { forSystem } from "@revio/db";
 import { hashPassword } from "./auth";
+
+// Operator provisions clients across all tenants → bypass RLS (app.bypass=on).
+const prisma = forSystem();
 
 export type ActionResult = { ok: boolean; error?: string };
 

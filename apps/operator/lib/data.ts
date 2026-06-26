@@ -1,5 +1,8 @@
 import "server-only";
-import { prisma } from "@revio/db";
+import { forSystem } from "@revio/db";
+
+// Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
+const prisma = forSystem();
 
 /** Aggregate numbers across ALL tenants — the operator's bird's-eye view. */
 export async function getOverviewStats() {

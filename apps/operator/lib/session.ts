@@ -1,6 +1,9 @@
 import "server-only";
-import { prisma } from "@revio/db";
+import { forSystem } from "@revio/db";
 import { readSessionToken, verifySessionToken } from "./auth";
+
+// Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
+const prisma = forSystem();
 
 /** Operator perimeter — sees ALL tenants. Resolves the logged-in operator staff user. */
 export interface OperatorSession {

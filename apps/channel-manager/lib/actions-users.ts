@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@revio/db";
+import { prisma } from "./db";
 import { hashPassword } from "./auth";
 import { getSession } from "./session";
 import { str } from "./mutation-helpers";

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@revio/db";
+import { prisma } from "./db";
 import { deriveRate, isOverbooking, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, strList, eachDate, utcDay } from "./mutation-helpers";

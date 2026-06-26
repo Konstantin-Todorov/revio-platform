@@ -1,8 +1,11 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { prisma } from "@revio/db";
+import { forSystem } from "@revio/db";
 import { verifyPassword, signSession, setSessionCookie, clearSessionCookie } from "./auth";
+
+// Login resolves a user by email before any tenant context exists → bypass RLS (app.bypass=on).
+const prisma = forSystem();
 
 export type LoginResult = { error?: string };
 

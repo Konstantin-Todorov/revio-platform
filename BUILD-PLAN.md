@@ -17,33 +17,53 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 - **Client self-service DONE** — in RevioLink Settings the Owner/Admin invites staff (role select +
   remove, tenant-scoped, role-gated in `lib/actions-users.ts`) and adds properties (chain support).
 
-**⚠️ KNOWN ISSUE — MOBILE LAYOUT IS BROKEN in BOTH apps.** The chrome (`components/shell/Sidebar.tsx`
-+ `Topbar.tsx` in channel-manager AND operator) is fixed-width desktop: the 248px sidebar never
-collapses, tables overflow, the topbar search/switcher don't reflow. **Fix mobile BEFORE cloning the
-layout into RevioCRS/RevioPMS** (otherwise the bug propagates). Plan: make the sidebar a slide-over
-drawer under `lg`, add a hamburger to the Topbar, let `main` tables scroll/stack, test at 375/768px
-(preview_resize). Do it once in a shared way so CRS/PMS inherit a correct responsive shell.
+**✅ MOBILE LAYOUT FIXED in BOTH apps (2026-06-26).** The shell is now responsive: `Sidebar` is a
+slide-over drawer under `lg` (backdrop + X + close-on-navigate) driven by a `ShellContext`; `Topbar`
+has a hamburger (`MobileMenuButton`) shown only `< lg`; wide tables wrap in `overflow-x-auto` so the
+page never overflows. Verified at 375 / 768 / 1280px in both channel-manager and operator. CRS/PMS now
+inherit a correct responsive shell pattern (copy `components/shell/{ShellContext,MobileMenuButton}.tsx`
++ the Sidebar drawer + Topbar hamburger wiring).
+
+**✅ RLS HARDENING — built & verified locally (2026-06-26); prod = a deliberate Phase 2 (see below).**
+DB-level tenant isolation now exists as defense-in-depth on top of app-level scoping. Pieces:
+- Migration `20260626130000_enable_rls`: `ENABLE`+`FORCE ROW LEVEL SECURITY` + a `tenant_isolation`
+  policy on every tenant table, keyed on `app.tenant_id` (hotel) / `app.bypass='on'` (operator/system).
+  Child tables (`RatePlanRoomType`, `ReservationLine`, no `tenantId`) isolate via an `EXISTS` check on
+  their RLS-protected parent. `Tenant` keys on its own `id`.
+- `packages/db/src/rls.ts`: `forTenant(id)` / `forSystem()` wrap each model op in a txn that sets the
+  GUC transaction-locally (canonical Prisma RLS pattern; safe under pooling).
+- CM: a per-request proxy `lib/db.ts` forwards `prisma.x.y()` to the session's tenant client → only the
+  *import* changed in data/action files, not the ~100 call sites. Identity (`session`,`actions-auth`)
+  uses `forSystem()`. Operator uses `forSystem()` (cross-tenant) everywhere.
+- **RLS only enforces against a NON-superuser role** (superusers/`BYPASSRLS` ignore it; `FORCE` only
+  reaches the owner). Local: created `revio_app` via `packages/db/prisma/rls-role.sql`; apps' `.env`
+  connect as it; `packages/db/.env` (owner) is used by migrate/seed.
+- **Verified locally:** as `revio_app` — no GUC → 0 rows; tenant A → only A; bypass → all; cross-tenant
+  INSERT rejected ("violates row-level security policy"); cross-tenant UPDATE → 0 rows. App reads + a
+  real "Simulate booking" write work; operator sees all tenants; tests core 18/18 + db 3/3 pass.
+- **Prod rollout is Phase 2 in `DEPLOY.md`** (create `revio_app` on Railway, split migrate-owner vs
+  runtime-restricted via `directUrl`, switch `DATABASE_URL`, verify, rollback-ready). Pushing the code
+  alone is behaviour-neutral in prod (the Railway role is a superuser → policies bypassed until flipped).
 
 **Real connectivity ≠ data loss:** demo content is DB data; real connectivity is an adapter swap
 (Mock → real `ChannelAdapter`, same interface). Demo tenants keep `MockChannelAdapter`; real tenants get
 real adapters; they coexist. Never point a real adapter at demo hotels.
 
 **▶️ NEXT TASKS — pick up here.** Priority order:
-1. **Mobile/responsive fix** (above) — highest, blocks good CRS/PMS layouts.
-2. **RLS hardening** — Postgres row-level security, defense-in-depth (app-level tenant scoping already
-   enforces isolation today, proven via login). Steps, do carefully + test, don't break the live apps:
-   (a) migration: `ALTER TABLE "X" ENABLE ROW LEVEL SECURITY;` + `CREATE POLICY tenant_isolation ON "X"
-   USING ("tenantId" = current_setting('app.tenant_id', true) OR current_setting('app.bypass', true) =
-   'on');` for every tenant-owned table; (b) a NON-superuser app DB role (Railway user is owner →
-   superuser/owner BYPASS RLS, so either create a restricted role + point `DATABASE_URL` at it, or use
-   `FORCE ROW LEVEL SECURITY`); (c) tenant-scoped Prisma client via `$extends`/interactive txn that runs
-   `SET LOCAL app.tenant_id='<id>'` per request from `getSession().tenantId`; operator client sets
-   `app.bypass='on'`; (d) verify locally with 2 tenants (A can't read B even with a bad query; operator
-   sees all; apps don't return empty) BEFORE flipping prod. Risk: misconfig → empty data / 500s.
+1. ✅ **Mobile/responsive fix — DONE** (2026-06-26, see above) — both apps, verified 375/768/1280.
+2. 🟡 **RLS hardening — DONE locally; PROD PHASE 2 PENDING** (see above + `DEPLOY.md`). Remaining: on
+   Railway, create `revio_app`, add `directUrl` to schema for migrate-as-owner, switch each service's
+   `DATABASE_URL` to the restricted role, redeploy, verify both apps load + A-can't-see-B, keep a
+   rollback. Pushing the current code first is safe/behaviour-neutral (prod role bypasses RLS until
+   flipped). Risk on the flip: misconfig → empty data / 500s — do it with rollback ready.
 3. ✅ **Manual mapping editor — DONE** — `updateMapping` action + per-row `MappingEditDialog` in the
    mapping page let the hotel set external room/rate IDs (status → complete when both filled).
 4. **Real connectivity (Channex / OTA adapters)** → lights up Connectivity screen + real mapping.
 5. **RevioCRS** then **RevioPMS** — new apps, same core/DB, more Railway services; entitlements gate them.
+
+**Minor cleanup noted:** `packages/db` has no `@types/node`, so its `tsc --noEmit typecheck` fails
+("Cannot find type definition file for 'node'") — pre-existing, doesn't affect build/tests/app
+typechecks. Add `@types/node` to `packages/db` devDeps when convenient.
 
 **Also pending:** Billing (Stripe), Platform Health, operator Settings — fill in as their systems land.
 

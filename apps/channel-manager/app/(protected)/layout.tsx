@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Lock } from "lucide-react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
+import { ShellProvider } from "@/components/shell/ShellContext";
 import { getSession, getSwitchableProperties } from "@/lib/session";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -22,14 +23,16 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const activeName = properties.find((p) => p.id === session.activePropertyId)?.name ?? session.tenantName;
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} />
-        <main className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="mx-auto max-w-[1400px]">{children}</div>
-        </main>
+    <ShellProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} />
+          <main className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
+            <div className="mx-auto max-w-[1400px]">{children}</div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ShellProvider>
   );
 }

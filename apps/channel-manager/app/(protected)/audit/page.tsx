@@ -1,4 +1,4 @@
-import { prisma } from "@revio/db";
+import { prisma } from "@/lib/db";
 import { getProperty } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { relativeTime } from "@/lib/format";
@@ -18,6 +18,7 @@ export default async function Page() {
       <PageHeader title="Audit Log" subtitle="Permanent record of every change — who, when, what" />
       <Card>
         <CardHeader title="Recent changes" />
+        <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
@@ -38,6 +39,7 @@ export default async function Page() {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
     </div>
   );

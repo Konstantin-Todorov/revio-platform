@@ -6,8 +6,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { computeAvailability, deriveRate, isOverbooking, occupancyPrice } from "@revio/core";
 
-const url =
+const baseUrl =
   process.env.TEST_DATABASE_URL ?? `postgresql://${process.env.USER}@localhost:5432/revio_test`;
+// Pin to one connection so the session-level RLS bypass (set in beforeAll) holds for the whole run.
+const url = baseUrl + (baseUrl.includes("?") ? "&" : "?") + "connection_limit=1";
 const prisma = new PrismaClient({ datasources: { db: { url } } });
 
 const TABLES = [
@@ -25,6 +27,8 @@ let channelId = "";
 const date = new Date(Date.UTC(2026, 5, 25));
 
 beforeAll(async () => {
+  // This integration test writes across a tenant as the table owner, so bypass RLS for the run.
+  await prisma.$executeRawUnsafe("SET app.bypass = 'on'");
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${TABLES.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE;`);
   const tenant = await prisma.tenant.create({ data: { name: "Test", slug: `t-${Date.now()}` } });
   tenantId = tenant.id;

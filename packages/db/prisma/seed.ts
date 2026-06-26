@@ -9,7 +9,11 @@ import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { deriveRate, type DerivedRateConfig } from "@revio/core";
 
-const prisma = new PrismaClient();
+// Seed writes rows for multiple tenants, so it must bypass RLS. Pin to a single connection
+// (connection_limit=1) and set app.bypass='on' once (see main()) so it persists for every statement.
+const baseUrl = process.env.DATABASE_URL ?? `postgresql://${process.env.USER}@localhost:5432/revio_dev`;
+const seedUrl = baseUrl + (baseUrl.includes("?") ? "&" : "?") + "connection_limit=1";
+const prisma = new PrismaClient({ datasources: { db: { url: seedUrl } } });
 const DEMO_PASSWORD = "revio1234";
 
 // --- date helpers ----------------------------------------------------------
@@ -28,6 +32,9 @@ function currentMonday(): Date {
 }
 
 async function main() {
+  // Bypass row-level security for the whole seed (operator/system perimeter). Session-level SET is
+  // safe here because connection_limit=1 guarantees one connection for the entire run.
+  await prisma.$executeRawUnsafe("SET app.bypass = 'on'");
   console.log("Resetting demo data…");
   // Truncate everything in one statement so FK order doesn't matter (re-runnable seed).
   const tables = [
