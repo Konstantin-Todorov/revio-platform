@@ -104,8 +104,16 @@ design/      Atlas/Haven/Pulse handoff prototypes + Revio brand
 - Local: `pnpm --filter @revio/<app> dev`. Seed/inspect the remote DB from this machine via
   Postgres's `DATABASE_PUBLIC_URL` (the internal `DATABASE_URL` isn't reachable off-Railway).
 
+## Auth (live)
+
+Self-hosted email + password (bcryptjs) + signed JWT session cookies (jose). `getSession()` /
+`getOperatorSession()` now resolve **real** identity; `middleware.ts` gates by cookie; `/login` lives in
+each app outside the `(protected)` route group. CM cookie `revio_session`, operator `revio_op_session`.
+`AUTH_SECRET` is set per Railway service. **Demo logins (password `revio1234`):** RevioLink →
+`admin@hotelsofia.demo` or `owner@blacksea.demo`; Operator → `operator@revio.app`.
+
 ## Status
 
-RevioLink (Channel Manager) is **built, tested, and live** with GitHub auto-deploy. Building the
-Operator Console (App 4) next. See `BUILD-PLAN.md` for the phased order, `ARCHITECTURE.md` for rationale,
+RevioLink + Operator Console are **built, tested, live, and behind login** with GitHub auto-deploy.
+Next: **RLS** (DB-level isolation) → real OTA connectivity (Channex) → RevioCRS / RevioPMS. See `BUILD-PLAN.md` for the phased order, `ARCHITECTURE.md` for rationale,
 `ACCESS-MODEL.md` for the access model, and `DEPLOY.md` for the deploy runbook.
