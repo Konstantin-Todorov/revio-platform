@@ -49,17 +49,31 @@ DB-level tenant isolation now exists as defense-in-depth on top of app-level sco
 (Mock → real `ChannelAdapter`, same interface). Demo tenants keep `MockChannelAdapter`; real tenants get
 real adapters; they coexist. Never point a real adapter at demo hotels.
 
-**▶️ NEXT TASKS — pick up here.** Priority order:
-1. ✅ **Mobile/responsive fix — DONE** (2026-06-26, see above) — both apps, verified 375/768/1280.
-2. 🟡 **RLS hardening — DONE locally; PROD PHASE 2 PENDING** (see above + `DEPLOY.md`). Remaining: on
-   Railway, create `revio_app`, add `directUrl` to schema for migrate-as-owner, switch each service's
-   `DATABASE_URL` to the restricted role, redeploy, verify both apps load + A-can't-see-B, keep a
-   rollback. Pushing the current code first is safe/behaviour-neutral (prod role bypasses RLS until
-   flipped). Risk on the flip: misconfig → empty data / 500s — do it with rollback ready.
-3. ✅ **Manual mapping editor — DONE** — `updateMapping` action + per-row `MappingEditDialog` in the
-   mapping page let the hotel set external room/rate IDs (status → complete when both filled).
-4. **Real connectivity (Channex / OTA adapters)** → lights up Connectivity screen + real mapping.
-5. **RevioCRS** then **RevioPMS** — new apps, same core/DB, more Railway services; entitlements gate them.
+**▶️ NEXT TASKS — pick up here.** Priority order (reprioritized by founder 2026-06-26):
+1. ✅ **Mobile/responsive fix — DONE & DEPLOYED** (Phase 1 push, both apps, verified 375/768/1280).
+2. ✅ **RLS hardening — DONE locally; Phase 1 code DEPLOYED (inert in prod).** Prod DB role is a
+   superuser so the shipped policies are bypassed → behaviour-neutral. **Phase 2 (enforcement) is now
+   scheduled LAST — AFTER RevioCRS + RevioPMS** (see note below). Phase 2 steps live in `DEPLOY.md`.
+3. ✅ **Manual mapping editor — DONE.**
+4. **Finish CM polish**, then **Real connectivity (Channex)** — see connectivity-test plan below.
+5. **RevioCRS** then **RevioPMS** — new Railway services, **same Postgres + same `@revio/core` + same
+   shell/scoping pattern** (this is the platform's core rule). Entitlements gate them.
+6. **RLS Phase 2 (prod enforcement) — LAST**, once CRS/PMS tables exist so one migration covers every
+   product's tenant tables. **CRS/PMS must, from day one, keep the tenant-scoping discipline** (query via
+   a per-request tenant proxy like `apps/channel-manager/lib/db.ts`, reuse `@revio/db` `forTenant`/
+   `forSystem`, carry `tenantId` on every tenant table) so the RLS flip later needs no rewrite.
+
+**Connectivity test plan (test live API keys BEFORE any real client).** It's an adapter swap — the
+`ChannelAdapter` interface + `MockChannelAdapter` already isolate it, and the adapter is chosen **per
+tenant** (demo hotels stay on Mock; others get real adapters; they coexist — no data loss). Steps:
+(1) implement `ChannexChannelAdapter` (same interface); (2) use **Channex sandbox + test API keys**
+(stored encrypted in the operator's connectivity keys, per tenant, never shown to a hotel); (3) make a
+dedicated internal **TEST tenant** ("Revio Test Hotel") wired to the real adapter pointed at the Channex
+sandbox; (4) run the full ARI loop against sandbox (push ARI → verify in Channex's sandbox → make a
+sandbox test booking → confirm the pull decrements availability → re-push); (5) only after the sandbox
+loop is green + Channex certification, point a real client's tenant at the production adapter with their
+real keys. Never point a real adapter at a demo hotel. Per-tenant mode flag: `mock | channex-sandbox |
+channex-prod`, so one deployment serves all three at once.
 
 **Minor cleanup noted:** `packages/db` has no `@types/node`, so its `tsc --noEmit typecheck` fails
 ("Cannot find type definition file for 'node'") — pre-existing, doesn't affect build/tests/app
