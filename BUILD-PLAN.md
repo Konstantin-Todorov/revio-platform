@@ -2,6 +2,40 @@
 
 Order of work toward the Channel Manager demo. Each phase ends in something runnable.
 
+---
+
+## 📍 WHERE WE ARE (2026-06-26) — read this first if resuming
+
+**Live & working** (GitHub auto-deploys `main`):
+- **RevioLink (CM)** → https://channel-manager-production-59bb.up.railway.app — behind login.
+- **Operator Console** → https://operator-production-5eed.up.railway.app — behind login.
+- **Repo** https://github.com/Konstantin-Todorov/revio-platform · **Railway** project `revio-platform`
+  (services `channel-manager`, `operator`, `Postgres`; per-service build/start config — NO root railway.json).
+- **Auth done** (email+password, JWT cookie). Demo logins (pw `revio1234`): RevioLink
+  `admin@hotelsofia.demo` / `owner@blacksea.demo`; Operator `operator@revio.app`.
+- **Empty-hotel crashes fixed**; operator can onboard a client (org+Owner+property+entitlements+base rate).
+
+**▶️ NEXT TASK (agreed): client self-service in RevioLink Settings.** The Settings page
+(`apps/channel-manager/app/(protected)/settings/page.tsx`) is the target. Build:
+1. **Users & Permissions** — Owner/Admin invites staff (name, email, role ∈ owner|admin|
+   revenue_manager|distribution_manager|read_only), edits role, removes. Scope every query/mutation to
+   `getSession().tenantId`. New user gets demo password `revio1234` (prod = invite link). Role-gate:
+   only owner/admin manage users. `getSettings()` already returns `users`. Add `apps/channel-manager/
+   lib/actions-users.ts` (inviteUser/updateUserRole/removeUser) + dialogs (reuse Modal/Field patterns).
+2. **Add Property** — Owner adds another property to their tenant (chain support). `addProperty` action
+   (name, baseCurrency, timezone) creating a Property under `session.tenantId`; it shows up in the
+   top-bar WorkspaceSwitcher (already tenant-scoped).
+3. *(optional)* **Manual mapping editor** — let the hotel type external room/rate IDs per channel in the
+   Mapping screen (real OTA-catalog matching waits for the Channex/OTA connectivity phase).
+
+**Then:** RLS hardening (DB-level isolation) → real connectivity (Channex) → RevioCRS/RevioPMS.
+
+**How to run/deploy:** `pnpm --filter @revio/<app> dev` (CM 3000, operator 3001). Seed/inspect remote DB
+from local via Postgres `DATABASE_PUBLIC_URL`. Push to `main` = auto-deploy both. Local DB `revio_dev`;
+tests DB `revio_test`. Full detail in `CLAUDE.md`, `ACCESS-MODEL.md`, `DEPLOY.md`, and memory.
+
+---
+
 ## ✅ Phase 0 — Foundation (done)
 - Monorepo (pnpm workspaces), nested `CLAUDE.md` system, TS config.
 - `@revio/core`: domain types + availability + derived-rate + restriction engines + channel adapter
