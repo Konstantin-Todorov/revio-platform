@@ -41,9 +41,15 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
   onto a sold-out date is flagged + raised in the Error Center. Verified end-to-end in the browser.
 - Tests: core 18/18 (vitest) + `@revio/db` integration 3/3 against `revio_test`.
 
-## Phase 6 — Operator console (thin) + Railway deploy
-- Operator app: tenant list, entitlements toggle, cross-tenant sync health.
-- Deploy to Railway (Postgres + Redis + web). Demo URL to show the first hotel.
+## ✅ Phase 6a — Railway deploy (done)
+- RevioLink live at https://channel-manager-production-59bb.up.railway.app on Railway (`revio-platform`
+  project, one Postgres). Prisma Migrate runs on deploy. **GitHub auto-deploy on push to `main`** —
+  proven end to end. Repo: https://github.com/Konstantin-Todorov/revio-platform.
+
+## 🟡 Phase 6b — Operator Console (App 4, in progress)
+- `apps/operator` (@revio/operator): all hotels overview, create client (org + owner + entitlements),
+  toggle entitlements + plan per client, cross-tenant sync health. Operator perimeter (sees all tenants).
+- Deploys as a second Railway service on the same Postgres; auto-deploys on push.
 
 ## Later (post-demo)
 - Real connectivity (Channex first, then direct OTA adapters), per channel, behind the same interface.

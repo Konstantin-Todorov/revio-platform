@@ -88,7 +88,21 @@ design/      Atlas/Haven/Pulse handoff prototypes + Revio brand
 - Domain logic is **pure and tested** in `packages/core`; apps stay thin (UI + wiring).
 - Don't widen a product's scope past what its `CLAUDE.md` says is in V1.
 
+## Deployment
+
+- **Repo:** https://github.com/Konstantin-Todorov/revio-platform (branch `main`).
+- **Live — RevioLink:** https://channel-manager-production-59bb.up.railway.app
+- **Railway project:** `revio-platform` — one Postgres shared by all services; each app is its own web
+  service. Build/start config in `railway.json` (Nixpacks → `prisma migrate deploy` → `next start` on `$PORT`).
+- **Auto-deploy:** the `channel-manager` service tracks `main` — **every `git push` builds and deploys
+  automatically.** Migrations run on each deploy; the DB is never reset. Don't run manual `railway up`
+  unless the GitHub source is disconnected.
+- **Adding an app** (Operator/CRS/PMS): a new Railway service on the same Postgres; see `DEPLOY.md`.
+- Local: `pnpm --filter @revio/<app> dev`. Seed/inspect the remote DB from this machine via
+  Postgres's `DATABASE_PUBLIC_URL` (the internal `DATABASE_URL` isn't reachable off-Railway).
+
 ## Status
 
-Foundation stage. CM demo is the active build. See `BUILD-PLAN.md` for the phased order and
-`ARCHITECTURE.md` for the rationale and decisions already made.
+RevioLink (Channel Manager) is **built, tested, and live** with GitHub auto-deploy. Building the
+Operator Console (App 4) next. See `BUILD-PLAN.md` for the phased order, `ARCHITECTURE.md` for rationale,
+`ACCESS-MODEL.md` for the access model, and `DEPLOY.md` for the deploy runbook.

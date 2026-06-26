@@ -1,7 +1,22 @@
 # Deploying Revio to Railway
 
 The platform is a pnpm monorepo on **one Postgres database**. Each app is its own Railway web service
-sharing that database. RevioLink (the Channel Manager) deploys first.
+sharing that database.
+
+## Current state (live)
+
+- **Repo:** https://github.com/Konstantin-Todorov/revio-platform (`main`)
+- **RevioLink (Channel Manager):** https://channel-manager-production-59bb.up.railway.app
+- **Railway project `revio-platform`:** services `channel-manager` (app) + `Postgres` (db).
+- **Auto-deploy is ON:** `channel-manager` tracks `main`; every `git push origin main` builds + deploys.
+  No manual `railway up` needed. Migrations run on each deploy; the DB is never reset.
+- **Seed/inspect the remote DB from local** with Postgres's public URL (internal `DATABASE_URL` isn't
+  reachable off-Railway):
+  `DATABASE_URL="$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)" pnpm --filter @revio/db db:seed`
+
+The original first-deploy runbook is kept below for reference / new apps.
+
+---
 
 ## One-time auth (you, in a terminal on this Mac)
 

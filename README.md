@@ -3,6 +3,10 @@
 A composable line of hotel software — **Channel Manager**, **Reservation/CRS**, **PMS** — sharing one
 inventory core, sold separately, run by one operator over many hotels.
 
+> **Live:** RevioLink (Channel Manager) → https://channel-manager-production-59bb.up.railway.app
+> · **Repo:** https://github.com/Konstantin-Todorov/revio-platform · pushes to `main` auto-deploy on Railway.
+> See [`DEPLOY.md`](DEPLOY.md).
+
 Start with **[`CLAUDE.md`](CLAUDE.md)** (the big picture), then **[`ARCHITECTURE.md`](ARCHITECTURE.md)**
 (decisions & rationale) and **[`BUILD-PLAN.md`](BUILD-PLAN.md)** (what gets built, in order).
 
