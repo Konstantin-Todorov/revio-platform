@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@revio/channel-manager", "dev"],
       "port": 3000
+    },
+    {
+      "name": "operator",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@revio/operator", "dev"],
+      "port": 3001
     }
   ]
 }

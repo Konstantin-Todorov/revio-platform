@@ -20,6 +20,9 @@ model Tenant {
   hasChannelManager Boolean @default(true)
   hasReservation    Boolean @default(false)
   hasPms            Boolean @default(false)
+  // Commercial profile, set by the operator. plan ≈ room-count tier / package; status gates access.
+  plan      String   @default("starter") // starter | growth | scale
+  status    String   @default("active")  // active | suspended
   createdAt DateTime @default(now())
 
   properties Property[]
