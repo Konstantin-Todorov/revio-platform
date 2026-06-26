@@ -4,6 +4,7 @@ import { getMapping } from "@/lib/data";
 import { fixMappings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { MappingEditDialog } from "@/components/mapping/MappingEditDialog";
 
 export const dynamic = "force-dynamic";
 
@@ -71,16 +72,25 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
                 {["Room Type", "Rate Plan", "External Room ID", "External Rate ID", "Status"].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
+                <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody>
               {mappings.map((m) => (
-                <tr key={m.id} className="border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
+                <tr key={m.id} className="group border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
                   <td className="px-4 py-2.5 font-semibold text-ink-900">{m.roomType.name}</td>
                   <td className="px-4 py-2.5 text-ink-600">{m.ratePlan.name}</td>
                   <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRoomId ?? <span className="text-danger-500">—</span>}</td>
                   <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRateId ?? <span className="text-danger-500">—</span>}</td>
                   <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status.replace(/_/g, " ")}</StatusPill></td>
+                  <td className="px-2 py-2.5">
+                    <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+                      <MappingEditDialog
+                        channelName={channel.name}
+                        mapping={{ id: m.id, roomTypeName: m.roomType.name, ratePlanName: m.ratePlan.name, externalRoomId: m.externalRoomId, externalRateId: m.externalRateId }}
+                      />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

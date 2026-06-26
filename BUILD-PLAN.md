@@ -17,19 +17,33 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 - **Client self-service DONE** — in RevioLink Settings the Owner/Admin invites staff (role select +
   remove, tenant-scoped, role-gated in `lib/actions-users.ts`) and adds properties (chain support).
 
-**▶️ NEXT TASK — pick up here.** In rough priority:
-1. *(optional, small)* **Manual mapping editor** — in `app/(protected)/mapping/page.tsx`, let the hotel
-   type/edit external room & rate IDs per channel (add an `updateMapping(channelId, roomTypeId,
-   ratePlanId, externalRoomId, externalRateId)` action). Real per-OTA catalog matching needs live
-   connectivity (below); this is the manual self-service version against the mock.
-2. **RLS hardening** — Postgres row-level security keyed on a per-request `app.tenant_id` GUC + a
-   non-superuser app DB role (so even a forgotten WHERE can't leak). Wrap Prisma in a tenant-scoped
-   client (transaction sets the GUC); operator perimeter bypasses. Do carefully + test with 2 tenants;
-   app-level scoping already enforces isolation today (proven via login), so this is defense-in-depth.
-3. **Real connectivity (Channex / OTA adapters)** — implement a real `ChannelAdapter` behind the same
-   interface as `MockChannelAdapter`; then the Connectivity screen (operator) + real mapping light up.
-4. **RevioCRS** (booking engine + folio + payments) then **RevioPMS** — new apps on the same core/DB,
-   deployed as more Railway services; entitlements already gate them.
+**⚠️ KNOWN ISSUE — MOBILE LAYOUT IS BROKEN in BOTH apps.** The chrome (`components/shell/Sidebar.tsx`
++ `Topbar.tsx` in channel-manager AND operator) is fixed-width desktop: the 248px sidebar never
+collapses, tables overflow, the topbar search/switcher don't reflow. **Fix mobile BEFORE cloning the
+layout into RevioCRS/RevioPMS** (otherwise the bug propagates). Plan: make the sidebar a slide-over
+drawer under `lg`, add a hamburger to the Topbar, let `main` tables scroll/stack, test at 375/768px
+(preview_resize). Do it once in a shared way so CRS/PMS inherit a correct responsive shell.
+
+**Real connectivity ≠ data loss:** demo content is DB data; real connectivity is an adapter swap
+(Mock → real `ChannelAdapter`, same interface). Demo tenants keep `MockChannelAdapter`; real tenants get
+real adapters; they coexist. Never point a real adapter at demo hotels.
+
+**▶️ NEXT TASKS — pick up here.** Priority order:
+1. **Mobile/responsive fix** (above) — highest, blocks good CRS/PMS layouts.
+2. **RLS hardening** — Postgres row-level security, defense-in-depth (app-level tenant scoping already
+   enforces isolation today, proven via login). Steps, do carefully + test, don't break the live apps:
+   (a) migration: `ALTER TABLE "X" ENABLE ROW LEVEL SECURITY;` + `CREATE POLICY tenant_isolation ON "X"
+   USING ("tenantId" = current_setting('app.tenant_id', true) OR current_setting('app.bypass', true) =
+   'on');` for every tenant-owned table; (b) a NON-superuser app DB role (Railway user is owner →
+   superuser/owner BYPASS RLS, so either create a restricted role + point `DATABASE_URL` at it, or use
+   `FORCE ROW LEVEL SECURITY`); (c) tenant-scoped Prisma client via `$extends`/interactive txn that runs
+   `SET LOCAL app.tenant_id='<id>'` per request from `getSession().tenantId`; operator client sets
+   `app.bypass='on'`; (d) verify locally with 2 tenants (A can't read B even with a bad query; operator
+   sees all; apps don't return empty) BEFORE flipping prod. Risk: misconfig → empty data / 500s.
+3. ✅ **Manual mapping editor — DONE** — `updateMapping` action + per-row `MappingEditDialog` in the
+   mapping page let the hotel set external room/rate IDs (status → complete when both filled).
+4. **Real connectivity (Channex / OTA adapters)** → lights up Connectivity screen + real mapping.
+5. **RevioCRS** then **RevioPMS** — new apps, same core/DB, more Railway services; entitlements gate them.
 
 **Also pending:** Billing (Stripe), Platform Health, operator Settings — fill in as their systems land.
 

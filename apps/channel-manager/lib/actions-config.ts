@@ -89,6 +89,26 @@ export async function fixMappings(fd: FormData): Promise<void> {
   revalidatePath("/dashboard");
 }
 
+/** Manually set a product's external IDs on a channel (self-service mapping against the mock). */
+export async function updateMapping(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const id = str(fd, "id");
+  const externalRoomId = str(fd, "externalRoomId") || null;
+  const externalRateId = str(fd, "externalRateId") || null;
+
+  const mapping = await prisma.productMapping.findUnique({ where: { id }, include: { channel: true, roomType: true, ratePlan: true } });
+  if (!mapping || mapping.tenantId !== tenantId) return { ok: false, error: "Mapping not found." };
+
+  const status = externalRoomId && externalRateId ? "complete" : "incomplete";
+  await prisma.productMapping.update({ where: { id }, data: { externalRoomId, externalRateId, status } });
+  await logAudit(propertyId, tenantId, { entity: `Mapping · ${mapping.channel.name} · ${mapping.roomType.name}/${mapping.ratePlan.name}`, field: "mapping", newValue: status });
+  await recordPush(propertyId, tenantId, `Mapping updated for ${mapping.channel.name}`);
+  revalidatePath("/mapping");
+  revalidatePath("/channels");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}
+
 // --- Channel settings & add channel ---------------------------------------
 
 export async function saveChannelSettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
