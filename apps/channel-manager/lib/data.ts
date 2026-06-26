@@ -90,22 +90,30 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
   const propertyId = property.id;
 
   const roomTypes = await prisma.roomType.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
-  const roomType = roomTypes.find((r) => r.code === roomTypeCode) ?? roomTypes[0]!;
-
   const start = currentMonday();
   const dates = Array.from({ length: days }, (_, i) => addDays(start, i));
+
+  // Empty hotel (no room types yet) — return a calendar with nothing to render; the page shows a CTA.
+  if (roomTypes.length === 0) {
+    return { property, roomTypes, roomType: null, dates: dates.map((d) => d.toISOString().slice(0, 10)), rows: [], currency: property.baseCurrency };
+  }
+
+  const roomType = roomTypes.find((r) => r.code === roomTypeCode) ?? roomTypes[0]!;
   const end = addDays(start, days - 1);
 
-  const standard = await prisma.ratePlan.findFirstOrThrow({ where: { propertyId, code: "BAR" } });
+  // The base manual rate plan (prefer "BAR", else the first manual plan). May be absent on a new hotel.
+  const standard =
+    (await prisma.ratePlan.findFirst({ where: { propertyId, code: "BAR" } })) ??
+    (await prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual" }, orderBy: { sortOrder: "asc" } }));
   const derived = await prisma.ratePlan.findMany({
     where: { propertyId, priceLogic: "derived", code: { in: ["NR", "BRF"] } },
     orderBy: { sortOrder: "asc" },
   });
 
   const [prices, cells] = await Promise.all([
-    prisma.ratePrice.findMany({
-      where: { roomTypeId: roomType.id, ratePlanId: standard.id, date: { gte: start, lte: end } },
-    }),
+    standard
+      ? prisma.ratePrice.findMany({ where: { roomTypeId: roomType.id, ratePlanId: standard.id, date: { gte: start, lte: end } } })
+      : Promise.resolve([]),
     prisma.dailyCell.findMany({ where: { roomTypeId: roomType.id, date: { gte: start, lte: end } } }),
   ]);
 
@@ -137,7 +145,7 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
 
   for (const dp of derived) {
     const cfg: DerivedRateConfig = {
-      parentRatePlanId: standard.id,
+      parentRatePlanId: standard?.id ?? "",
       adjustmentType: (dp.derivedType as "percent" | "fixed") ?? "percent",
       direction: (dp.derivedDirection as "increase" | "decrease") ?? "decrease",
       value: dp.derivedValue ?? 0,
@@ -233,13 +241,21 @@ export async function getRestrictions() {
 export async function getMapping(channelCode?: string) {
   const property = await getProperty();
   const channels = await prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } });
+  // No channels connected yet — return nothing to map; the page shows a CTA.
+  if (channels.length === 0) {
+    return { property, channels, channel: null, mappings: [] as Awaited<ReturnType<typeof getMappingRows>> };
+  }
   const channel = channels.find((c) => c.code === channelCode) ?? channels[0]!;
-  const mappings = await prisma.productMapping.findMany({
-    where: { channelId: channel.id },
+  const mappings = await getMappingRows(channel.id);
+  return { property, channels, channel, mappings };
+}
+
+function getMappingRows(channelId: string) {
+  return prisma.productMapping.findMany({
+    where: { channelId },
     include: { roomType: true, ratePlan: true },
     orderBy: [{ roomType: { sortOrder: "asc" } }, { ratePlan: { sortOrder: "asc" } }],
   });
-  return { property, channels, channel, mappings };
 }
 
 export async function getSettings() {

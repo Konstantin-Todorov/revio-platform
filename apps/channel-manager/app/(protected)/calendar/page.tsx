@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { BedDouble } from "lucide-react";
 import { getCalendar, getBookingOptions } from "@/lib/data";
 import { PageHeader } from "@/components/ui/primitives";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { EditableCell } from "@/components/calendar/EditableCell";
 import { BookingDialog } from "@/components/booking/BookingDialog";
 import { weekday, dayMonth, isWeekend, ymd } from "@/lib/format";
@@ -17,6 +19,22 @@ export default async function CalendarPage({
   const sp = await searchParams;
   const days = VIEWS.includes(Number(sp.days)) ? Number(sp.days) : 7;
   const { property, roomTypes, roomType, dates, rows, currency } = await getCalendar(sp.rt, days);
+
+  if (!roomType) {
+    return (
+      <div>
+        <PageHeader title="Calendar" subtitle={`${property.name} · availability, rates & restrictions`} />
+        <EmptyState
+          icon={<BedDouble className="h-7 w-7" />}
+          title="No room types yet"
+          body="The calendar shows availability and rates per room type. Add your first room type to get started."
+          actionLabel="Go to Rooms & Rates"
+          actionHref="/rooms-rates"
+        />
+      </div>
+    );
+  }
+
   const bookingOptions = await getBookingOptions();
 
   const todayKey = ymd(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())));

@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Link2 } from "lucide-react";
 import { getMapping } from "@/lib/data";
 import { fixMappings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,21 @@ const STATUS_TONE: Record<string, Tone> = {
 export default async function Page({ searchParams }: { searchParams: Promise<{ ch?: string }> }) {
   const sp = await searchParams;
   const { channels, channel, mappings } = await getMapping(sp.ch);
+
+  if (!channel) {
+    return (
+      <div>
+        <PageHeader title="Mapping" subtitle="Link your products to each channel's own IDs — self-service" />
+        <EmptyState
+          icon={<Link2 className="h-7 w-7" />}
+          title="No channels connected yet"
+          body="Mapping links your room types and rate plans to each channel's own IDs. Connect a channel first, then map its products here."
+          actionLabel="Connect a channel"
+          actionHref="/channels"
+        />
+      </div>
+    );
+  }
   const incomplete = mappings.filter((m) => m.status !== "complete").length;
 
   return (

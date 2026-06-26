@@ -24,6 +24,14 @@ export function BookingDialog({ options, defaultRoomTypeId }: { options: Options
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Simulate a channel booking">
+        {(options.channels.length === 0 || options.roomTypes.length === 0 || options.ratePlans.length === 0) ? (
+          <div className="py-2 text-[13px] text-ink-600">
+            To simulate a booking you need at least one <span className="font-semibold">room type</span>, one
+            <span className="font-semibold"> rate plan</span>, and one connected <span className="font-semibold">channel</span>.
+            Add them in <span className="font-semibold text-ink-800">Rooms &amp; Rates</span> and <span className="font-semibold text-ink-800">Channels</span> first.
+          </div>
+        ) : (
+        <>
         <p className="mb-3 text-[12.5px] text-ink-500">
           Books on a (mock) channel, imports the reservation, drops availability for those nights, and re-pushes —
           the full <span className="font-semibold text-ink-700">edit → book → pull → re-push</span> loop.
@@ -64,6 +72,8 @@ export function BookingDialog({ options, defaultRoomTypeId }: { options: Options
             </button>
           </div>
         </form>
+        </>
+        )}
       </Modal>
     </>
   );

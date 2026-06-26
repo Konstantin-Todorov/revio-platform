@@ -45,12 +45,19 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
   // Production: send an invite link and let the Owner set their own password (passwordHash stays null).
   const passwordHash = await hashPassword("revio1234");
 
-  await prisma.tenant.create({
+  const tenant = await prisma.tenant.create({
     data: {
       name, slug, plan, status: "active", ...entitlements,
       users: { create: [{ name: ownerName, email: ownerEmail, role: "owner", passwordHash }] },
       properties: { create: [{ name: propertyName, baseCurrency: "EUR", timezone: "Europe/Sofia" }] },
     },
+    include: { properties: true },
+  });
+  // Every new hotel starts with a base "Standard Rate" (manual) so the calendar, bulk update and
+  // derived rates have a parent to work from. The Owner adds room types + more rate plans from there.
+  const property = tenant.properties[0]!;
+  await prisma.ratePlan.create({
+    data: { tenantId: tenant.id, propertyId: property.id, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 },
   });
 
   revalidatePath("/clients");

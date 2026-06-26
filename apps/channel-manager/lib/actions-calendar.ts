@@ -16,9 +16,12 @@ function revalidateCalendar() {
   revalidatePath("/audit");
 }
 
-async function standardPlanId(propertyId: string): Promise<string> {
-  const std = await prisma.ratePlan.findFirstOrThrow({ where: { propertyId, code: "BAR" } });
-  return std.id;
+/** The base manual rate plan id (prefer "BAR", else first manual). Null on a hotel without one. */
+async function standardPlanId(propertyId: string): Promise<string | null> {
+  const std =
+    (await prisma.ratePlan.findFirst({ where: { propertyId, code: "BAR" } })) ??
+    (await prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual" }, orderBy: { sortOrder: "asc" } }));
+  return std?.id ?? null;
 }
 
 async function upsertCell(
@@ -43,6 +46,7 @@ export async function saveCell(input: { roomTypeId: string; date: string; field:
   if (input.field === "price") {
     const priceMinor = Math.max(0, Math.round(parseFloat(input.value) * 100));
     const ratePlanId = await standardPlanId(propertyId);
+    if (!ratePlanId) return; // no base rate plan to price against
     await prisma.ratePrice.upsert({
       where: { roomTypeId_ratePlanId_date: { roomTypeId: input.roomTypeId, ratePlanId, date } },
       update: { priceMinor },
@@ -91,12 +95,16 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
   if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
 
   const ratePlanId = await standardPlanId(propertyId);
+  if (updateType.startsWith("rate_") && !ratePlanId) {
+    return { ok: false, error: "Add a rate plan before bulk-updating prices." };
+  }
   let affected = 0;
 
   for (const roomTypeId of roomTypeIds) {
     for (const date of dates) {
       if (updateType.startsWith("rate_")) {
-        const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId, date } } });
+        const rpId = ratePlanId!; // guarded above for rate_* types
+        const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
         const base = existing?.priceMinor ?? 0;
         let next = base;
         if (updateType === "rate_set") next = Math.round(value * 100);
@@ -105,9 +113,9 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
         else if (updateType === "rate_inc_amt") next = base + Math.round(value * 100);
         else if (updateType === "rate_dec_amt") next = Math.max(0, base - Math.round(value * 100));
         await prisma.ratePrice.upsert({
-          where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId, date } },
+          where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
           update: { priceMinor: next },
-          create: { tenantId, propertyId, roomTypeId, ratePlanId, date, priceMinor: next },
+          create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next },
         });
       } else if (updateType === "availability_set") {
         await upsertCell(tenantId, propertyId, roomTypeId, date, { availabilityOverride: Math.max(0, Math.trunc(value)) });
@@ -153,7 +161,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
   let totalMinor = 0;
   let overbooked = false;
   const derivedCfg: DerivedRateConfig | null = ratePlan.priceLogic === "derived" && ratePlan.derivedType ? {
-    parentRatePlanId: stdId,
+    parentRatePlanId: stdId ?? "",
     adjustmentType: ratePlan.derivedType as "percent" | "fixed",
     direction: (ratePlan.derivedDirection as "increase" | "decrease") ?? "decrease",
     value: ratePlan.derivedValue ?? 0,
@@ -165,7 +173,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
   const checkOutDate = new Date(checkInDate.getTime() + nights * 86_400_000);
 
   for (const date of dates) {
-    const sp = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: stdId, date } } });
+    const sp = stdId ? await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: stdId, date } } }) : null;
     const stdMinor = sp?.priceMinor ?? 0;
     totalMinor += (derivedCfg ? deriveRate(stdMinor, derivedCfg) : stdMinor) * quantity;
 
