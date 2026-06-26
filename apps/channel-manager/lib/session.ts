@@ -33,7 +33,8 @@ export async function getSession(): Promise<Session> {
     (cookieProp
       ? await prisma.property.findUnique({ where: { id: cookieProp }, include: { tenant: true } })
       : null) ??
-    (await prisma.property.findFirst({ include: { tenant: true }, orderBy: { name: "asc" } }));
+    // Default to the oldest tenant's property (the flagship demo hotel, Hotel Sofia).
+    (await prisma.property.findFirst({ include: { tenant: true }, orderBy: { tenant: { createdAt: "asc" } } }));
 
   if (!active) throw new Error("No property exists — seed the database.");
 
