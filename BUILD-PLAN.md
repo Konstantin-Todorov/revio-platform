@@ -14,21 +14,24 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 - **Auth done** (email+password, JWT cookie). Demo logins (pw `revio1234`): RevioLink
   `admin@hotelsofia.demo` / `owner@blacksea.demo`; Operator `operator@revio.app`.
 - **Empty-hotel crashes fixed**; operator can onboard a client (org+Owner+property+entitlements+base rate).
+- **Client self-service DONE** — in RevioLink Settings the Owner/Admin invites staff (role select +
+  remove, tenant-scoped, role-gated in `lib/actions-users.ts`) and adds properties (chain support).
 
-**▶️ NEXT TASK (agreed): client self-service in RevioLink Settings.** The Settings page
-(`apps/channel-manager/app/(protected)/settings/page.tsx`) is the target. Build:
-1. **Users & Permissions** — Owner/Admin invites staff (name, email, role ∈ owner|admin|
-   revenue_manager|distribution_manager|read_only), edits role, removes. Scope every query/mutation to
-   `getSession().tenantId`. New user gets demo password `revio1234` (prod = invite link). Role-gate:
-   only owner/admin manage users. `getSettings()` already returns `users`. Add `apps/channel-manager/
-   lib/actions-users.ts` (inviteUser/updateUserRole/removeUser) + dialogs (reuse Modal/Field patterns).
-2. **Add Property** — Owner adds another property to their tenant (chain support). `addProperty` action
-   (name, baseCurrency, timezone) creating a Property under `session.tenantId`; it shows up in the
-   top-bar WorkspaceSwitcher (already tenant-scoped).
-3. *(optional)* **Manual mapping editor** — let the hotel type external room/rate IDs per channel in the
-   Mapping screen (real OTA-catalog matching waits for the Channex/OTA connectivity phase).
+**▶️ NEXT TASK — pick up here.** In rough priority:
+1. *(optional, small)* **Manual mapping editor** — in `app/(protected)/mapping/page.tsx`, let the hotel
+   type/edit external room & rate IDs per channel (add an `updateMapping(channelId, roomTypeId,
+   ratePlanId, externalRoomId, externalRateId)` action). Real per-OTA catalog matching needs live
+   connectivity (below); this is the manual self-service version against the mock.
+2. **RLS hardening** — Postgres row-level security keyed on a per-request `app.tenant_id` GUC + a
+   non-superuser app DB role (so even a forgotten WHERE can't leak). Wrap Prisma in a tenant-scoped
+   client (transaction sets the GUC); operator perimeter bypasses. Do carefully + test with 2 tenants;
+   app-level scoping already enforces isolation today (proven via login), so this is defense-in-depth.
+3. **Real connectivity (Channex / OTA adapters)** — implement a real `ChannelAdapter` behind the same
+   interface as `MockChannelAdapter`; then the Connectivity screen (operator) + real mapping light up.
+4. **RevioCRS** (booking engine + folio + payments) then **RevioPMS** — new apps on the same core/DB,
+   deployed as more Railway services; entitlements already gate them.
 
-**Then:** RLS hardening (DB-level isolation) → real connectivity (Channex) → RevioCRS/RevioPMS.
+**Also pending:** Billing (Stripe), Platform Health, operator Settings — fill in as their systems land.
 
 **How to run/deploy:** `pnpm --filter @revio/<app> dev` (CM 3000, operator 3001). Seed/inspect remote DB
 from local via Postgres `DATABASE_PUBLIC_URL`. Push to `main` = auto-deploy both. Local DB `revio_dev`;
