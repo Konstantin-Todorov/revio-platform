@@ -41,7 +41,7 @@ export default async function RoomsRatesPage() {
                   <td className="px-4 py-2.5 font-semibold text-ink-900">{rt.name}</td>
                   <td className="px-4 py-2.5 text-ink-500">{rt.code}</td>
                   <td className="px-4 py-2.5 text-ink-600">{KIND_LABEL[rt.unitKind] ?? rt.unitKind}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-700">{rt.totalInventory}</td>
+                  <td className="tnum px-4 py-2.5 text-ink-700">{rt.totalRooms}</td>
                   <td className="tnum px-4 py-2.5 text-ink-700">{rt.maxGuests}</td>
                   <td className="px-4 py-2.5"><StatusPill tone={rt.active ? "success" : "neutral"}>{rt.active ? "Active" : "Inactive"}</StatusPill></td>
                   <td className="px-2 py-2.5">

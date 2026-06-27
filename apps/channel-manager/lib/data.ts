@@ -79,8 +79,8 @@ export type CalendarRow = {
   kind: "availability" | "price" | "restriction" | "flag";
   /** Derived/secondary rows render in a muted style. */
   muted?: boolean;
-  /** Which DailyCell/RatePrice field this row edits (absent ⇒ read-only, e.g. derived rates). */
-  field?: "availability" | "price" | "minLos" | "ctd" | "stopSell";
+  /** Which DailyCell/RatePrice field this row edits (absent ⇒ read-only, e.g. derived rates / rooms sold). */
+  field?: "inventory" | "price" | "minLos" | "ctd" | "stopSell";
   editable?: boolean;
   cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean }[];
 };
@@ -110,28 +110,52 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
     orderBy: { sortOrder: "asc" },
   });
 
-  const [prices, cells] = await Promise.all([
+  const [prices, cells, resLines] = await Promise.all([
     standard
       ? prisma.ratePrice.findMany({ where: { roomTypeId: roomType.id, ratePlanId: standard.id, date: { gte: start, lte: end } } })
       : Promise.resolve([]),
     prisma.dailyCell.findMany({ where: { roomTypeId: roomType.id, date: { gte: start, lte: end } } }),
+    // Active reservation lines overlapping the window → "rooms sold" per date (derived).
+    prisma.reservationLine.findMany({
+      where: {
+        roomTypeId: roomType.id,
+        reservation: { propertyId, status: { in: ["confirmed", "modified", "overbooked"] } },
+        checkIn: { lte: end },
+        checkOut: { gt: start },
+      },
+    }),
   ]);
 
   const priceByDate = new Map(prices.map((p) => [p.date.toISOString().slice(0, 10), p.priceMinor]));
   const cellByDate = new Map(cells.map((c) => [c.date.toISOString().slice(0, 10), c]));
+  const soldByDate = new Map(
+    dates.map((d) => {
+      const k = d.toISOString().slice(0, 10);
+      const sold = resLines.filter((l) => l.checkIn <= d && d < l.checkOut).reduce((s, l) => s + l.quantity, 0);
+      return [k, sold] as const;
+    }),
+  );
 
   const cur = property.baseCurrency;
   const fmt = (m: number | undefined) => (m === undefined ? "—" : (m / 100).toLocaleString("en-US"));
 
   const rows: CalendarRow[] = [];
 
+  // "Rooms to sell" = the per-date allotment (defaults to physical Total Rooms). Editable.
   rows.push({
-    key: "availability", label: "Availability", kind: "availability", field: "availability", editable: true,
+    key: "inventory", label: "Rooms to sell", kind: "availability", field: "inventory", editable: true,
     cells: dates.map((d) => {
       const k = d.toISOString().slice(0, 10);
-      const cell = cellByDate.get(k);
-      const avail = cell?.availabilityOverride ?? roomType.totalInventory;
-      return { date: k, value: String(avail) };
+      const inv = cellByDate.get(k)?.inventory ?? roomType.totalRooms;
+      return { date: k, value: String(inv) };
+    }),
+  });
+  // "Rooms sold" = derived from confirmed reservations. Read-only (bookable = to-sell − sold).
+  rows.push({
+    key: "sold", label: "Rooms sold", kind: "availability", muted: true,
+    cells: dates.map((d) => {
+      const k = d.toISOString().slice(0, 10);
+      return { date: k, value: String(soldByDate.get(k) ?? 0), muted: true };
     }),
   });
 

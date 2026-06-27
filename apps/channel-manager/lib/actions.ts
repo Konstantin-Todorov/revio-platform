@@ -20,7 +20,7 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   if (!name) return { ok: false, error: "Name is required." };
   if (!code) return { ok: false, error: "Code is required." };
 
-  const totalInventory = Math.max(0, int(fd, "totalInventory"));
+  const totalRooms = Math.max(0, int(fd, "totalRooms"));
   const maxGuests = Math.max(1, int(fd, "maxGuests", 1));
   const unitKind = str(fd, "unitKind") || "room";
   const active = fd.get("active") != null;
@@ -36,25 +36,25 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
     const before = await prisma.roomType.findUnique({ where: { id: rowId } });
     await prisma.roomType.update({
       where: { id: rowId },
-      data: { name, code, unitKind, totalInventory, maxGuests, description, active },
+      data: { name, code, unitKind, totalRooms, maxGuests, description, active },
     });
     await logAudit(propertyId, tenantId, {
       entity: `Room Type · ${name}`, field: "edit",
-      oldValue: before ? `${before.name} (${before.totalInventory})` : undefined,
-      newValue: `${name} (${totalInventory})`,
+      oldValue: before ? `${before.name} (${before.totalRooms})` : undefined,
+      newValue: `${name} (${totalRooms})`,
     });
     await recordPush(propertyId, tenantId, `Room type "${name}" updated`);
   } else {
     const count = await prisma.roomType.count({ where: { propertyId } });
     const created = await prisma.roomType.create({
-      data: { tenantId, propertyId, name, code, unitKind, totalInventory, maxGuests, description, active, sortOrder: count },
+      data: { tenantId, propertyId, name, code, unitKind, totalRooms, maxGuests, description, active, sortOrder: count },
     });
     // A new room type becomes sellable under every existing rate plan (room × rate = product).
     const plans = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true } });
     if (plans.length) {
       await prisma.ratePlanRoomType.createMany({ data: plans.map((p) => ({ ratePlanId: p.id, roomTypeId: created.id })) });
     }
-    await logAudit(propertyId, tenantId, { entity: `Room Type · ${name}`, field: "create", newValue: `${name} · ${totalInventory} units` });
+    await logAudit(propertyId, tenantId, { entity: `Room Type · ${name}`, field: "create", newValue: `${name} · ${totalRooms} units` });
     await recordPush(propertyId, tenantId, `Room type "${name}" created`);
   }
 

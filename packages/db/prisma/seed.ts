@@ -100,19 +100,19 @@ async function main() {
 
   // --- Room types (6 → ×7 rate plans = 42 active products, matches dashboard) ---
   const roomTypeSpec = [
-    { name: "Deluxe Double Room", code: "DDR", unitKind: "room", totalInventory: 12, maxGuests: 2, basePrice: 12000 },
-    { name: "Superior Twin Room", code: "STR", unitKind: "room", totalInventory: 8, maxGuests: 2, basePrice: 11000 },
-    { name: "Family Room", code: "FAM", unitKind: "room", totalInventory: 4, maxGuests: 4, basePrice: 17000 },
-    { name: "Suite", code: "SUI", unitKind: "room", totalInventory: 3, maxGuests: 3, basePrice: 24000 },
-    { name: "Standard Single", code: "SSR", unitKind: "room", totalInventory: 6, maxGuests: 1, basePrice: 8000 },
-    { name: "Studio Apartment", code: "APT", unitKind: "apartment", totalInventory: 5, maxGuests: 3, basePrice: 15000 },
+    { name: "Deluxe Double Room", code: "DDR", unitKind: "room", totalRooms: 12, maxGuests: 2, basePrice: 12000 },
+    { name: "Superior Twin Room", code: "STR", unitKind: "room", totalRooms: 8, maxGuests: 2, basePrice: 11000 },
+    { name: "Family Room", code: "FAM", unitKind: "room", totalRooms: 4, maxGuests: 4, basePrice: 17000 },
+    { name: "Suite", code: "SUI", unitKind: "room", totalRooms: 3, maxGuests: 3, basePrice: 24000 },
+    { name: "Standard Single", code: "SSR", unitKind: "room", totalRooms: 6, maxGuests: 1, basePrice: 8000 },
+    { name: "Studio Apartment", code: "APT", unitKind: "apartment", totalRooms: 5, maxGuests: 3, basePrice: 15000 },
   ];
   const roomTypes = [];
   for (let i = 0; i < roomTypeSpec.length; i++) {
     const s = roomTypeSpec[i]!;
     roomTypes.push(
       await prisma.roomType.create({
-        data: { ...t, name: s.name, code: s.code, unitKind: s.unitKind, totalInventory: s.totalInventory, maxGuests: s.maxGuests, sortOrder: i },
+        data: { ...t, name: s.name, code: s.code, unitKind: s.unitKind, totalRooms: s.totalRooms, maxGuests: s.maxGuests, sortOrder: i },
       }),
     );
   }
@@ -236,7 +236,7 @@ async function main() {
       if (isDdrThisWeek) {
         cellRows.push({
           ...t, roomTypeId: rt.id, date: d,
-          availabilityOverride: ddrWeekAvail[weekIdx]!,
+          inventory: ddrWeekAvail[weekIdx]!,
           minLos: ddrWeekMinLos[weekIdx]!,
           cta: false,
           ctd: weekIdx === 5, // Saturday closed to departure (highlighted in screenshot)
@@ -336,7 +336,7 @@ async function main() {
   const rt2: { id: string; code: string }[] = [];
   for (let i = 0; i < rt2spec.length; i++) {
     const s = rt2spec[i]!;
-    rt2.push(await prisma.roomType.create({ data: { ...t2, name: s.name, code: s.code, unitKind: s.unitKind, totalInventory: s.inv, maxGuests: s.max, sortOrder: i } }));
+    rt2.push(await prisma.roomType.create({ data: { ...t2, name: s.name, code: s.code, unitKind: s.unitKind, totalRooms: s.inv, maxGuests: s.max, sortOrder: i } }));
   }
   const std2 = await prisma.ratePlan.create({ data: { ...t2, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 } });
   const plans2 = [std2];

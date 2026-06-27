@@ -34,7 +34,7 @@ beforeAll(async () => {
   tenantId = tenant.id;
   const property = await prisma.property.create({ data: { tenantId, name: "Test Hotel" } });
   propertyId = property.id;
-  const rt = await prisma.roomType.create({ data: { tenantId, propertyId, name: "Test Room", code: "TR", totalInventory: 8, maxGuests: 2 } });
+  const rt = await prisma.roomType.create({ data: { tenantId, propertyId, name: "Test Room", code: "TR", totalRooms: 8, maxGuests: 2 } });
   roomTypeId = rt.id;
   const std = await prisma.ratePlan.create({ data: { tenantId, propertyId, name: "Standard", code: "BAR", tags: [], priceLogic: "manual" } });
   stdId = std.id;
@@ -55,36 +55,43 @@ describe("DB + core: edit → derive", () => {
   });
 });
 
-describe("DB + core: book → drop availability → cancel → restore", () => {
-  it("starts at full inventory, drops on booking, detects overbooking, restores on cancel", async () => {
+describe("DB + core: book → drop availability → cancel → restore (sold is derived)", () => {
+  it("availability = inventory − sold; a booking lowers it and a cancel restores it", async () => {
     const rt = await prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId } });
-    const cell0 = await prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId, date } } });
-    const avail0 = cell0?.availabilityOverride ?? rt.totalInventory;
-    expect(avail0).toBe(8);
+    const nextDay = new Date(date.getTime() + 86_400_000);
 
-    // Book 2 rooms.
-    await prisma.reservation.create({
+    // Rooms sold for the date, derived from active reservations (the source of truth).
+    const soldOf = async () => {
+      const lines = await prisma.reservationLine.findMany({
+        where: {
+          roomTypeId,
+          reservation: { status: { in: ["confirmed", "modified", "overbooked"] } },
+          checkIn: { lte: date },
+          checkOut: { gt: date },
+        },
+      });
+      return lines.reduce((s, l) => s + l.quantity, 0);
+    };
+
+    // No date allotment set ⇒ inventory defaults to physical totalRooms (8), nothing sold yet.
+    expect(computeAvailability({ inventory: rt.totalRooms, confirmedUnits: await soldOf() })).toBe(8);
+
+    // Book 2 rooms for the night — availability drops to 6 with no inventory mutation.
+    const reservation = await prisma.reservation.create({
       data: {
         tenantId, propertyId, channelId,
         externalId: "X1", guestName: "Tester", totalMinor: 24000, currency: "EUR",
-        lines: { create: [{ roomTypeId, ratePlanId: stdId, quantity: 2, checkIn: date, checkOut: new Date(date.getTime() + 86_400_000) }] },
+        lines: { create: [{ roomTypeId, ratePlanId: stdId, quantity: 2, checkIn: date, checkOut: nextDay }] },
       },
     });
-    await prisma.dailyCell.upsert({
-      where: { roomTypeId_date: { roomTypeId, date } },
-      update: { availabilityOverride: avail0 - 2 },
-      create: { tenantId, propertyId, roomTypeId, date, availabilityOverride: avail0 - 2 },
-    });
-    const cell1 = await prisma.dailyCell.findUniqueOrThrow({ where: { roomTypeId_date: { roomTypeId, date } } });
-    expect(cell1.availabilityOverride).toBe(6);
+    expect(computeAvailability({ inventory: rt.totalRooms, confirmedUnits: await soldOf() })).toBe(6);
 
-    // Overbooking is flagged when the count is exhausted.
-    expect(isOverbooking(computeAvailability({ totalInventory: 0, confirmedUnits: 0 }))).toBe(true);
+    // A booking onto a sold-out date is flagged as overbooking.
+    expect(isOverbooking(computeAvailability({ inventory: 0, confirmedUnits: 0 }))).toBe(true);
 
-    // Cancel restores.
-    await prisma.dailyCell.update({ where: { roomTypeId_date: { roomTypeId, date } }, data: { availabilityOverride: 6 + 2 } });
-    const cell2 = await prisma.dailyCell.findUniqueOrThrow({ where: { roomTypeId_date: { roomTypeId, date } } });
-    expect(cell2.availabilityOverride).toBe(8);
+    // Cancel → sold returns to 0 → availability restores to 8.
+    await prisma.reservation.update({ where: { id: reservation.id }, data: { status: "cancelled" } });
+    expect(computeAvailability({ inventory: rt.totalRooms, confirmedUnits: await soldOf() })).toBe(8);
   });
 });
 

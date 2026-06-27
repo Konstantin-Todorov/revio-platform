@@ -5,13 +5,11 @@ import { occupancyPrice } from "./rates/occupancy.js";
 import { resolveRestriction } from "./restrictions/resolve.js";
 
 describe("availability", () => {
-  it("computes total minus confirmed", () => {
-    expect(computeAvailability({ totalInventory: 12, confirmedUnits: 4 })).toBe(8);
+  it("computes rooms-to-sell minus rooms-sold", () => {
+    expect(computeAvailability({ inventory: 12, confirmedUnits: 4 })).toBe(8);
   });
-  it("manual override becomes the baseline", () => {
-    expect(
-      computeAvailability({ totalInventory: 12, confirmedUnits: 4, manualOverride: 6 }),
-    ).toBe(6);
+  it("a tightened date allotment is the new ceiling", () => {
+    expect(computeAvailability({ inventory: 6, confirmedUnits: 4 })).toBe(2);
   });
   it("stop sell sends 0 bookable without changing availability", () => {
     expect(bookableForChannel({ availability: 8, stopSell: true })).toBe(0);
@@ -57,16 +55,16 @@ describe("occupancy pricing", () => {
 });
 
 describe("booking loop invariants", () => {
-  it("a booking decrements availability and a cancellation restores it", () => {
-    const before = computeAvailability({ totalInventory: 8, confirmedUnits: 0 });
-    const afterBooking = computeAvailability({ totalInventory: 8, confirmedUnits: 2 });
-    const afterCancel = computeAvailability({ totalInventory: 8, confirmedUnits: 0 });
+  it("a booking decrements availability and a cancellation restores it (sold is derived)", () => {
+    const before = computeAvailability({ inventory: 8, confirmedUnits: 0 });
+    const afterBooking = computeAvailability({ inventory: 8, confirmedUnits: 2 });
+    const afterCancel = computeAvailability({ inventory: 8, confirmedUnits: 0 });
     expect(before).toBe(8);
     expect(afterBooking).toBe(6);
     expect(afterCancel).toBe(before);
   });
   it("a booking onto a sold-out date is flagged as overbooking", () => {
-    expect(isOverbooking(computeAvailability({ totalInventory: 3, confirmedUnits: 3 }))).toBe(true);
+    expect(isOverbooking(computeAvailability({ inventory: 3, confirmedUnits: 3 }))).toBe(true);
   });
 });
 

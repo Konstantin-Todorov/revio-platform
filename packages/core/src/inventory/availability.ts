@@ -1,12 +1,14 @@
 /**
  * Availability — the single most important data-model decision in the platform.
  *
- * Availability for a (room type, date) is COMPUTED:
- *   available = manualOverride ?? (totalInventory - confirmedUnits)
+ * Inventory is managed at the DATE level (a per-date "rooms to sell" allotment the hotel controls,
+ * defaulting to the room type's physical Total Rooms when a date has no explicit value). Availability
+ * for a (room type, date) is then COMPUTED:
+ *   available = inventory - confirmedUnits        // "rooms to sell" minus "rooms sold"
  *
- * - Every confirmed reservation decrements it; every cancellation restores it (because it is derived
- *   from the live confirmed count, this happens for free).
- * - A manual cell edit sets a NEW BASELINE that overrides the computed value until cleared.
+ * - "Rooms sold" (confirmedUnits) is always DERIVED from the live confirmed reservations, so a new
+ *   booking lowers availability and a cancellation restores it for free — the allotment never has to
+ *   be mutated by the booking flow (self-correcting; it can't drift).
  * - Stop Sell does NOT change this number. It is a separate flag that makes the channel-facing
  *   bookable count 0 without touching the underlying inventory.
  *
@@ -14,19 +16,15 @@
  */
 
 export interface AvailabilityInput {
-  /** How many physical rooms of this type exist. */
-  totalInventory: number;
-  /** Sum of confirmed reservation units occupying this room type on this date. */
+  /** The date-level allotment ("rooms to sell"); defaults to the room's physical Total Rooms upstream. */
+  inventory: number;
+  /** Sum of confirmed reservation units (rooms sold) for this room type on this date. */
   confirmedUnits: number;
-  /** A manually typed cell value that overrides the computed baseline, if any. */
-  manualOverride?: number;
 }
 
-/** The true number of rooms left, before any stop-sell flag. Never negative in normal flow. */
+/** The true number of rooms left to sell, before any stop-sell flag. Never negative in normal flow. */
 export function computeAvailability(input: AvailabilityInput): number {
-  const base =
-    input.manualOverride ?? input.totalInventory - input.confirmedUnits;
-  return base;
+  return input.inventory - input.confirmedUnits;
 }
 
 /**

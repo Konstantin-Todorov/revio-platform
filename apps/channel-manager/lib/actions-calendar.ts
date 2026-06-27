@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
-import { deriveRate, isOverbooking, type DerivedRateConfig } from "@revio/core";
+import { computeAvailability, deriveRate, isOverbooking, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, strList, eachDate, utcDay } from "./mutation-helpers";
 
@@ -26,7 +26,7 @@ async function standardPlanId(propertyId: string): Promise<string | null> {
 
 async function upsertCell(
   tenantId: string, propertyId: string, roomTypeId: string, date: Date,
-  data: Partial<{ availabilityOverride: number; minLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean }>,
+  data: Partial<{ inventory: number; minLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean }>,
 ) {
   await prisma.dailyCell.upsert({
     where: { roomTypeId_date: { roomTypeId, date } },
@@ -53,9 +53,9 @@ export async function saveCell(input: { roomTypeId: string; date: string; field:
       create: { tenantId, propertyId, roomTypeId: input.roomTypeId, ratePlanId, date, priceMinor },
     });
     await logAudit(propertyId, tenantId, { entity: `${rt.name} · Standard Rate`, field: "price", newValue: `€${priceMinor / 100}` });
-  } else if (input.field === "availability") {
-    await upsertCell(tenantId, propertyId, input.roomTypeId, date, { availabilityOverride: Math.max(0, int2(input.value)) });
-    await logAudit(propertyId, tenantId, { entity: `${rt.name}`, field: "availability", newValue: input.value });
+  } else if (input.field === "inventory") {
+    await upsertCell(tenantId, propertyId, input.roomTypeId, date, { inventory: Math.max(0, int2(input.value)) });
+    await logAudit(propertyId, tenantId, { entity: `${rt.name}`, field: "rooms_to_sell", newValue: input.value });
   } else if (input.field === "minLos") {
     const v = int2(input.value);
     await upsertCell(tenantId, propertyId, input.roomTypeId, date, { minLos: v > 0 ? v : null });
@@ -118,7 +118,7 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
           create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next },
         });
       } else if (updateType === "availability_set") {
-        await upsertCell(tenantId, propertyId, roomTypeId, date, { availabilityOverride: Math.max(0, Math.trunc(value)) });
+        await upsertCell(tenantId, propertyId, roomTypeId, date, { inventory: Math.max(0, Math.trunc(value)) });
       } else if (updateType === "minlos_set") {
         await upsertCell(tenantId, propertyId, roomTypeId, date, { minLos: value > 0 ? Math.trunc(value) : null });
       } else if (updateType === "stopsell_on" || updateType === "stopsell_off") {
@@ -172,16 +172,30 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
   const checkInDate = utcDay(checkIn);
   const checkOutDate = new Date(checkInDate.getTime() + nights * 86_400_000);
 
+  // Rooms already sold per night (derived from active reservations) + the date allotment, for the
+  // overbooking check. We do NOT mutate inventory — availability = inventory − sold updates itself once
+  // this reservation lands (sold is always derived).
+  const [priorLines, cells] = await Promise.all([
+    prisma.reservationLine.findMany({
+      where: {
+        roomTypeId,
+        reservation: { propertyId, status: { in: ["confirmed", "modified", "overbooked"] } },
+        checkIn: { lt: checkOutDate },
+        checkOut: { gt: checkInDate },
+      },
+    }),
+    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: checkInDate, lt: checkOutDate } } }),
+  ]);
+  const invByDate = new Map(cells.map((c) => [c.date.toISOString().slice(0, 10), c.inventory]));
+
   for (const date of dates) {
     const sp = stdId ? await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: stdId, date } } }) : null;
     const stdMinor = sp?.priceMinor ?? 0;
     totalMinor += (derivedCfg ? deriveRate(stdMinor, derivedCfg) : stdMinor) * quantity;
 
-    // Decrement availability for the night (the booking consumes inventory).
-    const cell = await prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId, date } } });
-    const current = cell?.availabilityOverride ?? rt.totalInventory;
-    if (isOverbooking(current)) overbooked = true;
-    await upsertCell(tenantId, propertyId, roomTypeId, date, { availabilityOverride: current - quantity });
+    const inventory = invByDate.get(date.toISOString().slice(0, 10)) ?? rt.totalRooms;
+    const sold = priorLines.filter((l) => l.checkIn <= date && date < l.checkOut).reduce((s, l) => s + l.quantity, 0);
+    if (isOverbooking(computeAvailability({ inventory, confirmedUnits: sold }))) overbooked = true;
   }
 
   const reservation = await prisma.reservation.create({
@@ -218,19 +232,10 @@ export async function cancelReservation(fd: FormData): Promise<void> {
   const res = await prisma.reservation.findUnique({ where: { id }, include: { lines: true, channel: true } });
   if (!res || res.status === "cancelled") return;
 
+  // Cancelling drops the booking out of the "rooms sold" derivation, so availability
+  // (inventory − sold) restores itself — no manual inventory edit needed.
   await prisma.reservation.update({ where: { id }, data: { status: "cancelled" } });
 
-  // Restore the availability the booking had consumed.
-  for (const line of res.lines) {
-    const nights = Math.round((line.checkOut.getTime() - line.checkIn.getTime()) / 86_400_000);
-    for (let i = 0; i < nights; i++) {
-      const date = new Date(line.checkIn.getTime() + i * 86_400_000);
-      const cell = await prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date } } });
-      if (cell?.availabilityOverride != null) {
-        await prisma.dailyCell.update({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date } }, data: { availabilityOverride: cell.availabilityOverride + line.quantity } });
-      }
-    }
-  }
   await recordPush(propertyId, tenantId, `Availability restored after cancellation (${res.channel.name})`);
   await logAudit(propertyId, tenantId, { entity: `Reservation · ${res.guestName}`, field: "cancel", newValue: "cancelled" });
   revalidateCalendar();

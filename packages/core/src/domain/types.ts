@@ -46,7 +46,7 @@ export interface Property {
 
 /**
  * What a sellable unit is. Hotels/apartments sell whole units; hostels sell beds, so a "bed" unit
- * counts beds in `totalInventory` and controls availability per bed.
+ * counts beds in `totalRooms` and controls availability per bed.
  */
 export type UnitKind = "room" | "bed" | "apartment";
 
@@ -58,8 +58,9 @@ export interface RoomType {
   /** Short internal reference, e.g. "DDR". */
   code: string;
   unitKind: UnitKind;
-  /** How many physical rooms (or beds, for hostels) of this type exist. */
-  totalInventory: number;
+  /** How many physical rooms (or beds, for hostels) of this type exist — a cap / safety-net.
+   *  Actual rooms-to-sell is managed per date (see availability); this is not the sell allotment. */
+  totalRooms: number;
   maxGuests: number;
   active: boolean;
 }

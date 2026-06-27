@@ -93,9 +93,11 @@ model RoomType {
   name           String
   code           String
   // room | bed | apartment. Hotels/apartments sell whole units; hostels sell beds, so a "bed"
-  // unitKind means totalInventory counts beds and availability is controlled per bed.
+  // unitKind means totalRooms counts beds and availability is controlled per bed.
   unitKind       String  @default("room")
-  totalInventory Int
+  // Physical room/bed count — a CAP & safety-net only. Rooms-to-sell is managed per date
+  // (DailyCell.inventory); exceeding totalRooms warns but does not block.
+  totalRooms     Int
   maxGuests      Int
   description    String?
   active         Boolean @default(true)
@@ -283,14 +285,16 @@ model RatePrice {
   @@index([propertyId, date])
 }
 
-// Per-(room type, date) availability override + restriction flags shown in the Calendar grid.
+// Per-(room type, date) inventory allotment + restriction flags shown in the Calendar grid.
 model DailyCell {
   id                  String   @id @default(cuid())
   tenantId            String
   propertyId          String
   roomTypeId          String
   date                DateTime @db.Date
-  availabilityOverride Int?
+  // Date-level "rooms to sell" allotment. Null ⇒ default to the room type's totalRooms.
+  // Bookable = inventory − rooms sold (sold is derived from confirmed reservations, never stored here).
+  inventory           Int?
   minLos              Int?
   maxLos              Int?
   cta                 Boolean  @default(false)

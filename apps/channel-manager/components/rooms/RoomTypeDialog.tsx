@@ -7,7 +7,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 type RoomType = {
   id: string; name: string; code: string; unitKind: string;
-  totalInventory: number; maxGuests: number; description: string | null; active: boolean;
+  totalRooms: number; maxGuests: number; description: string | null; active: boolean;
 };
 
 export function RoomTypeDialog({ roomType }: { roomType?: RoomType }) {
@@ -46,7 +46,7 @@ export function RoomTypeDialog({ roomType }: { roomType?: RoomType }) {
                 <option value="bed">Bed (hostel)</option>
               </select>
             </Field>
-            <Field label="Inventory" hint="Rooms or beds"><input name="totalInventory" type="number" min={0} defaultValue={roomType?.totalInventory ?? 0} className={inputCls} /></Field>
+            <Field label="Total Rooms" hint="Physical count (safety-net)"><input name="totalRooms" type="number" min={0} defaultValue={roomType?.totalRooms ?? 0} className={inputCls} /></Field>
             <Field label="Max guests"><input name="maxGuests" type="number" min={1} defaultValue={roomType?.maxGuests ?? 2} className={inputCls} /></Field>
           </div>
           <Field label="Description"><input name="description" defaultValue={roomType?.description ?? ""} className={inputCls} placeholder="Optional" /></Field>

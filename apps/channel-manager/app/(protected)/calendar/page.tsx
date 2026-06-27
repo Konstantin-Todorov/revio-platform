@@ -108,7 +108,7 @@ export default async function CalendarPage({
               <th className="sticky left-0 z-10 min-w-[180px] border-b border-r border-surface-border bg-white px-4 py-3 text-left">
                 <div className="text-[13.5px] font-bold text-ink-900">{roomType.name}</div>
                 <div className="text-[11px] font-medium text-ink-400">
-                  {roomType.code} · {roomType.totalInventory} {roomType.unitKind === "bed" ? "beds" : "units"}
+                  {roomType.code} · {roomType.totalRooms} {roomType.unitKind === "bed" ? "beds" : "rooms"}
                 </div>
               </th>
               {dateObjs.map((d) => {
