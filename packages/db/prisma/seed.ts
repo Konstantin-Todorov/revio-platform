@@ -175,7 +175,7 @@ async function main() {
     channels.push(
       await prisma.channel.create({
         data: {
-          ...t, code: c.code, name: c.name, status: "connected", currency: c.currency,
+          ...t, code: c.code, name: c.name, status: "connected", currency: "EUR", // channels inherit the property currency
           commissionPct: c.commissionPct, conversionType: c.conversionType ?? "none", markupPct: c.markupPct ?? 0,
           rounding: "end_99", supportedRestrictions: c.supportedRestrictions, lastSyncAt: c.lastSyncAt,
           errorCount: c.errorCount, pendingCount: c.pendingCount, externalPropertyId: `${c.code.toUpperCase()}-100${channels.length + 1}`,
@@ -285,7 +285,9 @@ async function main() {
     await prisma.reservation.create({
       data: {
         ...t, channelId: ch.id, externalId: r.ext, guestName: r.guest, status: "confirmed",
-        totalMinor: total, currency: ch.currency, importedAt: minsAgo([2, 5, 8, 11, 12][i] ?? 15),
+        totalMinor: total, currency: "EUR",
+        propertyCurrency: "EUR", propertyTotalMinor: total, fxRate: 1, fxAt: minsAgo([2, 5, 8, 11, 12][i] ?? 15),
+        importedAt: minsAgo([2, 5, 8, 11, 12][i] ?? 15),
         lines: { create: [{ roomTypeId: rt.id, ratePlanId: rp.id, quantity: r.qty, checkIn, checkOut: addDays(checkIn, r.nights) }] },
       },
     });
@@ -345,8 +347,8 @@ async function main() {
   for (const rp of plans2) for (const rt of rt2) await prisma.ratePlanRoomType.create({ data: { ratePlanId: rp.id, roomTypeId: rt.id } });
 
   const ch2: { id: string; code: string }[] = [];
-  for (const c of [{ code: "booking", name: "Booking.com", cur: "EUR" }, { code: "expedia", name: "Expedia", cur: "USD" }]) {
-    ch2.push(await prisma.channel.create({ data: { ...t2, code: c.code, name: c.name, status: "connected", currency: c.cur, supportedRestrictions: ["stop_sell", "min_los", "cta"], lastSyncAt: minsAgo(2), pendingCount: 2, externalPropertyId: `${c.code.toUpperCase()}-BSR` } }));
+  for (const c of [{ code: "booking", name: "Booking.com" }, { code: "expedia", name: "Expedia" }]) {
+    ch2.push(await prisma.channel.create({ data: { ...t2, code: c.code, name: c.name, status: "connected", currency: "EUR", supportedRestrictions: ["stop_sell", "min_los", "cta"], lastSyncAt: minsAgo(2), pendingCount: 2, externalPropertyId: `${c.code.toUpperCase()}-BSR` } }));
   }
   for (const ch of ch2) for (const rt of rt2) for (const rp of plans2)
     await prisma.productMapping.create({ data: { tenantId: tenant2.id, channelId: ch.id, roomTypeId: rt.id, ratePlanId: rp.id, externalRoomId: `${ch.code}-r-${rt.code}`, externalRateId: `${ch.code}-rp-${rp.code}`, status: "complete" } });
@@ -361,7 +363,7 @@ async function main() {
     }
   }
   await prisma.ratePrice.createMany({ data: prices2 });
-  await prisma.reservation.create({ data: { ...t2, channelId: ch2[0]!.id, externalId: "BS-7714", guestName: "Ivan Petrov", status: "confirmed", totalMinor: 48000, currency: "EUR", importedAt: minsAgo(7), lines: { create: [{ roomTypeId: rt2[0]!.id, ratePlanId: std2.id, quantity: 1, checkIn: monday, checkOut: addDays(monday, 3) }] } } });
+  await prisma.reservation.create({ data: { ...t2, channelId: ch2[0]!.id, externalId: "BS-7714", guestName: "Ivan Petrov", status: "confirmed", totalMinor: 48000, currency: "EUR", propertyCurrency: "EUR", propertyTotalMinor: 48000, fxRate: 1, fxAt: minsAgo(7), importedAt: minsAgo(7), lines: { create: [{ roomTypeId: rt2[0]!.id, ratePlanId: std2.id, quantity: 1, checkIn: monday, checkOut: addDays(monday, 3) }] } } });
   await prisma.syncEvent.create({ data: { ...t2, channelId: ch2[0]!.id, kind: "pull", status: "success", summary: "New reservation imported (Booking.com)", createdAt: minsAgo(7) } });
 
   // --- Report ------------------------------------------------------------

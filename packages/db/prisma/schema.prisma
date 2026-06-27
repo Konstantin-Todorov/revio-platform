@@ -344,8 +344,16 @@ model Reservation {
   externalId String
   guestName  String
   status     String   @default("confirmed") // confirmed|modified|cancelled|failed_import|overbooked
+  // ORIGINAL booking values (what the guest was actually charged), captured at booking time.
   totalMinor Int
   currency   String   @default("EUR")
+  // CRS-compatible currency snapshot: the same amount converted to the property's base currency, plus
+  // the FX rate + timestamp used. Stored at booking time so historical revenue reports stay reproducible
+  // when exchange rates move (see docs/CRS-REFERENCE.md "Currency handling"). Null on legacy rows.
+  propertyCurrency   String?
+  propertyTotalMinor Int?
+  fxRate             Float?
+  fxAt               DateTime?
   importedAt DateTime @default(now())
   syncStatus String   @default("imported")
 

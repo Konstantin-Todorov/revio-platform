@@ -112,9 +112,11 @@ export async function updateMapping(_prev: ActionResult | null, fd: FormData): P
 // --- Channel settings & add channel ---------------------------------------
 
 export async function saveChannelSettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
-  const { id: propertyId, tenantId } = await getProperty();
+  const property = await getProperty();
+  const { id: propertyId, tenantId } = property;
   const id = str(fd, "id");
-  const currency = str(fd, "currency") || "EUR";
+  // Channels inherit the property currency — there is no per-channel currency setting.
+  const currency = property.baseCurrency;
   const conversionType = str(fd, "conversionType") || "none";
   const markupPct = Number(str(fd, "markupPct")) || 0;
   const commissionPct = Number(str(fd, "commissionPct")) || 0;
@@ -123,7 +125,7 @@ export async function saveChannelSettings(_prev: ActionResult | null, fd: FormDa
   const ch = await prisma.channel.findUnique({ where: { id } });
   if (!ch) return { ok: false, error: "Unknown channel." };
   await prisma.channel.update({ where: { id }, data: { currency, conversionType, markupPct, commissionPct, rounding } });
-  await logAudit(propertyId, tenantId, { entity: `Channel · ${ch.name}`, field: "settings", newValue: `${currency} · ${markupPct}% markup` });
+  await logAudit(propertyId, tenantId, { entity: `Channel · ${ch.name}`, field: "settings", newValue: `${markupPct}% markup` });
   await recordPush(propertyId, tenantId, `Channel settings updated for ${ch.name}`);
   revalidatePath("/channels");
   return { ok: true };
@@ -135,10 +137,11 @@ const KNOWN_OTAS: Record<string, string> = {
 };
 
 export async function addChannel(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
-  const { id: propertyId, tenantId } = await getProperty();
+  const property = await getProperty();
+  const { id: propertyId, tenantId } = property;
   const code = str(fd, "code");
   const name = (KNOWN_OTAS[code] ?? str(fd, "name")) || code;
-  const currency = str(fd, "currency") || "EUR";
+  const currency = property.baseCurrency; // inherit the property currency
   const externalPropertyId = str(fd, "externalPropertyId") || null;
   if (!code) return { ok: false, error: "Pick a channel." };
 
@@ -170,15 +173,23 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
 // --- Property settings -----------------------------------------------------
 
 export async function savePropertySettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
-  const { id: propertyId, tenantId } = await getProperty();
+  const property = await getProperty();
+  const { id: propertyId, tenantId } = property;
   const name = str(fd, "name");
   if (!name) return { ok: false, error: "Property name is required." };
+
+  // Currency is the property's single source of truth; channels inherit it (no per-channel currency).
+  const newCurrency = str(fd, "baseCurrency") || "EUR";
+  const currencyChanged = newCurrency !== property.baseCurrency;
+  const convertRates = str(fd, "convertRates") === "true";
+  const conversionRate = Number(str(fd, "conversionRate"));
+
   await prisma.property.update({
     where: { id: propertyId },
     data: {
       name,
       timezone: str(fd, "timezone") || "Europe/Sofia",
-      baseCurrency: str(fd, "baseCurrency") || "EUR",
+      baseCurrency: newCurrency,
       syncHorizonDays: Math.max(1, int(fd, "syncHorizonDays", 365)),
       checkInTime: str(fd, "checkInTime") || "14:00",
       checkOutTime: str(fd, "checkOutTime") || "12:00",
@@ -186,8 +197,25 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
       phone: str(fd, "phone") || null,
     },
   });
-  await logAudit(propertyId, tenantId, { entity: `Property · ${name}`, field: "settings", newValue: name });
+
+  let converted = 0;
+  if (currencyChanged) {
+    // Every channel inherits the property currency.
+    await prisma.channel.updateMany({ where: { propertyId }, data: { currency: newCurrency } });
+    // Optionally convert every stored rate (Postgres rounds the product back to integer minor units).
+    if (convertRates && Number.isFinite(conversionRate) && conversionRate > 0) {
+      const res = await prisma.ratePrice.updateMany({ where: { propertyId }, data: { priceMinor: { multiply: conversionRate } } });
+      converted = res.count;
+    }
+  }
+
+  await logAudit(propertyId, tenantId, {
+    entity: `Property · ${name}`, field: "settings",
+    newValue: currencyChanged ? `currency → ${newCurrency}${convertRates ? ` · ${converted} rates × ${conversionRate}` : " (display only)"}` : name,
+  });
   revalidatePath("/settings");
   revalidatePath("/dashboard");
+  revalidatePath("/calendar");
+  revalidatePath("/channels");
   return { ok: true };
 }

@@ -138,7 +138,8 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
 // --- Live loop: simulate a booking ----------------------------------------
 
 export async function simulateBooking(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
-  const { id: propertyId, tenantId } = await getProperty();
+  const property = await getProperty();
+  const { id: propertyId, tenantId } = property;
   const channelId = str(fd, "channelId");
   const roomTypeId = str(fd, "roomTypeId");
   const ratePlanId = str(fd, "ratePlanId");
@@ -198,10 +199,14 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
     if (isOverbooking(computeAvailability({ inventory, confirmedUnits: sold }))) overbooked = true;
   }
 
+  // The channel inherits the property currency, so this booking is already in property currency
+  // (FX rate 1). Real foreign-currency imports will set a real rate + converted amount here.
   const reservation = await prisma.reservation.create({
     data: {
       tenantId, propertyId, channelId, externalId: String(Math.floor(100000000 + Math.random() * 899999999)),
-      guestName, status: overbooked ? "overbooked" : "confirmed", totalMinor, currency: channel.currency,
+      guestName, status: overbooked ? "overbooked" : "confirmed",
+      totalMinor, currency: property.baseCurrency,
+      propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
       lines: { create: [{ roomTypeId, ratePlanId, quantity, checkIn: checkInDate, checkOut: checkOutDate }] },
     },
   });

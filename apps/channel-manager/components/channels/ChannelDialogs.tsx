@@ -24,10 +24,8 @@ export function ChannelSettingsDialog({ channel }: { channel: Channel }) {
         <form action={formAction} className="space-y-3.5">
           <input type="hidden" name="id" value={channel.id} />
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Currency">
-              <select name="currency" defaultValue={channel.currency} className={inputCls}>
-                {["EUR", "USD", "GBP", "BGN"].map((c) => <option key={c}>{c}</option>)}
-              </select>
+            <Field label="Currency" hint="Inherited from property">
+              <input value={channel.currency} disabled className={`${inputCls} bg-surface-muted text-ink-400`} />
             </Field>
             <Field label="Conversion">
               <select name="conversionType" defaultValue={channel.conversionType} className={inputCls}>
@@ -84,12 +82,9 @@ export function AddChannelDialog({ connectedCodes }: { connectedCodes: string[] 
               {all.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
             </select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Currency">
-              <select name="currency" defaultValue="EUR" className={inputCls}>{["EUR", "USD", "GBP", "BGN"].map((c) => <option key={c}>{c}</option>)}</select>
-            </Field>
-            <Field label="Property ID on channel" hint="The OTA's id for this hotel"><input name="externalPropertyId" className={inputCls} placeholder="e.g. 88291" /></Field>
-          </div>
+          <Field label="Property ID on channel" hint="The OTA's id for this hotel — currency is inherited from the property">
+            <input name="externalPropertyId" className={inputCls} placeholder="e.g. 88291" />
+          </Field>
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Cancel</button>
