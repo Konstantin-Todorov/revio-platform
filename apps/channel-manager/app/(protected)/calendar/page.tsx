@@ -160,10 +160,10 @@ export default async function CalendarPage({
                       </td>
                     );
                   }
-                  // Derived / read-only price row.
+                  // Read-only row: derived rates show €, counts (e.g. Rooms sold) show a plain number.
                   return (
                     <td key={cell.date} className={`${base} px-2 py-2 ${row.muted ? "text-ink-400" : "font-semibold text-ink-900"}`}>
-                      {cell.value === "—" ? "—" : `€${cell.value}`}
+                      {cell.value === "—" ? "—" : row.kind === "price" ? `€${cell.value}` : cell.value}
                     </td>
                   );
                 })}
