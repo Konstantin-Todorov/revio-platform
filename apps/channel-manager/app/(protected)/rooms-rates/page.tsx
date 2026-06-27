@@ -16,6 +16,15 @@ function derivedLabel(rp: { derivedType: string | null; derivedDirection: string
   return `${rp.parent?.name ?? "parent"} ${sign}${amount}`;
 }
 
+function restrictionLabel(rp: { defMinLos: number | null; defMaxLos: number | null; defAdvancePurchaseMin: number | null; defAdvancePurchaseMax: number | null }) {
+  const parts: string[] = [];
+  if (rp.defMinLos) parts.push(`min ${rp.defMinLos}n`);
+  if (rp.defMaxLos) parts.push(`max ${rp.defMaxLos}n`);
+  if (rp.defAdvancePurchaseMin != null) parts.push(`book ≥${rp.defAdvancePurchaseMin}d ahead`);
+  if (rp.defAdvancePurchaseMax != null) parts.push(`book ≤${rp.defAdvancePurchaseMax}d ahead`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 export default async function RoomsRatesPage() {
   const { roomTypes, ratePlans } = await getRoomsAndRates();
   const parents = ratePlans.map((rp) => ({ id: rp.id, name: rp.name }));
@@ -75,7 +84,10 @@ export default async function RoomsRatesPage() {
                     <div className="text-[11px] text-ink-400">{rp.code} · {rp._count.roomTypeLinks} rooms · {rp.mealPlan?.name ?? "—"}</div>
                   </td>
                   <td className="px-4 py-2.5"><StatusPill tone={rp.priceLogic === "derived" ? "info" : "neutral"}>{rp.priceLogic}</StatusPill></td>
-                  <td className="px-4 py-2.5 text-[12px] text-ink-600">{derivedLabel(rp) ?? "Manual entry"}</td>
+                  <td className="px-4 py-2.5 text-[12px] text-ink-600">
+                    {derivedLabel(rp) ?? "Manual entry"}
+                    {restrictionLabel(rp) && <div className="mt-0.5 text-[10.5px] text-ink-400">{restrictionLabel(rp)}</div>}
+                  </td>
                   <td className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {rp.tags.map((tg) => <span key={tg} className="rounded bg-surface-sunken px-1.5 py-0.5 text-[10.5px] font-medium text-ink-500">{tg}</span>)}

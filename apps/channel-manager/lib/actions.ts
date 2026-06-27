@@ -119,17 +119,32 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
     return { ok: false, error: "A derived rate needs a parent rate plan." };
   }
 
+  // Rate-plan-level restrictions (blank field = no rule → null). Min/Max stay apply to all dates;
+  // advance-purchase min/max drive the rolling auto-close computed in @revio/core.
+  const optInt = (key: string): number | null => {
+    const v = str(fd, key);
+    if (v === "") return null;
+    const n = Math.trunc(Number(v));
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  const restrictions = {
+    defMinLos: optInt("defMinLos"),
+    defMaxLos: optInt("defMaxLos"),
+    defAdvancePurchaseMin: optInt("defAdvancePurchaseMin"),
+    defAdvancePurchaseMax: optInt("defAdvancePurchaseMax"),
+  };
+
   const clash = await prisma.ratePlan.findFirst({ where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) } });
   if (clash) return { ok: false, error: `Code "${code}" is already used by another rate plan.` };
 
   if (rowId) {
-    await prisma.ratePlan.update({ where: { id: rowId }, data: { name, code, tags, priceLogic, active, ...derived } });
+    await prisma.ratePlan.update({ where: { id: rowId }, data: { name, code, tags, priceLogic, active, ...derived, ...restrictions } });
     await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${name}`, field: "edit", newValue: name });
     await recordPush(propertyId, tenantId, `Rate plan "${name}" updated`);
   } else {
     const count = await prisma.ratePlan.count({ where: { propertyId } });
     const rp = await prisma.ratePlan.create({
-      data: { tenantId, propertyId, name, code, tags, priceLogic, active, sortOrder: count, ...derived },
+      data: { tenantId, propertyId, name, code, tags, priceLogic, active, sortOrder: count, ...derived, ...restrictions },
     });
     // Link to all room types by default (a sellable product per room type).
     const roomTypes = await prisma.roomType.findMany({ where: { propertyId } });

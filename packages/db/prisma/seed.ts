@@ -138,6 +138,12 @@ async function main() {
     { name: "Corporate Rate", code: "COR", tags: ["corporate", "negotiated"], cfg: { adjustmentType: "percent", direction: "decrease", value: 8, rounding: "none" }, policy: fc3.id, meal: breakfastIncl.id },
     { name: "Early Booker", code: "EB", tags: ["advance-purchase"], cfg: { adjustmentType: "percent", direction: "decrease", value: 12, rounding: "end_99" }, policy: nrPolicy.id, meal: roomOnly.id },
   ];
+  // Rate-plan-level restrictions (Phase 1c): Long-Stay requires ≥5 nights; Early-Booker must be booked
+  // ≥14 days ahead (its advance-purchase window rolling-closes the nearest dates in the calendar).
+  const rpRestrictions: Record<string, { defMinLos?: number; defMaxLos?: number; defAdvancePurchaseMin?: number }> = {
+    LSR: { defMinLos: 5 },
+    EB: { defAdvancePurchaseMin: 14 },
+  };
   const ratePlans = [standard];
   for (let i = 0; i < derivedSpecs.length; i++) {
     const s = derivedSpecs[i]!;
@@ -149,6 +155,7 @@ async function main() {
           derivedType: s.cfg.adjustmentType, derivedDirection: s.cfg.direction, derivedValue: s.cfg.value,
           derivedRounding: s.cfg.rounding ?? "none", derivedFloorMinor: s.cfg.floorMinor ?? null, derivedCeilingMinor: s.cfg.ceilingMinor ?? null,
           cancellationPolicyId: s.policy, mealPlanId: s.meal, sortOrder: i + 1,
+          ...(rpRestrictions[s.code] ?? {}),
         },
       }),
     );

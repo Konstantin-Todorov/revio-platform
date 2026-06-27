@@ -9,6 +9,8 @@ type RatePlan = {
   id: string; name: string; code: string; tags: string[]; priceLogic: string; active: boolean;
   parentRatePlanId: string | null; derivedType: string | null; derivedDirection: string | null;
   derivedValue: number | null; derivedRounding: string | null;
+  defMinLos: number | null; defMaxLos: number | null;
+  defAdvancePurchaseMin: number | null; defAdvancePurchaseMax: number | null;
 };
 type Parent = { id: string; name: string };
 
@@ -83,6 +85,28 @@ export function RatePlanDialog({ ratePlan, parents }: { ratePlan?: RatePlan; par
               </Field>
             </div>
           )}
+
+          {/* Rate-plan-level restrictions — sent for all dates (Min/Max stay) and rolling-close
+              (advance purchase). Leave a field blank to mean "no rule". */}
+          <div className="space-y-3 rounded-md border border-surface-border bg-surface-muted/60 p-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Stay &amp; advance-purchase restrictions</div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Minimum stay (nights)" hint="Applies to all dates">
+                <input name="defMinLos" type="number" min={0} defaultValue={ratePlan?.defMinLos ?? ""} className={inputCls} placeholder="—" />
+              </Field>
+              <Field label="Maximum stay (nights)" hint="Applies to all dates">
+                <input name="defMaxLos" type="number" min={0} defaultValue={ratePlan?.defMaxLos ?? ""} className={inputCls} placeholder="—" />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Advance purchase — min days" hint="Auto-closes the next N days (rolling)">
+                <input name="defAdvancePurchaseMin" type="number" min={0} defaultValue={ratePlan?.defAdvancePurchaseMin ?? ""} className={inputCls} placeholder="—" />
+              </Field>
+              <Field label="Advance purchase — max days" hint="Auto-closes beyond N days (rolling)">
+                <input name="defAdvancePurchaseMax" type="number" min={0} defaultValue={ratePlan?.defAdvancePurchaseMax ?? ""} className={inputCls} placeholder="—" />
+              </Field>
+            </div>
+          </div>
 
           <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
             <input type="checkbox" name="active" defaultChecked={ratePlan?.active ?? true} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Active

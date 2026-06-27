@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { deriveRate, type DerivedRateConfig } from "@revio/core";
+import { deriveRate, isAdvancePurchaseClosed, type DerivedRateConfig } from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -187,11 +187,17 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
     });
   }
 
+  // Rate-plan-level restrictions on the standard plan: Min LOS falls back to the plan default; the
+  // advance-purchase window auto-closes near/far dates (rolling, computed live in @revio/core).
+  const today = utcDate(new Date()).toISOString().slice(0, 10);
+  const apWindow = { min: standard?.defAdvancePurchaseMin ?? null, max: standard?.defAdvancePurchaseMax ?? null };
+
   rows.push({
     key: "minlos", label: "Min LOS", kind: "restriction", field: "minLos", editable: true,
     cells: dates.map((d) => {
       const k = d.toISOString().slice(0, 10);
-      return { date: k, value: cellByDate.get(k)?.minLos ? String(cellByDate.get(k)!.minLos) : "—" };
+      const los = cellByDate.get(k)?.minLos ?? standard?.defMinLos ?? null;
+      return { date: k, value: los ? String(los) : "—" };
     }),
   });
   rows.push({
@@ -206,7 +212,8 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
     key: "stopsell", label: "Stop Sell", kind: "flag", field: "stopSell", editable: true,
     cells: dates.map((d) => {
       const k = d.toISOString().slice(0, 10);
-      const on = cellByDate.get(k)?.stopSell ?? false;
+      // Manual stop-sell OR an advance-purchase rolling auto-close on the standard plan.
+      const on = (cellByDate.get(k)?.stopSell ?? false) || isAdvancePurchaseClosed(today, k, apWindow);
       return { date: k, value: on ? "●" : "·", ...(on ? { flag: "stop" as const } : {}) };
     }),
   });
