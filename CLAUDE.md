@@ -116,8 +116,10 @@ each app outside the `(protected)` route group. CM cookie `revio_session`, opera
 
 RevioLink + Operator Console are **built, tested, live, and behind login** with GitHub auto-deploy.
 Operator onboards clients; **clients self-manage staff (roles) + properties** from RevioLink Settings.
-Both apps now have a **responsive (mobile) shell**, and **RLS** (DB-level tenant isolation) is built +
-verified locally — prod enforcement is a deliberate Phase 2 (restricted DB role) in `DEPLOY.md`.
-Next (see `BUILD-PLAN.md` handoff): RLS prod flip → real OTA connectivity (Channex) → RevioCRS /
-RevioPMS. See `BUILD-PLAN.md` for the phased order, `ARCHITECTURE.md` for rationale,
+Both apps now have a **responsive (mobile) shell**; **RLS** is built + verified locally (prod = Phase 2,
+`DEPLOY.md`); and the **Channex adapter is built + live-verified against the sandbox** (`@revio/connectivity`,
+not yet wired into the app). **V2 revisions** (founder spec `docs/CM-REVISIONS.md`, 2026-06-27) now drive
+the roadmap: settle the data model (date-level inventory, currency-on-property, two-stream mapping) →
+wire Channex → calendar/IA redesign → CRS/PMS → RLS Phase 2. See `BUILD-PLAN.md` for the phased order,
+`ARCHITECTURE.md` for rationale,
 `ACCESS-MODEL.md` for the access model, and `DEPLOY.md` for the deploy runbook.

@@ -49,19 +49,36 @@ DB-level tenant isolation now exists as defense-in-depth on top of app-level sco
 (Mock → real `ChannelAdapter`, same interface). Demo tenants keep `MockChannelAdapter`; real tenants get
 real adapters; they coexist. Never point a real adapter at demo hotels.
 
-**▶️ NEXT TASKS — pick up here.** Priority order (reprioritized by founder 2026-06-26):
-1. ✅ **Mobile/responsive fix — DONE & DEPLOYED** (Phase 1 push, both apps, verified 375/768/1280).
-2. ✅ **RLS hardening — DONE locally; Phase 1 code DEPLOYED (inert in prod).** Prod DB role is a
-   superuser so the shipped policies are bypassed → behaviour-neutral. **Phase 2 (enforcement) is now
-   scheduled LAST — AFTER RevioCRS + RevioPMS** (see note below). Phase 2 steps live in `DEPLOY.md`.
-3. ✅ **Manual mapping editor — DONE.**
-4. **Finish CM polish**, then **Real connectivity (Channex)** — see connectivity-test plan below.
-5. **RevioCRS** then **RevioPMS** — new Railway services, **same Postgres + same `@revio/core` + same
-   shell/scoping pattern** (this is the platform's core rule). Entitlements gate them.
-6. **RLS Phase 2 (prod enforcement) — LAST**, once CRS/PMS tables exist so one migration covers every
-   product's tenant tables. **CRS/PMS must, from day one, keep the tenant-scoping discipline** (query via
-   a per-request tenant proxy like `apps/channel-manager/lib/db.ts`, reuse `@revio/db` `forTenant`/
-   `forSystem`, carry `tenantId` on every tenant table) so the RLS flip later needs no rewrite.
+**▶️ ROADMAP — V2 revisions (founder spec `docs/CM-REVISIONS.md`, 2026-06-27).**
+Done & deployed: ✅ mobile/responsive shell · ✅ RLS (shipped inert in prod) · ✅ manual mapping editor ·
+✅ Channex adapter **built + live-verified against the sandbox** (`@revio/connectivity`, local commits,
+not yet wired into the app or deployed).
+
+**Recommended order — settle the data model FIRST so we don't build twice (rationale below):**
+
+- **Phase 1 — Core model (foundation; everything depends on it).**
+  (a) Inventory becomes date-level; `RoomType` → "Total Number of Rooms" (physical safety-net) — update
+  `@revio/core`, schema, seed, calendar. (b) Currency on Property, channels inherit; conversion prompt.
+  (c) Rate-plan-level Min/Max stay + Advance-Purchase rolling-close (schema fields mostly exist; add core
+  logic + UI). See `docs/CM-REVISIONS.md` decisions #1–#3.
+- **Phase 2 — Mapping restructure (the connectivity bridge).** Split mapping into a **Room-Type stream**
+  (inventory + open/close) and a **Rate-Plan stream** (rates + restrictions) — mirrors Channex exactly.
+- **Phase 3 — Wire real Channex + deploy.** The adapter is already built/proven; now wire push (avail via
+  room mapping, rates/restrictions via rate mapping) + pull, operator per-tenant key storage, per-channel
+  quick actions become real, connectivity-health bar. Then push the `@revio/connectivity` commits + deploy.
+- **Phase 4 — Calendar & Bulk Update redesign.** All rooms visible/collapsible, Rooms-Sold row, filters,
+  Customise Display, 2-yr horizon + 30-day window + custom range; merge Bulk Update with Restrictions.
+- **Phase 5 — Screen refinements (independent, parallelizable).** Reservations filters; Sync Center
+  consolidation (Logs + merge Error Center + Audit under it); channel logos; Dashboard quick actions;
+  Settings (Reservation Delivery emails + arrival Notifications — needs email/scheduler infra); **move
+  User Management to Operations nav** (quick win, do anytime).
+- **Later — RevioCRS → RevioPMS** (same Postgres/core/shell; entitlement-gated), then **RLS Phase 2
+  (prod enforcement) LAST** so one migration covers every product's tenant tables (`DEPLOY.md`).
+
+**Why not wire/deploy Channex right now:** Phases 1–2 change the very things Channex depends on — the
+inventory model (what "availability" means), the currency (what we send), and the mapping structure (the
+two streams). Wiring Channex before them = building it twice. The adapter being done means Channex is
+de-risked and ready to plug in **after** the model settles.
 
 **Connectivity test plan (test live API keys BEFORE any real client).** It's an adapter swap — the
 `ChannelAdapter` interface + `MockChannelAdapter` already isolate it, and the adapter is chosen **per

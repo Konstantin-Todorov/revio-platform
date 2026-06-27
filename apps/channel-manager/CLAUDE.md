@@ -3,6 +3,12 @@
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. This file narrows scope to CM.
 > The UI brands this app as **RevioLink**; the codebase calls it channel-manager.
 
+> **V2 revisions in flight (founder spec `docs/CM-REVISIONS.md`, 2026-06-27).** Before building more CM
+> UI, note three model changes coming: **(1) inventory is date-level** (room types hold only a physical
+> "Total Number of Rooms" safety-net, not an inventory baseline); **(2) currency lives on the Property**
+> and channels inherit it; **(3) Mapping splits into two streams** — Room-Type (inventory + open/close)
+> and Rate-Plan (rates + restrictions), mirroring Channex. Sequence + rationale in `BUILD-PLAN.md`.
+
 **This is the first product, the sales demo, and the priority.** It is a pure distribution tool:
 inventory out, bookings in, nothing else. It reads/writes inventory **only** through `@revio/core`.
 

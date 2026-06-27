@@ -65,3 +65,21 @@ Updated as work lands. **Status:** ✅ built · 🟡 partial · 🟦 planned (in
    questionnaire's "price for 2 guests − €10 = price for 1 guest". Math added to `@revio/core`.
 3. **`RatePlan.tags String[]`** — arbitrary tags so a hotel can label what a plan contains
    (e.g. `breakfast`, `non-refundable`, `corporate`), as required by "give them any names and tags".
+
+## V2 revisions (founder spec, 2026-06-27 — full detail in `docs/CM-REVISIONS.md`)
+
+Turning the demo-grade CM into a real operator tool. Status: 🟦 planned (sequenced in `BUILD-PLAN.md`).
+The **model-changing** items (do first, they ripple everywhere):
+
+| Requirement | Status | Note |
+| --- | --- | --- |
+| **Inventory is date-level**; room type holds only physical "Total Number of Rooms" (safety-net warning) | 🟦 | Changes `@revio/core` availability + `RoomType` + seed + calendar |
+| **Currency on Property**, channels inherit; "convert all rates?" prompt + FX conversion | 🟦 | Remove channel currency; affects calendar + Channex send |
+| **Mapping → two streams**: Room-Type (inventory/open-close) + Rate-Plan (rates/restrictions) | 🟦 | Mirrors Channex; restructures `ProductMapping`; do before wiring Channex |
+| Rate-plan **Min/Max stay** + **Advance-Purchase rolling close** | 🟦 | Schema fields exist (`defMinLos/defMaxLos/defAdvancePurchase*`); add core logic + UI |
+| Calendar redesign (all rooms, Rooms-Sold row, filters, Customise Display, 2-yr/30-day nav) | 🟦 | Depends on the inventory-model change |
+| Bulk Update **merges** Restrictions; Sync Center **absorbs** Error Center + Audit Log | 🟦 | IA consolidation |
+| Reservations filters (channel, res-number, date-type, range; cross-filtering) | 🟦 | UI |
+| Channels: quick actions, logos, "Connectivity Health – 24h" bar | 🟦 | Quick actions/health meaningful with real connectivity |
+| Settings: Reservation Delivery emails + arrival Notifications | 🟦 | Needs email + scheduler infra (new capability) |
+| User Management → its own **Operations** nav item (out of Settings) | 🟦 | Quick win |
