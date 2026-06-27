@@ -13,8 +13,11 @@ export interface ChannexRestrictionValue {
   property_id: string;
   rate_plan_id: string;
   date: string;
-  rate: number; // minor units, matching Channex's integer rate (e.g. 30000 = 300.00)
-  min_stay?: number;
+  rate: number; // minor units, matching Channex's integer rate (e.g. 12000 = 120.00). Verified live.
+  // Channex properties don't all support the generic `min_stay`; `min_stay_arrival`/`min_stay_through`
+  // are the supported forms (sending `min_stay` triggers a warning and the whole row is rejected).
+  min_stay_arrival?: number;
+  min_stay_through?: number;
   max_stay?: number;
   closed_to_arrival: boolean;
   closed_to_departure: boolean;
@@ -71,7 +74,10 @@ export function toRestrictionValue(propertyId: string, u: AriUpdate): ChannexRes
     closed_to_departure: r.ctd ?? false,
     stop_sell: r.stopSell ?? false,
   };
-  if (r.minLos != null) value.min_stay = r.minLos;
+  if (r.minLos != null) {
+    value.min_stay_arrival = r.minLos;
+    value.min_stay_through = r.minLos;
+  }
   if (r.maxLos != null) value.max_stay = r.maxLos;
   return value;
 }

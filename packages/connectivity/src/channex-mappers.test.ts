@@ -34,14 +34,16 @@ describe("ARI -> Channex restrictions", () => {
       closed_to_arrival: true,
       closed_to_departure: false,
       stop_sell: true,
-      min_stay: 2,
+      min_stay_arrival: 2,
+      min_stay_through: 2,
       max_stay: 7,
     });
   });
 
   it("omits min/max stay when not set and defaults booleans to false", () => {
     const v = toRestrictionValue(PROP, ari());
-    expect(v.min_stay).toBeUndefined();
+    expect(v.min_stay_arrival).toBeUndefined();
+    expect(v.min_stay_through).toBeUndefined();
     expect(v.max_stay).toBeUndefined();
     expect(v.stop_sell).toBe(false);
     expect(v.closed_to_arrival).toBe(false);

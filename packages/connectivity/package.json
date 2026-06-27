@@ -11,6 +11,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "channex:setup": "tsx scripts/channex-setup.ts",
     "channex:smoke": "tsx scripts/channex-smoke.ts"
   },
   "dependencies": {
