@@ -57,10 +57,11 @@ not yet wired into the app or deployed).
 **Recommended order — settle the data model FIRST so we don't build twice (rationale below):**
 
 - **Phase 1 — Core model (foundation; everything depends on it).**
-  (a) Inventory becomes date-level; `RoomType` → "Total Number of Rooms" (physical safety-net) — update
-  `@revio/core`, schema, seed, calendar. (b) Currency on Property, channels inherit; conversion prompt.
-  (c) Rate-plan-level Min/Max stay + Advance-Purchase rolling-close (schema fields mostly exist; add core
-  logic + UI). See `docs/CM-REVISIONS.md` decisions #1–#3.
+  (a) ✅ **DONE** — inventory date-level; `RoomType.totalRooms` (physical safety-net); calendar shows
+  Rooms-to-sell + Rooms-sold (derived). (b) Currency on Property, channels inherit; conversion prompt —
+  **and store the 4 currency fields (original / converted / FX rate / timestamp) on each reservation
+  now, for CRS compatibility (`docs/CRS-REFERENCE.md`).** (c) Rate-plan Min/Max stay + Advance-Purchase
+  rolling-close (schema fields mostly exist; add core logic + UI). See `docs/CM-REVISIONS.md` #1–#3.
 - **Phase 2 — Mapping restructure (the connectivity bridge).** Split mapping into a **Room-Type stream**
   (inventory + open/close) and a **Rate-Plan stream** (rates + restrictions) — mirrors Channex exactly.
 - **Phase 3 — Wire real Channex + deploy.** The adapter is already built/proven; now wire push (avail via
@@ -72,8 +73,13 @@ not yet wired into the app or deployed).
   consolidation (Logs + merge Error Center + Audit under it); channel logos; Dashboard quick actions;
   Settings (Reservation Delivery emails + arrival Notifications — needs email/scheduler infra); **move
   User Management to Operations nav** (quick win, do anytime).
-- **Later — RevioCRS → RevioPMS** (same Postgres/core/shell; entitlement-gated), then **RLS Phase 2
-  (prod enforcement) LAST** so one migration covers every product's tenant tables (`DEPLOY.md`).
+- **Later — RevioCRS** (full spec `docs/CRS-REFERENCE.md`; the system-of-record for reservations +
+  revenue metrics — Occupancy/ADR/RevPAR/Pickup). Synergy: its "Connected Channel Manager" is an
+  **adapter parallel to the CM's `ChannelAdapter`** — a `ChannelManagerConnector` that's RevioLink-internal
+  (shared core, no network) or third-party (push/pull); and the **availability waterfall lives once in
+  `@revio/core`** (Phase 1a seeded it; grows to Physical−OOO−Closed−Holds−Confirmed). Then **RevioPMS**
+  (same Postgres/core/shell; entitlement-gated), then **RLS Phase 2 (prod enforcement) LAST** so one
+  migration covers every product's tenant tables (`DEPLOY.md`).
 
 **Why not wire/deploy Channex right now:** Phases 1–2 change the very things Channex depends on — the
 inventory model (what "availability" means), the currency (what we send), and the mapping structure (the

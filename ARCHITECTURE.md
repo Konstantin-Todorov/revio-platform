@@ -47,11 +47,23 @@ ONE database (Postgres + RLS)
 
 ## The three engines (already implemented in `packages/core`, verified)
 
-1. **Availability** = total inventory − confirmed reservations, unless a manual override sets a new
-   baseline. Stop Sell is a *separate flag* that sends 0 bookable without changing the count.
+1. **Availability** (V2 model, 2026-06-27) = **date-level inventory − rooms sold**, where "rooms to sell"
+   is a per-date allotment the hotel manages (defaulting to the room type's physical `totalRooms`) and
+   "rooms sold" is always *derived* from confirmed reservations. Stop Sell is a *separate flag* (0 bookable
+   without changing the count). This is the seed of the **CRS availability waterfall**
+   (Physical − Out-of-order − Closed − Holds − Confirmed) — the same function in `@revio/core` grows to the
+   full form when RevioCRS lands; never a second copy. (See `docs/CRS-REFERENCE.md`, `docs/CM-REVISIONS.md`.)
 2. **Derived rates** — a rate plan's price computed from a parent (±%/±fixed, rounding, floor, ceiling);
    recalculates when the parent changes unless a date was manually overridden.
-3. **Restriction priority** — manual edit / Bulk Update > Restriction Rule > Rate Plan default.
+3. **Restriction priority** — manual edit / Bulk Update > Restriction Rule > Rate Plan default
+   > Property default (the CRS adds the property-level fallback).
+
+## Two adapter boundaries (the same pattern, twice)
+- **CM ↔ OTA** — `ChannelAdapter` (`@revio/connectivity`: Mock | Channex | …). Built + sandbox-verified.
+- **CRS ↔ Channel Manager** — a future `ChannelManagerConnector` with **RevioLink-internal** (shared
+  core/DB, no network) and **third-party** (real push/pull) impls. The CRS connects to exactly one CM and
+  can't tell internal from external — exactly the spec's requirement. Reservations are the CRS's system of
+  record; when CM + CRS are both on, they share one reservation table that grows additively.
 
 ## Tech stack
 
