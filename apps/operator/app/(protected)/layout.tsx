@@ -6,7 +6,7 @@ import { getOperatorSession } from "@/lib/session";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getOperatorSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/logout");
 
   return (
     <ShellProvider>

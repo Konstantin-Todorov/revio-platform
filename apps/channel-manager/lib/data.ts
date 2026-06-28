@@ -20,7 +20,7 @@ function currentMonday(): Date {
  *  this app resolves the property through here, so a hotel can only ever touch its own data. */
 export async function getProperty() {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/logout");
   return prisma.property.findUniqueOrThrow({
     where: { id: session.activePropertyId },
     include: { tenant: true },
