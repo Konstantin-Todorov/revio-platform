@@ -39,7 +39,7 @@ async function main() {
   // Truncate everything in one statement so FK order doesn't matter (re-runnable seed).
   const tables = [
     "AuditEntry", "ErrorItem", "SyncEvent", "ReservationLine", "Reservation",
-    "RestrictionRule", "DailyCell", "RatePrice", "ProductMapping", "OccupancyAdjustment",
+    "RestrictionRule", "DailyCell", "RatePrice", "ProductMapping", "ChannelRoomTypeMapping", "ChannelRatePlanMapping", "OccupancyAdjustment",
     "RatePlanRoomType", "RatePlan", "MealPlan", "CancellationPolicy", "RoomType",
     "Channel", "Property", "User", "Tenant",
   ];
@@ -192,23 +192,22 @@ async function main() {
   }
   const chByCode = Object.fromEntries(channels.map((c) => [c.code, c]));
 
-  // --- Mapping: most complete; leave a few incomplete (→ 5 unmapped products) ---
-  let unmappedLeft = 5;
+  // --- Mapping (two streams): map every room type + rate plan; leave the Trip.com Corporate and
+  //     Early-Booker rate plans unmapped to demo the incomplete state (→ 2 unmapped). ---
   for (const ch of channels) {
-    for (const rt of roomTypes) {
-      for (const rp of ratePlans) {
-        const makeIncomplete = unmappedLeft > 0 && ch.code === "trip" && (rp.code === "COR" || rp.code === "EB");
-        if (makeIncomplete) unmappedLeft--;
-        await prisma.productMapping.create({
-          data: {
-            tenantId, channelId: ch.id, roomTypeId: rt.id, ratePlanId: rp.id,
-            externalRoomId: makeIncomplete ? null : `${ch.code}-r-${rt.code}`,
-            externalRateId: makeIncomplete ? null : `${ch.code}-rp-${rp.code}`,
-            status: makeIncomplete ? "missing_rate" : "complete",
-          },
-        });
-      }
-    }
+    await prisma.channelRoomTypeMapping.createMany({
+      data: roomTypes.map((rt) => ({ tenantId, channelId: ch.id, roomTypeId: rt.id, externalRoomId: `${ch.code}-r-${rt.code}`, status: "complete" })),
+    });
+    await prisma.channelRatePlanMapping.createMany({
+      data: ratePlans.map((rp) => {
+        const incomplete = ch.code === "trip" && (rp.code === "COR" || rp.code === "EB");
+        return {
+          tenantId, channelId: ch.id, ratePlanId: rp.id,
+          externalRateId: incomplete ? null : `${ch.code}-rp-${rp.code}`,
+          status: incomplete ? "incomplete" : "complete",
+        };
+      }),
+    });
   }
 
   // --- Calendar: rolling prices + screenshot-exact current week for DDR ----
@@ -357,8 +356,10 @@ async function main() {
   for (const c of [{ code: "booking", name: "Booking.com" }, { code: "expedia", name: "Expedia" }]) {
     ch2.push(await prisma.channel.create({ data: { ...t2, code: c.code, name: c.name, status: "connected", currency: "EUR", supportedRestrictions: ["stop_sell", "min_los", "cta"], lastSyncAt: minsAgo(2), pendingCount: 2, externalPropertyId: `${c.code.toUpperCase()}-BSR` } }));
   }
-  for (const ch of ch2) for (const rt of rt2) for (const rp of plans2)
-    await prisma.productMapping.create({ data: { tenantId: tenant2.id, channelId: ch.id, roomTypeId: rt.id, ratePlanId: rp.id, externalRoomId: `${ch.code}-r-${rt.code}`, externalRateId: `${ch.code}-rp-${rp.code}`, status: "complete" } });
+  for (const ch of ch2) {
+    await prisma.channelRoomTypeMapping.createMany({ data: rt2.map((rt) => ({ tenantId: tenant2.id, channelId: ch.id, roomTypeId: rt.id, externalRoomId: `${ch.code}-r-${rt.code}`, status: "complete" })) });
+    await prisma.channelRatePlanMapping.createMany({ data: plans2.map((rp) => ({ tenantId: tenant2.id, channelId: ch.id, ratePlanId: rp.id, externalRateId: `${ch.code}-rp-${rp.code}`, status: "complete" })) });
+  }
 
   const prices2: any[] = [];
   for (const rt of rt2) {
@@ -379,8 +380,9 @@ async function main() {
     ratePlans: ratePlans.length,
     activeProducts: roomTypes.length * ratePlans.length,
     channels: channels.length,
-    mappings: await prisma.productMapping.count(),
-    unmappedProducts: await prisma.productMapping.count({ where: { status: { not: "complete" } } }),
+    roomMappings: await prisma.channelRoomTypeMapping.count(),
+    rateMappings: await prisma.channelRatePlanMapping.count(),
+    unmappedRates: await prisma.channelRatePlanMapping.count({ where: { status: { not: "complete" } } }),
     priceRows: priceRows.length,
     reservations: resSpec.length,
   };

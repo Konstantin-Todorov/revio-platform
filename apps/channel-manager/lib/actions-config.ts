@@ -67,42 +67,46 @@ export async function fixMappings(fd: FormData): Promise<void> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return;
 
-  const incomplete = await prisma.productMapping.findMany({
-    where: { channelId, status: { not: "complete" } },
-    include: { roomType: true, ratePlan: true },
-  });
-  for (const m of incomplete) {
-    await prisma.productMapping.update({
-      where: { id: m.id },
-      data: {
-        status: "complete",
-        externalRoomId: m.externalRoomId ?? `${channel.code}-r-${m.roomType.code}`,
-        externalRateId: m.externalRateId ?? `${channel.code}-rp-${m.ratePlan.code}`,
-      },
-    });
+  // Fill any unmapped room types and rate plans with a deterministic mock external id.
+  const [rooms, rates] = await Promise.all([
+    prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: { not: "complete" } }, include: { roomType: true } }),
+    prisma.channelRatePlanMapping.findMany({ where: { channelId, status: { not: "complete" } }, include: { ratePlan: true } }),
+  ]);
+  for (const m of rooms) {
+    await prisma.channelRoomTypeMapping.update({ where: { id: m.id }, data: { status: "complete", externalRoomId: m.externalRoomId ?? `${channel.code}-r-${m.roomType.code}` } });
   }
+  for (const m of rates) {
+    await prisma.channelRatePlanMapping.update({ where: { id: m.id }, data: { status: "complete", externalRateId: m.externalRateId ?? `${channel.code}-rp-${m.ratePlan.code}` } });
+  }
+  const fixed = rooms.length + rates.length;
   await prisma.channel.update({ where: { id: channelId }, data: { errorCount: { set: Math.max(0, channel.errorCount - 1) } } });
-  await logAudit(propertyId, tenantId, { entity: `Mapping · ${channel.name}`, field: "fix", newValue: `${incomplete.length} products mapped` });
-  await recordPush(propertyId, tenantId, `Mapping completed for ${channel.name} (${incomplete.length} products)`);
+  await logAudit(propertyId, tenantId, { entity: `Mapping · ${channel.name}`, field: "fix", newValue: `${fixed} mappings completed` });
+  await recordPush(propertyId, tenantId, `Mapping completed for ${channel.name} (${fixed})`);
   revalidatePath("/mapping");
   revalidatePath("/channels");
   revalidatePath("/dashboard");
 }
 
-/** Manually set a product's external IDs on a channel (self-service mapping against the mock). */
-export async function updateMapping(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+/** Manually set one stream mapping's external id (kind: "room" → room type, "rate" → rate plan). */
+export async function updateStreamMapping(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const { id: propertyId, tenantId } = await getProperty();
+  const kind = str(fd, "kind");
   const id = str(fd, "id");
-  const externalRoomId = str(fd, "externalRoomId") || null;
-  const externalRateId = str(fd, "externalRateId") || null;
+  const externalId = str(fd, "externalId") || null;
+  const status = externalId ? "complete" : "incomplete";
 
-  const mapping = await prisma.productMapping.findUnique({ where: { id }, include: { channel: true, roomType: true, ratePlan: true } });
-  if (!mapping || mapping.tenantId !== tenantId) return { ok: false, error: "Mapping not found." };
-
-  const status = externalRoomId && externalRateId ? "complete" : "incomplete";
-  await prisma.productMapping.update({ where: { id }, data: { externalRoomId, externalRateId, status } });
-  await logAudit(propertyId, tenantId, { entity: `Mapping · ${mapping.channel.name} · ${mapping.roomType.name}/${mapping.ratePlan.name}`, field: "mapping", newValue: status });
-  await recordPush(propertyId, tenantId, `Mapping updated for ${mapping.channel.name}`);
+  if (kind === "room") {
+    const m = await prisma.channelRoomTypeMapping.findUnique({ where: { id }, include: { channel: true, roomType: true } });
+    if (!m || m.tenantId !== tenantId) return { ok: false, error: "Mapping not found." };
+    await prisma.channelRoomTypeMapping.update({ where: { id }, data: { externalRoomId: externalId, status } });
+    await logAudit(propertyId, tenantId, { entity: `Mapping · ${m.channel.name} · ${m.roomType.name}`, field: "room mapping", newValue: status });
+  } else {
+    const m = await prisma.channelRatePlanMapping.findUnique({ where: { id }, include: { channel: true, ratePlan: true } });
+    if (!m || m.tenantId !== tenantId) return { ok: false, error: "Mapping not found." };
+    await prisma.channelRatePlanMapping.update({ where: { id }, data: { externalRateId: externalId, status } });
+    await logAudit(propertyId, tenantId, { entity: `Mapping · ${m.channel.name} · ${m.ratePlan.name}`, field: "rate mapping", newValue: status });
+  }
+  await recordPush(propertyId, tenantId, "Mapping updated");
   revalidatePath("/mapping");
   revalidatePath("/channels");
   revalidatePath("/dashboard");
@@ -155,15 +159,18 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
       lastSyncAt: new Date(), errorCount: 0, pendingCount: 0,
     },
   });
-  // Create complete mappings for all products so it's immediately sellable.
-  const products = await prisma.ratePlanRoomType.findMany({ where: { ratePlan: { propertyId } }, include: { roomType: true, ratePlan: true } });
-  await prisma.productMapping.createMany({
-    data: products.map((p) => ({
-      tenantId, channelId: channel.id, roomTypeId: p.roomTypeId, ratePlanId: p.ratePlanId,
-      externalRoomId: `${code}-r-${p.roomType.code}`, externalRateId: `${code}-rp-${p.ratePlan.code}`, status: "complete",
-    })),
+  // Map every room type and rate plan to the new channel (two streams) so it's immediately sellable.
+  const [roomTypes, ratePlans] = await Promise.all([
+    prisma.roomType.findMany({ where: { propertyId } }),
+    prisma.ratePlan.findMany({ where: { propertyId } }),
+  ]);
+  await prisma.channelRoomTypeMapping.createMany({
+    data: roomTypes.map((rt) => ({ tenantId, channelId: channel.id, roomTypeId: rt.id, externalRoomId: `${code}-r-${rt.code}`, status: "complete" })),
   });
-  await logAudit(propertyId, tenantId, { entity: `Channel · ${name}`, field: "connect", newValue: `${products.length} products mapped` });
+  await prisma.channelRatePlanMapping.createMany({
+    data: ratePlans.map((rp) => ({ tenantId, channelId: channel.id, ratePlanId: rp.id, externalRateId: `${code}-rp-${rp.code}`, status: "complete" })),
+  });
+  await logAudit(propertyId, tenantId, { entity: `Channel · ${name}`, field: "connect", newValue: `${roomTypes.length} rooms + ${ratePlans.length} rates mapped` });
   await recordPush(propertyId, tenantId, `Connected ${name} and pushed all products`);
   revalidatePath("/channels");
   revalidatePath("/dashboard");

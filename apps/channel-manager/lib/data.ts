@@ -35,7 +35,13 @@ export async function getDashboard() {
     await Promise.all([
       prisma.channel.findMany({ where: { propertyId }, orderBy: { name: "asc" } }),
       prisma.ratePlanRoomType.count({ where: { ratePlan: { propertyId, active: true } } }),
-      prisma.productMapping.count({ where: { roomType: { propertyId }, status: { not: "complete" } } }),
+      (async () => {
+        const [rt, rp] = await Promise.all([
+          prisma.channelRoomTypeMapping.count({ where: { channel: { propertyId }, status: { not: "complete" } } }),
+          prisma.channelRatePlanMapping.count({ where: { channel: { propertyId }, status: { not: "complete" } } }),
+        ]);
+        return rt + rp;
+      })(),
       prisma.reservation.findMany({
         where: { propertyId },
         include: { channel: true, lines: { include: { roomType: true } } },
@@ -246,11 +252,19 @@ export async function getRoomsAndRates() {
 export async function getChannels() {
   const property = await getProperty();
   const channels = await prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } });
-  const totalProducts = await prisma.ratePlanRoomType.count({ where: { ratePlan: { propertyId: property.id } } });
+  // Two-stream completeness: every room type AND every rate plan must be mapped to the channel.
+  const [totalRoomTypes, totalRatePlans] = await Promise.all([
+    prisma.roomType.count({ where: { propertyId: property.id } }),
+    prisma.ratePlan.count({ where: { propertyId: property.id } }),
+  ]);
+  const total = totalRoomTypes + totalRatePlans;
   const mapStats = await Promise.all(
     channels.map(async (c) => {
-      const complete = await prisma.productMapping.count({ where: { channelId: c.id, status: "complete" } });
-      return { channelId: c.id, complete, total: totalProducts };
+      const [rt, rp] = await Promise.all([
+        prisma.channelRoomTypeMapping.count({ where: { channelId: c.id, status: "complete" } }),
+        prisma.channelRatePlanMapping.count({ where: { channelId: c.id, status: "complete" } }),
+      ]);
+      return { channelId: c.id, complete: rt + rp, total };
     }),
   );
   return { property, channels, mapStats };
@@ -269,24 +283,34 @@ export async function getRestrictions() {
   return { property, rules: withNames, roomTypes, channels };
 }
 
+function loadRoomTypeMappings(channelId: string) {
+  return prisma.channelRoomTypeMapping.findMany({
+    where: { channelId }, include: { roomType: true }, orderBy: { roomType: { sortOrder: "asc" } },
+  });
+}
+function loadRatePlanMappings(channelId: string) {
+  return prisma.channelRatePlanMapping.findMany({
+    where: { channelId }, include: { ratePlan: true }, orderBy: { ratePlan: { sortOrder: "asc" } },
+  });
+}
+
 export async function getMapping(channelCode?: string) {
   const property = await getProperty();
   const channels = await prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } });
   // No channels connected yet — return nothing to map; the page shows a CTA.
   if (channels.length === 0) {
-    return { property, channels, channel: null, mappings: [] as Awaited<ReturnType<typeof getMappingRows>> };
+    return {
+      property, channels, channel: null,
+      roomTypeMappings: [] as Awaited<ReturnType<typeof loadRoomTypeMappings>>,
+      ratePlanMappings: [] as Awaited<ReturnType<typeof loadRatePlanMappings>>,
+    };
   }
   const channel = channels.find((c) => c.code === channelCode) ?? channels[0]!;
-  const mappings = await getMappingRows(channel.id);
-  return { property, channels, channel, mappings };
-}
-
-function getMappingRows(channelId: string) {
-  return prisma.productMapping.findMany({
-    where: { channelId },
-    include: { roomType: true, ratePlan: true },
-    orderBy: [{ roomType: { sortOrder: "asc" } }, { ratePlan: { sortOrder: "asc" } }],
-  });
+  const [roomTypeMappings, ratePlanMappings] = await Promise.all([
+    loadRoomTypeMappings(channel.id),
+    loadRatePlanMappings(channel.id),
+  ]);
+  return { property, channels, channel, roomTypeMappings, ratePlanMappings };
 }
 
 export async function getSettings() {
