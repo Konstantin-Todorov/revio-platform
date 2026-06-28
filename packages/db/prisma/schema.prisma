@@ -229,6 +229,9 @@ model Channel {
   code                String // booking | expedia | trip | agoda
   name                String
   status              String   @default("connected") // connected|not_connected|pending|error|disabled
+  // Which adapter this channel pushes through (@revio/connectivity). Demo channels stay on "mock"; a
+  // channel set to channex_* talks to the real Channex API. externalPropertyId is the Channex Property UUID.
+  connectivityMode    String   @default("mock") // mock | channex_sandbox | channex_prod
   externalPropertyId  String?
   currency            String   @default("EUR")
   commissionPct       Float    @default(15)

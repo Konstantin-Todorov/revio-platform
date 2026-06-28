@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@revio/core": "workspace:*",
+    "@revio/connectivity": "workspace:*",
     "@revio/db": "workspace:*",
     "@revio/ui": "workspace:*",
     "lucide-react": "^0.460.0",

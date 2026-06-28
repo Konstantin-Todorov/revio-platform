@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
+import { syncChannel } from "./connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -125,10 +126,12 @@ export async function saveChannelSettings(_prev: ActionResult | null, fd: FormDa
   const markupPct = Number(str(fd, "markupPct")) || 0;
   const commissionPct = Number(str(fd, "commissionPct")) || 0;
   const rounding = str(fd, "rounding") || "none";
+  const connectivityMode = str(fd, "connectivityMode") || "mock";
+  const externalPropertyId = str(fd, "externalPropertyId") || null;
 
   const ch = await prisma.channel.findUnique({ where: { id } });
   if (!ch) return { ok: false, error: "Unknown channel." };
-  await prisma.channel.update({ where: { id }, data: { currency, conversionType, markupPct, commissionPct, rounding } });
+  await prisma.channel.update({ where: { id }, data: { currency, conversionType, markupPct, commissionPct, rounding, connectivityMode, externalPropertyId } });
   await logAudit(propertyId, tenantId, { entity: `Channel · ${ch.name}`, field: "settings", newValue: `${markupPct}% markup` });
   await recordPush(propertyId, tenantId, `Channel settings updated for ${ch.name}`);
   revalidatePath("/channels");
@@ -175,6 +178,19 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
   revalidatePath("/channels");
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+/** Re-sync a channel: build + push the next horizon of ARI through its resolved adapter (mock/Channex). */
+export async function resyncChannel(fd: FormData): Promise<void> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const channelId = str(fd, "channelId");
+  if (!channelId) return;
+  const outcome = await syncChannel(channelId);
+  await logAudit(propertyId, tenantId, { entity: "Channel sync", field: "resync", newValue: `${outcome.pushed} pushed · ${outcome.rejected} rejected (${outcome.mode})` });
+  revalidatePath("/channels");
+  revalidatePath("/sync");
+  revalidatePath("/errors");
+  revalidatePath("/dashboard");
 }
 
 // --- Property settings -----------------------------------------------------

@@ -8,6 +8,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 type Channel = {
   id: string; name: string; currency: string; conversionType: string;
   markupPct: number; commissionPct: number; rounding: string;
+  connectivityMode: string; externalPropertyId: string | null;
 };
 
 export function ChannelSettingsDialog({ channel }: { channel: Channel }) {
@@ -46,6 +47,18 @@ export function ChannelSettingsDialog({ channel }: { channel: Channel }) {
                 <option value="nearest_minor_1">Whole</option>
                 <option value="nearest_minor_50">0.50</option>
               </select>
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3 rounded-md border border-surface-border bg-surface-muted/60 p-3">
+            <Field label="Connectivity" hint="Demo channels use the mock">
+              <select name="connectivityMode" defaultValue={channel.connectivityMode} className={inputCls}>
+                <option value="mock">Mock (demo)</option>
+                <option value="channex_sandbox">Channex — sandbox</option>
+                <option value="channex_prod">Channex — production</option>
+              </select>
+            </Field>
+            <Field label="Channex Property UUID" hint="Required for Channex modes">
+              <input name="externalPropertyId" defaultValue={channel.externalPropertyId ?? ""} className={inputCls} placeholder="e.g. 4e0c…" />
             </Field>
           </div>
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}

@@ -1,4 +1,6 @@
+import { RefreshCw } from "lucide-react";
 import { getChannels } from "@/lib/data";
+import { resyncChannel } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { ChannelSettingsDialog, AddChannelDialog } from "@/components/channels/ChannelDialogs";
 import { relativeTime } from "@/lib/format";
@@ -6,6 +8,7 @@ import { relativeTime } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 const INITIALS: Record<string, string> = { booking: "B", expedia: "E", trip: "T", agoda: "A" };
+const MODE_LABEL: Record<string, string> = { mock: "Mock", channex_sandbox: "Channex · sandbox", channex_prod: "Channex · prod" };
 
 export default async function ChannelsPage() {
   const { channels, mapStats } = await getChannels();
@@ -35,9 +38,18 @@ export default async function ChannelsPage() {
                   <div className="mt-0.5 text-[12px] text-ink-400">
                     {ch.currency} · {ch.commissionPct}% commission · synced {relativeTime(ch.lastSyncAt)}
                   </div>
+                  <div className="mt-1">
+                    <StatusPill tone={ch.connectivityMode === "mock" ? "neutral" : "info"}>{MODE_LABEL[ch.connectivityMode] ?? ch.connectivityMode}</StatusPill>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {ch.errorCount > 0 && <StatusPill tone="danger">{ch.errorCount} error</StatusPill>}
+                  <form action={resyncChannel}>
+                    <input type="hidden" name="channelId" value={ch.id} />
+                    <button type="submit" aria-label="Re-sync channel" title="Push the next 14 days of ARI now" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-brand-600">
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                  </form>
                   <ChannelSettingsDialog channel={ch} />
                 </div>
               </div>
