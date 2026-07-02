@@ -258,13 +258,23 @@ export async function getChannels() {
     prisma.ratePlan.count({ where: { propertyId: property.id } }),
   ]);
   const total = totalRoomTypes + totalRatePlans;
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const mapStats = await Promise.all(
     channels.map(async (c) => {
-      const [rt, rp] = await Promise.all([
+      const [rt, rp, syncs, syncsOk] = await Promise.all([
         prisma.channelRoomTypeMapping.count({ where: { channelId: c.id, status: "complete" } }),
         prisma.channelRatePlanMapping.count({ where: { channelId: c.id, status: "complete" } }),
+        prisma.syncEvent.count({ where: { channelId: c.id, createdAt: { gte: since24h } } }),
+        prisma.syncEvent.count({ where: { channelId: c.id, createdAt: { gte: since24h }, status: "success" } }),
       ]);
-      return { channelId: c.id, complete: rt + rp, total };
+      return {
+        channelId: c.id,
+        complete: rt + rp,
+        total,
+        // Last-24h connectivity health: % of this channel's sync events that succeeded (null = no activity).
+        health24h: syncs > 0 ? Math.round((syncsOk / syncs) * 100) : null,
+        syncs24h: syncs,
+      };
     }),
   );
   return { property, channels, mapStats };

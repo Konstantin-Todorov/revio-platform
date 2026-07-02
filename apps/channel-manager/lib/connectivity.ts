@@ -166,3 +166,190 @@ export async function syncChannel(channelId: string): Promise<SyncOutcome> {
 
   return { ok: result.ok, pushed: updates.length - result.rejected.length, rejected: result.rejected.length, mode: channel.connectivityMode };
 }
+
+/**
+ * Auto-push: sync every connected channel of the property that uses a REAL adapter (non-mock).
+ * Called after ARI-affecting edits so channex-mode channels receive the change without a manual
+ * Re-sync. A no-op when every channel is mock (the default), so demo flows are unaffected.
+ */
+export async function syncRealChannels(propertyId: string): Promise<void> {
+  const real = await prisma.channel.findMany({
+    where: { propertyId, status: "connected", connectivityMode: { not: "mock" } },
+    select: { id: true },
+  });
+  for (const c of real) {
+    try {
+      await syncChannel(c.id);
+    } catch {
+      // syncChannel records its own SyncEvent/ErrorItems; never block the user's edit on a push failure.
+    }
+  }
+}
+
+// --- Pull: bookings back from the channel -----------------------------------
+
+export interface PullOutcome {
+  ok: boolean;
+  imported: number;
+  updated: number;
+  unchanged: number;
+  mode: string;
+  error?: string;
+}
+
+/** How far back a pull looks. Overlapping pulls are safe — reservations dedupe on externalId. */
+const PULL_LOOKBACK_DAYS = 7;
+
+/**
+ * Pull bookings from the channel's adapter and import them: new bookings become Reservations
+ * (availability self-corrects because "sold" is derived from confirmed reservations), status changes
+ * (e.g. cancellations) update in place, and bookings that can't be mapped land as failed_import +
+ * an Error Center item. Overbookings are flagged, not silently absorbed.
+ */
+export async function pullChannel(channelId: string): Promise<PullOutcome> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, imported: 0, updated: 0, unchanged: 0, mode: "mock", error: "Unknown channel." };
+  const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId } });
+  const { tenantId, propertyId } = channel;
+
+  const [roomMaps, rateMaps] = await Promise.all([
+    prisma.channelRoomTypeMapping.findMany({ where: { channelId, externalRoomId: { not: null } }, include: { roomType: true } }),
+    prisma.channelRatePlanMapping.findMany({ where: { channelId, externalRateId: { not: null } } }),
+  ]);
+  const roomByExternal = new Map(roomMaps.map((m) => [m.externalRoomId!, m]));
+  const rateByExternal = new Map(rateMaps.map((m) => [m.externalRateId!, m.ratePlanId]));
+
+  const mode = adapterMode(channel.connectivityMode);
+  const adapter = createChannelAdapter({
+    mode,
+    channelCode: channel.code,
+    ...(mode !== "mock"
+      ? { channex: { apiKey: channexKey(channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
+      : {}),
+  });
+
+  const since = new Date(Date.now() - PULL_LOOKBACK_DAYS * DAY_MS).toISOString();
+  let raws;
+  try {
+    raws = await adapter.pullReservations(since);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Pull failed";
+    await prisma.syncEvent.create({
+      data: { tenantId, propertyId, channelId, kind: "pull", status: "failed", summary: `Pull from ${channel.name} failed`, detail: message },
+    });
+    return { ok: false, imported: 0, updated: 0, unchanged: 0, mode: channel.connectivityMode, error: message };
+  }
+
+  let imported = 0;
+  let updated = 0;
+  let unchanged = 0;
+
+  for (const raw of raws) {
+    const existing = await prisma.reservation.findFirst({ where: { channelId, externalId: raw.externalId } });
+    const status = raw.status === "cancelled" ? "cancelled" : raw.status === "modified" ? "modified" : "confirmed";
+
+    if (existing) {
+      // Status change (e.g. cancellation): update in place — derived "sold" self-corrects availability.
+      if (existing.status !== status && existing.status !== "cancelled") {
+        await prisma.reservation.update({ where: { id: existing.id }, data: { status } });
+        updated++;
+      } else {
+        unchanged++;
+      }
+      continue;
+    }
+
+    // Map the booking's lines through the two-stream mappings.
+    const lines: { roomTypeId: string; ratePlanId: string; quantity: number; checkIn: Date; checkOut: Date }[] = [];
+    let unmapped = false;
+    for (const l of raw.lines) {
+      const room = roomByExternal.get(l.externalRoomId);
+      const ratePlanId = rateByExternal.get(l.externalRateId);
+      if (!room || !ratePlanId) {
+        unmapped = true;
+        continue;
+      }
+      lines.push({
+        roomTypeId: room.roomTypeId,
+        ratePlanId,
+        quantity: l.quantity,
+        checkIn: new Date(`${l.checkIn}T00:00:00Z`),
+        checkOut: new Date(`${l.checkOut}T00:00:00Z`),
+      });
+    }
+
+    const sameCurrency = raw.currency === property.baseCurrency;
+    const fx = {
+      propertyCurrency: property.baseCurrency,
+      propertyTotalMinor: sameCurrency ? raw.totalMinor : null,
+      fxRate: sameCurrency ? 1 : null,
+      fxAt: new Date(),
+    };
+
+    if (unmapped || lines.length === 0) {
+      // Import it visibly as failed so the hotel can debug — never drop a booking silently.
+      await prisma.reservation.create({
+        data: { tenantId, propertyId, channelId, externalId: raw.externalId, guestName: raw.guestName, status: "failed_import", totalMinor: raw.totalMinor, currency: raw.currency, ...fx },
+      });
+      await prisma.errorItem.create({
+        data: {
+          tenantId, propertyId, channelId, severity: "critical", code: "reservation_unmapped",
+          message: `Booking #${raw.externalId} references an unmapped room or rate`,
+          productLabel: `${channel.name} · ${raw.guestName}`,
+          recommendedAction: "Complete the room/rate mapping for this channel, then pull again.", resolved: false,
+        },
+      });
+      imported++;
+      continue;
+    }
+
+    // Overbooking check: would any night dip below zero once this booking lands?
+    let overbooked = false;
+    for (const line of lines) {
+      const room = roomMaps.find((m) => m.roomTypeId === line.roomTypeId);
+      for (let t = line.checkIn.getTime(); t < line.checkOut.getTime(); t += DAY_MS) {
+        const d = new Date(t);
+        const cell = await prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date: d } } });
+        const inventory = cell?.inventory ?? room?.roomType.totalRooms ?? 0;
+        const soldAgg = await prisma.reservationLine.aggregate({
+          _sum: { quantity: true },
+          where: { roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d }, reservation: { status: { in: ["confirmed", "modified", "overbooked"] } } },
+        });
+        const sold = soldAgg._sum.quantity ?? 0;
+        if (inventory - (sold + line.quantity) < 0) overbooked = true;
+      }
+    }
+
+    await prisma.reservation.create({
+      data: {
+        tenantId, propertyId, channelId, externalId: raw.externalId, guestName: raw.guestName,
+        status: overbooked ? "overbooked" : status, totalMinor: raw.totalMinor, currency: raw.currency, ...fx,
+        lines: { create: lines },
+      },
+    });
+    if (overbooked) {
+      await prisma.errorItem.create({
+        data: {
+          tenantId, propertyId, channelId, severity: "critical", code: "overbooking_detected",
+          message: `Overbooking: booking #${raw.externalId} exceeds available rooms`,
+          productLabel: `${channel.name} · ${raw.guestName}`,
+          recommendedAction: "Resolve manually with the guest or move the booking.", resolved: false,
+        },
+      });
+    }
+    imported++;
+  }
+
+  await prisma.syncEvent.create({
+    data: {
+      tenantId, propertyId, channelId, kind: "pull", status: "success",
+      summary: `Pulled ${raws.length} bookings from ${channel.name} (${imported} new · ${updated} updated · ${unchanged} unchanged)`,
+    },
+  });
+  await prisma.channel.update({ where: { id: channelId }, data: { lastSyncAt: new Date() } });
+
+  // A new/changed booking changes availability → re-push so other channels can't oversell.
+  if (imported > 0 || updated > 0) await syncRealChannels(propertyId);
+
+  return { ok: true, imported, updated, unchanged, mode: channel.connectivityMode };
+}

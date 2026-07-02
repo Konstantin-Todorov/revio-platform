@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { syncChannel } from "./connectivity";
+import { syncChannel, pullChannel } from "./connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -190,6 +190,25 @@ export async function resyncChannel(fd: FormData): Promise<void> {
   revalidatePath("/channels");
   revalidatePath("/sync");
   revalidatePath("/errors");
+  revalidatePath("/dashboard");
+}
+
+/** Pull bookings from the channel now (new → imported, cancelled → restored, unmapped → Error Center). */
+export async function pullChannelBookings(fd: FormData): Promise<void> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const channelId = str(fd, "channelId");
+  if (!channelId) return;
+  const outcome = await pullChannel(channelId);
+  await logAudit(propertyId, tenantId, {
+    entity: "Channel sync", field: "pull",
+    newValue: outcome.ok ? `${outcome.imported} new · ${outcome.updated} updated (${outcome.mode})` : `failed: ${outcome.error ?? "unknown"}`,
+    source: "api",
+  });
+  revalidatePath("/channels");
+  revalidatePath("/sync");
+  revalidatePath("/errors");
+  revalidatePath("/reservations");
+  revalidatePath("/calendar");
   revalidatePath("/dashboard");
 }
 

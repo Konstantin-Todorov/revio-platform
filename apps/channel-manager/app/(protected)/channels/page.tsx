@@ -1,6 +1,6 @@
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Download } from "lucide-react";
 import { getChannels } from "@/lib/data";
-import { resyncChannel } from "@/lib/actions-config";
+import { resyncChannel, pullChannelBookings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { ChannelSettingsDialog, AddChannelDialog } from "@/components/channels/ChannelDialogs";
 import { relativeTime } from "@/lib/format";
@@ -50,6 +50,12 @@ export default async function ChannelsPage() {
                       <RefreshCw className="h-4 w-4" />
                     </button>
                   </form>
+                  <form action={pullChannelBookings}>
+                    <input type="hidden" name="channelId" value={ch.id} />
+                    <button type="submit" aria-label="Pull bookings" title="Pull the last 7 days of bookings from this channel" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-brand-600">
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </form>
                   <ChannelSettingsDialog channel={ch} />
                 </div>
               </div>
@@ -61,6 +67,24 @@ export default async function ChannelsPage() {
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-surface-sunken">
                   <div className={`h-full rounded-full ${pct >= 98 ? "bg-success-500" : pct >= 90 ? "bg-warning-500" : "bg-danger-500"}`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+
+              {/* Connectivity health — last 24h of this channel's push/pull events. */}
+              <div className="mt-3">
+                <div className="mb-1 flex items-center justify-between text-[11.5px] font-semibold text-ink-500">
+                  <span>Sync health · 24h</span>
+                  <span className="tnum text-ink-700">
+                    {m?.health24h == null ? "no syncs" : `${m.health24h}% · ${m.syncs24h} syncs`}
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-sunken">
+                  {m?.health24h != null && (
+                    <div
+                      className={`h-full rounded-full ${m.health24h >= 98 ? "bg-success-500" : m.health24h >= 80 ? "bg-warning-500" : "bg-danger-500"}`}
+                      style={{ width: `${m.health24h}%` }}
+                    />
+                  )}
                 </div>
               </div>
 

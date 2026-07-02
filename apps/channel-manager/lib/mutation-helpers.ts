@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { syncRealChannels } from "./connectivity";
 
 /** Record an Audit Log entry. Every hand-made change is permanent and attributable. */
 export async function logAudit(
@@ -21,12 +22,17 @@ export async function logAudit(
   });
 }
 
-/** Record a push to connected channels (mock connectivity) so the Sync Center shows activity. */
+/**
+ * Record a push so the Sync Center shows activity, then AUTO-PUSH the change through every channel
+ * that runs a real adapter (connectivityMode != mock). Mock channels keep the simulated event only;
+ * channex-mode channels get an actual ARI push — no manual Re-sync needed after an edit.
+ */
 export async function recordPush(propertyId: string, tenantId: string, summary: string) {
   const channels = await prisma.channel.count({ where: { propertyId, status: "connected" } });
   await prisma.syncEvent.create({
     data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: `Pushed to ${channels} channels` },
   });
+  await syncRealChannels(propertyId);
 }
 
 /** Record a pull (a booking arriving from a channel). */
