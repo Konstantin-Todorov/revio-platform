@@ -68,10 +68,13 @@ not yet wired into the app or deployed).
   (`pullChannel`: 7-day lookback, dedupe on externalId, cancel/modify update in place — derived sold
   self-corrects availability, unmapped → failed_import + Error Center, overbooking flagged, re-push
   after import; "Pull bookings" button per channel), **24h sync-health bar** on channel cards.
-  ⬜ Remaining: (i) operator per-tenant **encrypted key storage** (move `CHANNEX_*_KEY` off env into
-  the admin perimeter + mode flag UI in Operator Connectivity screen); (ii) scheduled auto-pull
-  (needs cron/queue infra — pair with the email/notifications infra in Phase 5); (iii) import-loop
-  live test needs a Channex-sandbox test OTA channel with a real booking.
+  ✅ 3c: **operator-managed encrypted keys** — `ConnectivityCredential` (AES-256-GCM via
+  `@revio/db` encryptSecret/decryptSecret, key = `CONNECTIVITY_SECRET` env → AUTH_SECRET fallback;
+  set on both Railway services), bypass-ONLY RLS policy (hotels see zero rows), Operator
+  Connectivity screen (set/replace/remove, last-4 hint only), CM resolves per-tenant key first,
+  env fallback. ⬜ Remaining: (i) scheduled auto-pull (needs cron/queue infra — pair with the
+  Phase 5 email/notifications infra); (ii) import-loop live test needs a Channex-sandbox test OTA
+  channel with a real booking.
 - **Phase 4 — Calendar & Bulk Update redesign.** All rooms visible/collapsible, Rooms-Sold row, filters,
   Customise Display, 2-yr horizon + 30-day window + custom range; merge Bulk Update with Restrictions.
 - **Phase 5 — Screen refinements (independent, parallelizable).** Reservations filters; Sync Center
