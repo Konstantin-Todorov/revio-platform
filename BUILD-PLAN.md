@@ -91,13 +91,24 @@ not yet wired into the app or deployed).
   days); (b) **delta-only pushes** (test 13 — our auto-push resends the whole 14-day window per edit);
   (c) **booking acknowledgments** on pull (test 11); (d) demonstrate rate-limit compliance. Note: the
   hotel's Channex account lives on **staging.channex.io** (app.channex.io is a separate production login).
-- **Later — RevioCRS** (full spec `docs/CRS-REFERENCE.md`; the system-of-record for reservations +
-  revenue metrics — Occupancy/ADR/RevPAR/Pickup). Synergy: its "Connected Channel Manager" is an
-  **adapter parallel to the CM's `ChannelAdapter`** — a `ChannelManagerConnector` that's RevioLink-internal
-  (shared core, no network) or third-party (push/pull); and the **availability waterfall lives once in
-  `@revio/core`** (Phase 1a seeded it; grows to Physical−OOO−Closed−Holds−Confirmed). Then **RevioPMS**
-  (same Postgres/core/shell; entitlement-gated), then **RLS Phase 2 (prod enforcement) LAST** so one
-  migration covers every product's tenant tables (`DEPLOY.md`).
+- **▶️ NEXT — RevioCRS** (founder spec **v2** captured 2026-07-02 → `docs/CRS-REFERENCE.md`: exact
+  metric formulas, Hold lifecycle, modification rules, 4-level restriction priority, date-sensitive
+  OOO/closure inventory, permission groups, performance targets, and its own 5-phase MVP order —
+  property foundation + pickup-snapshot job → reservations/holds → rates → dashboard/metrics →
+  distribution). Binding rules: `ChannelManagerConnector` adapter (RevioLink-internal = shared core,
+  no network; third-party = push/pull later); **availability waterfall once in `@revio/core`**
+  (Physical−OOO−Closed−Holds−Confirmed — CM's date-level inventory is the collapsed form); ONE metrics
+  module read by Dashboard + Reports. Same shell/auth/DB; `hasReservation` entitlement gates it;
+  new tables carry tenantId + RLS policy; third Railway service.
+- **Then — Channex certification prep** (see the prep item above): do it AFTER RevioCRS, BEFORE the
+  first real client goes live — cert has external lead time (Channex schedules a live screenshare), so
+  don't leave it to the last minute; testing continues on the staging sandbox meanwhile.
+- **Then — RevioPMS** (operations layer: front desk, housekeeping, minibar — spec TBD from founder),
+  same pattern, `hasPms` gate. **RLS Phase 2 (prod enforcement) LAST** so one migration pass covers
+  every product's tenant tables (`DEPLOY.md`).
+- **The operator (us) stays the admin over everything**: Operator Console provisions clients + flips
+  CM/CRS/PMS entitlements + holds encrypted connectivity keys; hotels self-manage staff/properties.
+  All four apps = one Postgres, one `@revio/core`, one access model (`ACCESS-MODEL.md`).
 
 **Why not wire/deploy Channex right now:** Phases 1–2 change the very things Channex depends on — the
 inventory model (what "availability" means), the currency (what we send), and the mapping structure (the
