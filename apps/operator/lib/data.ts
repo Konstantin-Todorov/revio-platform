@@ -1,5 +1,5 @@
 import "server-only";
-import { forSystem } from "@revio/db";
+import { forSystem, decryptSecret, keyHint } from "@revio/db";
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
@@ -53,4 +53,38 @@ export async function getClients() {
       };
     }),
   );
+}
+
+/** Connectivity credentials per client — key HINTS only (last 4 chars), never the key itself. */
+export async function getConnectivity() {
+  const [tenants, creds] = await Promise.all([
+    prisma.tenant.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true } }),
+    prisma.connectivityCredential.findMany(),
+  ]);
+  const channexChannels = await prisma.channel.groupBy({
+    by: ["tenantId"],
+    where: { connectivityMode: { not: "mock" } },
+    _count: { _all: true },
+  });
+  const channexByTenant = new Map(channexChannels.map((c) => [c.tenantId, c._count._all]));
+
+  const credFor = (tenantId: string, mode: string) => {
+    const c = creds.find((x) => x.tenantId === tenantId && x.mode === mode);
+    if (!c) return null;
+    let hint = "••••";
+    try {
+      hint = keyHint(decryptSecret(c.cipher));
+    } catch {
+      hint = "•••• (undecryptable)";
+    }
+    return { hint, updatedAt: c.updatedAt };
+  };
+
+  return tenants.map((t) => ({
+    id: t.id,
+    name: t.name,
+    sandbox: credFor(t.id, "channex_sandbox"),
+    prod: credFor(t.id, "channex_prod"),
+    channexChannels: channexByTenant.get(t.id) ?? 0,
+  }));
 }

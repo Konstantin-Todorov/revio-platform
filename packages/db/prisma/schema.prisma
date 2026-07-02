@@ -52,6 +52,21 @@ model OperatorUser {
   createdAt    DateTime @default(now())
 }
 
+// Per-tenant connectivity credential (e.g. a Channex API key), AES-256-GCM encrypted at rest.
+// Operator-managed; a hotel can NEVER read it (RLS policy = bypass-only). The CM reads it server-side
+// at push/pull time via the system perimeter — the plaintext key is never sent to any client.
+model ConnectivityCredential {
+  id        String   @id @default(cuid())
+  tenantId  String
+  mode      String // channex_sandbox | channex_prod
+  cipher    String // base64 iv.tag.ciphertext (AES-256-GCM)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, mode])
+  @@index([tenantId])
+}
+
 // --- Property & sellable products -----------------------------------------
 
 model Property {

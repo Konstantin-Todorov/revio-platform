@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { forSystem, decryptSecret } from "@revio/db";
 import { computeAvailability, deriveRate, isAdvancePurchaseClosed, type AriUpdate, type DerivedRateConfig } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "@revio/connectivity";
 
@@ -18,8 +19,23 @@ function adapterMode(mode: string): AdapterMode {
   return "mock";
 }
 
-/** The Channex key for a mode comes from env (per-tenant encrypted storage is the operator phase). */
-function channexKey(mode: string): string {
+/**
+ * Resolve the Channex key for a tenant + mode: the operator-managed ENCRYPTED per-tenant credential
+ * first, env as fallback. Read via the system perimeter (the credential table is RLS bypass-only so
+ * hotels can never query it) — the plaintext never leaves the server.
+ */
+async function channexKey(tenantId: string, mode: string): Promise<string> {
+  const cred = await forSystem().connectivityCredential.findUnique({
+    where: { tenantId_mode: { tenantId, mode } },
+  });
+  if (cred) {
+    try {
+      return decryptSecret(cred.cipher);
+    } catch {
+      // Wrong CONNECTIVITY_SECRET or corrupted payload — fall through to env so a misconfigured
+      // credential degrades to the old behaviour instead of silently pushing unauthenticated.
+    }
+  }
   return (mode === "channex_prod" ? process.env.CHANNEX_PROD_KEY : process.env.CHANNEX_SANDBOX_KEY) ?? "";
 }
 
@@ -136,7 +152,7 @@ export async function syncChannel(channelId: string): Promise<SyncOutcome> {
     mode,
     channelCode: channel.code,
     ...(mode !== "mock"
-      ? { channex: { apiKey: channexKey(channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
+      ? { channex: { apiKey: await channexKey(tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
       : {}),
   });
 
@@ -224,7 +240,7 @@ export async function pullChannel(channelId: string): Promise<PullOutcome> {
     mode,
     channelCode: channel.code,
     ...(mode !== "mock"
-      ? { channex: { apiKey: channexKey(channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
+      ? { channex: { apiKey: await channexKey(tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
       : {}),
   });
 
