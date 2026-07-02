@@ -78,6 +78,8 @@ not yet wired into the app or deployed).
 - ✅ **Phase 4 — Calendar & IA redesign — DONE + deployed (2026-07-02).** Calendar = ALL room types as
   collapsible sections (`getCalendarBoard`), 7/14/30-day movable window + jump-to-date (2-yr horizon),
   Rooms filter + Customise-display row groups (`ParamMultiSelect`), Rooms-sold derived row, editable CTA.
+  **+ Month-calendar view option (2026-07-02)**: Grid | Month toggle; classic month layout per room type
+  (day cells = Sell/Sold/Rate + flag dots, same edit logic), prev/next month within the 2-yr horizon.
   **Bulk Update merged with Restrictions** (one screen; /restrictions redirects).
 - ✅ **Phase 5 — Screen refinements — mostly DONE + deployed (2026-07-02).** Sync Center absorbed Error
   Center + Audit Log as tabs (+error badge; /errors,/audit redirect); Reservations filters (guest/#,
