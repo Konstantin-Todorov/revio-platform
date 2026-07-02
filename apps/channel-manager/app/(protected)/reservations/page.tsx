@@ -10,8 +10,25 @@ const STATUS_TONE: Record<string, Tone> = {
   confirmed: "success", modified: "info", cancelled: "neutral", failed_import: "danger", overbooked: "danger",
 };
 
-export default async function ReservationsPage() {
-  const [reservations, options] = await Promise.all([getReservations(), getBookingOptions()]);
+const STATUSES = ["confirmed", "modified", "cancelled", "failed_import", "overbooked"];
+
+export default async function ReservationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ channel?: string; status?: string; q?: string; from?: string; to?: string }>;
+}) {
+  const sp = await searchParams;
+  const filters = {
+    ...(sp.channel ? { channel: sp.channel } : {}),
+    ...(sp.status ? { status: sp.status } : {}),
+    ...(sp.q ? { q: sp.q } : {}),
+    ...(sp.from ? { from: sp.from } : {}),
+    ...(sp.to ? { to: sp.to } : {}),
+  };
+  const [reservations, options] = await Promise.all([getReservations(filters), getBookingOptions()]);
+  const filtered = Object.keys(filters).length > 0;
+
+  const fieldCls = "h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600";
 
   return (
     <div>
@@ -20,6 +37,31 @@ export default async function ReservationsPage() {
         subtitle="Bookings imported from channels — read-only, but you can cancel to restore availability"
         action={<BookingDialog options={options} />}
       />
+
+      {/* Filters — plain GET form, server-rendered results. */}
+      <form method="GET" action="/reservations" className="mb-3 flex flex-wrap items-center gap-2">
+        <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="Guest or booking #" className={`${fieldCls} w-44`} />
+        <select name="channel" defaultValue={sp.channel ?? ""} className={fieldCls}>
+          <option value="">All channels</option>
+          {options.channels.map((c) => <option key={c.id} value={c.code}>{c.name}</option>)}
+        </select>
+        <select name="status" defaultValue={sp.status ?? ""} className={fieldCls}>
+          <option value="">All statuses</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+        </select>
+        <label className="flex items-center gap-1 text-[12px] text-ink-500">
+          check-in <input type="date" name="from" defaultValue={sp.from ?? ""} className={fieldCls} />
+        </label>
+        <label className="flex items-center gap-1 text-[12px] text-ink-500">
+          → <input type="date" name="to" defaultValue={sp.to ?? ""} className={fieldCls} />
+        </label>
+        <button type="submit" className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Filter</button>
+        {filtered && (
+          <a href="/reservations" className="rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-ink-500 hover:bg-surface-muted">Clear</a>
+        )}
+        <span className="ml-auto text-[12px] text-ink-400">{reservations.length} result{reservations.length === 1 ? "" : "s"}</span>
+      </form>
+
       <Card>
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">

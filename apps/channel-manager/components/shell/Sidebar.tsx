@@ -3,31 +3,31 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, CalendarDays, SlidersHorizontal, BedDouble, Ban, Radio,
-  Link2, CalendarCheck, RefreshCw, TriangleAlert, ScrollText, Settings, X,
+  LayoutDashboard, CalendarDays, SlidersHorizontal, BedDouble, Radio,
+  Link2, CalendarCheck, RefreshCw, Users, Settings, X,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 
 type Item = { href: string; label: string; icon: typeof LayoutDashboard; badge?: number; tone?: "danger" | "warning" };
 
+// V2 IA: Restrictions live inside Bulk Update; Errors + Audit live inside the Sync Center;
+// User Management is its own Operations item.
 const SECTIONS: { title?: string; items: Item[] }[] = [
   { items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/calendar", label: "Calendar", icon: CalendarDays },
-    { href: "/bulk-update", label: "Bulk Update", icon: SlidersHorizontal },
+    { href: "/bulk-update", label: "Bulk & Restrictions", icon: SlidersHorizontal },
   ] },
   { title: "Distribution", items: [
     { href: "/rooms-rates", label: "Rooms & Rates", icon: BedDouble },
-    { href: "/restrictions", label: "Restrictions", icon: Ban },
     { href: "/channels", label: "Channels", icon: Radio },
     { href: "/mapping", label: "Mapping", icon: Link2 },
     { href: "/reservations", label: "Reservations", icon: CalendarCheck },
   ] },
   { title: "Operations", items: [
     { href: "/sync", label: "Sync Center", icon: RefreshCw },
-    { href: "/errors", label: "Error Center", icon: TriangleAlert, badge: 2, tone: "danger" },
-    { href: "/audit", label: "Audit Log", icon: ScrollText },
+    { href: "/users", label: "User Management", icon: Users },
     { href: "/settings", label: "Settings", icon: Settings },
   ] },
 ];

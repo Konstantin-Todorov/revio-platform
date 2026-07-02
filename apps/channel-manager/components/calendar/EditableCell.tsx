@@ -10,7 +10,7 @@ export function EditableCell({
 }: {
   roomTypeId: string;
   date: string;
-  field: "inventory" | "price" | "minLos" | "ctd" | "stopSell";
+  field: "inventory" | "price" | "minLos" | "cta" | "ctd" | "stopSell";
   kind: Kind;
   value: string;
   flag?: "stop" | "ctd" | "cta";

@@ -86,45 +86,76 @@ export type CalendarRow = {
   /** Derived/secondary rows render in a muted style. */
   muted?: boolean;
   /** Which DailyCell/RatePrice field this row edits (absent ⇒ read-only, e.g. derived rates / rooms sold). */
-  field?: "inventory" | "price" | "minLos" | "ctd" | "stopSell";
+  field?: "inventory" | "price" | "minLos" | "cta" | "ctd" | "stopSell";
   editable?: boolean;
   cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean }[];
 };
 
-export async function getCalendar(roomTypeCode?: string, days = 7) {
+/** Board query: window start (YYYY-MM-DD), window size, room-type filter, visible row groups. */
+export interface CalendarQuery {
+  start?: string;
+  days?: number;
+  rt?: string[];    // room-type codes to show (empty = all)
+  rows?: string[];  // visible optional row groups (sold|rates|minlos|cta|ctd|stopsell); inventory+price always on
+}
+
+export const CALENDAR_ROW_GROUPS = [
+  ["sold", "Rooms sold"],
+  ["rates", "Derived rates"],
+  ["minlos", "Min LOS"],
+  ["cta", "CTA"],
+  ["ctd", "CTD"],
+  ["stopsell", "Stop sell"],
+] as const;
+
+const HORIZON_DAYS_MAX = 730; // 2-year sync horizon (spec)
+
+/**
+ * The V2 calendar: EVERY room type as a collapsible section over a movable window (7/14/30 days,
+ * up to 2 years ahead), with per-room rows chosen via "Customise display".
+ */
+export async function getCalendarBoard(q: CalendarQuery) {
   const property = await getProperty();
   const propertyId = property.id;
+  const days = [7, 14, 30].includes(q.days ?? 0) ? q.days! : 14;
 
-  const roomTypes = await prisma.roomType.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
-  const start = currentMonday();
+  // Window start: requested date clamped to [today-7d, today+2y-days]; default = Monday of this week.
+  const today = utcDate(new Date());
+  const minStart = addDays(today, -7);
+  const maxStart = addDays(today, HORIZON_DAYS_MAX - days);
+  let start = currentMonday();
+  if (q.start && /^\d{4}-\d{2}-\d{2}$/.test(q.start)) {
+    const req = new Date(`${q.start}T00:00:00Z`);
+    if (!Number.isNaN(req.getTime())) start = new Date(Math.min(Math.max(req.getTime(), minStart.getTime()), maxStart.getTime()));
+  }
+  const end = addDays(start, days - 1);
   const dates = Array.from({ length: days }, (_, i) => addDays(start, i));
+  const dateKeys = dates.map((d) => d.toISOString().slice(0, 10));
 
-  // Empty hotel (no room types yet) — return a calendar with nothing to render; the page shows a CTA.
-  if (roomTypes.length === 0) {
-    return { property, roomTypes, roomType: null, dates: dates.map((d) => d.toISOString().slice(0, 10)), rows: [], currency: property.baseCurrency };
+  const allRoomTypes = await prisma.roomType.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
+  const visible = new Set((q.rows && q.rows.length > 0 ? q.rows : ["sold", "rates", "minlos", "ctd", "stopsell"]));
+  const roomTypes = q.rt && q.rt.length > 0 ? allRoomTypes.filter((r) => q.rt!.includes(r.code)) : allRoomTypes;
+
+  if (allRoomTypes.length === 0) {
+    return { property, allRoomTypes, sections: [], dates: dateKeys, days, start: dateKeys[0] ?? "", visible: [...visible], currency: property.baseCurrency };
   }
 
-  const roomType = roomTypes.find((r) => r.code === roomTypeCode) ?? roomTypes[0]!;
-  const end = addDays(start, days - 1);
-
-  // The base manual rate plan (prefer "BAR", else the first manual plan). May be absent on a new hotel.
   const standard =
     (await prisma.ratePlan.findFirst({ where: { propertyId, code: "BAR" } })) ??
     (await prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual" }, orderBy: { sortOrder: "asc" } }));
-  const derived = await prisma.ratePlan.findMany({
-    where: { propertyId, priceLogic: "derived", code: { in: ["NR", "BRF"] } },
-    orderBy: { sortOrder: "asc" },
-  });
+  const derived = visible.has("rates")
+    ? await prisma.ratePlan.findMany({ where: { propertyId, priceLogic: "derived", code: { in: ["NR", "BRF"] } }, orderBy: { sortOrder: "asc" } })
+    : [];
 
+  const rtIds = roomTypes.map((r) => r.id);
   const [prices, cells, resLines] = await Promise.all([
     standard
-      ? prisma.ratePrice.findMany({ where: { roomTypeId: roomType.id, ratePlanId: standard.id, date: { gte: start, lte: end } } })
+      ? prisma.ratePrice.findMany({ where: { roomTypeId: { in: rtIds }, ratePlanId: standard.id, date: { gte: start, lte: end } } })
       : Promise.resolve([]),
-    prisma.dailyCell.findMany({ where: { roomTypeId: roomType.id, date: { gte: start, lte: end } } }),
-    // Active reservation lines overlapping the window → "rooms sold" per date (derived).
+    prisma.dailyCell.findMany({ where: { roomTypeId: { in: rtIds }, date: { gte: start, lte: end } } }),
     prisma.reservationLine.findMany({
       where: {
-        roomTypeId: roomType.id,
+        roomTypeId: { in: rtIds },
         reservation: { propertyId, status: { in: ["confirmed", "modified", "overbooked"] } },
         checkIn: { lte: end },
         checkOut: { gt: start },
@@ -132,107 +163,127 @@ export async function getCalendar(roomTypeCode?: string, days = 7) {
     }),
   ]);
 
-  const priceByDate = new Map(prices.map((p) => [p.date.toISOString().slice(0, 10), p.priceMinor]));
-  const cellByDate = new Map(cells.map((c) => [c.date.toISOString().slice(0, 10), c]));
-  const soldByDate = new Map(
-    dates.map((d) => {
-      const k = d.toISOString().slice(0, 10);
-      const sold = resLines.filter((l) => l.checkIn <= d && d < l.checkOut).reduce((s, l) => s + l.quantity, 0);
-      return [k, sold] as const;
-    }),
-  );
+  const priceKey = (rt: string, k: string) => `${rt}:${k}`;
+  const priceMap = new Map(prices.map((p) => [priceKey(p.roomTypeId, p.date.toISOString().slice(0, 10)), p.priceMinor]));
+  const cellMap = new Map(cells.map((c) => [priceKey(c.roomTypeId, c.date.toISOString().slice(0, 10)), c]));
 
-  const cur = property.baseCurrency;
   const fmt = (m: number | undefined) => (m === undefined ? "—" : (m / 100).toLocaleString("en-US"));
-
-  const rows: CalendarRow[] = [];
-
-  // "Rooms to sell" = the per-date allotment (defaults to physical Total Rooms). Editable.
-  rows.push({
-    key: "inventory", label: "Rooms to sell", kind: "availability", field: "inventory", editable: true,
-    cells: dates.map((d) => {
-      const k = d.toISOString().slice(0, 10);
-      const inv = cellByDate.get(k)?.inventory ?? roomType.totalRooms;
-      return { date: k, value: String(inv) };
-    }),
-  });
-  // "Rooms sold" = derived from confirmed reservations. Read-only (bookable = to-sell − sold).
-  rows.push({
-    key: "sold", label: "Rooms sold", kind: "availability", muted: true,
-    cells: dates.map((d) => {
-      const k = d.toISOString().slice(0, 10);
-      return { date: k, value: String(soldByDate.get(k) ?? 0), muted: true };
-    }),
-  });
-
-  rows.push({
-    key: "standard", label: "Standard Rate", kind: "price", field: "price", editable: true,
-    cells: dates.map((d) => {
-      const k = d.toISOString().slice(0, 10);
-      return { date: k, value: fmt(priceByDate.get(k)) };
-    }),
-  });
-
-  for (const dp of derived) {
-    const cfg: DerivedRateConfig = {
-      parentRatePlanId: standard?.id ?? "",
-      adjustmentType: (dp.derivedType as "percent" | "fixed") ?? "percent",
-      direction: (dp.derivedDirection as "increase" | "decrease") ?? "decrease",
-      value: dp.derivedValue ?? 0,
-      rounding: (dp.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
-      ...(dp.derivedFloorMinor != null ? { floorMinor: dp.derivedFloorMinor } : {}),
-      ...(dp.derivedCeilingMinor != null ? { ceilingMinor: dp.derivedCeilingMinor } : {}),
-    };
-    rows.push({
-      key: dp.code, label: dp.name, kind: "price", muted: true,
-      cells: dates.map((d) => {
-        const k = d.toISOString().slice(0, 10);
-        const parent = priceByDate.get(k);
-        return { date: k, value: parent === undefined ? "—" : fmt(deriveRate(parent, cfg)), muted: true };
-      }),
-    });
-  }
-
-  // Rate-plan-level restrictions on the standard plan: Min LOS falls back to the plan default; the
-  // advance-purchase window auto-closes near/far dates (rolling, computed live in @revio/core).
-  const today = utcDate(new Date()).toISOString().slice(0, 10);
+  const todayStr = today.toISOString().slice(0, 10);
   const apWindow = { min: standard?.defAdvancePurchaseMin ?? null, max: standard?.defAdvancePurchaseMax ?? null };
 
-  rows.push({
-    key: "minlos", label: "Min LOS", kind: "restriction", field: "minLos", editable: true,
-    cells: dates.map((d) => {
-      const k = d.toISOString().slice(0, 10);
-      const los = cellByDate.get(k)?.minLos ?? standard?.defMinLos ?? null;
-      return { date: k, value: los ? String(los) : "—" };
-    }),
-  });
-  rows.push({
-    key: "ctd", label: "CTD", kind: "flag", field: "ctd", editable: true,
-    cells: dates.map((d) => {
-      const k = d.toISOString().slice(0, 10);
-      const on = cellByDate.get(k)?.ctd ?? false;
-      return { date: k, value: on ? "✕" : "·", ...(on ? { flag: "ctd" as const } : {}) };
-    }),
-  });
-  rows.push({
-    key: "stopsell", label: "Stop Sell", kind: "flag", field: "stopSell", editable: true,
-    cells: dates.map((d) => {
-      const k = d.toISOString().slice(0, 10);
-      // Manual stop-sell OR an advance-purchase rolling auto-close on the standard plan.
-      const on = (cellByDate.get(k)?.stopSell ?? false) || isAdvancePurchaseClosed(today, k, apWindow);
-      return { date: k, value: on ? "●" : "·", ...(on ? { flag: "stop" as const } : {}) };
-    }),
+  const sections = roomTypes.map((roomType) => {
+    const rows: CalendarRow[] = [];
+    const cellFor = (k: string) => cellMap.get(priceKey(roomType.id, k));
+
+    rows.push({
+      key: "inventory", label: "Rooms to sell", kind: "availability", field: "inventory", editable: true,
+      cells: dateKeys.map((k) => ({ date: k, value: String(cellFor(k)?.inventory ?? roomType.totalRooms) })),
+    });
+    if (visible.has("sold")) {
+      rows.push({
+        key: "sold", label: "Rooms sold", kind: "availability", muted: true,
+        cells: dates.map((d, i) => {
+          const sold = resLines.filter((l) => l.roomTypeId === roomType.id && l.checkIn <= d && d < l.checkOut).reduce((s2, l) => s2 + l.quantity, 0);
+          return { date: dateKeys[i]!, value: String(sold), muted: true };
+        }),
+      });
+    }
+    rows.push({
+      key: "standard", label: standard?.name ?? "Standard Rate", kind: "price", field: "price", editable: true,
+      cells: dateKeys.map((k) => ({ date: k, value: fmt(priceMap.get(priceKey(roomType.id, k))) })),
+    });
+    for (const dp of derived) {
+      const cfg: DerivedRateConfig = {
+        parentRatePlanId: standard?.id ?? "",
+        adjustmentType: (dp.derivedType as "percent" | "fixed") ?? "percent",
+        direction: (dp.derivedDirection as "increase" | "decrease") ?? "decrease",
+        value: dp.derivedValue ?? 0,
+        rounding: (dp.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
+        ...(dp.derivedFloorMinor != null ? { floorMinor: dp.derivedFloorMinor } : {}),
+        ...(dp.derivedCeilingMinor != null ? { ceilingMinor: dp.derivedCeilingMinor } : {}),
+      };
+      rows.push({
+        key: dp.code, label: dp.name, kind: "price", muted: true,
+        cells: dateKeys.map((k) => {
+          const parent = priceMap.get(priceKey(roomType.id, k));
+          return { date: k, value: parent === undefined ? "—" : fmt(deriveRate(parent, cfg)), muted: true };
+        }),
+      });
+    }
+    if (visible.has("minlos")) {
+      rows.push({
+        key: "minlos", label: "Min LOS", kind: "restriction", field: "minLos", editable: true,
+        cells: dateKeys.map((k) => {
+          const los = cellFor(k)?.minLos ?? standard?.defMinLos ?? null;
+          return { date: k, value: los ? String(los) : "—" };
+        }),
+      });
+    }
+    if (visible.has("cta")) {
+      rows.push({
+        key: "cta", label: "CTA", kind: "flag", field: "cta", editable: true,
+        cells: dateKeys.map((k) => {
+          const on = cellFor(k)?.cta ?? false;
+          return { date: k, value: on ? "✕" : "·", ...(on ? { flag: "cta" as const } : {}) };
+        }),
+      });
+    }
+    if (visible.has("ctd")) {
+      rows.push({
+        key: "ctd", label: "CTD", kind: "flag", field: "ctd", editable: true,
+        cells: dateKeys.map((k) => {
+          const on = cellFor(k)?.ctd ?? false;
+          return { date: k, value: on ? "✕" : "·", ...(on ? { flag: "ctd" as const } : {}) };
+        }),
+      });
+    }
+    if (visible.has("stopsell")) {
+      rows.push({
+        key: "stopsell", label: "Stop Sell", kind: "flag", field: "stopSell", editable: true,
+        cells: dateKeys.map((k) => {
+          const on = (cellFor(k)?.stopSell ?? false) || isAdvancePurchaseClosed(todayStr, k, apWindow);
+          return { date: k, value: on ? "●" : "·", ...(on ? { flag: "stop" as const } : {}) };
+        }),
+      });
+    }
+    return { roomType: { id: roomType.id, name: roomType.name, code: roomType.code, totalRooms: roomType.totalRooms, unitKind: roomType.unitKind }, rows };
   });
 
-  return { property, roomTypes, roomType, dates: dates.map((d) => d.toISOString().slice(0, 10)), rows, currency: cur };
+  return { property, allRoomTypes, sections, dates: dateKeys, days, start: dateKeys[0]!, visible: [...visible], currency: property.baseCurrency };
 }
 
-export async function getReservations() {
+export interface ReservationFilters {
+  channel?: string; // channel code
+  status?: string;
+  q?: string;       // guest name or external id
+  from?: string;    // check-in from (YYYY-MM-DD)
+  to?: string;      // check-in to
+}
+
+export async function getReservations(filters: ReservationFilters = {}) {
   const property = await getProperty();
+  const where: Record<string, unknown> = { propertyId: property.id };
+  if (filters.channel) where.channel = { code: filters.channel };
+  if (filters.status) where.status = filters.status;
+  if (filters.q) {
+    where.OR = [
+      { guestName: { contains: filters.q, mode: "insensitive" } },
+      { externalId: { contains: filters.q } },
+    ];
+  }
+  if (filters.from || filters.to) {
+    where.lines = {
+      some: {
+        ...(filters.from ? { checkIn: { gte: new Date(`${filters.from}T00:00:00Z`) } } : {}),
+        ...(filters.to ? { checkIn: { lte: new Date(`${filters.to}T00:00:00Z`) } } : {}),
+      },
+    };
+  }
   return prisma.reservation.findMany({
-    where: { propertyId: property.id },
+    where: where as never,
     include: { channel: true, lines: { include: { roomType: true, ratePlan: true } } },
     orderBy: { importedAt: "desc" },
+    take: 200,
   });
 }
 
