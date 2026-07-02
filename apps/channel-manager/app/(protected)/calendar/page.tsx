@@ -48,15 +48,15 @@ export default async function CalendarPage({
   const rt = sp.rt ? sp.rt.split(",").filter(Boolean) : [];
   const rows = sp.rows ? sp.rows.split(",").filter(Boolean) : [];
 
-  // Month view fetches its own window: exactly one month, one room type, sold + flag rows.
+  // Month view fetches its own window: exactly one month, same Rooms/Display filters as the grid.
   const mw = monthWindow(sp.month);
   const board =
     view === "month"
       ? await getCalendarBoard({
           start: mw.first.toISOString().slice(0, 10),
           days: mw.daysInMonth,
-          rt: rt.length > 0 ? [rt[0]!] : [],
-          rows: ["sold", "cta", "ctd", "stopsell"],
+          rt,
+          rows: rows.length > 0 ? rows : ["sold", "minlos", "cta", "ctd", "stopsell"],
         })
       : await getCalendarBoard({
           ...(sp.start ? { start: sp.start } : {}),
@@ -86,10 +86,23 @@ export default async function CalendarPage({
 
   // ---- MONTH VIEW ----------------------------------------------------------
   if (view === "month") {
-    const section = sections[0];
-    const activeCode = section?.roomType.code ?? allRoomTypes[0]!.code;
-    const monthQs = (over: { month?: string; rt?: string }) =>
-      `/calendar?view=month&month=${over.month ?? mw.iso}&rt=${over.rt ?? activeCode}`;
+    const [my, mm] = mw.iso.split("-").map(Number);
+    const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthLabel = `${MONTHS[(mm ?? 1) - 1]} ${my}`;
+    // Links preserve the current filters, changing only the month.
+    const monthQs = (month: string) => {
+      const p = new URLSearchParams({ view: "month", month });
+      if (rt.length > 0) p.set("rt", rt.join(","));
+      if (rows.length > 0) p.set("rows", rows.join(","));
+      return `/calendar?${p.toString()}`;
+    };
+    const monthGroups = CALENDAR_ROW_GROUPS.filter(([k]) => k !== "rates");
+    const legend = [
+      { label: "Stop Sell", color: "bg-danger-500" },
+      { label: "CTA", color: "bg-brand-600" },
+      { label: "CTD", color: "bg-accent-500" },
+      { label: "Weekend", color: "bg-warning-500" },
+    ];
 
     return (
       <div>
@@ -107,33 +120,73 @@ export default async function CalendarPage({
           }
         />
 
-        {/* Room type selector (single, month view shows one at a time) */}
-        <div className="mb-3 flex flex-wrap items-center gap-1.5">
-          {allRoomTypes.map((r) => (
-            <Link
-              key={r.id}
-              href={monthQs({ rt: r.code })}
-              className={`rounded-md border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
-                r.code === activeCode ? "border-brand-600 bg-brand-50 text-brand-700" : "border-surface-border bg-white text-ink-500 hover:bg-surface-muted"
-              }`}
-            >
-              {r.name}
+        {/* Month navigation + the SAME filters as the grid */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Link href={monthQs(mw.prev)} aria-label="Previous month" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
+              <ChevronLeft className="h-4 w-4" />
             </Link>
-          ))}
+            <Link href={`/calendar?view=month${rt.length > 0 ? `&rt=${rt.join(",")}` : ""}${rows.length > 0 ? `&rows=${rows.join(",")}` : ""}`} className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
+              This month
+            </Link>
+            <Link href={monthQs(mw.next)} aria-label="Next month" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <h2 className="text-[15px] font-bold tracking-tight text-ink-900">{monthLabel}</h2>
+
+          {/* Jump straight to any month in the 2-year horizon */}
+          <form method="GET" action="/calendar" className="flex items-center gap-1">
+            <input type="hidden" name="view" value="month" />
+            {rt.length > 0 && <input type="hidden" name="rt" value={rt.join(",")} />}
+            {rows.length > 0 && <input type="hidden" name="rows" value={rows.join(",")} />}
+            <input type="month" name="month" defaultValue={mw.iso} className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
+            <button type="submit" className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Go</button>
+          </form>
+
+          <ParamMultiSelect
+            label="Rooms" param="rt" emptyLabel="All"
+            options={allRoomTypes.map((r) => ({ value: r.code, label: r.name }))}
+            selected={rt}
+          />
+          <ParamMultiSelect
+            label="Display" param="rows" emptyLabel="Default"
+            options={monthGroups.map(([value, label]) => ({ value, label }))}
+            selected={rows}
+          />
+
+          <div className="ml-auto flex flex-wrap items-center gap-3 text-[11.5px] text-ink-500">
+            {legend.map((l) => (
+              <span key={l.label} className="inline-flex items-center gap-1.5"><span className={`h-2 w-2 rounded-full ${l.color}`} /> {l.label}</span>
+            ))}
+          </div>
         </div>
 
-        {section ? (
-          <MonthView
-            section={section}
-            dates={dates}
-            monthIso={mw.iso}
-            todayKey={todayKey}
-            currency={property.baseCurrency}
-            nav={{ prev: monthQs({ month: mw.prev }), next: monthQs({ month: mw.next }), thisMonth: monthQs({ month: undefined }) }}
-          />
-        ) : (
-          <EmptyState icon={<BedDouble className="h-7 w-7" />} title="Room type not found" body="Pick a room type above." />
-        )}
+        {/* One collapsible month calendar per room type — first open, rest folded (months are tall). */}
+        <div className="space-y-3">
+          {sections.map(({ roomType, rows: sectionRows }, i) => (
+            <details key={roomType.id} open={i === 0} className="group/section overflow-hidden rounded-lg border border-surface-border bg-white shadow-card">
+              <summary className="flex cursor-pointer select-none items-center gap-3 border-b border-surface-border bg-surface-muted/60 px-4 py-2.5 [&::-webkit-details-marker]:hidden">
+                <ChevronDown className="h-4 w-4 -rotate-90 text-ink-400 transition-transform group-open/section:rotate-0" />
+                <span className="text-[13.5px] font-bold text-ink-900">{roomType.name}</span>
+                <span className="text-[11px] font-medium text-ink-400">
+                  {roomType.code} · {roomType.totalRooms} {roomType.unitKind === "bed" ? "beds" : "rooms"} · {property.baseCurrency}
+                </span>
+              </summary>
+              <MonthView section={{ roomType, rows: sectionRows }} dates={dates} todayKey={todayKey} visible={new Set(visible)} />
+            </details>
+          ))}
+          {sections.length === 0 && (
+            <div className="rounded-lg border border-dashed border-surface-border bg-white p-10 text-center text-[13px] text-ink-400">
+              No room types match the filter — clear the Rooms filter above.
+            </div>
+          )}
+        </div>
+
+        <p className="mt-3 text-[12px] text-ink-400">
+          Same logic as the grid view — edits write the same rooms-to-sell and standard rate, derived rates
+          follow, and changes push to channels on real connectivity. Badge <span className="rounded bg-brand-50 px-1 text-[10px] font-bold text-brand-700">2n</span> = minimum stay.
+        </p>
       </div>
     );
   }
