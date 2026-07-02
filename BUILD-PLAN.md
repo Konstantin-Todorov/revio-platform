@@ -56,17 +56,22 @@ not yet wired into the app or deployed).
 
 **Recommended order — settle the data model FIRST so we don't build twice (rationale below):**
 
-- **Phase 1 — Core model (foundation; everything depends on it).**
-  (a) ✅ **DONE** — inventory date-level; `RoomType.totalRooms` (physical safety-net); calendar shows
-  Rooms-to-sell + Rooms-sold (derived). (b) Currency on Property, channels inherit; conversion prompt —
-  **and store the 4 currency fields (original / converted / FX rate / timestamp) on each reservation
-  now, for CRS compatibility (`docs/CRS-REFERENCE.md`).** (c) Rate-plan Min/Max stay + Advance-Purchase
-  rolling-close (schema fields mostly exist; add core logic + UI). See `docs/CM-REVISIONS.md` #1–#3.
-- **Phase 2 — Mapping restructure (the connectivity bridge).** Split mapping into a **Room-Type stream**
-  (inventory + open/close) and a **Rate-Plan stream** (rates + restrictions) — mirrors Channex exactly.
-- **Phase 3 — Wire real Channex + deploy.** The adapter is already built/proven; now wire push (avail via
-  room mapping, rates/restrictions via rate mapping) + pull, operator per-tenant key storage, per-channel
-  quick actions become real, connectivity-health bar. Then push the `@revio/connectivity` commits + deploy.
+- ✅ **Phase 1 — Core model — DONE + deployed** (a) inventory date-level (`totalRooms` safety-net;
+  Rooms-to-sell + derived Rooms-sold); (b) currency on Property + conversion prompt + the 4 CRS FX
+  fields per reservation; (c) rate-plan Min/Max stay + Advance-Purchase rolling-close.
+- ✅ **Phase 2 — Two-stream mapping — DONE + deployed.** Room-Type stream (inventory/open-close) +
+  Rate-Plan stream (rates/restrictions), mirroring Channex. ProductMapping kept but unused (cleanup later).
+- 🟡 **Phase 3 — Wire real Channex — mostly done.**
+  ✅ 3a: real ARI push via `@revio/connectivity`, opt-in per channel (`Channel.connectivityMode`:
+  mock default | channex_sandbox | channex_prod), Re-sync button, mode+UUID in channel settings.
+  ✅ 3b: **auto-push on every ARI edit** (recordPush → syncRealChannels; no-op for mock), **pull**
+  (`pullChannel`: 7-day lookback, dedupe on externalId, cancel/modify update in place — derived sold
+  self-corrects availability, unmapped → failed_import + Error Center, overbooking flagged, re-push
+  after import; "Pull bookings" button per channel), **24h sync-health bar** on channel cards.
+  ⬜ Remaining: (i) operator per-tenant **encrypted key storage** (move `CHANNEX_*_KEY` off env into
+  the admin perimeter + mode flag UI in Operator Connectivity screen); (ii) scheduled auto-pull
+  (needs cron/queue infra — pair with the email/notifications infra in Phase 5); (iii) import-loop
+  live test needs a Channex-sandbox test OTA channel with a real booking.
 - **Phase 4 — Calendar & Bulk Update redesign.** All rooms visible/collapsible, Rooms-Sold row, filters,
   Customise Display, 2-yr horizon + 30-day window + custom range; merge Bulk Update with Restrictions.
 - **Phase 5 — Screen refinements (independent, parallelizable).** Reservations filters; Sync Center
