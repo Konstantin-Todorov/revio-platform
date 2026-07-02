@@ -117,11 +117,12 @@ const HORIZON_DAYS_MAX = 730; // 2-year sync horizon (spec)
 export async function getCalendarBoard(q: CalendarQuery) {
   const property = await getProperty();
   const propertyId = property.id;
-  const days = [7, 14, 30].includes(q.days ?? 0) ? q.days! : 14;
+  // 7/14/30 from the view toggle; the month view passes the exact month length (28–31).
+  const days = q.days && q.days >= 1 && q.days <= 31 ? q.days : 14;
 
   // Window start: requested date clamped to [today-7d, today+2y-days]; default = Monday of this week.
   const today = utcDate(new Date());
-  const minStart = addDays(today, -7);
+  const minStart = addDays(today, -45); // allows the month view to start at the 1st of the current month
   const maxStart = addDays(today, HORIZON_DAYS_MAX - days);
   let start = currentMonday();
   if (q.start && /^\d{4}-\d{2}-\d{2}$/.test(q.start)) {

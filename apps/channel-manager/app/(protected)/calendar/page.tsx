@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { EditableCell } from "@/components/calendar/EditableCell";
 import { ParamMultiSelect } from "@/components/calendar/ParamMultiSelect";
+import { MonthView } from "@/components/calendar/MonthView";
 import { BookingDialog } from "@/components/booking/BookingDialog";
 import { weekday, dayMonth, isWeekend, ymd } from "@/lib/format";
 
@@ -17,20 +18,52 @@ function shift(startIso: string, byDays: number): string {
   return new Date(new Date(`${startIso}T00:00:00Z`).getTime() + byDays * DAY_MS).toISOString().slice(0, 10);
 }
 
+/** Clamp a YYYY-MM choice to [current month, +23 months] and return its first day + length. */
+function monthWindow(monthParam: string | undefined) {
+  const now = new Date();
+  const cur = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const max = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 23, 1));
+  let first = cur;
+  if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+    const [y, m] = monthParam.split("-").map(Number);
+    const req = new Date(Date.UTC(y!, m! - 1, 1));
+    first = new Date(Math.min(Math.max(req.getTime(), cur.getTime()), max.getTime()));
+  }
+  const daysInMonth = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  const iso = `${first.getUTCFullYear()}-${String(first.getUTCMonth() + 1).padStart(2, "0")}`;
+  const shiftMonth = (by: number) => {
+    const d = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + by, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  };
+  return { first, daysInMonth, iso, prev: shiftMonth(-1), next: shiftMonth(1) };
+}
+
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ start?: string; days?: string; rt?: string; rows?: string }>;
+  searchParams: Promise<{ start?: string; days?: string; rt?: string; rows?: string; view?: string; month?: string }>;
 }) {
   const sp = await searchParams;
+  const view = sp.view === "month" ? "month" : "grid";
   const rt = sp.rt ? sp.rt.split(",").filter(Boolean) : [];
   const rows = sp.rows ? sp.rows.split(",").filter(Boolean) : [];
-  const board = await getCalendarBoard({
-    ...(sp.start ? { start: sp.start } : {}),
-    days: Number(sp.days) || undefined as never,
-    rt,
-    rows,
-  });
+
+  // Month view fetches its own window: exactly one month, one room type, sold + flag rows.
+  const mw = monthWindow(sp.month);
+  const board =
+    view === "month"
+      ? await getCalendarBoard({
+          start: mw.first.toISOString().slice(0, 10),
+          days: mw.daysInMonth,
+          rt: rt.length > 0 ? [rt[0]!] : [],
+          rows: ["sold", "cta", "ctd", "stopsell"],
+        })
+      : await getCalendarBoard({
+          ...(sp.start ? { start: sp.start } : {}),
+          days: Number(sp.days) || undefined as never,
+          rt,
+          rows,
+        });
   const { property, allRoomTypes, sections, dates, days, start, visible } = board;
 
   if (allRoomTypes.length === 0) {
@@ -50,6 +83,62 @@ export default async function CalendarPage({
 
   const bookingOptions = await getBookingOptions();
   const todayKey = ymd(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())));
+
+  // ---- MONTH VIEW ----------------------------------------------------------
+  if (view === "month") {
+    const section = sections[0];
+    const activeCode = section?.roomType.code ?? allRoomTypes[0]!.code;
+    const monthQs = (over: { month?: string; rt?: string }) =>
+      `/calendar?view=month&month=${over.month ?? mw.iso}&rt=${over.rt ?? activeCode}`;
+
+    return (
+      <div>
+        <PageHeader
+          title="Calendar"
+          subtitle={`${property.name} · availability, rates & restrictions`}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
+                <Link href="/calendar" className="rounded px-2.5 py-1 text-[12.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted">Grid</Link>
+                <span className="rounded bg-brand-800 px-2.5 py-1 text-[12.5px] font-semibold text-white">Month</span>
+              </div>
+              <BookingDialog options={bookingOptions} />
+            </div>
+          }
+        />
+
+        {/* Room type selector (single, month view shows one at a time) */}
+        <div className="mb-3 flex flex-wrap items-center gap-1.5">
+          {allRoomTypes.map((r) => (
+            <Link
+              key={r.id}
+              href={monthQs({ rt: r.code })}
+              className={`rounded-md border px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                r.code === activeCode ? "border-brand-600 bg-brand-50 text-brand-700" : "border-surface-border bg-white text-ink-500 hover:bg-surface-muted"
+              }`}
+            >
+              {r.name}
+            </Link>
+          ))}
+        </div>
+
+        {section ? (
+          <MonthView
+            section={section}
+            dates={dates}
+            monthIso={mw.iso}
+            todayKey={todayKey}
+            currency={property.baseCurrency}
+            nav={{ prev: monthQs({ month: mw.prev }), next: monthQs({ month: mw.next }), thisMonth: monthQs({ month: undefined }) }}
+          />
+        ) : (
+          <EmptyState icon={<BedDouble className="h-7 w-7" />} title="Room type not found" body="Pick a room type above." />
+        )}
+      </div>
+    );
+  }
+
+  // ---- GRID VIEW -----------------------------------------------------------
   const dateObjs = dates.map((d) => new Date(d + "T00:00:00Z"));
 
   // Links preserve the current query, changing one param.
@@ -74,6 +163,12 @@ export default async function CalendarPage({
         subtitle={`${property.name} · availability, rates & restrictions`}
         action={
           <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
+              <span className="rounded bg-brand-800 px-2.5 py-1 text-[12.5px] font-semibold text-white">Grid</span>
+              <Link href={`/calendar?view=month${rt.length > 0 ? `&rt=${rt[0]}` : ""}`} className="rounded px-2.5 py-1 text-[12.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted">
+                Month
+              </Link>
+            </div>
             <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
               {VIEWS.map((v) => (
                 <Link key={v} href={qs({ days: String(v) })} className={`rounded px-2.5 py-1 text-[12.5px] font-semibold transition-colors ${days === v ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}>
