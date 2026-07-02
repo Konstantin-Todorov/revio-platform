@@ -75,12 +75,22 @@ not yet wired into the app or deployed).
   env fallback. ⬜ Remaining: (i) scheduled auto-pull (needs cron/queue infra — pair with the
   Phase 5 email/notifications infra); (ii) import-loop live test needs a Channex-sandbox test OTA
   channel with a real booking.
-- **Phase 4 — Calendar & Bulk Update redesign.** All rooms visible/collapsible, Rooms-Sold row, filters,
-  Customise Display, 2-yr horizon + 30-day window + custom range; merge Bulk Update with Restrictions.
-- **Phase 5 — Screen refinements (independent, parallelizable).** Reservations filters; Sync Center
-  consolidation (Logs + merge Error Center + Audit under it); channel logos; Dashboard quick actions;
-  Settings (Reservation Delivery emails + arrival Notifications — needs email/scheduler infra); **move
-  User Management to Operations nav** (quick win, do anytime).
+- ✅ **Phase 4 — Calendar & IA redesign — DONE + deployed (2026-07-02).** Calendar = ALL room types as
+  collapsible sections (`getCalendarBoard`), 7/14/30-day movable window + jump-to-date (2-yr horizon),
+  Rooms filter + Customise-display row groups (`ParamMultiSelect`), Rooms-sold derived row, editable CTA.
+  **Bulk Update merged with Restrictions** (one screen; /restrictions redirects).
+- ✅ **Phase 5 — Screen refinements — mostly DONE + deployed (2026-07-02).** Sync Center absorbed Error
+  Center + Audit Log as tabs (+error badge; /errors,/audit redirect); Reservations filters (guest/#,
+  channel, status, check-in range); **User Management = own Operations screen** (/users; Settings keeps a
+  pointer). ⬜ Remaining: channel logos (cosmetic), Settings reservation-delivery emails + arrival
+  notifications (**needs email + scheduler infra** — pair with scheduled auto-pull).
+- ⬜ **Channex certification prep (before production keys).** Channex requires passing their **PMS
+  certification** (docs.channex.io → pms-certification-tests): 14 scenarios run from OUR REAL UI against
+  the staging sandbox, task IDs submitted via form, then a live screenshare review → production access.
+  Gaps to close when we schedule it: (a) **full-sync = 500 days in ≤2 API calls** (our Re-sync pushes 14
+  days); (b) **delta-only pushes** (test 13 — our auto-push resends the whole 14-day window per edit);
+  (c) **booking acknowledgments** on pull (test 11); (d) demonstrate rate-limit compliance. Note: the
+  hotel's Channex account lives on **staging.channex.io** (app.channex.io is a separate production login).
 - **Later — RevioCRS** (full spec `docs/CRS-REFERENCE.md`; the system-of-record for reservations +
   revenue metrics — Occupancy/ADR/RevPAR/Pickup). Synergy: its "Connected Channel Manager" is an
   **adapter parallel to the CM's `ChannelAdapter`** — a `ChannelManagerConnector` that's RevioLink-internal
