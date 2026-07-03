@@ -111,12 +111,27 @@ with another tenant's `tenantId` is rejected with *"new row violates row-level s
 
 ## Adding the next app later (Operator / CRS / PMS)
 
-Same project, same database — just another service:
+Same project, same database — just another service (this is how `reservation` was added, 2026-07-03):
 
 ```bash
-railway add --service operator
-railway variables --service operator --set "DATABASE_URL=${{Postgres.DATABASE_URL}}"
-railway up --service operator
+railway add --service <name>          # or the Railway MCP create_service
+railway variables --service <name> --set "DATABASE_URL=${{Postgres.DATABASE_URL}}"   # reference var
+# per-service build/start (NEVER a root railway.json):
+railway environment edit \
+  --service-config <name> build.buildCommand "corepack enable && pnpm install --no-frozen-lockfile && pnpm --filter @revio/db db:generate && pnpm --filter @revio/<app> build" \
+  --service-config <name> deploy.startCommand "pnpm --filter @revio/db db:deploy && pnpm --filter @revio/<app> start"
+# set its own AUTH_SECRET, then a domain: railway domain --service <name>
+```
+
+**Auto-deploy gotcha:** connecting a `source_repo` at creation builds ONCE but does not track the
+branch. Wire the trigger explicitly — and note the config change alone doesn't deploy; kick the
+first build yourself:
+
+```bash
+railway environment edit \
+  --service-config <name> source.repo "Konstantin-Todorov/revio-platform" \
+  --service-config <name> source.branch "main"
+railway up --service <name> --detach   # first deploy; pushes auto-deploy from then on
 ```
 
 ## Auto-deploy on push (optional, later)
