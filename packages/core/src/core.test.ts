@@ -84,3 +84,16 @@ describe("restriction priority", () => {
     expect(resolveRestriction("min_los", { ratePlanDefault: 1 }).source).toBe("rate_plan_default");
   });
 });
+
+describe("restriction priority — level 4 property default", () => {
+  it("falls back to the property default when nothing else is set", () => {
+    expect(resolveRestriction("min_los", { propertyDefault: 2 })).toEqual({ value: 2, source: "property_default" });
+  });
+  it("rate-plan default beats the property default", () => {
+    expect(resolveRestriction("min_los", { ratePlanDefault: 3, propertyDefault: 2 })).toEqual({ value: 3, source: "rate_plan_default" });
+  });
+  it("a rule beats both defaults; manual beats everything", () => {
+    expect(resolveRestriction("min_los", { matchingRules: [{ priority: 1, value: 5 }], ratePlanDefault: 3, propertyDefault: 2 }).value).toBe(5);
+    expect(resolveRestriction("min_los", { manual: 1, matchingRules: [{ priority: 1, value: 5 }], propertyDefault: 2 }).value).toBe(1);
+  });
+});

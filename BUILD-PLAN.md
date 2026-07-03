@@ -135,10 +135,24 @@ not yet wired into the app or deployed).
     manual-booking validation all subtract OOO/closures/active holds via `computeWaterfall` — a CRS
     hold or OOO period takes rooms off sale on every channel on the next push. Gotcha fixed: the RLS
     proxy doesn't forward `$transaction` (model ops only) — actions use sequential ops.
-  - ⬜ Phase 3 — rates/restrictions (+ property-default fallback — PropertyDefaults fields already exist,
-    booking-source scope). ⬜ Phase 4 — dashboard/metrics (formula sheet, Action Center, Forecast,
-    Reports w/ CSV export, Global Search). ⬜ Phase 5 — distribution (ChannelManagerConnector, mapping,
-    Sync/Error Center in CRS) + Settings (Users & Permissions via PermissionRole, Taxes & Fees screen).
+  - ✅ **Phase 3 done (2026-07-03) — Rates & Restrictions.** `resolveRestriction` in `@revio/core` now
+    has the spec's **4th level** (`propertyDefault`, tests 34/34); `RestrictionRule.sourceCategories`
+    (migration `restriction_source_scope`) scopes rules by booking source — verified live: the seeded
+    "Trade fair — closed to Travel Agents" stop-sell blocks Travel Agent searches while Call Center
+    books the same dates. CRS **/rates screen**: Rate Plans CRUD (ported CM dialog — same shared
+    tables/engines), Restriction Rules CRUD (+ source-scope checkboxes), **Property defaults form**
+    (level-4 fallback + hold TTL). Inventory Calendar gained the spec's last two rows: **Rate**
+    (inline-editable standard-plan price → same RatePrice rows the CM pushes; derived plans recalc)
+    and **Restrictions** (4-level resolved min-stay badge + stop/CTA/CTD dots). **Enforcement at the
+    point of sale**: `stayViolation()` (stop-sell any night, CTA on arrival, min-LOS, rolling
+    advance-purchase — all source-scoped) gates both the Availability Search (shows "restricted" +
+    reason) and `placeHold`. Verified: level-4 AP min=3 blocked next-day stays across all room types;
+    level 3 correctly shadows level 4 (Standard's defMinLos=1 beats a property min of 2). **CM pushes
+    now apply the property-default fallback too** (minLos/maxLos/CTA/CTD/stop-sell/AP in
+    `buildAriUpdates`).
+  - ⬜ Phase 4 — dashboard/metrics (formula sheet, Action Center, Forecast, Reports w/ CSV export,
+    Global Search). ⬜ Phase 5 — distribution (ChannelManagerConnector, mapping, Sync/Error Center in
+    CRS) + Settings (Users & Permissions via PermissionRole, Taxes & Fees screen).
 - **Then — Channex certification prep** (see the prep item above): do it AFTER RevioCRS, BEFORE the
   first real client goes live — cert has external lead time (Channex schedules a live screenshare), so
   don't leave it to the last minute; testing continues on the staging sandbox meanwhile.

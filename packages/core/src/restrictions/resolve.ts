@@ -1,10 +1,11 @@
 /**
  * Restriction priority resolution. When more than one source sets the same restriction for a
- * date/room/rate/channel, the most specific wins:
+ * date/room/rate/channel, the most specific wins (docs/CRS-REFERENCE.md — FOUR levels):
  *
  *   1. Manual edit (Calendar cell or Bulk Update)   — always wins
  *   2. Restriction Rule (highest-priority matching)
- *   3. Rate Plan default                            — fallback baseline
+ *   3. Rate Plan default
+ *   4. Property default                             — global fallback baseline
  *
  * Pure functions only — see packages/core/CLAUDE.md.
  */
@@ -26,11 +27,13 @@ export interface RestrictionSources {
   matchingRules?: RestrictionRuleHit[];
   /** The rate plan's own default for this restriction, if set. */
   ratePlanDefault?: RestrictionValue;
+  /** The property-wide default (PropertyDefaults) — the level-4 global fallback. */
+  propertyDefault?: RestrictionValue;
 }
 
 export interface ResolvedRestriction {
   value: RestrictionValue;
-  source: "manual" | "rule" | "rate_plan_default" | "none";
+  source: "manual" | "rule" | "rate_plan_default" | "property_default" | "none";
 }
 
 /** Resolve one restriction type for one slot, applying the priority order. */
@@ -52,6 +55,10 @@ export function resolveRestriction(
 
   if (sources.ratePlanDefault !== undefined) {
     return { value: sources.ratePlanDefault, source: "rate_plan_default" };
+  }
+
+  if (sources.propertyDefault !== undefined) {
+    return { value: sources.propertyDefault, source: "property_default" };
   }
 
   return { value: false, source: "none" };

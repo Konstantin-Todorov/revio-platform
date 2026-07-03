@@ -19,19 +19,21 @@ const labelCls = "mb-1 block text-[11px] font-semibold uppercase tracking-wide t
 export default async function NewReservationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; guests?: string; qty?: string; rt?: string; hold?: string; error?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; guests?: string; qty?: string; rt?: string; src?: string; hold?: string; error?: string }>;
 }) {
   const sp = await searchParams;
   await releaseExpiredHolds();
 
-  if (sp.hold) return <HoldForm holdId={sp.hold} guests={Number(sp.guests) || 1} error={sp.error} />;
+  if (sp.hold) return <HoldForm holdId={sp.hold} guests={Number(sp.guests) || 1} sourceId={sp.src} error={sp.error} />;
   return <SearchStep sp={sp} />;
 }
 
 /* --- Step 1: Availability Search (the call-center entry point) --------------- */
 
-async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: string; qty?: string; rt?: string; error?: string } }) {
+async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: string; qty?: string; rt?: string; src?: string; error?: string } }) {
   const property = await getProperty();
+  const sources = await prisma.bookingSource.findMany({ where: { propertyId: property.id, active: true }, orderBy: { name: "asc" } });
+  const selectedSource = sources.find((s) => s.id === sp.src) ?? sources.find((s) => s.category === "call_center") ?? sources[0];
   const todayIso = todayInTz(property.timezone);
   const from = sp.from && /^\d{4}-\d{2}-\d{2}$/.test(sp.from) ? sp.from : todayIso;
   const to = sp.to && /^\d{4}-\d{2}-\d{2}$/.test(sp.to) && sp.to > from ? sp.to : ymd(addDays(new Date(`${from}T00:00:00Z`), 1));
@@ -39,7 +41,7 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
   const qty = Math.max(1, Number(sp.qty) || 1);
   const hasQuery = Boolean(sp.from && sp.to);
 
-  const search = hasQuery ? await searchAvailability({ checkIn: from, checkOut: to, guests, quantity: qty, roomTypeId: sp.rt }) : null;
+  const search = hasQuery ? await searchAvailability({ checkIn: from, checkOut: to, guests, quantity: qty, roomTypeId: sp.rt, sourceCategory: selectedSource?.category }) : null;
   const requested = search?.results.find((r) => sp.rt && r.roomType.id === sp.rt);
   const requestedFull = requested ? !requested.available : false;
 
@@ -58,7 +60,7 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
       )}
 
       <Card className="p-4">
-        <form method="GET" className="grid grid-cols-2 items-end gap-3 lg:grid-cols-5">
+        <form method="GET" className="grid grid-cols-2 items-end gap-3 lg:grid-cols-6">
           <div>
             <label className={labelCls}>Arrival</label>
             <input type="date" name="from" defaultValue={from} min={todayIso} className={inputCls} />
@@ -74,6 +76,12 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
           <div>
             <label className={labelCls}>Rooms</label>
             <input type="number" name="qty" defaultValue={qty} min={1} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Booking source</label>
+            <select name="src" defaultValue={selectedSource?.id} className={inputCls}>
+              {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
           </div>
           <button className="flex h-[38px] items-center justify-center gap-1.5 rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">
             <Search className="h-4 w-4" /> Search
@@ -109,7 +117,7 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
                       )}
                     </div>
                     <div className="mt-0.5 text-[12px] text-ink-500">
-                      {r.available ? `${r.remainingMin} left across every night` : "Sold out on at least one night"}
+                      {r.blocked ? r.blocked : r.available ? `${r.remainingMin} left across every night` : "Sold out on at least one night"}
                       {!r.fitsGuests && " · too small for this party"}
                       {r.totalMinor != null && search.standardPlanName && (
                         <> · from <span className="tnum font-semibold text-ink-900">{money(r.totalMinor)}</span> ({search.standardPlanName})</>
@@ -123,10 +131,13 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
                       <input type="hidden" name="checkOut" value={to} />
                       <input type="hidden" name="quantity" value={qty} />
                       <input type="hidden" name="guests" value={guests} />
+                      <input type="hidden" name="sourceId" value={selectedSource?.id ?? ""} />
                       <button className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
                         Hold &amp; continue
                       </button>
                     </form>
+                  ) : r.blocked ? (
+                    <span title={r.blocked}><StatusPill tone="warning">restricted</StatusPill></span>
                   ) : (
                     <StatusPill tone={r.available ? "warning" : "danger"}>{r.available ? "doesn't fit" : "sold out"}</StatusPill>
                   )}
@@ -146,7 +157,7 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
 
 /* --- Step 2: guest details against a live hold ------------------------------- */
 
-async function HoldForm({ holdId, guests, error }: { holdId: string; guests: number; error?: string }) {
+async function HoldForm({ holdId, guests, sourceId, error }: { holdId: string; guests: number; sourceId?: string; error?: string }) {
   const { property, ratePlans, sources } = await getCreateFormData();
   const hold = await prisma.hold.findFirst({
     where: { id: holdId, propertyId: property.id, status: "active", expiresAt: { gt: new Date() } },
@@ -228,7 +239,7 @@ async function HoldForm({ holdId, guests, error }: { holdId: string; guests: num
               </div>
               <div>
                 <label className={labelCls}>Booking source *</label>
-                <select name="bookingSourceId" required className={inputCls}>
+                <select name="bookingSourceId" required defaultValue={sourceId} className={inputCls}>
                   {sources.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}

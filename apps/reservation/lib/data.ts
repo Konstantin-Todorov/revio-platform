@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, expandInventoryPeriods, SOLD_STATUSES, type WaterfallResult } from "@revio/core";
+import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, SOLD_STATUSES, type RestrictionRuleHit, type WaterfallResult } from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -39,10 +39,17 @@ export interface InventoryQuery {
   days?: number;
 }
 
+export interface CellRestrictions {
+  stopSell: boolean;
+  cta: boolean;
+  ctd: boolean;
+  minLos: number | null;
+}
+
 export interface InventorySection {
   roomType: { id: string; name: string; code: string; totalRooms: number; unitKind: string; active: boolean };
   /** One waterfall per visible date, aligned with `dates`. */
-  cells: (WaterfallResult & { manualOverride: boolean })[];
+  cells: (WaterfallResult & { manualOverride: boolean; rate: string; restr: CellRestrictions })[];
 }
 
 const HORIZON_DAYS_MAX = 730;
@@ -77,12 +84,16 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
   });
   const rtIds = roomTypes.map((r) => r.id);
 
-  const [periods, cells, holds, lines] = await Promise.all([
+  const [standard, defaults, rules, prices, periods, cells, holds, lines] = await Promise.all([
+    prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId } }),
+    prisma.restrictionRule.findMany({ where: { propertyId, active: true, dateFrom: { lt: end }, dateTo: { gte: start } } }),
+    prisma.ratePrice.findMany({ where: { roomTypeId: { in: rtIds }, date: { gte: start, lt: end } } }),
     prisma.roomInventoryPeriod.findMany({
       where: { roomTypeId: { in: rtIds }, dateFrom: { lt: end }, dateTo: { gte: start } },
     }),
     prisma.dailyCell.findMany({
-      where: { roomTypeId: { in: rtIds }, date: { gte: start, lt: end }, inventory: { not: null } },
+      where: { roomTypeId: { in: rtIds }, date: { gte: start, lt: end } },
     }),
     prisma.hold.findMany({
       where: {
@@ -103,7 +114,41 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
     }),
   ]);
 
-  const overrideByKey = new Map(cells.map((c) => [`${c.roomTypeId}:${ymd(c.date)}`, c.inventory!]));
+  const cellByKey = new Map(cells.map((c) => [`${c.roomTypeId}:${ymd(c.date)}`, c]));
+  const priceByKey = new Map(
+    standard ? prices.filter((pr) => pr.ratePlanId === standard.id).map((pr) => [`${pr.roomTypeId}:${ymd(pr.date)}`, pr.priceMinor]) : [],
+  );
+
+  // Resolve one restriction for one (room type, date) across the FOUR priority levels
+  // (manual cell > matching rules > standard-plan default > property default) — display is
+  // source-agnostic: a rule scoped to any booking source still shows here.
+  function resolveFor(rtId: string, d: string, cell: (typeof cells)[number] | undefined): CellRestrictions {
+    const ruleHits = (type: string): RestrictionRuleHit[] =>
+      rules
+        .filter((r) => r.type === type && (r.roomTypeId == null || r.roomTypeId === rtId) && ymd(r.dateFrom) <= d && ymd(r.dateTo) >= d)
+        .map((r) => ({ priority: r.priority, value: (r.valueBool ?? r.valueInt ?? true) as number | boolean }));
+    const flag = (type: "stop_sell" | "cta" | "ctd", manual: boolean | undefined, plan: boolean | undefined, prop: boolean | undefined) =>
+      Boolean(
+        resolveRestriction(type, {
+          ...(manual ? { manual: true } : {}),
+          matchingRules: ruleHits(type),
+          ...(plan ? { ratePlanDefault: true } : {}),
+          ...(prop ? { propertyDefault: true } : {}),
+        }).value,
+      );
+    const minRes = resolveRestriction("min_los", {
+      ...(cell?.minLos != null ? { manual: cell.minLos } : {}),
+      matchingRules: ruleHits("min_los"),
+      ...(standard?.defMinLos != null ? { ratePlanDefault: standard.defMinLos } : {}),
+      ...(defaults?.defMinLos != null ? { propertyDefault: defaults.defMinLos } : {}),
+    });
+    return {
+      stopSell: flag("stop_sell", cell?.stopSell || undefined, standard?.defStopSell || undefined, defaults?.defStopSell || undefined),
+      cta: flag("cta", cell?.cta || undefined, standard?.defCta || undefined, defaults?.defCta || undefined),
+      ctd: flag("ctd", cell?.ctd || undefined, standard?.defCtd || undefined, defaults?.defCtd || undefined),
+      minLos: minRes.source === "none" ? null : Number(minRes.value),
+    };
+  }
 
   const sections: InventorySection[] = roomTypes.map((rt) => {
     const rtPeriods = periods
@@ -118,8 +163,10 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
       const holdUnits = holds
         .filter((h) => h.roomTypeId === rt.id && ymd(h.checkIn) <= d && ymd(h.checkOut) > d)
         .reduce((sum, h) => sum + h.quantity, 0);
-      const manual = overrideByKey.get(`${rt.id}:${d}`);
+      const cell = cellByKey.get(`${rt.id}:${d}`);
+      const manual = cell?.inventory;
       const { outOfOrder, closed } = periodByDate.get(d)!;
+      const priceMinor = priceByKey.get(`${rt.id}:${d}`);
       return {
         ...computeWaterfall({
           physical: rt.totalRooms,
@@ -130,6 +177,8 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
           confirmed: soldUnits,
         }),
         manualOverride: manual != null,
+        rate: priceMinor != null ? String(Math.round(priceMinor / 100)) : "—",
+        restr: resolveFor(rt.id, d, cell),
       };
     });
 
@@ -278,6 +327,8 @@ export interface StaySearch {
   guests: number;
   quantity: number;
   roomTypeId?: string;
+  /** BookingSource.category the agent is selling through — restriction rules may scope to it. */
+  sourceCategory?: string;
 }
 
 /**
@@ -295,11 +346,13 @@ export async function searchAvailability(q: StaySearch) {
       const nights = await remainingByNight(rt.id, q.checkIn, q.checkOut);
       const remainingMin = nights.length ? Math.min(...nights.map((n) => n.remaining)) : 0;
       const totalMinor = standard ? await stayQuote(rt.id, standard.id, q.checkIn, q.checkOut, q.quantity) : null;
+      const blocked = remainingMin >= q.quantity ? await stayViolation(rt.id, q.checkIn, q.checkOut, q.sourceCategory) : null;
       return {
         roomType: rt,
         remainingMin,
         fitsGuests: rt.maxGuests * q.quantity >= q.guests,
-        available: remainingMin >= q.quantity,
+        available: remainingMin >= q.quantity && !blocked,
+        blocked,
         totalMinor,
         requested: q.roomTypeId ? q.roomTypeId === rt.id : true,
       };
@@ -421,4 +474,116 @@ export async function getGuestDetail(id: string) {
     },
   });
   return guest ? { property, guest } : null;
+}
+
+// --- Phase 3: restriction enforcement at the point of sale --------------------
+
+/**
+ * Would selling this stay violate a restriction? Resolves stop-sell / CTA / min-LOS /
+ * advance-purchase across the four priority levels, honouring booking-source scope
+ * (a rule with sourceCategories only fires for reservations from those categories).
+ * Returns a human-readable reason, or null when the stay is sellable.
+ */
+export async function stayViolation(
+  roomTypeId: string,
+  checkIn: string,
+  checkOut: string,
+  sourceCategory?: string,
+): Promise<string | null> {
+  const property = await getProperty();
+  const propertyId = property.id;
+  const nights = nightsOf(checkIn, checkOut);
+  if (nights.length === 0) return "Departure must be after arrival.";
+  const start = new Date(`${checkIn}T00:00:00Z`);
+  const end = new Date(`${checkOut}T00:00:00Z`);
+
+  const [standard, defaults, cells, rules] = await Promise.all([
+    prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId } }),
+    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: start, lt: end } } }),
+    prisma.restrictionRule.findMany({
+      where: { propertyId, active: true, dateFrom: { lt: end }, dateTo: { gte: start } },
+    }),
+  ]);
+  const cellByDate = new Map(cells.map((c) => [ymd(c.date), c]));
+
+  const hits = (type: string, d: string): RestrictionRuleHit[] =>
+    rules
+      .filter(
+        (r) =>
+          r.type === type &&
+          (r.roomTypeId == null || r.roomTypeId === roomTypeId) &&
+          ymd(r.dateFrom) <= d && ymd(r.dateTo) >= d &&
+          (r.sourceCategories.length === 0 || (sourceCategory != null && r.sourceCategories.includes(sourceCategory))),
+      )
+      .map((r) => ({ priority: r.priority, value: (r.valueBool ?? r.valueInt ?? true) as number | boolean }));
+
+  // Stop sell — any night closes the whole stay.
+  for (const d of nights) {
+    const cell = cellByDate.get(d);
+    const stop = resolveRestriction("stop_sell", {
+      ...(cell?.stopSell ? { manual: true } : {}),
+      matchingRules: hits("stop_sell", d),
+      ...(standard?.defStopSell ? { ratePlanDefault: true } : {}),
+      ...(defaults?.defStopSell ? { propertyDefault: true } : {}),
+    });
+    if (stop.value) return `Closed to sale on ${d} (stop sell — ${stop.source.replace(/_/g, " ")}).`;
+  }
+
+  // Closed to arrival — the check-in night only.
+  const arrivalCell = cellByDate.get(checkIn);
+  const cta = resolveRestriction("cta", {
+    ...(arrivalCell?.cta ? { manual: true } : {}),
+    matchingRules: hits("cta", checkIn),
+    ...(standard?.defCta ? { ratePlanDefault: true } : {}),
+    ...(defaults?.defCta ? { propertyDefault: true } : {}),
+  });
+  if (cta.value) return `Arrivals are closed on ${checkIn}.`;
+
+  // Minimum stay — resolved for the arrival night.
+  const minRes = resolveRestriction("min_los", {
+    ...(arrivalCell?.minLos != null ? { manual: arrivalCell.minLos } : {}),
+    matchingRules: hits("min_los", checkIn),
+    ...(standard?.defMinLos != null ? { ratePlanDefault: standard.defMinLos } : {}),
+    ...(defaults?.defMinLos != null ? { propertyDefault: defaults.defMinLos } : {}),
+  });
+  if (minRes.source !== "none" && nights.length < Number(minRes.value)) {
+    return `Minimum stay is ${minRes.value} nights for ${checkIn}.`;
+  }
+
+  // Advance purchase — rolling window against the property's "today".
+  const todayIso = todayInTz(property.timezone);
+  const apOf = (type: string, planVal: number | null | undefined, propVal: number | null | undefined) => {
+    const r = resolveRestriction(type as Parameters<typeof resolveRestriction>[0], {
+      matchingRules: hits(type, checkIn),
+      ...(planVal != null ? { ratePlanDefault: planVal } : {}),
+      ...(propVal != null ? { propertyDefault: propVal } : {}),
+    });
+    return r.source === "none" ? null : Number(r.value);
+  };
+  const apMin = apOf("advance_purchase_min", standard?.defAdvancePurchaseMin, defaults?.defAdvancePurchaseMin);
+  const apMax = apOf("advance_purchase_max", standard?.defAdvancePurchaseMax, defaults?.defAdvancePurchaseMax);
+  if (isAdvancePurchaseClosed(todayIso, checkIn, { min: apMin, max: apMax })) {
+    return `The advance-purchase window for ${checkIn} is closed (book ${apMin != null ? `≥${apMin}` : ""}${apMin != null && apMax != null ? " and " : ""}${apMax != null ? `≤${apMax}` : ""} days ahead).`;
+  }
+
+  return null;
+}
+
+// --- Rates & Restrictions screen ----------------------------------------------
+
+export async function getRatesData() {
+  const property = await getProperty();
+  const [ratePlans, rules, defaults, roomTypes, channels] = await Promise.all([
+    prisma.ratePlan.findMany({
+      where: { propertyId: property.id },
+      include: { parent: { select: { name: true } }, mealPlan: { select: { name: true } }, cancellationPolicy: { select: { name: true, code: true } }, _count: { select: { roomTypeLinks: true } } },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.restrictionRule.findMany({ where: { propertyId: property.id }, orderBy: [{ active: "desc" }, { dateFrom: "asc" }] }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
+    prisma.roomType.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
+    prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" }, select: { code: true, name: true } }),
+  ]);
+  return { property, ratePlans, rules, defaults, roomTypes, channels };
 }

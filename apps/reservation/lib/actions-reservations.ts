@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { getProperty, remainingByNight, todayInTz, PAYMENT_GUARANTEES } from "./data";
+import { getProperty, remainingByNight, stayViolation, todayInTz, PAYMENT_GUARANTEES } from "./data";
 import { releaseExpiredHolds } from "./holds";
 import { getSession } from "./session";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
@@ -36,7 +36,8 @@ export async function placeHold(fd: FormData): Promise<void> {
   const checkOut = str(fd, "checkOut");
   const quantity = Math.max(1, int(fd, "quantity", 1));
   const guests = Math.max(1, int(fd, "guests", 1));
-  const back = `/reservations/new?from=${checkIn}&to=${checkOut}&guests=${guests}&qty=${quantity}`;
+  const sourceId = str(fd, "sourceId");
+  const back = `/reservations/new?from=${checkIn}&to=${checkOut}&guests=${guests}&qty=${quantity}${sourceId ? `&src=${sourceId}` : ""}`;
 
   if (!roomTypeId || !DATE_RE.test(checkIn) || !DATE_RE.test(checkOut) || checkOut <= checkIn) {
     redirect(`${back}&error=${encodeURIComponent("Pick valid arrival and departure dates.")}`);
@@ -49,6 +50,14 @@ export async function placeHold(fd: FormData): Promise<void> {
   const short = nights.filter((n) => n.remaining < quantity);
   if (short.length > 0) {
     redirect(`${back}&error=${encodeURIComponent(`${roomType!.name} has no availability on ${short[0]!.date} — pick an alternative.`)}`);
+  }
+
+  // Restriction gate (4-level resolution, booking-source-scoped) — a stay that violates a sales
+  // rule never reaches the hold stage.
+  const source = sourceId ? await prisma.bookingSource.findFirst({ where: { id: sourceId, propertyId: property.id } }) : null;
+  const violation = await stayViolation(roomTypeId, checkIn, checkOut, source?.category);
+  if (violation) {
+    redirect(`${back}&error=${encodeURIComponent(`${roomType!.name}: ${violation}`)}`);
   }
 
   const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } });
@@ -75,7 +84,7 @@ export async function placeHold(fd: FormData): Promise<void> {
     newValue: `${checkIn} → ${checkOut} · ${quantity}× · expires in ${ttlMinutes}m`,
   });
   revalidateReservations();
-  redirect(`/reservations/new?hold=${hold.id}&guests=${guests}`);
+  redirect(`/reservations/new?hold=${hold.id}&guests=${guests}${sourceId ? `&src=${sourceId}` : ""}`);
 }
 
 /** Abandon step 2 deliberately — frees the inventory immediately instead of waiting for expiry. */

@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Wrench } from "lucide-react";
 import { getInventoryBoard, addDays, ymd } from "@/lib/data";
 import { ensurePickupSnapshot } from "@/lib/pickup";
 import { PageHeader } from "@/components/ui/primitives";
+import { RateCell } from "@/components/inventory/RateCell";
 
 export const dynamic = "force-dynamic";
 
@@ -89,7 +90,11 @@ export default async function InventoryCalendarPage({
 
       <p className="mt-3 text-[11.5px] text-ink-400">
         Available = physical − out&nbsp;of&nbsp;order − closed (a <span className="font-semibold text-brand-700">•</span> marks a manual rooms-to-sell
-        override from RevioLink) · Remaining = available − holds − sold. Negative remaining = overbooked.
+        override from RevioLink) · Remaining = available − holds − sold. Negative remaining = overbooked. Rate = the
+        standard plan, click to edit. Restrictions resolve manual&nbsp;→&nbsp;rule&nbsp;→&nbsp;plan&nbsp;→&nbsp;property default
+        (<span className="inline-block h-2 w-2 rounded-full bg-danger-500 align-middle" /> stop&nbsp;·{" "}
+        <span className="inline-block h-2 w-2 rounded-full bg-brand-600 align-middle" /> CTA&nbsp;·{" "}
+        <span className="inline-block h-2 w-2 rounded-full bg-accent-500 align-middle" /> CTD).
       </p>
     </div>
   );
@@ -110,7 +115,7 @@ function SectionRows({
         </td>
       </tr>
       {ROWS.map((row) => (
-        <tr key={row.key} className="border-b border-surface-border/40 last:border-b-surface-border">
+        <tr key={row.key} className="border-b border-surface-border/40">
           <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">{row.label}</td>
           {section.cells.map((cell, i) => {
             const value = cell[row.key];
@@ -133,6 +138,33 @@ function SectionRows({
           })}
         </tr>
       ))}
+      {/* Rate (editable, standard plan) + resolved Restrictions — the spec's last two calendar rows. */}
+      <tr className="border-b border-surface-border/40">
+        <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">Rate</td>
+        {section.cells.map((cell, i) => (
+          <td key={i} className={`px-1 py-1 text-center ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
+            <RateCell roomTypeId={section.roomType.id} date={dates[i]!} value={cell.rate} />
+          </td>
+        ))}
+      </tr>
+      <tr className="border-b border-surface-border/40 last:border-b-surface-border">
+        <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">Restrictions</td>
+        {section.cells.map((cell, i) => (
+          <td key={i} className={`px-1 py-1 text-center ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
+            <span className="inline-flex items-center justify-center gap-1">
+              {cell.restr.minLos != null && cell.restr.minLos > 1 && (
+                <span title={`Min stay ${cell.restr.minLos} nights`} className="rounded bg-brand-50 px-1 text-[9.5px] font-bold text-brand-700">{cell.restr.minLos}n</span>
+              )}
+              {cell.restr.stopSell && <span title="Stop sell" className="inline-block h-2 w-2 rounded-full bg-danger-500" />}
+              {cell.restr.cta && <span title="Closed to arrival" className="inline-block h-2 w-2 rounded-full bg-brand-600" />}
+              {cell.restr.ctd && <span title="Closed to departure" className="inline-block h-2 w-2 rounded-full bg-accent-500" />}
+              {!cell.restr.stopSell && !cell.restr.cta && !cell.restr.ctd && (cell.restr.minLos ?? 1) <= 1 && (
+                <span className="text-ink-200">·</span>
+              )}
+            </span>
+          </td>
+        ))}
+      </tr>
     </>
   );
 }

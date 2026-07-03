@@ -72,7 +72,7 @@ export async function syncChannel(channelId: string): Promise<SyncOutcome> {
   const roomTypeIds = roomMaps.map((m) => m.roomTypeId);
 
   // Pull everything for the horizon up front, then assemble in memory.
-  const [cells, prices, resLines, periods, holds] = await Promise.all([
+  const [cells, prices, resLines, periods, holds, propertyDefaults] = await Promise.all([
     prisma.dailyCell.findMany({ where: { roomTypeId: { in: roomTypeIds }, date: { gte: start, lte: end } } }),
     prisma.ratePrice.findMany({ where: { propertyId, date: { gte: start, lte: end } } }),
     prisma.reservationLine.findMany({
@@ -84,6 +84,7 @@ export async function syncChannel(channelId: string): Promise<SyncOutcome> {
       where: { roomTypeId: { in: roomTypeIds }, status: "active", expiresAt: { gt: new Date() }, checkIn: { lte: end }, checkOut: { gt: start } },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
     }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId } }),
   ]);
 
   const cellKey = (rt: string, k: string) => `${rt}:${k}`;
@@ -136,18 +137,23 @@ export async function syncChannel(channelId: string): Promise<SyncOutcome> {
         const price = priceFor(rt.id, rp, k);
         if (price == null) continue; // nothing to send for this product/date
 
-        const apClosed = isAdvancePurchaseClosed(todayStr, k, { min: rp.defAdvancePurchaseMin, max: rp.defAdvancePurchaseMax });
-        const stopSell = (cell?.stopSell ?? false) || apClosed;
+        const apMin = rp.defAdvancePurchaseMin ?? propertyDefaults?.defAdvancePurchaseMin ?? null;
+        const apMax = rp.defAdvancePurchaseMax ?? propertyDefaults?.defAdvancePurchaseMax ?? null;
+        const apClosed = isAdvancePurchaseClosed(todayStr, k, { min: apMin, max: apMax });
+        // Priority levels 1/3/4 (manual cell > rate-plan default > property default); level 2 rules
+        // are pushed via Bulk Update writes to the cells themselves.
+        const stopSell = (cell?.stopSell ?? propertyDefaults?.defStopSell ?? false) || apClosed;
         const restrictions: AriUpdate["restrictions"] = {
           stopSell,
-          cta: cell?.cta ?? false,
-          ctd: cell?.ctd ?? false,
+          cta: cell?.cta ?? propertyDefaults?.defCta ?? false,
+          ctd: cell?.ctd ?? propertyDefaults?.defCtd ?? false,
         };
-        const minLos = cell?.minLos ?? rp.defMinLos;
+        const minLos = cell?.minLos ?? rp.defMinLos ?? propertyDefaults?.defMinLos;
+        const maxLos = rp.defMaxLos ?? propertyDefaults?.defMaxLos;
         if (minLos != null) restrictions.minLos = minLos;
-        if (rp.defMaxLos != null) restrictions.maxLos = rp.defMaxLos;
-        if (rp.defAdvancePurchaseMin != null) restrictions.advancePurchaseMin = rp.defAdvancePurchaseMin;
-        if (rp.defAdvancePurchaseMax != null) restrictions.advancePurchaseMax = rp.defAdvancePurchaseMax;
+        if (maxLos != null) restrictions.maxLos = maxLos;
+        if (apMin != null) restrictions.advancePurchaseMin = apMin;
+        if (apMax != null) restrictions.advancePurchaseMax = apMax;
 
         updates.push({
           externalRoomId: rm.externalRoomId!,

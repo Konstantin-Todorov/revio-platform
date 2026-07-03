@@ -354,6 +354,16 @@ async function main() {
     ],
   });
 
+  // Phase 3 demo: a booking-source-scoped restriction — Travel Agent bookings are closed for the
+  // trade-fair weekend while Direct/Call Center stay open (docs/CRS-REFERENCE.md source scope).
+  await prisma.restrictionRule.create({
+    data: {
+      ...t, name: "Trade fair — closed to Travel Agents", type: "stop_sell",
+      dateFrom: addDays(monday, 17), dateTo: addDays(monday, 19),
+      channelCodes: [], sourceCategories: ["travel_agent"], valueBool: true, priority: 10, active: true,
+    },
+  });
+
   // Phase 2 demo: a guest with a direct call-center reservation (no channel).
   const demoGuest = await prisma.guest.create({
     data: { ...t, firstName: "Elena", lastName: "Petrova", email: "elena.petrova@example.com", phone: "+359 88 555 0101", specialRequests: "High floor, away from the elevator" },

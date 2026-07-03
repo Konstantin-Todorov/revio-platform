@@ -389,6 +389,9 @@ model RestrictionRule {
   roomTypeId   String?
   ratePlanId   String?
   channelCodes String[]
+  // CRS: scope by booking source category (docs/CRS-REFERENCE.md — e.g. closed to Travel Agent,
+  // open to Direct). Empty = applies to every source. Categories match BookingSource.category.
+  sourceCategories String[] @default([])
   dateFrom     DateTime @db.Date
   dateTo       DateTime @db.Date
   daysOfWeek   String   @default("all")
