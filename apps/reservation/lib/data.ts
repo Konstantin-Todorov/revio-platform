@@ -587,3 +587,39 @@ export async function getRatesData() {
   ]);
   return { property, ratePlans, rules, defaults, roomTypes, channels };
 }
+
+// --- Global Search (reachable from anywhere — the topbar) ----------------------
+
+/** One query across reservations: ID, guest name/phone/email/company, room, channel, source, status. */
+export async function globalSearch(q: string) {
+  const property = await getProperty();
+  const needle = q.trim();
+  if (!needle) return { property, reservations: [] };
+  const reservations = await prisma.reservation.findMany({
+    where: {
+      propertyId: property.id,
+      OR: [
+        { guestName: { contains: needle, mode: "insensitive" } },
+        { id: { contains: needle } },
+        { externalId: { contains: needle } },
+        { status: needle.toLowerCase().replace(/ /g, "_") },
+        { notes: { contains: needle, mode: "insensitive" } },
+        { guest: { email: { contains: needle, mode: "insensitive" } } },
+        { guest: { phone: { contains: needle } } },
+        { guest: { company: { contains: needle, mode: "insensitive" } } },
+        { channel: { name: { contains: needle, mode: "insensitive" } } },
+        { bookingSource: { name: { contains: needle, mode: "insensitive" } } },
+        { lines: { some: { roomType: { name: { contains: needle, mode: "insensitive" } } } } },
+      ],
+    },
+    include: {
+      channel: { select: { name: true } },
+      bookingSource: { select: { name: true } },
+      guest: { select: { email: true, phone: true } },
+      lines: { include: { roomType: { select: { name: true } } } },
+    },
+    orderBy: { importedAt: "desc" },
+    take: 50,
+  });
+  return { property, reservations };
+}

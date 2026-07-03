@@ -609,6 +609,8 @@ model PropertyDefaults {
   revenueDisplay     String  @default("gross") // gross | net
   pickupOffsetDays   Int     @default(7)
   holdTtlMinutes     Int     @default(30)
+  // Action Center thresholds (docs/CRS-REFERENCE.md: every threshold a Setting, never hardcoded).
+  lowAvailabilityThreshold Int @default(2)
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 }

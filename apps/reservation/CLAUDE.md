@@ -3,8 +3,8 @@
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. **IN BUILD — Phases 1+2+3 shipped
 > 2026-07-03** (inventory foundation · Reservations/Holds · Rates & Restrictions: 4-level priority
 > incl. property-default fallback, booking-source-scoped rules, /rates CRUD, editable Rate +
-> resolved-Restrictions calendar rows, `stayViolation()` gate on search + holds). Next: **Phase 4 —
-> dashboard/metrics.** Cookie `revio_crs_session`; port 3002; gated on the `hasReservation`
+> resolved-Restrictions calendar rows, `stayViolation()` gate on search + holds). Phase 4 (dashboard/metrics: formula sheet in core, Reports+CSV,
+> Action Center, Forecast, Global Search) shipped too. Next: **Phase 5 — distribution + settings.** Cookie `revio_crs_session`; port 3002; gated on the `hasReservation`
 > entitlement. Gotcha: the RLS proxy (`lib/db.ts`) forwards `prisma.<model>.<op>` ONLY — no
 > `$transaction`.
 

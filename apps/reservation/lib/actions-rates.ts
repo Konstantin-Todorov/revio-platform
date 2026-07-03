@@ -167,6 +167,10 @@ export async function savePropertyDefaults(fd: FormData): Promise<void> {
     defAdvancePurchaseMin: optInt("defAdvancePurchaseMin"),
     defAdvancePurchaseMax: optInt("defAdvancePurchaseMax"),
     holdTtlMinutes: Math.min(Math.max(int(fd, "holdTtlMinutes", 30), 5), 240),
+    lowAvailabilityThreshold: Math.max(0, int(fd, "lowAvailabilityThreshold", 2)),
+    pickupOffsetDays: Math.min(Math.max(int(fd, "pickupOffsetDays", 7), 1), 90),
+    revenueDisplay: str(fd, "revenueDisplay") === "net" ? "net" : "gross",
+    countNoShowsAsSold: fd.get("countNoShowsAsSold") != null,
   };
   await prisma.propertyDefaults.upsert({
     where: { propertyId },

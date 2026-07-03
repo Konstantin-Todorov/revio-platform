@@ -1,105 +1,166 @@
 import Link from "next/link";
-import { BedDouble, CalendarOff, CalendarRange, Camera, TrendingDown } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, TrendingUp } from "lucide-react";
 import { getInventoryBoard } from "@/lib/data";
-import { prisma } from "@/lib/db";
-import { ensurePickupSnapshot, getPickupStatus } from "@/lib/pickup";
+import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolveRange, type RangePreset } from "@/lib/metrics";
+import { ensurePickupSnapshot } from "@/lib/pickup";
+import { releaseExpiredHolds } from "@/lib/holds";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Phase 1 dashboard: tonight's waterfall + low-availability watch + snapshot status. The full
- * metric cards (Occupancy/ADR/RevPAR/Pickup) arrive in Phase 4 — computed from the same records.
- */
-export default async function DashboardPage() {
-  const board = await getInventoryBoard({ days: 14 });
-  await ensurePickupSnapshot();
+const PRESETS: { key: RangePreset; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "tomorrow", label: "Tomorrow" },
+  { key: "7d", label: "7 days" },
+  { key: "30d", label: "30 days" },
+  { key: "mtd", label: "MTD" },
+  { key: "ytd", label: "YTD" },
+];
 
-  const [pickup, upcomingPeriods] = await Promise.all([
-    getPickupStatus(board.property.id, board.property.timezone),
-    prisma.roomInventoryPeriod.findMany({
-      where: { propertyId: board.property.id, dateTo: { gte: new Date(`${board.todayIso}T00:00:00Z`) } },
-      include: { roomType: { select: { name: true } } },
-      orderBy: { dateFrom: "asc" },
-      take: 6,
-    }),
+const pct = (v: number) => `${v.toFixed(v >= 10 ? 0 : 1)}%`;
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string; from?: string; to?: string }>;
+}) {
+  const sp = await searchParams;
+  await Promise.all([ensurePickupSnapshot(), releaseExpiredHolds()]);
+
+  const ops = await getOperations();
+  const range = resolveRange(ops.todayIso, sp.range, sp.from, sp.to);
+  const [metrics, board, f7, f30] = await Promise.all([
+    getRangeMetrics(range),
+    getInventoryBoard({ days: 14 }),
+    getForecast(ops.todayIso, 7),
+    getForecast(ops.todayIso, 30),
   ]);
+  const alerts = buildActionAlerts({
+    board,
+    threshold: ops.defaults?.lowAvailabilityThreshold ?? 2,
+    failedSyncs24h: ops.failedSyncs24h,
+    openErrors: ops.openErrors,
+  });
+  const c = metrics.cards;
+  const currency = ops.property.baseCurrency;
 
-  // Tonight = the first column of the board (the property-timezone today).
-  const tonight = board.sections.map((s) => s.cells[0]!);
-  const sum = (pick: (c: (typeof tonight)[number]) => number) => tonight.reduce((a, c) => a + pick(c), 0);
   const cards = [
-    { label: "Physical rooms", value: sum((c) => c.physical), sub: "across all room types" },
-    { label: "Available tonight", value: sum((c) => c.available), sub: "after out-of-order & closures" },
-    { label: "Sold tonight", value: sum((c) => c.confirmed), sub: "confirmed reservations" },
-    { label: "Remaining tonight", value: sum((c) => c.remaining), sub: "left to sell right now" },
+    { label: "Occupancy", value: pct(c.occupancyPct), sub: `${c.roomsSoldNights} of ${c.availableRoomNights} room-nights` },
+    { label: "Rooms sold", value: String(c.roomsSoldNights), sub: "room-nights in range" },
+    { label: "Rooms available", value: String(c.availableRoomNights), sub: "physical − OOO − closed" },
+    { label: `Room revenue (${c.revenueDisplay})`, value: money(c.revenueMinor, currency), sub: "accommodation only" },
+    { label: "ADR", value: money(c.adrMinor, currency), sub: "revenue ÷ rooms sold" },
+    { label: "RevPAR", value: money(c.revparMinor, currency), sub: "the #1 hotel KPI" },
+    { label: "Cancellation rate", value: pct(c.cancellationRatePct), sub: `${c.cancelledCount} of ${c.createdCount} created` },
+    { label: "Pickup · 30d", value: (c.pickup.value >= 0 ? "+" : "") + c.pickup.value, sub: c.pickup.vsDate ? `room-nights vs ${c.pickup.vsDate}` : "baseline recorded today" },
   ];
 
-  // Low-availability watch: next 14 days where a room type is nearly (or over) sold out.
-  const lowDates: { date: string; roomType: string; remaining: number }[] = [];
-  board.sections.forEach((s) =>
-    s.cells.forEach((c, i) => {
-      if (c.remaining <= 1) lowDates.push({ date: board.dates[i]!, roomType: s.roomType.name, remaining: c.remaining });
-    }),
-  );
+  const series = metrics.perDay.slice(0, 62);
+  const maxRevenue = Math.max(1, ...series.map((d) => d.revenueMinor));
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Dashboard"
-        subtitle={`${board.property.name} · today is ${board.todayIso} (property time)`}
+        subtitle={`${ops.property.name} · ${range.label} · every number from the shared formula sheet`}
         action={
-          <Link href="/inventory" className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-            <CalendarRange className="h-3.5 w-3.5" /> Inventory Calendar
+          <Link href="/reports" className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+            <TrendingUp className="h-3.5 w-3.5" /> Reports
           </Link>
         }
       />
 
+      {/* Date selector — applies to every widget below (spec rule). */}
+      <div className="flex flex-wrap items-center gap-2">
+        {PRESETS.map((p) => (
+          <Link
+            key={p.key}
+            href={`/dashboard?range=${p.key}`}
+            className={`rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+              range.preset === p.key ? "bg-brand-800 text-white" : "border border-surface-border bg-white text-ink-600 hover:bg-surface-muted"
+            }`}
+          >
+            {p.label}
+          </Link>
+        ))}
+        <form method="GET" className="ml-1 flex items-center gap-1.5">
+          <input type="hidden" name="range" value="custom" />
+          <input type="date" name="from" defaultValue={range.preset === "custom" ? range.start : ""} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
+          <span className="text-[11px] text-ink-400">→</span>
+          <input type="date" name="to" defaultValue={range.preset === "custom" ? range.endExcl.slice(0, 10) : ""} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
+          <button className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted">Apply</button>
+        </form>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cards.map((c) => (
-          <Card key={c.label} className="px-4 py-3.5">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{c.label}</div>
-            <div className={`tnum mt-1 text-[26px] font-bold leading-none ${c.label === "Remaining tonight" && c.value <= 0 ? "text-danger-600" : "text-ink-900"}`}>{c.value}</div>
-            <div className="mt-1.5 text-[11.5px] text-ink-400">{c.sub}</div>
+        {cards.map((card) => (
+          <Card key={card.label} className="px-4 py-3.5">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{card.label}</div>
+            <div className="tnum mt-1 text-[24px] font-bold leading-none text-ink-900">{card.value}</div>
+            <div className="mt-1.5 text-[11.5px] text-ink-400">{card.sub}</div>
           </Card>
         ))}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
+        {/* Occupancy + revenue per day */}
         <Card>
-          <CardHeader title="Low availability · next 14 days" />
-          {lowDates.length === 0 ? (
-            <div className="flex items-center gap-3 px-4 py-6 text-[13px] text-ink-500">
-              <BedDouble className="h-5 w-5 text-success-600" /> No room type is close to selling out in the next two weeks.
-            </div>
+          <CardHeader title={`Occupancy & revenue by day${metrics.perDay.length > 62 ? " (first 62 days)" : ""}`} />
+          {series.length <= 1 ? (
+            <div className="px-4 py-6 text-[13px] text-ink-500">Pick a multi-day range to see the daily trend.</div>
           ) : (
-            <ul className="divide-y divide-surface-border/60">
-              {lowDates.slice(0, 8).map((l, i) => (
-                <li key={i} className="flex items-center justify-between px-4 py-2.5 text-[13px]">
-                  <span className="font-semibold text-ink-900">{l.roomType}</span>
-                  <span className="tnum text-ink-500">{l.date}</span>
-                  <StatusPill tone={l.remaining < 0 ? "danger" : l.remaining === 0 ? "danger" : "warning"}>
-                    {l.remaining < 0 ? `overbooked by ${-l.remaining}` : l.remaining === 0 ? "sold out" : "1 left"}
-                  </StatusPill>
-                </li>
-              ))}
-            </ul>
+            <div className="px-4 py-4">
+              <div className="flex h-28 items-end gap-[2px]">
+                {series.map((d) => (
+                  <div key={d.date} className="group relative flex-1">
+                    <div
+                      className="w-full rounded-t bg-brand-600/80 transition-colors group-hover:bg-brand-700"
+                      style={{ height: `${Math.max(2, d.occupancyPct)}%` }}
+                      title={`${d.date} · ${d.occupancyPct.toFixed(0)}% · ${money(d.revenueMinor, currency)}`}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-1 flex justify-between text-[10px] text-ink-400">
+                <span>{series[0]!.date}</span>
+                <span>occupancy % per day · hover for revenue</span>
+                <span>{series[series.length - 1]!.date}</span>
+              </div>
+              <div className="mt-3 flex h-14 items-end gap-[2px]">
+                {series.map((d) => (
+                  <div key={d.date} className="flex-1">
+                    <div
+                      className="w-full rounded-t bg-warning-500/70"
+                      style={{ height: `${Math.max(2, (d.revenueMinor / maxRevenue) * 100)}%` }}
+                      title={`${d.date} · ${money(d.revenueMinor, currency)}`}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-1 text-center text-[10px] text-ink-400">revenue per day ({c.revenueDisplay})</div>
+            </div>
           )}
         </Card>
 
+        {/* Source mix */}
         <Card>
-          <CardHeader title="Out-of-order & closures" action={<Link href="/setup" className="text-[12px] font-semibold text-brand-700 hover:underline">Manage</Link>} />
-          {upcomingPeriods.length === 0 ? (
-            <div className="flex items-center gap-3 px-4 py-6 text-[13px] text-ink-500">
-              <CalendarOff className="h-5 w-5 text-ink-300" /> Nothing is out of order or closed from today on.
-            </div>
+          <CardHeader title="Source mix — revenue share" />
+          {metrics.sourceMix.length === 0 ? (
+            <div className="px-4 py-6 text-[13px] text-ink-500">No sold reservations in this range yet.</div>
           ) : (
-            <ul className="divide-y divide-surface-border/60">
-              {upcomingPeriods.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-[13px]">
-                  <span className="min-w-0 flex-1 truncate font-semibold text-ink-900">{p.roomType.name}</span>
-                  <span className="tnum shrink-0 text-ink-500">{p.dateFrom.toISOString().slice(0, 10)} → {p.dateTo.toISOString().slice(0, 10)}</span>
-                  <StatusPill tone={p.kind === "closure" ? "info" : "warning"}>{p.kind === "closure" ? `closed ×${p.rooms}` : `OOO ×${p.rooms}`}</StatusPill>
+            <ul className="space-y-2.5 px-4 py-4">
+              {metrics.sourceMix.map((s) => (
+                <li key={s.name}>
+                  <div className="flex items-baseline justify-between text-[12.5px]">
+                    <span className="font-semibold text-ink-900">{s.name}</span>
+                    <span className="tnum text-ink-500">
+                      {s.reservations} res · {s.roomNights} rn · {money(s.revenueMinor, currency)} · {pct(s.sharePct)}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-surface-sunken">
+                    <div className="h-full rounded-full bg-brand-600" style={{ width: `${Math.max(2, s.sharePct)}%` }} />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -107,27 +168,117 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader title="Pickup snapshots" />
-        <div className="flex items-start gap-3 px-4 py-4 text-[13px] text-ink-600">
-          {pickup.firstSnapshot ? (
-            <>
-              <Camera className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
-              <div>
-                Recording rooms sold per future date <span className="font-semibold text-ink-900">since {pickup.firstSnapshot}</span>
-                {pickup.latestSnapshot && pickup.latestSnapshot !== pickup.firstSnapshot && <> · latest {pickup.latestSnapshot}</>}
-                {pickup.todayRows > 0 && <> · today’s snapshot captured ({pickup.todayRows} data points)</>}.
-                <span className="text-ink-400"> Pickup &amp; Pace reports (Phase 4) will compare “sold now” against these snapshots — history builds from day one because it can’t be backfilled.</span>
-              </div>
-            </>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Action Center */}
+        <Card>
+          <CardHeader title="Action Center" />
+          {alerts.length === 0 ? (
+            <div className="px-4 py-6 text-[13px] text-ink-500">Nothing needs attention — no overbookings, sell-outs or sync failures.</div>
           ) : (
-            <>
-              <TrendingDown className="mt-0.5 h-5 w-5 shrink-0 text-ink-300" />
-              <div>No snapshots yet — the first one is taken automatically on the first visit (or nightly run) of each day.</div>
-            </>
+            <ul className="divide-y divide-surface-border/60">
+              {alerts.map((a, i) => (
+                <li key={i}>
+                  <Link href={a.href} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] transition-colors hover:bg-surface-muted">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${a.severity === "critical" ? "bg-danger-500" : a.severity === "warning" ? "bg-warning-500" : "bg-brand-600"}`} />
+                    <span className={a.severity === "critical" ? "font-semibold text-danger-600" : "text-ink-700"}>{a.message}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
           )}
-        </div>
-      </Card>
+          <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
+            Thresholds are Settings (low availability ≤ {ops.defaults?.lowAvailabilityThreshold ?? 2}) — tune them under Rates → Property defaults.
+          </p>
+        </Card>
+
+        {/* Forecast */}
+        <Card>
+          <CardHeader title="Forecast — the same data read forward" />
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                <th className="px-4 py-2.5">Window</th>
+                <th className="px-4 py-2.5 text-right">Occupancy</th>
+                <th className="px-4 py-2.5 text-right">Room-nights</th>
+                <th className="px-4 py-2.5 text-right">Revenue</th>
+                <th className="px-4 py-2.5 text-right">Arrivals</th>
+                <th className="px-4 py-2.5 text-right">Departures</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[f7, f30].map((f) => (
+                <tr key={f.days} className="border-b border-surface-border/60 last:border-0">
+                  <td className="px-4 py-2.5 font-semibold text-ink-900">Next {f.days} days</td>
+                  <td className="tnum px-4 py-2.5 text-right text-ink-700">{pct(f.occupancyPct)}</td>
+                  <td className="tnum px-4 py-2.5 text-right text-ink-700">{f.roomsSoldNights}</td>
+                  <td className="tnum px-4 py-2.5 text-right font-semibold text-ink-900">{money(f.revenueMinor, currency)}</td>
+                  <td className="tnum px-4 py-2.5 text-right text-ink-700">{f.arrivals}</td>
+                  <td className="tnum px-4 py-2.5 text-right text-ink-700">{f.departures}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
+            Expected values from confirmed bookings — not a prediction model.
+          </p>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title={`Arrivals today (${ops.arrivals.length}) · Departures today (${ops.departures.length})`} />
+          {ops.arrivals.length === 0 && ops.departures.length === 0 ? (
+            <div className="px-4 py-6 text-[13px] text-ink-500">No arrivals or departures today.</div>
+          ) : (
+            <ul className="divide-y divide-surface-border/60">
+              {ops.arrivals.map((l) => (
+                <li key={`a-${l.id}`} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px]">
+                  <ArrowDownLeft className="h-4 w-4 shrink-0 text-success-600" />
+                  <Link href={`/reservations/${l.reservation.id}`} className="font-semibold text-brand-700 hover:underline">{l.reservation.guestName}</Link>
+                  <span className="ml-auto text-ink-500">{l.roomType.name}{l.quantity > 1 ? ` ×${l.quantity}` : ""}</span>
+                </li>
+              ))}
+              {ops.departures.map((l) => (
+                <li key={`d-${l.id}`} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px]">
+                  <ArrowUpRight className="h-4 w-4 shrink-0 text-ink-400" />
+                  <Link href={`/reservations/${l.reservation.id}`} className="font-semibold text-brand-700 hover:underline">{l.reservation.guestName}</Link>
+                  <span className="ml-auto text-ink-500">{l.roomType.name}{l.quantity > 1 ? ` ×${l.quantity}` : ""}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader title="New & cancelled · last 24h" action={<Link href="/reservations" className="text-[12px] font-semibold text-brand-700 hover:underline">All reservations</Link>} />
+          {ops.newRes.length === 0 && ops.cancelledRes.length === 0 ? (
+            <div className="px-4 py-6 text-[13px] text-ink-500">No booking activity in the last 24 hours.</div>
+          ) : (
+            <ul className="divide-y divide-surface-border/60">
+              {ops.newRes.map((r) => (
+                <li key={r.id} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px]">
+                  <StatusPill tone={r.status === "cancelled" ? "neutral" : "success"}>{r.status === "cancelled" ? "cancelled" : "new"}</StatusPill>
+                  <Link href={`/reservations/${r.id}`} className="font-semibold text-brand-700 hover:underline">{r.guestName}</Link>
+                  <span className="ml-auto text-ink-500">{r.lines[0]?.roomType.name ?? "—"} · {money(r.totalMinor, r.currency)}</span>
+                </li>
+              ))}
+              {ops.cancelledRes.filter((r) => !ops.newRes.some((n) => n.id === r.id)).map((r) => (
+                <li key={r.id} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px]">
+                  <StatusPill tone="neutral">cancelled</StatusPill>
+                  <Link href={`/reservations/${r.id}`} className="font-semibold text-brand-700 hover:underline">{r.guestName}</Link>
+                  <span className="ml-auto text-ink-500">{r.lines[0]?.roomType.name ?? "—"} · {money(r.totalMinor, r.currency)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <p className="flex items-center gap-1.5 text-[11.5px] text-ink-400">
+        <AlertTriangle className="h-3.5 w-3.5" /> Avg length of stay {c.avgLosNights.toFixed(1)} nights · avg lead time {c.avgLeadDays.toFixed(0)} days ·
+        no-shows {ops.defaults?.countNoShowsAsSold === false ? "excluded from" : "count as"} sold ·{" "}
+        <Link href="/inventory" className="font-semibold text-brand-700 hover:underline"><CalendarRange className="mr-0.5 inline h-3 w-3" />Inventory Calendar</Link>
+      </p>
     </div>
   );
 }

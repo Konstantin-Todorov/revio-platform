@@ -20,10 +20,10 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     { href: "/guests", label: "Guests", icon: Users },
     { href: "/inventory", label: "Inventory Calendar", icon: CalendarRange },
     { href: "/rates", label: "Rates & Restrictions", icon: Tags },
+    { href: "/reports", label: "Reports", icon: BarChart3 },
     { href: "/setup", label: "Inventory Setup", icon: Wrench },
   ] },
   { title: "Coming next", items: [
-    { href: "/reports", label: "Reports", icon: BarChart3, soon: "Phase 4" },
     { href: "/distribution", label: "Distribution", icon: Share2, soon: "Phase 5" },
     { href: "/settings", label: "Settings", icon: Settings, soon: "Phase 5" },
   ] },
@@ -115,7 +115,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
-        Phase 3 · rates &amp; restrictions
+        Phase 4 · dashboard &amp; metrics
       </div>
       </aside>
     </>

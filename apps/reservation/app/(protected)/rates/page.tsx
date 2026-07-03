@@ -137,6 +137,18 @@ export default async function RatesPage() {
             <input type="checkbox" name="defCtd" defaultChecked={defaults?.defCtd ?? false} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Closed to departure
           </label>
           <div><label className={labelCls}>Hold TTL (minutes)</label><input type="number" name="holdTtlMinutes" min={5} max={240} defaultValue={defaults?.holdTtlMinutes ?? 30} className={inputCls} /></div>
+          <div><label className={labelCls}>Low-availability alert ≤</label><input type="number" name="lowAvailabilityThreshold" min={0} defaultValue={defaults?.lowAvailabilityThreshold ?? 2} className={inputCls} /></div>
+          <div><label className={labelCls}>Pickup compares vs (days ago)</label><input type="number" name="pickupOffsetDays" min={1} max={90} defaultValue={defaults?.pickupOffsetDays ?? 7} className={inputCls} /></div>
+          <div>
+            <label className={labelCls}>Revenue display</label>
+            <select name="revenueDisplay" defaultValue={defaults?.revenueDisplay ?? "gross"} className={inputCls}>
+              <option value="gross">Gross</option>
+              <option value="net">Net (− channel commission)</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
+            <input type="checkbox" name="countNoShowsAsSold" defaultChecked={defaults?.countNoShowsAsSold ?? true} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Count no-shows as sold
+          </label>
           <div className="col-span-2 flex items-center justify-between lg:col-span-4">
             <p className="text-[11.5px] text-ink-400">
               Priority: manual calendar edit → restriction rule → rate-plan default → <span className="font-semibold text-ink-600">these</span>.

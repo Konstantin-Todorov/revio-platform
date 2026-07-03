@@ -150,9 +150,21 @@ not yet wired into the app or deployed).
     level 3 correctly shadows level 4 (Standard's defMinLos=1 beats a property min of 2). **CM pushes
     now apply the property-default fallback too** (minLos/maxLos/CTA/CTD/stop-sell/AP in
     `buildAriUpdates`).
-  - ⬜ Phase 4 — dashboard/metrics (formula sheet, Action Center, Forecast, Reports w/ CSV export,
-    Global Search). ⬜ Phase 5 — distribution (ChannelManagerConnector, mapping, Sync/Error Center in
-    CRS) + Settings (Users & Permissions via PermissionRole, Taxes & Fees screen).
+  - ✅ **Phase 4 done (2026-07-03) — Dashboard & Metrics.** **Formula sheet ONCE in `@revio/core`**
+    (`metrics/formulas.ts`, 44/44 tests): room-nights w/ range clipping + prorated accommodation
+    revenue, occupancy, ADR, RevPAR (= ADR × occupancy, asserted), headline + room-night cancellation
+    rates, LOS, lead time, pickup, gross/net (− channel commission), no-shows-as-sold toggle.
+    `lib/metrics.ts` assembles DB → formulas (capacity = physical − OOO − closed; verified to the
+    room-night against SQL). **Dashboard**: date selector (Today/Tomorrow/7d/30d/MTD/YTD/custom)
+    driving every widget, 8 metric cards, occupancy+revenue day charts, source-mix share bars,
+    **Action Center** (thresholds = Settings incl. new `lowAvailabilityThreshold`), **Forecast**
+    (7d/30d, same data read forward), arrivals/departures today, new+cancelled 24h. **Reports** (5:
+    Performance / Pickup & Pace / Source / Cancellation / Availability) each with **CSV export**
+    (`/api/reports/export`, session-gated; Excel/PDF later). **Global Search** wired into the topbar
+    (guest/phone/email/company/room/channel/source/status → /search). Defaults form gained the metric
+    settings (no-shows toggle, gross/net, pickup offset, alert threshold).
+  - ⬜ Phase 5 — distribution (ChannelManagerConnector, mapping, Sync/Error Center in CRS) + Settings
+    (Users & Permissions via PermissionRole, Taxes & Fees screen).
 - **Then — Channex certification prep** (see the prep item above): do it AFTER RevioCRS, BEFORE the
   first real client goes live — cert has external lead time (Channex schedules a live screenshare), so
   don't leave it to the last minute; testing continues on the staging sandbox meanwhile.
