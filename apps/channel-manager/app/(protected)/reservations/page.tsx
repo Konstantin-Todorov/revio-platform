@@ -78,8 +78,8 @@ export default async function ReservationsPage({
                 const line = r.lines[0];
                 return (
                   <tr key={r.id} className="group border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
-                    <td className="px-4 py-3 font-semibold text-ink-900">{r.channel.name}</td>
-                    <td className="tnum px-4 py-3 text-ink-500">#{r.externalId}</td>
+                    <td className="px-4 py-3 font-semibold text-ink-900">{r.channel?.name ?? "Direct"}</td>
+                    <td className="tnum px-4 py-3 text-ink-500">#{r.externalId ?? r.id.slice(-6)}</td>
                     <td className="px-4 py-3 font-semibold text-ink-900">{r.guestName}</td>
                     <td className="px-4 py-3 text-ink-600">
                       {line ? <>{line.roomType.name}{line.quantity > 1 && <span className="ml-1 font-semibold text-brand-600">×{line.quantity}</span>}<span className="text-ink-400"> · {line.ratePlan.name}</span></> : "—"}

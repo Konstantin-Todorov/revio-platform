@@ -97,6 +97,13 @@ model Property {
   syncEvents          SyncEvent[]
   errorItems          ErrorItem[]
   auditEntries        AuditEntry[]
+  inventoryPeriods    RoomInventoryPeriod[]
+  holds               Hold[]
+  guests              Guest[]
+  bookingSources      BookingSource[]
+  taxesFees           TaxFee[]
+  pickupSnapshots     PickupSnapshot[]
+  defaults            PropertyDefaults?
 
   @@index([tenantId])
 }
@@ -125,6 +132,9 @@ model RoomType {
   ratePrices    RatePrice[]
   dailyCells    DailyCell[]
   resLines      ReservationLine[]
+  inventoryPeriods RoomInventoryPeriod[]
+  holds            Hold[]
+  pickupSnapshots  PickupSnapshot[]
 
   @@index([propertyId])
 }
@@ -257,8 +267,11 @@ model Channel {
   lastSyncAt          DateTime?
   errorCount          Int      @default(0)
   pendingCount        Int      @default(0)
+  // CRS reporting category this channel's bookings fall under (see BookingSource).
+  bookingSourceId     String?
 
-  property Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property      Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  bookingSource BookingSource? @relation(fields: [bookingSourceId], references: [id])
   mappings ProductMapping[]
   roomTypeMappings ChannelRoomTypeMapping[]
   ratePlanMappings ChannelRatePlanMapping[]
@@ -395,10 +408,14 @@ model Reservation {
   id         String   @id @default(cuid())
   tenantId   String
   propertyId String
-  channelId  String
-  externalId String
+  // Null for staff-entered bookings (Call Center / Direct / Corporate) — those never touch a CM.
+  channelId  String?
+  externalId String?
   guestName  String
-  status     String   @default("confirmed") // confirmed|modified|cancelled|failed_import|overbooked
+  // CM statuses: confirmed|modified|cancelled|failed_import|overbooked ("modified" = confirmed that
+  // was modified — a flag-as-status, still counts as sold). CRS lifecycle adds:
+  // draft|hold|expired|failed|no_show|archived (docs/CRS-REFERENCE.md "Reservation lifecycle").
+  status     String   @default("confirmed")
   // ORIGINAL booking values (what the guest was actually charged), captured at booking time.
   totalMinor Int
   currency   String   @default("EUR")
@@ -411,10 +428,20 @@ model Reservation {
   fxAt               DateTime?
   importedAt DateTime @default(now())
   syncStatus String   @default("imported")
+  // CRS fields (docs/CRS-REFERENCE.md). paymentGuarantee is a LABEL only — no card data in V1.
+  guestId          String?
+  bookingSourceId  String?
+  paymentGuarantee String? // card_on_file | company_account | prepaid_ota | none
+  notes            String?
+  cancelledAt      DateTime?
+  createdById      String? // staff user who entered a manual booking
 
   property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  channel  Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channel  Channel?          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  guest         Guest?         @relation(fields: [guestId], references: [id])
+  bookingSource BookingSource? @relation(fields: [bookingSourceId], references: [id])
   lines    ReservationLine[]
+  holds    Hold[]
 
   @@index([propertyId])
   @@index([channelId])
@@ -428,12 +455,185 @@ model ReservationLine {
   quantity      Int      @default(1)
   checkIn       DateTime @db.Date
   checkOut      DateTime @db.Date
+  // CRS: the line's accommodation price (whole stay, minor units) + guests staying. Null on legacy rows.
+  priceMinor    Int?
+  guestsCount   Int?
 
   reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   roomType    RoomType    @relation(fields: [roomTypeId], references: [id])
   ratePlan    RatePlan    @relation(fields: [ratePlanId], references: [id])
 
   @@index([reservationId])
+}
+
+// --- CRS: inventory periods, holds, guests, sources, taxes, snapshots ------
+// (docs/CRS-REFERENCE.md — all tenant-owned, RLS tenant_isolation added in the migration.)
+
+// Date-ranged unavailability for a room type: out-of-order (maintenance) or closure (seasonal).
+// Waterfall level 1: available = physical − OOO − closed. Separate from the permanent total.
+model RoomInventoryPeriod {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  roomTypeId String
+  kind       String // out_of_order | closure
+  dateFrom   DateTime @db.Date
+  dateTo     DateTime @db.Date // inclusive
+  rooms      Int      @default(1) // units affected (a closure usually = all units)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@index([roomTypeId, dateFrom])
+  @@index([propertyId])
+}
+
+// Temporary inventory lock, placed the INSTANT a room is selected (before the form saves).
+// Waterfall level 2: remaining = available − holds − confirmed. Expired holds are released by a job.
+model Hold {
+  id            String   @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  roomTypeId    String
+  reservationId String?
+  quantity      Int      @default(1)
+  checkIn       DateTime @db.Date
+  checkOut      DateTime @db.Date
+  status        String   @default("active") // active | converted | released | expired
+  expiresAt     DateTime
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType    RoomType     @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@index([propertyId, status])
+  @@index([roomTypeId, checkIn])
+}
+
+// Contact + booking history ONLY — hard scope line, not a CRM (no preferences/consent/loyalty).
+model Guest {
+  id              String   @id @default(cuid())
+  tenantId        String
+  propertyId      String
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String?
+  company         String?
+  specialRequests String? // free text
+  createdAt       DateTime @default(now())
+
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@index([propertyId, lastName])
+}
+
+// Reporting category each channel/booking belongs to (Direct, OTA, GDS, Call Center, Corporate,
+// Travel Agent). Channels map to a source; staff-entered bookings are tagged at creation.
+model BookingSource {
+  id         String  @id @default(cuid())
+  tenantId   String
+  propertyId String
+  name       String
+  category   String // direct | ota | gds | call_center | corporate | travel_agent
+  active     Boolean @default(true)
+
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  channels     Channel[]
+  reservations Reservation[]
+
+  @@unique([propertyId, name])
+  @@index([propertyId])
+}
+
+// Percent taxes use pct; fixed use amountMinor (money = integer minor units, never floats).
+// inclusion drives Room Revenue: "included" taxes are inside the displayed rate.
+model TaxFee {
+  id          String  @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  name        String
+  type        String // percent | fixed
+  pct         Float?
+  amountMinor Int?
+  basis       String // per_room | per_person | per_night | per_stay
+  inclusion   String  @default("excluded") // included | excluded
+  active      Boolean @default(true)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
+// Nightly record of rooms sold per future stay date. Pickup = sold NOW − sold at snapshot N days
+// ago. Snapshots can never be backfilled — the job runs from Phase 1 day one.
+model PickupSnapshot {
+  id           String   @id @default(cuid())
+  tenantId     String
+  propertyId   String
+  roomTypeId   String
+  snapshotDate DateTime @db.Date // property-timezone date the snapshot was taken
+  targetDate   DateTime @db.Date // the future stay date measured
+  roomsSold    Int
+  revenueMinor Int      @default(0)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, roomTypeId, snapshotDate, targetDate])
+  @@index([propertyId, targetDate])
+}
+
+// Property-level restriction fallback (priority level 4, below rate-plan defaults) + CRS settings.
+model PropertyDefaults {
+  id                    String  @id @default(cuid())
+  tenantId              String
+  propertyId            String  @unique
+  defStopSell           Boolean @default(false)
+  defMinLos             Int?
+  defMaxLos             Int?
+  defCta                Boolean @default(false)
+  defCtd                Boolean @default(false)
+  defAdvancePurchaseMin Int?
+  defAdvancePurchaseMax Int?
+  // Metric settings (docs/CRS-REFERENCE.md "Core metrics")
+  countNoShowsAsSold Boolean @default(true)
+  revenueDisplay     String  @default("gross") // gross | net
+  pickupOffsetDays   Int     @default(7)
+  holdTtlMinutes     Int     @default(30)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+// Roles = saved combinations of permission-group × access level (new roles are configuration,
+// not code). Groups: reservations|rates|inventory|restrictions|users|reports|distribution|finance.
+model PermissionRole {
+  id       String  @id @default(cuid())
+  tenantId String
+  name     String
+  builtin  Boolean @default(false)
+
+  access RoleAccess[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model RoleAccess {
+  id       String @id @default(cuid())
+  tenantId String
+  roleId   String
+  group    String
+  level    String @default("none") // none | view | edit
+
+  role PermissionRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, group])
 }
 
 // --- Monitoring: Sync / Error / Audit -------------------------------------

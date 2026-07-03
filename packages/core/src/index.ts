@@ -2,6 +2,7 @@
 
 export * from "./domain/types.js";
 export * from "./inventory/availability.js";
+export * from "./inventory/waterfall.js";
 export * from "./rates/derive.js";
 export * from "./rates/occupancy.js";
 export * from "./restrictions/resolve.js";

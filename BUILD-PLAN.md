@@ -88,14 +88,14 @@ not yet wired into the app or deployed).
   channel, status, check-in range); **User Management = own Operations screen** (/users; Settings keeps a
   pointer). ⬜ Remaining: channel logos (cosmetic), Settings reservation-delivery emails + arrival
   notifications (**needs email + scheduler infra** — pair with scheduled auto-pull).
-- ⬜ **Channex certification prep (before production keys).** Channex requires passing their **PMS
+- ⬜ **Channex certification prep (before production keys).** *(unchanged — scheduled after RevioCRS)* Channex requires passing their **PMS
   certification** (docs.channex.io → pms-certification-tests): 14 scenarios run from OUR REAL UI against
   the staging sandbox, task IDs submitted via form, then a live screenshare review → production access.
   Gaps to close when we schedule it: (a) **full-sync = 500 days in ≤2 API calls** (our Re-sync pushes 14
   days); (b) **delta-only pushes** (test 13 — our auto-push resends the whole 14-day window per edit);
   (c) **booking acknowledgments** on pull (test 11); (d) demonstrate rate-limit compliance. Note: the
   hotel's Channex account lives on **staging.channex.io** (app.channex.io is a separate production login).
-- **▶️ NEXT — RevioCRS** (founder spec **v2** captured 2026-07-02 → `docs/CRS-REFERENCE.md`: exact
+- **▶️ IN PROGRESS — RevioCRS** (founder spec **v2** captured 2026-07-02 → `docs/CRS-REFERENCE.md`: exact
   metric formulas, Hold lifecycle, modification rules, 4-level restriction priority, date-sensitive
   OOO/closure inventory, permission groups, performance targets, and its own 5-phase MVP order —
   property foundation + pickup-snapshot job → reservations/holds → rates → dashboard/metrics →
@@ -104,6 +104,26 @@ not yet wired into the app or deployed).
   (Physical−OOO−Closed−Holds−Confirmed — CM's date-level inventory is the collapsed form); ONE metrics
   module read by Dashboard + Reports. Same shell/auth/DB; `hasReservation` entitlement gates it;
   new tables carry tenantId + RLS policy; third Railway service.
+  - ✅ **Phase 1 done (2026-07-03) — inventory foundation.** `computeWaterfall` + `expandInventoryPeriods`
+    + `SOLD_STATUSES` in `@revio/core` (tested; CM's 4 sold-status filters now import the shared constant);
+    **full CRS data model settled in ONE migration** (`crs_data_model`): RoomInventoryPeriod, Hold, Guest,
+    BookingSource, TaxFee, PickupSnapshot, PropertyDefaults, PermissionRole/RoleAccess — all with
+    tenant_isolation RLS (verified cross-tenant = 0 rows) — plus Reservation extensions (nullable
+    channelId/externalId for staff-entered bookings, guestId, bookingSourceId, paymentGuarantee label,
+    cancelledAt, line priceMinor/guestsCount) and Channel.bookingSourceId. Third app `apps/reservation`
+    (port 3002, cookie `revio_crs_session`, gated on `hasReservation` — both demo tenants now entitled):
+    Dashboard (tonight's waterfall cards, low-availability watch, periods, snapshot status), **Inventory
+    Calendar** (Physical/OOO/Closed/Available/Sold/Remaining per room type × date, manual-override dot),
+    **Inventory Setup** (physical counts + OOO/closure period CRUD with audit + sync events). **Pickup
+    snapshot job** live from day one: lazy-triggered per property-timezone day on Dashboard/Inventory
+    loads + `POST /api/jobs/pickup` (CRON_SECRET-gated) for scheduled runs; rows only where sold > 0.
+    Verified end-to-end on dev (add period → availability drops on exactly the inclusive range → delete
+    restores; audit + sync rows written).
+  - ⬜ Phase 2 — Reservations: create/modify/cancel + **Hold mechanism** + lifecycle + hold-expiry job +
+    Availability Search (call-center entry). ⬜ Phase 3 — rates/restrictions (+ property-default fallback,
+    booking-source scope). ⬜ Phase 4 — dashboard/metrics (formula sheet). ⬜ Phase 5 — distribution
+    (ChannelManagerConnector). Note: CM pushes don't subtract OOO/holds yet — wire in Phase 2 when holds
+    exist (one spot: `apps/channel-manager/lib/connectivity.ts` sold derivation).
 - **Then — Channex certification prep** (see the prep item above): do it AFTER RevioCRS, BEFORE the
   first real client goes live — cert has external lead time (Channex schedules a live screenshare), so
   don't leave it to the last minute; testing continues on the staging sandbox meanwhile.

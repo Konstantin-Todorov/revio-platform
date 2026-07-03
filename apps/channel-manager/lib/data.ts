@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { deriveRate, isAdvancePurchaseClosed, type DerivedRateConfig } from "@revio/core";
+import { deriveRate, isAdvancePurchaseClosed, SOLD_STATUSES, type DerivedRateConfig } from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -157,7 +157,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
     prisma.reservationLine.findMany({
       where: {
         roomTypeId: { in: rtIds },
-        reservation: { propertyId, status: { in: ["confirmed", "modified", "overbooked"] } },
+        reservation: { propertyId, status: { in: [...SOLD_STATUSES] } },
         checkIn: { lte: end },
         checkOut: { gt: start },
       },

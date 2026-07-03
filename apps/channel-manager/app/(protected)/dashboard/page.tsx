@@ -151,11 +151,11 @@ export default async function DashboardPage() {
               {reservations.slice(0, 5).map((r) => (
                 <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
                   <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-50 text-[11px] font-bold text-brand-700">
-                    {CHANNEL_INITIALS[r.channel.code] ?? r.channel.name[0]}
+                    {r.channel ? (CHANNEL_INITIALS[r.channel.code] ?? r.channel.name[0]) : "D"}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[12.5px] font-semibold text-ink-900">{r.guestName}</div>
-                    <div className="tnum text-[11px] text-ink-400">#{r.externalId}</div>
+                    <div className="tnum text-[11px] text-ink-400">#{r.externalId ?? r.id.slice(-6)}</div>
                   </div>
                   <div className="text-right">
                     <div className="tnum text-[12.5px] font-semibold text-ink-900">{money(r.totalMinor, r.currency)}</div>

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
-import { computeAvailability, deriveRate, isOverbooking, type DerivedRateConfig } from "@revio/core";
+import { computeAvailability, deriveRate, isOverbooking, SOLD_STATUSES, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, strList, eachDate, utcDay } from "./mutation-helpers";
 
@@ -180,7 +180,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
     prisma.reservationLine.findMany({
       where: {
         roomTypeId,
-        reservation: { propertyId, status: { in: ["confirmed", "modified", "overbooked"] } },
+        reservation: { propertyId, status: { in: [...SOLD_STATUSES] } },
         checkIn: { lt: checkOutDate },
         checkOut: { gt: checkInDate },
       },
@@ -241,7 +241,7 @@ export async function cancelReservation(fd: FormData): Promise<void> {
   // (inventory − sold) restores itself — no manual inventory edit needed.
   await prisma.reservation.update({ where: { id }, data: { status: "cancelled" } });
 
-  await recordPush(propertyId, tenantId, `Availability restored after cancellation (${res.channel.name})`);
+  await recordPush(propertyId, tenantId, `Availability restored after cancellation (${res.channel?.name ?? "Direct"})`);
   await logAudit(propertyId, tenantId, { entity: `Reservation · ${res.guestName}`, field: "cancel", newValue: "cancelled" });
   revalidateCalendar();
 }

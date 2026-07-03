@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { forSystem, decryptSecret } from "@revio/db";
-import { computeAvailability, deriveRate, isAdvancePurchaseClosed, type AriUpdate, type DerivedRateConfig } from "@revio/core";
+import { computeAvailability, deriveRate, isAdvancePurchaseClosed, SOLD_STATUSES, type AriUpdate, type DerivedRateConfig } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "@revio/connectivity";
 
 /** How many days of ARI a manual Re-sync pushes. */
@@ -76,7 +76,7 @@ export async function syncChannel(channelId: string): Promise<SyncOutcome> {
     prisma.dailyCell.findMany({ where: { roomTypeId: { in: roomTypeIds }, date: { gte: start, lte: end } } }),
     prisma.ratePrice.findMany({ where: { propertyId, date: { gte: start, lte: end } } }),
     prisma.reservationLine.findMany({
-      where: { roomTypeId: { in: roomTypeIds }, reservation: { propertyId, status: { in: ["confirmed", "modified", "overbooked"] } } },
+      where: { roomTypeId: { in: roomTypeIds }, reservation: { propertyId, status: { in: [...SOLD_STATUSES] } } },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
     }),
   ]);
@@ -329,7 +329,7 @@ export async function pullChannel(channelId: string): Promise<PullOutcome> {
         const inventory = cell?.inventory ?? room?.roomType.totalRooms ?? 0;
         const soldAgg = await prisma.reservationLine.aggregate({
           _sum: { quantity: true },
-          where: { roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d }, reservation: { status: { in: ["confirmed", "modified", "overbooked"] } } },
+          where: { roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d }, reservation: { status: { in: [...SOLD_STATUSES] } } },
         });
         const sold = soldAgg._sum.quantity ?? 0;
         if (inventory - (sold + line.quantity) < 0) overbooked = true;

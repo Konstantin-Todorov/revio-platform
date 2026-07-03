@@ -38,6 +38,8 @@ async function main() {
   console.log("Resetting demo data…");
   // Truncate everything in one statement so FK order doesn't matter (re-runnable seed).
   const tables = [
+    "PickupSnapshot", "Hold", "RoomInventoryPeriod", "Guest", "RoleAccess", "PermissionRole",
+    "TaxFee", "PropertyDefaults", "BookingSource",
     "AuditEntry", "ErrorItem", "SyncEvent", "ReservationLine", "Reservation",
     "RestrictionRule", "DailyCell", "RatePrice", "ProductMapping", "ChannelRoomTypeMapping", "ChannelRatePlanMapping", "OccupancyAdjustment",
     "RatePlanRoomType", "RatePlan", "MealPlan", "CancellationPolicy", "RoomType",
@@ -60,7 +62,7 @@ async function main() {
       name: "Hotel Sofia Group",
       slug: "hotel-sofia",
       hasChannelManager: true,
-      hasReservation: false,
+      hasReservation: true,
       hasPms: false,
       users: {
         create: [
@@ -327,9 +329,34 @@ async function main() {
     ],
   });
 
+  // --- CRS (RevioCRS Phase 1): inventory periods, sources, defaults, taxes ---
+  await prisma.roomInventoryPeriod.createMany({
+    data: [
+      { ...t, roomTypeId: rtByCode["DDR"]!.id, kind: "out_of_order", dateFrom: addDays(monday, 3), dateTo: addDays(monday, 7), rooms: 2, note: "Bathroom renovation rooms 204-205" },
+      { ...t, roomTypeId: rtByCode["APT"]!.id, kind: "closure", dateFrom: addDays(monday, 21), dateTo: addDays(monday, 30), rooms: 5, note: "Studio wing seasonal closure" },
+    ],
+  });
+  const sourceSpec = [
+    { name: "Direct", category: "direct" },
+    { name: "OTA", category: "ota" },
+    { name: "Call Center", category: "call_center" },
+    { name: "Corporate", category: "corporate" },
+    { name: "Travel Agent", category: "travel_agent" },
+  ];
+  const sources: Record<string, { id: string }> = {};
+  for (const src of sourceSpec) sources[src.category] = await prisma.bookingSource.create({ data: { ...t, ...src } });
+  await prisma.channel.updateMany({ where: { propertyId }, data: { bookingSourceId: sources["ota"]!.id } });
+  await prisma.propertyDefaults.create({ data: { ...t, defMinLos: 1 } });
+  await prisma.taxFee.createMany({
+    data: [
+      { ...t, name: "City tax", type: "fixed", amountMinor: 150, basis: "per_person", inclusion: "excluded" },
+      { ...t, name: "VAT 9%", type: "percent", pct: 9, basis: "per_stay", inclusion: "included" },
+    ],
+  });
+
   // --- Second tenant: Black Sea Resort (proves tenant isolation) ----------
   const tenant2 = await prisma.tenant.create({
-    data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true,
+    data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true, hasReservation: true,
       users: { create: [{ name: "Resort Owner", email: "owner@blacksea.demo", role: "owner", passwordHash: pw }] } },
   });
   const property2 = await prisma.property.create({

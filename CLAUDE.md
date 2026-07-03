@@ -108,13 +108,17 @@ design/      Atlas/Haven/Pulse handoff prototypes + Revio brand
 
 Self-hosted email + password (bcryptjs) + signed JWT session cookies (jose). `getSession()` /
 `getOperatorSession()` now resolve **real** identity; `middleware.ts` gates by cookie; `/login` lives in
-each app outside the `(protected)` route group. CM cookie `revio_session`, operator `revio_op_session`.
+each app outside the `(protected)` route group. CM cookie `revio_session`, operator `revio_op_session`,
+CRS `revio_crs_session`.
 `AUTH_SECRET` is set per Railway service. **Demo logins (password `revio1234`):** RevioLink →
 `admin@hotelsofia.demo` or `owner@blacksea.demo`; Operator → `operator@revio.app`.
 
 ## Status
 
 RevioLink + Operator Console are **built, tested, live, and behind login** with GitHub auto-deploy.
+**RevioCRS is in build — Phase 1 (inventory foundation) shipped 2026-07-03**: availability waterfall in
+`@revio/core`, full CRS data model + RLS in one migration, `apps/reservation` (port 3002) with Dashboard /
+Inventory Calendar / Inventory Setup, pickup-snapshot job from day one (see `apps/reservation/CLAUDE.md`).
 Operator onboards clients; **clients self-manage staff (roles) + properties** from RevioLink Settings.
 Both apps now have a **responsive (mobile) shell**; **RLS** is built + verified locally (prod = Phase 2,
 `DEPLOY.md`); and the **Channex adapter is built + live-verified against the sandbox** (`@revio/connectivity`,

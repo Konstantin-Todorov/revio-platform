@@ -1,6 +1,9 @@
 # App: Reservation System — product name **RevioCRS** (`@revio/reservation`)
 
-> Part of the **Revio platform** — read the root `CLAUDE.md` first. **NEXT BUILD (CM V2 is done).**
+> Part of the **Revio platform** — read the root `CLAUDE.md` first. **IN BUILD — Phase 1 shipped
+> 2026-07-03** (inventory foundation: waterfall in `@revio/core`, full CRS schema + RLS, Dashboard /
+> Inventory Calendar / Inventory Setup on port 3002, pickup-snapshot job). Next: **Phase 2 —
+> Reservations + Holds.** Cookie `revio_crs_session`; gated on the `hasReservation` entitlement.
 
 **Full V1 spec: `docs/CRS-REFERENCE.md` (founder spec v2, 2026-07-02)** — exact metric formulas,
 reservation lifecycle, system rules, sitemap, and the 5-phase MVP build order. Read it before writing
