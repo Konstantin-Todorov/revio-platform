@@ -16,8 +16,13 @@ inventory/rate/restriction query inside an app, stop — add it here instead, be
   parent changes, unless a date was manually overridden.
 - `restrictions/` — **priority resolution**: manual edit / Bulk Update > Restriction Rule >
   Rate Plan default.
+- `metrics/` — the CRS **formula sheet** (occupancy, ADR, RevPAR, cancellation rates, LOS, lead time,
+  pickup; room-nights with range clipping + prorated revenue). Dashboard and Reports read the SAME
+  functions — the numbers cannot disagree.
 - `adapters/` — the `ChannelAdapter` interface every OTA implements, plus `MockChannelAdapter` so the
-  whole loop runs on demo data before any real certification.
+  whole loop runs on demo data before any real certification; and `ChannelManagerConnector` — the
+  CRS's one way out to distribution (`RevioLinkInternalConnector` = shared-DB no-op; third-party CMs
+  implement the same interface).
 
 ## Rules
 - **Pure and tested.** No DB, no HTTP, no framework imports here. Functions in / values out, so the

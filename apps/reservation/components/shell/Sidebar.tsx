@@ -23,9 +23,9 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     { href: "/reports", label: "Reports", icon: BarChart3 },
     { href: "/setup", label: "Inventory Setup", icon: Wrench },
   ] },
-  { title: "Coming next", items: [
-    { href: "/distribution", label: "Distribution", icon: Share2, soon: "Phase 5" },
-    { href: "/settings", label: "Settings", icon: Settings, soon: "Phase 5" },
+  { title: "Configuration", items: [
+    { href: "/distribution", label: "Distribution", icon: Share2 },
+    { href: "/settings", label: "Settings", icon: Settings },
   ] },
 ];
 
@@ -115,7 +115,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
-        Phase 4 · dashboard &amp; metrics
+        RevioCRS V1 · all 5 phases live
       </div>
       </aside>
     </>

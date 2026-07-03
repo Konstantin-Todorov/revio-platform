@@ -163,8 +163,17 @@ not yet wired into the app or deployed).
     (`/api/reports/export`, session-gated; Excel/PDF later). **Global Search** wired into the topbar
     (guest/phone/email/company/room/channel/source/status → /search). Defaults form gained the metric
     settings (no-shows toggle, gross/net, pickup offset, alert threshold).
-  - ⬜ Phase 5 — distribution (ChannelManagerConnector, mapping, Sync/Error Center in CRS) + Settings
-    (Users & Permissions via PermissionRole, Taxes & Fees screen).
+  - ✅ **Phase 5 done (2026-07-03) — Distribution + Settings. RevioCRS V1 COMPLETE (all 5 phases).**
+    `ChannelManagerConnector` in `@revio/core` (47/47 tests): the interface + `RevioLinkInternalConnector`
+    (push = no-op acknowledgement — shared inventory core; third-party CMs implement the same interface,
+    one integration pattern) + `createCmConnector` factory. CRS **/distribution**: Connected-CM card
+    (internal transport explained), channels read-only table, recent sync activity, unresolved errors —
+    per-OTA config stays in the CM (spec rule). CRS **/settings**: **Users & Permissions matrix** (the 8
+    groups × None/View/Edit; 5 built-in V1 roles seeded — Owner/Admin/Revenue Manager/Reservations
+    Agent/Read-only; custom roles = configuration via savePermissionRole; built-ins protected), staff
+    list (managed in RevioLink — one account across products), **Taxes & Fees CRUD** (percent|fixed,
+    basis, included|excluded), property profile summary. Gotcha re-hit: `"use server"` files export
+    async functions ONLY → `PERMISSION_GROUPS` moved to `lib/permissions.ts`.
 - **Then — Channex certification prep** (see the prep item above): do it AFTER RevioCRS, BEFORE the
   first real client goes live — cert has external lead time (Channex schedules a live screenshare), so
   don't leave it to the last minute; testing continues on the staging sandbox meanwhile.

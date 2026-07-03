@@ -364,6 +364,21 @@ async function main() {
     },
   });
 
+  // Phase 5: the spec's V1 permission roles — roles are configuration (group × level), not code.
+  const GROUPS = ["reservations", "rates", "inventory", "restrictions", "users", "reports", "distribution", "finance"];
+  const V1_ROLES: [string, Record<string, string>][] = [
+    ["Owner", Object.fromEntries(GROUPS.map((g) => [g, "edit"]))],
+    ["Admin", { ...Object.fromEntries(GROUPS.map((g) => [g, "edit"])), finance: "view" }],
+    ["Revenue Manager", { rates: "edit", inventory: "edit", restrictions: "edit", reports: "edit", reservations: "view", distribution: "view", users: "none", finance: "none" }],
+    ["Reservations Agent", { reservations: "edit", reports: "view", inventory: "view", rates: "none", restrictions: "none", users: "none", distribution: "none", finance: "none" }],
+    ["Read-only", Object.fromEntries(GROUPS.map((g) => [g, "view"]))],
+  ];
+  for (const [name, levels] of V1_ROLES) {
+    await prisma.permissionRole.create({
+      data: { tenantId, name, builtin: true, access: { create: GROUPS.map((g) => ({ tenantId, group: g, level: levels[g] ?? "none" })) } },
+    });
+  }
+
   // Phase 2 demo: a guest with a direct call-center reservation (no channel).
   const demoGuest = await prisma.guest.create({
     data: { ...t, firstName: "Elena", lastName: "Petrova", email: "elena.petrova@example.com", phone: "+359 88 555 0101", specialRequests: "High floor, away from the elevator" },
