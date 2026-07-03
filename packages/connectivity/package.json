@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "channex:setup": "tsx scripts/channex-setup.ts",
-    "channex:smoke": "tsx scripts/channex-smoke.ts"
+    "channex:smoke": "tsx scripts/channex-smoke.ts",
+    "channex:fill": "tsx scripts/channex-fill.ts",
+    "channex:book": "tsx scripts/channex-test-booking.ts"
   },
   "dependencies": {
     "@revio/core": "workspace:*"

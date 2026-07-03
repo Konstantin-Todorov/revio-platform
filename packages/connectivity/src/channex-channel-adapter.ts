@@ -100,6 +100,16 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     return data.map(toRawReservation);
   }
 
+  /**
+   * Acknowledge a booking revision so Channex stops re-sending it (Channex re-delivers unacked
+   * revisions for 30 min, then emails a warning). Required for PMS certification. The revision id is
+   * `attributes.revision_id` on a pulled booking.
+   */
+  async acknowledgeBooking(revisionId: string): Promise<{ ok: boolean; error?: string }> {
+    const res = await this.post(`/booking_revisions/${revisionId}/ack`, {});
+    return res.ok ? { ok: true } : { ok: false, error: res.error ?? `HTTP ${res.status}` };
+  }
+
   // --- HTTP --------------------------------------------------------------
 
   private headers(): Record<string, string> {

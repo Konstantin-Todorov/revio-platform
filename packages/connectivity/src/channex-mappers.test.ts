@@ -71,31 +71,57 @@ describe("unsupported restrictions", () => {
 });
 
 describe("Channex booking -> RawReservation", () => {
-  it("maps status, guest, rooms->lines, and amount to minor units", () => {
+  it("unwraps the JSON:API attributes envelope and derives nights from the room days map", () => {
+    // Shape returned by the real GET /api/v1/bookings — id at top level, everything else nested.
     const booking: ChannexBooking = {
       id: "booking-uuid",
-      unique_id: "BDC-123",
-      status: "new",
-      amount: "220.00",
-      currency: "GBP",
-      customer: { name: "Ada", surname: "Lovelace" },
-      rooms: [
-        { room_type_id: "room-uuid", rate_plan_id: "rate-uuid", checkin_date: "2026-07-01", checkout_date: "2026-07-03" },
-      ],
+      attributes: {
+        status: "new",
+        amount: "240.00",
+        currency: "EUR",
+        arrival_date: "2026-07-06",
+        departure_date: "2026-07-08",
+        customer: { name: "Ivan", surname: "Petrov" },
+        rooms: [
+          {
+            room_type_id: "room-uuid",
+            rate_plan_id: "rate-uuid",
+            amount: "240.00",
+            days: { "2026-07-06": "120.00", "2026-07-07": "120.00" },
+          },
+        ],
+      },
     };
     expect(toRawReservation(booking)).toEqual({
       externalId: "booking-uuid",
-      guestName: "Ada Lovelace",
+      guestName: "Ivan Petrov",
       status: "confirmed",
-      totalMinor: 22000,
-      currency: "GBP",
+      totalMinor: 24000,
+      currency: "EUR",
       lines: [
-        { externalRoomId: "room-uuid", externalRateId: "rate-uuid", quantity: 1, checkIn: "2026-07-01", checkOut: "2026-07-03" },
+        // checkout = last night (07-07) + 1 day
+        { externalRoomId: "room-uuid", externalRateId: "rate-uuid", quantity: 1, checkIn: "2026-07-06", checkOut: "2026-07-08" },
       ],
     });
   });
 
-  it("maps cancelled status and falls back on a missing guest name", () => {
+  it("falls back to booking-level arrival/departure when a room has no days map", () => {
+    const r = toRawReservation({
+      id: "b3",
+      attributes: {
+        status: "new",
+        amount: "100.00",
+        currency: "EUR",
+        arrival_date: "2026-08-01",
+        departure_date: "2026-08-02",
+        customer: { name: "Sam", surname: "Ng" },
+        rooms: [{ room_type_id: "r", rate_plan_id: "p" }],
+      },
+    });
+    expect(r.lines[0]).toMatchObject({ checkIn: "2026-08-01", checkOut: "2026-08-02" });
+  });
+
+  it("still accepts a flat (hoisted) shape and falls back on a missing guest name", () => {
     const r = toRawReservation({ id: "b2", status: "cancelled", rooms: [] });
     expect(r.status).toBe("cancelled");
     expect(r.guestName).toBe("Channel Guest");

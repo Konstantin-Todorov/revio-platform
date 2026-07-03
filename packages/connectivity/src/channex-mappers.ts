@@ -32,21 +32,51 @@ export interface ChannexAvailabilityValue {
   availability: number;
 }
 
-/** Subset of a Channex booking (GET /api/v1/bookings) that we map into a domain reservation. */
+/**
+ * A Channex booking as returned by GET /api/v1/bookings — a JSON:API resource: the id sits at the
+ * top level and every other field lives under `attributes`. `toRawReservation` tolerates a flat
+ * object too (attributes hoisted) so unit tests can pass a plain shape.
+ */
 export interface ChannexBooking {
   id: string;
-  unique_id?: string;
-  status: string; // "new" | "modified" | "cancelled"
-  amount?: string; // decimal string, e.g. "220.00"
+  attributes?: ChannexBookingAttributes;
+  // Flat fallback (tests / hoisted payloads): attributes may appear inline.
+  status?: string;
+  amount?: string;
   currency?: string;
-  customer?: { name?: string; surname?: string } | null;
-  rooms?: Array<{
-    room_type_id: string;
-    rate_plan_id: string;
-    checkin_date: string;
-    checkout_date: string;
-    amount?: string;
-  }>;
+  arrival_date?: string;
+  departure_date?: string;
+  customer?: ChannexCustomer | null;
+  rooms?: ChannexBookingRoom[];
+}
+
+interface ChannexCustomer {
+  name?: string;
+  surname?: string;
+}
+
+interface ChannexBookingRoom {
+  room_type_id: string;
+  rate_plan_id: string;
+  amount?: string;
+  /** Map of stay-night → nightly price, e.g. {"2026-07-06":"120.00"}. Channex omits explicit
+   *  check-in/check-out on the room; the nights come from these keys. */
+  days?: Record<string, string>;
+}
+
+interface ChannexBookingAttributes {
+  status?: string; // "new" | "modified" | "cancelled"
+  amount?: string; // decimal string, e.g. "240.00"
+  currency?: string;
+  arrival_date?: string;
+  departure_date?: string;
+  customer?: ChannexCustomer | null;
+  rooms?: ChannexBookingRoom[];
+}
+
+/** Add one calendar day to a YYYY-MM-DD string (last stay night → checkout date). */
+function nextDay(ymd: string): string {
+  return new Date(new Date(`${ymd}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
 }
 
 // --- ARI: domain -> Channex ------------------------------------------------
@@ -100,19 +130,27 @@ const STATUS_MAP: Record<string, RawReservation["status"]> = {
 };
 
 export function toRawReservation(b: ChannexBooking): RawReservation {
-  const name = [b.customer?.name, b.customer?.surname].filter(Boolean).join(" ").trim();
+  // Unwrap the JSON:API envelope: real responses nest everything under `attributes`; tests may
+  // pass a flat object. The id always stays at the top level.
+  const a: ChannexBookingAttributes = b.attributes ?? b;
+  const name = [a.customer?.name, a.customer?.surname].filter(Boolean).join(" ").trim();
   return {
     externalId: b.id,
     guestName: name || "Channel Guest",
-    status: STATUS_MAP[b.status] ?? "confirmed",
-    lines: (b.rooms ?? []).map((room) => ({
-      externalRoomId: room.room_type_id,
-      externalRateId: room.rate_plan_id,
-      quantity: 1,
-      checkIn: room.checkin_date,
-      checkOut: room.checkout_date,
-    })),
-    totalMinor: b.amount != null ? Math.round(Number(b.amount) * 100) : 0,
-    currency: b.currency ?? "EUR",
+    status: STATUS_MAP[a.status ?? ""] ?? "confirmed",
+    lines: (a.rooms ?? []).map((room) => {
+      const nights = Object.keys(room.days ?? {}).sort();
+      const checkIn = nights[0] ?? a.arrival_date ?? "";
+      const checkOut = nights.length ? nextDay(nights[nights.length - 1]!) : (a.departure_date ?? "");
+      return {
+        externalRoomId: room.room_type_id,
+        externalRateId: room.rate_plan_id,
+        quantity: 1,
+        checkIn,
+        checkOut,
+      };
+    }),
+    totalMinor: a.amount != null ? Math.round(Number(a.amount) * 100) : 0,
+    currency: a.currency ?? "EUR",
   };
 }
