@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { forSystem, decryptSecret } from "@revio/db";
-import { computeAvailability, deriveRate, isAdvancePurchaseClosed, SOLD_STATUSES, type AriUpdate, type DerivedRateConfig } from "@revio/core";
+import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, SOLD_STATUSES, type AriUpdate, type DerivedRateConfig } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "@revio/connectivity";
 
 /** How many days of ARI a manual Re-sync pushes. */
@@ -72,11 +72,16 @@ export async function syncChannel(channelId: string): Promise<SyncOutcome> {
   const roomTypeIds = roomMaps.map((m) => m.roomTypeId);
 
   // Pull everything for the horizon up front, then assemble in memory.
-  const [cells, prices, resLines] = await Promise.all([
+  const [cells, prices, resLines, periods, holds] = await Promise.all([
     prisma.dailyCell.findMany({ where: { roomTypeId: { in: roomTypeIds }, date: { gte: start, lte: end } } }),
     prisma.ratePrice.findMany({ where: { propertyId, date: { gte: start, lte: end } } }),
     prisma.reservationLine.findMany({
       where: { roomTypeId: { in: roomTypeIds }, reservation: { propertyId, status: { in: [...SOLD_STATUSES] } } },
+      select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
+    }),
+    prisma.roomInventoryPeriod.findMany({ where: { roomTypeId: { in: roomTypeIds }, dateFrom: { lte: end }, dateTo: { gte: start } } }),
+    prisma.hold.findMany({
+      where: { roomTypeId: { in: roomTypeIds }, status: "active", expiresAt: { gt: new Date() }, checkIn: { lte: end }, checkOut: { gt: start } },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
     }),
   ]);
@@ -107,14 +112,24 @@ export async function syncChannel(channelId: string): Promise<SyncOutcome> {
   }
 
   const updates: AriUpdate[] = [];
+  const dateKeys = dates.map(ymd);
   for (const rm of roomMaps) {
     const rt = rm.roomType;
+    const periodByDate = expandInventoryPeriods(
+      periods.filter((p) => p.roomTypeId === rt.id).map((p) => ({ kind: p.kind, dateFrom: ymd(p.dateFrom), dateTo: ymd(p.dateTo), rooms: p.rooms })),
+      dateKeys,
+    );
     for (const d of dates) {
       const k = ymd(d);
       const cell = cellMap.get(cellKey(rt.id, k));
-      const inventory = cell?.inventory ?? rt.totalRooms;
       const sold = resLines.filter((l) => l.roomTypeId === rt.id && l.checkIn <= d && d < l.checkOut).reduce((s, l) => s + l.quantity, 0);
-      const bookable = computeAvailability({ inventory, confirmedUnits: sold });
+      const held = holds.filter((h) => h.roomTypeId === rt.id && h.checkIn <= d && d < h.checkOut).reduce((s, h) => s + h.quantity, 0);
+      const { outOfOrder, closed } = periodByDate.get(k)!;
+      const bookable = Math.max(0, computeWaterfall({
+        physical: rt.totalRooms, outOfOrder, closed,
+        manualSellLimit: cell?.inventory ?? null,
+        holds: held, confirmed: sold,
+      }).remaining);
 
       for (const pm of rateMaps) {
         const rp = pm.ratePlan;
@@ -325,14 +340,27 @@ export async function pullChannel(channelId: string): Promise<PullOutcome> {
       const room = roomMaps.find((m) => m.roomTypeId === line.roomTypeId);
       for (let t = line.checkIn.getTime(); t < line.checkOut.getTime(); t += DAY_MS) {
         const d = new Date(t);
-        const cell = await prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date: d } } });
-        const inventory = cell?.inventory ?? room?.roomType.totalRooms ?? 0;
-        const soldAgg = await prisma.reservationLine.aggregate({
-          _sum: { quantity: true },
-          where: { roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d }, reservation: { status: { in: [...SOLD_STATUSES] } } },
-        });
-        const sold = soldAgg._sum.quantity ?? 0;
-        if (inventory - (sold + line.quantity) < 0) overbooked = true;
+        const [cell, soldAgg, heldAgg, dayPeriods] = await Promise.all([
+          prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date: d } } }),
+          prisma.reservationLine.aggregate({
+            _sum: { quantity: true },
+            where: { roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d }, reservation: { status: { in: [...SOLD_STATUSES] } } },
+          }),
+          prisma.hold.aggregate({
+            _sum: { quantity: true },
+            where: { roomTypeId: line.roomTypeId, status: "active", expiresAt: { gt: new Date() }, checkIn: { lte: d }, checkOut: { gt: d } },
+          }),
+          prisma.roomInventoryPeriod.findMany({ where: { roomTypeId: line.roomTypeId, dateFrom: { lte: d }, dateTo: { gte: d } } }),
+        ]);
+        const remaining = computeWaterfall({
+          physical: room?.roomType.totalRooms ?? 0,
+          outOfOrder: dayPeriods.filter((p) => p.kind === "out_of_order").reduce((s, p) => s + p.rooms, 0),
+          closed: dayPeriods.filter((p) => p.kind === "closure").reduce((s, p) => s + p.rooms, 0),
+          manualSellLimit: cell?.inventory ?? null,
+          holds: heldAgg._sum.quantity ?? 0,
+          confirmed: soldAgg._sum.quantity ?? 0,
+        }).remaining;
+        if (remaining - line.quantity < 0) overbooked = true;
       }
     }
 

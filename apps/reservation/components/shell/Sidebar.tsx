@@ -16,12 +16,12 @@ type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 const SECTIONS: { title?: string; items: Item[] }[] = [
   { items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/reservations", label: "Reservations", icon: CalendarCheck },
+    { href: "/guests", label: "Guests", icon: Users },
     { href: "/inventory", label: "Inventory Calendar", icon: CalendarRange },
     { href: "/setup", label: "Inventory Setup", icon: Wrench },
   ] },
   { title: "Coming next", items: [
-    { href: "/reservations", label: "Reservations", icon: CalendarCheck, soon: "Phase 2" },
-    { href: "/guests", label: "Guests", icon: Users, soon: "Phase 2" },
     { href: "/rates", label: "Rates & Restrictions", icon: Tags, soon: "Phase 3" },
     { href: "/reports", label: "Reports", icon: BarChart3, soon: "Phase 4" },
     { href: "/distribution", label: "Distribution", icon: Share2, soon: "Phase 5" },
@@ -115,7 +115,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
-        Phase 1 · inventory foundation
+        Phase 2 · reservations &amp; holds
       </div>
       </aside>
     </>

@@ -117,9 +117,10 @@ CRS `revio_crs_session`.
 ## Status
 
 RevioLink + Operator Console are **built, tested, live, and behind login** with GitHub auto-deploy.
-**RevioCRS is in build — Phase 1 (inventory foundation) shipped 2026-07-03**: availability waterfall in
-`@revio/core`, full CRS data model + RLS in one migration, `apps/reservation` (port 3002) with Dashboard /
-Inventory Calendar / Inventory Setup, pickup-snapshot job from day one (see `apps/reservation/CLAUDE.md`).
+**RevioCRS is in build — Phases 1+2 shipped 2026-07-03**: availability waterfall in `@revio/core`
+(CM pushes subtract OOO/closures/holds), full CRS data model + RLS, `apps/reservation` (port 3002) with
+Dashboard / Inventory Calendar / Inventory Setup / **Reservations (Availability Search → instant Hold →
+confirm, modify/cancel/no-show) / Guests**, pickup-snapshot + hold-expiry jobs (see `apps/reservation/CLAUDE.md`).
 Operator onboards clients; **clients self-manage staff (roles) + properties** from RevioLink Settings.
 Both apps now have a **responsive (mobile) shell**; **RLS** is built + verified locally (prod = Phase 2,
 `DEPLOY.md`); and the **Channex adapter is built + live-verified against the sandbox** (`@revio/connectivity`,

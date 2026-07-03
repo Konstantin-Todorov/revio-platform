@@ -119,11 +119,26 @@ not yet wired into the app or deployed).
     loads + `POST /api/jobs/pickup` (CRON_SECRET-gated) for scheduled runs; rows only where sold > 0.
     Verified end-to-end on dev (add period → availability drops on exactly the inclusive range → delete
     restores; audit + sync rows written).
-  - ⬜ Phase 2 — Reservations: create/modify/cancel + **Hold mechanism** + lifecycle + hold-expiry job +
-    Availability Search (call-center entry). ⬜ Phase 3 — rates/restrictions (+ property-default fallback,
-    booking-source scope). ⬜ Phase 4 — dashboard/metrics (formula sheet). ⬜ Phase 5 — distribution
-    (ChannelManagerConnector). Note: CM pushes don't subtract OOO/holds yet — wire in Phase 2 when holds
-    exist (one spot: `apps/channel-manager/lib/connectivity.ts` sold derivation).
+  - ✅ **Phase 2 done (2026-07-03) — Reservations + Holds.** The **Hold mechanism**: Availability Search
+    (call-center entry — guest-stay query over every room type at once, prices from the standard plan,
+    alternative + upgrade labeling) → "Hold & continue" locks inventory INSTANTLY (active Hold row with
+    PropertyDefaults.holdTtlMinutes TTL, default 30) → step-2 guest form converts the hold into a
+    confirmed reservation (guest record reused by e-mail, 4 currency fields, payment-guarantee label,
+    line priceMinor/guestsCount, audit + sync event). Lifecycle actions: **modify** = validate-new-first
+    with own line excluded — if any night doesn't fit, NOTHING changes (verified); **cancel** restores
+    availability instantly (derived sold) + sets cancelledAt; **no-show** gated to after the check-in
+    date (property TZ). **Hold-expiry job** (lazy on reservation pages + `POST /api/jobs/holds`,
+    CRON_SECRET) releases stale holds and expires their draft/hold reservations. **Guests**: list/search,
+    detail with contact + special-requests editing + booking history (scope line: not a CRM).
+    Reservation detail = stay/guest cards + **Timeline** (audit pre-filtered by `#<id6>` tag) + inline
+    modify. **CM now pushes the FULL waterfall**: `buildAriUpdates`, the pull overbooking check, and
+    manual-booking validation all subtract OOO/closures/active holds via `computeWaterfall` — a CRS
+    hold or OOO period takes rooms off sale on every channel on the next push. Gotcha fixed: the RLS
+    proxy doesn't forward `$transaction` (model ops only) — actions use sequential ops.
+  - ⬜ Phase 3 — rates/restrictions (+ property-default fallback — PropertyDefaults fields already exist,
+    booking-source scope). ⬜ Phase 4 — dashboard/metrics (formula sheet, Action Center, Forecast,
+    Reports w/ CSV export, Global Search). ⬜ Phase 5 — distribution (ChannelManagerConnector, mapping,
+    Sync/Error Center in CRS) + Settings (Users & Permissions via PermissionRole, Taxes & Fees screen).
 - **Then — Channex certification prep** (see the prep item above): do it AFTER RevioCRS, BEFORE the
   first real client goes live — cert has external lead time (Channex schedules a live screenshare), so
   don't leave it to the last minute; testing continues on the staging sandbox meanwhile.

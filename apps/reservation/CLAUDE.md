@@ -1,9 +1,11 @@
 # App: Reservation System — product name **RevioCRS** (`@revio/reservation`)
 
-> Part of the **Revio platform** — read the root `CLAUDE.md` first. **IN BUILD — Phase 1 shipped
-> 2026-07-03** (inventory foundation: waterfall in `@revio/core`, full CRS schema + RLS, Dashboard /
-> Inventory Calendar / Inventory Setup on port 3002, pickup-snapshot job). Next: **Phase 2 —
-> Reservations + Holds.** Cookie `revio_crs_session`; gated on the `hasReservation` entitlement.
+> Part of the **Revio platform** — read the root `CLAUDE.md` first. **IN BUILD — Phases 1+2 shipped
+> 2026-07-03** (inventory foundation + Reservations/Holds: Availability Search → instant Hold →
+> confirm; modify-validates-first; cancel/no-show; hold-expiry + pickup jobs; Guests; Timeline;
+> CM pushes subtract OOO/holds via the shared waterfall). Next: **Phase 3 — rates/restrictions.**
+> Cookie `revio_crs_session`; port 3002; gated on the `hasReservation` entitlement.
+> Gotcha: the RLS proxy (`lib/db.ts`) forwards `prisma.<model>.<op>` ONLY — no `$transaction`.
 
 **Full V1 spec: `docs/CRS-REFERENCE.md` (founder spec v2, 2026-07-02)** — exact metric formulas,
 reservation lifecycle, system rules, sitemap, and the 5-phase MVP build order. Read it before writing

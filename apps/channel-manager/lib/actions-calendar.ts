@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
-import { computeAvailability, deriveRate, isOverbooking, SOLD_STATUSES, type DerivedRateConfig } from "@revio/core";
+import { computeWaterfall, deriveRate, isOverbooking, SOLD_STATUSES, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, strList, eachDate, utcDay } from "./mutation-helpers";
 
@@ -176,7 +176,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
   // Rooms already sold per night (derived from active reservations) + the date allotment, for the
   // overbooking check. We do NOT mutate inventory — availability = inventory − sold updates itself once
   // this reservation lands (sold is always derived).
-  const [priorLines, cells] = await Promise.all([
+  const [priorLines, cells, periods, activeHolds] = await Promise.all([
     prisma.reservationLine.findMany({
       where: {
         roomTypeId,
@@ -186,6 +186,10 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
       },
     }),
     prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: checkInDate, lt: checkOutDate } } }),
+    prisma.roomInventoryPeriod.findMany({ where: { roomTypeId, dateFrom: { lt: checkOutDate }, dateTo: { gte: checkInDate } } }),
+    prisma.hold.findMany({
+      where: { roomTypeId, status: "active", expiresAt: { gt: new Date() }, checkIn: { lt: checkOutDate }, checkOut: { gt: checkInDate } },
+    }),
   ]);
   const invByDate = new Map(cells.map((c) => [c.date.toISOString().slice(0, 10), c.inventory]));
 
@@ -194,9 +198,17 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
     const stdMinor = sp?.priceMinor ?? 0;
     totalMinor += (derivedCfg ? deriveRate(stdMinor, derivedCfg) : stdMinor) * quantity;
 
-    const inventory = invByDate.get(date.toISOString().slice(0, 10)) ?? rt.totalRooms;
+    const k = date.toISOString().slice(0, 10);
     const sold = priorLines.filter((l) => l.checkIn <= date && date < l.checkOut).reduce((s, l) => s + l.quantity, 0);
-    if (isOverbooking(computeAvailability({ inventory, confirmedUnits: sold }))) overbooked = true;
+    const held = activeHolds.filter((h) => h.checkIn <= date && date < h.checkOut).reduce((s, h) => s + h.quantity, 0);
+    const remaining = computeWaterfall({
+      physical: rt.totalRooms,
+      outOfOrder: periods.filter((p) => p.kind === "out_of_order" && p.dateFrom <= date && date <= p.dateTo).reduce((s, p) => s + p.rooms, 0),
+      closed: periods.filter((p) => p.kind === "closure" && p.dateFrom <= date && date <= p.dateTo).reduce((s, p) => s + p.rooms, 0),
+      manualSellLimit: invByDate.get(k) ?? null,
+      holds: held, confirmed: sold,
+    }).remaining;
+    if (isOverbooking(remaining)) overbooked = true;
   }
 
   // The channel inherits the property currency, so this booking is already in property currency

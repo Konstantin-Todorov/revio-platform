@@ -354,6 +354,22 @@ async function main() {
     ],
   });
 
+  // Phase 2 demo: a guest with a direct call-center reservation (no channel).
+  const demoGuest = await prisma.guest.create({
+    data: { ...t, firstName: "Elena", lastName: "Petrova", email: "elena.petrova@example.com", phone: "+359 88 555 0101", specialRequests: "High floor, away from the elevator" },
+  });
+  const directRes = await prisma.reservation.create({
+    data: {
+      ...t, channelId: null, externalId: null, guestName: "Elena Petrova", status: "confirmed",
+      totalMinor: 36000, currency: "EUR", propertyCurrency: "EUR", propertyTotalMinor: 36000, fxRate: 1, fxAt: new Date(),
+      guestId: demoGuest.id, bookingSourceId: sources["call_center"]!.id, paymentGuarantee: "card_on_file",
+      lines: { create: [{ roomTypeId: rtByCode["SUI"]!.id, ratePlanId: standard.id, quantity: 1, checkIn: addDays(monday, 10), checkOut: addDays(monday, 13), priceMinor: 36000, guestsCount: 2 }] },
+    },
+  });
+  await prisma.auditEntry.create({
+    data: { ...t, entity: `Reservation #${directRes.id.slice(-6)} · Elena Petrova`, field: "created", newValue: "Suite · call center · 3 nights", source: "manual", channelCode: "all", syncResult: "success" },
+  });
+
   // --- Second tenant: Black Sea Resort (proves tenant isolation) ----------
   const tenant2 = await prisma.tenant.create({
     data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true, hasReservation: true,

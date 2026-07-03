@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { computeWaterfall, expandInventoryPeriods, SOLD_STATUSES, type WaterfallResult } from "@revio/core";
+import { computeWaterfall, deriveRate, expandInventoryPeriods, SOLD_STATUSES, type WaterfallResult } from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -162,4 +162,263 @@ export async function getSetupData() {
     }),
   ]);
   return { property, roomTypes, periods, todayIso: todayInTz(property.timezone) };
+}
+
+// --- Phase 2: availability search, quotes, reservations, guests --------------
+
+export const PAYMENT_GUARANTEES = [
+  { value: "card_on_file", label: "Card on file" },
+  { value: "company_account", label: "Company account" },
+  { value: "prepaid_ota", label: "Prepaid via OTA" },
+  { value: "none", label: "No guarantee" },
+] as const;
+
+/** Sold statuses (shared) — plus "hold"-status reservations lock inventory via the Hold table. */
+function nightsOf(checkIn: string, checkOut: string): string[] {
+  const out: string[] = [];
+  for (let t = new Date(`${checkIn}T00:00:00Z`).getTime(); t < new Date(`${checkOut}T00:00:00Z`).getTime(); t += DAY) {
+    out.push(ymd(new Date(t)));
+  }
+  return out;
+}
+
+/**
+ * The waterfall per night of a stay for one room type. `exclude` lets the modification flow
+ * validate a new stay while ignoring the reservation's own line / the hold being converted —
+ * the spec's release→validate step, done atomically instead of actually releasing first.
+ */
+export async function remainingByNight(
+  roomTypeId: string,
+  checkIn: string,
+  checkOut: string,
+  exclude: { reservationId?: string; holdId?: string } = {},
+) {
+  const nights = nightsOf(checkIn, checkOut);
+  if (nights.length === 0) return [];
+  const start = new Date(`${nights[0]}T00:00:00Z`);
+  const end = new Date(`${checkOut}T00:00:00Z`);
+
+  const [rt, cells, periods, holds, lines] = await Promise.all([
+    prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId } }),
+    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: start, lt: end }, inventory: { not: null } } }),
+    prisma.roomInventoryPeriod.findMany({ where: { roomTypeId, dateFrom: { lt: end }, dateTo: { gte: start } } }),
+    prisma.hold.findMany({
+      where: {
+        roomTypeId, status: "active", expiresAt: { gt: new Date() },
+        checkIn: { lt: end }, checkOut: { gt: start },
+        ...(exclude.holdId ? { id: { not: exclude.holdId } } : {}),
+      },
+    }),
+    prisma.reservationLine.findMany({
+      where: {
+        roomTypeId,
+        reservation: { status: { in: [...SOLD_STATUSES] } },
+        checkIn: { lt: end }, checkOut: { gt: start },
+        ...(exclude.reservationId ? { reservationId: { not: exclude.reservationId } } : {}),
+      },
+    }),
+  ]);
+
+  const overrideByDate = new Map(cells.map((c) => [ymd(c.date), c.inventory!]));
+  const periodByDate = expandInventoryPeriods(
+    periods.map((p) => ({ kind: p.kind, dateFrom: ymd(p.dateFrom), dateTo: ymd(p.dateTo), rooms: p.rooms })),
+    nights,
+  );
+
+  return nights.map((d) => {
+    const sold = lines.filter((l) => ymd(l.checkIn) <= d && ymd(l.checkOut) > d).reduce((s, l) => s + l.quantity, 0);
+    const held = holds.filter((h) => ymd(h.checkIn) <= d && ymd(h.checkOut) > d).reduce((s, h) => s + h.quantity, 0);
+    const { outOfOrder, closed } = periodByDate.get(d)!;
+    return {
+      date: d,
+      ...computeWaterfall({
+        physical: rt.totalRooms, outOfOrder, closed,
+        manualSellLimit: overrideByDate.get(d) ?? null,
+        holds: held, confirmed: sold,
+      }),
+    };
+  });
+}
+
+/** Total accommodation price for a stay on one (room type, rate plan) — derived plans computed from
+ *  the parent's stored nightly prices via @revio/core. Null when any night lacks a price. */
+export async function stayQuote(roomTypeId: string, ratePlanId: string, checkIn: string, checkOut: string, quantity = 1) {
+  const nights = nightsOf(checkIn, checkOut);
+  const rp = await prisma.ratePlan.findUniqueOrThrow({ where: { id: ratePlanId } });
+  const priceSourceId = rp.priceLogic === "derived" && rp.parentRatePlanId ? rp.parentRatePlanId : rp.id;
+  const rows = await prisma.ratePrice.findMany({
+    where: { roomTypeId, ratePlanId: priceSourceId, date: { gte: new Date(`${checkIn}T00:00:00Z`), lt: new Date(`${checkOut}T00:00:00Z`) } },
+  });
+  const byDate = new Map(rows.map((r) => [ymd(r.date), r.priceMinor]));
+
+  let total = 0;
+  for (const d of nights) {
+    const base = byDate.get(d);
+    if (base == null) return null;
+    if (rp.priceLogic === "derived" && rp.parentRatePlanId) {
+      total += deriveRate(base, {
+        parentRatePlanId: rp.parentRatePlanId,
+        adjustmentType: (rp.derivedType as "percent" | "fixed") ?? "percent",
+        direction: (rp.derivedDirection as "increase" | "decrease") ?? "decrease",
+        value: rp.derivedValue ?? 0,
+        rounding: (rp.derivedRounding as Parameters<typeof deriveRate>[1]["rounding"]) ?? "none",
+        ...(rp.derivedFloorMinor != null ? { floorMinor: rp.derivedFloorMinor } : {}),
+        ...(rp.derivedCeilingMinor != null ? { ceilingMinor: rp.derivedCeilingMinor } : {}),
+      });
+    } else {
+      total += base;
+    }
+  }
+  return total * quantity;
+}
+
+export interface StaySearch {
+  checkIn: string;
+  checkOut: string;
+  guests: number;
+  quantity: number;
+  roomTypeId?: string;
+}
+
+/**
+ * Availability Search — the call-center entry point (docs/CRS-REFERENCE.md). Answers the
+ * guest-stay-shaped question for every room type at once so the agent can offer alternatives
+ * (other available rooms when the requested one is full) and upgrades without a second query.
+ */
+export async function searchAvailability(q: StaySearch) {
+  const property = await getProperty();
+  const roomTypes = await prisma.roomType.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" } });
+  const standard = await prisma.ratePlan.findFirst({ where: { propertyId: property.id, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } });
+
+  const results = await Promise.all(
+    roomTypes.map(async (rt) => {
+      const nights = await remainingByNight(rt.id, q.checkIn, q.checkOut);
+      const remainingMin = nights.length ? Math.min(...nights.map((n) => n.remaining)) : 0;
+      const totalMinor = standard ? await stayQuote(rt.id, standard.id, q.checkIn, q.checkOut, q.quantity) : null;
+      return {
+        roomType: rt,
+        remainingMin,
+        fitsGuests: rt.maxGuests * q.quantity >= q.guests,
+        available: remainingMin >= q.quantity,
+        totalMinor,
+        requested: q.roomTypeId ? q.roomTypeId === rt.id : true,
+      };
+    }),
+  );
+
+  return { property, results, standardPlanName: standard?.name ?? null, nights: nightsOf(q.checkIn, q.checkOut).length };
+}
+
+export async function getCreateFormData() {
+  const property = await getProperty();
+  const [roomTypes, ratePlans, sources] = await Promise.all([
+    prisma.roomType.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.ratePlan.findMany({ where: { propertyId: property.id, active: true }, include: { cancellationPolicy: true }, orderBy: { sortOrder: "asc" } }),
+    prisma.bookingSource.findMany({ where: { propertyId: property.id, active: true }, orderBy: { name: "asc" } }),
+  ]);
+  return { property, roomTypes, ratePlans, sources };
+}
+
+export interface CrsReservationFilters {
+  q?: string;
+  status?: string;
+  from?: string;
+  to?: string;
+}
+
+export async function getReservationsList(filters: CrsReservationFilters = {}) {
+  const property = await getProperty();
+  const lineDate: Record<string, Date> = {};
+  if (filters.from && /^\d{4}-\d{2}-\d{2}$/.test(filters.from)) lineDate.gte = utcDayLocal(filters.from);
+  if (filters.to && /^\d{4}-\d{2}-\d{2}$/.test(filters.to)) lineDate.lte = utcDayLocal(filters.to);
+
+  const reservations = await prisma.reservation.findMany({
+    where: {
+      propertyId: property.id,
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.q
+        ? {
+            OR: [
+              { guestName: { contains: filters.q, mode: "insensitive" } },
+              { id: { contains: filters.q } },
+              { guest: { email: { contains: filters.q, mode: "insensitive" } } },
+              { guest: { phone: { contains: filters.q } } },
+            ],
+          }
+        : {}),
+      ...(Object.keys(lineDate).length ? { lines: { some: { checkIn: lineDate } } } : {}),
+    },
+    include: {
+      channel: { select: { name: true } },
+      bookingSource: { select: { name: true } },
+      guest: { select: { id: true, email: true, phone: true } },
+      lines: { include: { roomType: { select: { name: true, code: true } } } },
+    },
+    orderBy: { importedAt: "desc" },
+    take: 200,
+  });
+  return { property, reservations };
+}
+
+function utcDayLocal(iso: string): Date {
+  return new Date(`${iso}T00:00:00Z`);
+}
+
+export async function getReservationDetail(id: string) {
+  const property = await getProperty();
+  const reservation = await prisma.reservation.findFirst({
+    where: { id, propertyId: property.id },
+    include: {
+      channel: { select: { name: true } },
+      bookingSource: { select: { name: true } },
+      guest: true,
+      holds: { orderBy: { createdAt: "desc" } },
+      lines: { include: { roomType: true, ratePlan: { select: { name: true } } } },
+    },
+  });
+  if (!reservation) return null;
+  // Reservation Timeline = the audit log pre-filtered to this reservation (tagged by short id).
+  const timeline = await prisma.auditEntry.findMany({
+    where: { propertyId: property.id, entity: { contains: `#${id.slice(-6)}` } },
+    orderBy: { createdAt: "asc" },
+  });
+  return { property, reservation, timeline, todayIso: todayInTz(property.timezone) };
+}
+
+export async function getGuests(q?: string) {
+  const property = await getProperty();
+  const guests = await prisma.guest.findMany({
+    where: {
+      propertyId: property.id,
+      ...(q
+        ? {
+            OR: [
+              { firstName: { contains: q, mode: "insensitive" } },
+              { lastName: { contains: q, mode: "insensitive" } },
+              { email: { contains: q, mode: "insensitive" } },
+              { phone: { contains: q } },
+              { company: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    },
+    include: { _count: { select: { reservations: true } } },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    take: 200,
+  });
+  return { property, guests };
+}
+
+export async function getGuestDetail(id: string) {
+  const property = await getProperty();
+  const guest = await prisma.guest.findFirst({
+    where: { id, propertyId: property.id },
+    include: {
+      reservations: {
+        include: { lines: { include: { roomType: { select: { name: true } } } }, bookingSource: { select: { name: true } }, channel: { select: { name: true } } },
+        orderBy: { importedAt: "desc" },
+      },
+    },
+  });
+  return guest ? { property, guest } : null;
 }
