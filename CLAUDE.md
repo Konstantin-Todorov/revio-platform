@@ -93,6 +93,7 @@ design/      Atlas/Haven/Pulse handoff prototypes + Revio brand
 - **Repo:** https://github.com/Konstantin-Todorov/revio-platform (branch `main`).
 - **Live — RevioLink (CM):** https://channel-manager-production-59bb.up.railway.app
 - **Live — Operator Console:** https://operator-production-5eed.up.railway.app
+- **Live — RevioCRS:** https://reservation-production-f8c5.up.railway.app
 - **Railway project:** `revio-platform` — one Postgres shared by all services; each app is its own web
   service. **Each service defines its own build/start via Railway config** (NOT a root `railway.json` —
   that applied to every service and was removed): build = Nixpacks `pnpm install → db:generate → next
@@ -110,7 +111,7 @@ Self-hosted email + password (bcryptjs) + signed JWT session cookies (jose). `ge
 `getOperatorSession()` now resolve **real** identity; `middleware.ts` gates by cookie; `/login` lives in
 each app outside the `(protected)` route group. CM cookie `revio_session`, operator `revio_op_session`,
 CRS `revio_crs_session`.
-`AUTH_SECRET` is set per Railway service. **Demo logins (password `revio1234`):** RevioLink →
+`AUTH_SECRET` is set per Railway service. **Demo logins (password `revio1234`):** RevioLink + RevioCRS →
 `admin@hotelsofia.demo` or `owner@blacksea.demo`; Operator → `operator@revio.app`.
 
 ## Status
