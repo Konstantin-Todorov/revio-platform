@@ -197,8 +197,14 @@ not yet wired into the app or deployed).
     check-out (unit→dirty), room move, walk-in (same-day confirmed direct stay → reduces waterfall).
     Screens: Front Desk hub + /checkin/[id] + /walkin + /move/[assignmentId]; housekeeping occupancy
     overlay. Verified end-to-end via real server actions; deployed live.
-  - ⬜ **Phases 3–5:** Folio & Billing (labels-only payments) → Minibar/POS → Maintenance + manual
-    Close Day. (`docs/PMS-REFERENCE.md` "MVP build order".)
+  - ✅ **Phase 3 done (2026-07-04) — Folio & Billing.** `Folio` + `FolioLine`; a folio opens at
+    check-in/walk-in seeded from the reservation (accommodation = line price → bill matches CRS revenue;
+    excluded taxes/fees per basis; prepaid-OTA auto-settles). Post charge (minibar/extra/fee), take
+    payment (label + amount only, no card data), void (flagged). **Check-out gates on balance** (blocks
+    unless override, logged) + closes the folio. Screens: /folios + /folio/[reservationId]. Verified
+    end-to-end; deployed live.
+  - ⬜ **Phases 4–5:** Minibar/POS catalog (quick-post to folio) → Maintenance + manual Close Day.
+    (`docs/PMS-REFERENCE.md` "MVP build order".)
 - **RLS Phase 2 (prod enforcement) LAST** so one migration pass covers every product's tenant tables
   (`DEPLOY.md`).
 - **The operator (us) stays the admin over everything**: Operator Console provisions clients + flips

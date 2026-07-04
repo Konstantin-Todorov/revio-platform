@@ -3,10 +3,12 @@
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. **Now the active build** (started
 > 2026-07-04, after RevioCRS V1). **Canonical spec: `docs/PMS-REFERENCE.md`** (founder-confirmed V1 scope).
 > **LIVE: https://pms-production-a64b.up.railway.app** (port 3003, cookie `revio_pms_session`, `hasPms`
-> gate). **Phase 1 (Units & Housekeeping) + Phase 2 (Front Desk: check-in/out, room move, walk-in) DONE +
-> deployed.** Next: Phase 3 (Folio & Billing — labels-only payments). Gotcha: the RLS proxy `lib/db.ts`
-> forwards `prisma.<model>.<op>` ONLY (no `$transaction`); the preview harness drops the session cookie on
-> server-action POSTs (verify actions via minted-cookie curl instead — GET link-clicks keep the cookie).
+> gate). **Phases 1-3 DONE + deployed** (Units & Housekeeping · Front Desk check-in/out/move/walk-in ·
+> Folio & Billing with labels-only payments + a check-out balance gate). Next: Phase 4 (Minibar/POS) or
+> Phase 5 (Maintenance + manual Close Day). Gotchas: the RLS proxy `lib/db.ts` forwards `prisma.<model>.<op>`
+> ONLY (no `$transaction`); the preview harness drops the session cookie on server-action POSTs (verify via
+> minted-cookie curl — GET link-clicks keep it); after a migration RESTART `next dev` + `rm -rf .next` so it
+> loads the regenerated Prisma client; re-mint the session cookie after any re-seed (User ids change).
 
 Sold standalone as an operations layer, even over a foreign reservation system. Reads/writes inventory
 **only** through `@revio/core` — never ad-hoc queries against inventory tables.
