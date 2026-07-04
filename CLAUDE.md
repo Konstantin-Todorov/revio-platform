@@ -127,7 +127,11 @@ taxes & fees), pickup-snapshot + hold-expiry jobs (see `apps/reservation/CLAUDE.
 Operator onboards clients; **clients self-manage staff (roles) + properties** from RevioLink Settings.
 Both apps now have a **responsive (mobile) shell**; **RLS** is built + verified locally (prod = Phase 2,
 `DEPLOY.md`); and the **Channex adapter is built + live-verified against the sandbox** (`@revio/connectivity`,
-not yet wired into the app). **V2 revisions** (founder spec `docs/CM-REVISIONS.md`, 2026-06-27) now drive
+not yet wired into the app). **RevioPMS is now IN BUILD** (founder-confirmed spec `docs/PMS-REFERENCE.md`):
+**Phase 1 (Units & Housekeeping) is done** — `apps/pms` (port 3003, cookie `revio_pms_session`, `hasPms`
+gate) with the physical **Unit** model, a housekeeping board, and the one cross-product write (a Unit
+going out-of-order → a `RoomInventoryPeriod` → the shared availability waterfall). Not pushed / no Railway
+service yet. **V2 revisions** (founder spec `docs/CM-REVISIONS.md`, 2026-06-27) now drive
 the roadmap: settle the data model (date-level inventory, currency-on-property, two-stream mapping) →
 wire Channex → calendar/IA redesign → CRS/PMS → RLS Phase 2. See `BUILD-PLAN.md` for the phased order,
 `ARCHITECTURE.md` for rationale,

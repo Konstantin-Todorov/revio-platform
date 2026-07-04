@@ -177,9 +177,25 @@ not yet wired into the app or deployed).
 - **Then — Channex certification prep** (see the prep item above): do it AFTER RevioCRS, BEFORE the
   first real client goes live — cert has external lead time (Channex schedules a live screenshare), so
   don't leave it to the last minute; testing continues on the staging sandbox meanwhile.
-- **Then — RevioPMS** (operations layer: front desk, housekeeping, minibar — spec TBD from founder),
-  same pattern, `hasPms` gate. **RLS Phase 2 (prod enforcement) LAST** so one migration pass covers
-  every product's tenant tables (`DEPLOY.md`).
+- **▶️ IN BUILD — RevioPMS** (operations layer: front desk, housekeeping, minibar). Spec confirmed with
+  the founder → `docs/PMS-REFERENCE.md` (rooms-first; PMS owns the new physical **Unit**; payments =
+  labels+balance only; night audit = manual "Close Day"; Guests reuse the CRS record; 6 new tables;
+  metrics stay in the CRS core sheet). Same pattern, `hasPms` gate, 4th Next app `apps/pms` (port 3003,
+  cookie `revio_pms_session`).
+  - ✅ **Phase 1 done (2026-07-04) — Units & Housekeeping.** Migration `pms_units_housekeeping`: `Unit`
+    (physical room/bed under a RoomType, housekeeping status) + `HousekeepingTask` + nullable
+    `RoomInventoryPeriod.unitId`, both new tables with tenant_isolation RLS. **The one cross-product
+    write:** a Unit going `out_of_order` writes a RoomInventoryPeriod → the shared availability waterfall
+    takes the room off sale on every channel; serviceable again deletes it (verified bidirectionally,
+    DDR 12→11→12). Screens: Front Desk (HK status cards + today's arrivals/departures/in-house from the
+    shared reservation record), Housekeeping board (floor-grouped, mobile/PWA status control), Rooms
+    setup (add / bulk-generate / delete Units). Units seeded for both demo hotels; `hasPms` on. Prod
+    build green. ⬜ Remaining: push + stand up the 4th Railway service (like CRS — MCP create doesn't
+    auto-deploy on push).
+  - ⬜ **Phases 2–5:** Front Desk (check-in / RoomAssignment / walk-in / room move) → Folio & Billing →
+    Minibar/POS → Maintenance + manual Close Day. (`docs/PMS-REFERENCE.md` "MVP build order".)
+- **RLS Phase 2 (prod enforcement) LAST** so one migration pass covers every product's tenant tables
+  (`DEPLOY.md`).
 - **The operator (us) stays the admin over everything**: Operator Console provisions clients + flips
   CM/CRS/PMS entitlements + holds encrypted connectivity keys; hotels self-manage staff/properties.
   All four apps = one Postgres, one `@revio/core`, one access model (`ACCESS-MODEL.md`).
