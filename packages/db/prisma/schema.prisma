@@ -104,6 +104,8 @@ model Property {
   taxesFees           TaxFee[]
   pickupSnapshots     PickupSnapshot[]
   defaults            PropertyDefaults?
+  units               Unit[]
+  hkTasks             HousekeepingTask[]
 
   @@index([tenantId])
 }
@@ -135,6 +137,7 @@ model RoomType {
   inventoryPeriods RoomInventoryPeriod[]
   holds            Hold[]
   pickupSnapshots  PickupSnapshot[]
+  units            Unit[]
 
   @@index([propertyId])
 }
@@ -484,13 +487,18 @@ model RoomInventoryPeriod {
   dateTo     DateTime @db.Date // inclusive
   rooms      Int      @default(1) // units affected (a closure usually = all units)
   note       String?
+  // Set when this OOO period was created by a specific PMS Unit going out_of_order — the one
+  // cross-product write (docs/PMS-REFERENCE.md): un-OOO deletes the period, restoring the waterfall.
+  unitId     String?
   createdAt  DateTime @default(now())
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
   @@index([roomTypeId, dateFrom])
   @@index([propertyId])
+  @@index([unitId])
 }
 
 // Temporary inventory lock, placed the INSTANT a room is selected (before the form saves).
@@ -639,6 +647,55 @@ model RoleAccess {
   role PermissionRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, group])
+}
+
+// --- PMS: physical units + housekeeping (docs/PMS-REFERENCE.md) ------------
+// The PMS is the first product that cares WHICH physical room/bed (to clean/assign/bill it). A Unit is
+// an addressable sellable unit under a RoomType; it does NOT change the availability math — RoomType
+// counts stay the source of truth for what's sellable. Marking a Unit out_of_order writes a
+// RoomInventoryPeriod so the shared waterfall takes it off sale (the ONE cross-product write).
+// All tenant-owned → tenant_isolation RLS added in the migration.
+model Unit {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  roomTypeId String
+  label      String   // room number / name (e.g. "101", "Sea View 2") or a bed label for hostels
+  unitKind   String   @default("room") // room | bed (mirrors RoomType.unitKind; built rooms-first in V1)
+  floor      String?  // floor or zone — groups the housekeeping board
+  // Current housekeeping status (single value; changes logged to AuditEntry). Occupancy status is
+  // DERIVED from room assignments (Phase 2), never stored here.
+  hkStatus   String   @default("clean") // clean | dirty | inspected | out_of_order
+  sortOrder  Int      @default(0)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  property         Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType         RoomType              @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  hkTasks          HousekeepingTask[]
+  inventoryPeriods RoomInventoryPeriod[]
+
+  @@index([propertyId])
+  @@index([roomTypeId, sortOrder])
+}
+
+// A housekeeping / turndown / inspection task, optionally against a specific Unit. Basic in V1.
+model HousekeepingTask {
+  id          String    @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  unitId      String?
+  type        String    @default("clean") // clean | inspect | turndown
+  status      String    @default("open")  // open | in_progress | done
+  assignee    String?   // free-text staff name (or userId) — light in V1
+  note        String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, status])
 }
 
 // --- Monitoring: Sync / Error / Audit -------------------------------------

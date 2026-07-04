@@ -38,6 +38,7 @@ async function main() {
   console.log("Resetting demo data…");
   // Truncate everything in one statement so FK order doesn't matter (re-runnable seed).
   const tables = [
+    "HousekeepingTask", "Unit",
     "PickupSnapshot", "Hold", "RoomInventoryPeriod", "Guest", "RoleAccess", "PermissionRole",
     "TaxFee", "PropertyDefaults", "BookingSource",
     "AuditEntry", "ErrorItem", "SyncEvent", "ReservationLine", "Reservation",
@@ -63,7 +64,7 @@ async function main() {
       slug: "hotel-sofia",
       hasChannelManager: true,
       hasReservation: true,
-      hasPms: false,
+      hasPms: true,
       users: {
         create: [
           { name: "Admin", email: "admin@hotelsofia.demo", role: "owner", passwordHash: pw },
@@ -120,6 +121,9 @@ async function main() {
   }
   const basePriceByCode = Object.fromEntries(roomTypeSpec.map((s) => [s.code, s.basePrice]));
   const rtByCode = Object.fromEntries(roomTypes.map((r) => [r.code, r]));
+
+  // --- PMS: physical units for RevioPMS (housekeeping mix; no OOO — that's demoed live) ----
+  await seedUnits(tenantId, propertyId);
 
   // --- Rate plans: Standard (manual) + 6 derived -------------------------
   const standard = await prisma.ratePlan.create({
@@ -397,7 +401,7 @@ async function main() {
 
   // --- Second tenant: Black Sea Resort (proves tenant isolation) ----------
   const tenant2 = await prisma.tenant.create({
-    data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true, hasReservation: true,
+    data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true, hasReservation: true, hasPms: true,
       users: { create: [{ name: "Resort Owner", email: "owner@blacksea.demo", role: "owner", passwordHash: pw }] } },
   });
   const property2 = await prisma.property.create({
@@ -414,6 +418,7 @@ async function main() {
     const s = rt2spec[i]!;
     rt2.push(await prisma.roomType.create({ data: { ...t2, name: s.name, code: s.code, unitKind: s.unitKind, totalRooms: s.inv, maxGuests: s.max, sortOrder: i } }));
   }
+  await seedUnits(tenant2.id, property2.id);
   const std2 = await prisma.ratePlan.create({ data: { ...t2, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 } });
   const plans2 = [std2];
   plans2.push(await prisma.ratePlan.create({ data: { ...t2, name: "Non Refundable", code: "NR", tags: ["non-refundable"], priceLogic: "derived", parentRatePlanId: std2.id, derivedType: "percent", derivedDirection: "decrease", derivedValue: 12, derivedRounding: "none", sortOrder: 1 } }));
@@ -458,6 +463,35 @@ async function main() {
   console.log("DDR week — Standard:", ddrWeekPrice.map((p) => p / 100).join(", "));
   console.log("DDR week — NonRefundable (derived):", nrRow.map((p) => p / 100).join(", "));
   console.log("DDR week — Breakfast (derived):", brfRow.map((p) => p / 100).join(", "));
+}
+
+/**
+ * Seed physical Units (RevioPMS) for every room type on a property: floor-numbered rooms (101…110,
+ * 201…) with a realistic housekeeping mix. No out_of_order units — that transition (which writes a
+ * RoomInventoryPeriod and drops availability) is demonstrated live from the housekeeping board.
+ */
+async function seedUnits(tenantId: string, propertyId: string): Promise<number> {
+  const roomTypes = await prisma.roomType.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
+  const mix = ["clean", "clean", "inspected", "clean", "dirty", "clean", "clean", "dirty", "inspected", "clean"];
+  const rows: { tenantId: string; propertyId: string; roomTypeId: string; label: string; unitKind: string; floor: string; hkStatus: string; sortOrder: number }[] = [];
+  let placed = 0;
+  for (const rt of roomTypes) {
+    for (let i = 0; i < rt.totalRooms; i++) {
+      const floorNum = Math.floor(placed / 10) + 1;
+      const roomOnFloor = (placed % 10) + 1;
+      rows.push({
+        tenantId, propertyId, roomTypeId: rt.id,
+        label: `${floorNum}${String(roomOnFloor).padStart(2, "0")}`,
+        unitKind: rt.unitKind === "bed" ? "bed" : "room",
+        floor: `Floor ${floorNum}`,
+        hkStatus: mix[placed % mix.length]!,
+        sortOrder: i,
+      });
+      placed++;
+    }
+  }
+  await prisma.unit.createMany({ data: rows });
+  return rows.length;
 }
 
 main()
