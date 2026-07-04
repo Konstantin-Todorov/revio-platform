@@ -8,7 +8,10 @@ sharing that database.
 - **Repo:** https://github.com/Konstantin-Todorov/revio-platform (`main`)
 - **RevioLink (Channel Manager):** https://channel-manager-production-59bb.up.railway.app
 - **Operator Console:** https://operator-production-5eed.up.railway.app
-- **Railway project `revio-platform`:** services `channel-manager`, `operator`, `Postgres` (one shared DB).
+- **RevioCRS (Reservation):** https://reservation-production-f8c5.up.railway.app
+- **RevioPMS (Operations):** https://pms-production-a64b.up.railway.app
+- **Railway project `revio-platform`:** services `channel-manager`, `operator`, `reservation`, `pms`,
+  `Postgres` (one shared DB).
 - **No root `railway.json`** — it applied to every service. Each app service sets its **own** build/start
   via Railway config (`railway environment edit --json` with `build.buildCommand` + `deploy.startCommand`
   using that app's `--filter`). Both target `prisma migrate deploy` → `next start` on `$PORT`.
@@ -111,28 +114,37 @@ with another tenant's `tenantId` is rejected with *"new row violates row-level s
 
 ## Adding the next app later (Operator / CRS / PMS)
 
-Same project, same database — just another service (this is how `reservation` was added, 2026-07-03):
+Same project, same database — just another service (`reservation` added 2026-07-03; `pms` 2026-07-04):
 
 ```bash
-railway add --service <name>          # or the Railway MCP create_service
-railway variables --service <name> --set "DATABASE_URL=${{Postgres.DATABASE_URL}}"   # reference var
-# per-service build/start (NEVER a root railway.json):
-railway environment edit \
-  --service-config <name> build.buildCommand "corepack enable && pnpm install --no-frozen-lockfile && pnpm --filter @revio/db db:generate && pnpm --filter @revio/<app> build" \
-  --service-config <name> deploy.startCommand "pnpm --filter @revio/db db:deploy && pnpm --filter @revio/<app> start"
-# set its own AUTH_SECRET, then a domain: railway domain --service <name>
+railway add --service <name>                       # CLI is interactive; the service still gets created
+railway variables --service <name> \
+  --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' \  # single-quote so the shell doesn't expand the ref
+  --set "AUTH_SECRET=$(openssl rand -hex 32)"        # each service gets its own secret
+railway domain --service <name>                    # generates <name>-production-XXXX.up.railway.app
 ```
 
-**Auto-deploy gotcha:** connecting a `source_repo` at creation builds ONCE but does not track the
-branch. Wire the trigger explicitly — and note the config change alone doesn't deploy; kick the
-first build yourself:
+**Per-service build/start — the CLI can't set it (v4.61.1 has NO `railway environment edit
+--service-config`; that runbook was for the Railway MCP, whose token expires mid-session).** Set the
+build/start commands and connect the GitHub source via the **GraphQL API** with the CLI's own
+`accessToken` (from `~/.railway/config.json` → `user.accessToken`). **Cloudflare 403s (error 1010)
+the default urllib UA — send a browser `User-Agent`.** Endpoint `https://backboard.railway.com/graphql/v2`:
 
-```bash
-railway environment edit \
-  --service-config <name> source.repo "Konstantin-Todorov/revio-platform" \
-  --service-config <name> source.branch "main"
-railway up --service <name> --detach   # first deploy; pushes auto-deploy from then on
 ```
+# 1) connect source (repo + branch → enables push auto-deploy):
+mutation{ serviceConnect(id:"<serviceId>", input:{repo:"Konstantin-Todorov/revio-platform", branch:"main"}){id} }
+# 2) set build + start on the production ServiceInstance (returns true):
+mutation{ serviceInstanceUpdate(serviceId:"<serviceId>", environmentId:"<prodEnvId>", input:{
+  buildCommand:"corepack enable && pnpm install --no-frozen-lockfile && pnpm --filter @revio/db db:generate && pnpm --filter @revio/<app> build",
+  startCommand:"pnpm --filter @revio/db db:deploy && pnpm --filter @revio/<app> start" }) }
+```
+(prod env id `3da5ed39-384c-4c26-8e1a-e7032c1b4dfe`. If `serviceInstanceUpdate` 400s ("Problem
+processing request") right after `serviceConnect`, it's a race — just retry it.) Then
+`railway up --service <name> --detach` for the first build (or setting a var already triggers one from
+the connected source). **NB deploy does NOT re-seed** — new entitlement flags (e.g. `hasPms`) +
+backfill data must be applied to prod separately via `DATABASE_PUBLIC_URL`
+(`railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL`); the PMS units backfill is
+kept as an idempotent, re-runnable example at `packages/db/scripts/pms-prod-backfill.sql`.
 
 ## Auto-deploy on push (optional, later)
 
