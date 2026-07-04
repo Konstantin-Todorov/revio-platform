@@ -16,7 +16,8 @@
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "cert-property": "tsx scripts/cert-property.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
