@@ -11,6 +11,21 @@ and get **production** access. Source: Channex "PMS certification tests" (14 sce
 
 ---
 
+## 0. Do we need multiple OTA channels? (the common misconception)
+
+**No — Channex PMS certification is about the PMS ↔ Channex API, not OTA connections.** We (RevioLink)
+are the PMS: we push ARI to Channex and receive bookings from Channex; Channex fans out to whatever OTAs
+the hotel has connected. Of the 14 tests, **only Test 11 involves a channel**, and it accepts either a
+**Booking.com test channel** *or* **manual booking creation** — we've done both. Tests 1–10 and 12–14
+explicitly say "channel mapping: not required." Connecting real OTAs (each needs that OTA's own
+credentials) is a per-hotel step done *after* certification, not a prerequisite.
+
+**Booking.com test channel — connected + mapped (Test 11's channel path):** using Channex's shared test
+Hotel IDs (no external creds), a "Booking.com (test)" channel is connected (connection test passed) with
+its rooms/rates mapped to ours — Holiday Home→Double Room (rates→Best Available Rate / Breakfast),
+Studio→Twin Room (rate→Best Available Rate). It shows "Disabled" until the OTA side accepts the
+connection (a shared-test-hotel limitation), but the connection + mapping — what cert checks — are done.
+
 ## 1. The certification sandbox (built + verified)
 
 Property **"Revio Test Hotel"** on staging.channex.io, now at the exact cert data model:
