@@ -107,6 +107,8 @@ model Property {
   units               Unit[]
   hkTasks             HousekeepingTask[]
   roomAssignments     RoomAssignment[]
+  folios              Folio[]
+  folioLines          FolioLine[]
 
   @@index([tenantId])
 }
@@ -450,6 +452,7 @@ model Reservation {
   lines    ReservationLine[]
   holds    Hold[]
   assignments RoomAssignment[]
+  folio    Folio?
 
   @@index([propertyId])
   @@index([channelId])
@@ -730,6 +733,48 @@ model RoomAssignment {
   @@index([propertyId, status])
   @@index([unitId, status])
   @@index([reservationId])
+}
+
+// The in-house bill for a stay (PMS Phase 3). ONE folio per reservation. Accommodation lines come from
+// the reservation rate (same source as CRS Room-Revenue, so the bill and the reports agree); extras/
+// minibar/fees are new PMS lines. Payments are LABELS + amounts only — no card data (docs/PMS-REFERENCE.md).
+model Folio {
+  id            String    @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  reservationId String    @unique
+  status        String    @default("open") // open | closed
+  currency      String
+  openedAt      DateTime  @default(now())
+  closedAt      DateTime?
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  lines       FolioLine[]
+
+  @@index([propertyId, status])
+}
+
+// One posting on a folio. Charges are positive amounts; a `payment` line reduces the balance.
+// Balance = Σ(non-voided charge amounts) − Σ(non-voided payment amounts). Voids are flagged, not deleted.
+model FolioLine {
+  id          String   @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  folioId     String
+  kind        String // accommodation | minibar | extra | fee | tax | payment
+  description String
+  amountMinor Int
+  method      String? // for payments (label only): cash | card | company_account | bank_transfer | prepaid_ota
+  ref         String?
+  voided      Boolean  @default(false)
+  postedById  String?
+  postedAt    DateTime @default(now())
+
+  folio    Folio    @relation(fields: [folioId], references: [id], onDelete: Cascade)
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([folioId])
 }
 
 // --- Monitoring: Sync / Error / Audit -------------------------------------

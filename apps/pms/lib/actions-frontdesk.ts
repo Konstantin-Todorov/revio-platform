@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { availableUnitsFor } from "./data";
+import { ensureFolio, folioBalance } from "./folio";
 import { logAudit, recordSync, str, int } from "./mutation-helpers";
 import { todayInTz, addDaysYmd, utcDay } from "./format";
 
@@ -80,14 +81,33 @@ export async function checkIn(fd: FormData): Promise<void> {
       userId: session.userId,
     });
   }
+  // Open the folio so charges can be posted during the stay (Phase 3).
+  await ensureFolio(session.tenantId, session.activePropertyId, reservationId);
   refresh();
   redirect("/dashboard");
 }
 
-/** Check a reservation out: stamp checkedOutAt on its active assignments and set each vacated unit Dirty. */
+/**
+ * Check a reservation out: stamp checkedOutAt on its active assignments, set each vacated unit Dirty,
+ * and close the folio. GATE: a non-zero folio balance blocks check-out (redirect to the folio to settle)
+ * unless `override` is set — then the outstanding balance + reason are logged.
+ */
 export async function checkOut(fd: FormData): Promise<void> {
   const session = await ctx();
   const reservationId = str(fd, "reservationId");
+  const override = fd.get("override") != null;
+  const reason = str(fd, "reason");
+
+  const folioId = await ensureFolio(session.tenantId, session.activePropertyId, reservationId);
+  if (folioId) {
+    const lines = await prisma.folioLine.findMany({ where: { folioId }, select: { kind: true, amountMinor: true, voided: true } });
+    const { balance } = folioBalance(lines);
+    if (balance !== 0 && !override) redirect(`/folio/${reservationId}?error=balance`);
+    if (balance !== 0 && override) {
+      await logAudit(session.activePropertyId, session.tenantId, { entity: "checkout_override", field: `balance ${balance}`, newValue: reason || "no reason given", userId: session.userId });
+    }
+  }
+
   const assignments = await prisma.roomAssignment.findMany({
     where: { reservationId, propertyId: session.activePropertyId, status: "active", checkedOutAt: null },
     include: { unit: { select: { label: true } }, reservation: { select: { guestName: true } } },
@@ -100,6 +120,7 @@ export async function checkOut(fd: FormData): Promise<void> {
       entity: "check_out", field: a.unit.label, oldValue: a.reservation.guestName, newValue: "departed · room now dirty", userId: session.userId,
     });
   }
+  if (folioId) await prisma.folio.update({ where: { id: folioId }, data: { status: "closed", closedAt: now } });
   refresh();
 }
 
@@ -194,6 +215,7 @@ export async function walkIn(fd: FormData): Promise<void> {
       status: "active", checkedInAt: new Date(),
     },
   });
+  await ensureFolio(session.tenantId, session.activePropertyId, reservation.id);
   await logAudit(session.activePropertyId, session.tenantId, { entity: "walk_in", field: unit.label, newValue: `${firstName} ${lastName} · ${nights}n`, userId: session.userId });
   await recordSync(session.activePropertyId, session.tenantId, `Walk-in checked in — ${roomType!.name} ${unit.label}`, "1 room taken off sale (new confirmed stay) · sent to channels on next sync");
   refresh();

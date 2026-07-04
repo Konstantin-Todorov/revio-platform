@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BedDouble, Sparkles, Wrench, CircleCheck, LogIn, LogOut, Users, ArrowRightLeft, UserPlus, DoorOpen } from "lucide-react";
+import { BedDouble, Sparkles, Wrench, CircleCheck, LogIn, LogOut, Users, ArrowRightLeft, UserPlus, DoorOpen, Receipt } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getFrontDeskOverview, type StayRow } from "@/lib/data";
 import { checkOut } from "@/lib/actions-frontdesk";
@@ -116,6 +116,9 @@ export default async function DashboardPage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
+                    <Link href={`/folio/${r.reservationId}`} aria-label="Folio" title="Folio / bill" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border text-ink-500 transition-colors hover:bg-surface-muted">
+                      <Receipt className="h-3.5 w-3.5" />
+                    </Link>
                     {r.assignedUnits[0] && (
                       <Link href={`/move/${r.assignedUnits[0].assignmentId}`} aria-label="Move room" title="Move room" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border text-ink-500 transition-colors hover:bg-surface-muted">
                         <ArrowRightLeft className="h-3.5 w-3.5" />
