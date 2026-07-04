@@ -10,10 +10,11 @@
  * Auth: header `user-api-key: <key>`. Sandbox base: https://staging.channex.io/api/v1.
  */
 
-import type { AriUpdate, ChannelAdapter, PushResult, RawReservation } from "@revio/core";
+import type { AriUpdate, ChannelAdapter, PushResult, RawReservation, RawRevision } from "@revio/core";
 import {
   toAvailabilityValue,
   toRawReservation,
+  toRawRevision,
   toRestrictionValue,
   unsupportedReason,
   type ChannexBooking,
@@ -31,6 +32,8 @@ export interface ChannexConfig {
   baseUrl?: string;
   /** Our logical channel code for this connection, e.g. "booking". */
   channelCode?: string;
+  /** Minimum milliseconds between outgoing requests (rate limiter). Default 250ms (≤ 4 req/s). */
+  minRequestGapMs?: number;
 }
 
 interface ApiResult {
@@ -47,11 +50,31 @@ export class ChannexChannelAdapter implements ChannelAdapter {
   private readonly propertyId: string;
   private readonly baseUrl: string;
 
+  // Rate limiter (Channex certification test 12): all requests are serialized through one promise
+  // chain with a minimum gap between them, so we never fire a burst that trips Channex's limits.
+  private readonly minGapMs: number;
+  private chain: Promise<unknown> = Promise.resolve();
+  private lastStart = 0;
+
   constructor(config: ChannexConfig) {
     this.apiKey = config.apiKey;
     this.propertyId = config.propertyId;
     this.baseUrl = (config.baseUrl ?? CHANNEX_STAGING_URL).replace(/\/$/, "");
     this.channelCode = config.channelCode ?? "channex";
+    this.minGapMs = config.minRequestGapMs ?? 250; // ≤ 4 req/s, comfortably under Channex limits
+  }
+
+  /** Serialize + throttle: run `fn` after the previous request and after the min gap has elapsed. */
+  private schedule<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.chain.then(async () => {
+      const wait = this.minGapMs - (Date.now() - this.lastStart);
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      this.lastStart = Date.now();
+      return fn();
+    });
+    // Keep the chain alive regardless of individual success/failure.
+    this.chain = run.then(() => undefined, () => undefined);
+    return run;
   }
 
   async pushAri(updates: AriUpdate[]): Promise<PushResult> {
@@ -119,9 +142,24 @@ export class ChannexChannelAdapter implements ChannelAdapter {
   }
 
   /**
+   * Pull the **booking-revisions feed** — the certified way to receive bookings (new / modified /
+   * cancelled). Each item carries a `revisionId` to acknowledge; only UNacked revisions are returned,
+   * so this is naturally idempotent. Ack each via `acknowledgeBooking(revisionId)` after processing.
+   */
+  async pullRevisions(): Promise<RawRevision[]> {
+    const params = new URLSearchParams();
+    params.set("filter[property_id]", this.propertyId);
+    params.set("order[inserted_at]", "asc");
+    const res = await this.get(`/booking_revisions/feed?${params.toString()}`);
+    if (!res.ok) return [];
+    const data = (res.body as { data?: ChannexBooking[] } | null)?.data ?? [];
+    return data.map(toRawRevision);
+  }
+
+  /**
    * Acknowledge a booking revision so Channex stops re-sending it (Channex re-delivers unacked
-   * revisions for 30 min, then emails a warning). Required for PMS certification. The revision id is
-   * `attributes.revision_id` on a pulled booking.
+   * revisions for 30 min, then emails a warning). Required for PMS certification. The revision id
+   * comes from `pullRevisions()` (or `attributes.revision_id` on a pulled booking).
    */
   async acknowledgeBooking(revisionId: string): Promise<{ ok: boolean; error?: string }> {
     const res = await this.post(`/booking_revisions/${revisionId}/ack`, {});
@@ -146,7 +184,12 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     return this.request("GET", path);
   }
 
-  private async request(method: string, path: string, body?: unknown): Promise<ApiResult> {
+  private request(method: string, path: string, body?: unknown): Promise<ApiResult> {
+    // Every request goes through the rate limiter (serialized + min-gap).
+    return this.schedule(() => this.doRequest(method, path, body));
+  }
+
+  private async doRequest(method: string, path: string, body?: unknown): Promise<ApiResult> {
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}${path}`, {

@@ -4,6 +4,7 @@ import {
   toRestrictionValue,
   toAvailabilityValue,
   toRawReservation,
+  toRawRevision,
   unsupportedReason,
   type ChannexBooking,
 } from "./channex-mappers.js";
@@ -126,5 +127,28 @@ describe("Channex booking -> RawReservation", () => {
     expect(r.status).toBe("cancelled");
     expect(r.guestName).toBe("Channel Guest");
     expect(r.totalMinor).toBe(0);
+  });
+});
+
+describe("Channex booking-revision feed -> RawRevision", () => {
+  it("keeps the revision id for ack but uses the stable booking id as externalId", () => {
+    const rev = toRawRevision({
+      id: "revision-uuid",
+      attributes: {
+        booking_id: "booking-uuid",
+        status: "modified",
+        amount: "390.00",
+        currency: "EUR",
+        arrival_date: "2026-07-07",
+        departure_date: "2026-07-10",
+        customer: { name: "Maria", surname: "Ivanova" },
+        rooms: [{ room_type_id: "r", rate_plan_id: "p", days: { "2026-07-07": "130.00", "2026-07-08": "130.00", "2026-07-09": "130.00" } }],
+      },
+    });
+    expect(rev.revisionId).toBe("revision-uuid");
+    expect(rev.reservation.externalId).toBe("booking-uuid"); // stable across revisions, NOT the revision id
+    expect(rev.reservation.status).toBe("modified");
+    expect(rev.reservation.totalMinor).toBe(39000);
+    expect(rev.reservation.lines[0]).toMatchObject({ checkIn: "2026-07-07", checkOut: "2026-07-10" });
   });
 });

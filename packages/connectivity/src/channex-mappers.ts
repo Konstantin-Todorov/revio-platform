@@ -4,7 +4,7 @@
  * around these functions. Channex API reference: https://docs.channex.io/api-v.1-documentation/ari
  */
 
-import type { AriUpdate, RawReservation } from "@revio/core";
+import type { AriUpdate, RawReservation, RawRevision } from "@revio/core";
 
 // --- Channex wire types (subset we use) -----------------------------------
 
@@ -72,7 +72,10 @@ interface ChannexBookingAttributes {
   departure_date?: string;
   customer?: ChannexCustomer | null;
   rooms?: ChannexBookingRoom[];
+  /** On a booking-revision feed item: the stable booking id (revision id is the resource id). */
+  booking_id?: string;
 }
+
 
 /** Add one calendar day to a YYYY-MM-DD string (last stay night → checkout date). */
 function nextDay(ymd: string): string {
@@ -153,4 +156,15 @@ export function toRawReservation(b: ChannexBooking): RawReservation {
     totalMinor: a.amount != null ? Math.round(Number(a.amount) * 100) : 0,
     currency: a.currency ?? "EUR",
   };
+}
+
+/**
+ * Map a booking-revisions feed item → { revisionId, reservation }. The revision's resource id is the
+ * ack target; the reservation's externalId is the STABLE booking id (so new/modified/cancelled
+ * revisions of one booking all normalize to the same reservation).
+ */
+export function toRawRevision(r: ChannexBooking): RawRevision {
+  const a: ChannexBookingAttributes = r.attributes ?? r;
+  const bookingId = a.booking_id ?? r.id;
+  return { revisionId: r.id, reservation: toRawReservation({ id: bookingId, attributes: a }) };
 }

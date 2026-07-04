@@ -58,18 +58,19 @@ Verify any task landed: `GET /api/v1/tasks/{id}` → `attributes.success: true, 
 
 ---
 
-## 3. Test 11 (bookings) — pull + acknowledge working; modify/cancel to add
+## 3. Test 11 (bookings) — full lifecycle over the certified feed ✅
 
-The **Booking CRS** app is installed on the property (enables offline test bookings). Our adapter
-pulls and acknowledges:
+The **Booking CRS** app is installed (enables offline test bookings). The whole lifecycle runs over the
+certified **`GET /booking_revisions/feed`** (not the legacy `/bookings`), acknowledging each revision:
 ```bash
-pnpm channex:book            # create test booking → pull via adapter → acknowledge (green "Acked")
+pnpm channex:lifecycle       # create → feed(new) → ack → modify → feed(modified) → ack → cancel → feed(cancelled) → ack
+pnpm channex:book            # simpler: create → pull → acknowledge (green "Acked")
 ```
-✅ **Receive** (pull, correctly parsed) and ✅ **acknowledge** (`POST /booking_revisions/:id/ack`) are
-done and verified in the Bookings tab. **To finish test 11:** demonstrate **modify** and **cancel** of a
-booking and re-acknowledge each revision, and (recommended) switch the pull from `GET /bookings` to the
-certified **`GET /booking_revisions` feed** (webhooks preferred for notification). For submission the
-cert wants **booking IDs + screenshots of the bookings in RevioLink** — which needs §4.
+✅ **Receive / modify / cancel / acknowledge** all verified live. The adapter exposes `pullRevisions()`
+(feed) + `acknowledgeBooking(revisionId)`; **RevioLink's own pull uses the feed** — the CM `pullChannel`
+prefers `pullRevisions` and acks every revision (verified: app Pull imported a booking and the feed went
+empty). For submission the cert wants **booking IDs + screenshots of the bookings in RevioLink** — drive
+this from the cert property (§4), whose channel is connected to the sandbox.
 
 ---
 
@@ -96,9 +97,9 @@ needs steps 1–4.
 
 ## 5. Tests 12–14 — written answers for the form
 
-- **12 · Rate limits:** our pushes are **batched into ≤2 calls per change** (one `/restrictions`, one
-  `/availability`); auto-push is event-driven, not a tight loop. *To add before submission:* an explicit
-  queue/backoff honouring Channex's documented rate limits.
+- **12 · Rate limits:** ✅ the adapter has a **built-in rate limiter** — every request is serialized
+  through one queue with a minimum gap (`minRequestGapMs`, default 250ms ≈ ≤4 req/s), so we never burst.
+  Pushes are also batched into ≤2 calls per change.
 - **13 · Update logic:** we send **delta updates on edit** (event-driven). Full sync is a manual/periodic
   action, not a timer. *Confirm in the form:* full-sync ≤ once per 24h off-peak.
 - **14 · Extra notes:** we support **min-stay (arrival + through)**, **CTA/CTD**, **stop-sell**, **max-stay**,
@@ -109,7 +110,10 @@ needs steps 1–4.
 
 ## 6. Open items before scheduling the cert call
 
-- [ ] Wire the RevioLink channel → sandbox + map rooms/rates (§4) — the screenshare gate
-- [ ] Booking **modify + cancel** demo + switch pull to `/booking_revisions` feed (§3)
-- [ ] Rate-limit queue/backoff (§5.12)
-- [ ] Fill the form: task IDs (§2), booking IDs + screenshots (§3), written answers (§5)
+- [x] Wire the RevioLink channel → sandbox + map rooms/rates (§4) — done ("Revio Cert Hotel", verified
+      live: a UI Re-sync pushed 56/56 to Channex, task success)
+- [x] Booking **modify + cancel** + switch pull to the `/booking_revisions` feed (§3)
+- [x] Rate-limit queue (§5.12)
+- [ ] Fill the form: task IDs (`pnpm channex:cert`), booking IDs + screenshots from the cert property,
+      written answers (§5)
+- [ ] Schedule the screenshare and drive every scenario from the RevioLink UI on the cert property

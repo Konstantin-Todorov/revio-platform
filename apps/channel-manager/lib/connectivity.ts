@@ -265,10 +265,20 @@ export async function pullChannel(channelId: string): Promise<PullOutcome> {
       : {}),
   });
 
+  // Prefer the certified booking-revisions feed (Channex) — only un-acked revisions, which we then
+  // acknowledge; fall back to the plain reservations pull for adapters without a feed (mock).
+  const useFeed = typeof adapter.pullRevisions === "function" && typeof adapter.acknowledgeBooking === "function";
   const since = new Date(Date.now() - PULL_LOOKBACK_DAYS * DAY_MS).toISOString();
   let raws;
+  const ackIds: string[] = [];
   try {
-    raws = await adapter.pullReservations(since);
+    if (useFeed) {
+      const revisions = await adapter.pullRevisions!();
+      raws = revisions.map((r) => r.reservation);
+      for (const r of revisions) ackIds.push(r.revisionId);
+    } else {
+      raws = await adapter.pullReservations(since);
+    }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Pull failed";
     await prisma.syncEvent.create({
@@ -390,10 +400,20 @@ export async function pullChannel(channelId: string): Promise<PullOutcome> {
     imported++;
   }
 
+  // Acknowledge every revision we received (cert requirement) so Channex stops re-delivering them —
+  // including failed_import rows: the booking is on our side now, surfaced in the Error Center.
+  for (const revisionId of ackIds) {
+    try {
+      await adapter.acknowledgeBooking!(revisionId);
+    } catch {
+      /* a failed ack just means Channex re-sends it next pull — safe (idempotent). */
+    }
+  }
+
   await prisma.syncEvent.create({
     data: {
       tenantId, propertyId, channelId, kind: "pull", status: "success",
-      summary: `Pulled ${raws.length} bookings from ${channel.name} (${imported} new · ${updated} updated · ${unchanged} unchanged)`,
+      summary: `Pulled ${raws.length} ${useFeed ? "revisions" : "bookings"} from ${channel.name} (${imported} new · ${updated} updated · ${unchanged} unchanged)`,
     },
   });
   await prisma.channel.update({ where: { id: channelId }, data: { lastSyncAt: new Date() } });

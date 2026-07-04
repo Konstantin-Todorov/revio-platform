@@ -53,6 +53,13 @@ export interface RawReservation {
   currency: string;
 }
 
+/** One item from a channel's booking-revisions feed: a booking event (new/modified/cancelled) plus
+ *  the id to acknowledge so it isn't re-delivered. */
+export interface RawRevision {
+  revisionId: string;
+  reservation: RawReservation;
+}
+
 export interface ChannelAdapter {
   /** e.g. "booking", "expedia", "mock". */
   readonly channelCode: string;
@@ -60,4 +67,12 @@ export interface ChannelAdapter {
   pushAri(updates: AriUpdate[]): Promise<PushResult>;
   /** Pull bookings created/changed since a cursor. */
   pullReservations(since: string): Promise<RawReservation[]>;
+  /**
+   * Certified booking-revisions feed pull (Channex): returns only UN-acknowledged revisions. When an
+   * adapter implements this, callers should prefer it over pullReservations and acknowledge each
+   * revision after processing. Optional — adapters without a real feed (e.g. the mock) omit it.
+   */
+  pullRevisions?(): Promise<RawRevision[]>;
+  /** Acknowledge a booking revision (pairs with pullRevisions). */
+  acknowledgeBooking?(revisionId: string): Promise<{ ok: boolean; error?: string }>;
 }

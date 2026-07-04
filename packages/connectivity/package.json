@@ -16,7 +16,8 @@
     "channex:fill": "tsx scripts/channex-fill.ts",
     "channex:book": "tsx scripts/channex-test-booking.ts",
     "channex:cert-setup": "tsx scripts/channex-cert-setup.ts",
-    "channex:cert": "tsx scripts/channex-cert.ts"
+    "channex:cert": "tsx scripts/channex-cert.ts",
+    "channex:lifecycle": "tsx scripts/channex-lifecycle.ts"
   },
   "dependencies": {
     "@revio/core": "workspace:*"
