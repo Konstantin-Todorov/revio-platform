@@ -67,13 +67,10 @@ export class ChannexChannelAdapter implements ChannelAdapter {
       return { ok: rejected.length === 0, rejected };
     }
 
-    // Two batched calls keep us well under Channex's per-property rate limits.
-    const restrictions = await this.post("/restrictions", {
-      values: supported.map((u) => toRestrictionValue(this.propertyId, u)),
-    });
-    const availability = await this.post("/availability", {
-      values: supported.map((u) => toAvailabilityValue(this.propertyId, u)),
-    });
+    // Two batched calls keep us well under Channex's per-property rate limits (and satisfy the
+    // certification "500 days in ≤ 2 API calls" rule regardless of how many days are batched).
+    const restrictions = await this.pushRatesAndRestrictions(supported);
+    const availability = await this.pushAvailability(supported);
 
     if (!restrictions.ok) {
       for (const update of supported) rejected.push({ update, reason: `restrictions: ${restrictions.error}` });
@@ -83,9 +80,30 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     }
 
     const result: PushResult = { ok: restrictions.ok && availability.ok, rejected };
-    const responseId = restrictions.responseId ?? availability.responseId;
-    if (responseId) result.channelResponseId = responseId;
+    // Channex returns a task id per call ({data:[{id,type:"task"}]}); keep both — the certification
+    // form wants the task id from each ARI push.
+    const taskIds = [restrictions.taskId, availability.taskId].filter((id): id is string => !!id);
+    if (taskIds.length) {
+      result.taskIds = taskIds;
+      result.channelResponseId = taskIds[0]!;
+    }
     return result;
+  }
+
+  /** Push only rates + restrictions (one Channex /restrictions call). Returns the Channex task id. */
+  async pushRatesAndRestrictions(updates: AriUpdate[]): Promise<{ ok: boolean; taskId?: string; error?: string }> {
+    const res = await this.post("/restrictions", {
+      values: updates.map((u) => toRestrictionValue(this.propertyId, u)),
+    });
+    return res.ok ? { ok: true, ...(res.responseId ? { taskId: res.responseId } : {}) } : { ok: false, error: res.error ?? `HTTP ${res.status}` };
+  }
+
+  /** Push only availability (one Channex /availability call). Returns the Channex task id. */
+  async pushAvailability(updates: AriUpdate[]): Promise<{ ok: boolean; taskId?: string; error?: string }> {
+    const res = await this.post("/availability", {
+      values: updates.map((u) => toAvailabilityValue(this.propertyId, u)),
+    });
+    return res.ok ? { ok: true, ...(res.responseId ? { taskId: res.responseId } : {}) } : { ok: false, error: res.error ?? `HTTP ${res.status}` };
   }
 
   async pullReservations(since: string): Promise<RawReservation[]> {
@@ -151,7 +169,11 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     if (!res.ok) {
       return { ok: false, status: res.status, error: extractError(parsed) ?? `HTTP ${res.status}`, body: parsed };
     }
-    const responseId = (parsed as { data?: { id?: string } } | null)?.data?.id;
+    // ARI pushes return {data:[{id,type:"task"}]} (array); other creates return {data:{id}} (object).
+    const dataField = (parsed as { data?: unknown } | null)?.data;
+    const responseId = Array.isArray(dataField)
+      ? (dataField[0] as { id?: string } | undefined)?.id
+      : (dataField as { id?: string } | undefined)?.id;
     return { ok: true, status: res.status, body: parsed, ...(responseId ? { responseId } : {}) };
   }
 }

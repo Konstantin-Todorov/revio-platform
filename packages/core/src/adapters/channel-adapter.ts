@@ -32,6 +32,9 @@ export interface PushResult {
   /** Per-update failures, so a single unsupported restriction surfaces in the Error Center. */
   rejected: Array<{ update: AriUpdate; reason: string }>;
   channelResponseId?: string;
+  /** Async task/queue ids the channel returned (e.g. Channex task ids) — recorded for auditing
+   *  and PMS certification, where each push's task id is submitted as proof. */
+  taskIds?: string[];
 }
 
 /** A booking as it comes back from a channel, before it becomes a domain Reservation. */
