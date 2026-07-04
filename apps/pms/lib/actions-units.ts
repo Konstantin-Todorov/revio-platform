@@ -101,6 +101,10 @@ export async function deleteUnit(fd: FormData): Promise<void> {
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
   if (!unit || unit.propertyId !== session.activePropertyId) return;
 
+  // Never delete a room with a guest in it (would cascade away the stay record).
+  const occupied = await prisma.roomAssignment.count({ where: { unitId, status: "active", checkedOutAt: null } });
+  if (occupied > 0) return;
+
   await prisma.unit.delete({ where: { id: unitId } });
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit", field: "delete", oldValue: unit.label, userId: session.userId });
   refresh();

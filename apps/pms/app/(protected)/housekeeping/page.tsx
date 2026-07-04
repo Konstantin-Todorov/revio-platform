@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { User } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getHousekeepingUnits, statusCounts, type UnitRow } from "@/lib/data";
 import { StatusControl } from "@/components/housekeeping/StatusControl";
@@ -52,6 +53,10 @@ export default async function HousekeepingPage() {
                 <span className="tnum text-ink-900">{counts[s]}</span>
               </span>
             ))}
+            <span className="inline-flex items-center gap-2 rounded-full border border-brand-800/20 bg-brand-50 px-3 py-1.5 text-[12.5px] font-semibold text-brand-700">
+              <User className="h-3 w-3" /> Occupied
+              <span className="tnum">{units.filter((u) => u.occupied).length}</span>
+            </span>
           </div>
 
           {/* Board grouped by floor */}
@@ -66,6 +71,16 @@ export default async function HousekeepingPage() {
                         <span className="text-[16px] font-bold tracking-tight text-ink-900">{u.label}</span>
                         <span className="truncate pl-2 text-[10.5px] font-medium text-ink-500">{u.roomTypeName}</span>
                       </div>
+                      <div className="mt-1 flex items-center gap-1 text-[10.5px] leading-tight">
+                        {u.occupied ? (
+                          <>
+                            <User className="h-3 w-3 shrink-0 text-brand-700" />
+                            <span className="truncate font-semibold text-brand-700">{u.guestName ?? "Occupied"}</span>
+                          </>
+                        ) : (
+                          <span className="text-ink-400">Vacant</span>
+                        )}
+                      </div>
                       <div className="mt-2">
                         <StatusControl unitId={u.id} status={u.hkStatus} />
                       </div>
@@ -78,7 +93,7 @@ export default async function HousekeepingPage() {
 
           <p className="mt-5 text-[11.5px] text-ink-400">
             Marking a room <span className="font-semibold text-danger-600">Out of order</span> takes it off sale on every
-            channel (via the shared availability waterfall) until it’s back in service. Occupied/vacant overlay arrives in Phase 2.
+            channel (via the shared availability waterfall) until it’s back in service. Occupancy (guest name) reflects live check-ins from the Front Desk.
           </p>
         </>
       )}

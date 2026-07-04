@@ -47,3 +47,8 @@ export function addDaysYmd(dateYmd: string, days: number): string {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
+
+/** Parse a YYYY-MM-DD string into a UTC-midnight Date (for @db.Date columns). */
+export function utcDay(dateYmd: string): Date {
+  return new Date(dateYmd + "T00:00:00Z");
+}

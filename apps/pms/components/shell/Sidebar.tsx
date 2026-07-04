@@ -112,7 +112,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
-        RevioPMS · Phase 1 · Units &amp; Housekeeping
+        RevioPMS · Phase 2 · Front Desk
       </div>
       </aside>
     </>

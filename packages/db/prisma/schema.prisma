@@ -106,6 +106,7 @@ model Property {
   defaults            PropertyDefaults?
   units               Unit[]
   hkTasks             HousekeepingTask[]
+  roomAssignments     RoomAssignment[]
 
   @@index([tenantId])
 }
@@ -448,6 +449,7 @@ model Reservation {
   bookingSource BookingSource? @relation(fields: [bookingSourceId], references: [id])
   lines    ReservationLine[]
   holds    Hold[]
+  assignments RoomAssignment[]
 
   @@index([propertyId])
   @@index([channelId])
@@ -468,6 +470,7 @@ model ReservationLine {
   reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   roomType    RoomType    @relation(fields: [roomTypeId], references: [id])
   ratePlan    RatePlan    @relation(fields: [ratePlanId], references: [id])
+  assignments RoomAssignment[]
 
   @@index([reservationId])
 }
@@ -674,6 +677,7 @@ model Unit {
   roomType         RoomType              @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
   hkTasks          HousekeepingTask[]
   inventoryPeriods RoomInventoryPeriod[]
+  assignments      RoomAssignment[]
 
   @@index([propertyId])
   @@index([roomTypeId, sortOrder])
@@ -696,6 +700,36 @@ model HousekeepingTask {
   unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   @@index([propertyId, status])
+}
+
+// A physical Unit assigned to a reservation line for a date range (PMS front desk, Phase 2). Supports
+// room moves (end one, open another). The operational check-in/out timestamps live HERE — the
+// Reservation's sold/availability status is unchanged (a checked-in guest is still a confirmed, sold
+// booking that the waterfall already counts). Stay state is derived: no checkedInAt = arriving;
+// checkedInAt & no checkedOutAt = in-house; checkedOutAt set = departed.
+model RoomAssignment {
+  id                String    @id @default(cuid())
+  tenantId          String
+  propertyId        String
+  reservationId     String
+  reservationLineId String
+  unitId            String
+  checkIn           DateTime  @db.Date // stay window (copied from the line at assignment time)
+  checkOut          DateTime  @db.Date
+  status            String    @default("active") // active | moved | cancelled
+  checkedInAt       DateTime?
+  checkedOutAt      DateTime?
+  note              String?
+  createdAt         DateTime  @default(now())
+
+  reservation Reservation     @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  line        ReservationLine @relation(fields: [reservationLineId], references: [id], onDelete: Cascade)
+  unit        Unit            @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  property    Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, status])
+  @@index([unitId, status])
+  @@index([reservationId])
 }
 
 // --- Monitoring: Sync / Error / Audit -------------------------------------

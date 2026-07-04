@@ -41,6 +41,4 @@ export function int(fd: FormData, key: string, fallback = 0): number {
   return Number.isFinite(n) ? Math.trunc(n) : fallback;
 }
 
-export function utcDay(iso: string): Date {
-  return new Date(iso + "T00:00:00Z");
-}
+export { utcDay } from "./format";
