@@ -190,10 +190,15 @@ not yet wired into the app or deployed).
     DDR 12→11→12). Screens: Front Desk (HK status cards + today's arrivals/departures/in-house from the
     shared reservation record), Housekeeping board (floor-grouped, mobile/PWA status control), Rooms
     setup (add / bulk-generate / delete Units). Units seeded for both demo hotels; `hasPms` on. Prod
-    build green. ⬜ Remaining: push + stand up the 4th Railway service (like CRS — MCP create doesn't
-    auto-deploy on push).
-  - ⬜ **Phases 2–5:** Front Desk (check-in / RoomAssignment / walk-in / room move) → Folio & Billing →
-    Minibar/POS → Maintenance + manual Close Day. (`docs/PMS-REFERENCE.md` "MVP build order".)
+    build green. **Deployed live 2026-07-04: https://pms-production-a64b.up.railway.app** (4th Railway
+    service `pms`; auto-deploys on push; migration applied on prod; `hasPms` + units backfilled).
+  - ✅ **Phase 2 done (2026-07-04) — Front Desk.** `RoomAssignment` (line ↔ unit + checkedInAt/Out) —
+    reservation sold-status unchanged, stay state derived. check-in (unit assignment + override),
+    check-out (unit→dirty), room move, walk-in (same-day confirmed direct stay → reduces waterfall).
+    Screens: Front Desk hub + /checkin/[id] + /walkin + /move/[assignmentId]; housekeeping occupancy
+    overlay. Verified end-to-end via real server actions; deployed live.
+  - ⬜ **Phases 3–5:** Folio & Billing (labels-only payments) → Minibar/POS → Maintenance + manual
+    Close Day. (`docs/PMS-REFERENCE.md` "MVP build order".)
 - **RLS Phase 2 (prod enforcement) LAST** so one migration pass covers every product's tenant tables
   (`DEPLOY.md`).
 - **The operator (us) stays the admin over everything**: Operator Console provisions clients + flips
