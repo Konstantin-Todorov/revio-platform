@@ -203,8 +203,12 @@ not yet wired into the app or deployed).
     payment (label + amount only, no card data), void (flagged). **Check-out gates on balance** (blocks
     unless override, logged) + closes the folio. Screens: /folios + /folio/[reservationId]. Verified
     end-to-end; deployed live.
-  - ⬜ **Phases 4–5:** Minibar/POS catalog (quick-post to folio) → Maintenance + manual Close Day.
-    (`docs/PMS-REFERENCE.md` "MVP build order".)
+  - ✅ **Phase 4 done (2026-07-05) — Minibar / POS.** `PosItem` catalog (minibar|extra) + tap-to-post to
+    a stay's folio (a FolioLine of the item's kind). Screens: /minibar (occupied rooms) →
+    /minibar/[reservationId] (mobile tap-to-post) → /minibar/catalog (CRUD). Seeded catalog; verified
+    end-to-end; deployed live.
+  - ⬜ **Phase 5 (last):** Maintenance task board (a unit task can flag it OOO) + the manual "Close Day"
+    night-audit → completes RevioPMS V1. (`docs/PMS-REFERENCE.md` "MVP build order".)
 - **RLS Phase 2 (prod enforcement) LAST** so one migration pass covers every product's tenant tables
   (`DEPLOY.md`).
 - **The operator (us) stays the admin over everything**: Operator Console provisions clients + flips
