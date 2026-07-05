@@ -67,6 +67,24 @@ model ConnectivityCredential {
   @@index([tenantId])
 }
 
+// Operator-side billing (our invoices to the hotels). Operator business data — a hotel can NEVER read
+// it (RLS = bypass-only, like ConnectivityCredential). Payments are MOCKED in V1 (no gateway): status
+// moves draft → sent → paid manually; no card/money is handled here.
+model Invoice {
+  id          String    @id @default(cuid())
+  tenantId    String
+  period      String // billing month "YYYY-MM"
+  amountMinor Int
+  currency    String    @default("EUR")
+  status      String    @default("draft") // draft | sent | paid
+  lineItems   String? // human-readable summary of what's billed (plan + products)
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+
+  @@unique([tenantId, period])
+  @@index([tenantId])
+}
+
 // --- Property & sellable products -----------------------------------------
 
 model Property {

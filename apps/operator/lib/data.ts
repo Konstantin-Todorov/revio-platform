@@ -1,5 +1,6 @@
 import "server-only";
 import { forSystem, decryptSecret, keyHint } from "@revio/db";
+import { monthlyPriceMinor, billedProducts, type Entitlements } from "./pricing";
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
@@ -53,6 +54,83 @@ export async function getClients() {
       };
     }),
   );
+}
+
+/**
+ * Cross-tenant sync & error health — the operator's platform-wide monitor. Sync success rate over the
+ * last 24h, open errors by severity, per-tenant health, and the most recent failures to act on.
+ */
+export async function getPlatformHealth() {
+  const since = new Date(Date.now() - 24 * 3600 * 1000);
+  const [events, openErrors, failedRecent, tenants] = await Promise.all([
+    prisma.syncEvent.findMany({ where: { createdAt: { gte: since } }, select: { tenantId: true, status: true, kind: true } }),
+    prisma.errorItem.findMany({ where: { resolved: false }, select: { tenantId: true, severity: true } }),
+    prisma.syncEvent.findMany({ where: { status: "failed" }, orderBy: { createdAt: "desc" }, take: 10, include: { property: { select: { name: true } }, channel: { select: { name: true } } } }),
+    prisma.tenant.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true, status: true } }),
+  ]);
+
+  const total = events.length;
+  const success = events.filter((e) => e.status === "success").length;
+  const failed = events.filter((e) => e.status === "failed").length;
+  const pushes = events.filter((e) => e.kind === "push").length;
+  const pulls = events.filter((e) => e.kind === "pull").length;
+
+  const bySeverity = {
+    critical: openErrors.filter((e) => e.severity === "critical").length,
+    warning: openErrors.filter((e) => e.severity === "warning").length,
+    info: openErrors.filter((e) => e.severity === "info").length,
+  };
+
+  const byTenant = tenants.map((t) => {
+    const te = events.filter((e) => e.tenantId === t.id);
+    const s = te.filter((e) => e.status === "success").length;
+    return {
+      id: t.id, name: t.name, status: t.status,
+      syncs: te.length,
+      successRate: te.length ? Math.round((s / te.length) * 100) : null,
+      openErrors: openErrors.filter((e) => e.tenantId === t.id).length,
+    };
+  });
+
+  return {
+    window24h: { total, success, failed, pushes, pulls, successRate: total ? Math.round((success / total) * 100) : null },
+    openErrors: openErrors.length,
+    bySeverity,
+    byTenant,
+    failedRecent: failedRecent.map((e) => ({ id: e.id, property: e.property.name, channel: e.channel?.name ?? "—", summary: e.summary, detail: e.detail, createdAt: e.createdAt })),
+  };
+}
+
+/** Billing overview: each client's plan + computed monthly price + this month's invoice, plus MRR. */
+export async function getBilling() {
+  const period = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const [tenants, invoices] = await Promise.all([
+    prisma.tenant.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.invoice.findMany({ orderBy: { createdAt: "desc" } }),
+  ]);
+  const byKey = new Map(invoices.map((i) => [`${i.tenantId}:${i.period}`, i]));
+  const tenantName = new Map(tenants.map((t) => [t.id, t.name]));
+
+  const clients = tenants.map((t) => {
+    const ent: Entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
+    const priceMinor = monthlyPriceMinor(t.plan, ent);
+    const current = byKey.get(`${t.id}:${period}`) ?? null;
+    return {
+      id: t.id, name: t.name, plan: t.plan, status: t.status,
+      products: billedProducts(ent) || "—",
+      priceMinor,
+      currentInvoice: current ? { id: current.id, status: current.status, amountMinor: current.amountMinor } : null,
+    };
+  });
+
+  const mrr = clients.filter((c) => c.status === "active").reduce((s, c) => s + c.priceMinor, 0);
+  const recent = invoices.slice(0, 15).map((i) => ({ id: i.id, tenant: tenantName.get(i.tenantId) ?? "—", period: i.period, amountMinor: i.amountMinor, currency: i.currency, status: i.status }));
+  return { period, clients, mrr, unpaidCount: invoices.filter((i) => i.status !== "paid").length, recent };
+}
+
+/** Operator staff (us) — the people who can log into this console. */
+export async function getOperatorUsers() {
+  return prisma.operatorUser.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true, email: true, role: true, createdAt: true } });
 }
 
 /** Connectivity credentials per client — key HINTS only (last 4 chars), never the key itself. */
