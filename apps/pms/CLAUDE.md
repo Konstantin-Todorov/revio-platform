@@ -1,11 +1,12 @@
 # App: PMS — Operations (`@revio/pms`)
 
-> Part of the **Revio platform** — read the root `CLAUDE.md` first. **Now the active build** (started
-> 2026-07-04, after RevioCRS V1). **Canonical spec: `docs/PMS-REFERENCE.md`** (founder-confirmed V1 scope).
+> Part of the **Revio platform** — read the root `CLAUDE.md` first. **V1 COMPLETE — all 5 phases built,
+> tested, live (2026-07-05).** **Canonical spec: `docs/PMS-REFERENCE.md`** (founder-confirmed V1 scope).
 > **LIVE: https://pms-production-a64b.up.railway.app** (port 3003, cookie `revio_pms_session`, `hasPms`
-> gate). **Phases 1-4 DONE + deployed** (Units & Housekeeping · Front Desk check-in/out/move/walk-in ·
+> gate). **Phases 1-5 DONE — RevioPMS V1 COMPLETE, live** (Units & Housekeeping · Front Desk check-in/out/move/walk-in ·
 > Folio & Billing with labels-only payments + a check-out balance gate · Minibar/POS catalog + tap-to-post
-> to the folio). Next: Phase 5 (Maintenance task board + manual Close Day = last PMS phase). Gotchas: the RLS proxy `lib/db.ts` forwards `prisma.<model>.<op>`
+> to the folio · Maintenance task board + manual Close Day night-audit). Next: Channex production cert
+> (process), then RLS prod-enforcement flip (LAST, covers all products). Gotchas: the RLS proxy `lib/db.ts` forwards `prisma.<model>.<op>`
 > ONLY (no `$transaction`); the preview harness drops the session cookie on server-action POSTs (verify via
 > minted-cookie curl — GET link-clicks keep it); after a migration RESTART `next dev` + `rm -rf .next` so it
 > loads the regenerated Prisma client; re-mint the session cookie after any re-seed (User ids change).

@@ -207,8 +207,11 @@ not yet wired into the app or deployed).
     a stay's folio (a FolioLine of the item's kind). Screens: /minibar (occupied rooms) →
     /minibar/[reservationId] (mobile tap-to-post) → /minibar/catalog (CRUD). Seeded catalog; verified
     end-to-end; deployed live.
-  - ⬜ **Phase 5 (last):** Maintenance task board (a unit task can flag it OOO) + the manual "Close Day"
-    night-audit → completes RevioPMS V1. (`docs/PMS-REFERENCE.md` "MVP build order".)
+  - ✅ **Phase 5 done (2026-07-05) — Maintenance + Close Day. REVIOPMS V1 COMPLETE.** `MaintenanceTask` +
+    `Property.businessDate`; a maintenance task can flag a room out-of-order (shared `lib/units.ts` OOO
+    helpers → the waterfall) and completing it returns the room as Dirty. Manual "Close Day" night-audit
+    auto-marks un-arrived reservations as no-show and rolls the business date. Screens: /maintenance +
+    /closeday. Verified end-to-end; deployed live. **All 5 PMS phases built, tested, live.**
 - **RLS Phase 2 (prod enforcement) LAST** so one migration pass covers every product's tenant tables
   (`DEPLOY.md`).
 - **The operator (us) stays the admin over everything**: Operator Console provisions clients + flips

@@ -127,11 +127,15 @@ taxes & fees), pickup-snapshot + hold-expiry jobs (see `apps/reservation/CLAUDE.
 Operator onboards clients; **clients self-manage staff (roles) + properties** from RevioLink Settings.
 Both apps now have a **responsive (mobile) shell**; **RLS** is built + verified locally (prod = Phase 2,
 `DEPLOY.md`); and the **Channex adapter is built + live-verified against the sandbox** (`@revio/connectivity`,
-not yet wired into the app). **RevioPMS is now IN BUILD** (founder-confirmed spec `docs/PMS-REFERENCE.md`):
-**Phase 1 (Units & Housekeeping) is done** — `apps/pms` (port 3003, cookie `revio_pms_session`, `hasPms`
-gate) with the physical **Unit** model, a housekeeping board, and the one cross-product write (a Unit
-going out-of-order → a `RoomInventoryPeriod` → the shared availability waterfall). Not pushed / no Railway
-service yet. **V2 revisions** (founder spec `docs/CM-REVISIONS.md`, 2026-06-27) now drive
+not yet wired into the app). **RevioPMS V1 is COMPLETE — all 5 phases built, tested, live** (founder-confirmed
+spec `docs/PMS-REFERENCE.md`): `apps/pms` (port 3003, cookie `revio_pms_session`, `hasPms` gate) at
+https://pms-production-a64b.up.railway.app — the physical **Unit** model + housekeeping board (Phase 1),
+Front Desk check-in/out/room-move/walk-in (Phase 2), Folio & Billing with labels-only payments + a
+check-out balance gate (Phase 3), Minibar/POS catalog + tap-to-post (Phase 4), Maintenance + manual
+Close Day night-audit (Phase 5). The one cross-product write: a Unit going out-of-order (from housekeeping
+or maintenance) → a `RoomInventoryPeriod` → the shared availability waterfall. **All four products
+(RevioLink · Operator · RevioCRS · RevioPMS) are now built and live.** **V2 revisions** (founder spec
+`docs/CM-REVISIONS.md`, 2026-06-27) drove
 the roadmap: settle the data model (date-level inventory, currency-on-property, two-stream mapping) →
 wire Channex → calendar/IA redesign → CRS/PMS → RLS Phase 2. See `BUILD-PLAN.md` for the phased order,
 `ARCHITECTURE.md` for rationale,
