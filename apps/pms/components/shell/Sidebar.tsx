@@ -3,15 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Settings, X, type LucideIcon,
+  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, X, type LucideIcon,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 
 type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 
-// Phase 1 ships Units & Housekeeping; later phases light up the rest of the sitemap
-// (docs/PMS-REFERENCE.md "MVP build order"). "soon" items render disabled with their phase tag.
+// The full RevioPMS V1 sitemap (docs/PMS-REFERENCE.md "MVP build order").
 const SECTIONS: { title?: string; items: Item[] }[] = [
   { items: [
     { href: "/dashboard", label: "Front Desk", icon: LayoutDashboard },
@@ -19,10 +18,10 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     { href: "/housekeeping", label: "Housekeeping", icon: Sparkles },
     { href: "/folios", label: "Folios & Billing", icon: Receipt },
     { href: "/minibar", label: "Minibar / POS", icon: Wine },
+    { href: "/maintenance", label: "Maintenance", icon: Wrench },
   ] },
-  { title: "Coming next", items: [
-    { href: "/maintenance", label: "Maintenance", icon: Wrench, soon: "P5" },
-    { href: "/settings", label: "Settings", icon: Settings, soon: "P5" },
+  { title: "End of day", items: [
+    { href: "/closeday", label: "Close Day", icon: Moon },
   ] },
 ];
 

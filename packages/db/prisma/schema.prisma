@@ -83,6 +83,8 @@ model Property {
   checkInTime     String @default("14:00")
   checkOutTime    String @default("12:00")
   status          String @default("active")
+  // PMS Phase 5: the current open operational date (night audit rolls it forward). Null until first close.
+  businessDate    DateTime? @db.Date
 
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roomTypes           RoomType[]
@@ -110,6 +112,7 @@ model Property {
   folios              Folio[]
   folioLines          FolioLine[]
   posItems            PosItem[]
+  maintenanceTasks    MaintenanceTask[]
 
   @@index([tenantId])
 }
@@ -682,6 +685,7 @@ model Unit {
   hkTasks          HousekeepingTask[]
   inventoryPeriods RoomInventoryPeriod[]
   assignments      RoomAssignment[]
+  maintenanceTasks MaintenanceTask[]
 
   @@index([propertyId])
   @@index([roomTypeId, sortOrder])
@@ -794,6 +798,28 @@ model PosItem {
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([propertyId, category])
+}
+
+// A maintenance/repair task (PMS Phase 5), optionally against a Unit. Flagging it out-of-order sets the
+// Unit OOO → the shared availability waterfall takes the room off sale (same wiring as housekeeping OOO).
+model MaintenanceTask {
+  id          String    @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  unitId      String?
+  title       String
+  status      String    @default("open") // open | in_progress | done
+  priority    String    @default("normal") // low | normal | high
+  assignee    String?
+  setsOoo     Boolean   @default(false)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, status])
 }
 
 // --- Monitoring: Sync / Error / Audit -------------------------------------

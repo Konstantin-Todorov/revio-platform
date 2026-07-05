@@ -1,0 +1,80 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { prisma } from "./db";
+import { getSession } from "./session";
+import { takeUnitOoo, clearUnitOoo } from "./units";
+import { logAudit, str } from "./mutation-helpers";
+
+async function ctx() {
+  const session = await getSession();
+  if (!session) throw new Error("No session");
+  return session;
+}
+
+function refresh() {
+  revalidatePath("/maintenance");
+  revalidatePath("/housekeeping");
+  revalidatePath("/dashboard");
+}
+
+const PRIORITIES = ["low", "normal", "high"];
+const STATUSES = ["open", "in_progress", "done"];
+
+/** Log a maintenance task; ticking "out of order" takes the unit off sale via the shared waterfall. */
+export async function createMaintenanceTask(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const title = str(fd, "title");
+  const unitId = str(fd, "unitId") || null;
+  const priority = PRIORITIES.includes(str(fd, "priority")) ? str(fd, "priority") : "normal";
+  const assignee = str(fd, "assignee") || null;
+  const ooo = fd.get("ooo") != null;
+  if (!title) redirect("/maintenance?error=title");
+
+  let setsOoo = false;
+  if (ooo && unitId) {
+    const unit = await prisma.unit.findFirst({ where: { id: unitId, propertyId: session.activePropertyId }, select: { id: true, label: true, roomTypeId: true } });
+    if (unit) {
+      await takeUnitOoo(session.tenantId, session.activePropertyId, unit, `Maintenance: ${title}`);
+      setsOoo = true;
+    }
+  }
+  await prisma.maintenanceTask.create({
+    data: { tenantId: session.tenantId, propertyId: session.activePropertyId, unitId, title, priority, assignee, setsOoo, createdById: session.userId },
+  });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "maintenance", field: "create", newValue: `${title}${setsOoo ? " (OOO)" : ""}`, userId: session.userId });
+  refresh();
+}
+
+/** Move a task through open → in_progress → done. Completing an OOO task returns the room (as Dirty). */
+export async function setMaintenanceStatus(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const id = str(fd, "id");
+  const status = str(fd, "status");
+  if (!STATUSES.includes(status)) return;
+  const task = await prisma.maintenanceTask.findFirst({ where: { id, propertyId: session.activePropertyId }, include: { unit: { select: { id: true, label: true } } } });
+  if (!task) return;
+
+  await prisma.maintenanceTask.update({ where: { id }, data: { status, completedAt: status === "done" ? new Date() : null } });
+  if (status === "done" && task.setsOoo && task.unit) {
+    await clearUnitOoo(session.tenantId, session.activePropertyId, { id: task.unit.id, label: task.unit.label }, "dirty");
+    await prisma.maintenanceTask.update({ where: { id }, data: { setsOoo: false } });
+  }
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "maintenance", field: task.title, newValue: status, userId: session.userId });
+  refresh();
+}
+
+/** Delete a task; if it had the unit out of order, return the room to sale (as Dirty). */
+export async function deleteMaintenanceTask(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const id = str(fd, "id");
+  const task = await prisma.maintenanceTask.findFirst({ where: { id, propertyId: session.activePropertyId }, include: { unit: { select: { id: true, label: true } } } });
+  if (!task) return;
+  if (task.setsOoo && task.unit) {
+    await clearUnitOoo(session.tenantId, session.activePropertyId, { id: task.unit.id, label: task.unit.label }, "dirty");
+  }
+  await prisma.maintenanceTask.delete({ where: { id } });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "maintenance", field: "delete", oldValue: task.title, userId: session.userId });
+  refresh();
+}
