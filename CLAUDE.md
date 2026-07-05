@@ -134,8 +134,15 @@ Front Desk check-in/out/room-move/walk-in (Phase 2), Folio & Billing with labels
 check-out balance gate (Phase 3), Minibar/POS catalog + tap-to-post (Phase 4), Maintenance + manual
 Close Day night-audit (Phase 5). The one cross-product write: a Unit going out-of-order (from housekeeping
 or maintenance) → a `RoomInventoryPeriod` → the shared availability waterfall. **All four products
-(RevioLink · Operator · RevioCRS · RevioPMS) are now built and live.** **V2 revisions** (founder spec
-`docs/CM-REVISIONS.md`, 2026-06-27) drove
+(RevioLink · Operator · RevioCRS · RevioPMS) are now built and live.** **Cross-product Channex auto-push
+is live**: the push/pull orchestration moved into `@revio/connectivity` (`sync.ts`, parameterized by a
+tenant-scoped Prisma proxy), so a CRS booking or a PMS walk-in/OOO **immediately** pushes updated ARI to
+Channex (verified on prod: a PMS OOO and a CRS save each produced a Channex task `success:true`). The
+**Operator console is complete** (Overview · Clients · Connectivity · Platform Health · Settings · Billing
+— billing UI + `Invoice` model with operator-only RLS, **payments mocked**). **Entitlement gating verified**
+across one/some/all product combos. Marketing/positioning copy for the future product websites is drafted
+in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. **V2 revisions** (founder
+spec `docs/CM-REVISIONS.md`, 2026-06-27) drove
 the roadmap: settle the data model (date-level inventory, currency-on-property, two-stream mapping) →
 wire Channex → calendar/IA redesign → CRS/PMS → RLS Phase 2. See `BUILD-PLAN.md` for the phased order,
 `ARCHITECTURE.md` for rationale,

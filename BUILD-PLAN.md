@@ -4,6 +4,54 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 
 ---
 
+## 🗺️ REMAINING PLATFORM WORK (roadmap, 2026-07-05)
+
+All four products (RevioLink · RevioCRS · RevioPMS · Operator) are **built and live**, on one shared DB.
+Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). What's left, by area:
+
+**Distribution / connectivity**
+- **Channex production certification** — engineering done; remaining is the form + live screenshare
+  (founder's process). See `docs/CHANNEX-CERTIFICATION.md`.
+- **Scheduled auto-pull** — pull OTA bookings on a timer (today it's on-demand / on-edit). Needs the
+  scheduler infra below.
+- Per-client real OTA channels — each needs that OTA's own credentials (a per-hotel onboarding step).
+
+**Infrastructure (unblocks several items above)**
+- **Scheduler / cron + worker** for background jobs: CRS hold-expiry, pickup snapshot, FX refresh, sync
+  retry, scheduled Channex pull; PMS automated night-audit. Today they're lazy/in-process + CRON_SECRET
+  routes. Externalize with Railway cron or a worker (+ optional **Redis + BullMQ** for the sync queue →
+  also powers queue-depth on Operator → Platform Health).
+- **Email / notifications** — CRS reservation-delivery + arrival emails; operator alerts. Needs a provider.
+
+**Data / security**
+- **RLS Phase 2 (prod enforcement) — LAST.** Switch prod to the restricted `revio_app` role so every
+  `tenant_isolation` + `operator_only` policy (CM · CRS · PMS · Invoice · ConnectivityCredential) actually
+  enforces. One pass covers all four products. Runbook in `DEPLOY.md`. (On prod today the role is superuser
+  → policies are inert but correct.)
+- Drop the unused `ProductMapping` table (superseded by two-stream mapping).
+- Add `@types/node` to `packages/db` (its standalone typecheck warns; build/tests unaffected).
+
+**Deploy / ops**
+- **reservation-service auto-deploy** — still doesn't fire on `git push` (needs the founder to connect
+  repo + branch `main` in the Railway dashboard → Service → Settings → Source). Today: manual
+  `railway up --service reservation`.
+
+**Per-product polish / V2**
+- CM: channel logos (cosmetic); Settings reservation-delivery emails (needs email infra).
+- CRS: Excel/PDF report export (CSV shipped); scheduled report emails.
+- PMS: automated nightly Close Day (manual today); lock/key hardware integration; hostel bed-mode UI;
+  registration-card fields at check-in.
+- Operator: real **Stripe** billing (mocked today — no live payments); an operator audit-log screen.
+
+**Websites (new — see `docs/POSITIONING.md`)**
+- Build **4 marketing sites**: one general (routes to each product) + three product sites (Link / CRS /
+  PMS), each with a small cross-sell section for the other two. Content is drafted in `docs/POSITIONING.md`.
+
+**Future products**
+- Direct **Booking Engine** (consumer-facing) — parked as a future product.
+
+---
+
 ## 📍 WHERE WE ARE (2026-06-26) — read this first if resuming
 
 **Live & working** (GitHub auto-deploys `main`):
