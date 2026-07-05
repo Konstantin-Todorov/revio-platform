@@ -17,3 +17,10 @@ export {
   type ChannexAvailabilityValue,
   type ChannexBooking,
 } from "./channex-mappers.js";
+export {
+  syncChannel,
+  syncRealChannels,
+  pullChannel,
+  type SyncOutcome,
+  type PullOutcome,
+} from "./sync.js";

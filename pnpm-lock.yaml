@@ -127,6 +127,9 @@ importers:
 
   apps/pms:
     dependencies:
+      '@revio/connectivity':
+        specifier: workspace:*
+        version: link:../../packages/connectivity
       '@revio/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -182,6 +185,9 @@ importers:
 
   apps/reservation:
     dependencies:
+      '@revio/connectivity':
+        specifier: workspace:*
+        version: link:../../packages/connectivity
       '@revio/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -240,6 +246,9 @@ importers:
       '@revio/core':
         specifier: workspace:*
         version: link:../core
+      '@revio/db':
+        specifier: workspace:*
+        version: link:../db
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

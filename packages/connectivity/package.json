@@ -20,7 +20,8 @@
     "channex:lifecycle": "tsx scripts/channex-lifecycle.ts"
   },
   "dependencies": {
-    "@revio/core": "workspace:*"
+    "@revio/core": "workspace:*",
+    "@revio/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

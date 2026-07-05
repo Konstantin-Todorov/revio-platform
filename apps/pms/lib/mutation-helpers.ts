@@ -1,4 +1,5 @@
 import "server-only";
+import { syncRealChannels } from "@revio/connectivity";
 import { prisma } from "./db";
 
 /** Record an Audit Log entry. Every hand-made operational change is permanent and attributable. */
@@ -31,6 +32,13 @@ export async function recordSync(propertyId: string, tenantId: string, summary: 
   await prisma.syncEvent.create({
     data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: detail ?? null },
   });
+  // Immediate cross-product propagation: a PMS inventory change (unit OOO, walk-in) pushes the new
+  // availability to any real (channex) channel now. No-op when every channel is mock; never break the write.
+  try {
+    await syncRealChannels(prisma, propertyId);
+  } catch {
+    /* per-channel failures are already isolated inside syncRealChannels. */
+  }
 }
 
 export function str(fd: FormData, key: string): string {

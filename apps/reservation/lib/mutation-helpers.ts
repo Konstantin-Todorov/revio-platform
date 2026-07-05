@@ -1,4 +1,5 @@
 import "server-only";
+import { syncRealChannels } from "@revio/connectivity";
 import { prisma } from "./db";
 
 /** Record an Audit Log entry. Every hand-made change is permanent and attributable. */
@@ -31,6 +32,13 @@ export async function recordPush(propertyId: string, tenantId: string, summary: 
   await prisma.syncEvent.create({
     data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: `Availability recalculated · visible to ${channels} channels via the connected CM` },
   });
+  // Immediate cross-product propagation: push the new availability/rates to any real (channex) channel
+  // right now — no manual Re-sync in the CM. No-op when every channel is mock. Never break the write.
+  try {
+    await syncRealChannels(prisma, propertyId);
+  } catch {
+    /* syncRealChannels already isolates per-channel failures; guard the outer call too. */
+  }
 }
 
 /** Record a pull (a booking arriving from a channel). */
