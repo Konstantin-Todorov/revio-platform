@@ -38,7 +38,7 @@ async function main() {
   console.log("Resetting demo data…");
   // Truncate everything in one statement so FK order doesn't matter (re-runnable seed).
   const tables = [
-    "HousekeepingTask", "Unit",
+    "PosItem", "FolioLine", "Folio", "RoomAssignment", "HousekeepingTask", "Unit",
     "PickupSnapshot", "Hold", "RoomInventoryPeriod", "Guest", "RoleAccess", "PermissionRole",
     "TaxFee", "PropertyDefaults", "BookingSource",
     "AuditEntry", "ErrorItem", "SyncEvent", "ReservationLine", "Reservation",
@@ -124,6 +124,7 @@ async function main() {
 
   // --- PMS: physical units for RevioPMS (housekeeping mix; no OOO — that's demoed live) ----
   await seedUnits(tenantId, propertyId);
+  await seedPosItems(tenantId, propertyId);
 
   // --- Rate plans: Standard (manual) + 6 derived -------------------------
   const standard = await prisma.ratePlan.create({
@@ -419,6 +420,7 @@ async function main() {
     rt2.push(await prisma.roomType.create({ data: { ...t2, name: s.name, code: s.code, unitKind: s.unitKind, totalRooms: s.inv, maxGuests: s.max, sortOrder: i } }));
   }
   await seedUnits(tenant2.id, property2.id);
+  await seedPosItems(tenant2.id, property2.id);
   const std2 = await prisma.ratePlan.create({ data: { ...t2, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 } });
   const plans2 = [std2];
   plans2.push(await prisma.ratePlan.create({ data: { ...t2, name: "Non Refundable", code: "NR", tags: ["non-refundable"], priceLogic: "derived", parentRatePlanId: std2.id, derivedType: "percent", derivedDirection: "decrease", derivedValue: 12, derivedRounding: "none", sortOrder: 1 } }));
@@ -492,6 +494,29 @@ async function seedUnits(tenantId: string, propertyId: string): Promise<number> 
   }
   await prisma.unit.createMany({ data: rows });
   return rows.length;
+}
+
+/** Seed a minibar / extras catalog (RevioPMS Phase 4) so tap-to-post has items to choose from. */
+async function seedPosItems(tenantId: string, propertyId: string): Promise<number> {
+  const spec: { name: string; category: string; priceMinor: number }[] = [
+    { name: "Still Water", category: "minibar", priceMinor: 200 },
+    { name: "Sparkling Water", category: "minibar", priceMinor: 250 },
+    { name: "Coca-Cola", category: "minibar", priceMinor: 300 },
+    { name: "Orange Juice", category: "minibar", priceMinor: 350 },
+    { name: "Beer", category: "minibar", priceMinor: 450 },
+    { name: "White Wine (mini)", category: "minibar", priceMinor: 800 },
+    { name: "Peanuts", category: "minibar", priceMinor: 350 },
+    { name: "Chocolate Bar", category: "minibar", priceMinor: 300 },
+    { name: "Pringles", category: "minibar", priceMinor: 400 },
+    { name: "Breakfast (extra)", category: "extra", priceMinor: 1200 },
+    { name: "Late Check-out", category: "extra", priceMinor: 2000 },
+    { name: "Extra Bed", category: "extra", priceMinor: 2500 },
+    { name: "Laundry", category: "extra", priceMinor: 1500 },
+  ];
+  await prisma.posItem.createMany({
+    data: spec.map((s, i) => ({ tenantId, propertyId, name: s.name, category: s.category, priceMinor: s.priceMinor, sortOrder: i })),
+  });
+  return spec.length;
 }
 
 main()

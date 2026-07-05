@@ -18,9 +18,9 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     { href: "/rooms", label: "Rooms", icon: BedDouble },
     { href: "/housekeeping", label: "Housekeeping", icon: Sparkles },
     { href: "/folios", label: "Folios & Billing", icon: Receipt },
+    { href: "/minibar", label: "Minibar / POS", icon: Wine },
   ] },
   { title: "Coming next", items: [
-    { href: "/minibar", label: "Minibar / POS", icon: Wine, soon: "P4" },
     { href: "/maintenance", label: "Maintenance", icon: Wrench, soon: "P5" },
     { href: "/settings", label: "Settings", icon: Settings, soon: "P5" },
   ] },

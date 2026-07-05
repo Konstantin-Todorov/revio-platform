@@ -109,6 +109,7 @@ model Property {
   roomAssignments     RoomAssignment[]
   folios              Folio[]
   folioLines          FolioLine[]
+  posItems            PosItem[]
 
   @@index([tenantId])
 }
@@ -775,6 +776,24 @@ model FolioLine {
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@index([folioId])
+}
+
+// Chargeable-item catalog for minibar / extras (PMS Phase 4). Tapping an item posts a FolioLine
+// (kind = category) to a stay's folio — turning Phase-3 free-text charges into tap-to-add items.
+model PosItem {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  name       String
+  category   String   @default("minibar") // minibar | extra
+  priceMinor Int
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, category])
 }
 
 // --- Monitoring: Sync / Error / Audit -------------------------------------
