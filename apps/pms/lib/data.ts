@@ -31,6 +31,64 @@ export interface UnitRow {
   guestName: string | null;
 }
 
+/** Global search across the PMS: rooms (units), guests, and reservations. */
+export async function globalSearch(q: string) {
+  const { property } = await activeProperty();
+  const term = q.trim();
+  if (!term) return { property, term, units: [], guests: [], reservations: [] };
+  const [units, guests, reservations] = await Promise.all([
+    prisma.unit.findMany({ where: { propertyId: property.id, label: { contains: term, mode: "insensitive" } }, take: 8, include: { roomType: { select: { name: true } } } }),
+    prisma.guest.findMany({ where: { propertyId: property.id, OR: [{ firstName: { contains: term, mode: "insensitive" } }, { lastName: { contains: term, mode: "insensitive" } }, { email: { contains: term, mode: "insensitive" } }] }, take: 8 }),
+    prisma.reservation.findMany({ where: { propertyId: property.id, guestName: { contains: term, mode: "insensitive" } }, take: 8, include: { lines: { include: { roomType: { select: { name: true } } } } } }),
+  ]);
+  return { property, term, units, guests, reservations };
+}
+
+export interface NotifItem { text: string; href: string; tone: "danger" | "warning" | "info" | "success" }
+
+/** Notification-bell items: what needs attention right now (arrivals, cleaning, OOO, open balances). */
+export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
+  const { property } = await activeProperty();
+  const today = todayInTz(property.timezone);
+  const [reservations, dirty, ooo, openFolios] = await Promise.all([
+    prisma.reservation.findMany({ where: { propertyId: property.id, status: { in: [...OCCUPYING] } }, include: { lines: true, assignments: true } }),
+    prisma.unit.count({ where: { propertyId: property.id, active: true, hkStatus: "dirty" } }),
+    prisma.unit.count({ where: { propertyId: property.id, active: true, hkStatus: "out_of_order" } }),
+    prisma.folio.findMany({ where: { propertyId: property.id, status: "open" }, include: { lines: { select: { kind: true, amountMinor: true, voided: true } } } }),
+  ]);
+
+  let arrivalsDue = 0;
+  for (const r of reservations) {
+    if (r.lines.length === 0 || r.assignments.length > 0) continue;
+    const ci = ymd(r.lines.map((l) => l.checkIn).sort((a, b) => a.getTime() - b.getTime())[0]!);
+    if (ci <= today) arrivalsDue++;
+  }
+  const unsettled = openFolios.filter((f) => {
+    let c = 0, p = 0;
+    for (const l of f.lines) { if (l.voided) continue; l.kind === "payment" ? (p += l.amountMinor) : (c += l.amountMinor); }
+    return c - p !== 0;
+  }).length;
+
+  const items: NotifItem[] = [];
+  if (arrivalsDue > 0) items.push({ text: `${arrivalsDue} arrival${arrivalsDue === 1 ? "" : "s"} to check in`, href: "/dashboard", tone: "info" });
+  if (dirty > 0) items.push({ text: `${dirty} room${dirty === 1 ? "" : "s"} to clean`, href: "/housekeeping", tone: "warning" });
+  if (ooo > 0) items.push({ text: `${ooo} room${ooo === 1 ? "" : "s"} out of order`, href: "/maintenance", tone: "danger" });
+  if (unsettled > 0) items.push({ text: `${unsettled} open balance${unsettled === 1 ? "" : "s"}`, href: "/folios", tone: "danger" });
+  return { items, count: items.length };
+}
+
+/** Settings screen: property profile + its channels (read-only; distribution is managed in RevioLink). */
+export async function getPmsSettings() {
+  const { property } = await activeProperty();
+  const [channels, roomTypes, units, posItems] = await Promise.all([
+    prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" }, select: { id: true, name: true, status: true, connectivityMode: true } }),
+    prisma.roomType.count({ where: { propertyId: property.id, active: true } }),
+    prisma.unit.count({ where: { propertyId: property.id, active: true } }),
+    prisma.posItem.count({ where: { propertyId: property.id, active: true } }),
+  ]);
+  return { property, channels, counts: { roomTypes, units, posItems } };
+}
+
 /** Room types (active) each with their physical units, for the Rooms setup screen. */
 export async function getRoomsBoard() {
   const { property } = await activeProperty();

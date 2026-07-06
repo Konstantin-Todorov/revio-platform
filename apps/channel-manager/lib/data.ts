@@ -27,6 +27,40 @@ export async function getProperty() {
   });
 }
 
+export interface NotifItem { text: string; href: string; tone: "danger" | "warning" | "info" | "success" }
+
+/** Notification-bell items: open errors, recent sync failures, and unmapped products. */
+export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
+  const property = await getProperty();
+  const since = new Date(Date.now() - DAY);
+  const [openErrors, unmappedRates, unmappedRooms, failed] = await Promise.all([
+    prisma.errorItem.count({ where: { propertyId: property.id, resolved: false } }),
+    prisma.channelRatePlanMapping.count({ where: { tenantId: property.tenantId, status: { not: "complete" } } }),
+    prisma.channelRoomTypeMapping.count({ where: { tenantId: property.tenantId, status: { not: "complete" } } }),
+    prisma.syncEvent.count({ where: { propertyId: property.id, status: "failed", createdAt: { gte: since } } }),
+  ]);
+  const unmapped = unmappedRates + unmappedRooms;
+  const items: NotifItem[] = [];
+  if (openErrors > 0) items.push({ text: `${openErrors} open error${openErrors === 1 ? "" : "s"}`, href: "/sync", tone: "danger" });
+  if (failed > 0) items.push({ text: `${failed} sync failure${failed === 1 ? "" : "s"} (24h)`, href: "/sync", tone: "danger" });
+  if (unmapped > 0) items.push({ text: `${unmapped} unmapped product${unmapped === 1 ? "" : "s"}`, href: "/mapping", tone: "warning" });
+  return { items, count: items.length };
+}
+
+/** Global search across the CM: room types, rate plans, channels, and imported reservations. */
+export async function cmSearch(q: string) {
+  const property = await getProperty();
+  const term = q.trim();
+  if (!term) return { property, term, roomTypes: [], ratePlans: [], channels: [], reservations: [] };
+  const [roomTypes, ratePlans, channels, reservations] = await Promise.all([
+    prisma.roomType.findMany({ where: { propertyId: property.id, name: { contains: term, mode: "insensitive" } }, take: 8 }),
+    prisma.ratePlan.findMany({ where: { propertyId: property.id, name: { contains: term, mode: "insensitive" } }, take: 8 }),
+    prisma.channel.findMany({ where: { propertyId: property.id, name: { contains: term, mode: "insensitive" } }, take: 8 }),
+    prisma.reservation.findMany({ where: { propertyId: property.id, OR: [{ guestName: { contains: term, mode: "insensitive" } }, { externalId: { contains: term, mode: "insensitive" } }] }, take: 8, include: { channel: { select: { name: true } } } }),
+  ]);
+  return { property, term, roomTypes, ratePlans, channels, reservations };
+}
+
 export async function getDashboard() {
   const property = await getProperty();
   const propertyId = property.id;

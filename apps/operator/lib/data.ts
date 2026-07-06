@@ -5,6 +5,35 @@ import { monthlyPriceMinor, billedProducts, type Entitlements } from "./pricing"
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
 
+export interface NotifItem { text: string; href: string; tone: "danger" | "warning" | "info" | "success" }
+
+/** Notification-bell items across all hotels: sync failures, open errors, suspended clients. */
+export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
+  const since = new Date(Date.now() - 24 * 3600 * 1000);
+  const [failed, openErrors, suspended] = await Promise.all([
+    prisma.syncEvent.count({ where: { status: "failed", createdAt: { gte: since } } }),
+    prisma.errorItem.count({ where: { resolved: false } }),
+    prisma.tenant.count({ where: { status: "suspended" } }),
+  ]);
+  const items: NotifItem[] = [];
+  if (failed > 0) items.push({ text: `${failed} sync failure${failed === 1 ? "" : "s"} (24h)`, href: "/health", tone: "danger" });
+  if (openErrors > 0) items.push({ text: `${openErrors} open error${openErrors === 1 ? "" : "s"} across hotels`, href: "/health", tone: "warning" });
+  if (suspended > 0) items.push({ text: `${suspended} suspended client${suspended === 1 ? "" : "s"}`, href: "/clients", tone: "warning" });
+  return { items, count: items.length };
+}
+
+/** Global search across the operator perimeter: clients, properties, and owner users. */
+export async function operatorSearch(q: string) {
+  const term = q.trim();
+  if (!term) return { term, tenants: [], properties: [], users: [] };
+  const [tenants, properties, users] = await Promise.all([
+    prisma.tenant.findMany({ where: { OR: [{ name: { contains: term, mode: "insensitive" } }, { slug: { contains: term, mode: "insensitive" } }] }, take: 8 }),
+    prisma.property.findMany({ where: { name: { contains: term, mode: "insensitive" } }, take: 8, include: { tenant: { select: { name: true } } } }),
+    prisma.user.findMany({ where: { OR: [{ name: { contains: term, mode: "insensitive" } }, { email: { contains: term, mode: "insensitive" } }] }, take: 8, include: { tenant: { select: { name: true } } } }),
+  ]);
+  return { term, tenants, properties, users };
+}
+
 /** Aggregate numbers across ALL tenants — the operator's bird's-eye view. */
 export async function getOverviewStats() {
   const [clients, properties, products, connectedChannels, reservations, openErrors, suspended] =

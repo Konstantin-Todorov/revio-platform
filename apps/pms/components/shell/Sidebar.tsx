@@ -111,7 +111,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
-        RevioPMS · Phase 2 · Front Desk
+        RevioPMS V1 · all 5 phases live
       </div>
       </aside>
     </>

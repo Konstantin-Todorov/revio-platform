@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { ShellProvider } from "@/components/shell/ShellContext";
 import { getSession, getSwitchableProperties } from "@/lib/session";
+import { getNotifications } from "@/lib/data";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -21,13 +22,14 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   const properties = (await getSwitchableProperties(session.tenantId)).map((p) => ({ id: p.id, name: p.name, tenantName: p.tenant.name }));
   const activeName = properties.find((p) => p.id === session.activePropertyId)?.name ?? session.tenantName;
+  const { items: notifItems } = await getNotifications();
 
   return (
     <ShellProvider>
       <div className="flex h-screen overflow-hidden">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} />
+          <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} notifItems={notifItems} />
           <main className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
             <div className="mx-auto max-w-[1400px]">{children}</div>
           </main>

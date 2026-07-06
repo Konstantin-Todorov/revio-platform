@@ -32,6 +32,26 @@ export async function getProperty() {
   });
 }
 
+export interface NotifItem { text: string; href: string; tone: "danger" | "warning" | "info" | "success" }
+
+/** Notification-bell items: open errors + today's arrivals / departures. */
+export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
+  const property = await getProperty();
+  const today = todayInTz(property.timezone);
+  const start = new Date(`${today}T00:00:00Z`);
+  const next = new Date(start.getTime() + 86_400_000);
+  const [openErrors, arrivals, departures] = await Promise.all([
+    prisma.errorItem.count({ where: { propertyId: property.id, resolved: false } }),
+    prisma.reservationLine.count({ where: { checkIn: { gte: start, lt: next }, reservation: { propertyId: property.id, status: { in: ["confirmed", "modified"] } } } }),
+    prisma.reservationLine.count({ where: { checkOut: { gte: start, lt: next }, reservation: { propertyId: property.id, status: { in: ["confirmed", "modified"] } } } }),
+  ]);
+  const items: NotifItem[] = [];
+  if (openErrors > 0) items.push({ text: `${openErrors} open error${openErrors === 1 ? "" : "s"}`, href: "/distribution", tone: "danger" });
+  if (arrivals > 0) items.push({ text: `${arrivals} arrival${arrivals === 1 ? "" : "s"} today`, href: "/reservations", tone: "info" });
+  if (departures > 0) items.push({ text: `${departures} departure${departures === 1 ? "" : "s"} today`, href: "/reservations", tone: "info" });
+  return { items, count: items.length };
+}
+
 // --- Inventory board (the Inventory Calendar) -------------------------------
 
 export interface InventoryQuery {
