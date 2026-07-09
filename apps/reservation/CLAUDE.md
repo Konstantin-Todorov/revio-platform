@@ -8,6 +8,18 @@
 > entitlement. Gotcha: the RLS proxy (`lib/db.ts`) forwards `prisma.<model>.<op>` ONLY — no
 > `$transaction`.
 
+> **V2 overhaul in flight (founder spec 2026-07-09: `docs/specs/CRS-GUIDE-V1.md` — read it before
+> changing any CRS screen; Keep sections are binding).** Headlines: **the 4-level priority is replaced
+> by the two-tier precedence model** (date-scoped edits carry lastModified+source, calendar/bulk are
+> peers by recency → rate-plan default → property default); nav regroups into Overview / Bookings /
+> Inventory & Rates / Configuration and **Rates & Restrictions dissolves three ways** (products →
+> Rooms & Rates [new, absorbs Inventory Setup]; standing defaults → Settings; restriction rules →
+> Bulk Rates & Availability [new]); Reports → Analytics (6 CRS-native sub-tabs); YoY on every KPI
+> (STLY = 364 days); group/portfolio scope; Distribution gets CM-switching + CRS↔CM mapping;
+> **standalone-vs-integrated** is load-bearing (see `docs/specs/HIERARCHY.md` §6). The booking engine
+> is deferred but its three seams are mandatory now (`docs/specs/BOOKING-ENGINE-ADDENDUM.md`).
+> Task phases A (foundations) + C (CRS screens) in the tracker.
+
 **Full V1 spec: `docs/CRS-REFERENCE.md` (founder spec v2, 2026-07-02)** — exact metric formulas,
 reservation lifecycle, system rules, sitemap, and the 5-phase MVP build order. Read it before writing
 any code here. The CRS is the **system of record for every reservation** (from any source) and computes

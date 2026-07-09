@@ -141,9 +141,17 @@ Channex (verified on prod: a PMS OOO and a CRS save each produced a Channex task
 **Operator console is complete** (Overview · Clients · Connectivity · Platform Health · Settings · Billing
 — billing UI + `Invoice` model with operator-only RLS, **payments mocked**). **Entitlement gating verified**
 across one/some/all product combos. Marketing/positioning copy for the future product websites is drafted
-in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. **V2 revisions** (founder
-spec `docs/CM-REVISIONS.md`, 2026-06-27) drove
-the roadmap: settle the data model (date-level inventory, currency-on-property, two-stream mapping) →
-wire Channex → calendar/IA redesign → CRS/PMS → RLS Phase 2. See `BUILD-PLAN.md` for the phased order,
-`ARCHITECTURE.md` for rationale,
+in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. See `BUILD-PLAN.md` for
+the phased order, `ARCHITECTURE.md` for rationale,
 `ACCESS-MODEL.md` for the access model, and `DEPLOY.md` for the deploy runbook.
+
+**→ CURRENT CYCLE — the V2 platform overhaul (founder specs received 2026-07-09, `docs/specs/`).**
+Six specs govern it: `HIERARCHY.md` (product layering + write ownership + never-sync rule),
+`CM-GUIDE-V2.md` + `CM-UPDATES-V1.md` (RevioLink), `CRS-GUIDE-V1.md` (RevioCRS — **two-tier precedence
+replaces the 4-level priority**), `PMS-GUIDE-V1.md` (RevioPMS — charge-posting service, invoicing,
+deposits, gateway/fiscalization boundaries), `BOOKING-ENGINE-ADDENDUM.md` (build deferred; three seams
+mandatory now). Start at `docs/specs/README.md`. Every screen's **Keep** list is binding. Phase order
+(founder-confirmed): **A foundations → B RevioLink → C RevioCRS → D/E RevioPMS → F assignment +
+gateway/compliance seams** — tracked as tasks A0-F3 in the session task list. Integration seams are
+mock-first; real email (Resend), Stripe **test-mode**, and a BG fiscal-provider research pass are also
+approved. Older `docs/CM-REVISIONS.md` (2026-06-27) is superseded where the new specs overlap it.

@@ -3,11 +3,17 @@
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. This file narrows scope to CM.
 > The UI brands this app as **RevioLink**; the codebase calls it channel-manager.
 
-> **V2 revisions in flight (founder spec `docs/CM-REVISIONS.md`, 2026-06-27).** Before building more CM
-> UI, note three model changes coming: **(1) inventory is date-level** (room types hold only a physical
-> "Total Number of Rooms" safety-net, not an inventory baseline); **(2) currency lives on the Property**
-> and channels inherit it; **(3) Mapping splits into two streams** — Room-Type (inventory + open/close)
-> and Rate-Plan (rates + restrictions), mirroring Channex. Sequence + rationale in `BUILD-PLAN.md`.
+> **V2 overhaul in flight (founder specs 2026-07-09: `docs/specs/CM-GUIDE-V2.md` +
+> `docs/specs/CM-UPDATES-V1.md` — read BOTH before changing any CM screen).** Every screen is split
+> into **Keep** (binding — must survive refactors) and **Change**. Headlines: nav regroup (Rates &
+> Availability / Channels / Operations / Account); **the boundary rule** (only data that crossed the
+> channel boundary may appear anywhere in RevioLink — no PMS operational events); push **attribution
+> to channels** + per-channel **capability map** (a "not supported" is never a failed sync); calendar
+> 2-yr/30-day paging + rate-plan multi-select + rooms-sold row; Bulk merges the Restrictions page;
+> rate-plan min/max-stay + advance-purchase defaults; currency on the Property; Mapping pulls OTA
+> products from Channex; Sync Center absorbs Error Center + Audit Log; channel Pause/Disconnect/Sync
+> quick actions. Task phases A (foundations) + B (CM screens) in the tracker. The older
+> `docs/CM-REVISIONS.md` (2026-06-27) is superseded where they overlap.
 
 **This is the first product, the sales demo, and the priority.** It is a pure distribution tool:
 inventory out, bookings in, nothing else. It reads/writes inventory **only** through `@revio/core`.

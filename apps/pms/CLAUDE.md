@@ -11,6 +11,18 @@
 > minted-cookie curl — GET link-clicks keep it); after a migration RESTART `next dev` + `rm -rf .next` so it
 > loads the regenerated Prisma client; re-mint the session cookie after any re-seed (User ids change).
 
+> **V2 overhaul in flight (founder spec 2026-07-09: `docs/specs/PMS-GUIDE-V1.md` — read it before
+> changing any PMS screen; Keep sections are binding).** Headlines: nav regroups into Front Office /
+> Rooms & Housekeeping / Setup / End of Day; new screens — unified **Reservation view**, operational
+> **Guests** profile, **User Management**, **Configuration**; housekeeping gets in-progress + smart
+> routing + the one-room-in-progress rule + inspection gate + a scoped mobile role; **every folio
+> charge must go through ONE charge-posting service** (outlet + tax tags — the required architecture,
+> §1.7); split folios; deposits are **liabilities** (held default vs applied per type); a
+> jurisdiction-agnostic **Invoicing module** (gapless series, tax-per-rate); three integration
+> boundaries — payment gateway (mock + Stripe test-mode), external POS (via the posting service),
+> fiscalization/e-invoicing (Bulgaria N-18 = go-live blocker for real properties). Task phases
+> D (operations) + E (money) + F (assignment/seams) in the tracker.
+
 Sold standalone as an operations layer, even over a foreign reservation system. Reads/writes inventory
 **only** through `@revio/core` — never ad-hoc queries against inventory tables.
 
