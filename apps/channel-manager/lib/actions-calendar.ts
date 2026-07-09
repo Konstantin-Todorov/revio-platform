@@ -27,11 +27,12 @@ async function standardPlanId(propertyId: string): Promise<string | null> {
 async function upsertCell(
   tenantId: string, propertyId: string, roomTypeId: string, date: Date,
   data: Partial<{ inventory: number; minLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean }>,
+  source: "calendar" | "bulk" = "calendar", // two-tier provenance: which surface wrote this (spec §1.4)
 ) {
   await prisma.dailyCell.upsert({
     where: { roomTypeId_date: { roomTypeId, date } },
-    update: data,
-    create: { tenantId, propertyId, roomTypeId, date, ...data },
+    update: { ...data, source },
+    create: { tenantId, propertyId, roomTypeId, date, ...data, source },
   });
 }
 
@@ -49,8 +50,8 @@ export async function saveCell(input: { roomTypeId: string; date: string; field:
     if (!ratePlanId) return; // no base rate plan to price against
     await prisma.ratePrice.upsert({
       where: { roomTypeId_ratePlanId_date: { roomTypeId: input.roomTypeId, ratePlanId, date } },
-      update: { priceMinor },
-      create: { tenantId, propertyId, roomTypeId: input.roomTypeId, ratePlanId, date, priceMinor },
+      update: { priceMinor, source: "calendar" },
+      create: { tenantId, propertyId, roomTypeId: input.roomTypeId, ratePlanId, date, priceMinor, source: "calendar" },
     });
     await logAudit(propertyId, tenantId, { entity: `${rt.name} · Standard Rate`, field: "price", newValue: `€${priceMinor / 100}` });
   } else if (input.field === "inventory") {
@@ -114,15 +115,15 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
         else if (updateType === "rate_dec_amt") next = Math.max(0, base - Math.round(value * 100));
         await prisma.ratePrice.upsert({
           where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
-          update: { priceMinor: next },
-          create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next },
+          update: { priceMinor: next, source: "bulk" },
+          create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
         });
       } else if (updateType === "availability_set") {
-        await upsertCell(tenantId, propertyId, roomTypeId, date, { inventory: Math.max(0, Math.trunc(value)) });
+        await upsertCell(tenantId, propertyId, roomTypeId, date, { inventory: Math.max(0, Math.trunc(value)) }, "bulk");
       } else if (updateType === "minlos_set") {
-        await upsertCell(tenantId, propertyId, roomTypeId, date, { minLos: value > 0 ? Math.trunc(value) : null });
+        await upsertCell(tenantId, propertyId, roomTypeId, date, { minLos: value > 0 ? Math.trunc(value) : null }, "bulk");
       } else if (updateType === "stopsell_on" || updateType === "stopsell_off") {
-        await upsertCell(tenantId, propertyId, roomTypeId, date, { stopSell: updateType === "stopsell_on" });
+        await upsertCell(tenantId, propertyId, roomTypeId, date, { stopSell: updateType === "stopsell_on" }, "bulk");
       }
       affected++;
     }

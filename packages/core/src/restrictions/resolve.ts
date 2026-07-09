@@ -1,11 +1,26 @@
 /**
- * Restriction priority resolution. When more than one source sets the same restriction for a
- * date/room/rate/channel, the most specific wins (docs/CRS-REFERENCE.md — FOUR levels):
+ * ARI precedence resolution — the TWO-TIER model (docs/specs/CRS-GUIDE-V1.md §1.4).
  *
- *   1. Manual edit (Calendar cell or Bulk Update)   — always wins
- *   2. Restriction Rule (highest-priority matching)
- *   3. Rate Plan default
- *   4. Property default                             — global fallback baseline
+ * Tier 1 — date-scoped edits (attached to actual dates):
+ *   Any rate, restriction, or open/close value set for specific dates via the Calendar or a
+ *   Bulk run. Calendar and bulk are PEERS — they write the same stored record, so the most
+ *   recent write simply IS the stored value (last write wins by recency). There is no fixed
+ *   "manual beats bulk" ranking; provenance (updatedAt + source on DailyCell/RatePrice)
+ *   records which surface wrote last so the audit trail can explain which edit won.
+ *
+ *   Standing restriction RULES ("Easter minimum stay", source-targetable in the CRS) are
+ *   evaluated inside this tier, below an explicit cell value: an explicit date-scoped cell
+ *   edit overrides a rule for that date; a rule overrides the standing defaults.
+ *
+ * Tier 2 — standing defaults (product-level, no dates):
+ *   rate-plan default (more specific) → property default (catch-all).
+ *
+ * Resolution for any date + rate plan:
+ *   date-scoped value → matching rule → rate-plan default → property default
+ *
+ * Displayed precedence line wherever ARI is edited:
+ *   "date-scoped edit (calendar or bulk — most recent wins) → restriction rule →
+ *    rate-plan default → property default"
  *
  * Pure functions only — see packages/core/CLAUDE.md.
  */
@@ -20,29 +35,43 @@ export interface RestrictionRuleHit {
   value: RestrictionValue;
 }
 
+/** Which surface last wrote a date-scoped value (DailyCell/RatePrice provenance). */
+export type DateScopedSource = "calendar" | "bulk" | "seed" | "api";
+
 export interface RestrictionSources {
-  /** A manual cell/bulk edit for this exact slot, if any. Beats everything. */
-  manual?: RestrictionValue;
-  /** Restriction rules already filtered to those matching this slot/channel. */
+  /**
+   * The stored date-scoped value for this exact slot, if any (a Calendar or Bulk edit —
+   * peers by recency, the stored value is whichever wrote last). Beats everything.
+   */
+  dateScoped?: RestrictionValue;
+  /** Provenance of the date-scoped value, when known — surfaced in audit/tooltips. */
+  dateScopedVia?: DateScopedSource;
+  /** Restriction rules already filtered to those matching this slot/channel/source. */
   matchingRules?: RestrictionRuleHit[];
-  /** The rate plan's own default for this restriction, if set. */
+  /** The rate plan's own standing default for this restriction, if set. */
   ratePlanDefault?: RestrictionValue;
-  /** The property-wide default (PropertyDefaults) — the level-4 global fallback. */
+  /** The property-wide standing default (PropertyDefaults) — the catch-all fallback. */
   propertyDefault?: RestrictionValue;
 }
 
 export interface ResolvedRestriction {
   value: RestrictionValue;
-  source: "manual" | "rule" | "rate_plan_default" | "property_default" | "none";
+  source: "date_scoped" | "rule" | "rate_plan_default" | "property_default" | "none";
+  /** When source is date_scoped and provenance was supplied: which surface wrote it. */
+  via?: DateScopedSource;
 }
 
-/** Resolve one restriction type for one slot, applying the priority order. */
+/** Resolve one restriction type for one slot, applying the two-tier precedence. */
 export function resolveRestriction(
   _type: RestrictionType,
   sources: RestrictionSources,
 ): ResolvedRestriction {
-  if (sources.manual !== undefined) {
-    return { value: sources.manual, source: "manual" };
+  if (sources.dateScoped !== undefined) {
+    return {
+      value: sources.dateScoped,
+      source: "date_scoped",
+      ...(sources.dateScopedVia ? { via: sources.dateScopedVia } : {}),
+    };
   }
 
   const rules = sources.matchingRules ?? [];
@@ -63,3 +92,7 @@ export function resolveRestriction(
 
   return { value: false, source: "none" };
 }
+
+/** The precedence line to display wherever a user edits ARI (spec §1.4). */
+export const PRECEDENCE_LINE =
+  "date-scoped edit (calendar or bulk — most recent wins) → restriction rule → rate-plan default → property default";

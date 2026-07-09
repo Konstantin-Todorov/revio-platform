@@ -82,7 +82,7 @@ async function main() {
       priceRows.push({ ...p, roomTypeId: room.id, ratePlanId: plan.id, date, priceMinor: base + (weekend ? 2000 : 0) });
     }
   }
-  await prisma.ratePrice.createMany({ data: priceRows });
+  await prisma.ratePrice.createMany({ data: priceRows.map((r) => ({ ...r, source: "seed" })) });
 
   // Channel in channex_sandbox mode, pointed at the Channex property.
   const channel = await prisma.channel.create({

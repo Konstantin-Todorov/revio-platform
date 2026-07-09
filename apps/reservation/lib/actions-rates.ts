@@ -204,8 +204,8 @@ export async function saveCalendarRate(args: { roomTypeId: string; date: string;
   const before = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId: roomType.id, ratePlanId: standard.id, date } } });
   await prisma.ratePrice.upsert({
     where: { roomTypeId_ratePlanId_date: { roomTypeId: roomType.id, ratePlanId: standard.id, date } },
-    create: { tenantId, propertyId, roomTypeId: roomType.id, ratePlanId: standard.id, date, priceMinor },
-    update: { priceMinor },
+    create: { tenantId, propertyId, roomTypeId: roomType.id, ratePlanId: standard.id, date, priceMinor, source: "calendar" },
+    update: { priceMinor, source: "calendar" },
   });
   await logAudit(propertyId, tenantId, {
     entity: `RatePrice · ${roomType.name} / ${standard.name}`,

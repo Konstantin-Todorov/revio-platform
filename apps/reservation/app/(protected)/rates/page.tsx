@@ -121,7 +121,7 @@ export default async function RatesPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Property defaults — the level-4 fallback" />
+        <CardHeader title="Property defaults — the catch-all standing tier" subtitle="Precedence: date-scoped edit (calendar or bulk — most recent wins) → restriction rule → rate-plan default → property default" />
         <form action={savePropertyDefaults} className="grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-4">
           <div><label className={labelCls}>Min stay (nights)</label><input type="number" name="defMinLos" min={0} defaultValue={defaults?.defMinLos ?? ""} placeholder="—" className={inputCls} /></div>
           <div><label className={labelCls}>Max stay (nights)</label><input type="number" name="defMaxLos" min={0} defaultValue={defaults?.defMaxLos ?? ""} placeholder="—" className={inputCls} /></div>

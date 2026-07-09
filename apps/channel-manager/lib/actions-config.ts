@@ -246,7 +246,7 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
     await prisma.channel.updateMany({ where: { propertyId }, data: { currency: newCurrency } });
     // Optionally convert every stored rate (Postgres rounds the product back to integer minor units).
     if (convertRates && Number.isFinite(conversionRate) && conversionRate > 0) {
-      const res = await prisma.ratePrice.updateMany({ where: { propertyId }, data: { priceMinor: { multiply: conversionRate } } });
+      const res = await prisma.ratePrice.updateMany({ where: { propertyId }, data: { priceMinor: { multiply: conversionRate }, source: "bulk", updatedAt: new Date() } });
       converted = res.count;
     }
   }

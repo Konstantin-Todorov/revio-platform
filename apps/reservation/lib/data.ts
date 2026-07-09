@@ -139,25 +139,26 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
     standard ? prices.filter((pr) => pr.ratePlanId === standard.id).map((pr) => [`${pr.roomTypeId}:${ymd(pr.date)}`, pr.priceMinor]) : [],
   );
 
-  // Resolve one restriction for one (room type, date) across the FOUR priority levels
-  // (manual cell > matching rules > standard-plan default > property default) — display is
-  // source-agnostic: a rule scoped to any booking source still shows here.
+  // Resolve one restriction for one (room type, date) via the TWO-TIER precedence
+  // (date-scoped cell [calendar/bulk, recency] > matching rules > standard-plan default >
+  // property default — spec §1.4) — display is source-agnostic: a rule scoped to any
+  // booking source still shows here.
   function resolveFor(rtId: string, d: string, cell: (typeof cells)[number] | undefined): CellRestrictions {
     const ruleHits = (type: string): RestrictionRuleHit[] =>
       rules
         .filter((r) => r.type === type && (r.roomTypeId == null || r.roomTypeId === rtId) && ymd(r.dateFrom) <= d && ymd(r.dateTo) >= d)
         .map((r) => ({ priority: r.priority, value: (r.valueBool ?? r.valueInt ?? true) as number | boolean }));
-    const flag = (type: "stop_sell" | "cta" | "ctd", manual: boolean | undefined, plan: boolean | undefined, prop: boolean | undefined) =>
+    const flag = (type: "stop_sell" | "cta" | "ctd", dateScoped: boolean | undefined, plan: boolean | undefined, prop: boolean | undefined) =>
       Boolean(
         resolveRestriction(type, {
-          ...(manual ? { manual: true } : {}),
+          ...(dateScoped ? { dateScoped: true } : {}),
           matchingRules: ruleHits(type),
           ...(plan ? { ratePlanDefault: true } : {}),
           ...(prop ? { propertyDefault: true } : {}),
         }).value,
       );
     const minRes = resolveRestriction("min_los", {
-      ...(cell?.minLos != null ? { manual: cell.minLos } : {}),
+      ...(cell?.minLos != null ? { dateScoped: cell.minLos } : {}),
       matchingRules: ruleHits("min_los"),
       ...(standard?.defMinLos != null ? { ratePlanDefault: standard.defMinLos } : {}),
       ...(defaults?.defMinLos != null ? { propertyDefault: defaults.defMinLos } : {}),
@@ -542,7 +543,7 @@ export async function stayViolation(
   for (const d of nights) {
     const cell = cellByDate.get(d);
     const stop = resolveRestriction("stop_sell", {
-      ...(cell?.stopSell ? { manual: true } : {}),
+      ...(cell?.stopSell ? { dateScoped: true } : {}),
       matchingRules: hits("stop_sell", d),
       ...(standard?.defStopSell ? { ratePlanDefault: true } : {}),
       ...(defaults?.defStopSell ? { propertyDefault: true } : {}),
@@ -553,7 +554,7 @@ export async function stayViolation(
   // Closed to arrival — the check-in night only.
   const arrivalCell = cellByDate.get(checkIn);
   const cta = resolveRestriction("cta", {
-    ...(arrivalCell?.cta ? { manual: true } : {}),
+    ...(arrivalCell?.cta ? { dateScoped: true } : {}),
     matchingRules: hits("cta", checkIn),
     ...(standard?.defCta ? { ratePlanDefault: true } : {}),
     ...(defaults?.defCta ? { propertyDefault: true } : {}),
@@ -562,7 +563,7 @@ export async function stayViolation(
 
   // Minimum stay — resolved for the arrival night.
   const minRes = resolveRestriction("min_los", {
-    ...(arrivalCell?.minLos != null ? { manual: arrivalCell.minLos } : {}),
+    ...(arrivalCell?.minLos != null ? { dateScoped: arrivalCell.minLos } : {}),
     matchingRules: hits("min_los", checkIn),
     ...(standard?.defMinLos != null ? { ratePlanDefault: standard.defMinLos } : {}),
     ...(defaults?.defMinLos != null ? { propertyDefault: defaults.defMinLos } : {}),

@@ -372,6 +372,11 @@ model RatePrice {
   ratePlanId String
   date       DateTime @db.Date
   priceMinor Int
+  // Two-tier precedence provenance (docs/specs/CRS-GUIDE-V1.md §1.4): calendar and bulk are
+  // PEERS — last write wins by recency — so every date-scoped value records when it was last
+  // written and by which surface, or the audit trail can't explain which edit won.
+  updatedAt  DateTime @default(now()) @updatedAt
+  source     String   @default("calendar") // calendar | bulk | seed | api
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
@@ -398,6 +403,9 @@ model DailyCell {
   stopSell            Boolean  @default(false)
   advancePurchaseMin  Int?
   advancePurchaseMax  Int?
+  // Two-tier precedence provenance — see RatePrice for the rationale (spec §1.4).
+  updatedAt           DateTime @default(now()) @updatedAt
+  source              String   @default("calendar") // calendar | bulk | seed | api
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)

@@ -68,32 +68,32 @@ describe("booking loop invariants", () => {
   });
 });
 
-describe("restriction priority", () => {
+describe("two-tier ARI precedence (spec §1.4)", () => {
   const sources = {
-    manual: 3 as const,
+    dateScoped: 3 as const,
     matchingRules: [{ priority: 1, value: 2 }],
     ratePlanDefault: 1,
   };
-  it("manual wins over rule and default", () => {
-    expect(resolveRestriction("min_los", sources).source).toBe("manual");
+  it("a date-scoped edit wins over rule and defaults", () => {
+    expect(resolveRestriction("min_los", sources).source).toBe("date_scoped");
   });
-  it("rule wins over default when no manual", () => {
+  it("carries the writing surface as provenance when supplied", () => {
+    expect(resolveRestriction("min_los", { dateScoped: 2, dateScopedVia: "bulk" })).toEqual({ value: 2, source: "date_scoped", via: "bulk" });
+  });
+  it("rule wins over defaults when no date-scoped edit", () => {
     expect(resolveRestriction("min_los", { matchingRules: [{ priority: 5, value: 2 }], ratePlanDefault: 1 }).value).toBe(2);
   });
   it("falls back to rate plan default", () => {
     expect(resolveRestriction("min_los", { ratePlanDefault: 1 }).source).toBe("rate_plan_default");
   });
-});
-
-describe("restriction priority — level 4 property default", () => {
   it("falls back to the property default when nothing else is set", () => {
     expect(resolveRestriction("min_los", { propertyDefault: 2 })).toEqual({ value: 2, source: "property_default" });
   });
-  it("rate-plan default beats the property default", () => {
+  it("rate-plan default beats the property default (specificity)", () => {
     expect(resolveRestriction("min_los", { ratePlanDefault: 3, propertyDefault: 2 })).toEqual({ value: 3, source: "rate_plan_default" });
   });
-  it("a rule beats both defaults; manual beats everything", () => {
+  it("a rule beats both defaults; a date-scoped edit beats everything", () => {
     expect(resolveRestriction("min_los", { matchingRules: [{ priority: 1, value: 5 }], ratePlanDefault: 3, propertyDefault: 2 }).value).toBe(5);
-    expect(resolveRestriction("min_los", { manual: 1, matchingRules: [{ priority: 1, value: 5 }], propertyDefault: 2 }).value).toBe(1);
+    expect(resolveRestriction("min_los", { dateScoped: 1, matchingRules: [{ priority: 1, value: 5 }], propertyDefault: 2 }).value).toBe(1);
   });
 });

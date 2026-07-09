@@ -61,8 +61,9 @@ export default async function Page() {
         </div>
       </Card>
       <p className="mt-3 text-[12px] text-ink-400">
-        Priority resolved by <span className="font-semibold text-ink-500">@revio/core</span>: manual edit / bulk
-        update &gt; restriction rule &gt; rate-plan default.
+        Precedence resolved by <span className="font-semibold text-ink-500">@revio/core</span> (two-tier):
+        date-scoped edit (calendar or bulk — most recent wins) &gt; restriction rule &gt; rate-plan default &gt;
+        property default.
       </p>
     </div>
   );

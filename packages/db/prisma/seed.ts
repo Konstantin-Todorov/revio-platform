@@ -258,8 +258,8 @@ async function main() {
       }
     }
   }
-  await prisma.ratePrice.createMany({ data: priceRows });
-  await prisma.dailyCell.createMany({ data: cellRows });
+  await prisma.ratePrice.createMany({ data: priceRows.map((r) => ({ ...r, source: "seed" })) });
+  await prisma.dailyCell.createMany({ data: cellRows.map((r) => ({ ...r, source: "seed" })) });
 
   // sanity: confirm the derived engine reproduces the screenshot's NR/Breakfast rows
   const nrCfg: DerivedRateConfig = { parentRatePlanId: standard.id, adjustmentType: "percent", direction: "decrease", value: 10, rounding: "none" };
@@ -445,7 +445,7 @@ async function main() {
       prices2.push({ ...t2, roomTypeId: rt.id, ratePlanId: std2.id, date: d, priceMinor: Math.round((base * (weekend ? 1.2 : 1)) / 100) * 100 });
     }
   }
-  await prisma.ratePrice.createMany({ data: prices2 });
+  await prisma.ratePrice.createMany({ data: prices2.map((r) => ({ ...r, source: "seed" })) });
   await prisma.reservation.create({ data: { ...t2, channelId: ch2[0]!.id, externalId: "BS-7714", guestName: "Ivan Petrov", status: "confirmed", totalMinor: 48000, currency: "EUR", propertyCurrency: "EUR", propertyTotalMinor: 48000, fxRate: 1, fxAt: minsAgo(7), importedAt: minsAgo(7), lines: { create: [{ roomTypeId: rt2[0]!.id, ratePlanId: std2.id, quantity: 1, checkIn: monday, checkOut: addDays(monday, 3) }] } } });
   await prisma.syncEvent.create({ data: { ...t2, channelId: ch2[0]!.id, kind: "pull", status: "success", summary: "New reservation imported (Booking.com)", createdAt: minsAgo(7) } });
 
