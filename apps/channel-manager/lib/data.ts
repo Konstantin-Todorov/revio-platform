@@ -82,14 +82,28 @@ export async function getDashboard() {
         orderBy: { importedAt: "desc" },
         take: 6,
       }),
-      prisma.syncEvent.findMany({ where: { propertyId }, include: { channel: true }, orderBy: { createdAt: "desc" }, take: 6 }),
+      // Boundary rule (spec §1): the activity feed shows channel I/O only.
+      prisma.syncEvent.findMany({ where: { propertyId, kind: { in: ["push", "pull"] } }, include: { channel: true }, orderBy: { createdAt: "desc" }, take: 6 }),
       prisma.errorItem.findMany({ where: { propertyId, resolved: false }, include: { channel: true } }),
       prisma.dailyCell.count({ where: { propertyId, stopSell: true } }),
     ]);
 
   const connected = channels.filter((c) => c.status === "connected").length;
   const pending = channels.reduce((s, c) => s + c.pendingCount, 0);
-  const failed = channels.reduce((s, c) => s + c.errorCount, 0);
+  // Failed = REAL failures in the last 24h (spec §3.1/§5.2): failed pushes/pulls plus real open
+  // errors — capability mismatches never count (they aren't even sent since the capability map).
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [failed24h, oldestPending] = await Promise.all([
+    prisma.syncEvent.count({ where: { propertyId, status: "failed", createdAt: { gte: since24h } } }),
+    prisma.syncEvent.findFirst({ where: { propertyId, status: "pending" }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+  ]);
+  const failed = failed24h + errorItems.filter((e) => e.severity === "critical" && e.code !== "restriction_not_supported").length;
+  // Real errors per channel for the Channel Status table (limitations excluded).
+  const realErrorsByChannel = new Map<string, number>();
+  for (const e of errorItems) {
+    if (e.code === "restriction_not_supported" || !e.channelId) continue;
+    realErrorsByChannel.set(e.channelId, (realErrorsByChannel.get(e.channelId) ?? 0) + 1);
+  }
   const lastSync = channels.map((c) => c.lastSyncAt).filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0] ?? null;
   const currencyWarnings = channels.filter((c) => c.currency !== property.baseCurrency).length;
 
@@ -101,12 +115,15 @@ export async function getDashboard() {
       activeProducts: ratePlanLinks,
       unmappedProducts: mappings,
       pendingUpdates: pending,
+      // Age of the oldest queued item (spec §5.3) — a growing age means the queue is stuck.
+      oldestPendingAt: oldestPending?.createdAt ?? null,
       failedSyncs: failed,
       lastSync,
       stopSold: dailyStopSells,
       currencyWarnings,
     },
     channels,
+    realErrorsByChannel,
     reservations,
     syncEvents,
     errorItems,

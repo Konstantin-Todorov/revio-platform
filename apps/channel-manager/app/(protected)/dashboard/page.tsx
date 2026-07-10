@@ -2,7 +2,9 @@ import {
   Radio, Boxes, Unlink, ArrowUpDown, AlertCircle, CheckCircle2, CircleSlash,
   Coins, CalendarPlus, Upload, Wrench, RotateCw, ArrowRight,
 } from "lucide-react";
+import Link from "next/link";
 import { getDashboard } from "@/lib/data";
+import { PauseChannelButton, ResumeChannelButton, DisconnectChannelButton, FullSyncButton } from "@/components/channels/ChannelActions";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { money, relativeTime } from "@/lib/format";
 
@@ -11,15 +13,21 @@ export const dynamic = "force-dynamic";
 const CHANNEL_INITIALS: Record<string, string> = { booking: "B", expedia: "E", trip: "T", agoda: "A" };
 
 export default async function DashboardPage() {
-  const { property, stats, channels, reservations, syncEvents, errorItems } = await getDashboard();
+  const { property, stats, channels, realErrorsByChannel, reservations, syncEvents, errorItems } = await getDashboard();
 
+  // Pending age (spec §5.3): ten items two seconds old is healthy; two hours old means stuck.
+  const pendingAgeMs = stats.oldestPendingAt ? Date.now() - stats.oldestPendingAt.getTime() : null;
+  const pendingStuck = pendingAgeMs != null && pendingAgeMs > 30 * 60 * 1000;
+  const pendingSub = pendingAgeMs == null ? "Queue empty — all delivered" : `Oldest waiting ${relativeTime(stats.oldestPendingAt)}`;
+
+  // Every KPI clicks through to its filtered destination (spec §3.1).
   const cards = [
-    { icon: Radio, tone: "success", value: `${stats.connectedChannels} / ${stats.totalChannels}`, label: "Connected Channels", sub: "All channels connected", pill: { tone: "success" as const, text: "Healthy" } },
-    { icon: Boxes, tone: "info", value: String(stats.activeProducts), label: "Active Products", sub: "Room types × rate plans", pill: { tone: "info" as const, text: "Sellable" } },
-    { icon: Unlink, tone: "warning", value: String(stats.unmappedProducts), label: "Unmapped Products", sub: "Require mapping", pill: { tone: "warning" as const, text: "Action" } },
-    { icon: ArrowUpDown, tone: "info", value: String(stats.pendingUpdates), label: "Pending Updates", sub: "To be sent to channels", pill: { tone: "info" as const, text: "Queued" } },
-    { icon: AlertCircle, tone: "danger", value: String(stats.failedSyncs), label: "Failed Syncs", sub: "Last 24 hours", pill: { tone: "danger" as const, text: "Review" } },
-    { icon: CheckCircle2, tone: "success", value: relativeTime(stats.lastSync), label: "Last Successful Sync", sub: "Across all channels", pill: { tone: "success" as const, text: "Live" } },
+    { icon: Radio, tone: "success", href: "/channels", value: `${stats.connectedChannels} / ${stats.totalChannels}`, label: "Connected Channels", sub: "All channels connected", pill: { tone: "success" as const, text: "Healthy" } },
+    { icon: Boxes, tone: "info", href: "/rooms-rates", value: String(stats.activeProducts), label: "Active Products", sub: "Room types × rate plans", pill: { tone: "info" as const, text: "Sellable" } },
+    { icon: Unlink, tone: "warning", href: "/mapping", value: String(stats.unmappedProducts), label: "Unmapped Products", sub: "Require mapping", pill: { tone: "warning" as const, text: "Action" } },
+    { icon: ArrowUpDown, tone: pendingStuck ? "danger" : "info", href: "/sync?tab=activity", value: String(stats.pendingUpdates), label: "Pending Updates", sub: pendingSub, pill: pendingStuck ? { tone: "danger" as const, text: "Stuck?" } : { tone: "info" as const, text: "Queued" } },
+    { icon: AlertCircle, tone: "danger", href: "/sync?tab=errors", value: String(stats.failedSyncs), label: "Failed Syncs", sub: "Real failures · 24h (limitations excluded)", pill: { tone: "danger" as const, text: "Review" } },
+    { icon: CheckCircle2, tone: "success", href: "/sync", value: relativeTime(stats.lastSync), label: "Last Successful Sync", sub: "Across all channels", pill: { tone: "success" as const, text: "Live" } },
   ];
 
   const TONE_BG: Record<string, string> = {
@@ -44,7 +52,8 @@ export default async function DashboardPage() {
         {cards.map((c, i) => {
           const Icon = c.icon;
           return (
-            <Card key={c.label} className="p-4">
+            <Link key={c.label} href={c.href} className="block">
+            <Card className="h-full p-4 transition-shadow hover:shadow-md">
               <div style={{ animationDelay: `${i * 45}ms` }} className="animate-rise">
                 <div className="mb-3 flex items-start justify-between">
                   <div className={`flex h-9 w-9 items-center justify-center rounded-md ${TONE_BG[c.tone]}`}>
@@ -57,6 +66,7 @@ export default async function DashboardPage() {
                 <div className="text-[11.5px] text-ink-400">{c.sub}</div>
               </div>
             </Card>
+            </Link>
           );
         })}
       </div>
@@ -75,6 +85,7 @@ export default async function DashboardPage() {
                 <th className="px-4 py-2 font-semibold">Last Sync</th>
                 <th className="px-4 py-2 text-right font-semibold">Pending</th>
                 <th className="px-4 py-2 text-right font-semibold">Errors</th>
+                <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -89,11 +100,28 @@ export default async function DashboardPage() {
                       <span className="text-[11px] text-ink-400">{ch.currency}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-2.5"><StatusPill tone="success">Connected</StatusPill></td>
+                  <td className="px-4 py-2.5">
+                    <StatusPill tone={ch.status === "connected" ? "success" : ch.status === "paused" ? "warning" : "neutral"}>
+                      {ch.status === "connected" ? "Connected" : ch.status === "paused" ? "Paused" : ch.status}
+                    </StatusPill>
+                  </td>
                   <td className="px-4 py-2.5 text-ink-500">{relativeTime(ch.lastSyncAt)}</td>
                   <td className="tnum px-4 py-2.5 text-right text-ink-700">{ch.pendingCount}</td>
                   <td className="tnum px-4 py-2.5 text-right">
-                    {ch.errorCount > 0 ? <span className="font-bold text-danger-500">{ch.errorCount}</span> : <span className="text-ink-300">0</span>}
+                    {/* Real errors only — capability limitations never show red (spec §5.2). */}
+                    {(realErrorsByChannel.get(ch.id) ?? 0) > 0
+                      ? <span className="font-bold text-danger-500">{realErrorsByChannel.get(ch.id)}</span>
+                      : <span className="text-ink-300">0</span>}
+                  </td>
+                  <td className="px-2 py-2.5">
+                    {/* Per-row quick actions (CM-UPDATES-V1): sync · pause/resume · disconnect. */}
+                    <div className="flex items-center justify-end gap-0.5">
+                      {ch.status !== "paused" && ch.status !== "disconnected" && <FullSyncButton channelId={ch.id} channelName={ch.name} />}
+                      {ch.status === "paused"
+                        ? <ResumeChannelButton channelId={ch.id} channelName={ch.name} />
+                        : ch.status !== "disconnected" && <PauseChannelButton channelId={ch.id} channelName={ch.name} />}
+                      {ch.status !== "disconnected" && <DisconnectChannelButton channelId={ch.id} channelName={ch.name} />}
+                    </div>
                   </td>
                 </tr>
               ))}
