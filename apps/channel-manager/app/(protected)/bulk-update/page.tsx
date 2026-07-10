@@ -14,8 +14,11 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 /** V2 IA: Bulk Update and Restrictions are ONE screen — one-off mass edits on top, standing rules below. */
-export default async function Page() {
+export default async function Page({ searchParams }: { searchParams: Promise<{ rt?: string }> }) {
+  const { rt } = await searchParams;
   const [{ roomTypes }, { rules, channels }] = await Promise.all([getRoomsAndRates(), getRestrictions()]);
+  // Inline per-row bulk from the calendar pre-scopes to one room type (?rt=CODE).
+  const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
   const today = new Date().toISOString().slice(0, 10);
   const rtOpts = roomTypes.map((r) => ({ id: r.id, name: r.name }));
   const chOpts = channels.map((c) => ({ code: c.code, name: c.name }));
@@ -23,7 +26,7 @@ export default async function Page() {
   return (
     <div>
       <PageHeader title="Bulk Rates & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
-      <BulkUpdateForm roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))} today={today} />
+      <BulkUpdateForm roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))} today={today} {...(preselect ? { preselect } : {})} />
 
       <Card className="mt-4">
         <CardHeader title="Restriction Rules" action={<RestrictionDialog roomTypes={rtOpts} channels={chOpts} />} />

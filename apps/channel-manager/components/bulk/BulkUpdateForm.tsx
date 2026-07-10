@@ -8,7 +8,7 @@ import { Field, inputCls } from "@/components/ui/Modal";
 type Opt = { id: string; name: string; code: string };
 const DOW = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
 
-export function BulkUpdateForm({ roomTypes, today }: { roomTypes: Opt[]; today: string }) {
+export function BulkUpdateForm({ roomTypes, today, preselect }: { roomTypes: Opt[]; today: string; preselect?: string[] }) {
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(applyBulkUpdate, null);
   const in30 = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
 
@@ -39,7 +39,7 @@ export function BulkUpdateForm({ roomTypes, today }: { roomTypes: Opt[]; today: 
             <div className="grid grid-cols-2 gap-1.5">
               {roomTypes.map((rt) => (
                 <label key={rt.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
-                  <input type="checkbox" name="roomTypeIds" value={rt.id} defaultChecked className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
+                  <input type="checkbox" name="roomTypeIds" value={rt.id} defaultChecked={!preselect || preselect.includes(rt.id)} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
                   {rt.name}
                 </label>
               ))}
