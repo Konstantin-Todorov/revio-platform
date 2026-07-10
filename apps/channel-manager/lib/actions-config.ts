@@ -332,3 +332,22 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
   revalidatePath("/channels");
   return { ok: true };
 }
+
+
+/** Resolve/ignore an error item (spec §3.8: a capability warning offers one-click ignore; a real
+ * error is resolved once its cause is fixed). Audited. */
+export async function resolveErrorItem(fd: FormData): Promise<void> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const id = str(fd, "id");
+  if (!id) return;
+  const e = await prisma.errorItem.findUnique({ where: { id }, include: { channel: true } });
+  if (!e || e.tenantId !== tenantId) return;
+  await prisma.errorItem.update({ where: { id }, data: { resolved: true } });
+  await logAudit(propertyId, tenantId, {
+    entity: `Error · ${e.message.slice(0, 60)}`, field: "resolve",
+    newValue: e.code === "restriction_not_supported" ? "ignored (capability limitation)" : "resolved",
+    channelCode: e.channel?.code ?? null,
+  });
+  revalidatePath("/sync");
+  revalidatePath("/dashboard");
+}
