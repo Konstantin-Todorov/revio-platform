@@ -60,6 +60,13 @@ export interface RawRevision {
   reservation: RawReservation;
 }
 
+/** A product as the CHANNEL knows it — its own id/code + display name (spec §3.6: mapping
+ * offers the OTA's real products in a dropdown instead of hand-typed ids). */
+export interface ExternalProduct {
+  id: string;
+  name: string;
+}
+
 export interface ChannelAdapter {
   /** e.g. "booking", "expedia", "mock". */
   readonly channelCode: string;
@@ -75,4 +82,10 @@ export interface ChannelAdapter {
   pullRevisions?(): Promise<RawRevision[]>;
   /** Acknowledge a booking revision (pairs with pullRevisions). */
   acknowledgeBooking?(revisionId: string): Promise<{ ok: boolean; error?: string }>;
+
+  /**
+   * List the channel's own room types + rate plans (with the OTA-side product codes), so the
+   * Mapping screen can offer dropdown mapping. Optional — absent means manual-id entry only.
+   */
+  listProducts?(): Promise<{ rooms: ExternalProduct[]; rates: ExternalProduct[] }>;
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Link2 } from "lucide-react";
-import { getMapping } from "@/lib/data";
+import { AlertTriangle, Link2 } from "lucide-react";
+import { getMapping, getUnmappedBookingAlerts } from "@/lib/data";
+import { listChannelProducts } from "@/lib/connectivity";
 import { fixMappings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -33,9 +34,38 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
     roomTypeMappings.filter((m) => m.status !== "complete").length +
     ratePlanMappings.filter((m) => m.status !== "complete").length;
 
+  // The channel's own products (spec §3.6) — dropdown options + the pulled product codes.
+  const products = await listChannelProducts(channel.id);
+  // Unmapped-booking alerts: bookings Channex flagged because their room/rate isn't mapped —
+  // each deep-links to the exact row that needs attention.
+  const alerts = await getUnmappedBookingAlerts(channel.id);
+
   return (
     <div>
       <PageHeader title="Mapping" subtitle="Two streams: room types control inventory & open/close; rate plans control rates & restrictions" />
+      {(products.rooms.length > 0 || products.rates.length > 0) && (
+        <p className="-mt-3 mb-3 text-[11.5px] text-ink-400">
+          {products.rooms.length + products.rates.length} products pulled from {channel.name} — pick them from the dropdown when mapping.
+        </p>
+      )}
+
+      {alerts.length > 0 && (
+        <div className="mb-3 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-warning-700">
+            <AlertTriangle className="h-4 w-4" /> {alerts.length} booking{alerts.length > 1 ? "s" : ""} arrived for an unmapped product
+          </div>
+          <ul className="mt-1.5 space-y-1 pl-6 text-[12.5px] text-warning-700">
+            {alerts.map((a) => (
+              <li key={a.id}>
+                {a.message}
+                {a.anchor ? (
+                  <a href={`#${a.anchor}`} className="ml-1.5 font-semibold underline">jump to the row</a>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -77,13 +107,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
               </thead>
               <tbody>
                 {roomTypeMappings.map((m) => (
-                  <tr key={m.id} className="group border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
+                  <tr key={m.id} id={`map-room-${m.id}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{m.roomType.name}</td>
                     <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRoomId ?? <span className="text-danger-500">—</span>}</td>
                     <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
-                        <MappingEditDialog kind="room" id={m.id} label={m.roomType.name} externalId={m.externalRoomId} channelName={channel.name} />
+                        <MappingEditDialog kind="room" id={m.id} label={m.roomType.name} externalId={m.externalRoomId} channelName={channel.name} options={products.rooms} />
                       </div>
                     </td>
                   </tr>
@@ -106,13 +136,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
               </thead>
               <tbody>
                 {ratePlanMappings.map((m) => (
-                  <tr key={m.id} className="group border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
+                  <tr key={m.id} id={`map-rate-${m.id}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{m.ratePlan.name}</td>
                     <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRateId ?? <span className="text-danger-500">—</span>}</td>
                     <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
-                        <MappingEditDialog kind="rate" id={m.id} label={m.ratePlan.name} externalId={m.externalRateId} channelName={channel.name} />
+                        <MappingEditDialog kind="rate" id={m.id} label={m.ratePlan.name} externalId={m.externalRateId} channelName={channel.name} options={products.rates} />
                       </div>
                     </td>
                   </tr>

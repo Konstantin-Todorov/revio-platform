@@ -93,7 +93,8 @@ export async function updateStreamMapping(_prev: ActionResult | null, fd: FormDa
   const { id: propertyId, tenantId } = await getProperty();
   const kind = str(fd, "kind");
   const id = str(fd, "id");
-  const externalId = str(fd, "externalId") || null;
+  // Dropdown selection, or a hand-typed id when the OTA product isn't in the pulled list.
+  const externalId = str(fd, "externalIdCustom") || str(fd, "externalId") || null;
   const status = externalId ? "complete" : "incomplete";
 
   if (kind === "room") {

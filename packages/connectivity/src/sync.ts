@@ -578,3 +578,26 @@ export async function reconnectChannel(prisma: Db, channelId: string): Promise<C
   });
   return { ok: outcome.ok, ...(outcome.error ? { error: outcome.error } : {}) };
 }
+
+
+/** Pull the channel's own products (rooms + rates with their OTA-side ids) for dropdown mapping.
+ * Returns empty lists when the adapter can't list (network trouble must never break the screen). */
+export async function listChannelProducts(
+  prisma: Db, channelId: string,
+): Promise<{ rooms: { id: string; name: string }[]; rates: { id: string; name: string }[] }> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { rooms: [], rates: [] };
+  try {
+    const mode = adapterMode(channel.connectivityMode);
+    const adapter = createChannelAdapter({
+      mode,
+      channelCode: channel.code,
+      ...(mode !== "mock"
+        ? { channex: { apiKey: await channexKey(channel.tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
+        : {}),
+    });
+    return (await adapter.listProducts?.()) ?? { rooms: [], rates: [] };
+  } catch {
+    return { rooms: [], rates: [] };
+  }
+}

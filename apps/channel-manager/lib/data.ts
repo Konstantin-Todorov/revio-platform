@@ -470,3 +470,27 @@ export async function getBookingOptions() {
   const demoMode = channels.every((c) => c.connectivityMode === "mock");
   return { property, channels, roomTypes, ratePlans, demoMode };
 }
+
+
+/** Unresolved unmapped-product errors for one channel, each pointed at the mapping row to fix
+ * (spec §3.6: an unmapped-booking alert deep-links to the exact row). */
+export async function getUnmappedBookingAlerts(channelId: string) {
+  const property = await getProperty();
+  const errors = await prisma.errorItem.findMany({
+    where: { propertyId: property.id, channelId, resolved: false, code: { contains: "not_mapped" } },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
+  if (errors.length === 0) return [];
+  const [roomMaps, rateMaps] = await Promise.all([
+    prisma.channelRoomTypeMapping.findMany({ where: { channelId }, include: { roomType: true } }),
+    prisma.channelRatePlanMapping.findMany({ where: { channelId }, include: { ratePlan: true } }),
+  ]);
+  return errors.map((e) => {
+    const hay = `${e.message} ${e.productLabel ?? ""}`;
+    const room = roomMaps.find((m) => hay.includes(m.roomType.name));
+    const rate = rateMaps.find((m) => hay.includes(m.ratePlan.name));
+    const anchor = rate ? `map-rate-${rate.id}` : room ? `map-room-${room.id}` : null;
+    return { id: e.id, message: e.message, anchor };
+  });
+}

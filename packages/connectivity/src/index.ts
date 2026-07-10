@@ -20,6 +20,7 @@ export {
 export {
   syncChannel,
   syncRealChannels,
+  listChannelProducts,
   pauseChannel,
   resumeChannel,
   disconnectChannel,

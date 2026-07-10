@@ -184,6 +184,20 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     return this.request("GET", path);
   }
 
+  /** Pull the property's room types + rate plans from Channex (with their Channex ids) —
+   * feeds the Mapping screen's dropdowns (spec §3.6). */
+  async listProducts(): Promise<{ rooms: { id: string; name: string }[]; rates: { id: string; name: string }[] }> {
+    const [roomsRes, ratesRes] = [
+      await this.request("GET", `/room_types?filter[property_id]=${this.propertyId}`),
+      await this.request("GET", `/rate_plans?filter[property_id]=${this.propertyId}`),
+    ];
+    const items = (r: ApiResult): { id: string; name: string }[] => {
+      const data = (r.body as { data?: { id: string; attributes?: { title?: string } }[] } | null)?.data;
+      return Array.isArray(data) ? data.map((d) => ({ id: d.id, name: d.attributes?.title ?? d.id })) : [];
+    };
+    return { rooms: roomsRes.ok ? items(roomsRes) : [], rates: ratesRes.ok ? items(ratesRes) : [] };
+  }
+
   private request(method: string, path: string, body?: unknown): Promise<ApiResult> {
     // Every request goes through the rate limiter (serialized + min-gap).
     return this.schedule(() => this.doRequest(method, path, body));

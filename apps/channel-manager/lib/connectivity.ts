@@ -4,6 +4,7 @@ import {
   syncChannel as sharedSyncChannel,
   syncRealChannels as sharedSyncRealChannels,
   pullChannel as sharedPullChannel,
+  listChannelProducts as sharedListChannelProducts,
   pauseChannel as sharedPauseChannel,
   resumeChannel as sharedResumeChannel,
   disconnectChannel as sharedDisconnectChannel,
@@ -34,6 +35,7 @@ export function pullChannel(channelId: string): Promise<PullOutcome> {
 export function fullSyncChannel(channelId: string) {
   return sharedSyncChannel(prisma, channelId, { horizonDays: 365 });
 }
+export const listChannelProducts = (id: string) => sharedListChannelProducts(prisma, id);
 export const pauseChannel = (id: string) => sharedPauseChannel(prisma, id);
 export const resumeChannel = (id: string) => sharedResumeChannel(prisma, id);
 export const disconnectChannel = (id: string) => sharedDisconnectChannel(prisma, id);
