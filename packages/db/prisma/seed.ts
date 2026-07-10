@@ -168,6 +168,9 @@ async function main() {
     );
   }
 
+  // OTA-only / corporate-only plans never appear on the public widget (direct-channel flag).
+  await prisma.ratePlan.updateMany({ where: { propertyId, code: { in: ["TRP", "COR"] } }, data: { directChannelEnabled: false } });
+
   // Link every rate plan to every room type → 42 products.
   for (const rp of ratePlans) {
     for (const rt of roomTypes) {
@@ -350,6 +353,9 @@ async function main() {
   ];
   const sources: Record<string, { id: string }> = {};
   for (const src of sourceSpec) sources[src.category] = await prisma.bookingSource.create({ data: { ...t, ...src } });
+  // Booking-engine seam: website bookings get their own source so the channel mix can split
+  // "Booking Engine" from other direct business (docs/specs/BOOKING-ENGINE-ADDENDUM.md §6.2).
+  await prisma.bookingSource.create({ data: { ...t, name: "Booking Engine", category: "direct" } });
   await prisma.channel.updateMany({ where: { propertyId }, data: { bookingSourceId: sources["ota"]!.id } });
   await prisma.propertyDefaults.create({ data: { ...t, defMinLos: 1 } });
   await prisma.taxFee.createMany({
@@ -475,12 +481,18 @@ async function main() {
 async function seedUnits(tenantId: string, propertyId: string): Promise<number> {
   const roomTypes = await prisma.roomType.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
   const mix = ["clean", "clean", "inspected", "clean", "dirty", "clean", "clean", "dirty", "inspected", "clean"];
-  const rows: { tenantId: string; propertyId: string; roomTypeId: string; label: string; unitKind: string; floor: string; hkStatus: string; sortOrder: number }[] = [];
+  const rows: { tenantId: string; propertyId: string; roomTypeId: string; label: string; unitKind: string; floor: string; hkStatus: string; sortOrder: number; features: string[] }[] = [];
   let placed = 0;
   for (const rt of roomTypes) {
     for (let i = 0; i < rt.totalRooms; i++) {
       const floorNum = Math.floor(placed / 10) + 1;
       const roomOnFloor = (placed % 10) + 1;
+      // Attribute mix for assignment/preference demos: corner rooms are quiet, x01 is accessible,
+      // top-floor rooms have the view.
+      const features: string[] = [];
+      if (roomOnFloor === 1) features.push("accessible");
+      if (roomOnFloor >= 9) features.push("quiet");
+      if (floorNum >= 4) features.push("view");
       rows.push({
         tenantId, propertyId, roomTypeId: rt.id,
         label: `${floorNum}${String(roomOnFloor).padStart(2, "0")}`,
@@ -488,11 +500,23 @@ async function seedUnits(tenantId: string, propertyId: string): Promise<number> 
         floor: `Floor ${floorNum}`,
         hkStatus: mix[placed % mix.length]!,
         sortOrder: i,
+        features,
       });
       placed++;
     }
   }
   await prisma.unit.createMany({ data: rows });
+
+  // Connecting rooms: link the first two Family Room units (symmetric) — required by the
+  // housekeeping one-room-in-progress exception and family/group assignment (spec §3.4/§3.5).
+  const fam = roomTypes.find((rt) => rt.code === "FAM");
+  if (fam) {
+    const famUnits = await prisma.unit.findMany({ where: { roomTypeId: fam.id }, orderBy: { sortOrder: "asc" }, take: 2 });
+    if (famUnits.length === 2) {
+      await prisma.unit.update({ where: { id: famUnits[0]!.id }, data: { connectingUnitIds: [famUnits[1]!.id] } });
+      await prisma.unit.update({ where: { id: famUnits[1]!.id }, data: { connectingUnitIds: [famUnits[0]!.id] } });
+    }
+  }
   return rows.length;
 }
 

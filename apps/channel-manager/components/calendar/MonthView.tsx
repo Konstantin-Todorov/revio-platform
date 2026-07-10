@@ -75,7 +75,7 @@ export function MonthView({
 
               <div className="flex items-center gap-1 text-[10.5px] text-ink-400">
                 <span className="w-7 shrink-0">Sell</span>
-                {inv && <EditableCell roomTypeId={section.roomType.id} date={d} field="inventory" kind="availability" value={inv.value} />}
+                {inv && <EditableCell roomTypeId={section.roomType.id} date={d} field="inventory" kind="availability" value={inv.value} {...(inv.warn ? { warn: inv.warn } : {})} />}
               </div>
               {visible.has("sold") && sold !== undefined && (
                 <div className="flex items-center gap-1 text-[10.5px] text-ink-400">

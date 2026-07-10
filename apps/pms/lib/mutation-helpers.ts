@@ -29,9 +29,22 @@ export async function logAudit(
  * on its next push). This is the visible trace of the one cross-product write.
  */
 export async function recordSync(propertyId: string, tenantId: string, summary: string, detail?: string) {
-  await prisma.syncEvent.create({
-    data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: detail ?? null },
+  // BOUNDARY RULE (spec CM-GUIDE-V2 §1): callers pass the AVAILABILITY EFFECT only — never the
+  // operational cause (no unit labels, guest names, maintenance notes). Channel attribution
+  // (spec §5.1): one event per connected mock channel; real channels report their own pushes.
+  const mocks = await prisma.channel.findMany({
+    where: { propertyId, status: "connected", connectivityMode: "mock" },
+    select: { id: true, name: true },
   });
+  if (mocks.length === 0) {
+    await prisma.syncEvent.create({
+      data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: detail ?? null },
+    });
+  } else {
+    await prisma.syncEvent.createMany({
+      data: mocks.map((c) => ({ tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary, detail: detail ?? null })),
+    });
+  }
   // Immediate cross-product propagation: a PMS inventory change (unit OOO, walk-in) pushes the new
   // availability to any real (channex) channel now. No-op when every channel is mock; never break the write.
   try {

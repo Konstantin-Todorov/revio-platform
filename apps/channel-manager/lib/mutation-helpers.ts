@@ -23,15 +23,25 @@ export async function logAudit(
 }
 
 /**
- * Record a push so the Sync Center shows activity, then AUTO-PUSH the change through every channel
- * that runs a real adapter (connectivityMode != mock). Mock channels keep the simulated event only;
- * channex-mode channels get an actual ARI push — no manual Re-sync needed after an edit.
+ * Record a push with CHANNEL ATTRIBUTION (spec CM-GUIDE-V2 §5.1): one SyncEvent per connected
+ * mock channel (simulated push), so per-channel health bars and the Sync Center channel column
+ * populate. Real (channex) channels are excluded here — syncRealChannels writes their own
+ * attributed events with actual push results. Then auto-push through every real adapter.
  */
 export async function recordPush(propertyId: string, tenantId: string, summary: string) {
-  const channels = await prisma.channel.count({ where: { propertyId, status: "connected" } });
-  await prisma.syncEvent.create({
-    data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: `Pushed to ${channels} channels` },
+  const mocks = await prisma.channel.findMany({
+    where: { propertyId, status: "connected", connectivityMode: "mock" },
+    select: { id: true, name: true },
   });
+  if (mocks.length === 0) {
+    await prisma.syncEvent.create({
+      data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: "No mock channels — real channels report their own pushes" },
+    });
+  } else {
+    await prisma.syncEvent.createMany({
+      data: mocks.map((c) => ({ tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary, detail: `Pushed to ${c.name} (mock)` })),
+    });
+  }
   await syncRealChannels(propertyId);
 }
 

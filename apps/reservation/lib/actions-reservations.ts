@@ -194,7 +194,7 @@ export async function confirmReservation(fd: FormData): Promise<void> {
     field: "created",
     newValue: `${hold!.roomType.name} · ${hold!.checkIn.toISOString().slice(0, 10)} → ${hold!.checkOut.toISOString().slice(0, 10)} · ${hold!.quantity}× · ${ratePlan!.name}`,
   });
-  await recordPush(property.id, property.tenantId, `Reservation created (${guestName}) — availability reduced`);
+  await recordPush(property.id, property.tenantId, "Availability reduced — new reservation confirmed");
   revalidateReservations();
   redirect(`/reservations/${reservation.id}`);
 }
@@ -253,7 +253,7 @@ export async function modifyReservation(fd: FormData): Promise<void> {
     oldValue: before,
     newValue: `${roomType!.name} · ${checkIn} → ${checkOut} · ${quantity}×`,
   });
-  await recordPush(property.id, property.tenantId, `Reservation modified (${reservation!.guestName}) — availability updated`);
+  await recordPush(property.id, property.tenantId, "Availability updated — reservation modified");
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
   redirect(`/reservations/${id}`);
@@ -275,7 +275,7 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
     oldValue: reservation!.status,
     newValue: "cancelled",
   });
-  await recordPush(property.id, property.tenantId, `Reservation cancelled (${reservation!.guestName}) — availability restored`);
+  await recordPush(property.id, property.tenantId, "Availability restored — reservation cancelled");
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
   redirect(`/reservations/${id}`);

@@ -9,8 +9,9 @@
  */
 import { forSystem, decryptSecret, forTenant } from "@revio/db";
 import {
-  computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, SOLD_STATUSES,
-  type AriUpdate, type DerivedRateConfig,
+  channelSupports, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed,
+  resolveRestriction, SOLD_STATUSES, type AriUpdate, type DerivedRateConfig, type RestrictionRuleHit,
+  type RestrictionType,
 } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 
@@ -66,7 +67,7 @@ export interface SyncOutcome {
  * and an ErrorItem per rejected update.
  */
 export async function syncChannel(prisma: Db, channelId: string): Promise<SyncOutcome> {
-  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  const channel = await prisma.channel.findUnique({ where: { id: channelId }, include: { bookingSource: true } });
   if (!channel) return { ok: false, pushed: 0, rejected: 0, mode: "mock", error: "Unknown channel." };
   const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId } });
   const { tenantId, propertyId } = channel;
@@ -98,6 +99,23 @@ export async function syncChannel(prisma: Db, channelId: string): Promise<SyncOu
     }),
     prisma.propertyDefaults.findUnique({ where: { propertyId } }),
   ]);
+  // Standing restriction rules overlapping the window — they sit between a date-scoped cell edit
+  // and the rate-plan/property defaults in the two-tier resolution (see @revio/core resolve.ts).
+  const rules = await prisma.restrictionRule.findMany({
+    where: { propertyId, active: true, dateFrom: { lte: end }, dateTo: { gte: start } },
+  });
+  const srcCategory = channel.bookingSource?.category ?? null;
+  const ruleHits = (type: string, rtId: string, rpId: string, k: string): RestrictionRuleHit[] =>
+    rules
+      .filter((r) =>
+        r.type === type &&
+        (r.roomTypeId == null || r.roomTypeId === rtId) &&
+        (r.ratePlanId == null || r.ratePlanId === rpId) &&
+        (r.channelCodes.length === 0 || r.channelCodes.includes(channel.code)) &&
+        (r.sourceCategories.length === 0 || (srcCategory != null && r.sourceCategories.includes(srcCategory))) &&
+        ymd(r.dateFrom) <= k && ymd(r.dateTo) >= k,
+      )
+      .map((r) => ({ priority: r.priority, value: (r.valueBool ?? r.valueInt ?? true) as number | boolean }));
 
   const cellKey = (rt: string, k: string) => `${rt}:${k}`;
   const cellMap = new Map(cells.map((c) => [cellKey(c.roomTypeId, ymd(c.date)), c]));
@@ -148,17 +166,41 @@ export async function syncChannel(prisma: Db, channelId: string): Promise<SyncOu
         const price = priceFor(rt.id, rp, k);
         if (price == null) continue;
 
-        const apMin = rp.defAdvancePurchaseMin ?? propertyDefaults?.defAdvancePurchaseMin ?? null;
-        const apMax = rp.defAdvancePurchaseMax ?? propertyDefaults?.defAdvancePurchaseMax ?? null;
-        const apClosed = isAdvancePurchaseClosed(todayStr, k, { min: apMin, max: apMax });
-        const stopSell = (cell?.stopSell ?? propertyDefaults?.defStopSell ?? false) || apClosed;
-        const restrictions: AriUpdate["restrictions"] = {
-          stopSell,
-          cta: cell?.cta ?? propertyDefaults?.defCta ?? false,
-          ctd: cell?.ctd ?? propertyDefaults?.defCtd ?? false,
+        // Two-tier resolution per (room type, rate plan, date): date-scoped cell → rule →
+        // rate-plan default → property default. Flags treat false as "unset" at every tier.
+        const flagOf = (type: RestrictionType, cellV: boolean | undefined, planV: boolean, propV: boolean | undefined) =>
+          Boolean(resolveRestriction(type, {
+            ...(cellV ? { dateScoped: true } : {}),
+            matchingRules: ruleHits(type, rt.id, rp.id, k),
+            ...(planV ? { ratePlanDefault: true } : {}),
+            ...(propV ? { propertyDefault: true } : {}),
+          }).value);
+        const numOf = (type: RestrictionType, cellV: number | null | undefined, planV: number | null, propV: number | null | undefined) => {
+          const r = resolveRestriction(type, {
+            ...(cellV != null ? { dateScoped: cellV } : {}),
+            matchingRules: ruleHits(type, rt.id, rp.id, k),
+            ...(planV != null ? { ratePlanDefault: planV } : {}),
+            ...(propV != null ? { propertyDefault: propV } : {}),
+          });
+          return r.source === "none" ? null : Number(r.value);
         };
-        const minLos = cell?.minLos ?? rp.defMinLos ?? propertyDefaults?.defMinLos;
-        const maxLos = rp.defMaxLos ?? propertyDefaults?.defMaxLos;
+
+        // Capability map (spec §5.2): never send this channel a restriction type it can't
+        // honour — a limitation is not a failure, so it must never become a rejected update.
+        const can = (type: RestrictionType) => channelSupports(channel.supportedRestrictions, type);
+        const apMin = can("advance_purchase_min")
+          ? numOf("advance_purchase_min", cell?.advancePurchaseMin, rp.defAdvancePurchaseMin, propertyDefaults?.defAdvancePurchaseMin)
+          : null;
+        const apMax = can("advance_purchase_max")
+          ? numOf("advance_purchase_max", cell?.advancePurchaseMax, rp.defAdvancePurchaseMax, propertyDefaults?.defAdvancePurchaseMax)
+          : null;
+        const apClosed = isAdvancePurchaseClosed(todayStr, k, { min: apMin, max: apMax });
+        const stopSell = flagOf("stop_sell", cell?.stopSell, rp.defStopSell, propertyDefaults?.defStopSell) || apClosed;
+        const restrictions: AriUpdate["restrictions"] = { stopSell };
+        if (can("cta")) restrictions.cta = flagOf("cta", cell?.cta, rp.defCta, propertyDefaults?.defCta);
+        if (can("ctd")) restrictions.ctd = flagOf("ctd", cell?.ctd, rp.defCtd, propertyDefaults?.defCtd);
+        const minLos = can("min_los") ? numOf("min_los", cell?.minLos, rp.defMinLos, propertyDefaults?.defMinLos) : null;
+        const maxLos = can("max_los") ? numOf("max_los", cell?.maxLos, rp.defMaxLos, propertyDefaults?.defMaxLos) : null;
         if (minLos != null) restrictions.minLos = minLos;
         if (maxLos != null) restrictions.maxLos = maxLos;
         if (apMin != null) restrictions.advancePurchaseMin = apMin;

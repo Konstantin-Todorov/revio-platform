@@ -22,5 +22,7 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)"],
+  // api/public (booking-engine seam) + api/jobs (cron, Bearer-gated) do their own auth — the
+  // session-cookie gate must not redirect them to /login.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/public|api/jobs|.*\\.[a-zA-Z0-9]+$).*)"],
 };

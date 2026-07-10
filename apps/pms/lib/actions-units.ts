@@ -146,10 +146,12 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
         note: `Unit ${unit.label} out of order (PMS)`,
       },
     });
-    await recordSync(unit.propertyId, session.tenantId, `Unit ${unit.label} out of order`, "1 room off sale until back in service · sent to channels on next sync");
+    const rt = await prisma.roomType.findUnique({ where: { id: unit.roomTypeId } });
+    await recordSync(unit.propertyId, session.tenantId, `Availability reduced — ${rt?.name ?? "1 room"}`, "1 room off sale until back in service");
   } else if (prev === "out_of_order" && status !== "out_of_order") {
     await prisma.roomInventoryPeriod.deleteMany({ where: { unitId: unit.id } });
-    await recordSync(unit.propertyId, session.tenantId, `Unit ${unit.label} back in service`, "1 room returned to sale · sent to channels on next sync");
+    const rt = await prisma.roomType.findUnique({ where: { id: unit.roomTypeId } });
+    await recordSync(unit.propertyId, session.tenantId, `Availability restored — ${rt?.name ?? "1 room"}`, "1 room returned to sale");
   }
 
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: prev, newValue: status, userId: session.userId });

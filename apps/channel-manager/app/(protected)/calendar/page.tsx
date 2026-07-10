@@ -325,6 +325,7 @@ export default async function CalendarPage({
                                 kind={row.kind}
                                 value={cell.value}
                                 {...(cell.flag ? { flag: cell.flag } : {})}
+                                {...(cell.warn ? { warn: cell.warn } : {})}
                                 prefix={row.kind === "price" ? "€" : ""}
                               />
                             </td>

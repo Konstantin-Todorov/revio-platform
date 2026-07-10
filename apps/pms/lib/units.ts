@@ -19,7 +19,9 @@ export async function takeUnitOoo(tenantId: string, propertyId: string, unit: { 
     await prisma.roomInventoryPeriod.create({
       data: { tenantId, propertyId, roomTypeId: unit.roomTypeId, kind: "out_of_order", dateFrom: utcDay(today), dateTo: utcDay(to), rooms: 1, unitId: unit.id, note },
     });
-    await recordSync(propertyId, tenantId, `Unit ${unit.label} out of order`, "1 room off sale until back in service · sent to channels on next sync");
+    // Boundary rule: channels see the availability effect, never the operational cause.
+    const rt = await prisma.roomType.findUnique({ where: { id: unit.roomTypeId } });
+    await recordSync(propertyId, tenantId, `Availability reduced — ${rt?.name ?? "1 room"}`, "1 room off sale until back in service");
   }
 }
 
@@ -27,5 +29,8 @@ export async function takeUnitOoo(tenantId: string, propertyId: string, unit: { 
 export async function clearUnitOoo(tenantId: string, propertyId: string, unit: { id: string; label: string }, newStatus: string) {
   const removed = await prisma.roomInventoryPeriod.deleteMany({ where: { unitId: unit.id } });
   await prisma.unit.update({ where: { id: unit.id }, data: { hkStatus: newStatus } });
-  if (removed.count > 0) await recordSync(propertyId, tenantId, `Unit ${unit.label} back in service`, "1 room returned to sale · sent to channels on next sync");
+  if (removed.count > 0) {
+    const u = await prisma.unit.findUnique({ where: { id: unit.id }, include: { roomType: true } });
+    await recordSync(propertyId, tenantId, `Availability restored — ${u?.roomType.name ?? "1 room"}`, "1 room returned to sale");
+  }
 }

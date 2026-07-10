@@ -7,6 +7,7 @@ export * from "./metrics/formulas.js";
 export * from "./rates/derive.js";
 export * from "./rates/occupancy.js";
 export * from "./restrictions/resolve.js";
+export * from "./restrictions/capabilities.js";
 export * from "./restrictions/advance-purchase.js";
 export * from "./adapters/channel-adapter.js";
 export * from "./adapters/cm-connector.js";

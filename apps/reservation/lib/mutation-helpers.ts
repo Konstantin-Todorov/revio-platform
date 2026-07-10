@@ -28,10 +28,21 @@ export async function logAudit(
  * channex-mode channels get an actual ARI push — no manual Re-sync needed after an edit.
  */
 export async function recordPush(propertyId: string, tenantId: string, summary: string) {
-  const channels = await prisma.channel.count({ where: { propertyId, status: "connected" } });
-  await prisma.syncEvent.create({
-    data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: `Availability recalculated · visible to ${channels} channels via the connected CM` },
+  // Channel attribution (spec §5.1): one event per connected mock channel; real channels report
+  // their own attributed pushes from syncRealChannels below.
+  const mocks = await prisma.channel.findMany({
+    where: { propertyId, status: "connected", connectivityMode: "mock" },
+    select: { id: true, name: true },
   });
+  if (mocks.length === 0) {
+    await prisma.syncEvent.create({
+      data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: "Availability recalculated · real channels report their own pushes" },
+    });
+  } else {
+    await prisma.syncEvent.createMany({
+      data: mocks.map((c) => ({ tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary, detail: `Pushed to ${c.name} via the connected CM (mock)` })),
+    });
+  }
   // Immediate cross-product propagation: push the new availability/rates to any real (channex) channel
   // right now — no manual Re-sync in the CM. No-op when every channel is mock. Never break the write.
   try {

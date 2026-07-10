@@ -79,6 +79,9 @@ export function BulkUpdateForm({ roomTypes, today }: { roomTypes: Opt[]; today: 
               <CheckCircle2 className="h-4 w-4" /> Applied to {state.affected} cells and pushed to channels.
             </div>
           )}
+          {state?.warning && (
+            <p className="rounded-md bg-warning-50 px-3 py-2 text-[12.5px] font-medium text-warning-700">{state.warning}</p>
+          )}
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
 
           <button type="submit" disabled={pending} className="w-full rounded-md bg-brand-800 px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">

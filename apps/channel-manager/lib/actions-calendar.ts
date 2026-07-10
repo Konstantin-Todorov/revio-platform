@@ -6,7 +6,7 @@ import { computeWaterfall, deriveRate, isOverbooking, SOLD_STATUSES, type Derive
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, strList, eachDate, utcDay } from "./mutation-helpers";
 
-export type ActionResult = { ok: boolean; error?: string; affected?: number };
+export type ActionResult = { ok: boolean; error?: string; affected?: number; warning?: string };
 
 function revalidateCalendar() {
   revalidatePath("/calendar");
@@ -101,6 +101,20 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
   }
   let affected = 0;
 
+  // Total-rooms safety net (spec): loading more inventory than physically exists saves, but warns.
+  let warning: string | undefined;
+  if (updateType === "availability_set") {
+    const over = await prisma.roomType.findMany({
+      where: { id: { in: roomTypeIds }, totalRooms: { lt: Math.max(0, Math.trunc(value)) } },
+      select: { name: true, totalRooms: true },
+    });
+    if (over.length > 0) {
+      warning = `Attention: ${Math.trunc(value)} to sell exceeds the physical count for ${over
+        .map((r) => `${r.name} (${r.totalRooms})`)
+        .join(", ")} — saved anyway, double-check the number.`;
+    }
+  }
+
   for (const roomTypeId of roomTypeIds) {
     for (const date of dates) {
       if (updateType.startsWith("rate_")) {
@@ -133,7 +147,7 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
   await recordPush(propertyId, tenantId, `Bulk update applied (${updateType}) — ${affected} cells`);
   revalidateCalendar();
   revalidatePath("/rooms-rates");
-  return { ok: true, affected };
+  return { ok: true, affected, ...(warning ? { warning } : {}) };
 }
 
 // --- Live loop: simulate a booking ----------------------------------------

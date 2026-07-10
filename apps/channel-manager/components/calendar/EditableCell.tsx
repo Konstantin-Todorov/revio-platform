@@ -6,7 +6,7 @@ import { saveCell } from "@/lib/actions-calendar";
 type Kind = "availability" | "price" | "restriction" | "flag";
 
 export function EditableCell({
-  roomTypeId, date, field, kind, value, flag, prefix = "",
+  roomTypeId, date, field, kind, value, flag, prefix = "", warn,
 }: {
   roomTypeId: string;
   date: string;
@@ -15,6 +15,8 @@ export function EditableCell({
   value: string;
   flag?: "stop" | "ctd" | "cta";
   prefix?: string;
+  /** Non-blocking attention note (e.g. allotment above the physical room count). */
+  warn?: string;
 }) {
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -81,9 +83,11 @@ export function EditableCell({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className={`flex h-7 w-full items-center justify-center rounded transition-colors hover:bg-brand-50 ${kind === "availability" ? "font-bold" : ""} ${tone} ${pending ? "opacity-50" : ""}`}
+      title={warn}
+      className={`flex h-7 w-full items-center justify-center gap-0.5 rounded transition-colors hover:bg-brand-50 ${kind === "availability" ? "font-bold" : ""} ${warn ? "bg-warning-50 text-warning-700 ring-1 ring-inset ring-warning-600/40" : tone} ${pending ? "opacity-50" : ""}`}
     >
       {value === "—" ? "—" : `${prefix}${value}`}
+      {warn && <span aria-hidden className="text-[10px] leading-none">⚠</span>}
     </button>
   );
 }

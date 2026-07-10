@@ -57,7 +57,11 @@ export async function closeDay(): Promise<void> {
   const next = addDaysYmd(businessDate, 1);
   await prisma.property.update({ where: { id: property!.id }, data: { businessDate: utcDay(next) } });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "close_day", field: businessDate, newValue: `${noShows} no-show(s) · rolled to ${next}`, userId: session.userId });
-  await recordSync(session.activePropertyId, session.tenantId, `Day closed — ${businessDate}`, `${noShows} no-show(s) · business date rolled to ${next}`);
+  // Boundary rule: the close itself is operational (audit above). Only its availability effect
+  // (no-show rooms released back to sale) is channel-facing.
+  if (noShows > 0) {
+    await recordSync(session.activePropertyId, session.tenantId, "Availability restored — no-show rooms released", `${noShows} room(s) returned to sale`);
+  }
   revalidatePath("/closeday");
   revalidatePath("/dashboard");
   redirect(`/closeday?closed=${noShows}`);

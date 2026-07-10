@@ -227,6 +227,10 @@ model RatePlan {
 
   active    Boolean @default(true)
   sortOrder Int     @default(0)
+  // Booking-engine seam (docs/specs/BOOKING-ENGINE-ADDENDUM.md §6): may this plan be sold on the
+  // hotel's own direct channel (public widget)? OTA-only / corporate-only rates switch this off.
+  // Designed-in now; the widget build is deferred.
+  directChannelEnabled Boolean @default(true)
 
   property           Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   parent             RatePlan?           @relation("Derivation", fields: [parentRatePlanId], references: [id])
@@ -702,6 +706,11 @@ model Unit {
   // Current housekeeping status (single value; changes logged to AuditEntry). Occupancy status is
   // DERIVED from room assignments (Phase 2), never stored here.
   hkStatus   String   @default("clean") // clean | dirty | inspected | out_of_order
+  // Assignment/housekeeping attributes (docs/specs/PMS-GUIDE-V1.md §3.5): connecting-room links are
+  // REQUIRED data for the one-room-in-progress exception and family/group assignment; features feed
+  // preference-aware assignment. Links are symmetric — the app maintains both sides (D6 UI).
+  features          String[] @default([]) // quiet | accessible | view | smoking | …
+  connectingUnitIds String[] @default([])
   sortOrder  Int      @default(0)
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())

@@ -122,7 +122,7 @@ export type CalendarRow = {
   /** Which DailyCell/RatePrice field this row edits (absent ⇒ read-only, e.g. derived rates / rooms sold). */
   field?: "inventory" | "price" | "minLos" | "cta" | "ctd" | "stopSell";
   editable?: boolean;
-  cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean }[];
+  cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean; warn?: string }[];
 };
 
 /** Board query: window start (YYYY-MM-DD), window size, room-type filter, visible row groups. */
@@ -212,7 +212,15 @@ export async function getCalendarBoard(q: CalendarQuery) {
 
     rows.push({
       key: "inventory", label: "Rooms to sell", kind: "availability", field: "inventory", editable: true,
-      cells: dateKeys.map((k) => ({ date: k, value: String(cellFor(k)?.inventory ?? roomType.totalRooms) })),
+      cells: dateKeys.map((k) => {
+        const inv = cellFor(k)?.inventory ?? roomType.totalRooms;
+        // Total-rooms safety net (spec): loading more than the physical count saves, but warns.
+        const over = inv > roomType.totalRooms;
+        return {
+          date: k, value: String(inv),
+          ...(over ? { warn: `Attention: ${inv} to sell, but only ${roomType.totalRooms} physical ${roomType.unitKind === "bed" ? "beds" : "rooms"} exist` } : {}),
+        };
+      }),
     });
     if (visible.has("sold")) {
       rows.push({
