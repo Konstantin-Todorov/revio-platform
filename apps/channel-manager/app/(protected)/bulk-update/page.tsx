@@ -22,7 +22,7 @@ export default async function Page() {
 
   return (
     <div>
-      <PageHeader title="Bulk Update & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
+      <PageHeader title="Bulk Rates & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
       <BulkUpdateForm roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))} today={today} />
 
       <Card className="mt-4">

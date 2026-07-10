@@ -11,30 +11,70 @@ import { useShell } from "./ShellContext";
 
 type Item = { href: string; label: string; icon: typeof LayoutDashboard; badge?: number; tone?: "danger" | "warning" };
 
-// V2 IA: Restrictions live inside Bulk Update; Errors + Audit live inside the Sync Center;
-// User Management is its own Operations item.
+// V2 nav (docs/specs/CM-GUIDE-V2.md §2): grouped by mode of use — daily rate work (Revenue
+// Manager), occasional channel configuration (Distribution Manager), operational monitoring, and
+// the bottom-anchored Account group for rarely-touched admin.
 const SECTIONS: { title?: string; items: Item[] }[] = [
   { items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/calendar", label: "Calendar", icon: CalendarDays },
-    { href: "/bulk-update", label: "Bulk & Restrictions", icon: SlidersHorizontal },
   ] },
-  { title: "Distribution", items: [
+  { title: "Rates & Availability", items: [
+    { href: "/calendar", label: "Calendar", icon: CalendarDays },
+    { href: "/bulk-update", label: "Bulk Rates & Restrictions", icon: SlidersHorizontal },
     { href: "/rooms-rates", label: "Rooms & Rates", icon: BedDouble },
+  ] },
+  { title: "Channels", items: [
     { href: "/channels", label: "Channels", icon: Radio },
     { href: "/mapping", label: "Mapping", icon: Link2 },
-    { href: "/reservations", label: "Reservations", icon: CalendarCheck },
   ] },
   { title: "Operations", items: [
+    { href: "/reservations", label: "Reservations", icon: CalendarCheck },
     { href: "/sync", label: "Sync Center", icon: RefreshCw },
-    { href: "/users", label: "User Management", icon: Users },
-    { href: "/settings", label: "Settings", icon: Settings },
   ] },
 ];
+
+// Bottom-anchored Account group — rarely-touched admin (spec §2).
+const ACCOUNT_SECTION: { title: string; items: Item[] } = {
+  title: "Account",
+  items: [
+    { href: "/users", label: "User Management", icon: Users },
+    { href: "/settings", label: "Settings", icon: Settings },
+  ],
+};
 
 export function Sidebar() {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
+
+  const renderItems = (items: Item[]) =>
+    items.map((item) => {
+      const active = pathname === item.href || pathname.startsWith(item.href + "/");
+      const Icon = item.icon;
+      return (
+        <Link
+          key={item.href}
+          href={item.href}
+          onClick={() => setOpen(false)}
+          className={`group relative mb-0.5 flex items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium transition-colors duration-150 ${
+            active ? "bg-white/[0.13] text-white" : "text-white/70 hover:bg-white/[0.07] hover:text-white"
+          }`}
+        >
+          {active && (
+            <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-warning-500" />
+          )}
+          <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+          <span className="flex-1">{item.label}</span>
+          {item.badge ? (
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+              item.tone === "danger" ? "bg-danger-500 text-white" : "bg-warning-500 text-brand-900"
+            }`}>
+              {item.badge}
+            </span>
+          ) : null}
+        </Link>
+      );
+    });
+
   return (
     <>
       {/* Backdrop — mobile only, closes the drawer on tap */}
@@ -78,36 +118,18 @@ export function Sidebar() {
                 {section.title}
               </div>
             )}
-            {section.items.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  className={`group relative mb-0.5 flex items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium transition-colors duration-150 ${
-                    active ? "bg-white/[0.13] text-white" : "text-white/70 hover:bg-white/[0.07] hover:text-white"
-                  }`}
-                >
-                  {active && (
-                    <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-warning-500" />
-                  )}
-                  <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-                  <span className="flex-1">{item.label}</span>
-                  {item.badge ? (
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
-                      item.tone === "danger" ? "bg-danger-500 text-white" : "bg-warning-500 text-brand-900"
-                    }`}>
-                      {item.badge}
-                    </span>
-                  ) : null}
-                </Link>
-              );
-            })}
+            {renderItems(section.items)}
           </div>
         ))}
       </nav>
+
+      {/* Bottom-anchored Account group (spec §2) — admin, not daily operations. */}
+      <div className="border-t border-white/10 px-3 pb-3">
+        <div className="px-3 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35">
+          {ACCOUNT_SECTION.title}
+        </div>
+        {renderItems(ACCOUNT_SECTION.items)}
+      </div>
 
       <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
         Demo · mock connectivity

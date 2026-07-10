@@ -108,7 +108,7 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-1 gap-1.5 p-3">
             {[
               { icon: CalendarPlus, label: "Open Calendar", href: "/calendar" },
-              { icon: Upload, label: "Bulk Update", href: "/bulk-update" },
+              { icon: Upload, label: "Bulk Rates", href: "/bulk-update" },
               { icon: Radio, label: "Connect Channel", href: "/channels" },
               { icon: Wrench, label: "Fix Mapping", href: "/mapping" },
               { icon: RotateCw, label: "Retry Failed Syncs", href: "/sync" },
