@@ -103,6 +103,16 @@ model Property {
   status          String @default("active")
   // PMS Phase 5: the current open operational date (night audit rolls it forward). Null until first close.
   businessDate    DateTime? @db.Date
+  // Reservation delivery (CM-UPDATES-V1 Settings): where channel bookings are emailed when the
+  // property is NOT connected to a PMS/CRS — plus the arrival-summary notification toggles.
+  reservationEmailPrimary   String?
+  reservationEmailSecondary String?
+  notifyTodayArrivals    Boolean @default(false)
+  notifyTodayTime        String  @default("07:00") // property-TZ send time
+  notifyTodayTo          String  @default("primary") // primary | secondary | both
+  notifyTomorrowArrivals Boolean @default(false)
+  notifyTomorrowTime     String  @default("18:00")
+  notifyTomorrowTo       String  @default("primary")
 
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roomTypes           RoomType[]

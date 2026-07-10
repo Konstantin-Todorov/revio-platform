@@ -4,12 +4,13 @@ import { getSettings } from "@/lib/data";
 import { getSession } from "@/lib/session";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { PropertySettingsForm } from "@/components/settings/PropertySettingsForm";
+import { DeliverySettingsForm } from "@/components/settings/DeliverySettingsForm";
 import { AddPropertyDialog } from "@/components/settings/UserManagement";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  const [{ property, users, properties }, session] = await Promise.all([getSettings(), getSession()]);
+  const [{ property, users, properties, totalRooms }, session] = await Promise.all([getSettings(), getSession()]);
   const canManage = session?.role === "owner" || session?.role === "admin";
 
   return (
@@ -18,8 +19,18 @@ export default async function Page() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
           <Card>
-            <CardHeader title="Property" />
+            <CardHeader title="Property" subtitle={`${totalRooms} physical rooms across the active room types`} />
             <div className="p-5"><PropertySettingsForm property={property} /></div>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Reservation delivery & notifications"
+              subtitle="Where channel bookings are emailed when no PMS/CRS takes delivery, plus the arrival summaries"
+            />
+            <div className="p-5">
+              <DeliverySettingsForm property={property} emailMode={process.env.RESEND_API_KEY ? "resend" : "mock"} />
+            </div>
           </Card>
 
           <Card>

@@ -22,5 +22,6 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)"],
+  // api/jobs does its own Bearer auth (cron) — the session-cookie gate must not redirect it.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/jobs|.*\\.[a-zA-Z0-9]+$).*)"],
 };

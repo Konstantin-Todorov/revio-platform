@@ -490,11 +490,12 @@ export async function getMapping(channelCode?: string) {
 
 export async function getSettings() {
   const property = await getProperty();
-  const [users, properties] = await Promise.all([
+  const [users, properties, roomAgg] = await Promise.all([
     prisma.user.findMany({ where: { tenantId: property.tenantId }, orderBy: { name: "asc" } }),
     prisma.property.findMany({ where: { tenantId: property.tenantId }, orderBy: { name: "asc" } }),
+    prisma.roomType.aggregate({ where: { propertyId: property.id, active: true }, _sum: { totalRooms: true } }),
   ]);
-  return { property, users, properties };
+  return { property, users, properties, totalRooms: roomAgg._sum.totalRooms ?? 0 };
 }
 
 /** Options for the "simulate a booking" dialog. */

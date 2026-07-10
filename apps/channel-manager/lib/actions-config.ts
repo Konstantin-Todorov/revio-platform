@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { syncChannel, pullChannel, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
+import { sendEmail, deliveryRecipients } from "./email";
+import { getSession } from "./session";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -275,6 +277,35 @@ export async function pullChannelBookings(fd: FormData): Promise<void> {
     newValue: outcome.ok ? `${outcome.imported} new · ${outcome.updated} updated (${outcome.mode})` : `failed: ${outcome.error ?? "unknown"}`,
     source: "api",
   });
+  // Reservation delivery (CM-UPDATES-V1): when the property has no PMS/CRS taking delivery,
+  // new channel bookings are emailed to the configured reservation address(es).
+  if (outcome.ok && outcome.imported > 0) {
+    const session = await getSession();
+    const takesDeliveryElsewhere = session?.entitlements.reservation || session?.entitlements.pms;
+    const property = await prisma.property.findUnique({ where: { id: propertyId } });
+    const to = property ? deliveryRecipients(property, "both") : [];
+    if (!takesDeliveryElsewhere && property && to.length > 0) {
+      const fresh = await prisma.reservation.findMany({
+        where: { propertyId, channelId },
+        include: { channel: true, lines: { include: { roomType: true } } },
+        orderBy: { importedAt: "desc" },
+        take: outcome.imported,
+      });
+      const lines = fresh.map((r) => {
+        const l = r.lines[0];
+        return `#${r.externalId ?? r.id.slice(-6)} · ${r.guestName} · ${l ? `${l.roomType.name} ${l.checkIn.toISOString().slice(0, 10)} → ${l.checkOut.toISOString().slice(0, 10)}` : ""} · ${(r.totalMinor / 100).toFixed(2)} ${r.currency}`;
+      });
+      const res = await sendEmail({
+        to,
+        subject: `${fresh.length} new reservation${fresh.length > 1 ? "s" : ""} — ${property.name}`,
+        text: `New bookings just imported from ${fresh[0]?.channel?.name ?? "a channel"}:\n\n${lines.join("\n")}\n\n— RevioLink`,
+      });
+      await logAudit(propertyId, tenantId, {
+        entity: "Reservation delivery", field: "email",
+        newValue: res.ok ? `${fresh.length} booking(s) emailed to ${to.join(", ")} (${res.mode})` : `failed: ${res.error}`,
+      });
+    }
+  }
   revalidatePath("/channels");
   revalidatePath("/sync");
   revalidatePath("/errors");
@@ -350,4 +381,60 @@ export async function resolveErrorItem(fd: FormData): Promise<void> {
   });
   revalidatePath("/sync");
   revalidatePath("/dashboard");
+}
+
+
+// --- Reservation delivery & notifications (CM-UPDATES-V1 Settings) --------------------------
+
+/** Save the delivery emails + arrival-summary notification settings. */
+export async function saveDeliverySettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const primary = str(fd, "reservationEmailPrimary").toLowerCase() || null;
+  const secondary = str(fd, "reservationEmailSecondary").toLowerCase() || null;
+  const emailOk = (v: string | null) => v == null || /.+@.+\..+/.test(v);
+  if (!emailOk(primary) || !emailOk(secondary)) return { ok: false, error: "Enter valid email addresses." };
+  const timeOk = (v: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+  const todayTime = str(fd, "notifyTodayTime") || "07:00";
+  const tomorrowTime = str(fd, "notifyTomorrowTime") || "18:00";
+  if (!timeOk(todayTime) || !timeOk(tomorrowTime)) return { ok: false, error: "Send times must be HH:MM." };
+  const toOk = (v: string) => ["primary", "secondary", "both"].includes(v);
+  const todayTo = toOk(str(fd, "notifyTodayTo")) ? str(fd, "notifyTodayTo") : "primary";
+  const tomorrowTo = toOk(str(fd, "notifyTomorrowTo")) ? str(fd, "notifyTomorrowTo") : "primary";
+
+  await prisma.property.update({
+    where: { id: propertyId },
+    data: {
+      reservationEmailPrimary: primary,
+      reservationEmailSecondary: secondary,
+      notifyTodayArrivals: fd.get("notifyTodayArrivals") === "on",
+      notifyTodayTime: todayTime,
+      notifyTodayTo: todayTo,
+      notifyTomorrowArrivals: fd.get("notifyTomorrowArrivals") === "on",
+      notifyTomorrowTime: tomorrowTime,
+      notifyTomorrowTo: tomorrowTo,
+    },
+  });
+  await logAudit(propertyId, tenantId, {
+    entity: "Property · delivery settings", field: "reservation_delivery",
+    newValue: `primary ${primary ?? "—"} · today ${fd.get("notifyTodayArrivals") === "on" ? todayTime : "off"} · tomorrow ${fd.get("notifyTomorrowArrivals") === "on" ? tomorrowTime : "off"}`,
+  });
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+/** Send a test email to the configured primary (or the platform test recipient). */
+export async function sendTestEmail(): Promise<void> {
+  const property = await getProperty();
+  const to = property.reservationEmailPrimary ?? process.env.EMAIL_TEST_RECIPIENT;
+  if (!to) return;
+  const res = await sendEmail({
+    to: [to],
+    subject: `Revio test — ${property.name}`,
+    text: `This is a test of the reservation-delivery email for ${property.name}. If you can read this, delivery works (${new Date().toISOString()}).`,
+  });
+  await logAudit(property.id, property.tenantId, {
+    entity: "Property · delivery settings", field: "test_email",
+    newValue: res.ok ? `sent to ${to} (${res.mode})` : `failed: ${res.error}`,
+  });
+  revalidatePath("/settings");
 }
