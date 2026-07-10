@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, TrendingUp } from "lucide-react";
 import { getInventoryBoard } from "@/lib/data";
-import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolveRange, type RangePreset } from "@/lib/metrics";
+import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolveRange, stlyRange, type RangePreset } from "@/lib/metrics";
+import { DashboardView, type KpiCard } from "@/components/dashboard/DashboardView";
 import { ensurePickupSnapshot } from "@/lib/pickup";
 import { releaseExpiredHolds } from "@/lib/holds";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -9,13 +10,16 @@ import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
+// Spec §3.1 presets. L* = actuals (realized past); N* = on-the-books (confirmed future).
+// 28 = four whole weeks — never "tidy" back to 30 (day-of-week comparability).
 const PRESETS: { key: RangePreset; label: string }[] = [
   { key: "today", label: "Today" },
   { key: "tomorrow", label: "Tomorrow" },
-  { key: "7d", label: "7 days" },
-  { key: "30d", label: "30 days" },
-  { key: "mtd", label: "MTD" },
+  { key: "l7d", label: "L7D" },
+  { key: "l28d", label: "L28D" },
   { key: "ytd", label: "YTD" },
+  { key: "n7d", label: "N7D" },
+  { key: "n28d", label: "N28D" },
 ];
 
 const pct = (v: number) => `${v.toFixed(v >= 10 ? 0 : 1)}%`;
@@ -30,8 +34,9 @@ export default async function DashboardPage({
 
   const ops = await getOperations();
   const range = resolveRange(ops.todayIso, sp.range, sp.from, sp.to);
-  const [metrics, board, f7, f30] = await Promise.all([
+  const [metrics, stly, board, f7, f30] = await Promise.all([
     getRangeMetrics(range),
+    getRangeMetrics(stlyRange(range)), // STLY = 364 days back, same weekday (spec §4.2)
     getInventoryBoard({ days: 14 }),
     getForecast(ops.todayIso, 7),
     getForecast(ops.todayIso, 30),
@@ -43,17 +48,26 @@ export default async function DashboardPage({
     openErrors: ops.openErrors,
   });
   const c = metrics.cards;
+  const s = stly.cards;
   const currency = ops.property.baseCurrency;
+  // Past = actuals; future = on-the-books language (confirmed only — no realized occupancy yet).
+  const otb = range.kind === "future";
 
-  const cards = [
-    { label: "Occupancy", value: pct(c.occupancyPct), sub: `${c.roomsSoldNights} of ${c.availableRoomNights} room-nights` },
-    { label: "Rooms sold", value: String(c.roomsSoldNights), sub: "room-nights in range" },
-    { label: "Rooms available", value: String(c.availableRoomNights), sub: "physical − OOO − closed" },
-    { label: `Room revenue (${c.revenueDisplay})`, value: money(c.revenueMinor, currency), sub: "accommodation only" },
-    { label: "ADR", value: money(c.adrMinor, currency), sub: "revenue ÷ rooms sold" },
-    { label: "RevPAR", value: money(c.revparMinor, currency), sub: "the #1 hotel KPI" },
-    { label: "Cancellation rate", value: pct(c.cancellationRatePct), sub: `${c.cancelledCount} of ${c.createdCount} created` },
-    { label: "Pickup · 30d", value: (c.pickup.value >= 0 ? "+" : "") + c.pickup.value, sub: c.pickup.vsDate ? `room-nights vs ${c.pickup.vsDate}` : "baseline recorded today" },
+  // YoY vs STLY: relative % for money/counts, percentage-POINT delta for rates.
+  const relYoy = (now: number, then: number): KpiCard["yoy"] =>
+    then <= 0 ? null : { text: `${now >= then ? "+" : ""}${(((now - then) / then) * 100).toFixed(0)}%`, dir: now > then ? "up" : now < then ? "down" : "flat" };
+  const ppYoy = (now: number, then: number): KpiCard["yoy"] =>
+    ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp`, dir: now > then ? "up" : now < then ? "down" : "flat" });
+
+  const cards: KpiCard[] = [
+    { key: "occupancy", label: otb ? "Committed occupancy" : "Occupancy", value: pct(c.occupancyPct), sub: `${c.roomsSoldNights} of ${c.availableRoomNights} room-nights`, href: "/inventory", yoy: ppYoy(c.occupancyPct, s.occupancyPct) },
+    { key: "sold", label: otb ? "Rooms on the books" : "Rooms sold", value: String(c.roomsSoldNights), sub: "room-nights in range", href: "/reservations", yoy: relYoy(c.roomsSoldNights, s.roomsSoldNights) },
+    { key: "available", label: "Rooms available", value: String(c.availableRoomNights), sub: "physical − OOO − closed", href: "/rooms-rates", yoy: relYoy(c.availableRoomNights, s.availableRoomNights) },
+    { key: "revenue", label: otb ? `Revenue on the books (${c.revenueDisplay})` : `Room revenue (${c.revenueDisplay})`, value: money(c.revenueMinor, currency), sub: "accommodation only", href: "/reports?report=performance", yoy: relYoy(c.revenueMinor, s.revenueMinor) },
+    { key: "adr", label: "ADR", value: money(c.adrMinor, currency), sub: "revenue ÷ rooms sold", href: "/reports?report=performance", yoy: relYoy(c.adrMinor, s.adrMinor) },
+    { key: "revpar", label: "RevPAR", value: money(c.revparMinor, currency), sub: "the #1 hotel KPI", href: "/reports?report=performance", yoy: relYoy(c.revparMinor, s.revparMinor) },
+    { key: "cancellation", label: "Cancellation rate", value: pct(c.cancellationRatePct), sub: `${c.cancelledCount} of ${c.createdCount} created`, href: "/reservations?status=cancelled", yoy: ppYoy(c.cancellationRatePct, s.cancellationRatePct) },
+    { key: "pickup", label: "Pickup · 30d", value: (c.pickup.value >= 0 ? "+" : "") + c.pickup.value, sub: c.pickup.vsDate ? `room-nights vs ${c.pickup.vsDate}` : "baseline recorded today", href: "/reports?report=pickup", yoy: null },
   ];
 
   const series = metrics.perDay.slice(0, 62);
@@ -71,37 +85,14 @@ export default async function DashboardPage({
         }
       />
 
-      {/* Date selector — applies to every widget below (spec rule). */}
-      <div className="flex flex-wrap items-center gap-2">
-        {PRESETS.map((p) => (
-          <Link
-            key={p.key}
-            href={`/dashboard?range=${p.key}`}
-            className={`rounded-md px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
-              range.preset === p.key ? "bg-brand-800 text-white" : "border border-surface-border bg-white text-ink-600 hover:bg-surface-muted"
-            }`}
-          >
-            {p.label}
-          </Link>
-        ))}
-        <form method="GET" className="ml-1 flex items-center gap-1.5">
-          <input type="hidden" name="range" value="custom" />
-          <input type="date" name="from" defaultValue={range.preset === "custom" ? range.start : ""} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
-          <span className="text-[11px] text-ink-400">→</span>
-          <input type="date" name="to" defaultValue={range.preset === "custom" ? range.endExcl.slice(0, 10) : ""} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
-          <button className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted">Apply</button>
-        </form>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {cards.map((card) => (
-          <Card key={card.label} className="px-4 py-3.5">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{card.label}</div>
-            <div className="tnum mt-1 text-[24px] font-bold leading-none text-ink-900">{card.value}</div>
-            <div className="mt-1.5 text-[11.5px] text-ink-400">{card.sub}</div>
-          </Card>
-        ))}
-      </div>
+      {/* Date selector + KPI grid — per-user customizable, YoY vs STLY-364 on every card. */}
+      <DashboardView
+        presets={PRESETS}
+        activePreset={range.preset}
+        cards={cards}
+        customStart={range.preset === "custom" ? range.start : ""}
+        customEnd={range.preset === "custom" ? range.endExcl.slice(0, 10) : ""}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Occupancy + revenue per day */}

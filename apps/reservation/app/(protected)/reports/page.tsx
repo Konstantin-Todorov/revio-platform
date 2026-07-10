@@ -17,7 +17,8 @@ const REPORTS = [
 ] as const;
 
 const RANGES: { key: RangePreset; label: string }[] = [
-  { key: "7d", label: "7 days" }, { key: "30d", label: "30 days" }, { key: "mtd", label: "MTD" }, { key: "ytd", label: "YTD" },
+  { key: "l7d", label: "L7D" }, { key: "l28d", label: "L28D" }, { key: "ytd", label: "YTD" },
+  { key: "n7d", label: "N7D" }, { key: "n28d", label: "N28D" },
 ];
 
 const pct = (v: number) => `${v.toFixed(1)}%`;

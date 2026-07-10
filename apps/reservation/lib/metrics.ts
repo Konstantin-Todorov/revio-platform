@@ -13,37 +13,53 @@ import { addDays, getProperty, todayInTz, ymd } from "./data";
  * read THIS module — the numbers can never disagree because there is only one computation.
  */
 
-export type RangePreset = "today" | "tomorrow" | "7d" | "30d" | "mtd" | "ytd" | "custom";
+// Spec §3.1: Custom, L7D, L28D, YTD, N7D, N28D, Today, Tomorrow. 28 = four whole weeks so
+// week-over-week / year-over-year comparisons aren't distorted by day-of-week mismatch —
+// do NOT "tidy" this back to 30. (Legacy keys 7d/30d/mtd still resolve for old links.)
+export type RangePreset = "today" | "tomorrow" | "l7d" | "l28d" | "ytd" | "n7d" | "n28d" | "custom";
 
 export interface ResolvedRange extends DateRange {
   preset: RangePreset;
   label: string;
   days: number;
+  /** Past ranges are ACTUALS (realized); future ranges are ON-THE-BOOKS (confirmed only) —
+   * the labels must shift accordingly (spec §3.1). */
+  kind: "past" | "future" | "mixed";
 }
 
 export function resolveRange(todayIso: string, preset?: string, from?: string, to?: string): ResolvedRange {
   const today = new Date(`${todayIso}T00:00:00Z`);
   const iso = /^\d{4}-\d{2}-\d{2}$/;
-  const mk = (p: RangePreset, start: string, endExcl: string, label: string): ResolvedRange => ({
-    preset: p, start, endExcl, label,
+  const mk = (p: RangePreset, start: string, endExcl: string, label: string, kind: ResolvedRange["kind"]): ResolvedRange => ({
+    preset: p, start, endExcl, label, kind,
     days: Math.max(1, Math.round((new Date(`${endExcl}T00:00:00Z`).getTime() - new Date(`${start}T00:00:00Z`).getTime()) / 86_400_000)),
   });
   switch (preset) {
-    case "tomorrow": return mk("tomorrow", ymd(addDays(today, 1)), ymd(addDays(today, 2)), "Tomorrow");
-    case "7d": return mk("7d", todayIso, ymd(addDays(today, 7)), "Next 7 days");
-    case "30d": return mk("30d", todayIso, ymd(addDays(today, 30)), "Next 30 days");
-    case "mtd": return mk("mtd", `${todayIso.slice(0, 8)}01`, ymd(addDays(today, 1)), "Month to date");
-    case "ytd": return mk("ytd", `${todayIso.slice(0, 4)}-01-01`, ymd(addDays(today, 1)), "Year to date");
+    case "tomorrow": return mk("tomorrow", ymd(addDays(today, 1)), ymd(addDays(today, 2)), "Tomorrow", "future");
+    case "l7d": return mk("l7d", ymd(addDays(today, -7)), todayIso, "Last 7 days", "past");
+    case "l28d": return mk("l28d", ymd(addDays(today, -28)), todayIso, "Last 28 days", "past");
+    case "n7d": case "7d": return mk("n7d", todayIso, ymd(addDays(today, 7)), "Next 7 days", "future");
+    case "n28d": case "30d": return mk("n28d", todayIso, ymd(addDays(today, 28)), "Next 28 days", "future");
+    case "mtd": return mk("ytd", `${todayIso.slice(0, 8)}01`, ymd(addDays(today, 1)), "Month to date", "past");
+    case "ytd": return mk("ytd", `${todayIso.slice(0, 4)}-01-01`, ymd(addDays(today, 1)), "Year to date", "past");
     case "custom": {
       if (from && to && iso.test(from) && iso.test(to) && to >= from) {
         const endExcl = ymd(addDays(new Date(`${to}T00:00:00Z`), 1));
-        const r = mk("custom", from, endExcl, `${from} → ${to}`);
+        const kind = endExcl <= ymd(addDays(today, 1)) ? "past" : from >= todayIso ? "future" : "mixed";
+        const r = mk("custom", from, endExcl, `${from} → ${to}`, kind);
         if (r.days <= 366) return r;
       }
-      return mk("today", todayIso, ymd(addDays(today, 1)), "Today");
+      return mk("today", todayIso, ymd(addDays(today, 1)), "Today", "past");
     }
-    default: return mk("today", todayIso, ymd(addDays(today, 1)), "Today");
+    default: return mk("today", todayIso, ymd(addDays(today, 1)), "Today", "past");
   }
+}
+
+/** Same time last year = 364 DAYS BACK (52 whole weeks), not 365 — the shift preserves
+ * day-of-week so a Saturday compares to a Saturday (spec §4.2, the STLY standard). */
+export function stlyRange(range: ResolvedRange): ResolvedRange {
+  const shift = (isoDate: string) => ymd(addDays(new Date(`${isoDate}T00:00:00Z`), -364));
+  return { ...range, start: shift(range.start), endExcl: shift(range.endExcl), label: `${range.label} · STLY` };
 }
 
 interface LoadedLine extends MetricLine {
@@ -262,7 +278,7 @@ async function getPickup(propertyId: string, todayIso: string, offsetDays: numbe
 export async function getForecast(todayIso: string, days: 7 | 30) {
   const today = new Date(`${todayIso}T00:00:00Z`);
   const range: ResolvedRange = {
-    preset: "custom", start: todayIso, endExcl: ymd(addDays(today, days)), label: `Next ${days} days`, days,
+    preset: "custom", start: todayIso, endExcl: ymd(addDays(today, days)), label: `Next ${days} days`, days, kind: "future",
   };
   const { defaults, dates, availableByDate, lines } = await loadRange(range);
   const countNoShows = defaults?.countNoShowsAsSold ?? true;
