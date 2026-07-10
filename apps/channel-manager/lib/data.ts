@@ -326,32 +326,55 @@ export async function getCalendarBoard(q: CalendarQuery) {
   };
 }
 
+export type ReservationDateType = "check_in" | "check_out" | "created" | "cancelled" | "stay";
+
 export interface ReservationFilters {
-  channel?: string; // channel code
+  channels?: string[]; // channel codes, multi — empty ⇒ all (spec: cross-filtering)
   status?: string;
-  q?: string;       // guest name or external id
-  from?: string;    // check-in from (YYYY-MM-DD)
-  to?: string;      // check-in to
+  q?: string;          // guest name, or comma-separated booking numbers
+  from?: string;       // range start (YYYY-MM-DD)
+  to?: string;         // range end
+  dateType?: ReservationDateType; // which date the from→to range applies to (default check-in)
 }
 
 export async function getReservations(filters: ReservationFilters = {}) {
   const property = await getProperty();
   const where: Record<string, unknown> = { propertyId: property.id };
-  if (filters.channel) where.channel = { code: filters.channel };
+  if (filters.channels && filters.channels.length > 0) where.channel = { code: { in: filters.channels } };
   if (filters.status) where.status = filters.status;
   if (filters.q) {
-    where.OR = [
-      { guestName: { contains: filters.q, mode: "insensitive" } },
-      { externalId: { contains: filters.q } },
-    ];
+    // Multiple reservation numbers, comma-separated (spec) — else guest-or-number contains.
+    const tokens = filters.q.split(",").map((s) => s.trim()).filter(Boolean);
+    where.OR =
+      tokens.length > 1
+        ? [{ externalId: { in: tokens } }, { id: { in: tokens } }]
+        : [
+            { guestName: { contains: filters.q, mode: "insensitive" } },
+            { externalId: { contains: filters.q } },
+          ];
   }
   if (filters.from || filters.to) {
-    where.lines = {
-      some: {
-        ...(filters.from ? { checkIn: { gte: new Date(`${filters.from}T00:00:00Z`) } } : {}),
-        ...(filters.to ? { checkIn: { lte: new Date(`${filters.to}T00:00:00Z`) } } : {}),
-      },
-    };
+    // Date-type filter (spec §3.7): which date the from→to range applies to. R1/R2 inclusive;
+    // stay-in is an OVERLAP with strict > on departure (checkout day is not a stayed night).
+    const type: ReservationDateType = filters.dateType ?? "check_in";
+    const R1 = filters.from ? new Date(`${filters.from}T00:00:00Z`) : undefined;
+    const R2 = filters.to ? new Date(`${filters.to}T00:00:00Z`) : undefined;
+    const R2end = filters.to ? new Date(`${filters.to}T23:59:59.999Z`) : undefined; // inclusive for timestamps
+    if (type === "check_in") {
+      where.lines = { some: { checkIn: { ...(R1 ? { gte: R1 } : {}), ...(R2 ? { lte: R2 } : {}) } } };
+    } else if (type === "check_out") {
+      where.lines = { some: { checkOut: { ...(R1 ? { gte: R1 } : {}), ...(R2 ? { lte: R2 } : {}) } } };
+    } else if (type === "created") {
+      // The "pickup" lens — when the booking reached us (Channex receipt / core creation).
+      where.importedAt = { ...(R1 ? { gte: R1 } : {}), ...(R2end ? { lte: R2end } : {}) };
+    } else if (type === "cancelled") {
+      // Only cancelled reservations carry this date — auto-scope so an empty result isn't a "bug".
+      where.cancelledAt = { ...(R1 ? { gte: R1 } : {}), ...(R2end ? { lte: R2end } : {}) };
+      if (!filters.status) where.status = "cancelled";
+    } else if (type === "stay") {
+      // In-house on any night of the range: arrival <= R2 AND departure > R1.
+      where.lines = { some: { ...(R2 ? { checkIn: { lte: R2 } } : {}), ...(R1 ? { checkOut: { gt: R1 } } : {}) } };
+    }
   }
   return prisma.reservation.findMany({
     where: where as never,

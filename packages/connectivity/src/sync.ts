@@ -448,12 +448,22 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
     imported++;
   }
 
+  let acked = 0;
   for (const revisionId of ackIds) {
     try {
       await adapter.acknowledgeBooking!(revisionId);
+      acked++;
     } catch {
       /* a failed ack just means Channex re-sends it next pull — safe (idempotent). */
     }
+  }
+  // Acknowledgement state (spec §5.4): a received-but-unacknowledged booking is a visible risk.
+  // Mark this batch acked only when every ack landed; a partial batch re-acks on the next pull.
+  if (ackIds.length > 0 && acked === ackIds.length && raws.length > 0) {
+    await prisma.reservation.updateMany({
+      where: { channelId, externalId: { in: raws.map((r) => r.externalId) } },
+      data: { syncStatus: "acked" },
+    });
   }
 
   await prisma.syncEvent.create({

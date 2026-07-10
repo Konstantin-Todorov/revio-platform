@@ -283,7 +283,7 @@ export async function cancelReservation(fd: FormData): Promise<void> {
 
   // Cancelling drops the booking out of the "rooms sold" derivation, so availability
   // (inventory − sold) restores itself — no manual inventory edit needed.
-  await prisma.reservation.update({ where: { id }, data: { status: "cancelled" } });
+  await prisma.reservation.update({ where: { id }, data: { status: "cancelled", cancelledAt: new Date() } });
 
   await recordPush(propertyId, tenantId, `Availability restored after cancellation (${res.channel?.name ?? "Direct"})`);
   await logAudit(propertyId, tenantId, { entity: `Reservation · ${res.guestName}`, field: "cancel", newValue: "cancelled" });

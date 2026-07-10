@@ -1,4 +1,5 @@
-import { getReservations, getBookingOptions } from "@/lib/data";
+import { getReservations, getBookingOptions, type ReservationDateType } from "@/lib/data";
+import { getSession } from "@/lib/session";
 import { cancelReservation } from "@/lib/actions-calendar";
 import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { BookingDialog } from "@/components/booking/BookingDialog";
@@ -12,21 +13,34 @@ const STATUS_TONE: Record<string, Tone> = {
 
 const STATUSES = ["confirmed", "modified", "cancelled", "failed_import", "overbooked"];
 
+const DATE_TYPES: { value: ReservationDateType; label: string }[] = [
+  { value: "check_in", label: "Check-in" },
+  { value: "check_out", label: "Check-out" },
+  { value: "created", label: "Reservation made on" },
+  { value: "cancelled", label: "Cancellation date" },
+  { value: "stay", label: "Staying on (in-house)" },
+];
+
 export default async function ReservationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ channel?: string; status?: string; q?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ channel?: string; status?: string; q?: string; from?: string; to?: string; dateType?: string }>;
 }) {
   const sp = await searchParams;
+  const channels = (sp.channel ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const dateType = (DATE_TYPES.some((d) => d.value === sp.dateType) ? sp.dateType : "check_in") as ReservationDateType;
   const filters = {
-    ...(sp.channel ? { channel: sp.channel } : {}),
+    ...(channels.length > 0 ? { channels } : {}),
     ...(sp.status ? { status: sp.status } : {}),
     ...(sp.q ? { q: sp.q } : {}),
     ...(sp.from ? { from: sp.from } : {}),
     ...(sp.to ? { to: sp.to } : {}),
+    dateType,
   };
-  const [reservations, options] = await Promise.all([getReservations(filters), getBookingOptions()]);
-  const filtered = Object.keys(filters).length > 0;
+  const [reservations, options, session] = await Promise.all([getReservations(filters), getBookingOptions(), getSession()]);
+  const filtered = Boolean(sp.channel || sp.status || sp.q || sp.from || sp.to);
+  // Scope (spec §5.4): with the CRS the canonical list lives THERE — this is the channel monitor.
+  const integrated = session?.entitlements.reservation ?? false;
 
   const fieldCls = "h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600";
 
@@ -34,13 +48,15 @@ export default async function ReservationsPage({
     <div>
       <PageHeader
         title="Reservations"
-        subtitle="Bookings imported from channels — read-only, but you can cancel to restore availability"
-        action={<BookingDialog options={options} />}
+        subtitle={integrated
+          ? "Channel-bookings monitor — did each booking land and was it acknowledged? The canonical reservation list lives in RevioCRS."
+          : "Your reservations — channel bookings land here (standalone mode, no CRS connected); cancel to restore availability"}
+        action={options.demoMode ? <BookingDialog options={options} /> : undefined}
       />
 
       {/* Filters — plain GET form, server-rendered results. */}
       <form method="GET" action="/reservations" className="mb-3 flex flex-wrap items-center gap-2">
-        <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="Guest or booking #" className={`${fieldCls} w-44`} />
+        <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="Guest, or booking #s (comma-separated)" className={`${fieldCls} w-56`} />
         <select name="channel" defaultValue={sp.channel ?? ""} className={fieldCls}>
           <option value="">All channels</option>
           {options.channels.map((c) => <option key={c.id} value={c.code}>{c.name}</option>)}
@@ -49,8 +65,12 @@ export default async function ReservationsPage({
           <option value="">All statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
         </select>
+        {/* Date type governs which date the from→to range filters on (spec §3.7). */}
+        <select name="dateType" defaultValue={dateType} className={fieldCls}>
+          {DATE_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+        </select>
         <label className="flex items-center gap-1 text-[12px] text-ink-500">
-          check-in <input type="date" name="from" defaultValue={sp.from ?? ""} className={fieldCls} />
+          from <input type="date" name="from" defaultValue={sp.from ?? ""} className={fieldCls} />
         </label>
         <label className="flex items-center gap-1 text-[12px] text-ink-500">
           → <input type="date" name="to" defaultValue={sp.to ?? ""} className={fieldCls} />
@@ -67,7 +87,7 @@ export default async function ReservationsPage({
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                {["Channel", "Reservation", "Guest", "Room · Rate", "Check-in", "Check-out", "Status", "Total", "Imported"].map((h) => (
+                {["Channel", "Reservation", "Guest", "Room · Rate", "Check-in", "Check-out", "Status", "Ack", "Total", "Imported"].map((h) => (
                   <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>
                 ))}
                 <th className="px-4 py-2.5" />
@@ -87,6 +107,14 @@ export default async function ReservationsPage({
                     <td className="tnum px-4 py-3 text-ink-600">{line ? ymd(line.checkIn) : "—"}</td>
                     <td className="tnum px-4 py-3 text-ink-600">{line ? ymd(line.checkOut) : "—"}</td>
                     <td className="px-4 py-3"><StatusPill tone={STATUS_TONE[r.status] ?? "neutral"}>{r.status}</StatusPill></td>
+                    <td className="px-4 py-3">
+                      {/* Acknowledgement state (spec §5.4): received-but-unacked is an operational risk. */}
+                      {r.channelId == null
+                        ? <span className="text-[11px] text-ink-300">—</span>
+                        : r.syncStatus === "acked"
+                          ? <StatusPill tone="success">acked</StatusPill>
+                          : <StatusPill tone="warning">received</StatusPill>}
+                    </td>
                     <td className="tnum px-4 py-3 font-semibold text-ink-900">{money(r.totalMinor, r.currency)}</td>
                     <td className="px-4 py-3 text-[12px] text-ink-400">{relativeTime(r.importedAt)}</td>
                     <td className="px-2 py-3">
