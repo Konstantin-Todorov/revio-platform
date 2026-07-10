@@ -13,15 +13,22 @@ type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 
 // Phase 1 ships the inventory foundation; later phases light up the rest of the sitemap
 // (docs/CRS-REFERENCE.md "MVP build order"). "soon" items render disabled with their phase tag.
+// V2 nav (docs/specs/CRS-GUIDE-V1.md §2): screens sorted by mode — overview / bookings /
+// commercial control / configuration. Rates & Restrictions dissolved three ways (products →
+// Rooms & Rates; standing defaults → Settings; rules → Bulk); Inventory Setup merged away.
 const SECTIONS: { title?: string; items: Item[] }[] = [
-  { items: [
+  { title: "Overview", items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/reports", label: "Analytics", icon: BarChart3 },
+  ] },
+  { title: "Bookings", items: [
     { href: "/reservations", label: "Reservations", icon: CalendarCheck },
     { href: "/guests", label: "Guests", icon: Users },
+  ] },
+  { title: "Inventory & Rates", items: [
     { href: "/inventory", label: "Inventory Calendar", icon: CalendarRange },
-    { href: "/rates", label: "Rates & Restrictions", icon: Tags },
-    { href: "/reports", label: "Reports", icon: BarChart3 },
-    { href: "/setup", label: "Inventory Setup", icon: Wrench },
+    { href: "/rooms-rates", label: "Rooms & Rates", icon: Tags },
+    { href: "/bulk", label: "Bulk Rates & Availability", icon: Wrench },
   ] },
   { title: "Configuration", items: [
     { href: "/distribution", label: "Distribution", icon: Share2 },

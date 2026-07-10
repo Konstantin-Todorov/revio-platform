@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { getProperty } from "@/lib/data";
 import { getSession } from "@/lib/session";
 import { deletePermissionRole, deleteTaxFee, savePermissionRole, saveTaxFee } from "@/lib/actions-settings";
+import { savePropertyDefaults } from "@/lib/actions-rates";
+import { PRECEDENCE_LINE } from "@revio/core";
 import { PERMISSION_GROUPS } from "@/lib/permissions";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
@@ -22,7 +24,7 @@ const GROUP_LABEL: Record<string, string> = {
 export default async function SettingsPage() {
   const property = await getProperty();
   const session = await getSession();
-  const [roles, users, taxes] = await Promise.all([
+  const [roles, users, taxes, defaults] = await Promise.all([
     prisma.permissionRole.findMany({
       where: { tenantId: property.tenantId },
       include: { access: true },
@@ -30,6 +32,7 @@ export default async function SettingsPage() {
     }),
     prisma.user.findMany({ where: { tenantId: property.tenantId }, orderBy: { name: "asc" } }),
     prisma.taxFee.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
   ]);
 
   const levelOf = (role: (typeof roles)[number], group: string) =>
@@ -37,7 +40,44 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Settings" subtitle={`${property.name} · permissions, taxes & fees, property profile`} />
+      <PageHeader title="Settings" subtitle={`${property.name} · standing policy defaults, permissions, taxes & fees, property profile`} />
+
+      {/* Standing policy defaults (spec §3.9) — the property-default tier of the two-tier
+          precedence model, moved here from the dissolved Rates & Restrictions screen. */}
+      <Card>
+        <CardHeader title="Standing policy defaults — the catch-all tier" subtitle={`Precedence: ${PRECEDENCE_LINE}`} />
+        <form action={savePropertyDefaults} className="grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-4">
+          <div><label className={labelCls}>Min stay (nights)</label><input type="number" name="defMinLos" min={0} defaultValue={defaults?.defMinLos ?? ""} placeholder="—" className={inputCls} /></div>
+          <div><label className={labelCls}>Max stay (nights)</label><input type="number" name="defMaxLos" min={0} defaultValue={defaults?.defMaxLos ?? ""} placeholder="—" className={inputCls} /></div>
+          <div><label className={labelCls}>Book ≥ days ahead</label><input type="number" name="defAdvancePurchaseMin" min={0} defaultValue={defaults?.defAdvancePurchaseMin ?? ""} placeholder="—" className={inputCls} /></div>
+          <div><label className={labelCls}>Book ≤ days ahead</label><input type="number" name="defAdvancePurchaseMax" min={0} defaultValue={defaults?.defAdvancePurchaseMax ?? ""} placeholder="—" className={inputCls} /></div>
+          <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
+            <input type="checkbox" name="defStopSell" defaultChecked={defaults?.defStopSell ?? false} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Stop sell
+          </label>
+          <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
+            <input type="checkbox" name="defCta" defaultChecked={defaults?.defCta ?? false} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Closed to arrival
+          </label>
+          <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
+            <input type="checkbox" name="defCtd" defaultChecked={defaults?.defCtd ?? false} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Closed to departure
+          </label>
+          <div><label className={labelCls}>Hold TTL (minutes)</label><input type="number" name="holdTtlMinutes" min={5} max={240} defaultValue={defaults?.holdTtlMinutes ?? 30} className={inputCls} /></div>
+          <div><label className={labelCls}>Low-availability alert ≤</label><input type="number" name="lowAvailabilityThreshold" min={0} defaultValue={defaults?.lowAvailabilityThreshold ?? 2} className={inputCls} /></div>
+          <div><label className={labelCls}>Pickup compares vs (days ago)</label><input type="number" name="pickupOffsetDays" min={1} max={90} defaultValue={defaults?.pickupOffsetDays ?? 7} className={inputCls} /></div>
+          <div>
+            <label className={labelCls}>Revenue display</label>
+            <select name="revenueDisplay" defaultValue={defaults?.revenueDisplay ?? "gross"} className={inputCls}>
+              <option value="gross">Gross</option>
+              <option value="net">Net (− channel commission)</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
+            <input type="checkbox" name="countNoShowsAsSold" defaultChecked={defaults?.countNoShowsAsSold ?? true} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Count no-shows as sold
+          </label>
+          <div className="col-span-2 flex justify-end lg:col-span-4">
+            <button className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Save defaults</button>
+          </div>
+        </form>
+      </Card>
 
       <Card>
         <CardHeader title="Users & Permissions — roles are saved group×level combinations" />

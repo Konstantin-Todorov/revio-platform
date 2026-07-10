@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
+import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -86,6 +87,13 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
   if (!id) return;
   const rp = await prisma.ratePlan.findUnique({ where: { id }, include: { _count: { select: { children: true, resLines: true } } } });
   if (!rp) return;
+
+  // Deletion guard (spec §3.6): a rate plan mapped to the channel manager cannot be deleted —
+  // the CM-side call would fail. Unmap in RevioLink → Mapping first.
+  const mapped = await prisma.channelRatePlanMapping.count({ where: { ratePlanId: id, externalRateId: { not: null } } });
+  if (mapped > 0) {
+    redirect(`/rooms-rates?blocked=${encodeURIComponent(rp.name)}`);
+  }
 
   if (rp._count.children > 0 || rp._count.resLines > 0) {
     await prisma.ratePlan.update({ where: { id }, data: { active: false } });
@@ -215,4 +223,83 @@ export async function saveCalendarRate(args: { roomTypeId: string; date: string;
   });
   await recordPush(propertyId, tenantId, `Rate updated for ${roomType.name} (${args.date})`);
   revalidatePath("/inventory");
+}
+
+
+// --- Bulk Rates & Availability (spec §3.7) — the date-scoped ARI tab -------------------------
+
+/** One bulk run: pick a date range, set rate / restriction / open-close across the selected room
+ * types (and, for prices, the selected MANUAL rate plans — derived plans recalc from their parent).
+ * Calendar and bulk are PEERS: both write the same date-scoped records, last write wins (spec §1.4);
+ * every write is stamped source="bulk". One run = one audit entry + one push. */
+export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const property = await getProperty();
+  const { id: propertyId, tenantId } = property;
+  const dateFrom = str(fd, "dateFrom");
+  const dateTo = str(fd, "dateTo");
+  if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
+  if (dateTo < dateFrom) return { ok: false, error: "End date is before start date." };
+  const roomTypeIds = strList(fd, "roomTypeIds");
+  if (roomTypeIds.length === 0) return { ok: false, error: "Select at least one room type." };
+  const dows = strList(fd, "daysOfWeek").map(Number);
+  const updateType = str(fd, "updateType");
+  const value = Number(str(fd, "value"));
+  const dates = eachDate(dateFrom, dateTo, dows);
+  if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
+
+  let ratePlanIds: string[] = [];
+  if (updateType.startsWith("rate_")) {
+    const requested = strList(fd, "ratePlanIds");
+    const manual = await prisma.ratePlan.findMany({
+      where: { propertyId, priceLogic: "manual", active: true, ...(requested.length > 0 ? { id: { in: requested } } : {}) },
+      select: { id: true },
+    });
+    ratePlanIds = manual.map((m) => m.id);
+    if (ratePlanIds.length === 0) return { ok: false, error: "Select at least one manual rate plan (derived plans follow their parent)." };
+    if (!Number.isFinite(value) || value < 0) return { ok: false, error: "Enter a price value." };
+  }
+
+  let affected = 0;
+  for (const roomTypeId of roomTypeIds) {
+    for (const date of dates) {
+      if (updateType.startsWith("rate_")) {
+        for (const rpId of ratePlanIds) {
+          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
+          const base = existing?.priceMinor ?? 0;
+          let next = base;
+          if (updateType === "rate_set") next = Math.round(value * 100);
+          else if (updateType === "rate_inc_pct") next = Math.round(base * (1 + value / 100));
+          else if (updateType === "rate_dec_pct") next = Math.round(base * (1 - value / 100));
+          await prisma.ratePrice.upsert({
+            where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
+            update: { priceMinor: next, source: "bulk" },
+            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
+          });
+        }
+      } else {
+        const data =
+          updateType === "minlos_set" ? { minLos: value > 0 ? Math.trunc(value) : null }
+          : updateType === "close" ? { stopSell: true }
+          : updateType === "open" ? { stopSell: false }
+          : updateType === "availability_set" ? { inventory: Math.max(0, Math.trunc(value)) }
+          : null;
+        if (!data) return { ok: false, error: "Unknown update type." };
+        await prisma.dailyCell.upsert({
+          where: { roomTypeId_date: { roomTypeId, date } },
+          update: { ...data, source: "bulk" },
+          create: { tenantId, propertyId, roomTypeId, date, ...data, source: "bulk" },
+        });
+      }
+      affected++;
+    }
+  }
+
+  await logAudit(propertyId, tenantId, {
+    entity: `Bulk update · ${roomTypeIds.length} room types`,
+    field: updateType, newValue: `${affected} cells (${dateFrom} → ${dateTo})`,
+  });
+  await recordPush(propertyId, tenantId, "Availability & rates updated in bulk");
+  revalidateRates();
+  revalidatePath("/bulk");
+  return { ok: true };
 }
