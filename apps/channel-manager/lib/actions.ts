@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { logAudit, recordPush, str, int } from "./mutation-helpers";
@@ -69,11 +70,18 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
   const id = str(fd, "id");
   if (!id) return;
 
-  // Guard: never destroy a room type that has real reservations behind it.
-  const resCount = await prisma.reservationLine.count({ where: { roomTypeId: id } });
   const rt = await prisma.roomType.findUnique({ where: { id } });
   if (!rt) return;
 
+  // Guard (spec §3.4): a product mapped to a channel cannot be deleted at the Channex level —
+  // require unmapping first instead of letting the call fail downstream.
+  const mapped = await prisma.channelRoomTypeMapping.count({ where: { roomTypeId: id, externalRoomId: { not: null } } });
+  if (mapped > 0) {
+    redirect(`/rooms-rates?blocked=${encodeURIComponent(rt.name)}&kind=room`);
+  }
+
+  // Guard: never destroy a room type that has real reservations behind it.
+  const resCount = await prisma.reservationLine.count({ where: { roomTypeId: id } });
   if (resCount > 0) {
     // Soft-delete: deactivate instead of breaking booking history.
     await prisma.roomType.update({ where: { id }, data: { active: false } });
@@ -166,6 +174,12 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
 
   const rp = await prisma.ratePlan.findUnique({ where: { id }, include: { _count: { select: { children: true, resLines: true } } } });
   if (!rp) return;
+
+  // Guard (spec §3.4): mapped rate plans must be unmapped before deletion.
+  const mapped = await prisma.channelRatePlanMapping.count({ where: { ratePlanId: id, externalRateId: { not: null } } });
+  if (mapped > 0) {
+    redirect(`/rooms-rates?blocked=${encodeURIComponent(rp.name)}&kind=rate`);
+  }
 
   // Guard: can't delete a parent that other rates derive from, or one with reservations.
   if (rp._count.children > 0) {

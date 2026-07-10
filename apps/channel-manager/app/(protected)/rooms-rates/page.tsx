@@ -25,13 +25,30 @@ function restrictionLabel(rp: { defMinLos: number | null; defMaxLos: number | nu
   return parts.length ? parts.join(" · ") : null;
 }
 
-export default async function RoomsRatesPage() {
+export default async function RoomsRatesPage({ searchParams }: { searchParams: Promise<{ blocked?: string; kind?: string }> }) {
+  const { blocked, kind } = await searchParams;
   const { roomTypes, ratePlans } = await getRoomsAndRates();
   const parents = ratePlans.map((rp) => ({ id: rp.id, name: rp.name }));
+
+  // Rate Plan Linkage (CM-UPDATES-V1): derivation chains as a graphical overview — roots are
+  // manual plans, children hang off parentRatePlanId with their offset.
+  const childrenOf = (parentId: string) => ratePlans.filter((rp) => rp.parentRatePlanId === parentId);
+  const offsetOf = (rp: (typeof ratePlans)[number]) => {
+    const sign = rp.derivedDirection === "increase" ? "+" : "−";
+    return rp.derivedType === "percent" ? `${sign}${rp.derivedValue}%` : `${sign}€${((rp.derivedValue ?? 0) / 100).toLocaleString("en-US")}`;
+  };
+  const roots = ratePlans.filter((rp) => rp.priceLogic === "manual");
 
   return (
     <div>
       <PageHeader title="Rooms & Rates" subtitle="What you sell — add, edit and remove room types and rate plans" />
+
+      {blocked && (
+        <div className="mb-4 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3 text-[13px] font-medium text-warning-700">
+          “{blocked}” is mapped to a channel and can’t be deleted — remove its {kind === "room" ? "room-type" : "rate-plan"} mapping
+          in <a href="/mapping" className="font-semibold underline">Mapping</a> first, then delete it here.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
@@ -106,6 +123,47 @@ export default async function RoomsRatesPage() {
           </div>
         </Card>
       </div>
+
+      {/* Rate Plan Linkage (CM-UPDATES-V1): the derivation graph — who derives from whom, at what
+          offset. Derivation itself is configured on each plan (edit → Derived pricing). */}
+      <Card className="mt-4">
+        <CardHeader title="Rate Plan Linkage" subtitle="Derived-pricing chains — edit a parent and every child recalculates" />
+        <div className="grid grid-cols-1 gap-x-8 gap-y-5 p-5 md:grid-cols-2 xl:grid-cols-3">
+          {roots.map((root) => {
+            const kids = childrenOf(root.id);
+            return (
+              <div key={root.id}>
+                <div className="inline-flex items-center gap-2 rounded-md border border-brand-600/30 bg-brand-50 px-3 py-1.5 text-[13px] font-bold text-brand-800">
+                  {root.name}
+                  <span className="rounded bg-white px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-brand-700">manual</span>
+                </div>
+                {kids.length === 0 && <div className="mt-1.5 pl-4 text-[11.5px] text-ink-400">No derived rates yet.</div>}
+                {kids.map((kid) => {
+                  const grandkids = childrenOf(kid.id);
+                  return (
+                    <div key={kid.id} className="mt-1.5 pl-4">
+                      <div className="flex items-center gap-2 text-[12.5px]">
+                        <span className="text-ink-300">↓</span>
+                        <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-semibold text-ink-600">{offsetOf(kid)}</span>
+                        <span className={`font-semibold ${kid.active ? "text-ink-800" : "text-ink-400 line-through"}`}>{kid.name}</span>
+                        {!kid.directChannelEnabled && <span title="Not bookable on the direct channel" className="rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-bold uppercase text-ink-400">OTA/corp</span>}
+                      </div>
+                      {grandkids.map((g) => (
+                        <div key={g.id} className="mt-1 flex items-center gap-2 pl-6 text-[12.5px]">
+                          <span className="text-ink-300">↓</span>
+                          <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-semibold text-ink-600">{offsetOf(g)}</span>
+                          <span className={`font-semibold ${g.active ? "text-ink-800" : "text-ink-400 line-through"}`}>{g.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+          {roots.length === 0 && <p className="text-[13px] text-ink-400">Add a manual rate plan first — derived plans hang off it.</p>}
+        </div>
+      </Card>
 
       <p className="mt-3 text-[12px] text-ink-400">
         Every change is written through <span className="font-semibold text-ink-500">@revio/core</span>, recorded in the
