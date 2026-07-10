@@ -5,6 +5,7 @@ import { BulkUpdateForm } from "@/components/bulk/BulkUpdateForm";
 import { RestrictionDialog } from "@/components/restrictions/RestrictionDialog";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { ymd } from "@/lib/format";
+import { channelSupports } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,13 @@ const TYPE_LABEL: Record<string, string> = {
 /** V2 IA: Bulk Update and Restrictions are ONE screen — one-off mass edits on top, standing rules below. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ rt?: string }> }) {
   const { rt } = await searchParams;
-  const [{ roomTypes }, { rules, channels }] = await Promise.all([getRoomsAndRates(), getRestrictions()]);
+  const [{ roomTypes, ratePlans }, { rules, channels }] = await Promise.all([getRoomsAndRates(), getRestrictions()]);
+  // Capability flags (spec §3.3 / §5.2): a rule aimed at a channel that can't honour its type is
+  // flagged here, not silently created — and it is a limitation, never an error.
+  const ignoredBy = (rule: { type: string; channelCodes: string[] }): string[] => {
+    const targets = rule.channelCodes.length > 0 ? channels.filter((c) => rule.channelCodes.includes(c.code)) : channels;
+    return targets.filter((c) => !channelSupports(c.supportedRestrictions, rule.type as Parameters<typeof channelSupports>[1])).map((c) => c.name);
+  };
   // Inline per-row bulk from the calendar pre-scopes to one room type (?rt=CODE).
   const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
   const today = new Date().toISOString().slice(0, 10);
@@ -26,7 +33,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
   return (
     <div>
       <PageHeader title="Bulk Rates & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
-      <BulkUpdateForm roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))} today={today} {...(preselect ? { preselect } : {})} />
+      <BulkUpdateForm
+        roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))}
+        ratePlans={ratePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
+        today={today}
+        {...(preselect ? { preselect } : {})}
+      />
 
       <Card className="mt-4">
         <CardHeader title="Restriction Rules" action={<RestrictionDialog roomTypes={rtOpts} channels={chOpts} />} />
@@ -45,7 +57,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
                   <td className="px-4 py-2.5"><StatusPill tone="info">{TYPE_LABEL[r.type] ?? r.type}</StatusPill></td>
                   <td className="px-4 py-2.5 text-ink-600">{r.roomTypeName}</td>
                   <td className="tnum px-4 py-2.5 text-ink-600">{ymd(r.dateFrom)} → {ymd(r.dateTo)}</td>
-                  <td className="px-4 py-2.5 text-ink-500">{r.channelCodes.length === channels.length ? "All" : r.channelCodes.join(", ")}</td>
+                  <td className="px-4 py-2.5 text-ink-500">
+                    {r.channelCodes.length === channels.length ? "All" : r.channelCodes.join(", ")}
+                    {ignoredBy(r).length > 0 && (
+                      <span title="These channels don't support this restriction type — the rule is skipped for them (a limitation, not an error)." className="ml-1.5 rounded bg-warning-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-warning-700">
+                        ignored by {ignoredBy(r).join(", ")}
+                      </span>
+                    )}
+                  </td>
                   <td className="tnum px-4 py-2.5 text-ink-700">{r.valueInt ?? "—"}</td>
                   <td className="px-4 py-2.5"><StatusPill tone={r.active ? "success" : "neutral"}>{r.active ? "Active" : "Inactive"}</StatusPill></td>
                   <td className="px-2 py-2.5">

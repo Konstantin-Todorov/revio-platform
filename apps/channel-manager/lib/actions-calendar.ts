@@ -95,9 +95,25 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
   const dates = eachDate(dateFrom, dateTo, dows);
   if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
 
-  const ratePlanId = await standardPlanId(propertyId);
-  if (updateType.startsWith("rate_") && !ratePlanId) {
-    return { ok: false, error: "Add a rate plan before bulk-updating prices." };
+  // Rate-plan targeting (spec §3.3): bulk PRICE updates apply to the selected MANUAL plans —
+  // derived plans are never price-edited directly (their price = parent ± offset, cascade handles
+  // them). The server filters defensively even though the form disables derived checkboxes.
+  let ratePlanIds: string[] = [];
+  if (updateType.startsWith("rate_")) {
+    const requested = strList(fd, "ratePlanIds");
+    const manualPlans = await prisma.ratePlan.findMany({
+      where: { propertyId, priceLogic: "manual", active: true, ...(requested.length > 0 ? { id: { in: requested } } : {}) },
+      select: { id: true },
+      orderBy: { sortOrder: "asc" },
+    });
+    ratePlanIds = manualPlans.map((p) => p.id);
+    if (requested.length === 0) {
+      const std = await standardPlanId(propertyId);
+      ratePlanIds = std ? [std] : [];
+    }
+    if (ratePlanIds.length === 0) {
+      return { ok: false, error: "Select at least one manual rate plan (derived plans follow their parent)." };
+    }
   }
   let affected = 0;
 
@@ -118,20 +134,21 @@ export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData):
   for (const roomTypeId of roomTypeIds) {
     for (const date of dates) {
       if (updateType.startsWith("rate_")) {
-        const rpId = ratePlanId!; // guarded above for rate_* types
-        const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
-        const base = existing?.priceMinor ?? 0;
-        let next = base;
-        if (updateType === "rate_set") next = Math.round(value * 100);
-        else if (updateType === "rate_inc_pct") next = Math.round(base * (1 + value / 100));
-        else if (updateType === "rate_dec_pct") next = Math.round(base * (1 - value / 100));
-        else if (updateType === "rate_inc_amt") next = base + Math.round(value * 100);
-        else if (updateType === "rate_dec_amt") next = Math.max(0, base - Math.round(value * 100));
-        await prisma.ratePrice.upsert({
-          where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
-          update: { priceMinor: next, source: "bulk" },
-          create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
-        });
+        for (const rpId of ratePlanIds) {
+          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
+          const base = existing?.priceMinor ?? 0;
+          let next = base;
+          if (updateType === "rate_set") next = Math.round(value * 100);
+          else if (updateType === "rate_inc_pct") next = Math.round(base * (1 + value / 100));
+          else if (updateType === "rate_dec_pct") next = Math.round(base * (1 - value / 100));
+          else if (updateType === "rate_inc_amt") next = base + Math.round(value * 100);
+          else if (updateType === "rate_dec_amt") next = Math.max(0, base - Math.round(value * 100));
+          await prisma.ratePrice.upsert({
+            where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
+            update: { priceMinor: next, source: "bulk" },
+            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
+          });
+        }
       } else if (updateType === "availability_set") {
         await upsertCell(tenantId, propertyId, roomTypeId, date, { inventory: Math.max(0, Math.trunc(value)) }, "bulk");
       } else if (updateType === "minlos_set") {

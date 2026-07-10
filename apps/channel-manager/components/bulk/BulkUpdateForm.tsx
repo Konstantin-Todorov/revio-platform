@@ -6,9 +6,10 @@ import { applyBulkUpdate, type ActionResult } from "@/lib/actions-calendar";
 import { Field, inputCls } from "@/components/ui/Modal";
 
 type Opt = { id: string; name: string; code: string };
+type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null };
 const DOW = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
 
-export function BulkUpdateForm({ roomTypes, today, preselect }: { roomTypes: Opt[]; today: string; preselect?: string[] }) {
+export function BulkUpdateForm({ roomTypes, ratePlans, today, preselect }: { roomTypes: Opt[]; ratePlans: PlanOpt[]; today: string; preselect?: string[] }) {
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(applyBulkUpdate, null);
   const in30 = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
 
@@ -32,6 +33,30 @@ export function BulkUpdateForm({ roomTypes, today, preselect }: { roomTypes: Opt
               ))}
             </div>
             <span className="mt-1 block text-[11px] text-ink-400">Leave all unchecked to apply to every day.</span>
+          </div>
+
+          <div>
+            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Rate plans <span className="font-normal text-ink-400">(price updates — manual plans only)</span></span>
+            <div className="grid grid-cols-2 gap-1.5">
+              {ratePlans.map((rp) =>
+                rp.priceLogic === "manual" ? (
+                  <label key={rp.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
+                    <input type="checkbox" name="ratePlanIds" value={rp.id} defaultChecked className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
+                    {rp.name}
+                  </label>
+                ) : (
+                  <span
+                    key={rp.id}
+                    title={`Derived from ${rp.parentName ?? "its parent"} — edit the parent; the offset cascades automatically`}
+                    className="flex cursor-not-allowed items-center gap-2 rounded-md border border-dashed border-surface-border px-2.5 py-1.5 text-[12.5px] text-ink-300"
+                  >
+                    <span className="h-3.5 w-3.5 rounded border border-surface-border bg-surface-muted" />
+                    {rp.name} <span className="text-[10px] uppercase">derived</span>
+                  </span>
+                ),
+              )}
+            </div>
+            <span className="mt-1 block text-[11px] text-ink-400">Restrictions (Min LOS, stop-sell, availability) apply per room type, regardless of rate plan.</span>
           </div>
 
           <div>
@@ -70,8 +95,8 @@ export function BulkUpdateForm({ roomTypes, today, preselect }: { roomTypes: Opt
           </Field>
 
           <div className="rounded-md bg-surface-muted p-3 text-[12px] text-ink-500">
-            Bulk changes are applied to the <span className="font-semibold text-ink-700">Standard Rate</span> /
-            availability and propagate to derived rates automatically. Each run is one Audit entry + one push.
+            Price updates apply to the <span className="font-semibold text-ink-700">selected manual rate plans</span> and
+            propagate to their derived rates automatically. Each run is one Audit entry + one push.
           </div>
 
           {state?.ok && (
