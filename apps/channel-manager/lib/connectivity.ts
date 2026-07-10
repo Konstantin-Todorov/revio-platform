@@ -4,6 +4,10 @@ import {
   syncChannel as sharedSyncChannel,
   syncRealChannels as sharedSyncRealChannels,
   pullChannel as sharedPullChannel,
+  pauseChannel as sharedPauseChannel,
+  resumeChannel as sharedResumeChannel,
+  disconnectChannel as sharedDisconnectChannel,
+  reconnectChannel as sharedReconnectChannel,
   type SyncOutcome,
   type PullOutcome,
 } from "@revio/connectivity";
@@ -25,3 +29,12 @@ export function syncRealChannels(propertyId: string): Promise<void> {
 export function pullChannel(channelId: string): Promise<PullOutcome> {
   return sharedPullChannel(prisma, channelId);
 }
+
+/** Manual full sync — the on-demand recovery push (365 days through the normal queue, spec §3.5). */
+export function fullSyncChannel(channelId: string) {
+  return sharedSyncChannel(prisma, channelId, { horizonDays: 365 });
+}
+export const pauseChannel = (id: string) => sharedPauseChannel(prisma, id);
+export const resumeChannel = (id: string) => sharedResumeChannel(prisma, id);
+export const disconnectChannel = (id: string) => sharedDisconnectChannel(prisma, id);
+export const reconnectChannel = (id: string) => sharedReconnectChannel(prisma, id);

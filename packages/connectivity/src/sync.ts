@@ -66,9 +66,15 @@ export interface SyncOutcome {
  * rates/restrictions, and push it through the resolved adapter (mock or Channex). Records a SyncEvent
  * and an ErrorItem per rejected update.
  */
-export async function syncChannel(prisma: Db, channelId: string): Promise<SyncOutcome> {
+export async function syncChannel(prisma: Db, channelId: string, opts?: { horizonDays?: number }): Promise<SyncOutcome> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId }, include: { bookingSource: true } });
   if (!channel) return { ok: false, pushed: 0, rejected: 0, mode: "mock", error: "Unknown channel." };
+  // A paused/disconnected channel must NOT receive normal ARI — Resume/Reconnect restore it
+  // deliberately (spec §3.5: pause is a stop-sell overlay; a stray sync would undo it).
+  if (channel.status === "paused" || channel.status === "disconnected") {
+    return { ok: false, pushed: 0, rejected: 0, mode: channel.connectivityMode, error: `Channel is ${channel.status}.` };
+  }
+  const horizonDays = Math.min(500, Math.max(1, opts?.horizonDays ?? HORIZON_DAYS));
   const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId } });
   const { tenantId, propertyId } = channel;
 
@@ -79,8 +85,8 @@ export async function syncChannel(prisma: Db, channelId: string): Promise<SyncOu
   ]);
 
   const start = new Date(`${ymd(new Date())}T00:00:00Z`);
-  const end = new Date(start.getTime() + (HORIZON_DAYS - 1) * DAY_MS);
-  const dates = Array.from({ length: HORIZON_DAYS }, (_, i) => new Date(start.getTime() + i * DAY_MS));
+  const end = new Date(start.getTime() + (horizonDays - 1) * DAY_MS);
+  const dates = Array.from({ length: horizonDays }, (_, i) => new Date(start.getTime() + i * DAY_MS));
   const todayStr = ymd(start);
 
   const roomTypeIds = roomMaps.map((m) => m.roomTypeId);
@@ -461,4 +467,114 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
   if (imported > 0 || updated > 0) await syncRealChannels(prisma, propertyId);
 
   return { ok: true, imported, updated, unchanged, mode: channel.connectivityMode };
+}
+
+
+// --- Channel quick actions (spec CM-GUIDE-V2 §3.5) --------------------------------------------
+
+export interface ChannelActionOutcome {
+  ok: boolean;
+  error?: string;
+}
+
+/** Build a full-horizon STOP-SELL overlay for one channel (used by pause + disconnect close-out).
+ * Never touches the core's ARI — availability and rates stay intact, so Resume can restore the
+ * exact prior state just by re-pushing the truth. */
+async function pushStopSellOverlay(prisma: Db, channelId: string): Promise<void> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel || channel.connectivityMode === "mock") return; // mock channels: the flag alone suffices
+  const [roomMaps, rateMaps] = await Promise.all([
+    prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: "complete", externalRoomId: { not: null } } }),
+    prisma.channelRatePlanMapping.findMany({ where: { channelId, status: "complete", externalRateId: { not: null } } }),
+  ]);
+  const start = new Date(`${ymd(new Date())}T00:00:00Z`);
+  const updates: AriUpdate[] = [];
+  for (let i = 0; i < 365; i++) {
+    const k = ymd(new Date(start.getTime() + i * DAY_MS));
+    for (const rm of roomMaps) {
+      for (const pm of rateMaps) {
+        updates.push({
+          externalRoomId: rm.externalRoomId!, externalRateId: pm.externalRateId!, date: k,
+          bookable: 0, priceMinor: 0, currency: "EUR", restrictions: { stopSell: true },
+        });
+      }
+    }
+  }
+  if (updates.length === 0) return;
+  const mode = adapterMode(channel.connectivityMode);
+  const adapter = createChannelAdapter({
+    mode,
+    channelCode: channel.code,
+    ...(mode !== "mock"
+      ? { channex: { apiKey: await channexKey(channel.tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
+      : {}),
+  });
+  await adapter.pushAri(updates);
+}
+
+/** Pause: reversible stop-sell overlay on THIS channel only — other channels keep selling from the
+ * shared pool; the core's ARI is never zeroed (there would be nothing to restore). */
+export async function pauseChannel(prisma: Db, channelId: string): Promise<ChannelActionOutcome> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, error: "Unknown channel." };
+  if (channel.status !== "connected") return { ok: false, error: "Only a connected channel can be paused." };
+  await pushStopSellOverlay(prisma, channelId);
+  await prisma.channel.update({ where: { id: channelId }, data: { status: "paused" } });
+  await prisma.syncEvent.create({
+    data: {
+      tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push", status: "success",
+      summary: `Channel paused — all dates closed on ${channel.name} (stop-sell overlay, reversible)`,
+    },
+  });
+  return { ok: true };
+}
+
+/** Resume: restore the exact prior state by re-pushing the core's truth (365 days). */
+export async function resumeChannel(prisma: Db, channelId: string): Promise<ChannelActionOutcome> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, error: "Unknown channel." };
+  if (channel.status !== "paused") return { ok: false, error: "Channel is not paused." };
+  await prisma.channel.update({ where: { id: channelId }, data: { status: "connected" } });
+  const outcome = await syncChannel(prisma, channelId, { horizonDays: 365 });
+  await prisma.syncEvent.create({
+    data: {
+      tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push", status: outcome.ok ? "success" : "failed",
+      summary: `Channel resumed — ${channel.name} restored from the shared ARI (${outcome.pushed} updates)`,
+    },
+  });
+  return { ok: outcome.ok, ...(outcome.error ? { error: outcome.error } : {}) };
+}
+
+/** Disconnect: stop syncing and close the channel out so it isn't left selling on stale rates.
+ * Mappings are PRESERVED dormant (a later reconnect never forces a remap); reservations already
+ * imported from this channel are never touched. */
+export async function disconnectChannel(prisma: Db, channelId: string): Promise<ChannelActionOutcome> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, error: "Unknown channel." };
+  if (channel.status === "disconnected") return { ok: false, error: "Already disconnected." };
+  await pushStopSellOverlay(prisma, channelId);
+  await prisma.channel.update({ where: { id: channelId }, data: { status: "disconnected" } });
+  await prisma.syncEvent.create({
+    data: {
+      tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push", status: "success",
+      summary: `Channel disconnected — ${channel.name} closed out; mapping kept dormant for a later reconnect`,
+    },
+  });
+  return { ok: true };
+}
+
+/** Reconnect a dormant channel: mappings were preserved, so one full sync restores distribution. */
+export async function reconnectChannel(prisma: Db, channelId: string): Promise<ChannelActionOutcome> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, error: "Unknown channel." };
+  if (channel.status !== "disconnected") return { ok: false, error: "Channel is not disconnected." };
+  await prisma.channel.update({ where: { id: channelId }, data: { status: "connected" } });
+  const outcome = await syncChannel(prisma, channelId, { horizonDays: 365 });
+  await prisma.syncEvent.create({
+    data: {
+      tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push", status: outcome.ok ? "success" : "failed",
+      summary: `Channel reconnected — ${channel.name} resumed distribution (${outcome.pushed} updates, dormant mapping reused)`,
+    },
+  });
+  return { ok: outcome.ok, ...(outcome.error ? { error: outcome.error } : {}) };
 }

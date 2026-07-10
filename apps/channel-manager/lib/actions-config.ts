@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { syncChannel, pullChannel } from "./connectivity";
+import { syncChannel, pullChannel, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -180,17 +180,87 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
   return { ok: true };
 }
 
-/** Re-sync a channel: build + push the next horizon of ARI through its resolved adapter (mock/Channex). */
+/** Manual Sync (spec §3.5): a FULL 365-day recovery push — forces a drifted channel back into
+ * agreement with the shared ARI, through the same queue/batching as every other push. */
 export async function resyncChannel(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
   if (!channelId) return;
-  const outcome = await syncChannel(channelId);
-  await logAudit(propertyId, tenantId, { entity: "Channel sync", field: "resync", newValue: `${outcome.pushed} pushed · ${outcome.rejected} rejected (${outcome.mode})` });
+  const ch = await prisma.channel.findUnique({ where: { id: channelId } });
+  const outcome = await fullSyncChannel(channelId);
+  await logAudit(propertyId, tenantId, {
+    entity: `Channel · ${ch?.name ?? channelId}`, field: "full_sync",
+    newValue: `${outcome.pushed} pushed · ${outcome.rejected} rejected (${outcome.mode}, 365d)`,
+    channelCode: ch?.code,
+  });
   revalidatePath("/channels");
   revalidatePath("/sync");
   revalidatePath("/errors");
   revalidatePath("/dashboard");
+}
+
+function revalidateChannels() {
+  revalidatePath("/channels");
+  revalidatePath("/sync");
+  revalidatePath("/dashboard");
+}
+
+/** Pause (spec §3.5): reversible stop-sell overlay on one channel; the core ARI is untouched. */
+export async function pauseChannelAction(fd: FormData): Promise<void> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const channelId = str(fd, "channelId");
+  if (!channelId) return;
+  const ch = await prisma.channel.findUnique({ where: { id: channelId } });
+  const out = await pauseChannel(channelId);
+  await logAudit(propertyId, tenantId, {
+    entity: `Channel · ${ch?.name ?? channelId}`, field: "pause",
+    newValue: out.ok ? "paused — all dates closed (reversible)" : `failed: ${out.error}`,
+    channelCode: ch?.code,
+  });
+  revalidateChannels();
+}
+
+export async function resumeChannelAction(fd: FormData): Promise<void> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const channelId = str(fd, "channelId");
+  if (!channelId) return;
+  const ch = await prisma.channel.findUnique({ where: { id: channelId } });
+  const out = await resumeChannel(channelId);
+  await logAudit(propertyId, tenantId, {
+    entity: `Channel · ${ch?.name ?? channelId}`, field: "resume",
+    newValue: out.ok ? "resumed — prior state restored from shared ARI" : `failed: ${out.error}`,
+    channelCode: ch?.code,
+  });
+  revalidateChannels();
+}
+
+/** Disconnect (spec §3.5): close out + stop syncing; mapping kept dormant; reservations untouched. */
+export async function disconnectChannelAction(fd: FormData): Promise<void> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const channelId = str(fd, "channelId");
+  if (!channelId) return;
+  const ch = await prisma.channel.findUnique({ where: { id: channelId } });
+  const out = await disconnectChannel(channelId);
+  await logAudit(propertyId, tenantId, {
+    entity: `Channel · ${ch?.name ?? channelId}`, field: "disconnect",
+    newValue: out.ok ? "disconnected — mapping dormant, imported reservations untouched" : `failed: ${out.error}`,
+    channelCode: ch?.code,
+  });
+  revalidateChannels();
+}
+
+export async function reconnectChannelAction(fd: FormData): Promise<void> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const channelId = str(fd, "channelId");
+  if (!channelId) return;
+  const ch = await prisma.channel.findUnique({ where: { id: channelId } });
+  const out = await reconnectChannel(channelId);
+  await logAudit(propertyId, tenantId, {
+    entity: `Channel · ${ch?.name ?? channelId}`, field: "reconnect",
+    newValue: out.ok ? "reconnected — dormant mapping reused, full sync pushed" : `failed: ${out.error}`,
+    channelCode: ch?.code,
+  });
+  revalidateChannels();
 }
 
 /** Pull bookings from the channel now (new → imported, cancelled → restored, unmapped → Error Center). */

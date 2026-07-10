@@ -6,7 +6,7 @@ import { syncRealChannels } from "./connectivity";
 export async function logAudit(
   propertyId: string,
   tenantId: string,
-  entry: { entity: string; field?: string; oldValue?: string; newValue?: string; source?: string },
+  entry: { entity: string; field?: string; oldValue?: string; newValue?: string; source?: string; channelCode?: string | null },
 ) {
   await prisma.auditEntry.create({
     data: {
@@ -16,7 +16,8 @@ export async function logAudit(
       oldValue: entry.oldValue ?? null,
       newValue: entry.newValue ?? null,
       source: entry.source ?? "manual",
-      channelCode: "all",
+      // Channel attribution for channel-scoped actions (pause/resume/disconnect/sync — spec §3.5/§3.8).
+      channelCode: entry.channelCode ?? "all",
       syncResult: "success",
     },
   });

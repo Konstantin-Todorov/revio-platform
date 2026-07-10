@@ -20,6 +20,10 @@ export {
 export {
   syncChannel,
   syncRealChannels,
+  pauseChannel,
+  resumeChannel,
+  disconnectChannel,
+  reconnectChannel,
   pullChannel,
   type SyncOutcome,
   type PullOutcome,
