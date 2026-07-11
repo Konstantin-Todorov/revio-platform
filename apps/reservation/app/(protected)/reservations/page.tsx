@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarPlus, CalendarCheck } from "lucide-react";
-import { getReservationsList } from "@/lib/data";
+import { getActiveHolds, getReservationsList, type CrsDateType } from "@/lib/data";
+import { HoldCountdown } from "@/components/reservations/HoldCountdown";
 import { releaseExpiredHolds } from "@/lib/holds";
 import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -13,7 +14,17 @@ const STATUS_TONES: Record<string, Tone> = {
   overbooked: "danger", failed_import: "danger", expired: "neutral", hold: "warning", draft: "neutral",
 };
 
-const STATUSES = ["confirmed", "modified", "cancelled", "no_show", "overbooked", "failed_import", "expired"];
+// Full lifecycle (spec §3.3): Draft → Hold → Confirmed → Archived (+ Expired, Failed) —
+// holds and drafts are filterable states, not hidden behind "Any status".
+const STATUSES = ["confirmed", "modified", "hold", "draft", "cancelled", "no_show", "overbooked", "failed_import", "expired"];
+
+const DATE_TYPES: { value: CrsDateType; label: string }[] = [
+  { value: "check_in", label: "Check-in" },
+  { value: "check_out", label: "Check-out" },
+  { value: "created", label: "Reservation made on" },
+  { value: "cancelled", label: "Cancellation date" },
+  { value: "stay", label: "Staying on (in-house)" },
+];
 
 const inputCls =
   "rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] text-ink-900 outline-none transition-colors focus:border-brand-600";
@@ -21,11 +32,15 @@ const inputCls =
 export default async function ReservationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; from?: string; to?: string; dateType?: string }>;
 }) {
   const sp = await searchParams;
   await releaseExpiredHolds();
-  const { property, reservations } = await getReservationsList(sp);
+  const dateType = (DATE_TYPES.some((d) => d.value === sp.dateType) ? sp.dateType : "check_in") as CrsDateType;
+  const [{ property, reservations }, holds] = await Promise.all([
+    getReservationsList({ ...sp, dateType }),
+    getActiveHolds(),
+  ]);
   const filtered = Boolean(sp.q || sp.status || sp.from || sp.to);
 
   return (
@@ -47,7 +62,10 @@ export default async function ReservationsPage({
             <option value="">Any status</option>
             {STATUSES.map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
           </select>
-          <label className="text-[11.5px] font-medium text-ink-400">Check-in</label>
+          {/* Date type governs which date the from→to range filters on (spec §3.3). */}
+          <select name="dateType" defaultValue={dateType} className={inputCls}>
+            {DATE_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+          </select>
           <input type="date" name="from" defaultValue={sp.from ?? ""} className={inputCls} />
           <span className="text-[11.5px] text-ink-400">→</span>
           <input type="date" name="to" defaultValue={sp.to ?? ""} className={inputCls} />
@@ -56,6 +74,29 @@ export default async function ReservationsPage({
           <span className="ml-auto text-[11.5px] text-ink-400">{reservations.length} shown</span>
         </form>
       </Card>
+
+      {/* Live holds (spec §3.3): locked inventory with a running TTL — actionable, always visible. */}
+      {holds.length > 0 && (
+        <Card className="border-warning-600/30 bg-warning-50/40 p-3">
+          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-warning-700">
+            {holds.length} live hold{holds.length > 1 ? "s" : ""} — inventory locked until confirmed or expired
+          </div>
+          <ul className="space-y-1">
+            {holds.map((h) => (
+              <li key={h.id} className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-700">
+                <span className="font-semibold">{h.roomType.name}</span>
+                <span className="tnum text-ink-500">×{h.quantity} · {h.checkIn.toISOString().slice(0, 10)} → {h.checkOut.toISOString().slice(0, 10)}</span>
+                {h.reservation && (
+                  <Link href={`/reservations/${h.reservation.id}`} className="font-semibold text-brand-700 hover:underline">
+                    {h.reservation.guestName}
+                  </Link>
+                )}
+                <span className="text-ink-400">expires in</span> <HoldCountdown expiresAt={h.expiresAt.toISOString()} />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {reservations.length === 0 ? (
         <EmptyState

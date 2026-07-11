@@ -393,23 +393,43 @@ export async function getCreateFormData() {
   return { property, roomTypes, ratePlans, sources };
 }
 
+export type CrsDateType = "check_in" | "check_out" | "created" | "cancelled" | "stay";
+
 export interface CrsReservationFilters {
   q?: string;
   status?: string;
   from?: string;
   to?: string;
+  /** Which date the from→to range applies to (spec §3.3, same semantics as RevioLink). */
+  dateType?: CrsDateType;
 }
 
 export async function getReservationsList(filters: CrsReservationFilters = {}) {
   const property = await getProperty();
-  const lineDate: Record<string, Date> = {};
-  if (filters.from && /^\d{4}-\d{2}-\d{2}$/.test(filters.from)) lineDate.gte = utcDayLocal(filters.from);
-  if (filters.to && /^\d{4}-\d{2}-\d{2}$/.test(filters.to)) lineDate.lte = utcDayLocal(filters.to);
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  const R1 = filters.from && iso.test(filters.from) ? utcDayLocal(filters.from) : undefined;
+  const R2 = filters.to && iso.test(filters.to) ? utcDayLocal(filters.to) : undefined;
+  const R2end = filters.to && iso.test(filters.to) ? new Date(`${filters.to}T23:59:59.999Z`) : undefined;
+  const type: CrsDateType = filters.dateType ?? "check_in";
+
+  // Date-type filter (spec §3.3): which date the range governs. Stay-in = OVERLAP with strict >
+  // on departure (checkout day is not a stayed night); cancellation auto-scopes to cancelled.
+  let dateWhere: Record<string, unknown> = {};
+  let statusOverride: string | undefined;
+  if (R1 || R2) {
+    if (type === "check_in") dateWhere = { lines: { some: { checkIn: { ...(R1 ? { gte: R1 } : {}), ...(R2 ? { lte: R2 } : {}) } } } };
+    else if (type === "check_out") dateWhere = { lines: { some: { checkOut: { ...(R1 ? { gte: R1 } : {}), ...(R2 ? { lte: R2 } : {}) } } } };
+    else if (type === "created") dateWhere = { importedAt: { ...(R1 ? { gte: R1 } : {}), ...(R2end ? { lte: R2end } : {}) } };
+    else if (type === "cancelled") {
+      dateWhere = { cancelledAt: { ...(R1 ? { gte: R1 } : {}), ...(R2end ? { lte: R2end } : {}) } };
+      if (!filters.status) statusOverride = "cancelled";
+    } else if (type === "stay") dateWhere = { lines: { some: { ...(R2 ? { checkIn: { lte: R2 } } : {}), ...(R1 ? { checkOut: { gt: R1 } } : {}) } } };
+  }
 
   const reservations = await prisma.reservation.findMany({
     where: {
       propertyId: property.id,
-      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.status ? { status: filters.status } : statusOverride ? { status: statusOverride } : {}),
       ...(filters.q
         ? {
             OR: [
@@ -420,7 +440,7 @@ export async function getReservationsList(filters: CrsReservationFilters = {}) {
             ],
           }
         : {}),
-      ...(Object.keys(lineDate).length ? { lines: { some: { checkIn: lineDate } } } : {}),
+      ...dateWhere,
     },
     include: {
       channel: { select: { name: true } },
@@ -436,6 +456,17 @@ export async function getReservationsList(filters: CrsReservationFilters = {}) {
 
 function utcDayLocal(iso: string): Date {
   return new Date(`${iso}T00:00:00Z`);
+}
+
+/** Live holds (spec §3.3): a Hold with a running TTL is ACTIONABLE and must be visible —
+ * never hidden behind "Any status". */
+export async function getActiveHolds() {
+  const property = await getProperty();
+  return prisma.hold.findMany({
+    where: { propertyId: property.id, status: "active", expiresAt: { gt: new Date() } },
+    include: { roomType: { select: { name: true } }, reservation: { select: { id: true, guestName: true } } },
+    orderBy: { expiresAt: "asc" },
+  });
 }
 
 export async function getReservationDetail(id: string) {
