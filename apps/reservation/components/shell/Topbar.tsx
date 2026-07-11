@@ -13,11 +13,13 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export function Topbar({
-  properties, activeId, activeName, role, userName, notifItems,
+  properties, activeId, activeName, scope, canGroup, role, userName, notifItems,
 }: {
   properties: Property[];
   activeId: string;
   activeName: string;
+  scope: "property" | "group";
+  canGroup: boolean;
   role: string;
   userName: string;
   notifItems: NotifItem[];
@@ -38,7 +40,7 @@ export function Topbar({
       </form>
 
       <div className="ml-auto">
-        <WorkspaceSwitcher properties={properties} activeId={activeId} activeName={activeName} />
+        <WorkspaceSwitcher properties={properties} activeId={activeId} activeName={activeName} scope={scope} canGroup={canGroup} />
       </div>
 
       <NotificationBell items={notifItems} />

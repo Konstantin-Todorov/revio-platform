@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, TrendingUp } from "lucide-react";
-import { getInventoryBoard } from "@/lib/data";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, Layers, TrendingUp } from "lucide-react";
+import { getInventoryBoard, getScope } from "@/lib/data";
 import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolveRange, stlyRange, type RangePreset } from "@/lib/metrics";
 import { DashboardView, type KpiCard } from "@/components/dashboard/DashboardView";
 import { ensurePickupSnapshot } from "@/lib/pickup";
@@ -32,8 +32,9 @@ export default async function DashboardPage({
   const sp = await searchParams;
   await Promise.all([ensurePickupSnapshot(), releaseExpiredHolds()]);
 
-  const ops = await getOperations();
+  const [ops, scope] = await Promise.all([getOperations(), getScope()]);
   const range = resolveRange(ops.todayIso, sp.range, sp.from, sp.to);
+  const isGroup = scope.scope === "group";
   const [metrics, stly, board, f7, f30] = await Promise.all([
     getRangeMetrics(range),
     getRangeMetrics(stlyRange(range)), // STLY = 364 days back, same weekday (spec §4.2)
@@ -77,7 +78,7 @@ export default async function DashboardPage({
     <div className="space-y-5">
       <PageHeader
         title="Dashboard"
-        subtitle={`${ops.property.name} · ${range.label} · every number from the shared formula sheet`}
+        subtitle={`${isGroup ? `${scope.label}` : ops.property.name} · ${range.label} · every number from the shared formula sheet`}
         action={
           <Link href="/reports" className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
             <TrendingUp className="h-3.5 w-3.5" /> Reports
@@ -158,6 +159,17 @@ export default async function DashboardPage({
           )}
         </Card>
       </div>
+
+      {isGroup && (
+        <div className="flex items-start gap-2 rounded-md border border-brand-600/25 bg-brand-50 px-3.5 py-2.5 text-[12.5px] text-brand-800">
+          <Layers className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+          <span>
+            <span className="font-semibold">Portfolio view.</span> KPIs, charts, source mix and forecast above sum across all {scope.count} properties
+            (ratios recomputed from combined totals). The operational lists below auto-select <span className="font-semibold">{ops.property.name}</span> —
+            switch to a single property to act on its arrivals, alerts and bookings.
+          </span>
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Action Center */}

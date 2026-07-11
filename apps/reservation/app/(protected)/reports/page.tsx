@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
+import { Layers } from "lucide-react";
 import { getInventoryBoard } from "@/lib/data";
 import { getCancellationReport, getPickupReport, getProductPerformance, getProductionByDay, getRangeMetrics, resolveRange, stlyRange, type RangePreset } from "@/lib/metrics";
-import { getProperty, todayInTz } from "@/lib/data";
+import { getProperty, getScope, todayInTz } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
 
@@ -34,7 +35,9 @@ export default async function ReportsPage({
 }) {
   const sp = await searchParams;
   const report = REPORTS.some((r) => r.key === sp.report) ? sp.report! : "performance";
-  const property = await getProperty();
+  const scope = await getScope();
+  const property = scope.primary;
+  const isGroup = scope.scope === "group";
   const todayIso = todayInTz(property.timezone);
   const range = resolveRange(todayIso, sp.range ?? "l28d", sp.from, sp.to);
   // Global controls (spec §3.2): Book date vs Stay date lens + granularity, on every sub-tab
@@ -52,7 +55,7 @@ export default async function ReportsPage({
     <div className="space-y-4">
       <PageHeader
         title="Analytics"
-        subtitle={`${property.name} · calculated from reservations + inventory — never stored separately`}
+        subtitle={`${isGroup ? scope.label : property.name} · calculated from reservations + inventory — never stored separately`}
         action={
           <a href={`/api/reports/export?${qs}`} className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
             <Download className="h-3.5 w-3.5" /> Export CSV
@@ -106,6 +109,16 @@ export default async function ReportsPage({
               </span>
             </>
           )}
+        </div>
+      )}
+
+      {isGroup && (
+        <div className="flex items-start gap-2 rounded-md border border-brand-600/25 bg-brand-50 px-3.5 py-2.5 text-[12.5px] text-brand-800">
+          <Layers className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
+          <span>
+            <span className="font-semibold">Portfolio totals across {scope.count} properties.</span> Occupancy, ADR and RevPAR are recomputed
+            from combined room-nights and revenue — never averaged.{report === "availability" ? ` The Availability calendar shows ${property.name} only (room types differ per property).` : ""}
+          </span>
         </div>
       )}
 

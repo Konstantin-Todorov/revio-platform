@@ -6,7 +6,7 @@ import {
   type DateRange, type MetricLine,
 } from "@revio/core";
 import { prisma } from "./db";
-import { addDays, getProperty, todayInTz, ymd } from "./data";
+import { addDays, getProperty, getScope, todayInTz, ymd } from "./data";
 
 /**
  * Assembles DB records into the @revio/core formula sheet's inputs. Dashboard and every report
@@ -70,19 +70,20 @@ interface LoadedLine extends MetricLine {
   importedAt: Date;
 }
 
-/** Everything a range needs, loaded once: capacity per day + normalized stay lines. */
+/** Everything a range needs, loaded once: capacity per day + normalized stay lines. Scope-aware —
+ * in portfolio (group) scope it sums capacity and lines across EVERY property in the tenant so the
+ * cards can recompute ratios from summed numerators/denominators (never averaged). */
 async function loadRange(range: DateRange) {
-  const property = await getProperty();
-  const propertyId = property.id;
+  const { propertyIds, primary } = await getScope();
   const start = new Date(`${range.start}T00:00:00Z`);
   const end = new Date(`${range.endExcl}T00:00:00Z`);
 
   const [defaults, roomTypes, periods, rawLines] = await Promise.all([
-    prisma.propertyDefaults.findUnique({ where: { propertyId } }),
-    prisma.roomType.findMany({ where: { propertyId, active: true } }),
-    prisma.roomInventoryPeriod.findMany({ where: { propertyId, dateFrom: { lt: end }, dateTo: { gte: start } } }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId: primary.id } }),
+    prisma.roomType.findMany({ where: { propertyId: { in: propertyIds }, active: true } }),
+    prisma.roomInventoryPeriod.findMany({ where: { propertyId: { in: propertyIds }, dateFrom: { lt: end }, dateTo: { gte: start } } }),
     prisma.reservationLine.findMany({
-      where: { checkIn: { lt: end }, checkOut: { gt: start }, reservation: { propertyId } },
+      where: { checkIn: { lt: end }, checkOut: { gt: start }, reservation: { propertyId: { in: propertyIds } } },
       include: {
         roomType: { select: { name: true } },
         reservation: {
@@ -99,15 +100,30 @@ async function loadRange(range: DateRange) {
   const physical = roomTypes.reduce((s, rt) => s + rt.totalRooms, 0);
   const dates: string[] = [];
   for (let t = start.getTime(); t < end.getTime(); t += 86_400_000) dates.push(ymd(new Date(t)));
+
   // Capacity = physical − OOO − closed (the manual rooms-to-sell cap is a sales lever, not capacity).
-  const periodByDate = expandInventoryPeriods(
-    periods.map((p) => ({ kind: p.kind, dateFrom: ymd(p.dateFrom), dateTo: ymd(p.dateTo), rooms: p.rooms })),
-    dates,
-  );
-  const availableByDate = new Map(dates.map((d) => {
-    const { outOfOrder, closed } = periodByDate.get(d)!;
-    return [d, Math.max(0, physical - outOfOrder - closed)] as const;
-  }));
+  // In group scope this MUST be clamped per property (max(0, …) before summing) so one hotel's
+  // closures can never erase another's rooms — group available room-nights = Σ over properties.
+  const physicalByProp = new Map<string, number>();
+  for (const rt of roomTypes) physicalByProp.set(rt.propertyId, (physicalByProp.get(rt.propertyId) ?? 0) + rt.totalRooms);
+  const periodsByProp = new Map<string, typeof periods>();
+  for (const p of periods) {
+    const arr = periodsByProp.get(p.propertyId) ?? [];
+    arr.push(p);
+    periodsByProp.set(p.propertyId, arr);
+  }
+  const availableByDate = new Map<string, number>(dates.map((d) => [d, 0]));
+  for (const pid of propertyIds) {
+    const phys = physicalByProp.get(pid) ?? 0;
+    const byDate = expandInventoryPeriods(
+      (periodsByProp.get(pid) ?? []).map((p) => ({ kind: p.kind, dateFrom: ymd(p.dateFrom), dateTo: ymd(p.dateTo), rooms: p.rooms })),
+      dates,
+    );
+    for (const d of dates) {
+      const { outOfOrder, closed } = byDate.get(d)!;
+      availableByDate.set(d, availableByDate.get(d)! + Math.max(0, phys - outOfOrder - closed));
+    }
+  }
 
   const lines: LoadedLine[] = rawLines.map((l) => ({
     reservationId: l.reservation.id,
@@ -124,7 +140,7 @@ async function loadRange(range: DateRange) {
     importedAt: l.reservation.importedAt,
   }));
 
-  return { property, defaults, dates, availableByDate, lines, physical };
+  return { property: primary, defaults, dates, availableByDate, lines, physical, propertyIds };
 }
 
 export interface MetricCards {
@@ -144,7 +160,7 @@ export interface MetricCards {
 }
 
 export async function getRangeMetrics(range: ResolvedRange) {
-  const { property, defaults, dates, availableByDate, lines } = await loadRange(range);
+  const { property, defaults, dates, availableByDate, lines, propertyIds } = await loadRange(range);
   const countNoShows = defaults?.countNoShowsAsSold ?? true;
   const revenueDisplay = (defaults?.revenueDisplay === "net" ? "net" : "gross") as "gross" | "net";
   const todayIso = todayInTz(property.timezone);
@@ -171,8 +187,8 @@ export async function getRangeMetrics(range: ResolvedRange) {
   const startD = new Date(`${range.start}T00:00:00Z`);
   const endD = new Date(`${range.endExcl}T00:00:00Z`);
   const [createdCount, cancelledCount] = await Promise.all([
-    prisma.reservation.count({ where: { propertyId: property.id, importedAt: { gte: startD, lt: endD } } }),
-    prisma.reservation.count({ where: { propertyId: property.id, importedAt: { gte: startD, lt: endD }, status: "cancelled" } }),
+    prisma.reservation.count({ where: { propertyId: { in: propertyIds }, importedAt: { gte: startD, lt: endD } } }),
+    prisma.reservation.count({ where: { propertyId: { in: propertyIds }, importedAt: { gte: startD, lt: endD }, status: "cancelled" } }),
   ]);
 
   // LOS + lead time over reservations whose stay touches the range (sold only).
@@ -192,7 +208,7 @@ export async function getRangeMetrics(range: ResolvedRange) {
   const avgLos = averageLosNights(resAgg.reduce((s, r) => s + r.nights, 0), resAgg.length);
   const avgLead = averageLeadTimeDays(resAgg.map((r) => [r.importedAt.toISOString(), r.checkIn]));
 
-  const pickup = await getPickup(property.id, todayIso, defaults?.pickupOffsetDays ?? 7, countNoShows);
+  const pickup = await getPickup(propertyIds, todayIso, defaults?.pickupOffsetDays ?? 7, countNoShows);
 
   const cards: MetricCards = {
     occupancyPct: occupancyPct(totals.roomsSoldNights, availableRoomNights),
@@ -237,20 +253,22 @@ export async function getRangeMetrics(range: ResolvedRange) {
   return { property, defaults, range, cards, perDay, sourceMix, todayIso };
 }
 
-/** Pickup vs the snapshot ~offset days back (or the earliest we have — snapshots started Phase 1). */
-async function getPickup(propertyId: string, todayIso: string, offsetDays: number, countNoShows: boolean) {
+/** Pickup vs the snapshot ~offset days back (or the earliest we have — snapshots started Phase 1).
+ * Scope-aware: in group scope it sums pickup across every property (snapshots are taken on the same
+ * dates for all of them, so the aggregate over `snapshotDate` is directly comparable). */
+async function getPickup(propertyIds: string[], todayIso: string, offsetDays: number, countNoShows: boolean) {
   const today = new Date(`${todayIso}T00:00:00Z`);
   const horizonEnd = addDays(today, 30);
   const wanted = ymd(addDays(today, -offsetDays));
 
   const candidate =
     (await prisma.pickupSnapshot.findFirst({
-      where: { propertyId, snapshotDate: { lte: new Date(`${wanted}T00:00:00Z`) } },
+      where: { propertyId: { in: propertyIds }, snapshotDate: { lte: new Date(`${wanted}T00:00:00Z`) } },
       orderBy: { snapshotDate: "desc" },
       select: { snapshotDate: true },
     })) ??
     (await prisma.pickupSnapshot.findFirst({
-      where: { propertyId },
+      where: { propertyId: { in: propertyIds } },
       orderBy: { snapshotDate: "asc" },
       select: { snapshotDate: true },
     }));
@@ -259,12 +277,12 @@ async function getPickup(propertyId: string, todayIso: string, offsetDays: numbe
   const [snapAgg, lines] = await Promise.all([
     prisma.pickupSnapshot.aggregate({
       _sum: { roomsSold: true },
-      where: { propertyId, snapshotDate: candidate.snapshotDate, targetDate: { gte: today, lt: horizonEnd } },
+      where: { propertyId: { in: propertyIds }, snapshotDate: candidate.snapshotDate, targetDate: { gte: today, lt: horizonEnd } },
     }),
     prisma.reservationLine.findMany({
       where: {
         checkIn: { lt: horizonEnd }, checkOut: { gt: today },
-        reservation: { propertyId, status: { in: soldStatusesFor(countNoShows) } },
+        reservation: { propertyId: { in: propertyIds }, status: { in: soldStatusesFor(countNoShows) } },
       },
       select: { quantity: true, checkIn: true, checkOut: true },
     }),
@@ -370,7 +388,7 @@ export function buildActionAlerts(args: {
 // --- Reports -----------------------------------------------------------------
 
 export async function getPickupReport() {
-  const property = await getProperty();
+  const { propertyIds, primary: property } = await getScope();
   const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } });
   const todayIso = todayInTz(property.timezone);
   const today = new Date(`${todayIso}T00:00:00Z`);
@@ -380,21 +398,21 @@ export async function getPickupReport() {
 
   const candidate =
     (await prisma.pickupSnapshot.findFirst({
-      where: { propertyId: property.id, snapshotDate: { lte: new Date(`${wanted}T00:00:00Z`) } },
+      where: { propertyId: { in: propertyIds }, snapshotDate: { lte: new Date(`${wanted}T00:00:00Z`) } },
       orderBy: { snapshotDate: "desc" }, select: { snapshotDate: true },
     })) ??
-    (await prisma.pickupSnapshot.findFirst({ where: { propertyId: property.id }, orderBy: { snapshotDate: "asc" }, select: { snapshotDate: true } }));
+    (await prisma.pickupSnapshot.findFirst({ where: { propertyId: { in: propertyIds } }, orderBy: { snapshotDate: "asc" }, select: { snapshotDate: true } }));
 
   const [snapRows, lines] = await Promise.all([
     candidate
       ? prisma.pickupSnapshot.groupBy({
           by: ["targetDate"],
           _sum: { roomsSold: true },
-          where: { propertyId: property.id, snapshotDate: candidate.snapshotDate, targetDate: { gte: today, lt: horizonEnd } },
+          where: { propertyId: { in: propertyIds }, snapshotDate: candidate.snapshotDate, targetDate: { gte: today, lt: horizonEnd } },
         })
       : Promise.resolve([]),
     prisma.reservationLine.findMany({
-      where: { checkIn: { lt: horizonEnd }, checkOut: { gt: today }, reservation: { propertyId: property.id, status: { in: soldStatusesFor(countNoShows) } } },
+      where: { checkIn: { lt: horizonEnd }, checkOut: { gt: today }, reservation: { propertyId: { in: propertyIds }, status: { in: soldStatusesFor(countNoShows) } } },
       select: { quantity: true, checkIn: true, checkOut: true },
     }),
   ]);
@@ -411,11 +429,11 @@ export async function getPickupReport() {
 }
 
 export async function getCancellationReport(range: ResolvedRange) {
-  const property = await getProperty();
+  const { propertyIds, primary: property } = await getScope();
   const startD = new Date(`${range.start}T00:00:00Z`);
   const endD = new Date(`${range.endExcl}T00:00:00Z`);
   const created = await prisma.reservation.findMany({
-    where: { propertyId: property.id, importedAt: { gte: startD, lt: endD } },
+    where: { propertyId: { in: propertyIds }, importedAt: { gte: startD, lt: endD } },
     include: { lines: { include: { roomType: { select: { name: true } } } }, channel: { select: { name: true } }, bookingSource: { select: { name: true } } },
     orderBy: { importedAt: "desc" },
   });
@@ -439,7 +457,7 @@ export async function getCancellationReport(range: ResolvedRange) {
  * lens "stay" = clipped to nights falling in the range (occupancy view); lens "book" =
  * reservations MADE in the range, whole stays (production view). */
 export async function getProductPerformance(range: ResolvedRange, lens: "stay" | "book") {
-  const property = await getProperty();
+  const { propertyIds, primary: property } = await getScope();
   const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } });
   const countNoShows = defaults?.countNoShowsAsSold ?? true;
   const soldSet = new Set(soldStatusesFor(countNoShows));
@@ -449,7 +467,7 @@ export async function getProductPerformance(range: ResolvedRange, lens: "stay" |
   const lines = await prisma.reservationLine.findMany({
     where: {
       reservation: {
-        propertyId: property.id,
+        propertyId: { in: propertyIds },
         ...(lens === "book" ? { importedAt: { gte: start, lt: endExcl } } : {}),
       },
       ...(lens === "stay" ? { checkIn: { lt: endExcl }, checkOut: { gt: start } } : {}),
@@ -486,11 +504,11 @@ export async function getProductPerformance(range: ResolvedRange, lens: "stay" |
 /** Production by creation day (the book-date lens for Performance): what was BOOKED each day
  * of the range, regardless of when the stays fall (spec §3.2 global Book/Stay toggle). */
 export async function getProductionByDay(range: ResolvedRange) {
-  const property = await getProperty();
+  const { propertyIds, primary: property } = await getScope();
   const start = new Date(`${range.start}T00:00:00Z`);
   const endExcl = new Date(`${range.endExcl}T00:00:00Z`);
   const reservations = await prisma.reservation.findMany({
-    where: { propertyId: property.id, importedAt: { gte: start, lt: endExcl } },
+    where: { propertyId: { in: propertyIds }, importedAt: { gte: start, lt: endExcl } },
     include: { lines: true },
   });
   const days = new Map<string, { bookings: number; nights: number; revenueMinor: number; cancelled: number }>();

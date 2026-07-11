@@ -22,7 +22,8 @@ export function todayInTz(timeZone: string): string {
 }
 
 /** The active property for the current session — scoped to the session's tenant. Every read/write in
- *  this app resolves the property through here, so a hotel can only ever touch its own data. */
+ *  this app resolves the property through here, so a hotel can only ever touch its own data. In group
+ *  scope this is the auto-selected primary property (operational screens still work on one property). */
 export async function getProperty() {
   const session = await getSession();
   if (!session) redirect("/logout");
@@ -30,6 +31,41 @@ export async function getProperty() {
     where: { id: session.activePropertyId },
     include: { tenant: true },
   });
+}
+
+export interface CrsScope {
+  scope: "property" | "group";
+  /** Every property the current view spans — one in property scope, all tenant properties in group. */
+  propertyIds: string[];
+  /** Representative property for display (timezone, currency, name). In group scope = the first. */
+  primary: Awaited<ReturnType<typeof getProperty>>;
+  count: number;
+  label: string;
+}
+
+/** Resolve the reporting scope (CRS-GUIDE §4.1). Dashboard + Analytics read THIS instead of
+ *  getProperty() so they can sum across the whole portfolio when the user picks "All properties".
+ *  Ratios are always recomputed from summed numerators/denominators — never averaged. */
+export async function getScope(): Promise<CrsScope> {
+  const session = await getSession();
+  if (!session) redirect("/logout");
+  if (session.scope === "group") {
+    const properties = await prisma.property.findMany({
+      where: { tenantId: session.tenantId },
+      include: { tenant: true },
+      orderBy: { name: "asc" },
+    });
+    const primary = properties[0]!;
+    return {
+      scope: "group",
+      propertyIds: properties.map((p) => p.id),
+      primary,
+      count: properties.length,
+      label: `All properties · ${properties.length} hotels`,
+    };
+  }
+  const primary = await getProperty();
+  return { scope: "property", propertyIds: [primary.id], primary, count: 1, label: primary.name };
 }
 
 export interface NotifItem { text: string; href: string; tone: "danger" | "warning" | "info" | "success" }

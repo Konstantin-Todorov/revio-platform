@@ -18,9 +18,16 @@ export interface Session {
   entitlements: { channelManager: boolean; reservation: boolean; pms: boolean };
   activePropertyId: string;
   tenantName: string;
+  /** "group" = portfolio scope (CRS-GUIDE §4.1): Dashboard + Analytics aggregate across every
+   * property in the tenant. Operational screens still auto-select `activePropertyId` (the first
+   * property). Only reachable when the tenant actually owns more than one property. */
+  scope: "property" | "group";
+  propertyCount: number;
 }
 
 export const ACTIVE_PROPERTY_COOKIE = "revio_property";
+/** Sentinel cookie value selecting the whole portfolio instead of one property. */
+export const GROUP_SCOPE = "__group__";
 
 /**
  * THE single identity choke point. Resolves the logged-in hotel user → their tenant.
@@ -39,7 +46,9 @@ export async function getSession(): Promise<Session | null> {
   const properties = await prisma.property.findMany({ where: { tenantId: tenant.id }, orderBy: { name: "asc" } });
   if (properties.length === 0) return null;
   const cookieProp = (await cookies()).get(ACTIVE_PROPERTY_COOKIE)?.value;
-  const active = properties.find((p) => p.id === cookieProp) ?? properties[0]!;
+  // Portfolio scope only makes sense with >1 property; otherwise fall back to the single property.
+  const isGroup = cookieProp === GROUP_SCOPE && properties.length > 1;
+  const active = isGroup ? properties[0]! : (properties.find((p) => p.id === cookieProp) ?? properties[0]!);
 
   return {
     perimeter: "hotel",
@@ -54,6 +63,8 @@ export async function getSession(): Promise<Session | null> {
     },
     activePropertyId: active.id,
     tenantName: tenant.name,
+    scope: isGroup ? "group" : "property",
+    propertyCount: properties.length,
   };
 }
 
