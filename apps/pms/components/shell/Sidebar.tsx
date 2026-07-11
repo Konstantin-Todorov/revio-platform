@@ -16,7 +16,7 @@ type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 const SECTIONS: { title?: string; items: Item[] }[] = [
   { title: "Front office", items: [
     { href: "/dashboard", label: "Front Desk", icon: LayoutDashboard },
-    { href: "/guests", label: "Guests", icon: Users, soon: "D4" },
+    { href: "/guests", label: "Guests", icon: Users },
     { href: "/folios", label: "Folios & Billing", icon: Receipt },
     { href: "/minibar", label: "Minibar / POS", icon: Wine },
   ] },
