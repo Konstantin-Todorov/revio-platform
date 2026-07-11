@@ -15,8 +15,12 @@ const SOURCE_LABEL: Record<string, string> = {
 /** Bulk Rates & Availability (spec §3.7) — date-scoped ARI: the CRS twin of RevioLink's bulk
  * screen, with open/close added. Standing restriction RULES live here too (moved from the
  * dissolved Rates & Restrictions screen), keeping their source-level targeting. */
-export default async function BulkPage() {
+export default async function BulkPage({ searchParams }: { searchParams: Promise<{ rt?: string }> }) {
+  const { rt } = await searchParams;
   const { property, ratePlans, rules, roomTypes, channels } = await getRatesData();
+  // Inline per-row bulk from the Inventory Calendar pre-scopes to one room type (?rt=CODE) —
+  // the SAME code path and audit trail, never a parallel implementation (spec §3.5).
+  const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
   const rtName = new Map(roomTypes.map((r) => [r.id, r.name]));
   const today = new Date().toISOString().slice(0, 10);
 
@@ -30,6 +34,7 @@ export default async function BulkPage() {
       <Card>
         <CardHeader title="Bulk update" subtitle="One run = one audit entry + one push to the connected channel manager" />
         <CrsBulkForm
+          {...(preselect && preselect.length > 0 ? { preselect } : {})}
           roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name }))}
           ratePlans={ratePlans.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
           today={today}

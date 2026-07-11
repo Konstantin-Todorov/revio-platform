@@ -14,7 +14,7 @@ const labelCls = "mb-1 block text-[11px] font-semibold uppercase tracking-wide t
 
 /** Bulk Rates & Availability (spec §3.7): one operation sets rate, restrictions and open/close
  * across a date range. Only MANUAL rates are price-editable; derived recalc from their parent. */
-export function CrsBulkForm({ roomTypes, ratePlans, today }: { roomTypes: Opt[]; ratePlans: PlanOpt[]; today: string }) {
+export function CrsBulkForm({ roomTypes, ratePlans, today, preselect }: { roomTypes: Opt[]; ratePlans: PlanOpt[]; today: string; preselect?: string[] }) {
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(applyCrsBulkUpdate, null);
   const [updateType, setUpdateType] = useState("rate_set");
   const in30 = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
@@ -46,7 +46,7 @@ export function CrsBulkForm({ roomTypes, ratePlans, today }: { roomTypes: Opt[];
           <div className="grid grid-cols-2 gap-1.5">
             {roomTypes.map((rt) => (
               <label key={rt.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
-                <input type="checkbox" name="roomTypeIds" value={rt.id} defaultChecked className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
+                <input type="checkbox" name="roomTypeIds" value={rt.id} defaultChecked={!preselect || preselect.includes(rt.id)} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
                 {rt.name}
               </label>
             ))}
