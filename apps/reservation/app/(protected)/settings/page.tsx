@@ -73,6 +73,23 @@ export default async function SettingsPage() {
           <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
             <input type="checkbox" name="countNoShowsAsSold" defaultChecked={defaults?.countNoShowsAsSold ?? true} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Count no-shows as sold
           </label>
+          {/* City tax (spec §4.4): ONE definition, three products — the CRS defines the rule, the
+              PMS posts/suppresses the folio line, the CM discloses to the OTA. The setting NEVER
+              changes the rate exported to the channel manager. */}
+          <div className="col-span-2 rounded-md border border-surface-border bg-surface-muted/50 p-3 lg:col-span-4">
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">City tax mode</div>
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
+                <input type="radio" name="cityTaxMode" value="payable_on_spot" defaultChecked={(defaults?.cityTaxMode ?? "payable_on_spot") === "payable_on_spot"} className="h-4 w-4 border-surface-border text-brand-600" />
+                Payable on spot — the PMS posts it as a folio charge at check-in; the channel manager discloses it to the OTA
+              </label>
+              <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
+                <input type="radio" name="cityTaxMode" value="included" defaultChecked={defaults?.cityTaxMode === "included"} className="h-4 w-4 border-surface-border text-brand-600" />
+                Included — absorbed in the rate; no folio line, no disclosure
+              </label>
+            </div>
+            <p className="mt-1.5 text-[11px] text-ink-400">Either way the rate sent to the OTA is the room rate, full stop — this setting only controls downstream behaviour.</p>
+          </div>
           <div className="col-span-2 flex justify-end lg:col-span-4">
             <button className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Save defaults</button>
           </div>
@@ -80,7 +97,7 @@ export default async function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Users & Permissions — roles are saved group×level combinations" />
+        <CardHeader title="Users & Permissions — roles are saved group×level combinations" subtitle="Roles are DEFINED here; user assignment happens in RevioLink → User Management (one account across every Revio product)" />
         <div className="overflow-x-auto">
           <table className="w-full text-[12.5px]">
             <thead>

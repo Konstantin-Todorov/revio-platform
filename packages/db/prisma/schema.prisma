@@ -673,6 +673,9 @@ model PropertyDefaults {
   countNoShowsAsSold Boolean @default(true)
   revenueDisplay     String  @default("gross") // gross | net
   pickupOffsetDays   Int     @default(7)
+  // City tax (spec §4.4): the CRS DEFINES the rule, the PMS applies it to the folio, the CM
+  // discloses it to the OTA. The setting NEVER changes the rate exported to the channel manager.
+  cityTaxMode String @default("payable_on_spot") // payable_on_spot | included
   holdTtlMinutes     Int     @default(30)
   // Action Center thresholds (docs/CRS-REFERENCE.md: every threshold a Setting, never hardcoded).
   lowAvailabilityThreshold Int @default(2)

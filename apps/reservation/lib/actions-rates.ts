@@ -179,6 +179,8 @@ export async function savePropertyDefaults(fd: FormData): Promise<void> {
     pickupOffsetDays: Math.min(Math.max(int(fd, "pickupOffsetDays", 7), 1), 90),
     revenueDisplay: str(fd, "revenueDisplay") === "net" ? "net" : "gross",
     countNoShowsAsSold: fd.get("countNoShowsAsSold") != null,
+    // City tax (spec §4.4): CRS defines, PMS applies, CM discloses — the exported rate never changes.
+    cityTaxMode: str(fd, "cityTaxMode") === "included" ? "included" : "payable_on_spot",
   };
   await prisma.propertyDefaults.upsert({
     where: { propertyId },
