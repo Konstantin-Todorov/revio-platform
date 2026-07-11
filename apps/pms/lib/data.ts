@@ -29,6 +29,11 @@ export interface UnitRow {
   roomTypeName: string;
   occupied: boolean;
   guestName: string | null;
+  connectingUnitIds: string[];
+  dueOutToday: boolean;
+  /** Smart-routing (spec §3.4): lower = clean sooner. Reason is shown so staff trust the order. */
+  priority: number;
+  cleanReason: string | null;
 }
 
 /** Global search across the PMS: rooms (units), guests, and reservations. */
@@ -103,7 +108,10 @@ export async function getRoomsBoard() {
 /** Every unit (with room type + floor + live occupancy), for the housekeeping board. */
 export async function getHousekeepingUnits(): Promise<{ property: Awaited<ReturnType<typeof activeProperty>>["property"]; units: UnitRow[] }> {
   const { property } = await activeProperty();
-  const [units, occupied] = await Promise.all([
+  const today = todayInTz(property.timezone);
+  const start = new Date(`${today}T00:00:00Z`);
+  const next = new Date(start.getTime() + 86_400_000);
+  const [units, occupied, arrivalLines] = await Promise.all([
     prisma.unit.findMany({
       where: { propertyId: property.id, active: true },
       orderBy: [{ floor: "asc" }, { sortOrder: "asc" }, { label: "asc" }],
@@ -114,31 +122,52 @@ export async function getHousekeepingUnits(): Promise<{ property: Awaited<Return
       where: { propertyId: property.id, status: "active", checkedOutAt: null, checkedInAt: { not: null } },
       include: { reservation: { include: { guest: true } } },
     }),
-  ]);
-  const occByUnit = new Map(occupied.map((a) => [a.unitId, a.reservation]));
-  return {
-    property,
-    units: units.map((u) => {
-      const res = occByUnit.get(u.id);
-      const guestName = res ? (res.guest ? `${res.guest.firstName} ${res.guest.lastName}`.trim() : res.guestName) : null;
-      return {
-        id: u.id,
-        label: u.label,
-        floor: u.floor,
-        hkStatus: u.hkStatus as HkStatus,
-        active: u.active,
-        roomTypeId: u.roomTypeId,
-        roomTypeName: u.roomType.name,
-        occupied: !!res,
-        guestName,
-      };
+    // Arrivals DUE (today or overdue) not yet checked in, by room type → which types need a ready
+    // room now. Overdue guests still need a room, so they count toward cleaning pressure.
+    prisma.reservationLine.findMany({
+      where: { checkIn: { lt: next }, checkOut: { gt: start }, reservation: { propertyId: property.id, status: { in: [...OCCUPYING] } } },
+      select: { roomTypeId: true, quantity: true, reservation: { select: { assignments: { where: { status: "active", checkedInAt: { not: null } } } } } },
     }),
-  };
+  ]);
+  const occByUnit = new Map(occupied.map((a) => [a.unitId, { res: a.reservation, checkOut: a.checkOut }]));
+  // Arrival pressure per room type = today's arrivals still needing a room (not yet checked in).
+  const arrivalsByType = new Map<string, number>();
+  for (const l of arrivalLines) {
+    if (l.reservation.assignments.length > 0) continue;
+    arrivalsByType.set(l.roomTypeId, (arrivalsByType.get(l.roomTypeId) ?? 0) + l.quantity);
+  }
+
+  const units2 = units.map((u): UnitRow => {
+    const occ = occByUnit.get(u.id);
+    const res = occ?.res;
+    const guestName = res ? (res.guest ? `${res.guest.firstName} ${res.guest.lastName}`.trim() : res.guestName) : null;
+    const dueOutToday = occ ? ymd(occ.checkOut) === today : false;
+    const arrivalPressure = (arrivalsByType.get(u.roomTypeId) ?? 0) > 0;
+
+    // Smart routing (spec §3.4): only dirty/in-progress rooms are in the cleaning queue. Order:
+    // turn-for-arrival → arrival-today → departure → stayover → no-pressure. Reason shown for trust.
+    let priority = 99, cleanReason: string | null = null;
+    const needsClean = u.hkStatus === "dirty" || u.hkStatus === "in_progress";
+    if (needsClean) {
+      if (dueOutToday && arrivalPressure) { priority = 1; cleanReason = "Turn for arrival"; }
+      else if (!occ && arrivalPressure) { priority = 2; cleanReason = "Arrival today"; }
+      else if (dueOutToday) { priority = 3; cleanReason = "Departure"; }
+      else if (occ) { priority = 4; cleanReason = "Stayover"; }
+      else { priority = 5; cleanReason = "No arrival pressure"; }
+      if (u.hkStatus === "in_progress") priority -= 0.5; // already started → finish it first
+    }
+    return {
+      id: u.id, label: u.label, floor: u.floor, hkStatus: u.hkStatus as HkStatus, active: u.active,
+      roomTypeId: u.roomTypeId, roomTypeName: u.roomType.name, occupied: !!res, guestName,
+      connectingUnitIds: u.connectingUnitIds, dueOutToday, priority, cleanReason,
+    };
+  });
+  return { property, units: units2 };
 }
 
 /** Housekeeping status counts across all active units. */
 export function statusCounts(units: { hkStatus: HkStatus }[]): Record<HkStatus, number> {
-  const base: Record<HkStatus, number> = { clean: 0, dirty: 0, inspected: 0, out_of_order: 0 };
+  const base: Record<HkStatus, number> = { clean: 0, dirty: 0, in_progress: 0, inspected: 0, out_of_order: 0 };
   for (const u of units) base[u.hkStatus] = (base[u.hkStatus] ?? 0) + 1;
   return base;
 }

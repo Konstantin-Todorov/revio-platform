@@ -1,12 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { logAudit, recordSync, str, int, utcDay } from "./mutation-helpers";
 import { todayInTz, addDaysYmd } from "./format";
 
-const HK_STATUSES = ["clean", "dirty", "inspected", "out_of_order"];
+const HK_STATUSES = ["clean", "dirty", "in_progress", "inspected", "out_of_order"];
 
 async function ctx() {
   const session = await getSession();
@@ -156,4 +157,67 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
 
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: prev, newValue: status, userId: session.userId });
   refresh();
+}
+
+/**
+ * Start cleaning a room (dirty → in_progress) with the ONE-ROOM-IN-PROGRESS rule (spec §3.4): a
+ * housekeeper may have only one room in progress at a time, because they clean one room at a time and
+ * allowing several lets statuses be gamed and blinds the supervisor. The only exception is CONNECTING
+ * rooms (physically one job). Attempting to start a second, non-connected room is BLOCKED with a
+ * message — the block is what enforces the discipline. (A desktop supervisor uses the free status
+ * select, which is unconstrained; per-user role scoping formalizes in D8.)
+ */
+export async function startCleaning(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const unitId = str(fd, "unitId");
+  const unit = await prisma.unit.findUnique({ where: { id: unitId } });
+  if (!unit || unit.propertyId !== session.activePropertyId) return;
+
+  const inProgress = await prisma.unit.findMany({
+    where: { propertyId: session.activePropertyId, hkStatus: "in_progress", id: { not: unitId } },
+    select: { id: true, label: true },
+  });
+  const connecting = new Set(unit.connectingUnitIds);
+  const blocker = inProgress.find((u) => !connecting.has(u.id));
+  if (blocker) {
+    revalidatePath("/housekeeping");
+    redirect(`/housekeeping?blocked=${encodeURIComponent(blocker.label)}`);
+  }
+
+  await prisma.unit.update({ where: { id: unitId }, data: { hkStatus: "in_progress" } });
+  await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: unit.hkStatus, newValue: "in_progress", userId: session.userId });
+  refresh();
+}
+
+/** Finish cleaning (in_progress → clean). Under the inspection gate `clean` is "cleaned, pending
+ * inspection" (not sellable) until a supervisor approves; off, it's directly sellable (spec §3.4). */
+export async function finishCleaning(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const unitId = str(fd, "unitId");
+  const unit = await prisma.unit.findUnique({ where: { id: unitId } });
+  if (!unit || unit.propertyId !== session.activePropertyId) return;
+  await prisma.unit.update({ where: { id: unitId }, data: { hkStatus: "clean" } });
+  await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: unit.hkStatus, newValue: "clean", userId: session.userId });
+  refresh();
+}
+
+/** Report-an-issue from housekeeping (spec §3.4): a cleaner flags damage/a fault → a Maintenance
+ * task, linked to the room. Photo attachment arrives in D7. */
+export async function reportRoomIssue(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const unitId = str(fd, "unitId");
+  const title = str(fd, "title");
+  if (!title) return;
+  const unit = await prisma.unit.findUnique({ where: { id: unitId } });
+  if (!unit || unit.propertyId !== session.activePropertyId) return;
+
+  await prisma.maintenanceTask.create({
+    data: {
+      tenantId: session.tenantId, propertyId: session.activePropertyId, unitId,
+      title, status: "open", priority: "normal", createdById: session.userId,
+    },
+  });
+  await logAudit(unit.propertyId, session.tenantId, { entity: "maintenance_reported", field: unit.label, newValue: title, userId: session.userId });
+  revalidatePath("/housekeeping");
+  revalidatePath("/maintenance");
 }

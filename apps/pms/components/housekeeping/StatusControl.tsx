@@ -7,6 +7,7 @@ import { HK_STATUSES, HK_LABEL, type HkStatus } from "@/lib/hk-meta";
 const SELECT_TINT: Record<HkStatus, string> = {
   clean: "text-success-600 border-success-500/50",
   dirty: "text-warning-600 border-warning-500/60",
+  in_progress: "text-brand-600 border-brand-500/50",
   inspected: "text-accent-600 border-accent-500/50",
   out_of_order: "text-danger-600 border-danger-500/60",
 };
