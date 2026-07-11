@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Wand2, ChevronDown, SlidersHorizontal, Link2, TriangleAlert } from "lucide-react";
+import Link from "next/link";
+import { Plus, Trash2, Wand2, ChevronDown, SlidersHorizontal, Link2, TriangleAlert, History } from "lucide-react";
 import { StatusPill } from "@/components/ui/primitives";
 import { HK_LABEL, HK_TONE, type HkStatus } from "@/lib/hk-meta";
 import { createUnit, generateUnits, deleteUnit, updateUnit } from "@/lib/actions-units";
@@ -131,6 +132,14 @@ export function RoomsManager({ roomTypes, allUnits, blocked }: { roomTypes: Room
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-0.5">
+                          <Link
+                            href={`/rooms/${u.id}`}
+                            aria-label={`Lifecycle history for room ${u.label}`}
+                            title="Room lifecycle timeline"
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-surface-muted hover:text-ink-600"
+                          >
+                            <History className="h-3.5 w-3.5" />
+                          </Link>
                           <button
                             type="button"
                             onClick={() => setOpenEdit(editing ? null : u.id)}

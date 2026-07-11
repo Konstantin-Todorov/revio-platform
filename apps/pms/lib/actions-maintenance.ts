@@ -65,6 +65,21 @@ export async function setMaintenanceStatus(fd: FormData): Promise<void> {
   refresh();
 }
 
+/** Attach (or replace) a photo of the fault (spec §3.8). The client downscales to a small JPEG data
+ * URL before posting; we cap the stored size so the demo DB stays lean. Empty clears the photo. */
+export async function setTaskPhoto(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const id = str(fd, "id");
+  const photoUrl = str(fd, "photoUrl");
+  const task = await prisma.maintenanceTask.findFirst({ where: { id, propertyId: session.activePropertyId }, select: { id: true, title: true } });
+  if (!task) return;
+  // Accept only a data-URL image, and only up to ~1.5MB (a downscaled JPEG is far smaller).
+  const value = photoUrl && /^data:image\/(png|jpe?g|webp);base64,/.test(photoUrl) && photoUrl.length < 1_500_000 ? photoUrl : null;
+  await prisma.maintenanceTask.update({ where: { id }, data: { photoUrl: value } });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "maintenance", field: task.title, newValue: value ? "photo attached" : "photo removed", userId: session.userId });
+  refresh();
+}
+
 /** Delete a task; if it had the unit out of order, return the room to sale (as Dirty). */
 export async function deleteMaintenanceTask(fd: FormData): Promise<void> {
   const session = await ctx();

@@ -1,8 +1,10 @@
-import { Wrench, Plus, Trash2, AlertTriangle, PowerOff } from "lucide-react";
+import Link from "next/link";
+import { Plus, Trash2, AlertTriangle, PowerOff, History } from "lucide-react";
 import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getMaintenanceBoard } from "@/lib/maintenance";
 import { createMaintenanceTask, deleteMaintenanceTask } from "@/lib/actions-maintenance";
 import { MaintStatusControl } from "@/components/maintenance/MaintStatusControl";
+import { TaskPhoto } from "@/components/maintenance/TaskPhoto";
 
 export const dynamic = "force-dynamic";
 
@@ -89,11 +91,17 @@ function TaskList({ title, rows }: { title: string; rows: Awaited<ReturnType<typ
                 <StatusPill tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{t.priority}</StatusPill>
                 {t.setsOoo && <span className="inline-flex items-center gap-1 rounded bg-danger-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-danger-600"><PowerOff className="h-3 w-3" />OOO</span>}
               </div>
-              <div className="mt-0.5 text-[11.5px] text-ink-500">
-                {t.unit ? `Room ${t.unit.label} · ${t.unit.roomType.name}` : "No room"}{t.assignee ? ` · ${t.assignee}` : ""}
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11.5px] text-ink-500">
+                <span>{t.unit ? `Room ${t.unit.label} · ${t.unit.roomType.name}` : "No room"}{t.assignee ? ` · ${t.assignee}` : ""}</span>
+                {t.unit && (
+                  <Link href={`/rooms/${t.unit.id}`} className="inline-flex items-center gap-1 font-semibold text-accent-600 hover:underline">
+                    <History className="h-3 w-3" /> Room history
+                  </Link>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <TaskPhoto id={t.id} photoUrl={t.photoUrl} />
               <MaintStatusControl id={t.id} status={t.status} />
               <form action={deleteMaintenanceTask}>
                 <input type="hidden" name="id" value={t.id} />

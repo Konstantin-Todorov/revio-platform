@@ -867,6 +867,9 @@ model MaintenanceTask {
   priority    String    @default("normal") // low | normal | high
   assignee    String?
   setsOoo     Boolean   @default(false)
+  // A photo of the fault (spec §3.8) — for the technician, HK exception reports, and damage-deposit
+  // evidence. Demo stores a downscaled data URL; productionization swaps in object storage.
+  photoUrl    String?
   createdById String?
   createdAt   DateTime  @default(now())
   completedAt DateTime?
