@@ -433,3 +433,82 @@ export async function getCancellationReport(range: ResolvedRange) {
     grossNights,
   };
 }
+
+
+/** Room-type & rate-plan performance (spec §3.2): nights, revenue, ADR per product.
+ * lens "stay" = clipped to nights falling in the range (occupancy view); lens "book" =
+ * reservations MADE in the range, whole stays (production view). */
+export async function getProductPerformance(range: ResolvedRange, lens: "stay" | "book") {
+  const property = await getProperty();
+  const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } });
+  const countNoShows = defaults?.countNoShowsAsSold ?? true;
+  const soldSet = new Set(soldStatusesFor(countNoShows));
+  const start = new Date(`${range.start}T00:00:00Z`);
+  const endExcl = new Date(`${range.endExcl}T00:00:00Z`);
+
+  const lines = await prisma.reservationLine.findMany({
+    where: {
+      reservation: {
+        propertyId: property.id,
+        ...(lens === "book" ? { importedAt: { gte: start, lt: endExcl } } : {}),
+      },
+      ...(lens === "stay" ? { checkIn: { lt: endExcl }, checkOut: { gt: start } } : {}),
+    },
+    include: { reservation: { select: { status: true, importedAt: true } }, roomType: true, ratePlan: true },
+  });
+
+  type Row = { name: string; reservations: Set<string>; nights: number; revenueMinor: number };
+  const byRoom = new Map<string, Row>();
+  const byPlan = new Map<string, Row>();
+  for (const l of lines) {
+    if (!soldSet.has(l.reservation.status)) continue;
+    const totalNights = Math.max(1, Math.round((l.checkOut.getTime() - l.checkIn.getTime()) / 86_400_000));
+    const nights = lens === "stay" ? nightsInRange(l.checkIn.toISOString().slice(0, 10), l.checkOut.toISOString().slice(0, 10), range) * l.quantity : totalNights * l.quantity;
+    if (nights <= 0) continue;
+    // Revenue prorated per night for the stay lens; whole line for the book lens.
+    const lineRevenue = l.priceMinor ?? 0;
+    const revenue = lens === "stay" ? Math.round(lineRevenue * (nights / (totalNights * l.quantity || 1))) : lineRevenue;
+    for (const [map, key] of [[byRoom, l.roomType.name], [byPlan, l.ratePlan.name]] as const) {
+      const row = map.get(key) ?? { name: key, reservations: new Set<string>(), nights: 0, revenueMinor: 0 };
+      row.reservations.add(l.reservationId);
+      row.nights += nights;
+      row.revenueMinor += revenue;
+      map.set(key, row);
+    }
+  }
+  const finish = (m: Map<string, Row>) =>
+    [...m.values()]
+      .map((r) => ({ name: r.name, reservations: r.reservations.size, nights: r.nights, revenueMinor: r.revenueMinor, adrMinor: r.nights > 0 ? Math.round(r.revenueMinor / r.nights) : 0 }))
+      .sort((a, b) => b.revenueMinor - a.revenueMinor);
+  return { property, roomTypes: finish(byRoom), ratePlans: finish(byPlan) };
+}
+
+/** Production by creation day (the book-date lens for Performance): what was BOOKED each day
+ * of the range, regardless of when the stays fall (spec §3.2 global Book/Stay toggle). */
+export async function getProductionByDay(range: ResolvedRange) {
+  const property = await getProperty();
+  const start = new Date(`${range.start}T00:00:00Z`);
+  const endExcl = new Date(`${range.endExcl}T00:00:00Z`);
+  const reservations = await prisma.reservation.findMany({
+    where: { propertyId: property.id, importedAt: { gte: start, lt: endExcl } },
+    include: { lines: true },
+  });
+  const days = new Map<string, { bookings: number; nights: number; revenueMinor: number; cancelled: number }>();
+  for (const r of reservations) {
+    const key = r.importedAt.toISOString().slice(0, 10);
+    const row = days.get(key) ?? { bookings: 0, nights: 0, revenueMinor: 0, cancelled: 0 };
+    row.bookings += 1;
+    if (r.status === "cancelled") row.cancelled += 1;
+    else {
+      row.nights += r.lines.reduce((s, l) => s + Math.max(1, Math.round((l.checkOut.getTime() - l.checkIn.getTime()) / 86_400_000)) * l.quantity, 0);
+      row.revenueMinor += r.propertyTotalMinor ?? r.totalMinor;
+    }
+    days.set(key, row);
+  }
+  const rows = [...days.entries()].map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date));
+  const totals = rows.reduce(
+    (s, r) => ({ bookings: s.bookings + r.bookings, nights: s.nights + r.nights, revenueMinor: s.revenueMinor + r.revenueMinor, cancelled: s.cancelled + r.cancelled }),
+    { bookings: 0, nights: 0, revenueMinor: 0, cancelled: 0 },
+  );
+  return { property, rows, totals };
+}

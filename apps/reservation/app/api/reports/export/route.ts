@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/session";
 import { getInventoryBoard, getProperty, todayInTz } from "@/lib/data";
-import { getCancellationReport, getPickupReport, getRangeMetrics, resolveRange } from "@/lib/metrics";
+import { getCancellationReport, getPickupReport, getProductPerformance, getProductionByDay, getRangeMetrics, resolveRange } from "@/lib/metrics";
 
 /** CSV export for every report — the SAME data functions the screens render (one formula sheet).
  *  Excel/PDF variants are a future addition per the spec; CSV covers V1. */
@@ -22,8 +22,23 @@ export async function GET(req: NextRequest) {
   const csv = (rows: (string | number)[][]) => rows.map((r) => r.map(esc).join(",")).join("\n") + "\n";
   const moneyCol = (minor: number) => (minor / 100).toFixed(2);
 
+  const lens = sp.get("lens") === "book" ? ("book" as const) : ("stay" as const);
+
   let body = "";
-  if (report === "pickup") {
+  if (report === "products") {
+    const r = await getProductPerformance(range, lens);
+    body = csv([
+      ["product", "kind", "reservations", "room_nights", "revenue", "adr"],
+      ...r.roomTypes.map((row) => [row.name, "room_type", row.reservations, row.nights, moneyCol(row.revenueMinor), moneyCol(row.adrMinor)]),
+      ...r.ratePlans.map((row) => [row.name, "rate_plan", row.reservations, row.nights, moneyCol(row.revenueMinor), moneyCol(row.adrMinor)]),
+    ]);
+  } else if (report === "production") {
+    const r = await getProductionByDay(range);
+    body = csv([
+      ["booked_on", "bookings", "room_nights", "revenue_booked", "since_cancelled"],
+      ...r.rows.map((row) => [row.date, row.bookings, row.nights, moneyCol(row.revenueMinor), row.cancelled]),
+    ]);
+  } else if (report === "pickup") {
     const r = await getPickupReport();
     body = csv([
       ["stay_date", "sold_now", `sold_at_snapshot_${r.vsDate ?? "none"}`, "pickup"],
