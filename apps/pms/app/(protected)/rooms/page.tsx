@@ -5,7 +5,8 @@ import type { HkStatus } from "@/lib/hk-meta";
 
 export const dynamic = "force-dynamic";
 
-export default async function RoomsPage() {
+export default async function RoomsPage({ searchParams }: { searchParams: Promise<{ blocked?: string }> }) {
+  const { blocked } = await searchParams;
   const { property, roomTypes } = await getRoomsBoard();
 
   const data = roomTypes.map((rt) => ({
@@ -14,10 +15,15 @@ export default async function RoomsPage() {
     code: rt.code,
     totalRooms: rt.totalRooms,
     unitKind: rt.unitKind,
-    units: rt.units.map((u) => ({ id: u.id, label: u.label, floor: u.floor, hkStatus: u.hkStatus as HkStatus })),
+    units: rt.units.map((u) => ({
+      id: u.id, label: u.label, floor: u.floor, hkStatus: u.hkStatus as HkStatus,
+      features: u.features, connectingUnitIds: u.connectingUnitIds,
+    })),
   }));
 
-  const totalUnits = data.reduce((sum, rt) => sum + rt.units.length, 0);
+  // Flat list of every unit (for the connecting-room picker) — connections can cross room types.
+  const allUnits = data.flatMap((rt) => rt.units.map((u) => ({ id: u.id, label: u.label })));
+  const totalUnits = allUnits.length;
 
   return (
     <div>
@@ -34,7 +40,7 @@ export default async function RoomsPage() {
           </p>
         </Card>
       ) : (
-        <RoomsManager roomTypes={data} />
+        <RoomsManager roomTypes={data} allUnits={allUnits} blocked={blocked} />
       )}
     </div>
   );

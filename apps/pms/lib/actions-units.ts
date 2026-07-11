@@ -76,12 +76,24 @@ export async function generateUnits(fd: FormData): Promise<void> {
   refresh();
 }
 
-/** Edit a unit's label / floor / active flag. */
+const UNIT_FEATURES = ["quiet", "accessible", "view", "smoking"];
+
+/** Edit a unit's label / floor / active flag + assignment attributes (features, connecting rooms).
+ * Connecting-room links are kept SYMMETRIC (both units list each other) because the one-room-in-
+ * progress rule and family/group assignment read them from either side (spec §3.5). */
 export async function updateUnit(fd: FormData): Promise<void> {
   const session = await ctx();
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
   if (!unit || unit.propertyId !== session.activePropertyId) return;
+
+  const features = fd.getAll("features").map(String).filter((f) => UNIT_FEATURES.includes(f));
+  const requested = fd.getAll("connecting").map(String).filter(Boolean);
+  // Only allow connecting to real units at the same property (never to self).
+  const valid = requested.length
+    ? await prisma.unit.findMany({ where: { id: { in: requested }, propertyId: unit.propertyId, NOT: { id: unitId } }, select: { id: true } })
+    : [];
+  const nextConnecting = valid.map((u) => u.id);
 
   await prisma.unit.update({
     where: { id: unitId },
@@ -89,23 +101,55 @@ export async function updateUnit(fd: FormData): Promise<void> {
       label: str(fd, "label") || unit.label,
       floor: str(fd, "floor") || null,
       active: fd.get("active") != null,
+      features,
+      connectingUnitIds: nextConnecting,
     },
   });
+
+  // Maintain symmetry: add this unit to newly-linked partners, remove from dropped ones.
+  const before = new Set(unit.connectingUnitIds);
+  const after = new Set(nextConnecting);
+  const added = nextConnecting.filter((id) => !before.has(id));
+  const removed = unit.connectingUnitIds.filter((id) => !after.has(id));
+  for (const id of added) {
+    const partner = await prisma.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
+    if (partner && !partner.connectingUnitIds.includes(unitId)) {
+      await prisma.unit.update({ where: { id }, data: { connectingUnitIds: [...partner.connectingUnitIds, unitId] } });
+    }
+  }
+  for (const id of removed) {
+    const partner = await prisma.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
+    if (partner) await prisma.unit.update({ where: { id }, data: { connectingUnitIds: partner.connectingUnitIds.filter((x) => x !== unitId) } });
+  }
+
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit", field: "edit", newValue: str(fd, "label"), userId: session.userId });
   refresh();
 }
 
-/** Remove a unit (cascades its OOO period, restoring the room to sale). */
+/**
+ * Remove a unit (cascades its OOO period, restoring the room to sale). DELETION GUARD (spec §3.5):
+ * a room that is occupied, assigned, or has a future reservation cannot be deleted — WARN rather
+ * than fail silently, so the user learns why.
+ */
 export async function deleteUnit(fd: FormData): Promise<void> {
   const session = await ctx();
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
   if (!unit || unit.propertyId !== session.activePropertyId) return;
 
-  // Never delete a room with a guest in it (would cascade away the stay record).
-  const occupied = await prisma.roomAssignment.count({ where: { unitId, status: "active", checkedOutAt: null } });
-  if (occupied > 0) return;
+  // Blocked if a guest is in it now OR it's assigned to any current/future stay (active, not yet
+  // checked out) — deleting would cascade away a live stay record.
+  const held = await prisma.roomAssignment.count({ where: { unitId, status: "active", checkedOutAt: null } });
+  if (held > 0) {
+    revalidatePath("/rooms");
+    redirect(`/rooms?blocked=${encodeURIComponent(unit.label)}`);
+  }
 
+  // Clean up symmetric connecting links pointing back at this unit before deleting.
+  for (const id of unit.connectingUnitIds) {
+    const partner = await prisma.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
+    if (partner) await prisma.unit.update({ where: { id }, data: { connectingUnitIds: partner.connectingUnitIds.filter((x) => x !== unitId) } });
+  }
   await prisma.unit.delete({ where: { id: unitId } });
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit", field: "delete", oldValue: unit.label, userId: session.userId });
   refresh();
