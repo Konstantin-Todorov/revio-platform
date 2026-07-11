@@ -266,6 +266,10 @@ export async function syncChannel(prisma: Db, channelId: string, opts?: { horizo
  * without a manual Re-sync. A no-op when every channel is mock (the default), so demo flows are safe.
  */
 export async function syncRealChannels(prisma: Db, propertyId: string): Promise<void> {
+  // CM-connection lifecycle (CRS spec §3.8): a paused/disconnected channel-manager connection
+  // stops ALL distribution for the property, reversibly — mappings stay dormant.
+  const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { cmStatus: true } });
+  if (property && property.cmStatus !== "connected") return;
   const real = await prisma.channel.findMany({
     where: { propertyId, status: "connected", connectivityMode: { not: "mock" } },
     select: { id: true },

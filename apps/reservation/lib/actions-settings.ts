@@ -98,3 +98,40 @@ export async function deleteTaxFee(fd: FormData): Promise<void> {
   await logAudit(property.id, property.tenantId, { entity: `Tax/Fee · ${tax.name}`, field: "deleted" });
   revalidatePath("/settings");
 }
+
+
+// --- Distribution: the CM connection lifecycle (spec §3.8) -----------------------------------
+
+/** Pause / resume / disconnect / reconnect the property's ONE channel-manager connection.
+ * Pausing stops distribution reversibly; disconnecting keeps the CRS↔CM mapping DORMANT so a
+ * later reconnect never forces a re-map. Reservations already imported are never touched. */
+export async function setCmConnection(fd: FormData): Promise<void> {
+  const property = await getProperty();
+  const action = str(fd, "cmAction");
+  const next =
+    action === "pause" ? "paused"
+    : action === "resume" ? "connected"
+    : action === "disconnect" ? "disconnected"
+    : action === "reconnect" ? "connected"
+    : null;
+  if (!next) return;
+  await prisma.property.update({ where: { id: property.id }, data: { cmStatus: next } });
+  await logAudit(property.id, property.tenantId, {
+    entity: "Channel manager connection", field: action,
+    newValue:
+      next === "paused" ? "paused — distribution stopped reversibly"
+      : action === "disconnect" ? "disconnected — mapping kept dormant, imported reservations untouched"
+      : "connected — distribution resumed",
+  });
+  await prisma.syncEvent.create({
+    data: {
+      tenantId: property.tenantId, propertyId: property.id, kind: "push",
+      status: "success",
+      summary:
+        next === "paused" ? "Distribution paused at the channel-manager connection"
+        : action === "disconnect" ? "Channel manager disconnected — mapping dormant"
+        : "Distribution resumed through the connected channel manager",
+    },
+  });
+  revalidatePath("/distribution");
+}

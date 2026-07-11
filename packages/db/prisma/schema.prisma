@@ -113,6 +113,13 @@ model Property {
   notifyTomorrowArrivals Boolean @default(false)
   notifyTomorrowTime     String  @default("18:00")
   notifyTomorrowTo       String  @default("primary")
+  // CRS Distribution (spec §3.8): exactly ONE connected channel manager per property.
+  // reviolink_internal = the platform's own CM (shared core, automatic mapping); third-party
+  // kinds plug into the identical ChannelManagerConnector interface later — never a second path.
+  cmKind   String @default("reviolink_internal")
+  // Connection lifecycle at the CM level: pausing stops distribution reversibly; disconnecting
+  // preserves the CRS↔CM mapping dormant so resuming never forces a re-map.
+  cmStatus String @default("connected") // connected | paused | disconnected
 
   tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roomTypes           RoomType[]
