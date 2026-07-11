@@ -3,22 +3,31 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, X, type LucideIcon,
+  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 
 type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 
-// The full RevioPMS V1 sitemap (docs/PMS-REFERENCE.md "MVP build order").
+// Nav regrouped to the roles that use each area (spec §2): Front Office (reception) · Rooms &
+// Housekeeping · Setup (manager/admin) · End of Day. New tabs (Guests / User Management /
+// Configuration) land as placeholders until their phase builds them (D4 / D8 / E7).
 const SECTIONS: { title?: string; items: Item[] }[] = [
-  { items: [
+  { title: "Front office", items: [
     { href: "/dashboard", label: "Front Desk", icon: LayoutDashboard },
-    { href: "/rooms", label: "Rooms", icon: BedDouble },
-    { href: "/housekeeping", label: "Housekeeping", icon: Sparkles },
+    { href: "/guests", label: "Guests", icon: Users, soon: "D4" },
     { href: "/folios", label: "Folios & Billing", icon: Receipt },
     { href: "/minibar", label: "Minibar / POS", icon: Wine },
+  ] },
+  { title: "Rooms & housekeeping", items: [
+    { href: "/housekeeping", label: "Housekeeping", icon: Sparkles },
+    { href: "/rooms", label: "Rooms", icon: BedDouble },
     { href: "/maintenance", label: "Maintenance", icon: Wrench },
+  ] },
+  { title: "Setup", items: [
+    { href: "/users", label: "User Management", icon: UserCog, soon: "D8" },
+    { href: "/configuration", label: "Configuration", icon: SlidersHorizontal, soon: "E7" },
   ] },
   { title: "End of day", items: [
     { href: "/closeday", label: "Close Day", icon: Moon },
@@ -78,7 +87,7 @@ export function Sidebar() {
                   <div
                     key={item.href}
                     className="mb-0.5 flex cursor-default items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium text-white/30"
-                    title={`${item.label} arrives in phase ${item.soon.slice(1)}`}
+                    title={`${item.label} — arrives in phase ${item.soon}`}
                   >
                     <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
                     <span className="flex-1">{item.label}</span>
