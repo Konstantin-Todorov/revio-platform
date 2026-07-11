@@ -525,7 +525,69 @@ export async function getGuestDetail(id: string) {
       },
     },
   });
-  return guest ? { property, guest } : null;
+  if (!guest) return null;
+
+  // --- Preference layer (spec §3.4) — the edge of "not a CRM", deliberately light. ---
+  // CRS-DERIVABLE (computed here, from booking history):
+  const DAY = 86_400_000;
+  const sold = guest.reservations.filter((r) => !["cancelled", "expired", "failed", "failed_import", "draft"].includes(r.status));
+  const roomCounts = new Map<string, number>();
+  let nights = 0;
+  let leadDaysTotal = 0;
+  let leadCount = 0;
+  let lifetimeMinor = 0;
+  for (const r of sold) {
+    lifetimeMinor += r.propertyTotalMinor ?? r.totalMinor;
+    for (const l of r.lines) {
+      const n = Math.max(1, Math.round((l.checkOut.getTime() - l.checkIn.getTime()) / DAY)) * l.quantity;
+      nights += n;
+      roomCounts.set(l.roomType.name, (roomCounts.get(l.roomType.name) ?? 0) + n);
+      leadDaysTotal += Math.max(0, Math.round((l.checkIn.getTime() - r.importedAt.getTime()) / DAY));
+      leadCount++;
+    }
+  }
+  const cancelled = guest.reservations.filter((r) => r.status === "cancelled").length;
+  const noShows = guest.reservations.filter((r) => r.status === "no_show").length;
+  const preferredRoomType = [...roomCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const derived = {
+    preferredRoomType,
+    avgLosNights: sold.length > 0 ? nights / sold.length : 0,
+    avgLeadDays: leadCount > 0 ? Math.round(leadDaysTotal / leadCount) : 0,
+    stays: sold.length,
+    lifetimeAccommodationMinor: lifetimeMinor,
+    cancelled,
+    noShows,
+    totalBookings: guest.reservations.length,
+  };
+
+  // PMS/POS-SOURCED (display-only — the PMS wrote these to the shared core; the CRS never
+  // computes POS analytics of its own; empty in standalone / CRS-without-PMS):
+  const resIds = guest.reservations.map((r) => r.id);
+  const [posAgg, assignments] = await Promise.all([
+    prisma.folioLine.aggregate({
+      where: { folio: { reservationId: { in: resIds } }, kind: { in: ["minibar", "extra"] }, voided: false },
+      _sum: { amountMinor: true },
+    }),
+    prisma.roomAssignment.findMany({
+      where: { reservationId: { in: resIds } },
+      include: { unit: { select: { label: true, floor: true } } },
+    }),
+  ]);
+  const unitCounts = new Map<string, number>();
+  const floorCounts = new Map<string, number>();
+  for (const a of assignments) {
+    unitCounts.set(a.unit.label, (unitCounts.get(a.unit.label) ?? 0) + 1);
+    if (a.unit.floor) floorCounts.set(a.unit.floor, (floorCounts.get(a.unit.floor) ?? 0) + 1);
+  }
+  const fromPms = {
+    hasPmsData: posAgg._sum.amountMinor != null || assignments.length > 0,
+    ancillarySpendMinor: posAgg._sum.amountMinor ?? 0,
+    avgAncillaryPerStayMinor: sold.length > 0 ? Math.round((posAgg._sum.amountMinor ?? 0) / sold.length) : 0,
+    favouriteUnit: [...unitCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
+    favouriteFloor: [...floorCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
+  };
+
+  return { property, guest, derived, fromPms };
 }
 
 // --- Phase 3: restriction enforcement at the point of sale --------------------

@@ -20,7 +20,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const detail = await getGuestDetail(id);
   if (!detail) notFound();
-  const { property, guest } = detail;
+  const { property, guest, derived, fromPms } = detail;
 
   return (
     <div className="space-y-5">
@@ -45,6 +45,44 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
           </div>
         </form>
       </Card>
+
+      {/* Preference layer (spec §3.4) — the edge of "not a CRM": a light, derived layer only. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader title="Preferences — derived from booking history" subtitle="Computed by the CRS from this guest's reservations" />
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Preferred room type</dt><dd className="mt-0.5 font-semibold text-ink-900">{derived.preferredRoomType ?? "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Average stay</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLosNights.toFixed(1)} nights` : "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Average lead time</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLeadDays} days` : "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Booking frequency</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays} stay{derived.stays === 1 ? "" : "s"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Lifetime accommodation</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(derived.lifetimeAccommodationMinor, property.baseCurrency)}</dd></div>
+            <div>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Cancellation behaviour</dt>
+              <dd className="mt-0.5 font-semibold text-ink-900">
+                {derived.cancelled + derived.noShows === 0
+                  ? "clean record"
+                  : `${derived.cancelled} cancelled · ${derived.noShows} no-show of ${derived.totalBookings}`}
+              </dd>
+            </div>
+          </dl>
+        </Card>
+
+        <Card>
+          <CardHeader title="From the property's PMS / POS" subtitle="Display-only — written by RevioPMS to the shared core; never computed here" />
+          {fromPms.hasPmsData ? (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Ancillary spend (lifetime)</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.ancillarySpendMinor, property.baseCurrency)}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Avg ancillary / stay</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.avgAncillaryPerStayMinor, property.baseCurrency)}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Usual room</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteUnit ?? "—"}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Usual floor</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteFloor ?? "—"}</dd></div>
+            </dl>
+          ) : (
+            <p className="px-4 py-5 text-[13px] text-ink-500">
+              No PMS data for this guest yet — these fields fill in once the property runs RevioPMS (folio + room-assignment history).
+            </p>
+          )}
+        </Card>
+      </div>
 
       <Card>
         <CardHeader title={`Booking history (${guest.reservations.length})`} />
