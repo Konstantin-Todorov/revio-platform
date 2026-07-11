@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
-import { ymd } from "./format";
+import { ymd, todayInTz } from "./format";
+import type { HkStatus } from "./hk-meta";
 
 export type FolioLineRow = {
   id: string; kind: string; description: string; amountMinor: number;
@@ -98,6 +99,100 @@ export async function getFolioView(reservationId: string) {
   if (!folio) return null;
 
   return { property, reservation, folio, totals: folioBalance(folio.lines) };
+}
+
+export interface TimelineEvent { at: Date; label: string; detail?: string; kind: "booking" | "assigned" | "moved" | "checkin" | "checkout" | "charge" | "payment" | "cancel" }
+export type StayState = "booked" | "assigned" | "in_house" | "departed" | "cancelled";
+
+/**
+ * The unified Reservation view (spec §3.2) — one record, two phases. Three zones from a single shared
+ * reservation: the COMMERCIAL origin (read-only, written by the CRS/channel), the OPERATIONAL state
+ * (PMS-owned: room, stay state, folio, housekeeping), and the TIMELINE (history of the stay). No
+ * side effects — the folio is only read, never seeded here (that stays with the folio screen).
+ */
+export async function getReservationDetail(reservationId: string) {
+  const { property } = await activeProperty();
+  const today = todayInTz(property.timezone);
+  const r = await prisma.reservation.findFirst({
+    where: { id: reservationId, propertyId: property.id },
+    include: {
+      guest: true,
+      channel: { select: { name: true } },
+      bookingSource: { select: { name: true } },
+      lines: { include: { roomType: { select: { name: true } }, ratePlan: { select: { name: true, cancellationPolicy: { select: { name: true } }, mealPlan: { select: { name: true } } } } } },
+      assignments: { include: { unit: { select: { label: true, floor: true, hkStatus: true } } }, orderBy: { createdAt: "asc" } },
+      folio: { include: { lines: { orderBy: { postedAt: "asc" } } } },
+    },
+  });
+  if (!r) return null;
+
+  const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
+  const ci = r.lines.map((l) => l.checkIn).sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+  const co = r.lines.map((l) => l.checkOut).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+  const nights = ci && co ? Math.max(0, Math.round((co.getTime() - ci.getTime()) / 86_400_000)) : 0;
+  const rooms = r.lines.reduce((n, l) => n + l.quantity, 0);
+  const guests = r.lines.reduce((n, l) => n + (l.guestsCount ?? 0), 0);
+
+  const active = r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
+  const assignedUnits = active.map((a) => ({ label: a.unit.label, floor: a.unit.floor, hkStatus: a.unit.hkStatus as HkStatus }));
+  const checkedIn = active.some((a) => a.checkedInAt != null);
+  const departedToday = r.assignments.some((a) => a.checkedOutAt != null && ymd(a.checkedOutAt) === today);
+  const stayState: StayState =
+    r.status === "cancelled" ? "cancelled"
+      : checkedIn ? "in_house"
+      : active.length > 0 ? "assigned"
+      : departedToday ? "departed"
+      : "booked";
+
+  const balance = r.folio ? folioBalance(r.folio.lines) : null;
+
+  // Timeline — booking → assigned → checked in → moved → charges → checked out (spec §3.2).
+  const events: TimelineEvent[] = [
+    { at: r.importedAt, label: "Booking received", detail: `${r.channel?.name ?? r.bookingSource?.name ?? "Direct"}${r.externalId ? ` · #${r.externalId}` : ""}`, kind: "booking" },
+  ];
+  for (const a of r.assignments) {
+    const moved = a.note?.startsWith("moved from") ?? false;
+    events.push({ at: a.createdAt, label: moved ? `Moved to room ${a.unit.label}` : `Room ${a.unit.label} assigned`, detail: a.note ?? undefined, kind: moved ? "moved" : "assigned" });
+    if (a.checkedInAt) events.push({ at: a.checkedInAt, label: `Checked in — room ${a.unit.label}`, kind: "checkin" });
+    if (a.checkedOutAt) events.push({ at: a.checkedOutAt, label: `Checked out — room ${a.unit.label}`, kind: "checkout" });
+  }
+  for (const l of r.folio?.lines ?? []) {
+    if (l.voided) continue;
+    events.push({ at: l.postedAt, label: l.kind === "payment" ? "Payment recorded" : "Charge posted", detail: l.description, kind: l.kind === "payment" ? "payment" : "charge" });
+  }
+  if (r.cancelledAt) events.push({ at: r.cancelledAt, label: "Cancelled", kind: "cancel" });
+  events.sort((a, b) => a.at.getTime() - b.at.getTime());
+
+  return {
+    property,
+    reservationId: r.id,
+    guestName,
+    status: r.status,
+    commercial: {
+      source: r.channel?.name ?? r.bookingSource?.name ?? "Direct",
+      externalId: r.externalId,
+      ratePlans: [...new Set(r.lines.map((l) => l.ratePlan.name))],
+      roomTypes: [...new Set(r.lines.map((l) => l.roomType.name))],
+      mealPlan: r.lines.map((l) => l.ratePlan.mealPlan?.name).find(Boolean) ?? null,
+      cancellation: r.lines.map((l) => l.ratePlan.cancellationPolicy?.name).find(Boolean) ?? null,
+      paymentGuarantee: r.paymentGuarantee,
+      totalMinor: r.propertyTotalMinor ?? r.totalMinor,
+      currency: r.propertyCurrency ?? r.currency,
+      checkIn: ci ? ymd(ci) : null,
+      checkOut: co ? ymd(co) : null,
+      nights, rooms, guests,
+      notes: r.notes,
+    },
+    operational: {
+      stayState,
+      dueOut: co ? ymd(co) === today : false,
+      assignedUnits,
+      folioId: r.folio?.id ?? null,
+      balance,
+      currency: r.folio?.currency ?? r.currency,
+    },
+    events,
+  };
 }
 
 /** In-house stays with their folio balance, for the /folios list. */

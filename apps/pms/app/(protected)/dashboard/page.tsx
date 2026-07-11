@@ -123,7 +123,7 @@ export default async function DashboardPage() {
                 <li key={r.reservationId} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-[13px] font-semibold text-ink-900">{r.guestName}</span>
+                      <Link href={`/reservation/${r.reservationId}`} className="truncate text-[13px] font-semibold text-ink-900 hover:text-accent-600 hover:underline">{r.guestName}</Link>
                       {r.overdue && <StatusPill tone="danger">Overdue</StatusPill>}
                       {r.roomReady && <StatusPill tone={READY[r.roomReady].tone}>{READY[r.roomReady].label}</StatusPill>}
                     </div>
@@ -149,7 +149,7 @@ export default async function DashboardPage() {
                 <li key={r.reservationId} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="truncate text-[13px] font-semibold text-ink-900">{r.guestName}</span>
+                      <Link href={`/reservation/${r.reservationId}`} className="truncate text-[13px] font-semibold text-ink-900 hover:text-accent-600 hover:underline">{r.guestName}</Link>
                       {r.dueOutToday && <StatusPill tone="warning">Due out</StatusPill>}
                       {r.conflict && <StatusPill tone="danger">Room conflict</StatusPill>}
                     </div>
