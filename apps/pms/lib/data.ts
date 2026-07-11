@@ -155,28 +155,36 @@ export interface StayRow {
   checkOut: string;
   nights: number;
   status: string;
-  assignedUnits: { assignmentId: string; unitId: string; unitLabel: string }[];
+  assignedUnits: { assignmentId: string; unitId: string; unitLabel: string; hkStatus: HkStatus }[];
   dueOutToday: boolean;
   overdue: boolean; // arrival date already passed, still not checked in
+  /** Arrivals only: is a room of their type clean/inspected right now? (spec §3.1 — "can I check
+   * them in now, or am I waiting on housekeeping?"). null on in-house/departure rows. */
+  roomReady: "ready" | "partial" | "none" | null;
+  /** In-house only: this stay shares a physical room with another in-house guest (double-assignment). */
+  conflict: boolean;
 }
 
+export interface AssignmentConflict { unitLabel: string; guests: string[] }
+
 /**
- * Assignment-aware front-desk overview (Phase 2): housekeeping counts + today's arrivals (to check in),
- * in-house guests (with their assigned room), and who departed today. Stay state is derived from
- * RoomAssignment (checkedInAt / checkedOutAt) — the reservation's sold status never changes.
+ * Assignment-aware front-desk overview (Phase 2 + D2): housekeeping counts + today's arrivals (to check
+ * in, with room-ready status), in-house guests (with their assigned room + hk state), explicit departures
+ * (due out today), and who departed today. Stay state is derived from RoomAssignment (checkedInAt /
+ * checkedOutAt) — the reservation's sold status never changes. Flags double-assignment conflicts.
  */
 export async function getFrontDeskOverview() {
   const { property } = await activeProperty();
   const today = todayInTz(property.timezone);
 
   const [units, reservations] = await Promise.all([
-    prisma.unit.findMany({ where: { propertyId: property.id, active: true }, select: { hkStatus: true } }),
+    prisma.unit.findMany({ where: { propertyId: property.id, active: true }, select: { id: true, roomTypeId: true, hkStatus: true } }),
     prisma.reservation.findMany({
       where: { propertyId: property.id, status: { in: [...OCCUPYING] } },
       include: {
         lines: { include: { roomType: { select: { name: true } } } },
         guest: true,
-        assignments: { include: { unit: { select: { label: true } } } },
+        assignments: { include: { unit: { select: { label: true, hkStatus: true } } } },
       },
     }),
   ]);
@@ -184,6 +192,8 @@ export async function getFrontDeskOverview() {
   const arrivals: StayRow[] = [];
   const inHouse: StayRow[] = [];
   const departedToday: StayRow[] = [];
+  const arrivalNeeds: { row: StayRow; needByType: Map<string, number> }[] = [];
+  const unitOccupants = new Map<string, string[]>(); // in-house unitId → guest names (for conflicts + occupancy)
 
   for (const r of reservations) {
     if (r.lines.length === 0) continue;
@@ -194,22 +204,55 @@ export async function getFrontDeskOverview() {
     const roomLabel = r.lines.length === 1 ? r.lines[0]!.roomType.name : `${r.lines.reduce((n, l) => n + l.quantity, 0)} rooms`;
 
     const active = r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
-    const assignedUnits = active.map((a) => ({ assignmentId: a.id, unitId: a.unitId, unitLabel: a.unit.label }));
+    const assignedUnits = active.map((a) => ({ assignmentId: a.id, unitId: a.unitId, unitLabel: a.unit.label, hkStatus: a.unit.hkStatus as HkStatus }));
 
     const row: StayRow = {
       reservationId: r.id, guestName, roomLabel, checkIn: ciY, checkOut: coY,
       nights: nightsBetween(ci, co), status: r.status,
-      assignedUnits, dueOutToday: coY === today, overdue: false,
+      assignedUnits, dueOutToday: coY === today, overdue: false, roomReady: null, conflict: false,
     };
 
     if (active.length > 0) {
       inHouse.push(row);
+      for (const u of assignedUnits) unitOccupants.set(u.unitId, [...(unitOccupants.get(u.unitId) ?? []), guestName]);
     } else {
       const departedTodayHere = r.assignments.some((a) => a.checkedOutAt != null && ymd(a.checkedOutAt) === today);
       if (departedTodayHere) departedToday.push(row);
-      else if (ciY <= today) arrivals.push({ ...row, overdue: ciY < today });
+      else if (ciY <= today) {
+        const arr: StayRow = { ...row, overdue: ciY < today };
+        arrivals.push(arr);
+        const needByType = new Map<string, number>();
+        for (const l of r.lines) needByType.set(l.roomTypeId, (needByType.get(l.roomTypeId) ?? 0) + l.quantity);
+        arrivalNeeds.push({ row: arr, needByType });
+      }
     }
   }
+
+  // Room-ready = clean/inspected units of the arrival's type that aren't already occupied. This is the
+  // single most-used fact at a front desk: can I check them in now, or am I waiting on housekeeping?
+  const occupied = new Set(unitOccupants.keys());
+  const readyByType = new Map<string, number>();
+  for (const u of units) {
+    if (occupied.has(u.id)) continue;
+    if (u.hkStatus === "clean" || u.hkStatus === "inspected") readyByType.set(u.roomTypeId, (readyByType.get(u.roomTypeId) ?? 0) + 1);
+  }
+  for (const { row, needByType } of arrivalNeeds) {
+    let need = 0, have = 0;
+    for (const [rt, q] of needByType) { need += q; have += Math.min(q, readyByType.get(rt) ?? 0); }
+    row.roomReady = have >= need ? "ready" : have > 0 ? "partial" : "none";
+  }
+
+  // Double-assignment conflicts (spec §3.1) — a physical room holding more than one in-house guest.
+  const conflicts: AssignmentConflict[] = [];
+  const conflictUnitIds = new Set<string>();
+  for (const [unitId, guests] of unitOccupants) {
+    if (guests.length > 1) {
+      conflictUnitIds.add(unitId);
+      const label = inHouse.flatMap((s) => s.assignedUnits).find((u) => u.unitId === unitId)?.unitLabel ?? unitId;
+      conflicts.push({ unitLabel: label, guests });
+    }
+  }
+  for (const row of inHouse) row.conflict = row.assignedUnits.some((u) => conflictUnitIds.has(u.unitId));
 
   arrivals.sort((a, b) => a.checkIn.localeCompare(b.checkIn) || a.guestName.localeCompare(b.guestName));
   inHouse.sort((a, b) => Number(b.dueOutToday) - Number(a.dueOutToday) || a.guestName.localeCompare(b.guestName));
@@ -222,7 +265,9 @@ export async function getFrontDeskOverview() {
     arrivals,
     inHouse,
     departedToday,
+    departures: inHouse.filter((s) => s.dueOutToday),
     dueOutCount: inHouse.filter((s) => s.dueOutToday).length,
+    conflicts,
   };
 }
 
