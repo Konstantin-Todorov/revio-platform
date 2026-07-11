@@ -26,7 +26,7 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     { href: "/maintenance", label: "Maintenance", icon: Wrench },
   ] },
   { title: "Setup", items: [
-    { href: "/users", label: "User Management", icon: UserCog, soon: "D8" },
+    { href: "/users", label: "User Management", icon: UserCog },
     { href: "/configuration", label: "Configuration", icon: SlidersHorizontal, soon: "E7" },
   ] },
   { title: "End of day", items: [

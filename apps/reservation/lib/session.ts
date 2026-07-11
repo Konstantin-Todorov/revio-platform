@@ -40,7 +40,7 @@ export async function getSession(): Promise<Session | null> {
   if (!payload || payload.kind !== "hotel") return null;
 
   const user = await prisma.user.findUnique({ where: { id: payload.sub }, include: { tenant: true } });
-  if (!user || user.tenant.status !== "active") return null;
+  if (!user || !user.active || user.tenant.status !== "active") return null;
   const tenant = user.tenant;
 
   const properties = await prisma.property.findMany({ where: { tenantId: tenant.id }, orderBy: { name: "asc" } });

@@ -34,8 +34,12 @@ model User {
   tenantId     String
   name         String
   email        String  @unique
-  role         String // owner | admin | revenue_manager | distribution_manager | read_only
+  // Shared account role for the whole platform (CM/CRS taxonomy) PLUS the PMS operational roles
+  // (manager | reception | housekeeper | hk_supervisor | maintenance | outlet_pos). One identity,
+  // one role — the PMS User Management (§3.9) is a scoped view onto this shared identity.
+  role         String // owner | admin | revenue_manager | distribution_manager | read_only | manager | reception | housekeeper | hk_supervisor | maintenance | outlet_pos
   passwordHash String? // null until the invited Owner sets their password
+  active       Boolean @default(true) // deactivated staff keep their identity but can't sign in
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 

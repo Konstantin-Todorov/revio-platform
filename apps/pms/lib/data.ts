@@ -19,6 +19,17 @@ export async function activeProperty() {
   return { session, property };
 }
 
+/** Staff (shared identities) for this tenant — the PMS User Management view (spec §3.9). */
+export async function getStaff() {
+  const { session, property } = await activeProperty();
+  const users = await prisma.user.findMany({
+    where: { tenantId: session.tenantId },
+    orderBy: [{ active: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, email: true, role: true, active: true },
+  });
+  return { property, users, meId: session.userId, canManage: ["owner", "admin", "manager"].includes(session.role) };
+}
+
 export interface UnitRow {
   id: string;
   label: string;
