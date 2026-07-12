@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { ensureFolio } from "./folio";
+import { postFolioLine } from "./posting";
 import { logAudit, str } from "./mutation-helpers";
 
 async function ctx() {
@@ -48,9 +49,8 @@ export async function postCharge(fd: FormData): Promise<void> {
 
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
-  await prisma.folioLine.create({
-    data: { tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind, description, amountMinor, postedById: session.userId },
-  });
+  // Route through the single charge-posting service so the line is tagged (outlet + tax category).
+  await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind, description, amountMinor, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_charge", field: description, newValue: `${kind} +${amountMinor}`, userId: session.userId });
   refresh(reservationId);
 }
@@ -66,9 +66,7 @@ export async function postPayment(fd: FormData): Promise<void> {
 
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
-  await prisma.folioLine.create({
-    data: { tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind: "payment", description: PAY_METHODS[method]!, amountMinor, method, ref, postedById: session.userId },
-  });
+  await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind: "payment", description: PAY_METHODS[method]!, amountMinor, method, ref, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_payment", field: PAY_METHODS[method], newValue: `-${amountMinor}`, userId: session.userId });
   refresh(reservationId);
 }

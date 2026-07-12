@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
+import { postFolioLine } from "./posting";
 import { ymd, todayInTz } from "./format";
 import type { HkStatus } from "./hk-meta";
 
@@ -67,20 +68,19 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
     accomTotal += price;
     rooms += line.quantity;
     guests += line.guestsCount ?? line.quantity;
-    await prisma.folioLine.create({
-      data: { ...base, kind: "accommodation", description: `${line.roomType.name} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price },
-    });
+    // Seed accommodation via the charge-posting service too — no direct FolioLine writes (spec §1.7).
+    await postFolioLine({ ...base, kind: "accommodation", description: `${line.roomType.name} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price });
   }
 
   const fees = await prisma.taxFee.findMany({ where: { propertyId, active: true, inclusion: "excluded" } });
   for (const f of fees) {
     const amt = feeAmount(f, accomTotal, nights, rooms, guests);
-    if (amt > 0) await prisma.folioLine.create({ data: { ...base, kind: f.type === "percent" ? "tax" : "fee", description: f.name, amountMinor: amt } });
+    if (amt > 0) await postFolioLine({ ...base, kind: f.type === "percent" ? "tax" : "fee", description: f.name, amountMinor: amt });
   }
 
   if (reservation.paymentGuarantee === "prepaid_ota") {
     const charges = (await prisma.folioLine.findMany({ where: { folioId, voided: false, kind: { not: "payment" } }, select: { amountMinor: true } })).reduce((s, l) => s + l.amountMinor, 0);
-    if (charges > 0) await prisma.folioLine.create({ data: { ...base, kind: "payment", description: "Prepaid via OTA", amountMinor: charges, method: "prepaid_ota" } });
+    if (charges > 0) await postFolioLine({ ...base, kind: "payment", description: "Prepaid via OTA", amountMinor: charges, method: "prepaid_ota" });
   }
   return folioId;
 }

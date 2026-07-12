@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getFolioView } from "@/lib/folio";
+import { OUTLET_LABEL } from "@/lib/posting";
 import { postCharge, postPayment, voidFolioLine } from "@/lib/actions-folio";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
@@ -61,6 +62,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 <div className="flex min-w-0 items-center gap-2.5">
                   <StatusPill tone={KIND_TONE[l.kind] ?? "neutral"}>{KIND_LABEL[l.kind] ?? l.kind}</StatusPill>
                   <span className={`truncate text-[13px] ${l.voided ? "text-ink-400 line-through" : "text-ink-800"}`}>{l.description}</span>
+                  {l.outlet && !isPayment && <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">{OUTLET_LABEL[l.outlet] ?? l.outlet}</span>}
                   {l.voided && <span className="text-[10.5px] font-semibold uppercase tracking-wide text-danger-500">void</span>}
                 </div>
                 <div className="flex items-center gap-2">

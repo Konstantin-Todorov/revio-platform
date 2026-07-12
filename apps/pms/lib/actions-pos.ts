@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { ensureFolio } from "./folio";
+import { postFolioLine, type Outlet } from "./posting";
 import { logAudit, str } from "./mutation-helpers";
 
 async function ctx() {
@@ -32,9 +33,9 @@ export async function postPosItem(fd: FormData): Promise<void> {
   const folio = await prisma.folio.findUnique({ where: { id: folioId }, select: { status: true } });
   if (folio?.status !== "open") redirect(`/minibar/${reservationId}?error=closed`);
 
-  await prisma.folioLine.create({
-    data: { tenantId: session.tenantId, propertyId: session.activePropertyId, folioId, kind: item!.category, description: item!.name, amountMinor: item!.priceMinor, postedById: session.userId },
-  });
+  // Native POS is a CALLER of the posting service (spec §1.7) — the outlet is the item's category.
+  const outlet = (item!.category === "minibar" ? "minibar" : "extra") as Outlet;
+  await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId, kind: item!.category, description: item!.name, amountMinor: item!.priceMinor, outlet, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "pos_charge", field: item!.name, newValue: `+${item!.priceMinor}`, userId: session.userId });
   revalidatePath(`/minibar/${reservationId}`);
   revalidatePath(`/folio/${reservationId}`);

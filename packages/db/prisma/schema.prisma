@@ -827,6 +827,10 @@ model FolioLine {
   propertyId  String
   folioId     String
   kind        String // accommodation | minibar | extra | fee | tax | payment
+  // Written ONLY by the charge-posting service (spec §1.7): every charge carries its outlet and tax
+  // category so the invoice can break out Spa vs Accommodation and summarise tax per rate (§4.3).
+  outlet      String? // room | minibar | extra | spa | bar | restaurant | other  (null for payments)
+  taxCategory String? // standard | reduced | city_tax | exempt                    (null for payments)
   description String
   amountMinor Int
   method      String? // for payments (label only): cash | card | company_account | bank_transfer | prepaid_ota
