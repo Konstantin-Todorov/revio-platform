@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Plus, Receipt, AlertTriangle, Wine, Sparkles } from "lucide-react";
+import { ArrowLeft, Plus, Receipt, AlertTriangle, Wine, Sparkles, GlassWater, Utensils } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getMinibarBoard } from "@/lib/pos";
 import { postPosItem } from "@/lib/actions-pos";
+import { POS_OUTLETS, POS_OUTLET_LABEL } from "@/lib/roles";
 import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+
+const OUTLET_ICON: Record<string, typeof Wine> = { minibar: Wine, spa: Sparkles, bar: GlassWater, restaurant: Utensils };
 
 export default async function MinibarStagePage({ params, searchParams }: { params: Promise<{ reservationId: string }>; searchParams: Promise<{ error?: string }> }) {
   const { reservationId } = await params;
@@ -17,9 +20,9 @@ export default async function MinibarStagePage({ params, searchParams }: { param
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const rooms = r.assignments.map((a) => a.unit.label).join(", ");
-  const minibar = items.filter((i) => i.category === "minibar");
-  const extras = items.filter((i) => i.category === "extra");
   const closed = folio.status !== "open";
+  // Group the catalog by OUTLET (spec §3.7) — Minibar is one outlet among several.
+  const byOutlet = POS_OUTLETS.map((o) => ({ outlet: o, items: items.filter((i) => (i.outlet ?? "minibar") === o) })).filter((g) => g.items.length > 0);
 
   const grid = (list: typeof items) => (
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -66,18 +69,15 @@ export default async function MinibarStagePage({ params, searchParams }: { param
         </Card>
       ) : (
         <div className="space-y-5">
-          {minibar.length > 0 && (
-            <section>
-              <h2 className="mb-2 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400"><Wine className="h-3.5 w-3.5" /> Minibar</h2>
-              {grid(minibar)}
-            </section>
-          )}
-          {extras.length > 0 && (
-            <section>
-              <h2 className="mb-2 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400"><Sparkles className="h-3.5 w-3.5" /> Extras</h2>
-              {grid(extras)}
-            </section>
-          )}
+          {byOutlet.map(({ outlet, items: list }) => {
+            const Icon = OUTLET_ICON[outlet] ?? Wine;
+            return (
+              <section key={outlet}>
+                <h2 className="mb-2 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400"><Icon className="h-3.5 w-3.5" /> {POS_OUTLET_LABEL[outlet]}</h2>
+                {grid(list)}
+              </section>
+            );
+          })}
         </div>
       )}
 

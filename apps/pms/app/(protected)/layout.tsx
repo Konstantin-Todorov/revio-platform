@@ -1,14 +1,21 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { Lock } from "lucide-react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { ShellProvider } from "@/components/shell/ShellContext";
 import { getSession, getSwitchableProperties } from "@/lib/session";
 import { getNotifications } from "@/lib/data";
+import { roleAllowsPath, roleHome } from "@/lib/roles";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session) redirect("/logout");
+
+  // Route-guard scoped roles (spec §3.4 / §3.7): a housekeeper / outlet-POS user typing another
+  // screen's URL is bounced back to their home. Full-access roles pass through.
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  if (pathname && !roleAllowsPath(session.role, pathname)) redirect(roleHome(session.role));
 
   if (!session.entitlements.pms) {
     return (
@@ -27,7 +34,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   return (
     <ShellProvider>
       <div className="flex h-screen overflow-hidden">
-        <Sidebar />
+        <Sidebar role={session.role} />
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} notifItems={notifItems} />
           <main className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">

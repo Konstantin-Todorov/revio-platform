@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
+import { roleAllowsPath } from "@/lib/roles";
 
 type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 
@@ -34,9 +35,13 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   ] },
 ];
 
-export function Sidebar() {
+export function Sidebar({ role }: { role: string }) {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
+  // Scoped roles (housekeeper, outlet/POS…) see only their allowed sections (spec §3.4 / §3.7).
+  const sections = SECTIONS
+    .map((s) => ({ ...s, items: s.items.filter((i) => roleAllowsPath(role, i.href)) }))
+    .filter((s) => s.items.length > 0);
   return (
     <>
       {/* Backdrop — mobile only, closes the drawer on tap */}
@@ -73,7 +78,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-4">
-        {SECTIONS.map((section, i) => (
+        {sections.map((section, i) => (
           <div key={i} className="mb-1">
             {section.title && (
               <div className="px-3 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35">

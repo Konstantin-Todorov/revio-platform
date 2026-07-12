@@ -3,6 +3,7 @@ import { ArrowLeft, Plus, Trash2, Save, AlertTriangle } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getCatalog } from "@/lib/pos";
 import { createPosItem, updatePosItem, deletePosItem } from "@/lib/actions-pos";
+import { POS_OUTLETS, POS_OUTLET_LABEL } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +35,15 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
             <input name="name" required placeholder="e.g. Espresso" className={`${inputCls} w-40`} />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold text-ink-600">Category</span>
-            <select name="category" defaultValue="minibar" className={`${inputCls} w-28`}>
-              <option value="minibar">Minibar</option>
+            <span className="text-[11px] font-semibold text-ink-600">Outlet</span>
+            <select name="outlet" defaultValue="minibar" className={`${inputCls} w-28`}>
+              {POS_OUTLETS.map((o) => <option key={o} value={o}>{POS_OUTLET_LABEL[o]}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-semibold text-ink-600">Type</span>
+            <select name="category" defaultValue="minibar" className={`${inputCls} w-24`}>
+              <option value="minibar">Item</option>
               <option value="extra">Extra</option>
             </select>
           </label>
@@ -61,8 +68,11 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                 <form action={updatePosItem} className="flex flex-1 flex-wrap items-center gap-2">
                   <input type="hidden" name="id" value={it.id} />
                   <input name="name" defaultValue={it.name} className={`${inputCls} w-36 flex-1`} />
-                  <select name="category" defaultValue={it.category} className={`${inputCls} w-24`}>
-                    <option value="minibar">Minibar</option>
+                  <select name="outlet" defaultValue={it.outlet ?? "minibar"} className={`${inputCls} w-24`}>
+                    {POS_OUTLETS.map((o) => <option key={o} value={o}>{POS_OUTLET_LABEL[o]}</option>)}
+                  </select>
+                  <select name="category" defaultValue={it.category} className={`${inputCls} w-20`}>
+                    <option value="minibar">Item</option>
                     <option value="extra">Extra</option>
                   </select>
                   <input name="price" type="text" inputMode="decimal" defaultValue={(it.priceMinor / 100).toFixed(2)} className={`${inputCls} w-20`} />

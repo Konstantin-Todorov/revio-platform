@@ -852,7 +852,10 @@ model PosItem {
   tenantId   String
   propertyId String
   name       String
-  category   String   @default("minibar") // minibar | extra
+  // Which outlet sells it (spec §3.7) — minibar is one outlet among several. The posting service
+  // tags the folio line with this outlet. `category` is the item-vs-extra split (kept).
+  outlet     String   @default("minibar") // minibar | spa | bar | restaurant
+  category   String   @default("minibar") // minibar (product/item) | extra (service)
   priceMinor Int
   active     Boolean  @default(true)
   sortOrder  Int      @default(0)

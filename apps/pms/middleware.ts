@@ -18,7 +18,10 @@ export function middleware(req: NextRequest) {
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
-  return NextResponse.next();
+  // Expose the pathname to the protected layout so it can route-guard scoped roles (§3.4 / §3.7).
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {
