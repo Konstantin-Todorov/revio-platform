@@ -507,7 +507,7 @@ model Reservation {
   lines    ReservationLine[]
   holds    Hold[]
   assignments RoomAssignment[]
-  folio    Folio?
+  folios   Folio[]
 
   @@index([propertyId])
   @@index([channelId])
@@ -806,7 +806,11 @@ model Folio {
   id            String    @id @default(cuid())
   tenantId      String
   propertyId    String
-  reservationId String    @unique
+  reservationId String
+  // A stay can carry more than one folio (spec §3.6): the primary (guest) folio plus company /
+  // split folios. Charge lines move between a reservation's folios to deliver every split.
+  label         String    @default("Guest")
+  isPrimary     Boolean   @default(true)
   status        String    @default("open") // open | closed
   currency      String
   openedAt      DateTime  @default(now())
@@ -816,6 +820,7 @@ model Folio {
   property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   lines       FolioLine[]
 
+  @@index([reservationId])
   @@index([propertyId, status])
 }
 

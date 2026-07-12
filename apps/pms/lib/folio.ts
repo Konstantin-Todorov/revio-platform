@@ -36,7 +36,8 @@ function feeAmount(f: { type: string; pct: number | null; amountMinor: number | 
  * folio page (for stays checked in before Phase 3).
  */
 export async function ensureFolio(tenantId: string, propertyId: string, reservationId: string): Promise<string | null> {
-  const existing = await prisma.folio.findUnique({ where: { reservationId }, select: { id: true } });
+  // The PRIMARY (guest) folio; split/company folios (spec §3.6) are added on top and never seeded here.
+  const existing = await prisma.folio.findFirst({ where: { reservationId, isPrimary: true }, select: { id: true } });
   if (existing) return existing.id;
 
   const reservation = await prisma.reservation.findFirst({
@@ -46,15 +47,8 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
   if (!reservation) return null;
 
   const currency = reservation.currency || "EUR";
-  let folioId: string;
-  try {
-    const created = await prisma.folio.create({ data: { tenantId, propertyId, reservationId, currency }, select: { id: true } });
-    folioId = created.id;
-  } catch {
-    // Lost a create race — the other request seeded it.
-    const again = await prisma.folio.findUnique({ where: { reservationId }, select: { id: true } });
-    return again?.id ?? null;
-  }
+  const created = await prisma.folio.create({ data: { tenantId, propertyId, reservationId, currency, isPrimary: true, label: "Guest" }, select: { id: true } });
+  const folioId = created.id;
 
   const base = { tenantId, propertyId, folioId };
   let accomTotal = 0;
@@ -85,7 +79,8 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
   return folioId;
 }
 
-/** The folio view for /folio/[reservationId]: ensures the folio exists, returns reservation + lines + balance. */
+/** The folio view for /folio/[reservationId]: ensures the primary folio exists, returns reservation +
+ * EVERY folio for the stay (primary + split/company) with per-folio and combined balance (spec §3.6). */
 export async function getFolioView(reservationId: string) {
   const { session, property } = await activeProperty();
   const reservation = await prisma.reservation.findFirst({
@@ -95,10 +90,28 @@ export async function getFolioView(reservationId: string) {
   if (!reservation) return null;
 
   await ensureFolio(session.tenantId, property.id, reservationId);
-  const folio = await prisma.folio.findUnique({ where: { reservationId }, include: { lines: { orderBy: { postedAt: "asc" } } } });
-  if (!folio) return null;
+  const folioRows = await prisma.folio.findMany({
+    where: { reservationId },
+    orderBy: [{ isPrimary: "desc" }, { openedAt: "asc" }],
+    include: { lines: { orderBy: { postedAt: "asc" } } },
+  });
+  if (folioRows.length === 0) return null;
 
-  return { property, reservation, folio, totals: folioBalance(folio.lines) };
+  const folios = folioRows.map((f) => ({ ...f, totals: folioBalance(f.lines) }));
+  const currency = folios[0]!.currency;
+  const combined = folios.reduce(
+    (s, f) => ({ charges: s.charges + f.totals.charges, payments: s.payments + f.totals.payments, balance: s.balance + f.totals.balance }),
+    { charges: 0, payments: 0, balance: 0 },
+  );
+  // Any other open folio of THIS stay a line could be moved to.
+  const moveTargets = folios.map((f) => ({ id: f.id, label: f.label }));
+  return { property, reservation, folios, currency, combined, moveTargets };
+}
+
+/** Combined balance across all a reservation's folios — the true amount owed at check-out. */
+export async function reservationBalance(reservationId: string): Promise<number> {
+  const folios = await prisma.folio.findMany({ where: { reservationId }, include: { lines: { select: { kind: true, amountMinor: true, voided: true } } } });
+  return folios.reduce((s, f) => s + folioBalance(f.lines).balance, 0);
 }
 
 export interface TimelineEvent { at: Date; label: string; detail?: string; kind: "booking" | "assigned" | "moved" | "checkin" | "checkout" | "charge" | "payment" | "cancel" }
@@ -121,10 +134,12 @@ export async function getReservationDetail(reservationId: string) {
       bookingSource: { select: { name: true } },
       lines: { include: { roomType: { select: { name: true } }, ratePlan: { select: { name: true, cancellationPolicy: { select: { name: true } }, mealPlan: { select: { name: true } } } } } },
       assignments: { include: { unit: { select: { label: true, floor: true, hkStatus: true } } }, orderBy: { createdAt: "asc" } },
-      folio: { include: { lines: { orderBy: { postedAt: "asc" } } } },
+      folios: { include: { lines: { orderBy: { postedAt: "asc" } } }, orderBy: [{ isPrimary: "desc" }, { openedAt: "asc" }] },
     },
   });
   if (!r) return null;
+  const primaryFolio = r.folios.find((f) => f.isPrimary) ?? r.folios[0] ?? null;
+  const allFolioLines = r.folios.flatMap((f) => f.lines);
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const ci = r.lines.map((l) => l.checkIn).sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
@@ -144,7 +159,7 @@ export async function getReservationDetail(reservationId: string) {
       : departedToday ? "departed"
       : "booked";
 
-  const balance = r.folio ? folioBalance(r.folio.lines) : null;
+  const balance = r.folios.length > 0 ? folioBalance(allFolioLines) : null;
 
   // Timeline — booking → assigned → checked in → moved → charges → checked out (spec §3.2).
   const events: TimelineEvent[] = [
@@ -156,7 +171,7 @@ export async function getReservationDetail(reservationId: string) {
     if (a.checkedInAt) events.push({ at: a.checkedInAt, label: `Checked in — room ${a.unit.label}`, kind: "checkin" });
     if (a.checkedOutAt) events.push({ at: a.checkedOutAt, label: `Checked out — room ${a.unit.label}`, kind: "checkout" });
   }
-  for (const l of r.folio?.lines ?? []) {
+  for (const l of allFolioLines) {
     if (l.voided) continue;
     events.push({ at: l.postedAt, label: l.kind === "payment" ? "Payment recorded" : "Charge posted", detail: l.description, kind: l.kind === "payment" ? "payment" : "charge" });
   }
@@ -187,9 +202,10 @@ export async function getReservationDetail(reservationId: string) {
       stayState,
       dueOut: co ? ymd(co) === today : false,
       assignedUnits,
-      folioId: r.folio?.id ?? null,
+      folioId: primaryFolio?.id ?? null,
+      folioCount: r.folios.length,
       balance,
-      currency: r.folio?.currency ?? r.currency,
+      currency: primaryFolio?.currency ?? r.currency,
     },
     events,
   };
@@ -200,21 +216,31 @@ export async function listFolios() {
   const { property } = await activeProperty();
   const assignments = await prisma.roomAssignment.findMany({
     where: { propertyId: property.id, status: "active", checkedOutAt: null },
-    include: { reservation: { include: { guest: true, folio: { include: { lines: true } } } }, unit: { select: { label: true } } },
+    include: { reservation: { include: { guest: true, folios: { include: { lines: true } } } }, unit: { select: { label: true } } },
     orderBy: { checkedInAt: "desc" },
   });
 
-  const byRes = new Map<string, { reservationId: string; guestName: string; units: string[]; balance: number | null; currency: string }>();
+  const byRes = new Map<string, { reservationId: string; guestName: string; units: string[]; balance: number | null; currency: string; folioCount: number }>();
   for (const a of assignments) {
     const r = a.reservation;
     const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
+    const balance = r.folios.length > 0 ? r.folios.reduce((s, f) => s + folioBalance(f.lines).balance, 0) : null;
     const row = byRes.get(r.id) ?? {
       reservationId: r.id, guestName, units: [],
-      balance: r.folio ? folioBalance(r.folio.lines).balance : null,
-      currency: r.folio?.currency ?? r.currency ?? property.baseCurrency,
+      balance,
+      currency: r.folios[0]?.currency ?? r.currency ?? property.baseCurrency,
+      folioCount: r.folios.length,
     };
     row.units.push(a.unit.label);
     byRes.set(r.id, row);
   }
   return { property, rows: [...byRes.values()] };
+}
+
+/** Add a labelled split/company folio to a stay (spec §3.6). */
+export async function createSplitFolio(tenantId: string, propertyId: string, reservationId: string, label: string): Promise<string | null> {
+  const primary = await prisma.folio.findFirst({ where: { reservationId, propertyId }, select: { currency: true } });
+  if (!primary) return null;
+  const f = await prisma.folio.create({ data: { tenantId, propertyId, reservationId, currency: primary.currency, isPrimary: false, label: label || "Split" }, select: { id: true } });
+  return f.id;
 }

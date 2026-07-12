@@ -22,7 +22,7 @@ export async function getPmsGuests() {
   const { property } = await activeProperty();
   const reservations = await prisma.reservation.findMany({
     where: { propertyId: property.id, status: { in: STAY_STATUSES } },
-    include: { lines: true, folio: { include: { lines: true } }, guest: { select: { firstName: true, lastName: true, email: true } } },
+    include: { lines: true, folios: { include: { lines: true } }, guest: { select: { firstName: true, lastName: true, email: true } } },
   });
 
   const byGuest = new Map<string, { key: string; name: string; guestId: string | null; email: string | null; stays: number; nights: number; ancillaryMinor: number; lifetimeMinor: number; lastStay: string | null }>();
@@ -33,7 +33,7 @@ export async function getPmsGuests() {
     const row = byGuest.get(key) ?? { key, name, guestId: r.guestId, email: r.guest?.email ?? null, stays: 0, nights: 0, ancillaryMinor: 0, lifetimeMinor: 0, lastStay: null };
     row.stays += 1;
     row.nights += nightsOf(r.lines);
-    row.ancillaryMinor += ancillaryOf(r.folio?.lines ?? []);
+    row.ancillaryMinor += ancillaryOf(r.folios.flatMap((f) => f.lines));
     row.lifetimeMinor += r.propertyTotalMinor ?? r.totalMinor;
     const co = r.lines.map((l) => ymd(l.checkOut)).sort().at(-1)!;
     if (!row.lastStay || co > row.lastStay) row.lastStay = co;
@@ -56,7 +56,7 @@ export async function getPmsGuestProfile(key: string) {
       where,
       include: {
         lines: { include: { roomType: { select: { name: true } } } },
-        folio: { include: { lines: true } },
+        folios: { include: { lines: true } },
         assignments: { include: { unit: { select: { label: true, floor: true } } } },
         channel: { select: { name: true } },
         bookingSource: { select: { name: true } },
@@ -72,7 +72,7 @@ export async function getPmsGuestProfile(key: string) {
   const accommodationMinor = stays.reduce((s, r) => s + (r.propertyTotalMinor ?? r.totalMinor), 0);
 
   // Ancillary / POS consumption across every folio → spend + favourite items.
-  const folioLines = reservations.flatMap((r) => r.folio?.lines ?? []);
+  const folioLines = reservations.flatMap((r) => r.folios.flatMap((f) => f.lines));
   const ancillaryMinor = ancillaryOf(folioLines);
   const itemAgg = new Map<string, { count: number; amountMinor: number }>();
   for (const l of folioLines) {

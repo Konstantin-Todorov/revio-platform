@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
-import { ensureFolio } from "./folio";
+import { ensureFolio, createSplitFolio } from "./folio";
 import { postFolioLine } from "./posting";
 import { logAudit, str } from "./mutation-helpers";
 
@@ -68,6 +68,35 @@ export async function postPayment(fd: FormData): Promise<void> {
   if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
   await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind: "payment", description: PAY_METHODS[method]!, amountMinor, method, ref, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_payment", field: PAY_METHODS[method], newValue: `-${amountMinor}`, userId: session.userId });
+  refresh(reservationId);
+}
+
+/** Add a split / company folio to the stay (spec §3.6). Charge lines can then be moved onto it. */
+export async function createFolio(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const reservationId = str(fd, "reservationId");
+  const label = str(fd, "label") || "Company";
+  await createSplitFolio(session.tenantId, session.activePropertyId, reservationId, label);
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_split", field: label, newValue: "added", userId: session.userId });
+  refresh(reservationId);
+}
+
+/** Move a charge line onto another folio of the SAME stay — the one mechanism behind every split
+ * (room→company, extras→guest, 50/50). Payments and closed folios are off-limits. */
+export async function moveFolioLine(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const reservationId = str(fd, "reservationId");
+  const lineId = str(fd, "lineId");
+  const targetFolioId = str(fd, "targetFolioId");
+
+  const line = await prisma.folioLine.findFirst({ where: { id: lineId, propertyId: session.activePropertyId }, include: { folio: { select: { reservationId: true } } } });
+  if (!line || line.voided || line.kind === "payment") redirect(`/folio/${reservationId}`);
+  const target = await prisma.folio.findFirst({ where: { id: targetFolioId, reservationId, status: "open" }, select: { id: true } });
+  // Both source and target must belong to THIS reservation, and the target must be open.
+  if (!target || line!.folio.reservationId !== reservationId) redirect(`/folio/${reservationId}`);
+
+  await prisma.folioLine.update({ where: { id: lineId }, data: { folioId: target!.id } });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_move", field: line!.description, newValue: `→ folio ${target!.id.slice(-6)}`, userId: session.userId });
   refresh(reservationId);
 }
 

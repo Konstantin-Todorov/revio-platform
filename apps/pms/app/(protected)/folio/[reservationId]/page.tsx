@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
+import { SplitSquareHorizontal, ArrowRightLeft } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
 import { OUTLET_LABEL } from "@/lib/posting";
-import { postCharge, postPayment, voidFolioLine } from "@/lib/actions-folio";
+import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine } from "@/lib/actions-folio";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 
@@ -27,12 +28,13 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const { error } = await searchParams;
   const data = await getFolioView(reservationId);
   if (!data) redirect("/folios");
-  const { reservation: r, folio, totals } = data!;
+  const { reservation: r, folios, currency, combined, moveTargets } = data!;
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
-  const rooms = folio ? r.assignments.map((a) => a.unit.label).join(", ") : "";
-  const open = folio.status === "open";
-  const settled = totals.balance === 0;
+  const rooms = r.assignments.map((a) => a.unit.label).join(", ");
+  const open = folios.some((f) => f.status === "open");
+  const settled = combined.balance === 0;
+  const split = folios.length > 1;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -41,7 +43,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
       </Link>
       <PageHeader
         title={`Folio — ${guestName}`}
-        subtitle={`${rooms ? `Room ${rooms} · ` : ""}${folio.currency}${!open ? " · closed" : ""}`}
+        subtitle={`${rooms ? `Room ${rooms} · ` : ""}${currency}${!open ? " · closed" : ""}${split ? ` · ${folios.length} folios` : ""}`}
         action={open ? undefined : <StatusPill tone="neutral">Closed</StatusPill>}
       />
 
@@ -51,42 +53,78 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
         </div>
       )}
 
-      {/* Bill */}
+      {/* One bill card per folio (primary + split/company). Lines can move between them. */}
+      {folios.map((folio) => (
+        <Card key={folio.id} className="mb-4">
+          <CardHeader
+            title={`${folio.label}${folio.isPrimary ? "" : " folio"}`}
+            action={<span className={`tnum text-[13px] font-bold ${folio.totals.balance === 0 ? "text-success-600" : "text-danger-600"}`}>{money(folio.totals.balance, currency)}</span>}
+          />
+          {folio.lines.length === 0 ? (
+            <div className="px-4 py-4 text-center text-[12.5px] text-ink-400">No lines yet — move charges here from the guest folio.</div>
+          ) : (
+            <ul className="divide-y divide-surface-border">
+              {folio.lines.map((l) => {
+                const isPayment = l.kind === "payment";
+                return (
+                  <li key={l.id} className={`flex items-center justify-between gap-3 px-4 py-2.5 ${l.voided ? "opacity-50" : ""}`}>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <StatusPill tone={KIND_TONE[l.kind] ?? "neutral"}>{KIND_LABEL[l.kind] ?? l.kind}</StatusPill>
+                      <span className={`truncate text-[13px] ${l.voided ? "text-ink-400 line-through" : "text-ink-800"}`}>{l.description}</span>
+                      {l.outlet && !isPayment && <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">{OUTLET_LABEL[l.outlet] ?? l.outlet}</span>}
+                      {l.voided && <span className="text-[10.5px] font-semibold uppercase tracking-wide text-danger-500">void</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`tnum text-[13px] font-semibold ${isPayment ? "text-success-600" : "text-ink-900"} ${l.voided ? "line-through" : ""}`}>
+                        {isPayment ? "−" : ""}{money(l.amountMinor, currency)}
+                      </span>
+                      {/* Move this line to another folio of the stay (spec §3.6). */}
+                      {open && !l.voided && !isPayment && split && (
+                        <form action={moveFolioLine} className="flex items-center">
+                          <input type="hidden" name="reservationId" value={reservationId} />
+                          <input type="hidden" name="lineId" value={l.id} />
+                          <ArrowRightLeft className="h-3 w-3 text-ink-300" />
+                          <select name="targetFolioId" defaultValue="" className="ml-0.5 max-w-[92px] rounded border border-surface-border bg-white py-0.5 pl-1 pr-4 text-[10.5px] text-ink-500 outline-none">
+                            <option value="" disabled>move…</option>
+                            {moveTargets.filter((t) => t.id !== folio.id).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                          </select>
+                          <button type="submit" className="ml-0.5 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-600 hover:bg-ink-100">go</button>
+                        </form>
+                      )}
+                      {open && !l.voided && l.kind !== "accommodation" && (
+                        <form action={voidFolioLine}>
+                          <input type="hidden" name="reservationId" value={reservationId} />
+                          <input type="hidden" name="lineId" value={l.id} />
+                          <button type="submit" aria-label="Void line" title="Void" className="flex h-7 w-7 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                            <Ban className="h-3.5 w-3.5" />
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      ))}
+
+      {/* Combined total across every folio + add a split/company folio. */}
       <Card className="mb-4">
-        <CardHeader title="Bill" />
-        <ul className="divide-y divide-surface-border">
-          {folio.lines.map((l) => {
-            const isPayment = l.kind === "payment";
-            return (
-              <li key={l.id} className={`flex items-center justify-between gap-3 px-4 py-2.5 ${l.voided ? "opacity-50" : ""}`}>
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <StatusPill tone={KIND_TONE[l.kind] ?? "neutral"}>{KIND_LABEL[l.kind] ?? l.kind}</StatusPill>
-                  <span className={`truncate text-[13px] ${l.voided ? "text-ink-400 line-through" : "text-ink-800"}`}>{l.description}</span>
-                  {l.outlet && !isPayment && <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">{OUTLET_LABEL[l.outlet] ?? l.outlet}</span>}
-                  {l.voided && <span className="text-[10.5px] font-semibold uppercase tracking-wide text-danger-500">void</span>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`tnum text-[13px] font-semibold ${isPayment ? "text-success-600" : "text-ink-900"} ${l.voided ? "line-through" : ""}`}>
-                    {isPayment ? "−" : ""}{money(l.amountMinor, folio.currency)}
-                  </span>
-                  {open && !l.voided && l.kind !== "accommodation" && (
-                    <form action={voidFolioLine}>
-                      <input type="hidden" name="reservationId" value={reservationId} />
-                      <input type="hidden" name="lineId" value={l.id} />
-                      <button type="submit" aria-label="Void line" title="Void" className="flex h-7 w-7 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
-                        <Ban className="h-3.5 w-3.5" />
-                      </button>
-                    </form>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        <div className="space-y-1 border-t border-surface-border px-4 py-3 text-[13px]">
-          <div className="flex justify-between text-ink-500"><span>Charges</span><span className="tnum">{money(totals.charges, folio.currency)}</span></div>
-          <div className="flex justify-between text-ink-500"><span>Payments</span><span className="tnum">−{money(totals.payments, folio.currency)}</span></div>
-          <div className="flex justify-between pt-1 text-[15px] font-bold text-ink-900"><span>Balance</span><span className={`tnum ${settled ? "text-success-600" : "text-danger-600"}`}>{money(totals.balance, folio.currency)}</span></div>
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="space-y-1 text-[13px]">
+            <div className="flex gap-6 text-ink-500"><span>Charges {money(combined.charges, currency)}</span><span>Payments −{money(combined.payments, currency)}</span></div>
+            <div className="text-[15px] font-bold text-ink-900">Balance <span className={`tnum ${settled ? "text-success-600" : "text-danger-600"}`}>{money(combined.balance, currency)}</span> <span className="text-[11px] font-normal text-ink-400">across {folios.length} folio{folios.length === 1 ? "" : "s"}</span></div>
+          </div>
+          {open && (
+            <form action={createFolio} className="flex items-center gap-1.5">
+              <input type="hidden" name="reservationId" value={reservationId} />
+              <input name="label" placeholder="Company" className={`${inputCls} w-28`} />
+              <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-2 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
+                <SplitSquareHorizontal className="h-3.5 w-3.5" /> Split
+              </button>
+            </form>
+          )}
         </div>
       </Card>
 
@@ -106,7 +144,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 <input name="description" required placeholder="Description" className={`${inputCls} flex-1`} />
               </div>
               <div className="flex gap-2">
-                <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${folio.currency})`} className={`${inputCls} flex-1`} />
+                <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${currency})`} className={`${inputCls} flex-1`} />
                 <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500">
                   <Plus className="h-3.5 w-3.5" /> Add
                 </button>
@@ -126,7 +164,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <option value="company_account">Company account</option>
                   <option value="bank_transfer">Bank transfer</option>
                 </select>
-                <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${folio.currency})`} className={`${inputCls} flex-1`} />
+                <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${currency})`} className={`${inputCls} flex-1`} />
               </div>
               <div className="flex gap-2">
                 <input name="ref" type="text" placeholder="Reference (optional)" className={`${inputCls} flex-1`} />
@@ -154,7 +192,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 <input type="hidden" name="reservationId" value={reservationId} />
                 <input type="hidden" name="override" value="1" />
                 <p className="text-[12.5px] text-ink-600">
-                  Outstanding balance of <span className="font-bold text-danger-600">{money(totals.balance, folio.currency)}</span>. Settle it above, or check out with an override (logged).
+                  Outstanding balance of <span className="font-bold text-danger-600">{money(combined.balance, currency)}</span> across {folios.length} folio{folios.length === 1 ? "" : "s"}. Settle it above, or check out with an override (logged).
                 </p>
                 <div className="flex gap-2">
                   <input name="reason" type="text" placeholder="Override reason (e.g. bill to company)" className={`${inputCls} flex-1`} />
@@ -168,7 +206,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
         </div>
       ) : (
         <Card className="p-4 text-center text-[13px] text-ink-500">
-          This folio is closed. Final balance {money(totals.balance, folio.currency)}.
+          This folio is closed. Final balance {money(combined.balance, currency)}.
         </Card>
       )}
     </div>

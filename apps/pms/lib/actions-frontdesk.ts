@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { availableUnitsFor } from "./data";
-import { ensureFolio, folioBalance } from "./folio";
+import { ensureFolio, reservationBalance } from "./folio";
 import { logAudit, recordSync, str, int } from "./mutation-helpers";
 import { todayInTz, addDaysYmd, utcDay } from "./format";
 
@@ -100,8 +100,8 @@ export async function checkOut(fd: FormData): Promise<void> {
 
   const folioId = await ensureFolio(session.tenantId, session.activePropertyId, reservationId);
   if (folioId) {
-    const lines = await prisma.folioLine.findMany({ where: { folioId }, select: { kind: true, amountMinor: true, voided: true } });
-    const { balance } = folioBalance(lines);
+    // Gate on the COMBINED balance across every folio of the stay (primary + split/company).
+    const balance = await reservationBalance(reservationId);
     if (balance !== 0 && !override) redirect(`/folio/${reservationId}?error=balance`);
     if (balance !== 0 && override) {
       await logAudit(session.activePropertyId, session.tenantId, { entity: "checkout_override", field: `balance ${balance}`, newValue: reason || "no reason given", userId: session.userId });
@@ -120,7 +120,7 @@ export async function checkOut(fd: FormData): Promise<void> {
       entity: "check_out", field: a.unit.label, oldValue: a.reservation.guestName, newValue: "departed · room now dirty", userId: session.userId,
     });
   }
-  if (folioId) await prisma.folio.update({ where: { id: folioId }, data: { status: "closed", closedAt: now } });
+  await prisma.folio.updateMany({ where: { reservationId, status: "open" }, data: { status: "closed", closedAt: now } });
   refresh();
 }
 
