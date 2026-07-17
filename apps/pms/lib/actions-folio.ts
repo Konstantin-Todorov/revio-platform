@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
-import { ensureFolio, createSplitFolio } from "./folio";
+import { ensureFolio, createSplitFolio, folioBalance } from "./folio";
 import { postFolioLine } from "./posting";
 import { logAudit, str } from "./mutation-helpers";
 
@@ -68,6 +68,86 @@ export async function postPayment(fd: FormData): Promise<void> {
   if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
   await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind: "payment", description: PAY_METHODS[method]!, amountMinor, method, ref, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_payment", field: PAY_METHODS[method], newValue: `-${amountMinor}`, userId: session.userId });
+  refresh(reservationId);
+}
+
+/**
+ * Capture a deposit (spec §4.4). A deposit is NOT revenue — it's money held that may be returned.
+ * The deposit TYPE decides the behaviour:
+ *   held    → a `deposit_held` line in its own folio section, outside the running balance. Not a
+ *             taxable supply until applied, so it carries no VAT unless the type says vatTiming=capture.
+ *   applied → recorded straight as a `payment`: the balance drops now (consumption-prepayment model).
+ */
+export async function captureDeposit(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const reservationId = str(fd, "reservationId");
+  const depositTypeId = str(fd, "depositTypeId");
+  const method = str(fd, "method") || "cash";
+  const amountMinor = moneyMinor(fd, "amount");
+  if (amountMinor <= 0) redirect(`/folio/${reservationId}?error=deposit`);
+
+  const type = await prisma.depositType.findFirst({ where: { id: depositTypeId, propertyId: session.activePropertyId, active: true } });
+  if (!type) redirect(`/folio/${reservationId}?error=deposit`);
+  const folioId = await openFolioId(session, reservationId);
+  if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
+
+  const applied = type!.behaviour === "applied";
+  await postFolioLine({
+    tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!,
+    kind: applied ? "payment" : "deposit_held",
+    description: `${type!.name} deposit${applied ? "" : " (held)"}`,
+    amountMinor, method, depositTypeId: type!.id,
+    // VAT point: at capture only when the type says so; a held deposit is otherwise not yet taxable.
+    ...(applied ? {} : { taxCategory: type!.vatTiming === "capture" ? ("standard" as const) : null }),
+    postedById: session.userId,
+  });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "deposit_capture", field: type!.name, newValue: `${applied ? "applied" : "held"} ${amountMinor}`, userId: session.userId });
+  refresh(reservationId);
+}
+
+/** Apply held deposit money to the bill — only NOW does it count as a payment (and the VAT point
+ * triggers for a vatTiming=use type). Capped at what's actually held. */
+export async function useDeposit(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const reservationId = str(fd, "reservationId");
+  const folioId = await openFolioId(session, reservationId);
+  if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
+
+  const lines = await prisma.folioLine.findMany({ where: { folioId: folioId! }, select: { kind: true, amountMinor: true, voided: true } });
+  const { depositsHeld, balance } = folioBalance(lines);
+  const requested = moneyMinor(fd, "amount");
+  // Never apply more than is held, nor more than is owed.
+  const amountMinor = Math.min(requested > 0 ? requested : depositsHeld, depositsHeld, Math.max(0, balance));
+  if (amountMinor <= 0) redirect(`/folio/${reservationId}?error=deposit`);
+
+  await postFolioLine({
+    tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!,
+    kind: "deposit_use", description: "Deposit applied to balance", amountMinor,
+    taxCategory: "standard", postedById: session.userId,
+  });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "deposit_use", field: "applied to balance", newValue: String(amountMinor), userId: session.userId });
+  refresh(reservationId);
+}
+
+/** Return held deposit money to the guest — reduces the liability, never touches revenue. */
+export async function refundDeposit(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const reservationId = str(fd, "reservationId");
+  const folioId = await openFolioId(session, reservationId);
+  if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
+
+  const lines = await prisma.folioLine.findMany({ where: { folioId: folioId! }, select: { kind: true, amountMinor: true, voided: true } });
+  const { depositsHeld } = folioBalance(lines);
+  const requested = moneyMinor(fd, "amount");
+  const amountMinor = Math.min(requested > 0 ? requested : depositsHeld, depositsHeld);
+  if (amountMinor <= 0) redirect(`/folio/${reservationId}?error=deposit`);
+
+  await postFolioLine({
+    tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!,
+    kind: "deposit_refund", description: "Deposit refunded", amountMinor,
+    method: str(fd, "method") || "cash", taxCategory: null, postedById: session.userId,
+  });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "deposit_refund", field: "returned to guest", newValue: String(amountMinor), userId: session.userId });
   refresh(reservationId);
 }
 

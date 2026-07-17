@@ -38,22 +38,28 @@ function defaultTaxCategory(kind: string, description: string): TaxCategory {
   return "standard";
 }
 
+/** Money movements, not outlet sales: they carry no outlet tag. */
+const MONEY_KINDS = new Set(["payment", "deposit_held", "deposit_use", "deposit_refund"]);
+
 export interface PostChargeInput {
   tenantId: string;
   propertyId: string;
   folioId: string;
-  kind: string; // accommodation | minibar | extra | fee | tax | payment
+  kind: string; // accommodation | minibar | extra | fee | tax | payment | deposit_held | deposit_use | deposit_refund
   description: string;
   amountMinor: number;
   outlet?: Outlet;
-  taxCategory?: TaxCategory;
-  method?: string | null; // payments only
+  taxCategory?: TaxCategory | null;
+  method?: string | null; // payments / deposit captures only
   ref?: string | null;
+  depositTypeId?: string | null;
   postedById?: string | null;
 }
 
-/** Post ONE line to a folio. Payments carry no outlet/tax; every other kind is tagged. */
+/** Post ONE line to a folio. Payments + deposit movements carry no outlet; a deposit's tax category
+ * comes from its type's VAT timing (spec §4.4) and is passed in by the caller. */
 export async function postFolioLine(input: PostChargeInput) {
+  const isMoney = MONEY_KINDS.has(input.kind);
   const isPayment = input.kind === "payment";
   return prisma.folioLine.create({
     data: {
@@ -63,10 +69,11 @@ export async function postFolioLine(input: PostChargeInput) {
       kind: input.kind,
       description: input.description,
       amountMinor: input.amountMinor,
-      outlet: isPayment ? null : input.outlet ?? defaultOutlet(input.kind),
-      taxCategory: isPayment ? null : input.taxCategory ?? defaultTaxCategory(input.kind, input.description),
+      outlet: isMoney ? null : input.outlet ?? defaultOutlet(input.kind),
+      taxCategory: isPayment ? null : input.taxCategory !== undefined ? input.taxCategory : defaultTaxCategory(input.kind, input.description),
       method: input.method ?? null,
       ref: input.ref ?? null,
+      depositTypeId: input.depositTypeId ?? null,
       postedById: input.postedById ?? null,
     },
   });

@@ -151,6 +151,7 @@ model Property {
   folios              Folio[]
   folioLines          FolioLine[]
   posItems            PosItem[]
+  depositTypes        DepositType[]
   maintenanceTasks    MaintenanceTask[]
 
   @@index([tenantId])
@@ -831,7 +832,12 @@ model FolioLine {
   tenantId    String
   propertyId  String
   folioId     String
-  kind        String // accommodation | minibar | extra | fee | tax | payment
+  // accommodation | minibar | extra | fee | tax | payment | deposit_held | deposit_use | deposit_refund
+  // A HELD deposit (spec §4.4) is a LIABILITY: deposit_held/deposit_refund sit outside charges AND
+  // payments; only deposit_use (applying it) counts against the balance. An APPLIED deposit is
+  // simply a `payment` at capture.
+  kind        String
+  depositTypeId String? // which deposit type a deposit entry belongs to (for per-type reporting)
   // Written ONLY by the charge-posting service (spec §1.7): every charge carries its outlet and tax
   // category so the invoice can break out Spa vs Accommodation and summarise tax per rate (§4.3).
   outlet      String? // room | minibar | extra | spa | bar | restaurant | other  (null for payments)
@@ -852,6 +858,29 @@ model FolioLine {
 
 // Chargeable-item catalog for minibar / extras (PMS Phase 4). Tapping an item posts a FolioLine
 // (kind = category) to a stay's folio — turning Phase-3 free-text charges into tap-to-add items.
+// Deposit types (spec §4.4) — Consumption / Damage / property-defined. A deposit is NOT revenue when
+// taken; it's money held that may be returned. Each type carries its own behaviour and VAT timing,
+// edited by the property accountant in Configuration (E7) — never hardcoded.
+model DepositType {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  name       String
+  // held    = sits in its own folio section, outside the running balance (default; damage deposits).
+  // applied = recorded as a payment at capture; the balance drops (consumption-prepayment model).
+  behaviour  String   @default("held") // held | applied
+  // When the VAT point triggers: a held deposit isn't a taxable supply until applied; an applied
+  // prepayment for a known service can trigger VAT at capture in the EU.
+  vatTiming  String   @default("use") // capture | use
+  active     Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+}
+
 model PosItem {
   id         String   @id @default(cuid())
   tenantId   String

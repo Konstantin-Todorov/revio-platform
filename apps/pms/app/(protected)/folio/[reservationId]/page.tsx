@@ -2,10 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
-import { SplitSquareHorizontal, ArrowRightLeft } from "lucide-react";
+import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
 import { OUTLET_LABEL } from "@/lib/posting";
-import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine } from "@/lib/actions-folio";
+import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit } from "@/lib/actions-folio";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 
@@ -19,8 +19,16 @@ const ERRORS: Record<string, string> = {
   balance: "Settle the balance first, or check out with an override below.",
 };
 
-const KIND_LABEL: Record<string, string> = { accommodation: "Room", minibar: "Minibar", extra: "Extra", fee: "Fee", tax: "Tax", payment: "Payment" };
-const KIND_TONE: Record<string, Tone> = { accommodation: "neutral", minibar: "info", extra: "neutral", fee: "warning", tax: "warning", payment: "success" };
+const KIND_LABEL: Record<string, string> = {
+  accommodation: "Room", minibar: "Minibar", extra: "Extra", fee: "Fee", tax: "Tax", payment: "Payment",
+  deposit_held: "Deposit held", deposit_use: "Deposit applied", deposit_refund: "Deposit refunded",
+};
+const KIND_TONE: Record<string, Tone> = {
+  accommodation: "neutral", minibar: "info", extra: "neutral", fee: "warning", tax: "warning", payment: "success",
+  deposit_held: "info", deposit_use: "success", deposit_refund: "neutral",
+};
+/** Held deposits are a liability — neither a charge nor a payment until applied (spec §4.4). */
+const DEPOSIT_KINDS = new Set(["deposit_held", "deposit_use", "deposit_refund"]);
 const inputCls = "h-9 rounded-md border border-surface-border bg-white px-2.5 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-600";
 
 export default async function FolioPage({ params, searchParams }: { params: Promise<{ reservationId: string }>; searchParams: Promise<{ error?: string }> }) {
@@ -28,7 +36,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const { error } = await searchParams;
   const data = await getFolioView(reservationId);
   if (!data) redirect("/folios");
-  const { reservation: r, folios, currency, combined, moveTargets } = data!;
+  const { reservation: r, folios, currency, combined, moveTargets, depositTypes } = data!;
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const rooms = r.assignments.map((a) => a.unit.label).join(", ");
@@ -66,6 +74,10 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
             <ul className="divide-y divide-surface-border">
               {folio.lines.map((l) => {
                 const isPayment = l.kind === "payment";
+                const isDeposit = DEPOSIT_KINDS.has(l.kind);
+                // Only a payment or an APPLIED deposit reduces the balance; a held/refunded deposit
+                // is a liability movement and shows plain (spec §4.4).
+                const isCredit = isPayment || l.kind === "deposit_use";
                 return (
                   <li key={l.id} className={`flex items-center justify-between gap-3 px-4 py-2.5 ${l.voided ? "opacity-50" : ""}`}>
                     <div className="flex min-w-0 items-center gap-2.5">
@@ -75,11 +87,11 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                       {l.voided && <span className="text-[10.5px] font-semibold uppercase tracking-wide text-danger-500">void</span>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`tnum text-[13px] font-semibold ${isPayment ? "text-success-600" : "text-ink-900"} ${l.voided ? "line-through" : ""}`}>
-                        {isPayment ? "−" : ""}{money(l.amountMinor, currency)}
+                      <span className={`tnum text-[13px] font-semibold ${isCredit ? "text-success-600" : isDeposit ? "text-brand-700" : "text-ink-900"} ${l.voided ? "line-through" : ""}`}>
+                        {isCredit ? "−" : ""}{money(l.amountMinor, currency)}
                       </span>
                       {/* Move this line to another folio of the stay (spec §3.6). */}
-                      {open && !l.voided && !isPayment && split && (
+                      {open && !l.voided && !isPayment && !isDeposit && split && (
                         <form action={moveFolioLine} className="flex items-center">
                           <input type="hidden" name="reservationId" value={reservationId} />
                           <input type="hidden" name="lineId" value={l.id} />
@@ -113,7 +125,15 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
       <Card className="mb-4">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="space-y-1 text-[13px]">
-            <div className="flex gap-6 text-ink-500"><span>Charges {money(combined.charges, currency)}</span><span>Payments −{money(combined.payments, currency)}</span></div>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-ink-500">
+              <span>Charges {money(combined.charges, currency)}</span>
+              <span>Payments −{money(combined.payments, currency)}</span>
+              {combined.depositsHeld > 0 && (
+                <span className="font-semibold text-brand-700" title="A held deposit is a liability — outside charges and payments until applied or refunded">
+                  Deposits held {money(combined.depositsHeld, currency)}
+                </span>
+              )}
+            </div>
             <div className="text-[15px] font-bold text-ink-900">Balance <span className={`tnum ${settled ? "text-success-600" : "text-danger-600"}`}>{money(combined.balance, currency)}</span> <span className="text-[11px] font-normal text-ink-400">across {folios.length} folio{folios.length === 1 ? "" : "s"}</span></div>
           </div>
           {open && (
@@ -176,9 +196,70 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
             </form>
           </Card>
 
+          {/* Deposits — a liability, not revenue (spec §4.4) */}
+          <Card className="p-4 lg:col-span-2">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[13px] font-bold text-ink-900">Deposits</h3>
+              <span className="text-[12px] text-ink-500">
+                Held: <span className="tnum font-bold text-brand-700">{money(combined.depositsHeld, currency)}</span>
+                <span className="ml-1.5 text-[11px] text-ink-400">money held that may be returned — outside the balance until applied</span>
+              </span>
+            </div>
+            <div className="flex flex-wrap items-end gap-4">
+              <form action={captureDeposit} className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="reservationId" value={reservationId} />
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-ink-600">Type</span>
+                  <select name="depositTypeId" className={`${inputCls} w-40`}>
+                    {depositTypes.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name} · {t.behaviour === "held" ? "held" : "applied"}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-ink-600">Method</span>
+                  <select name="method" defaultValue="cash" className={`${inputCls} w-24`}>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                  </select>
+                </label>
+                <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${currency})`} className={`${inputCls} w-32`} />
+                <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Take deposit
+                </button>
+              </form>
+
+              {combined.depositsHeld > 0 && (
+                <div className="flex flex-wrap items-end gap-2 border-l border-surface-border pl-4">
+                  <form action={useDeposit} className="flex items-end gap-1.5">
+                    <input type="hidden" name="reservationId" value={reservationId} />
+                    <input name="amount" type="text" inputMode="decimal" placeholder="all" className={`${inputCls} w-20`} />
+                    <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-success-500 px-3 text-[12.5px] font-semibold text-success-600 transition-colors hover:bg-success-50">
+                      Use deposit
+                    </button>
+                  </form>
+                  <form action={refundDeposit} className="flex items-end gap-1.5">
+                    <input type="hidden" name="reservationId" value={reservationId} />
+                    <input name="amount" type="text" inputMode="decimal" placeholder="all" className={`${inputCls} w-20`} />
+                    <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-surface-border px-3 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
+                      Refund
+                    </button>
+                  </form>
+                </div>
+              )}
+            </div>
+            {depositTypes.length === 0 && <p className="mt-2 text-[11px] text-ink-400">No deposit types configured for this property yet.</p>}
+          </Card>
+
           {/* Check out */}
           <Card className="p-4 lg:col-span-2">
             <h3 className="mb-3 text-[13px] font-bold text-ink-900">Check out</h3>
+            {combined.depositsHeld > 0 && (
+              <p className="mb-2.5 flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-2 text-[12px] text-brand-800">
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span><span className="font-semibold">{money(combined.depositsHeld, currency)} still held.</span> Use it against the balance or refund it before the guest leaves.</span>
+              </p>
+            )}
             {settled ? (
               <form action={checkOut} className="flex items-center gap-3">
                 <input type="hidden" name="reservationId" value={reservationId} />

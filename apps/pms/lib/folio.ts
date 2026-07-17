@@ -10,15 +10,30 @@ export type FolioLineRow = {
   method: string | null; ref: string | null; voided: boolean; postedAt: Date;
 };
 
-/** Balance = Σ(non-voided charges) − Σ(non-voided payments). Charges are every non-payment kind. */
+/**
+ * Balance = Σ(non-voided charges) − Σ(non-voided payments).
+ *
+ * DEPOSITS ARE A LIABILITY, not revenue and not an ordinary payment (spec §4.4) — booking one as
+ * either breaks both night-audit revenue and the folio balance. So a HELD deposit sits in its own
+ * bucket, outside charges AND payments:
+ *   deposit_held    → money held that may be returned (liability+)
+ *   deposit_refund  → held money returned to the guest (liability−)
+ *   deposit_use     → held money APPLIED to the bill — only now does it count as a payment
+ * An APPLIED-behaviour deposit never uses these kinds: it's captured straight as a `payment`.
+ */
 export function folioBalance(lines: { kind: string; amountMinor: number; voided: boolean }[]) {
-  let charges = 0, payments = 0;
+  let charges = 0, payments = 0, depositsHeld = 0;
   for (const l of lines) {
     if (l.voided) continue;
-    if (l.kind === "payment") payments += l.amountMinor;
-    else charges += l.amountMinor;
+    switch (l.kind) {
+      case "payment": payments += l.amountMinor; break;
+      case "deposit_held": depositsHeld += l.amountMinor; break;
+      case "deposit_refund": depositsHeld -= l.amountMinor; break;
+      case "deposit_use": depositsHeld -= l.amountMinor; payments += l.amountMinor; break;
+      default: charges += l.amountMinor;
+    }
   }
-  return { charges, payments, balance: charges - payments };
+  return { charges, payments, balance: charges - payments, depositsHeld };
 }
 
 /** Fee/tax amount for a TaxFee against a stay (percent = % of accommodation; fixed × basis multiplier). */
@@ -100,12 +115,21 @@ export async function getFolioView(reservationId: string) {
   const folios = folioRows.map((f) => ({ ...f, totals: folioBalance(f.lines) }));
   const currency = folios[0]!.currency;
   const combined = folios.reduce(
-    (s, f) => ({ charges: s.charges + f.totals.charges, payments: s.payments + f.totals.payments, balance: s.balance + f.totals.balance }),
-    { charges: 0, payments: 0, balance: 0 },
+    (s, f) => ({
+      charges: s.charges + f.totals.charges,
+      payments: s.payments + f.totals.payments,
+      balance: s.balance + f.totals.balance,
+      depositsHeld: s.depositsHeld + f.totals.depositsHeld,
+    }),
+    { charges: 0, payments: 0, balance: 0, depositsHeld: 0 },
   );
   // Any other open folio of THIS stay a line could be moved to.
   const moveTargets = folios.map((f) => ({ id: f.id, label: f.label }));
-  return { property, reservation, folios, currency, combined, moveTargets };
+  const depositTypes = await prisma.depositType.findMany({
+    where: { propertyId: property.id, active: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  return { property, reservation, folios, currency, combined, moveTargets, depositTypes };
 }
 
 /** Combined balance across all a reservation's folios — the true amount owed at check-out. */
