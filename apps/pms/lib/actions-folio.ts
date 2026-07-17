@@ -72,6 +72,39 @@ export async function postPayment(fd: FormData): Promise<void> {
 }
 
 /**
+ * Add a recurring stay extra (spec §3.6) — "breakfast for the whole stay" accrues per night at the
+ * night audit, not as a one-off charge. BOUNDARY: this never changes the CRS rate plan the guest
+ * booked; the rate plan stays as sold and the folio reflects reality.
+ */
+export async function addStayExtra(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const reservationId = str(fd, "reservationId");
+  const name = str(fd, "name");
+  const priceMinor = moneyMinor(fd, "price");
+  if (!name || priceMinor <= 0) redirect(`/folio/${reservationId}?error=extra`);
+
+  const reservation = await prisma.reservation.findFirst({ where: { id: reservationId, propertyId: session.activePropertyId }, select: { id: true } });
+  if (!reservation) redirect("/folios");
+  await prisma.stayExtra.create({
+    data: { tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId, name, priceMinor, active: true },
+  });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "stay_extra", field: name, newValue: `${priceMinor}/night`, userId: session.userId });
+  refresh(reservationId);
+}
+
+/** Stop a recurring extra. Nights already accrued stay on the folio — only future nights stop. */
+export async function removeStayExtra(fd: FormData): Promise<void> {
+  const session = await ctx();
+  const reservationId = str(fd, "reservationId");
+  const id = str(fd, "id");
+  const extra = await prisma.stayExtra.findFirst({ where: { id, propertyId: session.activePropertyId }, select: { id: true, name: true } });
+  if (!extra) redirect(`/folio/${reservationId}`);
+  await prisma.stayExtra.delete({ where: { id } });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "stay_extra", field: extra!.name, newValue: "stopped", userId: session.userId });
+  refresh(reservationId);
+}
+
+/**
  * Capture a deposit (spec §4.4). A deposit is NOT revenue — it's money held that may be returned.
  * The deposit TYPE decides the behaviour:
  *   held    → a `deposit_held` line in its own folio section, outside the running balance. Not a

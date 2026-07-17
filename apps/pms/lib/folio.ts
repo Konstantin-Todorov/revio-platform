@@ -36,6 +36,11 @@ export function folioBalance(lines: { kind: string; amountMinor: number; voided:
   return { charges, payments, balance: charges - payments, depositsHeld };
 }
 
+/** The property's city-tax fee, by name — the one fee the CRS's cityTaxMode can suppress. */
+export function isCityTax(name: string): boolean {
+  return /city\s*tax/i.test(name);
+}
+
 /** Fee/tax amount for a TaxFee against a stay (percent = % of accommodation; fixed × basis multiplier). */
 function feeAmount(f: { type: string; pct: number | null; amountMinor: number | null; basis: string }, subtotal: number, nights: number, rooms: number, guests: number): number {
   if (f.type === "percent") return f.pct ? Math.round((subtotal * f.pct) / 100) : 0;
@@ -81,8 +86,15 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
     await postFolioLine({ ...base, kind: "accommodation", description: `${line.roomType.name} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price });
   }
 
+  // CITY-TAX SUPPRESSION (spec §3.6): the CRS decides whether city tax is payable on spot or already
+  // included in the rate. When it's "included", the PMS must NOT post the Fee line — the guest has
+  // already paid it in the rate, and posting it here would double-charge. Both CRS modes are honoured.
+  const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId }, select: { cityTaxMode: true } });
+  const cityTaxIncluded = defaults?.cityTaxMode === "included";
+
   const fees = await prisma.taxFee.findMany({ where: { propertyId, active: true, inclusion: "excluded" } });
   for (const f of fees) {
+    if (cityTaxIncluded && isCityTax(f.name)) continue;
     const amt = feeAmount(f, accomTotal, nights, rooms, guests);
     if (amt > 0) await postFolioLine({ ...base, kind: f.type === "percent" ? "tax" : "fee", description: f.name, amountMinor: amt });
   }
@@ -125,11 +137,11 @@ export async function getFolioView(reservationId: string) {
   );
   // Any other open folio of THIS stay a line could be moved to.
   const moveTargets = folios.map((f) => ({ id: f.id, label: f.label }));
-  const depositTypes = await prisma.depositType.findMany({
-    where: { propertyId: property.id, active: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  });
-  return { property, reservation, folios, currency, combined, moveTargets, depositTypes };
+  const [depositTypes, stayExtras] = await Promise.all([
+    prisma.depositType.findMany({ where: { propertyId: property.id, active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.stayExtra.findMany({ where: { reservationId, active: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+  return { property, reservation, folios, currency, combined, moveTargets, depositTypes, stayExtras };
 }
 
 /** Combined balance across all a reservation's folios — the true amount owed at check-out. */
@@ -259,6 +271,36 @@ export async function listFolios() {
     byRes.set(r.id, row);
   }
   return { property, rows: [...byRes.values()] };
+}
+
+/**
+ * Accrue every in-house stay's recurring extras for one night (spec §3.6) — "breakfast for the whole
+ * stay" posts one folio line per night at the night audit, separate from one-off POS. IDEMPOTENT: each
+ * line carries ref `stayextra:<id>:<date>`, so re-running Close Day never double-charges a night.
+ * Returns how many lines were posted.
+ */
+export async function accrueStayExtras(tenantId: string, propertyId: string, businessDate: string): Promise<number> {
+  const inHouse = await prisma.roomAssignment.findMany({
+    where: { propertyId, status: "active", checkedOutAt: null, checkedInAt: { not: null } },
+    select: { reservationId: true },
+  });
+  const reservationIds = [...new Set(inHouse.map((a) => a.reservationId))];
+  if (reservationIds.length === 0) return 0;
+
+  const extras = await prisma.stayExtra.findMany({ where: { propertyId, active: true, reservationId: { in: reservationIds } } });
+  let posted = 0;
+  for (const e of extras) {
+    const ref = `stayextra:${e.id}:${businessDate}`;
+    if (await prisma.folioLine.findFirst({ where: { ref }, select: { id: true } })) continue; // already accrued
+    const folioId = await ensureFolio(tenantId, propertyId, e.reservationId);
+    if (!folioId) continue;
+    await postFolioLine({
+      tenantId, propertyId, folioId, kind: "extra", outlet: "extra",
+      description: `${e.name} · ${businessDate}`, amountMinor: e.priceMinor, ref,
+    });
+    posted++;
+  }
+  return posted;
 }
 
 /** Add a labelled split/company folio to a stay (spec §3.6). */

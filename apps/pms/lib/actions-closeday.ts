@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { logAudit, recordSync, str } from "./mutation-helpers";
+import { accrueStayExtras } from "./folio";
 import { todayInTz, addDaysYmd, utcDay, ymd } from "./format";
 
 async function ctx() {
@@ -54,9 +55,13 @@ export async function closeDay(): Promise<void> {
     }
   }
 
+  // Recurring stay extras (breakfast, parking…) accrue for the night being closed (spec §3.6).
+  // Idempotent per (extra, date), so re-closing a day never double-charges.
+  const accrued = await accrueStayExtras(session.tenantId, session.activePropertyId, businessDate);
+
   const next = addDaysYmd(businessDate, 1);
   await prisma.property.update({ where: { id: property!.id }, data: { businessDate: utcDay(next) } });
-  await logAudit(session.activePropertyId, session.tenantId, { entity: "close_day", field: businessDate, newValue: `${noShows} no-show(s) · rolled to ${next}`, userId: session.userId });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "close_day", field: businessDate, newValue: `${noShows} no-show(s) · ${accrued} extra(s) accrued · rolled to ${next}`, userId: session.userId });
   // Boundary rule: the close itself is operational (audit above). Only its availability effect
   // (no-show rooms released back to sale) is channel-facing.
   if (noShows > 0) {

@@ -508,7 +508,8 @@ model Reservation {
   lines    ReservationLine[]
   holds    Hold[]
   assignments RoomAssignment[]
-  folios   Folio[]
+  folios     Folio[]
+  stayExtras StayExtra[]
 
   @@index([propertyId])
   @@index([channelId])
@@ -858,6 +859,26 @@ model FolioLine {
 
 // Chargeable-item catalog for minibar / extras (PMS Phase 4). Tapping an item posts a FolioLine
 // (kind = category) to a stay's folio — turning Phase-3 free-text charges into tap-to-add items.
+// Stay extras (spec §3.6) — "add breakfast for the whole stay" is NOT a one-off POS charge: it's a
+// per-night recurring extra that accrues automatically at each night audit as its own folio line.
+// BOUNDARY: adding one operationally never changes the CRS rate plan the guest booked — the rate plan
+// stays as sold; the folio reflects reality.
+model StayExtra {
+  id            String   @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  reservationId String
+  name          String // Breakfast | Parking | Half-board | …
+  priceMinor    Int // per night
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId])
+  @@index([propertyId])
+}
+
 // Deposit types (spec §4.4) — Consumption / Damage / property-defined. A deposit is NOT revenue when
 // taken; it's money held that may be returned. Each type carries its own behaviour and VAT timing,
 // edited by the property accountant in Configuration (E7) — never hardcoded.

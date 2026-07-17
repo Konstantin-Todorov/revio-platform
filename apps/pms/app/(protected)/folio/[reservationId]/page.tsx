@@ -2,10 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
-import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck } from "lucide-react";
+import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
 import { OUTLET_LABEL } from "@/lib/posting";
-import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit } from "@/lib/actions-folio";
+import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 
@@ -36,7 +36,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const { error } = await searchParams;
   const data = await getFolioView(reservationId);
   if (!data) redirect("/folios");
-  const { reservation: r, folios, currency, combined, moveTargets, depositTypes } = data!;
+  const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras } = data!;
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const rooms = r.assignments.map((a) => a.unit.label).join(", ");
@@ -193,6 +193,41 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 </button>
               </div>
               <p className="text-[10.5px] text-ink-400">Label + amount only — no card number is stored or processed.</p>
+            </form>
+          </Card>
+
+          {/* Stay extras — recurring, accrue per night at the audit (spec §3.6) */}
+          <Card className="p-4 lg:col-span-2">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[13px] font-bold text-ink-900">Stay extras</h3>
+              <span className="text-[11px] text-ink-400">Recurring per night — posts at each night audit. Doesn’t change the booked rate plan; the folio reflects reality.</span>
+            </div>
+            {stayExtras.length > 0 && (
+              <ul className="mb-3 divide-y divide-surface-border/60 rounded-md border border-surface-border">
+                {stayExtras.map((e) => (
+                  <li key={e.id} className="flex items-center justify-between gap-2 px-3 py-2 text-[12.5px]">
+                    <span className="flex items-center gap-1.5 font-semibold text-ink-800"><Repeat className="h-3 w-3 text-accent-600" />{e.name}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="tnum text-ink-600">{money(e.priceMinor, currency)} / night</span>
+                      <form action={removeStayExtra}>
+                        <input type="hidden" name="reservationId" value={reservationId} />
+                        <input type="hidden" name="id" value={e.id} />
+                        <button type="submit" title="Stop this extra (nights already accrued stay on the bill)" className="flex h-6 w-6 items-center justify-center rounded text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                          <Ban className="h-3 w-3" />
+                        </button>
+                      </form>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form action={addStayExtra} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="reservationId" value={reservationId} />
+              <input name="name" required placeholder="e.g. Breakfast" className={`${inputCls} w-40`} />
+              <input name="price" type="text" inputMode="decimal" required placeholder={`Per night (${currency})`} className={`${inputCls} w-32`} />
+              <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50">
+                <Repeat className="h-3.5 w-3.5" /> Add for the stay
+              </button>
             </form>
           </Card>
 
