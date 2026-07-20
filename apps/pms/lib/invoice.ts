@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
+import { fiscalizeInvoice } from "./fiscal";
 import { ymd } from "./format";
 
 /**
@@ -118,6 +119,15 @@ export async function generateInvoice(input: GenerateInvoiceInput): Promise<stri
     },
     select: { id: true },
   });
+
+  // Fiscalization boundary (spec §4.7) — if this property's jurisdiction pack requires real-time
+  // reporting (e.g. Bulgaria N-18), report the document and stamp the returned fiscal seal on it.
+  const fiscal = await fiscalizeInvoice(
+    { jurisdiction: defaults?.jurisdiction ?? "generic", fiscalizationEnabled: defaults?.fiscalizationEnabled ?? false, eInvoicingEnabled: defaults?.eInvoicingEnabled ?? false },
+    { docType: input.docType, number, grossMinor: summary.grossMinor, currency: folio.currency },
+  );
+  if (fiscal) await prisma.taxInvoice.update({ where: { id: inv.id }, data: { fiscalRef: fiscal.fiscalRef } });
+
   return inv.id;
 }
 
