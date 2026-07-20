@@ -145,13 +145,18 @@ in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. 
 the phased order, `ARCHITECTURE.md` for rationale,
 `ACCESS-MODEL.md` for the access model, and `DEPLOY.md` for the deploy runbook.
 
-**→ CURRENT CYCLE — the V2 platform overhaul (founder specs received 2026-07-09, `docs/specs/`).**
-Six specs govern it: `HIERARCHY.md` (product layering + write ownership + never-sync rule),
-`CM-GUIDE-V2.md` + `CM-UPDATES-V1.md` (RevioLink), `CRS-GUIDE-V1.md` (RevioCRS — **two-tier precedence
-replaces the 4-level priority**), `PMS-GUIDE-V1.md` (RevioPMS — charge-posting service, invoicing,
-deposits, gateway/fiscalization boundaries), `BOOKING-ENGINE-ADDENDUM.md` (build deferred; three seams
-mandatory now). Start at `docs/specs/README.md`. Every screen's **Keep** list is binding. Phase order
-(founder-confirmed): **A foundations → B RevioLink → C RevioCRS → D/E RevioPMS → F assignment +
-gateway/compliance seams** — tracked as tasks A0-F3 in the session task list. Integration seams are
-mock-first; real email (Resend), Stripe **test-mode**, and a BG fiscal-provider research pass are also
-approved. Older `docs/CM-REVISIONS.md` (2026-06-27) is superseded where the new specs overlap it.
+**→ ✅ V2 PLATFORM OVERHAUL COMPLETE (founder specs 2026-07-09, `docs/specs/`) — all phases A–F shipped,
+tested, live.** Governed by six specs: `HIERARCHY.md`, `CM-GUIDE-V2.md` + `CM-UPDATES-V1.md` (RevioLink),
+`CRS-GUIDE-V1.md` (RevioCRS — **two-tier precedence replaced the 4-level priority**), `PMS-GUIDE-V1.md`
+(RevioPMS), `BOOKING-ENGINE-ADDENDUM.md` (build deferred; its three seams built). Delivered in order
+**A foundations → B RevioLink → C RevioCRS → D/E RevioPMS → F assignment + gateway/compliance seams**
+(tasks A0–F3). Headline additions: two-tier ARI precedence + push attribution + per-channel capability
+map; CRS Analytics + STLY-364 + portfolio scope; PMS Reservation view / Guests / User Management /
+Configuration, housekeeping smart-routing + inspection gate + scoped roles; the **charge-posting service**
+(every folio line, outlet+tax tagged), split folios, **deposits-as-liability**, stay extras + city-tax
+suppression, a jurisdiction-agnostic **Invoicing module** (gapless series, tax-per-rate), night-audit
+report, room-assignment suggestions. **THREE integration boundaries, all mock-first with a real path:**
+Channex (distribution) · **Stripe test-mode** (payments §4.5, F2 — TEST keys on Railway, never live) ·
+**fiscalization** (§4.7, F3 — `TaxInvoice.fiscalRef` + jurisdiction pack; `docs/specs/BG-FISCALIZATION-
+RESEARCH.md`). Real email (Resend) is wired (mock-log until `RESEND_API_KEY` set). Every screen's **Keep**
+list was honoured. Older `docs/CM-REVISIONS.md` (2026-06-27) is superseded where the specs overlap it.
