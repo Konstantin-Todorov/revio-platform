@@ -32,6 +32,7 @@ export async function saveConfiguration(fd: FormData): Promise<void> {
     invoiceVatId: str(fd, "invoiceVatId") || null,
     invoiceAddress: str(fd, "invoiceAddress") || null,
     inspectionGate: fd.get("inspectionGate") != null,
+    autoAssignEnabled: fd.get("autoAssignEnabled") != null,
     jurisdiction: ["generic", "bg", "eu"].includes(str(fd, "jurisdiction")) ? str(fd, "jurisdiction") : "generic",
     fiscalizationEnabled: fd.get("fiscalizationEnabled") != null,
     eInvoicingEnabled: fd.get("eInvoicingEnabled") != null,

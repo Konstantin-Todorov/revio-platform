@@ -125,10 +125,13 @@ export async function checkOut(fd: FormData): Promise<void> {
 }
 
 /** Move an in-house stay to a different unit: end the current assignment, open a new one, vacated unit → Dirty. */
+const MOVE_REASONS = ["request", "upgrade", "maintenance", "noise"];
+
 export async function roomMove(fd: FormData): Promise<void> {
   const session = await ctx();
   const assignmentId = str(fd, "assignmentId");
   const newUnitId = str(fd, "unitId");
+  const reason = MOVE_REASONS.includes(str(fd, "reason")) ? str(fd, "reason") : "request";
 
   const a = await prisma.roomAssignment.findFirst({
     where: { id: assignmentId, propertyId: session.activePropertyId, status: "active", checkedOutAt: null },
@@ -149,11 +152,11 @@ export async function roomMove(fd: FormData): Promise<void> {
     data: {
       tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId: a!.reservationId,
       reservationLineId: a!.reservationLineId, unitId: newUnitId, checkIn: a!.checkIn, checkOut: a!.checkOut,
-      status: "active", checkedInAt: a!.checkedInAt ?? new Date(), note: `moved from ${a!.unit.label}`,
+      status: "active", checkedInAt: a!.checkedInAt ?? new Date(), note: `moved from ${a!.unit.label} (${reason})`,
     },
   });
   await prisma.unit.update({ where: { id: a!.unitId }, data: { hkStatus: "dirty" } });
-  await logAudit(session.activePropertyId, session.tenantId, { entity: "room_move", oldValue: a!.unit.label, newValue: newUnit!.label, userId: session.userId });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "room_move", field: reason, oldValue: a!.unit.label, newValue: newUnit!.label, userId: session.userId });
   refresh();
   redirect("/dashboard");
 }

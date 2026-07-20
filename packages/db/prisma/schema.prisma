@@ -698,6 +698,9 @@ model PropertyDefaults {
   // Housekeeping inspection gate (spec §3.4). On ⇒ nothing is sellable until a supervisor inspects
   // ("clean" = cleaned-pending); off ⇒ cleaned counts as sellable. sellableStatuses() reads this.
   inspectionGate    Boolean @default(false)
+  // Room auto-assignment (spec §4.1) — opt-in, OFF by default. "Suggest a room" works either way;
+  // this only decides whether the evening-before pass auto-commits physical rooms.
+  autoAssignEnabled Boolean @default(false)
   // Compliance pack (spec §4.7) — the per-country selection that makes invoicing multimarket without
   // code. The fiscalization/e-invoicing boundary (F3) is gated by these flags.
   jurisdiction         String  @default("generic") // generic | bg | eu

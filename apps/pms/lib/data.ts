@@ -353,6 +353,42 @@ export async function availableUnitsFor(roomTypeId: string, checkIn: string, che
 }
 
 /** A reservation (scoped to the active property) with its lines + guest + active assignments, for check-in. */
+/** The guest's usual floor, from their prior room assignments (spec §4.1 preference honouring). */
+async function preferredFloorForGuest(guestId: string | null): Promise<string | null> {
+  if (!guestId) return null;
+  const assigns = await prisma.roomAssignment.findMany({
+    where: { reservation: { guestId } },
+    include: { unit: { select: { floor: true } } },
+  });
+  const counts = new Map<string, number>();
+  for (const a of assigns) if (a.unit.floor) counts.set(a.unit.floor, (counts.get(a.unit.floor) ?? 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+}
+
+/**
+ * Suggest a physical room (spec §4.1) — proposes without committing so even auto-assign-off properties
+ * get the benefit. Ranks the AVAILABLE units of the type: guest's usual floor first (honour known
+ * preference), then already-inspected over merely-clean, then keep low room numbers free last to avoid
+ * fragmentation. Returns the chosen unit id + a human reason. Physical assignment stays LATE (at check-in).
+ */
+export function suggestUnit(units: AvailableUnit[], preferredFloor: string | null): { unitId: string; reason: string } | null {
+  const free = units.filter((u) => u.available);
+  if (free.length === 0) return null;
+  const scored = free
+    .map((u) => {
+      let score = 0;
+      const reasons: string[] = [];
+      if (preferredFloor && u.floor === preferredFloor) { score += 100; reasons.push("guest’s usual floor"); }
+      if (u.hkStatus === "inspected") { score += 10; reasons.push("inspected"); }
+      // Prefer higher room numbers so low, contiguous rooms stay open for walk-ins/groups (anti-fragmentation).
+      const num = parseInt(u.label.replace(/\D/g, ""), 10);
+      if (Number.isFinite(num)) score += Math.min(9, num / 100);
+      return { u, score, reason: reasons[0] ?? "next available room" };
+    })
+    .sort((a, b) => b.score - a.score);
+  return { unitId: scored[0]!.u.id, reason: scored[0]!.reason };
+}
+
 export async function getReservationForCheckin(reservationId: string) {
   const { property } = await activeProperty();
   const r = await prisma.reservation.findFirst({
@@ -363,7 +399,9 @@ export async function getReservationForCheckin(reservationId: string) {
       assignments: { where: { status: "active", checkedOutAt: null }, include: { unit: { select: { label: true } } } },
     },
   });
-  return r ? { property, reservation: r } : null;
+  if (!r) return null;
+  const preferredFloor = await preferredFloorForGuest(r.guestId);
+  return { property, reservation: r, preferredFloor };
 }
 
 /** One active assignment (scoped) for a room move — with its line's room type + stay window. */

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, LogIn, DoorOpen, AlertTriangle } from "lucide-react";
+import { ArrowLeft, LogIn, DoorOpen, AlertTriangle, Wand2 } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
-import { getReservationForCheckin, availableUnitsFor, type AvailableUnit } from "@/lib/data";
+import { getReservationForCheckin, availableUnitsFor, suggestUnit, type AvailableUnit } from "@/lib/data";
 import { checkIn } from "@/lib/actions-frontdesk";
 import { HK_LABEL } from "@/lib/hk-meta";
 import { ymd } from "@/lib/format";
@@ -27,7 +27,7 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
   const { error } = await searchParams;
   const data = await getReservationForCheckin(id);
   if (!data) redirect("/dashboard");
-  const { reservation: r } = data!;
+  const { reservation: r, preferredFloor } = data!;
 
   const alreadyIn = r.assignments.length > 0;
 
@@ -38,11 +38,18 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
       byRoomType.set(line.roomTypeId, await availableUnitsFor(line.roomTypeId, ymd(line.checkIn), ymd(line.checkOut)));
     }
   }
+  // Suggest a room per slot (spec §4.1) — assign physical rooms LATE, but propose the best one now.
+  const usedSuggestions = new Set<string>();
   const slots = r.lines.flatMap((line) =>
-    Array.from({ length: Math.max(1, line.quantity) }, (_, i) => ({
-      key: `${line.id}-${i}`, lineId: line.id, roomTypeId: line.roomTypeId, roomTypeName: line.roomType.name,
-      units: byRoomType.get(line.roomTypeId) ?? [],
-    })),
+    Array.from({ length: Math.max(1, line.quantity) }, (_, i) => {
+      const units = byRoomType.get(line.roomTypeId) ?? [];
+      const pick = suggestUnit(units.filter((u) => !usedSuggestions.has(u.id)), preferredFloor);
+      if (pick) usedSuggestions.add(pick.unitId);
+      return {
+        key: `${line.id}-${i}`, lineId: line.id, roomTypeId: line.roomTypeId, roomTypeName: line.roomType.name,
+        units, suggestedId: pick?.unitId ?? null, suggestReason: pick?.reason ?? null,
+      };
+    }),
   );
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const anyFree = slots.some((s) => s.units.some((u) => u.available));
@@ -74,14 +81,19 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
               const free = slot.units.filter((u) => u.available);
               return (
                 <div key={slot.key}>
-                  <label className="mb-1 flex items-center gap-2 text-[12.5px] font-semibold text-ink-700">
+                  <label className="mb-1 flex flex-wrap items-center gap-2 text-[12.5px] font-semibold text-ink-700">
                     <DoorOpen className="h-4 w-4 text-accent-500" />
                     Room {slots.length > 1 ? idx + 1 : ""} · {slot.roomTypeName}
                     <span className="text-[11px] font-medium text-ink-400">({free.length} free)</span>
+                    {slot.suggestReason && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5 text-[10.5px] font-semibold text-accent-700">
+                        <Wand2 className="h-3 w-3" /> Suggested · {slot.suggestReason}
+                      </span>
+                    )}
                   </label>
                   <select
                     name="slot"
-                    defaultValue={free[0] ? `${slot.lineId}:${free[0].id}` : ""}
+                    defaultValue={slot.suggestedId ? `${slot.lineId}:${slot.suggestedId}` : free[0] ? `${slot.lineId}:${free[0].id}` : ""}
                     required
                     className="h-10 w-full rounded-md border border-surface-border bg-white px-2.5 text-[13.5px] text-ink-900 outline-none focus:border-accent-600"
                   >

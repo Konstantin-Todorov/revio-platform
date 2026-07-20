@@ -56,7 +56,16 @@ export default async function MovePage({ params, searchParams }: { params: Promi
                 ))}
               </select>
             </label>
-            <p className="text-[11.5px] text-ink-400">The guest keeps the same stay; {a.unit.label} is set dirty for housekeeping.</p>
+            <label className="block">
+              <span className="mb-1 block text-[12px] font-semibold text-ink-600">Reason</span>
+              <select name="reason" defaultValue="request" className="h-10 w-full rounded-md border border-surface-border bg-white px-2.5 text-[13.5px] text-ink-900 outline-none focus:border-accent-600">
+                <option value="request">Guest request</option>
+                <option value="upgrade">Upgrade</option>
+                <option value="maintenance">Maintenance</option>
+                <option value="noise">Noise</option>
+              </select>
+            </label>
+            <p className="text-[11.5px] text-ink-400">The guest keeps the same stay; {a.unit.label} is set dirty for housekeeping. The reason is logged to the room timeline.</p>
             <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700">
               <ArrowRightLeft className="h-4 w-4" /> Move room
             </button>

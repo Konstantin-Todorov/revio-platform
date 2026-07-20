@@ -63,13 +63,21 @@ export default async function ConfigurationPage() {
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Housekeeping" subtitle="Inspection gate (spec §3.4)" />
-            <label className="flex cursor-pointer items-start gap-2.5 p-4">
-              <input type="checkbox" name="inspectionGate" defaultChecked={d?.inspectionGate ?? false} className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
-              <span className="text-[12.5px] text-ink-700">
-                <span className="font-semibold text-ink-900">Require inspection before a room is sellable.</span> On: a cleaned room is <em>pending inspection</em> and can’t be assigned until a supervisor marks it Inspected. Off: cleaned counts as ready.
-              </span>
-            </label>
+            <CardHeader title="Housekeeping & assignment" subtitle="Inspection gate (§3.4) + room auto-assign (§4.1)" />
+            <div className="divide-y divide-surface-border/60">
+              <label className="flex cursor-pointer items-start gap-2.5 p-4">
+                <input type="checkbox" name="inspectionGate" defaultChecked={d?.inspectionGate ?? false} className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
+                <span className="text-[12.5px] text-ink-700">
+                  <span className="font-semibold text-ink-900">Require inspection before a room is sellable.</span> On: a cleaned room is <em>pending inspection</em> and can’t be assigned until a supervisor marks it Inspected. Off: cleaned counts as ready.
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2.5 p-4">
+                <input type="checkbox" name="autoAssignEnabled" defaultChecked={d?.autoAssignEnabled ?? false} className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
+                <span className="text-[12.5px] text-ink-700">
+                  <span className="font-semibold text-ink-900">Auto-assign physical rooms the evening before.</span> Off by default — "Suggest a room" works either way. When on, the evening pass assigns late and pins manual overrides so a later run never reshuffles them.
+                </span>
+              </label>
+            </div>
           </Card>
 
           <Card>
