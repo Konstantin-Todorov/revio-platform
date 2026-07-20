@@ -2,7 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { todayInTz, ymd, utcDay } from "./format";
-import type { HkStatus } from "./hk-meta";
+import { sellableStatuses, type HkStatus } from "./hk-meta";
 
 // Statuses that actually occupy a room tonight (front-desk view). Distinct from the metrics
 // SOLD_STATUSES (which also counts no_show/overbooked) — an in-house guest is confirmed/modified.
@@ -268,13 +268,15 @@ export async function getFrontDeskOverview() {
     }
   }
 
-  // Room-ready = clean/inspected units of the arrival's type that aren't already occupied. This is the
-  // single most-used fact at a front desk: can I check them in now, or am I waiting on housekeeping?
+  // Room-ready = SELLABLE units of the arrival's type that aren't already occupied. Sellability depends
+  // on the inspection gate (§3.4): gate on ⇒ only inspected rooms count; off ⇒ clean or inspected.
+  const defs = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id }, select: { inspectionGate: true } });
+  const sellable = new Set(sellableStatuses(defs?.inspectionGate ?? false));
   const occupied = new Set(unitOccupants.keys());
   const readyByType = new Map<string, number>();
   for (const u of units) {
     if (occupied.has(u.id)) continue;
-    if (u.hkStatus === "clean" || u.hkStatus === "inspected") readyByType.set(u.roomTypeId, (readyByType.get(u.roomTypeId) ?? 0) + 1);
+    if (sellable.has(u.hkStatus as HkStatus)) readyByType.set(u.roomTypeId, (readyByType.get(u.roomTypeId) ?? 0) + 1);
   }
   for (const { row, needByType } of arrivalNeeds) {
     let need = 0, have = 0;
@@ -322,6 +324,9 @@ export interface AvailableUnit {
 
 /** Units of a room type with availability for a stay window (for check-in / room move). */
 export async function availableUnitsFor(roomTypeId: string, checkIn: string, checkOut: string, excludeAssignmentId?: string): Promise<AvailableUnit[]> {
+  const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId }, select: { propertyId: true } });
+  const defs = roomType ? await prisma.propertyDefaults.findUnique({ where: { propertyId: roomType.propertyId }, select: { inspectionGate: true } }) : null;
+  const sellable = new Set(sellableStatuses(defs?.inspectionGate ?? false));
   const units = await prisma.unit.findMany({
     where: { roomTypeId, active: true },
     orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
@@ -342,7 +347,7 @@ export async function availableUnitsFor(roomTypeId: string, checkIn: string, che
   const busy = new Set(overlapping.map((a) => a.unitId));
   return units.map((u) => {
     const hk = u.hkStatus as HkStatus;
-    const serviceable = hk === "clean" || hk === "inspected";
+    const serviceable = sellable.has(hk); // inspection gate decides whether "clean" is sellable
     return { id: u.id, label: u.label, floor: u.floor, hkStatus: hk, occupied: busy.has(u.id), available: !busy.has(u.id) && serviceable };
   });
 }

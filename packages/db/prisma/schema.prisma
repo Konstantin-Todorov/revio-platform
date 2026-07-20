@@ -695,6 +695,14 @@ model PropertyDefaults {
   invoiceIssuerName String?
   invoiceVatId      String?
   invoiceAddress    String?
+  // Housekeeping inspection gate (spec §3.4). On ⇒ nothing is sellable until a supervisor inspects
+  // ("clean" = cleaned-pending); off ⇒ cleaned counts as sellable. sellableStatuses() reads this.
+  inspectionGate    Boolean @default(false)
+  // Compliance pack (spec §4.7) — the per-country selection that makes invoicing multimarket without
+  // code. The fiscalization/e-invoicing boundary (F3) is gated by these flags.
+  jurisdiction         String  @default("generic") // generic | bg | eu
+  fiscalizationEnabled Boolean @default(false)
+  eInvoicingEnabled    Boolean @default(false)
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 }

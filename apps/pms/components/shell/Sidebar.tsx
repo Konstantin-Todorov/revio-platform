@@ -28,7 +28,7 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   ] },
   { title: "Setup", items: [
     { href: "/users", label: "User Management", icon: UserCog },
-    { href: "/configuration", label: "Configuration", icon: SlidersHorizontal, soon: "E7" },
+    { href: "/configuration", label: "Configuration", icon: SlidersHorizontal },
   ] },
   { title: "End of day", items: [
     { href: "/closeday", label: "Close Day", icon: Moon },
