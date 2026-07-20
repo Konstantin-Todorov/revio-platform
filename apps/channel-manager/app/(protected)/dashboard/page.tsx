@@ -3,8 +3,9 @@ import {
   Coins, CalendarPlus, Upload, Wrench, RotateCw, ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
-import { getDashboard } from "@/lib/data";
+import { getDashboard, getReservationSummary } from "@/lib/data";
 import { PauseChannelButton, ResumeChannelButton, DisconnectChannelButton, FullSyncButton } from "@/components/channels/ChannelActions";
+import { ReservationSummaryCard } from "@/components/dashboard/ReservationSummaryCard";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { money, relativeTime } from "@/lib/format";
 
@@ -14,6 +15,7 @@ const CHANNEL_INITIALS: Record<string, string> = { booking: "B", expedia: "E", t
 
 export default async function DashboardPage() {
   const { property, stats, channels, realErrorsByChannel, reservations, syncEvents, errorItems } = await getDashboard();
+  const resSummary = await getReservationSummary();
 
   // Pending age (spec §5.3): ten items two seconds old is healthy; two hours old means stuck.
   const pendingAgeMs = stats.oldestPendingAt ? Date.now() - stats.oldestPendingAt.getTime() : null;
@@ -173,6 +175,8 @@ export default async function DashboardPage() {
 
         {/* Right column: reservations + warnings */}
         <div className="space-y-4">
+          <ReservationSummaryCard newRes={resSummary.newRes} cancelled={resSummary.cancelled} />
+
           <Card>
             <CardHeader title="Latest Reservations" action={<a href="/reservations" className="text-[12px] font-semibold text-brand-600 hover:underline">All</a>} />
             <ul className="divide-y divide-surface-border/60">

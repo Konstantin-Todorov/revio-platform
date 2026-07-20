@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { BedDouble, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { getCalendarBoard, getBookingOptions, CALENDAR_ROW_GROUPS } from "@/lib/data";
+import { getCalendarBoard, getBookingOptions, getRoomsAndRates, CALENDAR_ROW_GROUPS } from "@/lib/data";
 import { PageHeader } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { EditableCell } from "@/components/calendar/EditableCell";
+import { CalendarBulkButton } from "@/components/calendar/CalendarBulkButton";
 import { CollapseAll } from "@/components/calendar/CollapseAll";
 import { ParamMultiSelect } from "@/components/calendar/ParamMultiSelect";
 import { MonthView } from "@/components/calendar/MonthView";
@@ -65,6 +66,7 @@ export default async function CalendarPage({
           days: mw.daysInMonth,
           rt,
           rows: rows.length > 0 ? rows : ["sold", "minlos", "cta", "ctd", "stopsell"],
+          rateRows: "month",
         })
       : await getCalendarBoard({
           ...(sp.start ? { start: sp.start } : {}),
@@ -105,7 +107,7 @@ export default async function CalendarPage({
       if (rows.length > 0) p.set("rows", rows.join(","));
       return `/calendar?${p.toString()}`;
     };
-    const monthGroups = CALENDAR_ROW_GROUPS.filter(([k]) => k !== "rates");
+    const monthGroups = CALENDAR_ROW_GROUPS; // "rates" is no longer a display group (spec §2.2)
     const legend = [
       { label: "Stop Sell", color: "bg-danger-500" },
       { label: "CTA", color: "bg-brand-600" },
@@ -202,6 +204,11 @@ export default async function CalendarPage({
 
   // ---- GRID VIEW -----------------------------------------------------------
   const dateObjs = dates.map((d) => new Date(d + "T00:00:00Z"));
+  // Data for the in-calendar bulk modal (spec §2.1) — same room types + rate plans the Bulk screen uses.
+  const { roomTypes: bulkRoomTypes, ratePlans: bulkRatePlans } = await getRoomsAndRates();
+  const bulkRtOpts = bulkRoomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }));
+  const bulkPlanOpts = bulkRatePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }));
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   // Links preserve the current query, changing one param.
   const qs = (over: Record<string, string | undefined>) => {
@@ -312,14 +319,15 @@ export default async function CalendarPage({
               <span className="text-[11px] font-medium text-ink-400">
                 {roomType.code} · {roomType.totalRooms} {roomType.unitKind === "bed" ? "beds" : "rooms"}
               </span>
-              {/* Inline per-row bulk (spec §3.2): the bulk screen pre-scoped to this room type —
-                  the SAME code path and audit trail, never a parallel implementation. */}
-              <Link
-                href={`/bulk-update?rt=${roomType.code}`}
-                className="ml-auto rounded-md border border-surface-border bg-white px-2 py-1 text-[11px] font-semibold text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700"
-              >
-                Bulk edit
-              </Link>
+              {/* Inline per-row bulk (spec §2.1): opens the bulk tool in a modal OVER the calendar,
+                  pre-scoped to this room type — the SAME engine + audit trail as the Bulk screen. */}
+              <CalendarBulkButton
+                roomTypeId={roomType.id}
+                roomTypeName={roomType.name}
+                roomTypes={bulkRtOpts}
+                ratePlans={bulkPlanOpts}
+                today={todayIso}
+              />
             </summary>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-[13px]">
@@ -344,6 +352,9 @@ export default async function CalendarPage({
                   {sectionRows.map((row) => (
                     <tr key={row.key}>
                       <td className={`sticky left-0 z-10 border-b border-r border-surface-border bg-white px-4 py-1.5 text-[12px] font-semibold ${row.muted ? "pl-7 font-normal text-ink-400" : "text-ink-700"}`}>
+                        {row.derived && (
+                          <span title={`Derived from ${row.derived.parent} · ${row.derived.offset}`} className="mr-1 cursor-help select-none" aria-label={`Derived rate (${row.derived.parent} ${row.derived.offset})`}>📎</span>
+                        )}
                         {row.label}
                       </td>
                       {row.cells.map((cell, i) => {

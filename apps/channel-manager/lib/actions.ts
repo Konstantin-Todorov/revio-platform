@@ -196,3 +196,82 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
   revalidatePath("/rooms-rates");
   revalidatePath("/calendar");
 }
+
+// --- Rate Plan Linkage (editable, spec §4.2) -------------------------------
+// Derived prices are computed live from the parent (never materialized), so changing a parent/offset
+// "recalculates" every child automatically on the next read. The guardrails we DO enforce here:
+// no self-reference, no cycles, a chain that ultimately resolves to a MANUAL base rate, and a max depth.
+
+const MAX_LINKAGE_DEPTH = 4;
+
+export interface LinkagePayload {
+  ratePlanId: string;
+  mode: "derive" | "unlink";
+  parentRatePlanId?: string | null;
+  derivedDirection?: string;
+  derivedType?: string;
+  derivedValue?: number;
+  derivedRounding?: string;
+}
+
+export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<ActionResult> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const plan = await prisma.ratePlan.findFirst({ where: { id: payload.ratePlanId, propertyId } });
+  if (!plan) return { ok: false, error: "Rate plan not found." };
+
+  // Unlink → back to a manual, hand-entered rate.
+  if (payload.mode === "unlink") {
+    await prisma.ratePlan.update({
+      where: { id: plan.id },
+      data: { priceLogic: "manual", parentRatePlanId: null, derivedType: null, derivedDirection: null, derivedValue: null, derivedRounding: null },
+    });
+    await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${plan.name}`, field: "linkage", newValue: "unlinked → manual" });
+    await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" is now a manual rate`);
+    revalidatePath("/rooms-rates");
+    revalidatePath("/calendar");
+    return { ok: true };
+  }
+
+  const parentId = payload.parentRatePlanId;
+  if (!parentId) return { ok: false, error: "Choose a parent rate plan." };
+  if (parentId === plan.id) return { ok: false, error: "A rate plan can’t derive from itself." };
+
+  const all = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true, name: true, priceLogic: true, parentRatePlanId: true } });
+  const byId = new Map(all.map((p) => [p.id, p]));
+  const parent = byId.get(parentId);
+  if (!parent) return { ok: false, error: "Parent rate plan not found." };
+
+  // Walk UP from the proposed parent: reject a loop back to this plan, cap the depth, and require the
+  // chain to terminate at a MANUAL root.
+  let cursor: (typeof all)[number] | undefined = parent;
+  let depth = 1;
+  const seen = new Set<string>();
+  while (cursor) {
+    if (cursor.id === plan.id) return { ok: false, error: "That would create a loop — a rate can’t derive from one of its own descendants." };
+    if (seen.has(cursor.id)) break;
+    seen.add(cursor.id);
+    if (cursor.priceLogic === "manual" || !cursor.parentRatePlanId) break; // reached a manual root
+    depth++;
+    if (depth > MAX_LINKAGE_DEPTH) return { ok: false, error: `Derivation chains are limited to ${MAX_LINKAGE_DEPTH} levels — link to a plan closer to the base rate.` };
+    cursor = byId.get(cursor.parentRatePlanId) ?? undefined;
+  }
+  if (!cursor || cursor.priceLogic !== "manual") return { ok: false, error: "A derived rate must ultimately trace back to a manual base rate." };
+
+  await prisma.ratePlan.update({
+    where: { id: plan.id },
+    data: {
+      priceLogic: "derived",
+      parentRatePlanId: parentId,
+      derivedType: payload.derivedType === "fixed" ? "fixed" : "percent",
+      derivedDirection: payload.derivedDirection === "increase" ? "increase" : "decrease",
+      derivedValue: Math.max(0, Math.trunc(payload.derivedValue ?? 0)),
+      derivedRounding: payload.derivedRounding || "none",
+    },
+  });
+  await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${plan.name}`, field: "linkage", newValue: `derives from ${parent.name}` });
+  await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" now derives from "${parent.name}" — children recalculated`);
+  revalidatePath("/rooms-rates");
+  revalidatePath("/calendar");
+  revalidatePath("/dashboard");
+  return { ok: true };
+}

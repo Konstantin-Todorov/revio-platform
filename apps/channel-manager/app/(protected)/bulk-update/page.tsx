@@ -1,7 +1,7 @@
 import { getRoomsAndRates, getRestrictions } from "@/lib/data";
 import { deleteRestrictionRule } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { BulkUpdateForm } from "@/components/bulk/BulkUpdateForm";
+import { BulkUpdatePanel } from "@/components/bulk/BulkUpdatePanel";
 import { RestrictionDialog } from "@/components/restrictions/RestrictionDialog";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { ymd } from "@/lib/format";
@@ -33,15 +33,15 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
   return (
     <div>
       <PageHeader title="Bulk Rates & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
-      <BulkUpdateForm
+      <BulkUpdatePanel
         roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))}
         ratePlans={ratePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
         today={today}
-        {...(preselect ? { preselect } : {})}
+        {...(preselect ? { preselectRoomTypeIds: preselect } : {})}
       />
 
       <Card className="mt-4">
-        <CardHeader title="Restriction Rules" action={<RestrictionDialog roomTypes={rtOpts} channels={chOpts} />} />
+        <CardHeader title="Your active restriction rules" action={<RestrictionDialog roomTypes={rtOpts} channels={chOpts} />} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>

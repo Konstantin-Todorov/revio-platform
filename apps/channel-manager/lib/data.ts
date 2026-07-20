@@ -139,6 +139,8 @@ export type CalendarRow = {
   /** Which DailyCell/RatePrice field this row edits (absent ⇒ read-only, e.g. derived rates / rooms sold). */
   field?: "inventory" | "price" | "minLos" | "cta" | "ctd" | "stopSell";
   editable?: boolean;
+  /** Set on a derived rate row (spec §2.3): the grid marks it with a paperclip; hover shows parent + offset. */
+  derived?: { parent: string; offset: string };
   cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean; warn?: string }[];
 };
 
@@ -147,13 +149,15 @@ export interface CalendarQuery {
   start?: string;
   days?: number;
   rt?: string[];    // room-type codes to show (empty = all)
-  rows?: string[];  // visible optional row groups (sold|rates|minlos|cta|ctd|stopsell)
-  rp?: string[];    // rate-plan codes whose rate rows show (spec §3.2 named multi-select; empty = default Standard + NR/BRF)
+  rows?: string[];  // visible optional row groups (sold|minlos|cta|ctd|stopsell)
+  rp?: string[];    // rate-plan codes whose rate rows show (spec §2.3 named multi-select; empty = default Standard + NR/BRF)
+  rateRows?: "grid" | "month"; // grid: rate rows governed solely by the Rates filter; month: standard only, no derived
 }
 
+// Spec §2.2: "Derived rates" is NO LONGER a display toggle — rate-row visibility is governed solely by
+// the Rates multi-select (rp), and derived status is shown inline via a paperclip (§2.3).
 export const CALENDAR_ROW_GROUPS = [
   ["sold", "Rooms sold"],
-  ["rates", "Derived rates"],
   ["minlos", "Min LOS"],
   ["cta", "CTA"],
   ["ctd", "CTD"],
@@ -186,7 +190,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
   const dateKeys = dates.map((d) => d.toISOString().slice(0, 10));
 
   const allRoomTypes = await prisma.roomType.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
-  const visible = new Set((q.rows && q.rows.length > 0 ? q.rows : ["sold", "rates", "minlos", "ctd", "stopsell"]));
+  const visible = new Set((q.rows && q.rows.length > 0 ? q.rows : ["sold", "minlos", "ctd", "stopsell"]));
   const roomTypes = q.rt && q.rt.length > 0 ? allRoomTypes.filter((r) => q.rt!.includes(r.code)) : allRoomTypes;
 
   if (allRoomTypes.length === 0) {
@@ -206,10 +210,13 @@ export async function getCalendarBoard(q: CalendarQuery) {
   const allPlans = await prisma.ratePlan.findMany({ where: { propertyId, active: true }, orderBy: { sortOrder: "asc" } });
   const defaultRp = [standard?.code, "NR", "BRF"].filter(Boolean) as string[]; // today's behaviour
   const selectedRp = new Set(q.rp && q.rp.length > 0 ? q.rp : defaultRp);
-  const derived = visible.has("rates")
+  // Grid (spec §2.2): rate rows — standard + derived — are shown purely by the Rates multi-select.
+  // Month keeps its historical shape: the standard row only, no derived rows.
+  const rateMode = q.rateRows ?? "grid";
+  const derived = rateMode === "grid"
     ? allPlans.filter((p) => p.priceLogic === "derived" && selectedRp.has(p.code))
     : [];
-  const showStandardRow = visible.has("rates") ? (standard != null && selectedRp.has(standard.code)) : standard != null;
+  const showStandardRow = rateMode === "grid" ? (standard != null && selectedRp.has(standard.code)) : standard != null;
 
   const rtIds = roomTypes.map((r) => r.id);
   const [prices, cells, resLines] = await Promise.all([
@@ -280,7 +287,8 @@ export async function getCalendarBoard(q: CalendarQuery) {
         ? `${dp.derivedDirection === "increase" ? "+" : "−"}${dp.derivedValue}%`
         : `${dp.derivedDirection === "increase" ? "+" : "−"}€${((dp.derivedValue ?? 0) / 100).toLocaleString("en-US")}`;
       rows.push({
-        key: dp.code, label: `${dp.name} · ${off}`, kind: "price", muted: true,
+        key: dp.code, label: dp.name, kind: "price", muted: true,
+        derived: { parent: standard?.name ?? "Standard Rate", offset: off }, // paperclip + hover (spec §2.3)
         cells: dateKeys.map((k) => {
           const parent = priceMap.get(priceKey(roomType.id, k));
           return { date: k, value: parent === undefined ? "—" : fmt(deriveRate(parent, cfg)), muted: true };
@@ -412,6 +420,32 @@ export async function getRoomsAndRates() {
     }),
   ]);
   return { property, roomTypes, ratePlans };
+}
+
+/**
+ * Dashboard Reservation Summary (spec §1.1): new vs cancelled reservations counted by ACTION date
+ * (made / cancelled), NOT stay date — the same date basis as the Reservations "Date type" filter.
+ * Both Today and Yesterday are precomputed so the card's toggle flips instantly with no refetch.
+ */
+export async function getReservationSummary() {
+  const property = await getProperty();
+  const now = new Date();
+  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const yesterdayStart = new Date(todayStart.getTime() - 86_400_000);
+  const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
+  // "Made" date = importedAt (when the reservation entered the system); cancelled = cancelledAt.
+  const count = (field: "importedAt" | "cancelledAt", from: Date, to: Date) =>
+    prisma.reservation.count({ where: { propertyId: property.id, [field]: { gte: from, lt: to } } });
+  const [newToday, newYesterday, cancToday, cancYesterday] = await Promise.all([
+    count("importedAt", todayStart, tomorrowStart),
+    count("importedAt", yesterdayStart, todayStart),
+    count("cancelledAt", todayStart, tomorrowStart),
+    count("cancelledAt", yesterdayStart, todayStart),
+  ]);
+  return {
+    newRes: { today: newToday, yesterday: newYesterday },
+    cancelled: { today: cancToday, yesterday: cancYesterday },
+  };
 }
 
 export async function getChannels() {

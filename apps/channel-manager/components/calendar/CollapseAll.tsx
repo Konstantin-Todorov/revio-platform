@@ -9,10 +9,9 @@ import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
  * independently after a global toggle. The chosen state persists per user (localStorage) because
  * this screen stays open all day and the layout should survive a reload.
  */
-const STORE_KEY = "cm-calendar-collapsed";
-
 export function CollapseAll({ containerId }: { containerId: string }) {
   const [collapsed, setCollapsed] = useState(false);
+  const storeKey = `cm-collapsed-${containerId}`;
 
   const apply = (c: boolean) => {
     document.querySelectorAll<HTMLDetailsElement>(`#${containerId} > details`).forEach((d) => {
@@ -21,7 +20,7 @@ export function CollapseAll({ containerId }: { containerId: string }) {
   };
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORE_KEY) === "1";
+    const saved = localStorage.getItem(storeKey) === "1";
     if (saved) apply(true);
     setCollapsed(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -31,7 +30,7 @@ export function CollapseAll({ containerId }: { containerId: string }) {
     const next = !collapsed;
     apply(next);
     setCollapsed(next);
-    localStorage.setItem(STORE_KEY, next ? "1" : "0");
+    localStorage.setItem(storeKey, next ? "1" : "0");
   };
 
   const Icon = collapsed ? ChevronsUpDown : ChevronsDownUp;

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { computeWaterfall, deriveRate, isOverbooking, SOLD_STATUSES, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
-import { logAudit, recordPush, recordPull, str, int, strList, eachDate, utcDay } from "./mutation-helpers";
+import { logAudit, recordPush, recordPull, str, int, eachDate, utcDay } from "./mutation-helpers";
 
 export type ActionResult = { ok: boolean; error?: string; affected?: number; warning?: string };
 
@@ -26,7 +26,7 @@ async function standardPlanId(propertyId: string): Promise<string | null> {
 
 async function upsertCell(
   tenantId: string, propertyId: string, roomTypeId: string, date: Date,
-  data: Partial<{ inventory: number; minLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean }>,
+  data: Partial<{ inventory: number; minLos: number | null; maxLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean; advancePurchaseMin: number | null; advancePurchaseMax: number | null }>,
   source: "calendar" | "bulk" = "calendar", // two-tier provenance: which surface wrote this (spec §1.4)
 ) {
   await prisma.dailyCell.upsert({
@@ -77,91 +77,109 @@ function int2(v: string): number {
   return Number.isFinite(n) ? Math.trunc(n) : 0;
 }
 
-// --- Bulk update -----------------------------------------------------------
+// --- Bulk update (multi-field, spec §3.1) ----------------------------------
+// One pass sets any subset of the ARI attributes; empty fields are untouched. ≥1 field required.
+// Same engine + same audit path as the single edits; the Calendar bulk modal calls this too (§2.1).
 
-export async function applyBulkUpdate(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+export type BulkRateMode = "set" | "inc_pct" | "dec_pct" | "inc_amt" | "dec_amt";
+export interface BulkPayload {
+  dateFrom: string;
+  dateTo: string;
+  daysOfWeek: number[];
+  roomTypeIds: string[];
+  ratePlanIds: string[]; // manual plans the price change targets
+  rate?: { mode: BulkRateMode; value: number };
+  minLos?: number | null; // >0 sets, ≤0 clears
+  maxLos?: number | null;
+  cta?: boolean;
+  ctd?: boolean;
+  stopSell?: boolean; // open/close (stop-sell): true = closed, false = open
+  advanceMin?: number | null;
+  advanceMax?: number | null;
+  availability?: number; // rooms to sell
+}
+export type BulkResult = { ok: boolean; error?: string; affected?: number; warning?: string };
+
+export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkResult> {
   const { id: propertyId, tenantId } = await getProperty();
-  const dateFrom = str(fd, "dateFrom");
-  const dateTo = str(fd, "dateTo");
+  const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
   if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
   if (dateTo < dateFrom) return { ok: false, error: "End date is before start date." };
-
-  const roomTypeIds = strList(fd, "roomTypeIds");
   if (roomTypeIds.length === 0) return { ok: false, error: "Select at least one room type." };
 
-  const dows = strList(fd, "daysOfWeek").map(Number);
-  const updateType = str(fd, "updateType");
-  const value = Number(str(fd, "value"));
-  const dates = eachDate(dateFrom, dateTo, dows);
+  // Assemble the DailyCell patch from whichever restriction fields were supplied.
+  const cell: Partial<{ inventory: number; minLos: number | null; maxLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean; advancePurchaseMin: number | null; advancePurchaseMax: number | null }> = {};
+  const changed: string[] = [];
+  const posOrNull = (v: number | null | undefined) => (v != null && v > 0 ? Math.trunc(v) : null);
+  if (payload.minLos !== undefined) { cell.minLos = posOrNull(payload.minLos); changed.push("min_los"); }
+  if (payload.maxLos !== undefined) { cell.maxLos = posOrNull(payload.maxLos); changed.push("max_los"); }
+  if (payload.cta !== undefined) { cell.cta = payload.cta; changed.push("cta"); }
+  if (payload.ctd !== undefined) { cell.ctd = payload.ctd; changed.push("ctd"); }
+  if (payload.stopSell !== undefined) { cell.stopSell = payload.stopSell; changed.push("stop_sell"); }
+  if (payload.advanceMin !== undefined) { cell.advancePurchaseMin = posOrNull(payload.advanceMin); changed.push("advance_min"); }
+  if (payload.advanceMax !== undefined) { cell.advancePurchaseMax = posOrNull(payload.advanceMax); changed.push("advance_max"); }
+  if (payload.availability !== undefined) { cell.inventory = Math.max(0, Math.trunc(payload.availability)); changed.push("availability"); }
+
+  const doRate = !!payload.rate && Number.isFinite(payload.rate.value);
+  if (doRate) changed.push("rate");
+
+  // ≥1 field required (spec §3.1) — an empty apply is not a valid update.
+  if (changed.length === 0) return { ok: false, error: "Set at least one field to update." };
+
+  const dates = eachDate(dateFrom, dateTo, daysOfWeek);
   if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
 
-  // Rate-plan targeting (spec §3.3): bulk PRICE updates apply to the selected MANUAL plans —
-  // derived plans are never price-edited directly (their price = parent ± offset, cascade handles
-  // them). The server filters defensively even though the form disables derived checkboxes.
+  // Rate targeting: only MANUAL plans are price-edited (derived plans follow their parent).
   let ratePlanIds: string[] = [];
-  if (updateType.startsWith("rate_")) {
-    const requested = strList(fd, "ratePlanIds");
+  if (doRate) {
+    const requested = payload.ratePlanIds ?? [];
     const manualPlans = await prisma.ratePlan.findMany({
       where: { propertyId, priceLogic: "manual", active: true, ...(requested.length > 0 ? { id: { in: requested } } : {}) },
-      select: { id: true },
-      orderBy: { sortOrder: "asc" },
+      select: { id: true }, orderBy: { sortOrder: "asc" },
     });
     ratePlanIds = manualPlans.map((p) => p.id);
-    if (requested.length === 0) {
-      const std = await standardPlanId(propertyId);
-      ratePlanIds = std ? [std] : [];
-    }
-    if (ratePlanIds.length === 0) {
-      return { ok: false, error: "Select at least one manual rate plan (derived plans follow their parent)." };
-    }
+    if (requested.length === 0) { const std = await standardPlanId(propertyId); ratePlanIds = std ? [std] : []; }
+    if (ratePlanIds.length === 0) return { ok: false, error: "Select at least one manual rate plan for the price change (derived plans follow their parent)." };
   }
-  let affected = 0;
 
-  // Total-rooms safety net (spec): loading more inventory than physically exists saves, but warns.
+  // Total-rooms safety net (spec A4): more inventory than physically exists saves, but warns.
   let warning: string | undefined;
-  if (updateType === "availability_set") {
-    const over = await prisma.roomType.findMany({
-      where: { id: { in: roomTypeIds }, totalRooms: { lt: Math.max(0, Math.trunc(value)) } },
-      select: { name: true, totalRooms: true },
-    });
-    if (over.length > 0) {
-      warning = `Attention: ${Math.trunc(value)} to sell exceeds the physical count for ${over
-        .map((r) => `${r.name} (${r.totalRooms})`)
-        .join(", ")} — saved anyway, double-check the number.`;
-    }
+  if (payload.availability !== undefined) {
+    const v = Math.max(0, Math.trunc(payload.availability));
+    const over = await prisma.roomType.findMany({ where: { id: { in: roomTypeIds }, totalRooms: { lt: v } }, select: { name: true, totalRooms: true } });
+    if (over.length > 0) warning = `${v} to sell exceeds the physical count for ${over.map((r) => `${r.name} (${r.totalRooms})`).join(", ")} — saved anyway, double-check the number.`;
   }
 
+  const hasCell = Object.keys(cell).length > 0;
+  let affected = 0;
   for (const roomTypeId of roomTypeIds) {
     for (const date of dates) {
-      if (updateType.startsWith("rate_")) {
+      if (hasCell) await upsertCell(tenantId, propertyId, roomTypeId, date, cell, "bulk");
+      if (doRate) {
+        const { mode, value } = payload.rate!;
         for (const rpId of ratePlanIds) {
           const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
           const base = existing?.priceMinor ?? 0;
           let next = base;
-          if (updateType === "rate_set") next = Math.round(value * 100);
-          else if (updateType === "rate_inc_pct") next = Math.round(base * (1 + value / 100));
-          else if (updateType === "rate_dec_pct") next = Math.round(base * (1 - value / 100));
-          else if (updateType === "rate_inc_amt") next = base + Math.round(value * 100);
-          else if (updateType === "rate_dec_amt") next = Math.max(0, base - Math.round(value * 100));
+          if (mode === "set") next = Math.round(value * 100);
+          else if (mode === "inc_pct") next = Math.round(base * (1 + value / 100));
+          else if (mode === "dec_pct") next = Math.round(base * (1 - value / 100));
+          else if (mode === "inc_amt") next = base + Math.round(value * 100);
+          else if (mode === "dec_amt") next = Math.max(0, base - Math.round(value * 100));
           await prisma.ratePrice.upsert({
             where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
             update: { priceMinor: next, source: "bulk" },
             create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
           });
         }
-      } else if (updateType === "availability_set") {
-        await upsertCell(tenantId, propertyId, roomTypeId, date, { inventory: Math.max(0, Math.trunc(value)) }, "bulk");
-      } else if (updateType === "minlos_set") {
-        await upsertCell(tenantId, propertyId, roomTypeId, date, { minLos: value > 0 ? Math.trunc(value) : null }, "bulk");
-      } else if (updateType === "stopsell_on" || updateType === "stopsell_off") {
-        await upsertCell(tenantId, propertyId, roomTypeId, date, { stopSell: updateType === "stopsell_on" }, "bulk");
       }
       affected++;
     }
   }
 
-  await logAudit(propertyId, tenantId, { entity: `Bulk update · ${roomTypeIds.length} room types`, field: updateType, newValue: `${affected} cells`, source: "bulk" });
-  await recordPush(propertyId, tenantId, `Bulk update applied (${updateType}) — ${affected} cells`);
+  // One apply = one audit entry recording every attribute changed (spec §3.1 build note).
+  await logAudit(propertyId, tenantId, { entity: `Bulk update · ${roomTypeIds.length} room types`, field: changed.join(", "), newValue: `${affected} cells`, source: "bulk" });
+  await recordPush(propertyId, tenantId, `Bulk update applied (${changed.join(", ")}) — ${affected} cells`);
   revalidateCalendar();
   revalidatePath("/rooms-rates");
   return { ok: true, affected, ...(warning ? { warning } : {}) };
