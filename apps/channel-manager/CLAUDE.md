@@ -15,6 +15,21 @@
 > quick actions. Task phases A (foundations) + B (CM screens) in the tracker. The older
 > `docs/CM-REVISIONS.md` (2026-06-27) is superseded where they overlap.
 
+> **🔜 Refinement Round 1 intake (founder doc 2026-07-20: `docs/specs/CM-REFINEMENT-R1.md` — read it
+> before changing any CM screen; NOT yet built, plan pending sign-off).** ⚠ The source file's title reads
+> "RevioCRS" but that is a **typo — the doc is for RevioLink/CM** (founder-confirmed; corrected file being
+> re-sent — reconcile when it lands). Refines the shipped V2. Asks: **Dashboard** Reservation-Summary card
+> (new/cancelled by **action date**, Today/Yesterday toggle); **Calendar** → bulk edit in a modal **over**
+> the calendar (stay on the calendar after apply), remove the derived-rates display filter, **paperclip**
+> marks derived rows (hover = parent + offset), hide the top search bar in calendar view; **Bulk Update** →
+> **multi-field editor** (any subset of the full ARI set, ≥1 field required) + **confirm-then-result modal**
+> (green "Successful" / red "Not successful", X/backdrop dismiss) + rename "Restriction Rules" → "Your active
+> restriction rules"; **Rooms & Rates** → vertical restack (rooms on top, rate plans below, collapsible +
+> expand-all) + **editable Rate Plan Linkage** (no-cycles / recalc-on-change / manual-parent-only+max-depth /
+> respect precedence / surface the existing-data overwrite choice). **Shared with the CRS refinement** — the
+> Calendar / Bulk / Rooms & Rates changes are identical across CM + CRS, so build them **once as shared
+> components** (one bulk engine, one modal pattern, paperclip=derived everywhere). Task phase **G** on sign-off.
+
 **This is the first product, the sales demo, and the priority.** It is a pure distribution tool:
 inventory out, bookings in, nothing else. It reads/writes inventory **only** through `@revio/core`.
 

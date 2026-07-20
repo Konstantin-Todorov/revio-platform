@@ -23,6 +23,35 @@
 > fiscalization/e-invoicing (Bulgaria N-18 = go-live blocker for real properties). Task phases
 > D (operations) + E (money) + F (assignment/seams) in the tracker.
 
+> **🔜 Page-by-Page Refinement Round 1 intake (founder doc 2026-07-20: `docs/specs/PMS-REFINEMENT-R1.md`
+> — read it before changing any PMS screen; NOT yet built, plan pending sign-off).** Additive refinement
+> on the shipped V2 (D/E/F), judging every screen by *who's on it and what decision they make here*.
+> Headlines by screen: **Front Desk** → FD-metric KPI row, two co-equal action columns + collapsible
+> in-house, **"Needs attention" exception strip**, overdue-checkout states, **extend-checkout** (same-day
+> only — NOT a stay extension), active room-ready↔arrival prioritize link; **Reservation view** → the
+> action hub (check out / extend / move / post / folio), drop dev scaffolding; **Guests** → graceful
+> empty-state degrade, **n≥2 preference guard**, **guest identity/merge (foundational)**, blacklist +
+> GDPR consent, action-paired profile; **Folios** → **Open/History split**, closed-folio-as-statement,
+> nameable/removable splits, **mandatory-deposit check-in gate**, checkout-readiness signal, document
+> layer (bill/invoice/credit-note via the invoicing module); **Extras & Charges** (rename) → pick-a-folio
+> reframe, void+quantity, folio-routing on splits, real add/edit/remove catalog w/ tax category;
+> **Housekeeping** → **role-scoped views** (housekeeper list / supervisor board / FD readiness),
+> **Dirty→In progress→Awaiting inspection→Ready** pipeline, reason-on-each-room, per-cleaner assignment,
+> **clock-in/active workforce**, manager-only event-stream analytics; **Rooms** → structured beds + max
+> occupancy (type-vs-physical boundary), **floor/zone as a first-class object** (warn-and-steer), self-
+> populating lifecycle timeline, bulk edit, delete guard; **Maintenance** → reuse HK pattern (crew view +
+> clock-in + analytics), severity/revenue priority, **On-hold-awaiting-parts** lifecycle, **OOO↔revenue
+> loop** (complete → prompt back-on-sale), fix-photo, cost note; **Configuration** → §9 is the expansion
+> target (E7 shipped a base) — grouped sections + search + deep-links, owns times/late-checkout default/
+> deposit types+mandatory flag/inspection mode/catalog/roles matrix; **Staff & Access Management**
+> (rename) → live workforce roster + clock-in (incl. delegated) + user CRUD + per-user security (login/
+> device history, restrict/suspend). **Cross-cutting invariants:** one shared identity; readiness-before-
+> irreversible; every create needs a lifecycle-gated inverse; role shapes the view (no escalation);
+> set-default-general/override-specific; degrade empty states; no dev scaffolding in shipped UI; EU
+> worker-data/GDPR caution on all clock-in/analytics. **⚠ Two pending founder items:** the **§11 Close
+> Day** section ("will add later today") and round scope/sequence sign-off. Task phase **H** to be created
+> on sign-off.
+
 Sold standalone as an operations layer, even over a foreign reservation system. Reads/writes inventory
 **only** through `@revio/core` — never ad-hoc queries against inventory tables.
 

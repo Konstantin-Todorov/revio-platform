@@ -160,3 +160,27 @@ Channex (distribution) · **Stripe test-mode** (payments §4.5, F2 — TEST keys
 **fiscalization** (§4.7, F3 — `TaxInvoice.fiscalRef` + jurisdiction pack; `docs/specs/BG-FISCALIZATION-
 RESEARCH.md`). Real email (Resend) is wired (mock-log until `RESEND_API_KEY` set). Every screen's **Keep**
 list was honoured. Older `docs/CM-REVISIONS.md` (2026-06-27) is superseded where the specs overlap it.
+
+**→ 🔜 REFINEMENT ROUND intake (founder docs 2026-07-20, `docs/specs/`) — NOT yet built; plan pending
+founder sign-off.** **THREE systems, three docs** (one doc per system; the `Revio Development Docs.docx`
+title reads "RevioCRS" but that's a **typo — it's the RevioLink/CM doc**, founder-confirmed; the founder is
+re-sending the corrected file). **RevioLink R1** (`CM-REFINEMENT-R1.md`) + **RevioCRS R2**
+(`CRS-REFINEMENT-R2.md`) + **RevioPMS R1** (`PMS-REFINEMENT-R1.md`). CM + CRS **share** the Calendar / Bulk
+/ Rooms & Rates changes — build them **once as shared components, reused across both** (paperclip=derived,
+one bulk engine, one preview→apply→result modal everywhere). **RevioLink** asks: Dashboard Reservation-
+Summary card (by action date); Calendar bulk-in-modal-over-calendar + remove derived filter + paperclip +
+hide search; Bulk **multi-field editor + confirm-then-result modal** + rename "Restriction Rules"→"Your
+active restriction rules"; Rooms & Rates vertical restack + **editable Rate Plan Linkage** (cycle/recalc/
+precedence guardrails). **RevioCRS** adds on top: Dashboard YoY/LW toggle w/ basis labels; **Analytics full
+redesign** (summary cards + evolution bar charts + performance-by-room-type, replacing the day table);
+Reservations 3-click column sort; Guests **Notes** tab; Settings low-availability alert + staff CRUD on the
+shared identity (+ the shared Calendar/Bulk/linkage changes). **RevioPMS** (10 screens): Front Desk
+exception-strip + overdue/extend-checkout + FD-metric KPIs; Reservation-view action hub; **Guests
+identity/merge + n≥2 preference guard + GDPR/blacklist**; Folios **Open/History split** + mandatory-deposit
+check-in gate + checkout-readiness; **Extras & Charges** rename + void/qty + real catalog; Housekeeping
+**role-scoped views** + Dirty→In progress→Awaiting inspection→Ready pipeline + per-cleaner assignment +
+**clock-in** + event-stream analytics; Rooms beds/occupancy + floor-as-object + bulk-edit; Maintenance crew
+view + On-hold + **OOO↔revenue loop**; **Configuration expansion** (E7 already shipped a base — §9 is the
+target); **Staff & Access Management** rename + workforce roster + clock-in + user security. **Two pending
+founder items:** PMS **§11 Close Day** section ("will add later today") and the re-sent corrected RevioLink
+doc. Task phases **G (RevioLink R1)** + **H (RevioCRS R2)** + **J (RevioPMS R1)** to be created on sign-off.
