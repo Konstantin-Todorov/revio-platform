@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { ensureFolio, createSplitFolio, folioBalance } from "./folio";
 import { postFolioLine } from "./posting";
+import { chargeCard, refundCard } from "./gateway";
 import { logAudit, str } from "./mutation-helpers";
 
 async function ctx() {
@@ -66,8 +67,19 @@ export async function postPayment(fd: FormData): Promise<void> {
 
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
-  await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind: "payment", description: PAY_METHODS[method]!, amountMinor, method, ref, postedById: session.userId });
-  await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_payment", field: PAY_METHODS[method], newValue: `-${amountMinor}`, userId: session.userId });
+
+  // Card payments flow through the gateway boundary (spec §4.5) — we store only the token + result,
+  // never a card number. Cash / company / bank are drawer/manual entries and skip the gateway.
+  let description = PAY_METHODS[method]!;
+  let gwRef = ref;
+  if (method === "card") {
+    const g = await chargeCard(amountMinor, "EUR", `Folio ${reservationId.slice(-6)}`);
+    if (!g.ok) redirect(`/folio/${reservationId}?error=gateway`);
+    gwRef = g.ref;
+    description = g.mode === "stripe_test" ? `Card •••• ${g.last4 ?? "4242"} (test)` : "Card (mock gateway)";
+  }
+  await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind: "payment", description, amountMinor, method, ref: gwRef, postedById: session.userId });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_payment", field: PAY_METHODS[method], newValue: `-${amountMinor}${gwRef ? ` · ${gwRef}` : ""}`, userId: session.userId });
   refresh(reservationId);
 }
 
@@ -124,12 +136,19 @@ export async function captureDeposit(fd: FormData): Promise<void> {
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
 
+  // Card deposits are gateway transactions against the token; cash is a drawer entry (spec §4.5).
+  let depositRef: string | null = null;
+  if (method === "card") {
+    const g = await chargeCard(amountMinor, "EUR", `${type!.name} deposit ${reservationId.slice(-6)}`);
+    if (!g.ok) redirect(`/folio/${reservationId}?error=gateway`);
+    depositRef = g.ref;
+  }
   const applied = type!.behaviour === "applied";
   await postFolioLine({
     tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!,
     kind: applied ? "payment" : "deposit_held",
-    description: `${type!.name} deposit${applied ? "" : " (held)"}`,
-    amountMinor, method, depositTypeId: type!.id,
+    description: `${type!.name} deposit${applied ? "" : " (held)"}${depositRef ? ` · ${depositRef}` : ""}`,
+    amountMinor, method, ref: depositRef, depositTypeId: type!.id,
     // VAT point: at capture only when the type says so; a held deposit is otherwise not yet taxable.
     ...(applied ? {} : { taxCategory: type!.vatTiming === "capture" ? ("standard" as const) : null }),
     postedById: session.userId,
@@ -175,10 +194,19 @@ export async function refundDeposit(fd: FormData): Promise<void> {
   const amountMinor = Math.min(requested > 0 ? requested : depositsHeld, depositsHeld);
   if (amountMinor <= 0) redirect(`/folio/${reservationId}?error=deposit`);
 
+  // Card refunds go back through the same gateway; cash refunds are a drawer entry (spec §4.5).
+  const method = str(fd, "method") || "cash";
+  let refundRef: string | null = null;
+  if (method === "card") {
+    const held = await prisma.folioLine.findFirst({ where: { folioId: folioId!, kind: "deposit_held", ref: { not: null } }, orderBy: { postedAt: "desc" }, select: { ref: true } });
+    const g = await refundCard(held?.ref ?? "mock_", amountMinor);
+    if (!g.ok) redirect(`/folio/${reservationId}?error=gateway`);
+    refundRef = g.ref;
+  }
   await postFolioLine({
     tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!,
-    kind: "deposit_refund", description: "Deposit refunded", amountMinor,
-    method: str(fd, "method") || "cash", taxCategory: null, postedById: session.userId,
+    kind: "deposit_refund", description: `Deposit refunded${refundRef ? ` · ${refundRef}` : ""}`, amountMinor,
+    method, ref: refundRef, taxCategory: null, postedById: session.userId,
   });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "deposit_refund", field: "returned to guest", newValue: String(amountMinor), userId: session.userId });
   refresh(reservationId);

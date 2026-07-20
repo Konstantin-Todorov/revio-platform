@@ -5,6 +5,7 @@ import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/component
 import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat, FileText } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
 import { listInvoicesForReservation, DOC_LABEL } from "@/lib/invoice";
+import { gatewayMode } from "@/lib/gateway";
 import { OUTLET_LABEL } from "@/lib/posting";
 import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
 import { issueInvoice } from "@/lib/actions-invoice";
@@ -23,6 +24,7 @@ const ERRORS: Record<string, string> = {
   extra: "Enter a name and a positive per-night price.",
   buyer: "Enter who the invoice is billed to.",
   invoice: "Couldn’t issue the invoice — is there a folio to bill?",
+  gateway: "The card gateway declined the transaction — try again or use another method.",
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -199,7 +201,10 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <CreditCard className="h-3.5 w-3.5" /> Take
                 </button>
               </div>
-              <p className="text-[10.5px] text-ink-400">Label + amount only — no card number is stored or processed.</p>
+              <p className="text-[10.5px] text-ink-400">
+                Cash / company / bank are drawer entries. Card runs through the payment gateway
+                ({gatewayMode() === "stripe_test" ? "Stripe test-mode" : "mock"}) — only a token is stored, never a card number.
+              </p>
             </form>
           </Card>
 
