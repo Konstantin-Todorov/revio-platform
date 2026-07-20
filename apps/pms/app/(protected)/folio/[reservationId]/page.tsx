@@ -2,10 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
-import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat } from "lucide-react";
+import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat, FileText } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
+import { listInvoicesForReservation, DOC_LABEL } from "@/lib/invoice";
 import { OUTLET_LABEL } from "@/lib/posting";
 import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
+import { issueInvoice } from "@/lib/actions-invoice";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 
@@ -17,6 +19,10 @@ const ERRORS: Record<string, string> = {
   closed: "This folio is closed — no more postings.",
   voidaccom: "Accommodation lines can’t be voided (they come from the reservation).",
   balance: "Settle the balance first, or check out with an override below.",
+  deposit: "Enter a positive amount (and, to capture, a deposit type).",
+  extra: "Enter a name and a positive per-night price.",
+  buyer: "Enter who the invoice is billed to.",
+  invoice: "Couldn’t issue the invoice — is there a folio to bill?",
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -37,6 +43,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const data = await getFolioView(reservationId);
   if (!data) redirect("/folios");
   const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras } = data!;
+  const invoices = await listInvoicesForReservation(reservationId);
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const rooms = r.assignments.map((a) => a.unit.label).join(", ");
@@ -227,6 +234,57 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
               <input name="price" type="text" inputMode="decimal" required placeholder={`Per night (${currency})`} className={`${inputCls} w-32`} />
               <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50">
                 <Repeat className="h-3.5 w-3.5" /> Add for the stay
+              </button>
+            </form>
+          </Card>
+
+          {/* Invoicing — render a folio (or the split's chosen folio) as a numbered tax document (§4.3) */}
+          <Card className="p-4 lg:col-span-2">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[13px] font-bold text-ink-900">Invoicing</h3>
+              <span className="text-[11px] text-ink-400">Charges live on folios; an invoice renders them as a numbered tax document — gapless series, tax per rate, accommodation broken out.</span>
+            </div>
+            {invoices.length > 0 && (
+              <ul className="mb-3 divide-y divide-surface-border/60 rounded-md border border-surface-border">
+                {invoices.map((inv) => (
+                  <li key={inv.id} className="flex items-center justify-between gap-2 px-3 py-2 text-[12.5px]">
+                    <Link href={`/invoice/${inv.id}`} className="flex items-center gap-1.5 font-semibold text-accent-600 hover:underline">
+                      <FileText className="h-3 w-3" /> {inv.number}
+                      <span className="font-normal text-ink-400">· {DOC_LABEL[inv.docType as "invoice"] ?? inv.docType} · {inv.buyerName}</span>
+                    </Link>
+                    <span className="tnum text-ink-700">{money(inv.grossMinor, inv.currency)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <form action={issueInvoice} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="reservationId" value={reservationId} />
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold text-ink-600">Document</span>
+                <select name="docType" defaultValue="invoice" className={`${inputCls} w-28`}>
+                  <option value="invoice">Invoice</option>
+                  <option value="proforma">Proforma</option>
+                  <option value="credit_note">Credit note</option>
+                </select>
+              </label>
+              {folios.length > 1 && (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-ink-600">Folio</span>
+                  <select name="folioId" defaultValue={folios[0]!.id} className={`${inputCls} w-28`}>
+                    {folios.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                </label>
+              )}
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold text-ink-600">Bill to</span>
+                <input name="buyerName" required defaultValue={guestName} className={`${inputCls} w-40`} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] font-semibold text-ink-600">Buyer VAT ID</span>
+                <input name="buyerVatId" placeholder="(company)" className={`${inputCls} w-32`} />
+              </label>
+              <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+                <FileText className="h-3.5 w-3.5" /> Issue
               </button>
             </form>
           </Card>

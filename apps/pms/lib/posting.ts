@@ -31,9 +31,11 @@ function defaultOutlet(kind: string): Outlet {
   return "extra"; // extra / fee / tax
 }
 
-/** Sensible default tax category. Accommodation carries the property VAT (default standard — the
- * configurable rate/label lands with Configuration in E7); a city-tax fee is its own category. */
+/** Sensible default tax category. Accommodation typically sits at a REDUCED VAT rate (broken out on
+ * its own invoice line, spec §4.3); a city-tax fee is its own category; everything else is standard.
+ * The rate values behind each category are property config (E7), never hardcoded here. */
 function defaultTaxCategory(kind: string, description: string): TaxCategory {
+  if (kind === "accommodation") return "reduced";
   if (kind === "fee" && /city\s*tax/i.test(description)) return "city_tax";
   return "standard";
 }

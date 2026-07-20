@@ -152,6 +152,8 @@ model Property {
   folioLines          FolioLine[]
   posItems            PosItem[]
   depositTypes        DepositType[]
+  invoiceSeries       InvoiceSeries[]
+  taxInvoices         TaxInvoice[]
   maintenanceTasks    MaintenanceTask[]
 
   @@index([tenantId])
@@ -685,8 +687,69 @@ model PropertyDefaults {
   holdTtlMinutes     Int     @default(30)
   // Action Center thresholds (docs/CRS-REFERENCE.md: every threshold a Setting, never hardcoded).
   lowAvailabilityThreshold Int @default(2)
+  // Invoicing config (spec §4.3/§4.6) — the "jurisdiction pack" as data, never hardcoded. VAT rates
+  // per charge category (BG defaults: 20% standard, 9% reduced for accommodation) + issuer legal
+  // identity for the tax document. Edited in Configuration (E7).
+  vatStandardPct    Int    @default(20)
+  vatReducedPct     Int    @default(9)
+  invoiceIssuerName String?
+  invoiceVatId      String?
+  invoiceAddress    String?
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+// Gapless numbering (spec §4.3) — a per-property, per-doc-type counter incremented atomically so an
+// invoice/proforma/credit-note series never skips a number. Separate series per docType.
+model InvoiceSeries {
+  id         String @id @default(cuid())
+  tenantId   String
+  propertyId String
+  docType    String // invoice | proforma | credit_note
+  prefix     String @default("")
+  nextNumber Int    @default(1)
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, docType])
+}
+
+// An issued tax document (spec §4.3) — "render this folio (or these lines) as a numbered tax
+// document." Jurisdiction-agnostic: EN-16931-style fields (buyer VAT ID, taxable-supply date distinct
+// from issue date, per-rate tax summary) so turning a market on is configuration, not a rebuild.
+model TaxInvoice {
+  id            String   @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  reservationId String
+  folioId       String?
+  docType       String   @default("invoice") // invoice | proforma | credit_note
+  number        String // gapless, from the series (e.g. "INV-2026-0007")
+  // Issuer legal identity (snapshot at issue).
+  issuerName    String
+  issuerVatId   String?
+  issuerAddress String?
+  // Buyer — for a company invoice the buyer tax/VAT ID is required.
+  buyerName     String
+  buyerVatId    String?
+  buyerAddress  String?
+  issueDate     DateTime @default(now())
+  supplyDate    DateTime // date of taxable supply, distinct from issue date
+  currency      String
+  netMinor      Int
+  taxMinor      Int
+  grossMinor    Int
+  taxSummary    Json // [{ category, ratePct, netMinor, taxMinor, grossMinor }]
+  lineSnapshot  Json // the folio lines as they stood at issue
+  fiscalRef     String? // filled by the fiscalization boundary (F3); null = not yet fiscalized
+  status        String   @default("issued") // issued | void
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, docType])
+  @@index([reservationId])
 }
 
 // Roles = saved combinations of permission-group × access level (new roles are configuration,
