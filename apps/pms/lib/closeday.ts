@@ -57,5 +57,50 @@ export async function getCloseDayView() {
     })
     .filter((x) => x.balance !== 0);
 
-  return { property, today, businessDate, noShowCandidates, dueOutStillIn, unsettled };
+  // --- Night-audit report (spec §3.11) — occupancy, revenue accruing tonight, arrivals/departures ---
+  const bizStart = new Date(`${businessDate}T00:00:00Z`);
+  const bizNext = new Date(bizStart.getTime() + 86_400_000);
+  const [totalRooms, occAssignments, arrivalsToday, departuresToday, extras] = await Promise.all([
+    prisma.unit.count({ where: { propertyId: property.id, active: true } }),
+    prisma.roomAssignment.findMany({
+      where: { propertyId: property.id, status: "active", checkedOutAt: null, checkedInAt: { not: null } },
+      include: { reservation: { include: { lines: true } } },
+    }),
+    prisma.roomAssignment.count({ where: { propertyId: property.id, checkedInAt: { gte: bizStart, lt: bizNext } } }),
+    prisma.roomAssignment.count({ where: { propertyId: property.id, checkedOutAt: { gte: bizStart, lt: bizNext } } }),
+    prisma.stayExtra.findMany({ where: { propertyId: property.id, active: true }, select: { reservationId: true, priceMinor: true } }),
+  ]);
+
+  const occupiedRooms = occAssignments.length;
+  // Room revenue accruing for THIS night = each in-house stay's nightly room rate (accommodation ÷ nights).
+  const currency = property.baseCurrency;
+  let roomRevenueMinor = 0;
+  const seen = new Set<string>();
+  for (const a of occAssignments) {
+    const r = a.reservation;
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
+    const accom = r.propertyTotalMinor ?? r.totalMinor;
+    const ci = r.lines.map((l) => l.checkIn.getTime()).sort((x, y) => x - y)[0];
+    const co = r.lines.map((l) => l.checkOut.getTime()).sort((x, y) => y - x)[0];
+    const nights = ci != null && co != null ? Math.max(1, Math.round((co - ci) / 86_400_000)) : 1;
+    roomRevenueMinor += Math.round(accom / nights);
+  }
+  const inHouseReservationIds = new Set(occAssignments.map((a) => a.reservationId));
+  const extrasMinor = extras.filter((e) => inHouseReservationIds.has(e.reservationId)).reduce((s, e) => s + e.priceMinor, 0);
+
+  const report = {
+    currency,
+    totalRooms,
+    occupiedRooms,
+    occupancyPct: totalRooms > 0 ? Math.round((occupiedRooms / totalRooms) * 1000) / 10 : 0,
+    arrivalsToday,
+    departuresToday,
+    noShows: noShowCandidates.length,
+    roomRevenueMinor,
+    extrasMinor,
+    accrualMinor: roomRevenueMinor + extrasMinor,
+  };
+
+  return { property, today, businessDate, noShowCandidates, dueOutStillIn, unsettled, report };
 }
