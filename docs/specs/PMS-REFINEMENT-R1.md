@@ -72,6 +72,19 @@ stays quiet.*
   "Late Check-out" extra. **Resolved:** in-house roster → state-aware collapsible; late-checkout →
   chargeable by default + one-tap logged comp waiver.
 
+> **BUILT — J1 read-side (2026-07-21).** Front Desk (`/dashboard`) refined: **§1.1** KPI row swapped to
+> front-desk metrics (Arrivals · Departures · In-house · Rooms ready to assign · OOO); **§1.2/§1.3** two
+> co-equal columns (To check in · Due out today) with an in-house roster in a state-aware collapsible section
+> beneath (auto-open when no check-in/out work) and check-out **only** on due-out rows; **§1.6** overdue
+> detection — `overstayed` (past departure, still in-house) + `past_time` (past checkout clock), measured
+> against `Property.checkOutTime`, with header count; **§1.8a** the "Needs attention" exception strip (only
+> place exceptions live: overstays, past-time, blocked arrivals, balance-due due-outs, conflicts, returning
+> guests); **§1.8d** balance-due flags on due-outs; **§1.8e** returning-guest marker (≥1 completed prior stay,
+> keyed on the J0 stable Guest id). **Deferred to a J1 follow-up** (need schema / write-wiring): **§1.7**
+> extend-checkout (same-day time grant + optional waivable Late Check-out charge — needs a per-reservation
+> override field + POS item + config default), **§1.8b** one-tap "prioritize this room" into the HK queue,
+> **§1.8c** one-tap assign for unassigned arrivals.
+
 ## 2. Reservation view
 **Who / what:** any front-office user who opened a booking — the hub Front Desk rows and Guests history
 link into. **This screen is very good — mostly keep** (commercial/operational split, timeline).

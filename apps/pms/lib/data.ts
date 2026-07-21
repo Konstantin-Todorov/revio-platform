@@ -3,6 +3,24 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { todayInTz, ymd, utcDay } from "./format";
 import { sellableStatuses, type HkStatus } from "./hk-meta";
+import { folioBalance } from "./folio";
+
+/** Minutes-since-midnight, right now, in the given IANA timezone (for overdue-past-checkout-time checks). */
+function minutesOfDayInTz(timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return (h % 24) * 60 + m;
+}
+/** Parse a "HH:MM" time string to minutes-since-midnight. */
+function hhmmToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+/** Whole days between two YYYY-MM-DD strings (a − b). */
+function daysBetweenYmd(a: string, b: string): number {
+  return Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000);
+}
 
 // Statuses that actually occupy a room tonight (front-desk view). Distinct from the metrics
 // SOLD_STATUSES (which also counts no_show/overbooked) — an in-house guest is confirmed/modified.
@@ -203,6 +221,17 @@ export interface StayRow {
   roomReady: "ready" | "partial" | "none" | null;
   /** In-house only: this stay shares a physical room with another in-house guest (double-assignment). */
   conflict: boolean;
+  guestId: string | null;
+  /** Arrivals only (§1.8e): a returning guest (≥1 completed prior stay) — a light VIP/recognition marker. */
+  returning: boolean;
+  /** Overdue checkout state (§1.6): `past_time` = due out today but past the checkout time (gentle nudge);
+   * `overstayed` = past the departure date, never checked out (a data-integrity problem). null otherwise. */
+  overdueState: "past_time" | "overstayed" | null;
+  /** Minutes past the checkout deadline (for `past_time`) or nights overstayed ×1440 (for `overstayed`). */
+  overdueByMinutes: number;
+  /** Due-out rows (§1.8d): outstanding folio balance in minor units; null when there is no folio. */
+  balanceMinor: number | null;
+  currency: string;
 }
 
 export interface AssignmentConflict { unitLabel: string; guests: string[] }
@@ -250,6 +279,8 @@ export async function getFrontDeskOverview() {
       reservationId: r.id, guestName, roomLabel, checkIn: ciY, checkOut: coY,
       nights: nightsBetween(ci, co), status: r.status,
       assignedUnits, dueOutToday: coY === today, overdue: false, roomReady: null, conflict: false,
+      guestId: r.guestId, returning: false, overdueState: null, overdueByMinutes: 0,
+      balanceMinor: null, currency: r.currency,
     };
 
     if (active.length > 0) {
@@ -296,20 +327,94 @@ export async function getFrontDeskOverview() {
   }
   for (const row of inHouse) row.conflict = row.assignedUnits.some((u) => conflictUnitIds.has(u.unitId));
 
+  // Overdue checkouts (§1.6): overstayed (past departure date, still in-house) is a data-integrity
+  // problem; past_time (due out today, clock past checkout) is a gentle nudge. Measured against the
+  // property checkout time (a Configuration setting, §1.10).
+  const nowMin = minutesOfDayInTz(property.timezone);
+  const checkoutMin = hhmmToMinutes(property.checkOutTime);
+  for (const row of inHouse) {
+    if (row.checkOut < today) {
+      row.overdueState = "overstayed";
+      row.overdueByMinutes = daysBetweenYmd(today, row.checkOut) * 1440;
+    } else if (row.dueOutToday && nowMin > checkoutMin) {
+      row.overdueState = "past_time";
+      row.overdueByMinutes = nowMin - checkoutMin;
+    }
+  }
+
+  // Balance-due on due-outs (§1.8d) — the folio already knows; surface it before they walk.
+  const dueOuts = inHouse.filter((s) => s.dueOutToday || s.overdueState);
+  if (dueOuts.length > 0) {
+    const folios = await prisma.folio.findMany({
+      where: { reservationId: { in: dueOuts.map((s) => s.reservationId) } },
+      include: { lines: { select: { kind: true, amountMinor: true, voided: true } } },
+    });
+    const balByRes = new Map<string, number>();
+    for (const f of folios) balByRes.set(f.reservationId, (balByRes.get(f.reservationId) ?? 0) + folioBalance(f.lines).balance);
+    for (const s of dueOuts) if (balByRes.has(s.reservationId)) s.balanceMinor = balByRes.get(s.reservationId)!;
+  }
+
+  // Returning-guest / VIP marker on arrivals (§1.8e) — a guest with ≥1 completed prior stay. Keyed on the
+  // stable Guest id (identity foundation, J0); walk-ins without a Guest row simply don't light up.
+  const arrivalGuestIds = [...new Set(arrivals.map((a) => a.guestId).filter((g): g is string => !!g))];
+  if (arrivalGuestIds.length > 0) {
+    // A prior stay = a reservation for this guest whose departure is already in the past. checkOut lives on
+    // the line, so filter through the relation. (An arrival's own reservation departs in the future, so it
+    // never matches.)
+    const priors = await prisma.reservation.findMany({
+      where: {
+        propertyId: property.id, guestId: { in: arrivalGuestIds }, status: { in: [...OCCUPYING] },
+        lines: { some: { checkOut: { lt: utcDay(today) } } },
+      },
+      select: { guestId: true },
+    });
+    const priorByGuest = new Map<string, number>();
+    for (const p of priors) if (p.guestId) priorByGuest.set(p.guestId, (priorByGuest.get(p.guestId) ?? 0) + 1);
+    for (const a of arrivals) if (a.guestId && (priorByGuest.get(a.guestId) ?? 0) >= 1) a.returning = true;
+  }
+
   arrivals.sort((a, b) => a.checkIn.localeCompare(b.checkIn) || a.guestName.localeCompare(b.guestName));
   inHouse.sort((a, b) => Number(b.dueOutToday) - Number(a.dueOutToday) || a.guestName.localeCompare(b.guestName));
+
+  // Rooms ready to assign right now (§1.1): sellable (per the inspection gate) AND not occupied.
+  const roomsReadyTotal = units.filter((u) => !occupied.has(u.id) && sellable.has(u.hkStatus as HkStatus)).length;
+  const counts = statusCounts(units.map((u) => ({ hkStatus: u.hkStatus as HkStatus })));
+
+  const departures = inHouse.filter((s) => s.dueOutToday || s.overdueState);
+  const overstayed = inHouse.filter((s) => s.overdueState === "overstayed");
+  const pastTime = departures.filter((s) => s.overdueState === "past_time");
+  const balanceDueOuts = departures.filter((s) => (s.balanceMinor ?? 0) > 0);
+  const blockedArrivals = arrivals.filter((s) => s.roomReady === "none");
+  const returningArrivals = arrivals.filter((s) => s.returning);
 
   return {
     property,
     today,
-    counts: statusCounts(units.map((u) => ({ hkStatus: u.hkStatus as HkStatus }))),
+    counts,
     totalUnits: units.length,
     arrivals,
     inHouse,
     departedToday,
-    departures: inHouse.filter((s) => s.dueOutToday),
-    dueOutCount: inHouse.filter((s) => s.dueOutToday).length,
+    departures,
+    dueOutCount: departures.length,
     conflicts,
+    // Front-desk KPI row (§1.1)
+    kpis: {
+      arrivals: arrivals.length,
+      departures: departures.length,
+      inHouse: inHouse.length,
+      roomsReady: roomsReadyTotal,
+      outOfOrder: counts.out_of_order,
+    },
+    // "Needs attention" exception strip (§1.8a) — the only place exceptions live.
+    exceptions: {
+      overstayed,
+      pastTime,
+      balanceDueOuts,
+      blockedArrivals,
+      returningArrivals,
+      conflictCount: conflicts.length,
+    },
   };
 }
 
