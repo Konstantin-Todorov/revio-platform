@@ -51,6 +51,15 @@
 > worker-data/GDPR caution on all clock-in/analytics. **⚠ Two pending founder items:** the **§11 Close
 > Day** section ("will add later today") and round scope/sequence sign-off. Task phase **H** to be created
 > on sign-off.
+>
+> **⏳ IN BUILD — phase J (RevioPMS R1). J0 data foundations DONE + committed (2026-07-21, not yet pushed).**
+> The three build-first primitives the screens consume: **guest identity/merge** (`Guest.mergedIntoId` +
+> `lib/guest-identity.ts` dup-detection + `lib/actions-guests.ts` `mergeGuests`), the **ops event stream**
+> (`OpsEvent` model + `lib/events.ts` `recordOpsEvent`/`getUnitTimeline`/`getHousekeepingPerformance`), and
+> **clock-in/workforce** (`StaffShift` model + `lib/workforce.ts` + `lib/actions-workforce.ts` self+delegated
+> clock-in, each appending an OpsEvent). Migration `20260721182000_pms_r1_foundations` (additive). **Remaining
+> in J:** §9 Configuration expansion + the ten screens J1–J9 (wire these primitives into UI), J10 Close Day
+> (awaits §11), J11 verify+deploy. Wire `recordOpsEvent` into HK/maintenance status changes when building J6/J8.
 
 Sold standalone as an operations layer, even over a foreign reservation system. Reads/writes inventory
 **only** through `@revio/core` — never ad-hoc queries against inventory tables.
