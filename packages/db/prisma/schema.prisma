@@ -13,17 +13,17 @@ datasource db {
 // --- Tenancy ---------------------------------------------------------------
 
 model Tenant {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
   // Entitlements: which products this hotel account bought ("sold separately").
-  hasChannelManager Boolean @default(true)
-  hasReservation    Boolean @default(false)
-  hasPms            Boolean @default(false)
+  hasChannelManager Boolean  @default(true)
+  hasReservation    Boolean  @default(false)
+  hasPms            Boolean  @default(false)
   // Commercial profile, set by the operator. plan ≈ room-count tier / package; status gates access.
-  plan      String   @default("starter") // starter | growth | scale
-  status    String   @default("active")  // active | suspended
-  createdAt DateTime @default(now())
+  plan              String   @default("starter") // starter | growth | scale
+  status            String   @default("active") // active | suspended
+  createdAt         DateTime @default(now())
 
   properties Property[]
   users      User[]
@@ -93,97 +93,99 @@ model Invoice {
 // --- Property & sellable products -----------------------------------------
 
 model Property {
-  id              String @id @default(cuid())
-  tenantId        String
-  name            String
-  timezone        String @default("Europe/Sofia")
-  baseCurrency    String @default("EUR")
-  defaultLanguage String @default("en")
-  syncHorizonDays Int    @default(365)
-  address         String?
-  contactEmail    String?
-  phone           String?
-  checkInTime     String @default("14:00")
-  checkOutTime    String @default("12:00")
-  status          String @default("active")
+  id                        String    @id @default(cuid())
+  tenantId                  String
+  name                      String
+  timezone                  String    @default("Europe/Sofia")
+  baseCurrency              String    @default("EUR")
+  defaultLanguage           String    @default("en")
+  syncHorizonDays           Int       @default(365)
+  address                   String?
+  contactEmail              String?
+  phone                     String?
+  checkInTime               String    @default("14:00")
+  checkOutTime              String    @default("12:00")
+  status                    String    @default("active")
   // PMS Phase 5: the current open operational date (night audit rolls it forward). Null until first close.
-  businessDate    DateTime? @db.Date
+  businessDate              DateTime? @db.Date
   // Reservation delivery (CM-UPDATES-V1 Settings): where channel bookings are emailed when the
   // property is NOT connected to a PMS/CRS — plus the arrival-summary notification toggles.
   reservationEmailPrimary   String?
   reservationEmailSecondary String?
-  notifyTodayArrivals    Boolean @default(false)
-  notifyTodayTime        String  @default("07:00") // property-TZ send time
-  notifyTodayTo          String  @default("primary") // primary | secondary | both
-  notifyTomorrowArrivals Boolean @default(false)
-  notifyTomorrowTime     String  @default("18:00")
-  notifyTomorrowTo       String  @default("primary")
+  notifyTodayArrivals       Boolean   @default(false)
+  notifyTodayTime           String    @default("07:00") // property-TZ send time
+  notifyTodayTo             String    @default("primary") // primary | secondary | both
+  notifyTomorrowArrivals    Boolean   @default(false)
+  notifyTomorrowTime        String    @default("18:00")
+  notifyTomorrowTo          String    @default("primary")
   // CRS Distribution (spec §3.8): exactly ONE connected channel manager per property.
   // reviolink_internal = the platform's own CM (shared core, automatic mapping); third-party
   // kinds plug into the identical ChannelManagerConnector interface later — never a second path.
-  cmKind   String @default("reviolink_internal")
+  cmKind                    String    @default("reviolink_internal")
   // Connection lifecycle at the CM level: pausing stops distribution reversibly; disconnecting
   // preserves the CRS↔CM mapping dormant so resuming never forces a re-map.
-  cmStatus String @default("connected") // connected | paused | disconnected
+  cmStatus                  String    @default("connected") // connected | paused | disconnected
 
-  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  roomTypes           RoomType[]
-  ratePlans           RatePlan[]
-  channels            Channel[]
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roomTypes            RoomType[]
+  ratePlans            RatePlan[]
+  channels             Channel[]
   cancellationPolicies CancellationPolicy[]
-  mealPlans           MealPlan[]
-  ratePrices          RatePrice[]
-  dailyCells          DailyCell[]
-  restrictionRules    RestrictionRule[]
-  reservations        Reservation[]
-  syncEvents          SyncEvent[]
-  errorItems          ErrorItem[]
-  auditEntries        AuditEntry[]
-  inventoryPeriods    RoomInventoryPeriod[]
-  holds               Hold[]
-  guests              Guest[]
-  bookingSources      BookingSource[]
-  taxesFees           TaxFee[]
-  pickupSnapshots     PickupSnapshot[]
-  defaults            PropertyDefaults?
-  units               Unit[]
-  hkTasks             HousekeepingTask[]
-  roomAssignments     RoomAssignment[]
-  folios              Folio[]
-  folioLines          FolioLine[]
-  posItems            PosItem[]
-  depositTypes        DepositType[]
-  invoiceSeries       InvoiceSeries[]
-  taxInvoices         TaxInvoice[]
-  maintenanceTasks    MaintenanceTask[]
+  mealPlans            MealPlan[]
+  ratePrices           RatePrice[]
+  dailyCells           DailyCell[]
+  restrictionRules     RestrictionRule[]
+  reservations         Reservation[]
+  syncEvents           SyncEvent[]
+  errorItems           ErrorItem[]
+  auditEntries         AuditEntry[]
+  inventoryPeriods     RoomInventoryPeriod[]
+  holds                Hold[]
+  guests               Guest[]
+  bookingSources       BookingSource[]
+  taxesFees            TaxFee[]
+  pickupSnapshots      PickupSnapshot[]
+  defaults             PropertyDefaults?
+  units                Unit[]
+  hkTasks              HousekeepingTask[]
+  roomAssignments      RoomAssignment[]
+  folios               Folio[]
+  folioLines           FolioLine[]
+  posItems             PosItem[]
+  depositTypes         DepositType[]
+  invoiceSeries        InvoiceSeries[]
+  taxInvoices          TaxInvoice[]
+  maintenanceTasks     MaintenanceTask[]
+  staffShifts          StaffShift[]
+  opsEvents            OpsEvent[]
 
   @@index([tenantId])
 }
 
 model RoomType {
-  id             String  @id @default(cuid())
-  tenantId       String
-  propertyId     String
-  name           String
-  code           String
+  id          String  @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  name        String
+  code        String
   // room | bed | apartment. Hotels/apartments sell whole units; hostels sell beds, so a "bed"
   // unitKind means totalRooms counts beds and availability is controlled per bed.
-  unitKind       String  @default("room")
+  unitKind    String  @default("room")
   // Physical room/bed count — a CAP & safety-net only. Rooms-to-sell is managed per date
   // (DailyCell.inventory); exceeding totalRooms warns but does not block.
-  totalRooms     Int
-  maxGuests      Int
-  description    String?
-  active         Boolean @default(true)
-  sortOrder      Int     @default(0)
+  totalRooms  Int
+  maxGuests   Int
+  description String?
+  active      Boolean @default(true)
+  sortOrder   Int     @default(0)
 
-  property      Property           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  ratePlanLinks RatePlanRoomType[]
-  mappings      ProductMapping[]
-  channelMappings ChannelRoomTypeMapping[]
-  ratePrices    RatePrice[]
-  dailyCells    DailyCell[]
-  resLines      ReservationLine[]
+  property         Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  ratePlanLinks    RatePlanRoomType[]
+  mappings         ProductMapping[]
+  channelMappings  ChannelRoomTypeMapping[]
+  ratePrices       RatePrice[]
+  dailyCells       DailyCell[]
+  resLines         ReservationLine[]
   inventoryPeriods RoomInventoryPeriod[]
   holds            Hold[]
   pickupSnapshots  PickupSnapshot[]
@@ -193,7 +195,7 @@ model RoomType {
 }
 
 model CancellationPolicy {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   tenantId    String
   propertyId  String
   name        String
@@ -220,21 +222,21 @@ model MealPlan {
 }
 
 model RatePlan {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   tenantId   String
   propertyId String
   name       String
   code       String
   // Arbitrary labels the hotel uses for orientation, e.g. ["breakfast","non-refundable","corporate"].
   tags       String[]
-  priceLogic String @default("manual") // manual | derived
+  priceLogic String   @default("manual") // manual | derived
 
   // Derived-rate config (when priceLogic = derived) — consumed by @revio/core deriveRate().
-  parentRatePlanId String?
-  derivedType      String? // percent | fixed
-  derivedDirection String? // increase | decrease
-  derivedValue     Int? // percent (0-100) or minor units
-  derivedRounding  String? // none | nearest_minor_1 | nearest_minor_50 | end_99
+  parentRatePlanId    String?
+  derivedType         String? // percent | fixed
+  derivedDirection    String? // increase | decrease
+  derivedValue        Int? // percent (0-100) or minor units
+  derivedRounding     String? // none | nearest_minor_1 | nearest_minor_50 | end_99
   derivedFloorMinor   Int?
   derivedCeilingMinor Int?
 
@@ -242,31 +244,31 @@ model RatePlan {
   mealPlanId           String?
 
   // Default restriction baseline (fallback when nothing more specific applies).
-  defStopSell          Boolean @default(false)
-  defMinLos            Int?
-  defMaxLos            Int?
-  defCta               Boolean @default(false)
-  defCtd               Boolean @default(false)
+  defStopSell           Boolean @default(false)
+  defMinLos             Int?
+  defMaxLos             Int?
+  defCta                Boolean @default(false)
+  defCtd                Boolean @default(false)
   defAdvancePurchaseMin Int?
   defAdvancePurchaseMax Int?
 
-  active    Boolean @default(true)
-  sortOrder Int     @default(0)
+  active               Boolean @default(true)
+  sortOrder            Int     @default(0)
   // Booking-engine seam (docs/specs/BOOKING-ENGINE-ADDENDUM.md §6): may this plan be sold on the
   // hotel's own direct channel (public widget)? OTA-only / corporate-only rates switch this off.
   // Designed-in now; the widget build is deferred.
   directChannelEnabled Boolean @default(true)
 
-  property           Property            @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  parent             RatePlan?           @relation("Derivation", fields: [parentRatePlanId], references: [id])
-  children           RatePlan[]          @relation("Derivation")
-  cancellationPolicy CancellationPolicy? @relation(fields: [cancellationPolicyId], references: [id])
-  mealPlan           MealPlan?           @relation(fields: [mealPlanId], references: [id])
-  roomTypeLinks      RatePlanRoomType[]
-  mappings           ProductMapping[]
-  channelMappings    ChannelRatePlanMapping[]
-  ratePrices         RatePrice[]
-  resLines           ReservationLine[]
+  property             Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  parent               RatePlan?                @relation("Derivation", fields: [parentRatePlanId], references: [id])
+  children             RatePlan[]               @relation("Derivation")
+  cancellationPolicy   CancellationPolicy?      @relation(fields: [cancellationPolicyId], references: [id])
+  mealPlan             MealPlan?                @relation(fields: [mealPlanId], references: [id])
+  roomTypeLinks        RatePlanRoomType[]
+  mappings             ProductMapping[]
+  channelMappings      ChannelRatePlanMapping[]
+  ratePrices           RatePrice[]
+  resLines             ReservationLine[]
   occupancyAdjustments OccupancyAdjustment[]
 
   @@index([propertyId])
@@ -278,10 +280,10 @@ model OccupancyAdjustment {
   id             String @id @default(cuid())
   tenantId       String
   ratePlanId     String
-  occupancy      Int    // number of guests this price applies to
+  occupancy      Int // number of guests this price applies to
   adjustmentType String // percent | fixed
   direction      String // increase | decrease
-  value          Int    // percent (0-100) or minor units
+  value          Int // percent (0-100) or minor units
   rounding       String @default("none")
 
   ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
@@ -305,49 +307,49 @@ model RatePlanRoomType {
 // --- Channels & mapping ----------------------------------------------------
 
 model Channel {
-  id                  String   @id @default(cuid())
-  tenantId            String
-  propertyId          String
-  code                String // booking | expedia | trip | agoda
-  name                String
-  status              String   @default("connected") // connected|not_connected|pending|error|disabled
+  id                    String    @id @default(cuid())
+  tenantId              String
+  propertyId            String
+  code                  String // booking | expedia | trip | agoda
+  name                  String
+  status                String    @default("connected") // connected|not_connected|pending|error|disabled
   // Which adapter this channel pushes through (@revio/connectivity). Demo channels stay on "mock"; a
   // channel set to channex_* talks to the real Channex API. externalPropertyId is the Channex Property UUID.
-  connectivityMode    String   @default("mock") // mock | channex_sandbox | channex_prod
-  externalPropertyId  String?
-  currency            String   @default("EUR")
-  commissionPct       Float    @default(15)
-  conversionType      String   @default("none") // none|manual|auto|channel_override
-  markupPct           Float    @default(0)
-  rounding            String   @default("none")
+  connectivityMode      String    @default("mock") // mock | channex_sandbox | channex_prod
+  externalPropertyId    String?
+  currency              String    @default("EUR")
+  commissionPct         Float     @default(15)
+  conversionType        String    @default("none") // none|manual|auto|channel_override
+  markupPct             Float     @default(0)
+  rounding              String    @default("none")
   supportedRestrictions String[]
-  lastSyncAt          DateTime?
-  errorCount          Int      @default(0)
-  pendingCount        Int      @default(0)
+  lastSyncAt            DateTime?
+  errorCount            Int       @default(0)
+  pendingCount          Int       @default(0)
   // CRS reporting category this channel's bookings fall under (see BookingSource).
-  bookingSourceId     String?
+  bookingSourceId       String?
 
-  property      Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  bookingSource BookingSource? @relation(fields: [bookingSourceId], references: [id])
-  mappings ProductMapping[]
+  property         Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  bookingSource    BookingSource?           @relation(fields: [bookingSourceId], references: [id])
+  mappings         ProductMapping[]
   roomTypeMappings ChannelRoomTypeMapping[]
   ratePlanMappings ChannelRatePlanMapping[]
-  reservations Reservation[]
-  syncEvents SyncEvent[]
-  errorItems ErrorItem[]
+  reservations     Reservation[]
+  syncEvents       SyncEvent[]
+  errorItems       ErrorItem[]
 
   @@index([propertyId])
 }
 
 model ProductMapping {
-  id             String @id @default(cuid())
+  id             String  @id @default(cuid())
   tenantId       String
   channelId      String
   roomTypeId     String
   ratePlanId     String
   externalRoomId String?
   externalRateId String?
-  status         String @default("complete") // complete|incomplete|missing_room|missing_rate|channel_error|disabled|pending_confirmation
+  status         String  @default("complete") // complete|incomplete|missing_room|missing_rate|channel_error|disabled|pending_confirmation
 
   channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
   roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
@@ -417,24 +419,24 @@ model RatePrice {
 
 // Per-(room type, date) inventory allotment + restriction flags shown in the Calendar grid.
 model DailyCell {
-  id                  String   @id @default(cuid())
-  tenantId            String
-  propertyId          String
-  roomTypeId          String
-  date                DateTime @db.Date
+  id                 String   @id @default(cuid())
+  tenantId           String
+  propertyId         String
+  roomTypeId         String
+  date               DateTime @db.Date
   // Date-level "rooms to sell" allotment. Null ⇒ default to the room type's totalRooms.
   // Bookable = inventory − rooms sold (sold is derived from confirmed reservations, never stored here).
-  inventory           Int?
-  minLos              Int?
-  maxLos              Int?
-  cta                 Boolean  @default(false)
-  ctd                 Boolean  @default(false)
-  stopSell            Boolean  @default(false)
-  advancePurchaseMin  Int?
-  advancePurchaseMax  Int?
+  inventory          Int?
+  minLos             Int?
+  maxLos             Int?
+  cta                Boolean  @default(false)
+  ctd                Boolean  @default(false)
+  stopSell           Boolean  @default(false)
+  advancePurchaseMin Int?
+  advancePurchaseMax Int?
   // Two-tier precedence provenance — see RatePrice for the rationale (spec §1.4).
-  updatedAt           DateTime @default(now()) @updatedAt
-  source              String   @default("calendar") // calendar | bulk | seed | api
+  updatedAt          DateTime @default(now()) @updatedAt
+  source             String   @default("calendar") // calendar | bulk | seed | api
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
@@ -446,24 +448,24 @@ model DailyCell {
 // --- Restrictions ----------------------------------------------------------
 
 model RestrictionRule {
-  id           String   @id @default(cuid())
-  tenantId     String
-  propertyId   String
-  name         String
-  type         String // stop_sell|min_los|max_los|cta|ctd|advance_purchase_min|advance_purchase_max|channel_allocation
-  roomTypeId   String?
-  ratePlanId   String?
-  channelCodes String[]
+  id               String   @id @default(cuid())
+  tenantId         String
+  propertyId       String
+  name             String
+  type             String // stop_sell|min_los|max_los|cta|ctd|advance_purchase_min|advance_purchase_max|channel_allocation
+  roomTypeId       String?
+  ratePlanId       String?
+  channelCodes     String[]
   // CRS: scope by booking source category (docs/CRS-REFERENCE.md — e.g. closed to Travel Agent,
   // open to Direct). Empty = applies to every source. Categories match BookingSource.category.
   sourceCategories String[] @default([])
-  dateFrom     DateTime @db.Date
-  dateTo       DateTime @db.Date
-  daysOfWeek   String   @default("all")
-  valueInt     Int?
-  valueBool    Boolean?
-  priority     Int      @default(0)
-  active       Boolean  @default(true)
+  dateFrom         DateTime @db.Date
+  dateTo           DateTime @db.Date
+  daysOfWeek       String   @default("all")
+  valueInt         Int?
+  valueBool        Boolean?
+  priority         Int      @default(0)
+  active           Boolean  @default(true)
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
@@ -473,20 +475,20 @@ model RestrictionRule {
 // --- Reservations ----------------------------------------------------------
 
 model Reservation {
-  id         String   @id @default(cuid())
-  tenantId   String
-  propertyId String
+  id                 String    @id @default(cuid())
+  tenantId           String
+  propertyId         String
   // Null for staff-entered bookings (Call Center / Direct / Corporate) — those never touch a CM.
-  channelId  String?
-  externalId String?
-  guestName  String
+  channelId          String?
+  externalId         String?
+  guestName          String
   // CM statuses: confirmed|modified|cancelled|failed_import|overbooked ("modified" = confirmed that
   // was modified — a flag-as-status, still counts as sold). CRS lifecycle adds:
   // draft|hold|expired|failed|no_show|archived (docs/CRS-REFERENCE.md "Reservation lifecycle").
-  status     String   @default("confirmed")
+  status             String    @default("confirmed")
   // ORIGINAL booking values (what the guest was actually charged), captured at booking time.
-  totalMinor Int
-  currency   String   @default("EUR")
+  totalMinor         Int
+  currency           String    @default("EUR")
   // CRS-compatible currency snapshot: the same amount converted to the property's base currency, plus
   // the FX rate + timestamp used. Stored at booking time so historical revenue reports stay reproducible
   // when exchange rates move (see docs/CRS-REFERENCE.md "Currency handling"). Null on legacy rows.
@@ -494,25 +496,25 @@ model Reservation {
   propertyTotalMinor Int?
   fxRate             Float?
   fxAt               DateTime?
-  importedAt DateTime @default(now())
-  syncStatus String   @default("imported")
+  importedAt         DateTime  @default(now())
+  syncStatus         String    @default("imported")
   // CRS fields (docs/CRS-REFERENCE.md). paymentGuarantee is a LABEL only — no card data in V1.
-  guestId          String?
-  bookingSourceId  String?
-  paymentGuarantee String? // card_on_file | company_account | prepaid_ota | none
-  notes            String?
-  cancelledAt      DateTime?
-  createdById      String? // staff user who entered a manual booking
+  guestId            String?
+  bookingSourceId    String?
+  paymentGuarantee   String? // card_on_file | company_account | prepaid_ota | none
+  notes              String?
+  cancelledAt        DateTime?
+  createdById        String? // staff user who entered a manual booking
 
-  property Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  channel  Channel?          @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  guest         Guest?         @relation(fields: [guestId], references: [id])
-  bookingSource BookingSource? @relation(fields: [bookingSourceId], references: [id])
-  lines    ReservationLine[]
-  holds    Hold[]
-  assignments RoomAssignment[]
-  folios     Folio[]
-  stayExtras StayExtra[]
+  property      Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  channel       Channel?          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  guest         Guest?            @relation(fields: [guestId], references: [id])
+  bookingSource BookingSource?    @relation(fields: [bookingSourceId], references: [id])
+  lines         ReservationLine[]
+  holds         Hold[]
+  assignments   RoomAssignment[]
+  folios        Folio[]
+  stayExtras    StayExtra[]
 
   @@index([propertyId])
   @@index([channelId])
@@ -530,9 +532,9 @@ model ReservationLine {
   priceMinor    Int?
   guestsCount   Int?
 
-  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
-  roomType    RoomType    @relation(fields: [roomTypeId], references: [id])
-  ratePlan    RatePlan    @relation(fields: [ratePlanId], references: [id])
+  reservation Reservation      @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  roomType    RoomType         @relation(fields: [roomTypeId], references: [id])
+  ratePlan    RatePlan         @relation(fields: [ratePlanId], references: [id])
   assignments RoomAssignment[]
 
   @@index([reservationId])
@@ -603,12 +605,21 @@ model Guest {
   company         String?
   specialRequests String? // free text
   createdAt       DateTime @default(now())
+  // Guest identity/merge (PMS-REFINEMENT-R1 §3.5, "foundational — build first"): when two records are the
+  // same person (direct / OTA / walk-in duplicates), the loser is soft-merged INTO the winner. At merge the
+  // app re-parents reservations + notes to the winner, then sets mergedIntoId on the loser so it drops out
+  // of lists/metrics but its id stays resolvable (nothing is deleted). Stable identity underwrites every
+  // guest metric across all products.
+  mergedIntoId    String?
 
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   reservations Reservation[]
   notes        GuestNote[]
+  mergedInto   Guest?        @relation("GuestMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom   Guest[]       @relation("GuestMerge")
 
   @@index([propertyId, lastName])
+  @@index([mergedIntoId])
 }
 
 // Free-text staff notes on a guest (CRS-REFINEMENT-R2 §4). Multiple per guest, each stamped with
@@ -688,45 +699,45 @@ model PickupSnapshot {
 
 // Property-level restriction fallback (priority level 4, below rate-plan defaults) + CRS settings.
 model PropertyDefaults {
-  id                    String  @id @default(cuid())
-  tenantId              String
-  propertyId            String  @unique
-  defStopSell           Boolean @default(false)
-  defMinLos             Int?
-  defMaxLos             Int?
-  defCta                Boolean @default(false)
-  defCtd                Boolean @default(false)
-  defAdvancePurchaseMin Int?
-  defAdvancePurchaseMax Int?
+  id                       String  @id @default(cuid())
+  tenantId                 String
+  propertyId               String  @unique
+  defStopSell              Boolean @default(false)
+  defMinLos                Int?
+  defMaxLos                Int?
+  defCta                   Boolean @default(false)
+  defCtd                   Boolean @default(false)
+  defAdvancePurchaseMin    Int?
+  defAdvancePurchaseMax    Int?
   // Metric settings (docs/CRS-REFERENCE.md "Core metrics")
-  countNoShowsAsSold Boolean @default(true)
-  revenueDisplay     String  @default("gross") // gross | net
-  pickupOffsetDays   Int     @default(7)
+  countNoShowsAsSold       Boolean @default(true)
+  revenueDisplay           String  @default("gross") // gross | net
+  pickupOffsetDays         Int     @default(7)
   // City tax (spec §4.4): the CRS DEFINES the rule, the PMS applies it to the folio, the CM
   // discloses it to the OTA. The setting NEVER changes the rate exported to the channel manager.
-  cityTaxMode String @default("payable_on_spot") // payable_on_spot | included
-  holdTtlMinutes     Int     @default(30)
+  cityTaxMode              String  @default("payable_on_spot") // payable_on_spot | included
+  holdTtlMinutes           Int     @default(30)
   // Action Center thresholds (docs/CRS-REFERENCE.md: every threshold a Setting, never hardcoded).
-  lowAvailabilityThreshold Int @default(2)
+  lowAvailabilityThreshold Int     @default(2)
   // Invoicing config (spec §4.3/§4.6) — the "jurisdiction pack" as data, never hardcoded. VAT rates
   // per charge category (BG defaults: 20% standard, 9% reduced for accommodation) + issuer legal
   // identity for the tax document. Edited in Configuration (E7).
-  vatStandardPct    Int    @default(20)
-  vatReducedPct     Int    @default(9)
-  invoiceIssuerName String?
-  invoiceVatId      String?
-  invoiceAddress    String?
+  vatStandardPct           Int     @default(20)
+  vatReducedPct            Int     @default(9)
+  invoiceIssuerName        String?
+  invoiceVatId             String?
+  invoiceAddress           String?
   // Housekeeping inspection gate (spec §3.4). On ⇒ nothing is sellable until a supervisor inspects
   // ("clean" = cleaned-pending); off ⇒ cleaned counts as sellable. sellableStatuses() reads this.
-  inspectionGate    Boolean @default(false)
+  inspectionGate           Boolean @default(false)
   // Room auto-assignment (spec §4.1) — opt-in, OFF by default. "Suggest a room" works either way;
   // this only decides whether the evening-before pass auto-commits physical rooms.
-  autoAssignEnabled Boolean @default(false)
+  autoAssignEnabled        Boolean @default(false)
   // Compliance pack (spec §4.7) — the per-country selection that makes invoicing multimarket without
   // code. The fiscalization/e-invoicing boundary (F3) is gated by these flags.
-  jurisdiction         String  @default("generic") // generic | bg | eu
-  fiscalizationEnabled Boolean @default(false)
-  eInvoicingEnabled    Boolean @default(false)
+  jurisdiction             String  @default("generic") // generic | bg | eu
+  fiscalizationEnabled     Boolean @default(false)
+  eInvoicingEnabled        Boolean @default(false)
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 }
@@ -817,24 +828,24 @@ model RoleAccess {
 // RoomInventoryPeriod so the shared waterfall takes it off sale (the ONE cross-product write).
 // All tenant-owned → tenant_isolation RLS added in the migration.
 model Unit {
-  id         String   @id @default(cuid())
-  tenantId   String
-  propertyId String
-  roomTypeId String
-  label      String   // room number / name (e.g. "101", "Sea View 2") or a bed label for hostels
-  unitKind   String   @default("room") // room | bed (mirrors RoomType.unitKind; built rooms-first in V1)
-  floor      String?  // floor or zone — groups the housekeeping board
+  id                String   @id @default(cuid())
+  tenantId          String
+  propertyId        String
+  roomTypeId        String
+  label             String // room number / name (e.g. "101", "Sea View 2") or a bed label for hostels
+  unitKind          String   @default("room") // room | bed (mirrors RoomType.unitKind; built rooms-first in V1)
+  floor             String? // floor or zone — groups the housekeeping board
   // Current housekeeping status (single value; changes logged to AuditEntry). Occupancy status is
   // DERIVED from room assignments (Phase 2), never stored here.
-  hkStatus   String   @default("clean") // clean | dirty | inspected | out_of_order
+  hkStatus          String   @default("clean") // clean | dirty | inspected | out_of_order
   // Assignment/housekeeping attributes (docs/specs/PMS-GUIDE-V1.md §3.5): connecting-room links are
   // REQUIRED data for the one-room-in-progress exception and family/group assignment; features feed
   // preference-aware assignment. Links are symmetric — the app maintains both sides (D6 UI).
   features          String[] @default([]) // quiet | accessible | view | smoking | …
   connectingUnitIds String[] @default([])
-  sortOrder  Int      @default(0)
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  sortOrder         Int      @default(0)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
 
   property         Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   roomType         RoomType              @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
@@ -842,6 +853,7 @@ model Unit {
   inventoryPeriods RoomInventoryPeriod[]
   assignments      RoomAssignment[]
   maintenanceTasks MaintenanceTask[]
+  opsEvents        OpsEvent[]
 
   @@index([propertyId])
   @@index([roomTypeId, sortOrder])
@@ -854,8 +866,8 @@ model HousekeepingTask {
   propertyId  String
   unitId      String?
   type        String    @default("clean") // clean | inspect | turndown
-  status      String    @default("open")  // open | in_progress | done
-  assignee    String?   // free-text staff name (or userId) — light in V1
+  status      String    @default("open") // open | in_progress | done
+  assignee    String? // free-text staff name (or userId) — light in V1
   note        String?
   createdAt   DateTime  @default(now())
   completedAt DateTime?
@@ -924,27 +936,27 @@ model Folio {
 // One posting on a folio. Charges are positive amounts; a `payment` line reduces the balance.
 // Balance = Σ(non-voided charge amounts) − Σ(non-voided payment amounts). Voids are flagged, not deleted.
 model FolioLine {
-  id          String   @id @default(cuid())
-  tenantId    String
-  propertyId  String
-  folioId     String
+  id            String   @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  folioId       String
   // accommodation | minibar | extra | fee | tax | payment | deposit_held | deposit_use | deposit_refund
   // A HELD deposit (spec §4.4) is a LIABILITY: deposit_held/deposit_refund sit outside charges AND
   // payments; only deposit_use (applying it) counts against the balance. An APPLIED deposit is
   // simply a `payment` at capture.
-  kind        String
+  kind          String
   depositTypeId String? // which deposit type a deposit entry belongs to (for per-type reporting)
   // Written ONLY by the charge-posting service (spec §1.7): every charge carries its outlet and tax
   // category so the invoice can break out Spa vs Accommodation and summarise tax per rate (§4.3).
-  outlet      String? // room | minibar | extra | spa | bar | restaurant | other  (null for payments)
-  taxCategory String? // standard | reduced | city_tax | exempt                    (null for payments)
-  description String
-  amountMinor Int
-  method      String? // for payments (label only): cash | card | company_account | bank_transfer | prepaid_ota
-  ref         String?
-  voided      Boolean  @default(false)
-  postedById  String?
-  postedAt    DateTime @default(now())
+  outlet        String? // room | minibar | extra | spa | bar | restaurant | other  (null for payments)
+  taxCategory   String? // standard | reduced | city_tax | exempt                    (null for payments)
+  description   String
+  amountMinor   Int
+  method        String? // for payments (label only): cash | card | company_account | bank_transfer | prepaid_ota
+  ref           String?
+  voided        Boolean  @default(false)
+  postedById    String?
+  postedAt      DateTime @default(now())
 
   folio    Folio    @relation(fields: [folioId], references: [id], onDelete: Cascade)
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -1041,6 +1053,56 @@ model MaintenanceTask {
   @@index([propertyId, status])
 }
 
+// --- PMS R1 foundations: workforce clock-in + the ops event stream --------
+
+// A clock-in shift on the SHARED identity (PMS-REFINEMENT-R1 §6.7 / §10.2-10.3). "Active now" = a shift
+// row with clockOutAt = null. Feeds the workforce dashboard, housekeeping/maintenance assignment
+// feasibility, and the clock-in KPI. Delegated clock-in records who did it (clockedInById). This is a
+// light availability + KPI signal — NOT payroll/attendance/HR (§6.9, §10.6).
+model StaffShift {
+  id            String    @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  userId        String // the shared-identity user who is on shift
+  role          String // the PMS role they are working (housekeeper | maintenance | reception | …)
+  clockInAt     DateTime  @default(now())
+  clockOutAt    DateTime?
+  clockedInById String? // set when a supervisor/FD clocked them in (delegated); null = self clock-in
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, clockOutAt]) // "active now" lookups
+  @@index([userId, clockInAt])
+}
+
+// The operational event stream (PMS-REFINEMENT-R1 §6.8 / §7.4 / §8.7). Every housekeeping/maintenance
+// status change + clock-in is appended here (who · unit · from→to · when) — one immutable log that powers
+// the live boards, the self-populating per-room timeline (§7.4), and the manager-only performance
+// analytics. Employee data: manager/owner-only, EU worker-monitoring/GDPR aware — never a live staff
+// leaderboard.
+model OpsEvent {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  domain     String // housekeeping | maintenance | workforce
+  action     String // status_change | clock_in | clock_out | assigned | inspection_pass | inspection_fail | …
+  unitId     String? // the room this event concerns (null for workforce events)
+  userId     String? // the staff member the event is ABOUT (e.g. the cleaner)
+  actorId    String? // who performed the action (may differ: supervisor approving, delegated clock-in)
+  fromState  String?
+  toState    String?
+  refId      String? // the task/assignment id this event belongs to (HousekeepingTask, MaintenanceTask, StaffShift)
+  meta       String? // small JSON blob for extra context (reason, duration, etc.)
+  at         DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unit     Unit?    @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, at])
+  @@index([unitId, at])
+  @@index([propertyId, domain, at])
+}
+
 // --- Monitoring: Sync / Error / Audit -------------------------------------
 
 model SyncEvent {
@@ -1061,7 +1123,7 @@ model SyncEvent {
 }
 
 model ErrorItem {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   tenantId          String
   propertyId        String
   channelId         String?
@@ -1071,8 +1133,8 @@ model ErrorItem {
   productLabel      String?
   dateAffected      DateTime? @db.Date
   recommendedAction String?
-  resolved          Boolean  @default(false)
-  createdAt         DateTime @default(now())
+  resolved          Boolean   @default(false)
+  createdAt         DateTime  @default(now())
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   channel  Channel? @relation(fields: [channelId], references: [id])
@@ -1081,18 +1143,18 @@ model ErrorItem {
 }
 
 model AuditEntry {
-  id         String   @id @default(cuid())
-  tenantId   String
-  propertyId String
-  userId     String?
-  entity     String
-  field      String?
-  oldValue   String?
-  newValue   String?
-  source     String // manual | api | bulk | rule
+  id          String   @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  userId      String?
+  entity      String
+  field       String?
+  oldValue    String?
+  newValue    String?
+  source      String // manual | api | bulk | rule
   channelCode String?
-  syncResult String?
-  createdAt  DateTime @default(now())
+  syncResult  String?
+  createdAt   DateTime @default(now())
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 

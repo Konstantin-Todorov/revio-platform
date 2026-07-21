@@ -366,6 +366,25 @@ PMS Close Day (E8) is the base.
 
 ---
 
+## Build status — Phase J (RevioPMS R1)
+
+> **J0 foundations BUILT (2026-07-21).** The three "build-first" data foundations the screens depend on:
+> - **Guest identity + merge (§3.5):** `Guest.mergedIntoId` soft-merge self-relation. `guest-identity.ts`
+>   (`findDuplicateGuests` — same email/phone/normalized-name candidates, strongest-signal ranked) +
+>   `actions-guests.ts` (`mergeGuests` — re-parents reservations + notes to the winner, back-fills missing
+>   contact fields, flags the loser, audit-logged, manager-gated). Nothing is deleted; ids stay resolvable.
+> - **Ops event stream (§6.8/§7.4/§8.7):** new `OpsEvent` model (domain · action · unit · user · actor ·
+>   from→to · at) + `events.ts` (`recordOpsEvent`, `getUnitTimeline`, `getHousekeepingPerformance` with the
+>   paused-clean outlier guard). Manager-only analytics; never a live leaderboard.
+> - **Clock-in / workforce (§6.7/§10.2-10.3):** new `StaffShift` model (active = clockOutAt null,
+>   `clockedInById` for delegated) + `workforce.ts` (`getActiveShifts`, `getWorkforceSummary`,
+>   `getActiveCleanerCount`) + `actions-workforce.ts` (self + delegated clock-in/out, each appending an
+>   OpsEvent). Availability + light KPI only, not payroll/HR.
+>
+> Migration `20260721182000_pms_r1_foundations` (additive: new tables + RLS + nullable column). The **§9
+> Configuration expansion** (grouped/searchable sections + deep-links on the shipped E7 page) and the ten
+> screens (J1–J9, J11; J10 Close Day awaits §11) build on top of these primitives.
+
 ## Cross-cutting principles (running)
 - **Derived signals need a minimum sample (n ≥ 2)** — a "preference"/"usual"/"returning-guest" signal must
   not be inferred from a single occurrence; below threshold show "not enough history yet." Governs Guest
