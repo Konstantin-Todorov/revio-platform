@@ -93,6 +93,11 @@ link into. **This screen is very good — mostly keep** (commercial/operational 
 - **2.2 Remove dev-facing scaffolding.** "Deposit handling arrives in phase E4" → a real empty state ("No
   deposit held") or hide the Deposits block until deposits exist.
 
+> **BUILT — J2 (2026-07-21).** Reservation view (`/reservation/[id]`): **§2.1** action hub — Open folio ·
+> Check in · Move room · Post charge · Check out, each gated by stay state (booked / assigned / in-house);
+> **§2.2** the "Deposit handling arrives in phase E4" scaffolding replaced with a real state (deposit held
+> amount, else "No deposit held"). Extend-checkout is part of the deferred J1 follow-up.
+
 ## 3. Guests
 **Who / what:** front-office staff recognising and serving a guest. The **operational** profile the CRS
 deliberately isn't. Issue is **under-populated data shown at full weight**, not over-building.

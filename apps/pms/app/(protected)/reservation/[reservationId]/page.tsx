@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getReservationDetail, type TimelineEvent, type StayState } from "@/lib/folio";
+import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
 
@@ -121,10 +122,15 @@ export default async function ReservationViewPage({ params }: { params: Promise<
             </Field>
             <div className="col-span-2">
               <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400"><Sparkles className="h-3.5 w-3.5" /> Deposits</dt>
-              <dd className="mt-0.5 text-[12.5px] text-ink-400">Deposit handling arrives in phase E4.</dd>
+              {/* §2.2: real empty state, not dev scaffolding. Deposits shipped in E4 — show what's held. */}
+              <dd className="mt-0.5 text-[13px] font-semibold text-ink-900">
+                {o.balance && o.balance.depositsHeld > 0
+                  ? <span className="text-accent-600">{money(o.balance.depositsHeld, o.currency)} held</span>
+                  : <span className="text-ink-400">No deposit held</span>}
+              </dd>
             </div>
           </dl>
-          {/* Quick actions — the folio and move stay one click away (spec §3.1). */}
+          {/* §2.1 — the action hub: every Front Desk action lives here, gated by stay state. */}
           <div className="flex flex-wrap gap-2 border-t border-surface-border/60 p-4">
             <Link href={`/folio/${reservationId}`} className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
               <Receipt className="h-3.5 w-3.5" /> Open folio
@@ -133,6 +139,24 @@ export default async function ReservationViewPage({ params }: { params: Promise<
               <Link href={`/checkin/${reservationId}`} className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
                 <LogIn className="h-3.5 w-3.5" /> Check in
               </Link>
+            )}
+            {(o.stayState === "assigned" || o.stayState === "in_house") && o.assignedUnits[0] && (
+              <Link href={`/move/${o.assignedUnits[0].assignmentId}`} className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
+                <ArrowRightLeft className="h-3.5 w-3.5" /> Move room
+              </Link>
+            )}
+            {(o.stayState === "in_house" || o.stayState === "assigned") && (
+              <Link href={`/minibar/${reservationId}`} className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
+                <PlusCircle className="h-3.5 w-3.5" /> Post charge
+              </Link>
+            )}
+            {o.stayState === "in_house" && (
+              <form action={checkOut}>
+                <input type="hidden" name="reservationId" value={reservationId} />
+                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted hover:text-danger-600">
+                  <LogOut className="h-3.5 w-3.5" /> Check out
+                </button>
+              </form>
             )}
           </div>
         </Card>

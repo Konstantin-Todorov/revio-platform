@@ -185,7 +185,7 @@ export async function getReservationDetail(reservationId: string) {
   const guests = r.lines.reduce((n, l) => n + (l.guestsCount ?? 0), 0);
 
   const active = r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
-  const assignedUnits = active.map((a) => ({ label: a.unit.label, floor: a.unit.floor, hkStatus: a.unit.hkStatus as HkStatus }));
+  const assignedUnits = active.map((a) => ({ assignmentId: a.id, label: a.unit.label, floor: a.unit.floor, hkStatus: a.unit.hkStatus as HkStatus }));
   const checkedIn = active.some((a) => a.checkedInAt != null);
   const departedToday = r.assignments.some((a) => a.checkedOutAt != null && ymd(a.checkedOutAt) === today);
   const stayState: StayState =
