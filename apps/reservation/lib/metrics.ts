@@ -62,6 +62,15 @@ export function stlyRange(range: ResolvedRange): ResolvedRange {
   return { ...range, start: shift(range.start), endExcl: shift(range.endExcl), label: `${range.label} · STLY` };
 }
 
+/** Dashboard/Analytics comparison baseline (CRS-REFINEMENT-R2 §1.2): YoY = 364 days back (STLY,
+ * weekday-aligned — NOT 365); LW = 7 days back (day-of-week aligned automatically). */
+export type CompareBasis = "yoy" | "lw";
+export function comparisonRange(range: ResolvedRange, basis: CompareBasis): ResolvedRange {
+  const back = basis === "lw" ? 7 : 364;
+  const shift = (isoDate: string) => ymd(addDays(new Date(`${isoDate}T00:00:00Z`), -back));
+  return { ...range, start: shift(range.start), endExcl: shift(range.endExcl), label: `${range.label} · ${basis === "lw" ? "LW" : "STLY"}` };
+}
+
 interface LoadedLine extends MetricLine {
   reservationId: string;
   guestName: string;

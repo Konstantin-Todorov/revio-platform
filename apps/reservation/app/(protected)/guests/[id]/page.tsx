@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getGuestDetail } from "@/lib/data";
 import { updateGuest } from "@/lib/actions-reservations";
+import { GuestNotes, type GuestNoteRow } from "@/components/guests/GuestNotes";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
 
@@ -20,7 +21,14 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const detail = await getGuestDetail(id);
   if (!detail) notFound();
-  const { property, guest, derived, fromPms } = detail;
+  const { property, guest, derived, fromPms, notes } = detail;
+  const noteRows: GuestNoteRow[] = notes.map((n) => ({
+    id: n.id,
+    authorName: n.authorName,
+    body: n.body,
+    createdIso: n.createdAt.toISOString(),
+    edited: n.updatedAt.getTime() - n.createdAt.getTime() > 1000,
+  }));
 
   return (
     <div className="space-y-5">
@@ -83,6 +91,15 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
           )}
         </Card>
       </div>
+
+      {/* Staff notes (spec §4) — on the SHARED guest record, so they travel wherever the guest does. */}
+      <Card>
+        <CardHeader
+          title={`Notes (${notes.length})`}
+          subtitle="Free-text staff notes — saved on the shared guest record, visible wherever this guest appears (CRS today, RevioPMS once the property runs it)"
+        />
+        <GuestNotes guestId={guest.id} notes={noteRows} />
+      </Card>
 
       <Card>
         <CardHeader title={`Booking history (${guest.reservations.length})`} />

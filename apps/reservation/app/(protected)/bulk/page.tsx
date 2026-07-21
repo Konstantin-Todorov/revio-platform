@@ -1,6 +1,6 @@
 import { getRatesData } from "@/lib/data";
 import { deleteRestrictionRule } from "@/lib/actions-rates";
-import { CrsBulkForm } from "@/components/rates/CrsBulkForm";
+import { CrsBulkPanel } from "@/components/rates/CrsBulkPanel";
 import { RestrictionDialog } from "@/components/rates/RestrictionDialog";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
@@ -33,8 +33,8 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
 
       <Card>
         <CardHeader title="Bulk update" subtitle="One run = one audit entry + one push to the connected channel manager" />
-        <CrsBulkForm
-          {...(preselect && preselect.length > 0 ? { preselect } : {})}
+        <CrsBulkPanel
+          {...(preselect && preselect.length > 0 ? { preselectRoomTypeIds: preselect } : {})}
           roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name }))}
           ratePlans={ratePlans.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
           today={today}
@@ -43,7 +43,7 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
 
       <Card>
         <CardHeader
-          title="Restriction Rules"
+          title="Your active restriction rules"
           subtitle="Date-scoped, source-targetable standing rules — e.g. closed to Travel Agents over a trade fair"
           action={<RestrictionDialog roomTypes={roomTypes} channels={channels} />}
         />

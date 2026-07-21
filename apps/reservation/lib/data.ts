@@ -623,7 +623,13 @@ export async function getGuestDetail(id: string) {
     favouriteFloor: [...floorCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null,
   };
 
-  return { property, guest, derived, fromPms };
+  // Free-text staff notes (CRS-REFINEMENT-R2 §4) — newest first, on the shared guest record.
+  const notes = await prisma.guestNote.findMany({
+    where: { guestId: guest.id },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return { property, guest, derived, fromPms, notes };
 }
 
 // --- Phase 3: restriction enforcement at the point of sale --------------------

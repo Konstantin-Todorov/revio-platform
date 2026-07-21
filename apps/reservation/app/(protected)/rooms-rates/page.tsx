@@ -3,6 +3,7 @@ import { getRatesData, getSetupData } from "@/lib/data";
 import { deleteRatePlan } from "@/lib/actions-rates";
 import { deleteInventoryPeriod } from "@/lib/actions-inventory";
 import { RatePlanDialog } from "@/components/rates/RatePlanDialog";
+import { RatePlanLinkageBoard } from "@/components/rates/RatePlanLinkageBoard";
 import { PeriodDialog } from "@/components/inventory/PeriodDialog";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
@@ -33,6 +34,12 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
   const { blocked } = await searchParams;
   const [{ property, ratePlans }, { roomTypes, periods, todayIso }] = await Promise.all([getRatesData(), getSetupData()]);
   const parents = ratePlans.map((rp) => ({ id: rp.id, name: rp.name }));
+  const linkPlans = ratePlans.map((rp) => ({
+    id: rp.id, name: rp.name, priceLogic: rp.priceLogic, active: rp.active,
+    parentRatePlanId: rp.parentRatePlanId, parentName: rp.parent?.name ?? null,
+    derivedType: rp.derivedType, derivedDirection: rp.derivedDirection, derivedValue: rp.derivedValue, derivedRounding: rp.derivedRounding,
+    directChannelEnabled: rp.directChannelEnabled,
+  }));
   const activePeriod = (p: (typeof periods)[number]) => p.dateTo.toISOString().slice(0, 10) >= todayIso;
 
   return (
@@ -93,6 +100,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
                 <tr key={rp.id} className="group border-b border-surface-border/60 align-top transition-colors last:border-0 hover:bg-surface-muted">
                   <td className="px-4 py-2.5">
                     <div className="font-semibold text-ink-900">
+                      {rp.priceLogic === "derived" && <span title={`Derived from ${rp.parent?.name ?? "parent"}`} className="mr-1 select-none">📎</span>}
                       {rp.name}
                       {!rp.active && <span className="ml-1.5 text-[10px] font-bold uppercase text-ink-400">inactive</span>}
                       {!rp.directChannelEnabled && <span title="Not bookable on the direct channel" className="ml-1.5 rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-bold uppercase text-ink-400">OTA/corp</span>}
@@ -118,6 +126,12 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
           Daily prices live on the Inventory Calendar (Rate line) or Bulk Rates &amp; Availability; derived plans
           recalculate from their parent automatically.
         </p>
+      </Card>
+
+      {/* Editable Rate Plan Linkage (CRS-REFINEMENT-R2 §6). */}
+      <Card>
+        <CardHeader title="Rate Plan Linkage" subtitle="Derived-pricing chains — change a parent or offset, or switch a plan between manual and derived" />
+        <RatePlanLinkageBoard plans={linkPlans} />
       </Card>
 
       <Card>

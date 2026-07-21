@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Download } from "lucide-react";
 import { Layers } from "lucide-react";
 import { getInventoryBoard } from "@/lib/data";
-import { getCancellationReport, getPickupReport, getProductPerformance, getProductionByDay, getRangeMetrics, resolveRange, stlyRange, type RangePreset } from "@/lib/metrics";
+import { getCancellationReport, getPickupReport, getProductPerformance, getProductionByDay, getRangeMetrics, resolveRange, comparisonRange, type CompareBasis, type RangePreset } from "@/lib/metrics";
 import { getProperty, getScope, todayInTz } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
@@ -31,7 +31,7 @@ const pct = (v: number) => `${v.toFixed(1)}%`;
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ report?: string; range?: string; from?: string; to?: string; lens?: string; g?: string }>;
+  searchParams: Promise<{ report?: string; range?: string; from?: string; to?: string; lens?: string; g?: string; basis?: string }>;
 }) {
   const sp = await searchParams;
   const report = REPORTS.some((r) => r.key === sp.report) ? sp.report! : "performance";
@@ -44,9 +44,10 @@ export default async function ReportsPage({
   // where the distinction exists. Book = production ("what did we book"); Stay = occupancy.
   const lens: "stay" | "book" = sp.lens === "book" ? "book" : "stay";
   const gran: "d" | "w" | "m" = sp.g === "w" ? "w" : sp.g === "m" ? "m" : "d";
+  const basis: CompareBasis = sp.basis === "lw" ? "lw" : "yoy"; // comparison baseline for the summary cards (§2.3)
   const qs = `report=${report}&range=${range.preset}${range.preset === "custom" ? `&from=${sp.from}&to=${sp.to}` : ""}&lens=${lens}`;
   const href = (over: Record<string, string>) => {
-    const params = new URLSearchParams({ report, range: range.preset, lens, g: gran, ...over });
+    const params = new URLSearchParams({ report, range: range.preset, lens, g: gran, basis, ...over });
     if (range.preset === "custom") { if (sp.from) params.set("from", sp.from); if (sp.to) params.set("to", sp.to); }
     return `/reports?${params.toString()}`;
   };
@@ -107,6 +108,13 @@ export default async function ReportsPage({
                   <Link key={k} href={href({ g: k })} className={`rounded-md px-2.5 py-1 transition-colors ${gran === k ? "bg-brand-50 text-brand-800 ring-1 ring-brand-600/30" : "text-ink-500 hover:bg-surface-muted"}`}>{l}</Link>
                 ))}
               </span>
+              <span className="h-4 w-px bg-surface-border" />
+              <span className="flex items-center gap-1 text-[11.5px] font-semibold">
+                <span className="text-[10.5px] font-normal text-ink-400">Compared with</span>
+                {([["yoy", "Last year"], ["lw", "Last week"]] as const).map(([k, l]) => (
+                  <Link key={k} href={href({ basis: k })} className={`rounded-md px-2.5 py-1 transition-colors ${basis === k ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}>{l}</Link>
+                ))}
+              </span>
             </>
           )}
         </div>
@@ -122,7 +130,7 @@ export default async function ReportsPage({
         </div>
       )}
 
-      {report === "performance" && (lens === "book" ? <ProductionReport range={range} /> : <PerformanceReport range={range} gran={gran} />)}
+      {report === "performance" && (lens === "book" ? <ProductionReport range={range} /> : <PerformanceReport range={range} gran={gran} basis={basis} />)}
       {report === "pickup" && <PickupReport />}
       {report === "source" && <SourceReport range={range} />}
       {report === "products" && <ProductsReport range={range} lens={lens} />}
@@ -154,52 +162,192 @@ function bucket(perDay: { date: string; available: number; soldNights: number; r
   return [...map.values()];
 }
 
-async function PerformanceReport({ range, gran }: { range: ReturnType<typeof resolveRange>; gran: "d" | "w" | "m" }) {
-  const [m, s] = await Promise.all([getRangeMetrics(range), getRangeMetrics(stlyRange(range))]);
-  const currency = m.property.baseCurrency;
-  const rows = bucket(m.perDay, gran);
-  // YoY vs STLY (364 days back — same weekday), green/red per spec §4.2.
-  const yoy = (now: number, then: number, fmt: (v: number) => string) =>
-    then > 0 ? (
-      <span className={now >= then ? "text-success-600" : "text-danger-600"}>
-        {now >= then ? "▲" : "▼"} {fmt(Math.abs(now - then))} vs STLY
-      </span>
-    ) : null;
+/** A period summary card (§2.3): value + basis-labelled delta (green up / red down) + the prior value. */
+function SummaryCard({ label, value, delta, prior }: { label: string; value: string; delta: { text: string; up: boolean } | null; prior: string }) {
   return (
-    <Card>
-      <CardHeader
-        title={`Performance · ${range.label} · ${pct(m.cards.occupancyPct)} occupancy · ${money(m.cards.revenueMinor, currency)} revenue (${m.cards.revenueDisplay}) · ADR ${money(m.cards.adrMinor, currency)} · RevPAR ${money(m.cards.revparMinor, currency)}`}
-      />
-      <div className="flex flex-wrap gap-4 border-b border-surface-border/60 px-4 py-2 text-[12px]">
-        <span className="text-ink-400">Same time last year (364d back):</span>
-        {yoy(m.cards.occupancyPct, s.cards.occupancyPct, (v) => `${v.toFixed(1)}pp occupancy`)}
-        {yoy(m.cards.revenueMinor, s.cards.revenueMinor, (v) => `${money(v, currency)} revenue`)}
-        {yoy(m.cards.adrMinor, s.cards.adrMinor, (v) => `${money(v, currency)} ADR`)}
-        {s.cards.revenueMinor === 0 && <span className="text-ink-400">no STLY data yet</span>}
+    <div className="rounded-lg border border-surface-border bg-white px-4 py-3.5 shadow-card">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{label}</div>
+      <div className="tnum mt-1 text-[22px] font-bold leading-none text-ink-900">{value}</div>
+      <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+        {delta ? (
+          <span className={`rounded px-1 py-0.5 font-bold tabular-nums ${delta.up ? "bg-success-50 text-success-600" : "bg-danger-50 text-danger-600"}`}>{delta.up ? "▲" : "▼"} {delta.text}</span>
+        ) : <span className="text-ink-300">no baseline</span>}
+        <span className="text-ink-400">{prior}</span>
       </div>
-      <div className="max-h-[520px] overflow-auto">
-        <table className="w-full text-[13px]">
-          <thead className="sticky top-0 bg-white">
-            <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              {[gran === "d" ? "Date" : gran === "w" ? "Week" : "Month", "Available", "Sold", "Occupancy", "Revenue", "ADR", "RevPAR"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((d) => (
-              <tr key={d.label} className="border-b border-surface-border/60 last:border-0">
-                <td className="tnum px-4 py-2 text-ink-700">{d.label}</td>
-                <td className="tnum px-4 py-2 text-ink-600">{d.available}</td>
-                <td className="tnum px-4 py-2 font-semibold text-ink-900">{d.soldNights}</td>
-                <td className="tnum px-4 py-2 text-ink-700">{d.available > 0 ? pct((d.soldNights / d.available) * 100) : "—"}</td>
-                <td className="tnum px-4 py-2 text-ink-700">{money(d.revenueMinor, currency)}</td>
-                <td className="tnum px-4 py-2 text-ink-600">{d.soldNights > 0 ? money(Math.round(d.revenueMinor / d.soldNights), currency) : "—"}</td>
-                <td className="tnum px-4 py-2 text-ink-600">{d.available > 0 ? money(Math.round(d.revenueMinor / d.available), currency) : "—"}</td>
+    </div>
+  );
+}
+
+type EvoBucket = { label: string; rnNow: number; rnThen: number; adrNow: number; adrThen: number };
+
+/** Combined bar + line evolution chart (§2.4, [match reference]): grouped Room-night bars (this period vs
+ * comparison) on the left axis, ADR lines (this period vs comparison) on the right axis. Server-rendered SVG. */
+function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket[]; currency: string; basisLabel: string }) {
+  const W = 1000, H = 300, padL = 44, padR = 48, padT = 16, padB = 46;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const n = data.length;
+  const rnMax = Math.max(1, ...data.map((d) => Math.max(d.rnNow, d.rnThen)));
+  const adrMax = Math.max(1, ...data.map((d) => Math.max(d.adrNow, d.adrThen)));
+  const niceMax = (v: number) => { const step = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / step) * step; };
+  const rnTop = niceMax(rnMax), adrTop = niceMax(adrMax);
+  const step = plotW / n;
+  const barW = Math.min(18, step * 0.3);
+  const yRn = (v: number) => padT + plotH - (v / rnTop) * plotH;
+  const yAdr = (v: number) => padT + plotH - (v / adrTop) * plotH;
+  const cx = (i: number) => padL + step * i + step / 2;
+  const line = (pick: (d: EvoBucket) => number) => data.map((d, i) => `${cx(i)},${yAdr(pick(d))}`).join(" ");
+  const gridVals = [0, 0.25, 0.5, 0.75, 1];
+
+  return (
+    <div className="px-4 py-4">
+      <div className="mb-1 flex justify-between text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
+        <span>Room-nights</span><span>ADR ({currency})</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: "auto" }} preserveAspectRatio="xMidYMid meet">
+        {/* gridlines + axes */}
+        {gridVals.map((g) => (
+          <g key={g}>
+            <line x1={padL} x2={W - padR} y1={padT + plotH * (1 - g)} y2={padT + plotH * (1 - g)} stroke="#e9edf3" strokeWidth={1} />
+            <text x={padL - 6} y={padT + plotH * (1 - g) + 3} textAnchor="end" className="fill-[#98a2b3]" fontSize={10}>{Math.round(rnTop * g)}</text>
+            <text x={W - padR + 6} y={padT + plotH * (1 - g) + 3} textAnchor="start" className="fill-[#98a2b3]" fontSize={10}>{Math.round(adrTop * g)}</text>
+          </g>
+        ))}
+        {/* grouped room-night bars: comparison (teal) + current (blue) */}
+        {data.map((d, i) => (
+          <g key={i}>
+            <rect x={cx(i) - barW - 1} y={yRn(d.rnThen)} width={barW} height={Math.max(0, padT + plotH - yRn(d.rnThen))} rx={2} className="fill-[#14b8a6]" opacity={0.85} />
+            <rect x={cx(i) + 1} y={yRn(d.rnNow)} width={barW} height={Math.max(0, padT + plotH - yRn(d.rnNow))} rx={2} className="fill-[#2f5bd8]" />
+            <text x={cx(i)} y={H - padB + 16} textAnchor="middle" className="fill-[#98a2b3]" fontSize={9.5}>{d.label.replace("wk ", "")}</text>
+          </g>
+        ))}
+        {/* ADR lines: comparison (red) + current (amber) */}
+        <polyline points={line((d) => d.adrThen)} fill="none" stroke="#ef4444" strokeWidth={2} strokeLinejoin="round" opacity={0.85} />
+        <polyline points={line((d) => d.adrNow)} fill="none" stroke="#f59e0b" strokeWidth={2.5} strokeLinejoin="round" />
+        {data.map((d, i) => <circle key={`m-${i}`} cx={cx(i)} cy={yAdr(d.adrNow)} r={3} className="fill-white" stroke="#f59e0b" strokeWidth={2} />)}
+      </svg>
+      {/* legend */}
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-[11px] text-ink-500">
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#2f5bd8]" /> Room-nights</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#14b8a6]" /> Room-nights ({basisLabel})</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[#f59e0b]" /> ADR</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[#ef4444]" /> ADR ({basisLabel})</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Analytics Performance — full redesign (CRS-REFINEMENT-R2 §2): a period SUMMARY dashboard (metric cards
+ * with Σ/Σ-recomputed ratios + basis-labelled deltas, evolution bar charts, and performance-by-room-type)
+ * replaces the one-row-per-day table as the primary view. The raw day table is kept as a drill-down.
+ */
+async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typeof resolveRange>; gran: "d" | "w" | "m"; basis: CompareBasis }) {
+  const [m, cmp, prod] = await Promise.all([
+    getRangeMetrics(range),
+    getRangeMetrics(comparisonRange(range, basis)), // YoY=364d or LW=7d, ratios recomputed Σ/Σ
+    getProductPerformance(range, "stay"),
+  ]);
+  const currency = m.property.baseCurrency;
+  const basisLabel = basis === "lw" ? "LW" : "YoY";
+  const rows = bucket(m.perDay, gran);
+  const cmpRows = bucket(cmp.perDay, gran);
+  const granLabel = gran === "d" ? "daily" : gran === "w" ? "weekly" : "monthly";
+  const cmpName = basis === "lw" ? "Last week" : "Last year";
+  // Align this-period and comparison buckets by index (same length + granularity) for the combo chart.
+  const chart: EvoBucket[] = rows.map((r, i) => {
+    const cr = cmpRows[i];
+    return {
+      label: r.label,
+      rnNow: r.soldNights,
+      rnThen: cr?.soldNights ?? 0,
+      adrNow: r.soldNights > 0 ? r.revenueMinor / r.soldNights / 100 : 0,
+      adrThen: cr && cr.soldNights > 0 ? cr.revenueMinor / cr.soldNights / 100 : 0,
+    };
+  });
+
+  const relDelta = (now: number, then: number) => (then <= 0 ? null : { text: `${now >= then ? "+" : ""}${(((now - then) / then) * 100).toFixed(0)}% ${basisLabel}`, up: now >= then });
+  const ppDelta = (now: number, then: number) => ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp ${basisLabel}`, up: now >= then });
+
+  const summary = [
+    { label: "Occupancy", value: pct(m.cards.occupancyPct), delta: ppDelta(m.cards.occupancyPct, cmp.cards.occupancyPct), prior: `${cmp.cards.occupancyPct.toFixed(1)}% prior` },
+    { label: "ADR", value: money(m.cards.adrMinor, currency), delta: relDelta(m.cards.adrMinor, cmp.cards.adrMinor), prior: `${money(cmp.cards.adrMinor, currency)} prior` },
+    { label: "RevPAR", value: money(m.cards.revparMinor, currency), delta: relDelta(m.cards.revparMinor, cmp.cards.revparMinor), prior: `${money(cmp.cards.revparMinor, currency)} prior` },
+    { label: `Revenue (${m.cards.revenueDisplay})`, value: money(m.cards.revenueMinor, currency), delta: relDelta(m.cards.revenueMinor, cmp.cards.revenueMinor), prior: `${money(cmp.cards.revenueMinor, currency)} prior` },
+    { label: "Room-nights", value: String(m.cards.roomsSoldNights), delta: relDelta(m.cards.roomsSoldNights, cmp.cards.roomsSoldNights), prior: `${cmp.cards.roomsSoldNights} prior` },
+  ];
+
+  return (
+    <div className="space-y-4">
+      {/* Metric summary cards for the period (§2.3). */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        {summary.map((c) => <SummaryCard key={c.label} label={c.label} value={c.value} delta={c.delta} prior={c.prior} />)}
+      </div>
+
+      {/* Combined bar + line evolution chart at the selected granularity (§2.4, matches the reference). */}
+      <Card>
+        <CardHeader title={`Evolution · ${range.label} · ${granLabel}`} subtitle={`Room-nights (bars) and ADR (lines) — this period vs ${cmpName.toLowerCase()}`} />
+        {rows.length <= 1 ? (
+          <div className="px-4 py-6 text-[13px] text-ink-500">Pick a multi-day range to see the trend.</div>
+        ) : (
+          <EvolutionChart data={chart} currency={currency} basisLabel={cmpName} />
+        )}
+      </Card>
+
+      {/* Performance by room type (§2.5) — compare room types against each other. */}
+      <Card>
+        <CardHeader title="Performance by room type" subtitle="Room-nights, revenue and ADR per type for the selected period" />
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                {["Room type", "Reservations", "Room-nights", "Revenue", "ADR"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+            </thead>
+            <tbody>
+              {prod.roomTypes.map((row) => (
+                <tr key={row.name} className="border-b border-surface-border/60 last:border-0">
+                  <td className="px-4 py-2.5 font-semibold text-ink-900">{row.name}</td>
+                  <td className="tnum px-4 py-2.5 text-ink-700">{row.reservations}</td>
+                  <td className="tnum px-4 py-2.5 font-semibold text-ink-900">{row.nights}</td>
+                  <td className="tnum px-4 py-2.5 text-ink-700">{money(row.revenueMinor, currency)}</td>
+                  <td className="tnum px-4 py-2.5 text-ink-600">{row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"}</td>
+                </tr>
+              ))}
+              {prod.roomTypes.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-[13px] text-ink-400">No sold nights in this range.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Raw day-level data kept as a drill-down / export (§2.6). */}
+      <details className="overflow-hidden rounded-lg border border-surface-border bg-white shadow-card">
+        <summary className="flex cursor-pointer select-none items-center gap-2 border-b border-surface-border bg-surface-muted/60 px-4 py-2.5 text-[12.5px] font-semibold text-ink-700 [&::-webkit-details-marker]:hidden">
+          Detailed {granLabel} data — the numbers behind the charts
+        </summary>
+        <div className="max-h-[420px] overflow-auto">
+          <table className="w-full text-[13px]">
+            <thead className="sticky top-0 bg-white">
+              <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                {[gran === "d" ? "Date" : gran === "w" ? "Week" : "Month", "Available", "Sold", "Occupancy", "Revenue", "ADR", "RevPAR"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((d) => (
+                <tr key={d.label} className="border-b border-surface-border/60 last:border-0">
+                  <td className="tnum px-4 py-2 text-ink-700">{d.label}</td>
+                  <td className="tnum px-4 py-2 text-ink-600">{d.available}</td>
+                  <td className="tnum px-4 py-2 font-semibold text-ink-900">{d.soldNights}</td>
+                  <td className="tnum px-4 py-2 text-ink-700">{d.available > 0 ? pct((d.soldNights / d.available) * 100) : "—"}</td>
+                  <td className="tnum px-4 py-2 text-ink-700">{money(d.revenueMinor, currency)}</td>
+                  <td className="tnum px-4 py-2 text-ink-600">{d.soldNights > 0 ? money(Math.round(d.revenueMinor / d.soldNights), currency) : "—"}</td>
+                  <td className="tnum px-4 py-2 text-ink-600">{d.available > 0 ? money(Math.round(d.revenueMinor / d.available), currency) : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </div>
   );
 }
 

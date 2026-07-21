@@ -332,3 +332,54 @@ export async function updateGuest(fd: FormData): Promise<void> {
   revalidatePath("/guests");
   redirect(`/guests/${id}`);
 }
+
+// --- Guest notes (CRS-REFINEMENT-R2 §4) — multi-note, author + timestamp, on the shared record ---
+
+/** Add a note to a guest. Author identity is taken from the session (never client-supplied), and
+ * the note is tenant-stamped so RLS + the shared-core visibility rule both hold. */
+export async function addGuestNote(fd: FormData): Promise<void> {
+  const property = await getProperty();
+  const session = await getSession();
+  if (!session) redirect("/logout");
+  const guestId = str(fd, "guestId");
+  const body = str(fd, "body").trim();
+  const guest = await prisma.guest.findFirst({ where: { id: guestId, propertyId: property.id } });
+  if (!guest) redirect("/guests");
+  if (body) {
+    await prisma.guestNote.create({
+      data: { tenantId: guest!.tenantId, guestId, authorId: session!.userId, authorName: session!.userName, body },
+    });
+  }
+  revalidatePath(`/guests/${guestId}`);
+  redirect(`/guests/${guestId}#notes`);
+}
+
+/** Edit an existing note's body. Scoped to the guest under this property; author/byline is preserved
+ * (updatedAt marks the revision). */
+export async function editGuestNote(fd: FormData): Promise<void> {
+  const property = await getProperty();
+  const noteId = str(fd, "noteId");
+  const guestId = str(fd, "guestId");
+  const body = str(fd, "body").trim();
+  const guest = await prisma.guest.findFirst({ where: { id: guestId, propertyId: property.id } });
+  if (!guest) redirect("/guests");
+  const note = await prisma.guestNote.findFirst({ where: { id: noteId, guestId } });
+  if (note && body) {
+    await prisma.guestNote.update({ where: { id: noteId }, data: { body } });
+  }
+  revalidatePath(`/guests/${guestId}`);
+  redirect(`/guests/${guestId}#notes`);
+}
+
+/** Remove a note. Same guest/property scope guard as edit. */
+export async function deleteGuestNote(fd: FormData): Promise<void> {
+  const property = await getProperty();
+  const noteId = str(fd, "noteId");
+  const guestId = str(fd, "guestId");
+  const guest = await prisma.guest.findFirst({ where: { id: guestId, propertyId: property.id } });
+  if (!guest) redirect("/guests");
+  const note = await prisma.guestNote.findFirst({ where: { id: noteId, guestId } });
+  if (note) await prisma.guestNote.delete({ where: { id: noteId } });
+  revalidatePath(`/guests/${guestId}`);
+  redirect(`/guests/${guestId}#notes`);
+}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, Layers, TrendingUp } from "lucide-react";
 import { getInventoryBoard, getScope } from "@/lib/data";
-import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolveRange, stlyRange, type RangePreset } from "@/lib/metrics";
+import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolveRange, comparisonRange, type CompareBasis, type RangePreset } from "@/lib/metrics";
 import { DashboardView, type KpiCard } from "@/components/dashboard/DashboardView";
 import { ensurePickupSnapshot } from "@/lib/pickup";
 import { releaseExpiredHolds } from "@/lib/holds";
@@ -27,17 +27,20 @@ const pct = (v: number) => `${v.toFixed(v >= 10 ? 0 : 1)}%`;
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ range?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; basis?: string }>;
 }) {
   const sp = await searchParams;
   await Promise.all([ensurePickupSnapshot(), releaseExpiredHolds()]);
 
   const [ops, scope] = await Promise.all([getOperations(), getScope()]);
   const range = resolveRange(ops.todayIso, sp.range, sp.from, sp.to);
+  // Comparison basis (§1.2): one toggle governs every card. YoY = 364d back, LW = 7d back.
+  const basis: CompareBasis = sp.basis === "lw" ? "lw" : "yoy";
+  const basisLabel = basis === "lw" ? "LW" : "YoY";
   const isGroup = scope.scope === "group";
   const [metrics, stly, board, f7, f30] = await Promise.all([
     getRangeMetrics(range),
-    getRangeMetrics(stlyRange(range)), // STLY = 364 days back, same weekday (spec §4.2)
+    getRangeMetrics(comparisonRange(range, basis)), // YoY=364d (STLY) or LW=7d, per the toggle
     getInventoryBoard({ days: 14 }),
     getForecast(ops.todayIso, 7),
     getForecast(ops.todayIso, 30),
@@ -54,11 +57,11 @@ export default async function DashboardPage({
   // Past = actuals; future = on-the-books language (confirmed only — no realized occupancy yet).
   const otb = range.kind === "future";
 
-  // YoY vs STLY: relative % for money/counts, percentage-POINT delta for rates.
+  // Relative % for money/counts, percentage-POINT delta for rates — each labelled with its basis (§1.1).
   const relYoy = (now: number, then: number): KpiCard["yoy"] =>
-    then <= 0 ? null : { text: `${now >= then ? "+" : ""}${(((now - then) / then) * 100).toFixed(0)}%`, dir: now > then ? "up" : now < then ? "down" : "flat" };
+    then <= 0 ? null : { text: `${now >= then ? "+" : ""}${(((now - then) / then) * 100).toFixed(0)}% ${basisLabel}`, dir: now > then ? "up" : now < then ? "down" : "flat" };
   const ppYoy = (now: number, then: number): KpiCard["yoy"] =>
-    ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp`, dir: now > then ? "up" : now < then ? "down" : "flat" });
+    ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp ${basisLabel}`, dir: now > then ? "up" : now < then ? "down" : "flat" });
 
   const cards: KpiCard[] = [
     { key: "occupancy", label: otb ? "Committed occupancy" : "Occupancy", value: pct(c.occupancyPct), sub: `${c.roomsSoldNights} of ${c.availableRoomNights} room-nights`, href: "/inventory", yoy: ppYoy(c.occupancyPct, s.occupancyPct) },
@@ -91,6 +94,7 @@ export default async function DashboardPage({
         presets={PRESETS}
         activePreset={range.preset}
         cards={cards}
+        basis={basis}
         customStart={range.preset === "custom" ? range.start : ""}
         customEnd={range.preset === "custom" ? range.endExcl.slice(0, 10) : ""}
       />

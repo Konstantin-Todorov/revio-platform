@@ -38,6 +38,16 @@
 > one shared identity**. **One bulk engine + one modal pattern + one comparison model + one shared
 > identity + paperclip=derived everywhere** are cross-cutting invariants. CM is the finished reference —
 > reuse RevioLink components. Task phase **G** to be created on sign-off.
+>
+> **✅ RevioCRS R2 SHIPPED (phase H, H1–H9, 2026-07-21).** All eight screens built, browser-verified, live:
+> Bulk multi-field editor + confirm/result modal (H1); Inventory Calendar aligned to RevioLink — bulk-in-
+> modal, paperclip=derived, filters removed, search hidden (H2); Rooms & Rates vertical restack + editable
+> Rate Plan Linkage (H3); Dashboard YoY/LW basis toggle + per-delta labels (H4); Analytics full redesign —
+> summary cards + combined bar+line evolution chart + performance-by-room-type, raw table as drill-down
+> (H5); Reservations 3-click sortable columns (H6); Guests **Notes** — new `GuestNote` on the shared core
+> (visible wherever the guest appears, incl. PMS), add/edit/delete with session author (H7); Settings **Staff
+> CRUD on the one shared `User` identity** — invite / role / deactivate / reset-pw / edit email+phone, with
+> a new nullable `User.phone` (H8). Migrations `20260721174110_guest_notes` + `20260721180000_user_phone`.
 
 **Full V1 spec: `docs/CRS-REFERENCE.md` (founder spec v2, 2026-07-02)** — exact metric formulas,
 reservation lifecycle, system rules, sitemap, and the 5-phase MVP build order. Read it before writing

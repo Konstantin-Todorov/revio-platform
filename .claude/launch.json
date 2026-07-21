@@ -24,6 +24,18 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@revio/pms", "dev"],
       "port": 3003
+    },
+    {
+      "name": "revio-websites",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/a516065/Work/Claude Projects/revio-websites", "run", "dev", "--", "--port", "4321"],
+      "port": 4321
+    },
+    {
+      "name": "revio-websites-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "/Users/a516065/Work/Claude Projects/revio-websites", "run", "preview", "--", "--port", "4323"],
+      "port": 4323
     }
   ]
 }

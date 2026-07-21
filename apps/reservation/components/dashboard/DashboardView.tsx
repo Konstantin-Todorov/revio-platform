@@ -31,16 +31,32 @@ const STORE = "crs-dash-view";
 type Prefs = { presets: string[]; cards: string[] };
 
 export function DashboardView({
-  presets, activePreset, cards, customStart, customEnd,
+  presets, activePreset, cards, basis, customStart, customEnd,
 }: {
   presets: PresetOpt[];
   activePreset: string;
   cards: KpiCard[];
+  basis: "yoy" | "lw";
   customStart: string;
   customEnd: string;
 }) {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [open, setOpen] = useState(false);
+
+  // Persist the comparison basis per user (§1.2). The URL param is the source of truth for the server;
+  // localStorage remembers the last pick for continuity across visits.
+  useEffect(() => {
+    try { localStorage.setItem("crs-dash-basis", basis); } catch { /* ignore */ }
+  }, [basis]);
+
+  // Build a basis-toggle href that preserves the current range.
+  const basisHref = (b: "yoy" | "lw") => {
+    const p = new URLSearchParams();
+    if (activePreset === "custom") { p.set("range", "custom"); if (customStart) p.set("from", customStart); if (customEnd) p.set("to", customEnd); }
+    else p.set("range", activePreset);
+    p.set("basis", b);
+    return `/dashboard?${p.toString()}`;
+  };
 
   useEffect(() => {
     try {
@@ -88,6 +104,22 @@ export function DashboardView({
           <button className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted">Apply</button>
         </form>
 
+        {/* Comparison basis toggle (§1.2): governs every card's delta at once. */}
+        <div className="ml-2 flex items-center gap-1.5">
+          <span className="text-[11px] font-medium text-ink-400">Compared with</span>
+          <div className="flex items-center gap-0.5 rounded-md border border-surface-border bg-white p-0.5">
+            {([["yoy", "Last year"], ["lw", "Last week"]] as const).map(([b, label]) => (
+              <Link
+                key={b}
+                href={basisHref(b)}
+                className={`rounded px-2 py-1 text-[11.5px] font-semibold transition-colors ${basis === b ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
         <div className="relative ml-auto">
           <button
             type="button"
@@ -125,7 +157,7 @@ export function DashboardView({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {shownCards.map((card) => (
           <Link key={card.key} href={card.href} className="block">
-            <Card605 label={card.label} value={card.value} sub={card.sub} yoy={card.yoy} />
+            <Card605 label={card.label} value={card.value} sub={card.sub} yoy={card.yoy} basis={basis} />
           </Link>
         ))}
       </div>
@@ -133,15 +165,15 @@ export function DashboardView({
   );
 }
 
-function Card605({ label, value, sub, yoy }: Pick<KpiCard, "label" | "value" | "sub" | "yoy">) {
+function Card605({ label, value, sub, yoy, basis }: Pick<KpiCard, "label" | "value" | "sub" | "yoy"> & { basis: "yoy" | "lw" }) {
   return (
     <div className="rounded-lg border border-surface-border bg-white px-4 py-3.5 shadow-card transition-shadow hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
         <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{label}</div>
-        {/* YoY vs STLY-364 (spec §4.2): gain = green ▲, drop = red ▼. */}
+        {/* Delta vs the chosen basis (§1.2): gain = green ▲, drop = red ▼. */}
         {yoy && (
           <span
-            title="vs same time last year (364 days back — same weekday)"
+            title={basis === "lw" ? "vs last week (7 days back — same weekday)" : "vs same time last year (364 days back — same weekday)"}
             className={`flex items-center gap-0.5 rounded px-1 py-0.5 text-[10.5px] font-bold tabular-nums ${
               yoy.dir === "up" ? "bg-success-50 text-success-600" : yoy.dir === "down" ? "bg-danger-50 text-danger-600" : "bg-surface-sunken text-ink-400"
             }`}

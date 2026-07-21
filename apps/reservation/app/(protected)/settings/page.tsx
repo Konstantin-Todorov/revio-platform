@@ -8,6 +8,7 @@ import { PRECEDENCE_LINE } from "@revio/core";
 import { PERMISSION_GROUPS } from "@/lib/permissions";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
+import { StaffManagement, type StaffRow } from "@/components/settings/StaffManagement";
 import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -163,28 +164,19 @@ export default async function SettingsPage() {
         </details>
       </Card>
 
+      {/* Staff — full user-management CRUD on the shared identity (spec §8.2). Supersedes the old
+          "managed in RevioLink only" note: user management is now surfaced in each product, all acting
+          on the one shared-core account. */}
       <Card>
-        <CardHeader title={`Staff (${users.length})`} />
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              {["Name", "Email", "Role"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b border-surface-border/60 last:border-0">
-                <td className="px-4 py-2.5 font-semibold text-ink-900">{u.name}{u.id === session?.userId && <StatusPill tone="info">you</StatusPill>}</td>
-                <td className="px-4 py-2.5 text-ink-600">{u.email}</td>
-                <td className="px-4 py-2.5 text-ink-600">{u.role.replace("_", " ")}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="border-t border-surface-border/60 px-4 py-2.5 text-[11.5px] text-ink-400">
-          Staff invitations and role changes are managed in RevioLink → User Management — one account works across every
-          Revio product the hotel owns.
-        </p>
+        <CardHeader
+          title={`Staff (${users.length})`}
+          subtitle="Add, deactivate, change role, reset password, edit email/phone — all on the one shared Revio identity"
+        />
+        <StaffManagement
+          users={users.map<StaffRow>((u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role, active: u.active }))}
+          canManage={session?.role === "owner" || session?.role === "admin"}
+          currentUserId={session?.userId}
+        />
       </Card>
 
       <Card>

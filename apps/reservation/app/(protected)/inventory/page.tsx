@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/primitives";
 import { RateCell } from "@/components/inventory/RateCell";
 import { CollapseAll } from "@/components/inventory/CollapseAll";
 import { ParamMultiSelect } from "@/components/inventory/ParamMultiSelect";
+import { CrsCalendarBulkButton } from "@/components/inventory/CrsCalendarBulkButton";
 import { deriveRate, type DerivedRateConfig } from "@revio/core";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +32,23 @@ function remainingTone(remaining: number, available: number): string {
 export default async function InventoryCalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ start?: string; days?: string; rp?: string }>;
+  searchParams: Promise<{ start?: string; days?: string; rp?: string; rt?: string }>;
 }) {
   const sp = await searchParams;
   const board = await getInventoryBoard({ start: sp.start, days: sp.days ? Number(sp.days) : undefined });
   await ensurePickupSnapshot();
+
+  // Room-type view filter (§5.1, match RevioLink) — narrows which room-type sections render.
+  const rt = (sp.rt ?? "").split(",").filter(Boolean);
+  const sections = rt.length > 0 ? board.sections.filter((s) => rt.includes(s.roomType.code)) : board.sections;
+  // Data for the in-calendar bulk modal (§5.2) — same room types + rate plans the Bulk screen uses.
+  const bulkRoomTypes = board.sections.map((s) => ({ id: s.roomType.id, name: s.roomType.name }));
+  const bulkPlans = await prisma.ratePlan.findMany({
+    where: { propertyId: board.property.id, active: true },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true, priceLogic: true, parent: { select: { name: true } } },
+  });
+  const bulkPlanOpts = bulkPlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }));
 
   // Rate-plan multi-select (spec §3.5, aligned to RevioLink): governs RATE rows only — the
   // waterfall and restriction rows stay pinned regardless. Default = the standard plan.
@@ -90,6 +103,11 @@ export default async function InventoryCalendarPage({
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <ParamMultiSelect
+          label="Rooms" param="rt" emptyLabel="All"
+          options={board.sections.map((s) => ({ value: s.roomType.code, label: s.roomType.name }))}
+          selected={rt}
+        />
+        <ParamMultiSelect
           label="Rates" param="rp" emptyLabel="Standard only"
           options={allPlans.map((p) => ({ value: p.code, label: p.priceLogic === "derived" ? `${p.name} (derived)` : p.name }))}
           selected={[...selected]}
@@ -98,7 +116,7 @@ export default async function InventoryCalendarPage({
       </div>
 
       <div id="crs-inventory-sections" className="space-y-3">
-        {board.sections.map((section) => (
+        {sections.map((section) => (
           <details key={section.roomType.id} open className="group/section overflow-hidden rounded-lg border border-surface-border bg-white shadow-card">
             <summary className="flex cursor-pointer select-none items-center gap-3 border-b border-surface-border bg-surface-muted/60 px-4 py-2.5 [&::-webkit-details-marker]:hidden">
               <ChevronDown className="h-4 w-4 -rotate-90 text-ink-400 transition-transform group-open/section:rotate-0" />
@@ -106,14 +124,15 @@ export default async function InventoryCalendarPage({
               <span className="text-[11px] font-medium text-ink-400">
                 {section.roomType.code} · {section.roomType.totalRooms} {section.roomType.unitKind === "bed" ? "beds" : "rooms"}
               </span>
-              {/* Inline per-row bulk (spec §3.5): the bulk tab pre-scoped to this room type —
-                  same logic + audit path, never a parallel implementation. */}
-              <Link
-                href={`/bulk?rt=${section.roomType.code}`}
-                className="ml-auto rounded-md border border-surface-border bg-white px-2 py-1 text-[11px] font-semibold text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700"
-              >
-                Bulk edit
-              </Link>
+              {/* Inline per-row bulk (§5.2): opens the bulk tool in a modal OVER the calendar,
+                  pre-scoped to this room type — the SAME engine + audit path as the Bulk screen. */}
+              <CrsCalendarBulkButton
+                roomTypeId={section.roomType.id}
+                roomTypeName={section.roomType.name}
+                roomTypes={bulkRoomTypes}
+                ratePlans={bulkPlanOpts}
+                today={board.todayIso}
+              />
             </summary>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-[12.5px]">
@@ -208,7 +227,8 @@ function SectionRows({
       )}
       {derivedRows.map((dr) => (
         <tr key={dr.code} className="border-b border-surface-border/40">
-          <td className="sticky left-0 z-10 bg-white px-4 py-1.5 pl-7 text-[11.5px] font-medium text-ink-400">
+          <td className="sticky left-0 z-10 bg-white px-4 py-1.5 pl-4 text-[11.5px] font-medium text-ink-400">
+            <span title={`Derived from the standard rate · ${dr.offset}`} className="mr-1 cursor-help select-none">📎</span>
             {dr.name} <span className="tnum rounded bg-surface-sunken px-1 text-[10px] font-semibold text-ink-500">{dr.offset}</span>
           </td>
           {section.cells.map((cell, i) => (

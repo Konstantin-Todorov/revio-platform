@@ -305,3 +305,186 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
   revalidatePath("/bulk");
   return { ok: true };
 }
+
+// --- Bulk update (multi-field, CRS-REFINEMENT-R2 §7) -----------------------
+// The CRS twin of the RevioLink shared bulk engine: any subset of the ARI attributes in one pass
+// (≥1 required), same DailyCell/RatePrice tables, same two-tier precedence. Called by CrsBulkPanel
+// on the Bulk screen and by the Inventory Calendar bulk modal (H2) — one engine, two entry points.
+
+export type CrsBulkRateMode = "set" | "inc_pct" | "dec_pct" | "inc_amt" | "dec_amt";
+export interface CrsBulkPayload {
+  dateFrom: string;
+  dateTo: string;
+  daysOfWeek: number[];
+  roomTypeIds: string[];
+  ratePlanIds: string[];
+  rate?: { mode: CrsBulkRateMode; value: number };
+  minLos?: number | null;
+  maxLos?: number | null;
+  cta?: boolean;
+  ctd?: boolean;
+  stopSell?: boolean;
+  advanceMin?: number | null;
+  advanceMax?: number | null;
+  availability?: number;
+}
+export type CrsBulkResult = { ok: boolean; error?: string; affected?: number; warning?: string };
+
+export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<CrsBulkResult> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
+  if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
+  if (dateTo < dateFrom) return { ok: false, error: "End date is before start date." };
+  if (roomTypeIds.length === 0) return { ok: false, error: "Select at least one room type." };
+
+  const cell: Partial<{ inventory: number; minLos: number | null; maxLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean; advancePurchaseMin: number | null; advancePurchaseMax: number | null }> = {};
+  const changed: string[] = [];
+  const posOrNull = (v: number | null | undefined) => (v != null && v > 0 ? Math.trunc(v) : null);
+  if (payload.minLos !== undefined) { cell.minLos = posOrNull(payload.minLos); changed.push("min_los"); }
+  if (payload.maxLos !== undefined) { cell.maxLos = posOrNull(payload.maxLos); changed.push("max_los"); }
+  if (payload.cta !== undefined) { cell.cta = payload.cta; changed.push("cta"); }
+  if (payload.ctd !== undefined) { cell.ctd = payload.ctd; changed.push("ctd"); }
+  if (payload.stopSell !== undefined) { cell.stopSell = payload.stopSell; changed.push("stop_sell"); }
+  if (payload.advanceMin !== undefined) { cell.advancePurchaseMin = posOrNull(payload.advanceMin); changed.push("advance_min"); }
+  if (payload.advanceMax !== undefined) { cell.advancePurchaseMax = posOrNull(payload.advanceMax); changed.push("advance_max"); }
+  if (payload.availability !== undefined) { cell.inventory = Math.max(0, Math.trunc(payload.availability)); changed.push("availability"); }
+
+  const doRate = !!payload.rate && Number.isFinite(payload.rate.value);
+  if (doRate) changed.push("rate");
+  if (changed.length === 0) return { ok: false, error: "Set at least one field to update." };
+
+  const dates = eachDate(dateFrom, dateTo, daysOfWeek);
+  if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
+
+  let ratePlanIds: string[] = [];
+  if (doRate) {
+    const requested = payload.ratePlanIds ?? [];
+    const manual = await prisma.ratePlan.findMany({
+      where: { propertyId, priceLogic: "manual", active: true, ...(requested.length > 0 ? { id: { in: requested } } : {}) },
+      select: { id: true }, orderBy: { sortOrder: "asc" },
+    });
+    ratePlanIds = manual.map((m) => m.id);
+    if (ratePlanIds.length === 0) return { ok: false, error: "Select at least one manual rate plan for the price change (derived plans follow their parent)." };
+  }
+
+  let warning: string | undefined;
+  if (payload.availability !== undefined) {
+    const v = Math.max(0, Math.trunc(payload.availability));
+    const over = await prisma.roomType.findMany({ where: { id: { in: roomTypeIds }, totalRooms: { lt: v } }, select: { name: true, totalRooms: true } });
+    if (over.length > 0) warning = `${v} to sell exceeds the physical count for ${over.map((r) => `${r.name} (${r.totalRooms})`).join(", ")} — saved anyway, double-check the number.`;
+  }
+
+  const hasCell = Object.keys(cell).length > 0;
+  let affected = 0;
+  for (const roomTypeId of roomTypeIds) {
+    for (const date of dates) {
+      if (hasCell) {
+        await prisma.dailyCell.upsert({
+          where: { roomTypeId_date: { roomTypeId, date } },
+          update: { ...cell, source: "bulk" },
+          create: { tenantId, propertyId, roomTypeId, date, ...cell, source: "bulk" },
+        });
+      }
+      if (doRate) {
+        const { mode, value } = payload.rate!;
+        for (const rpId of ratePlanIds) {
+          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
+          const base = existing?.priceMinor ?? 0;
+          let next = base;
+          if (mode === "set") next = Math.round(value * 100);
+          else if (mode === "inc_pct") next = Math.round(base * (1 + value / 100));
+          else if (mode === "dec_pct") next = Math.round(base * (1 - value / 100));
+          else if (mode === "inc_amt") next = base + Math.round(value * 100);
+          else if (mode === "dec_amt") next = Math.max(0, base - Math.round(value * 100));
+          await prisma.ratePrice.upsert({
+            where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
+            update: { priceMinor: next, source: "bulk" },
+            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
+          });
+        }
+      }
+      affected++;
+    }
+  }
+
+  await logAudit(propertyId, tenantId, { entity: `Bulk update · ${roomTypeIds.length} room types`, field: changed.join(", "), newValue: `${affected} cells (${dateFrom} → ${dateTo})` });
+  await recordPush(propertyId, tenantId, `Availability & rates updated in bulk (${changed.join(", ")})`);
+  revalidateRates();
+  revalidatePath("/bulk");
+  return { ok: true, affected, ...(warning ? { warning } : {}) };
+}
+
+// --- Rate Plan Linkage (editable, CRS-REFINEMENT-R2 §6) --------------------
+// Same shared RatePlan tables RevioLink edits — derived prices are computed live from the parent, so a
+// change recalculates every child automatically. Enforced guardrails: no self-ref, no cycles, a chain
+// that resolves to a MANUAL base rate, and a max depth. (Twin of RevioLink's saveRatePlanLinkage.)
+
+const MAX_LINKAGE_DEPTH = 4;
+
+export interface LinkagePayload {
+  ratePlanId: string;
+  mode: "derive" | "unlink";
+  parentRatePlanId?: string | null;
+  derivedDirection?: string;
+  derivedType?: string;
+  derivedValue?: number;
+  derivedRounding?: string;
+}
+
+export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<ActionResult> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const plan = await prisma.ratePlan.findFirst({ where: { id: payload.ratePlanId, propertyId } });
+  if (!plan) return { ok: false, error: "Rate plan not found." };
+
+  if (payload.mode === "unlink") {
+    await prisma.ratePlan.update({
+      where: { id: plan.id },
+      data: { priceLogic: "manual", parentRatePlanId: null, derivedType: null, derivedDirection: null, derivedValue: null, derivedRounding: null },
+    });
+    await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${plan.name}`, field: "linkage", newValue: "unlinked → manual" });
+    await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" is now a manual rate`);
+    revalidateRates();
+    revalidatePath("/rooms-rates");
+    return { ok: true };
+  }
+
+  const parentId = payload.parentRatePlanId;
+  if (!parentId) return { ok: false, error: "Choose a parent rate plan." };
+  if (parentId === plan.id) return { ok: false, error: "A rate plan can’t derive from itself." };
+
+  const all = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true, name: true, priceLogic: true, parentRatePlanId: true } });
+  const byId = new Map(all.map((p) => [p.id, p]));
+  const parent = byId.get(parentId);
+  if (!parent) return { ok: false, error: "Parent rate plan not found." };
+
+  let cursor: (typeof all)[number] | undefined = parent;
+  let depth = 1;
+  const seen = new Set<string>();
+  while (cursor) {
+    if (cursor.id === plan.id) return { ok: false, error: "That would create a loop — a rate can’t derive from one of its own descendants." };
+    if (seen.has(cursor.id)) break;
+    seen.add(cursor.id);
+    if (cursor.priceLogic === "manual" || !cursor.parentRatePlanId) break;
+    depth++;
+    if (depth > MAX_LINKAGE_DEPTH) return { ok: false, error: `Derivation chains are limited to ${MAX_LINKAGE_DEPTH} levels — link to a plan closer to the base rate.` };
+    cursor = byId.get(cursor.parentRatePlanId) ?? undefined;
+  }
+  if (!cursor || cursor.priceLogic !== "manual") return { ok: false, error: "A derived rate must ultimately trace back to a manual base rate." };
+
+  await prisma.ratePlan.update({
+    where: { id: plan.id },
+    data: {
+      priceLogic: "derived",
+      parentRatePlanId: parentId,
+      derivedType: payload.derivedType === "fixed" ? "fixed" : "percent",
+      derivedDirection: payload.derivedDirection === "increase" ? "increase" : "decrease",
+      derivedValue: Math.max(0, Math.trunc(payload.derivedValue ?? 0)),
+      derivedRounding: payload.derivedRounding || "none",
+    },
+  });
+  await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${plan.name}`, field: "linkage", newValue: `derives from ${parent.name}` });
+  await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" now derives from "${parent.name}" — children recalculated`);
+  revalidateRates();
+  revalidatePath("/rooms-rates");
+  return { ok: true };
+}

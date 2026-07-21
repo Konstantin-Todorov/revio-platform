@@ -96,6 +96,12 @@ A **Notes** tab where an agent can add, save, and edit notes for a guest.
   wherever the guest record appears (e.g. PMS) — and apply it consistently. Keep it a **light operational
   free-text aid** ("not a CRM" scoping).
 
+> **BUILT (H7, 2026-07-21).** New `GuestNote` model on the shared core (`guestId` + `tenantId` + RLS),
+> newest-first, add/edit/delete server actions with the author taken from the session (never
+> client-supplied). **Visibility decision: shared-core, not CRS-only** — notes hang off the core `Guest`
+> and carry `tenantId`, so they surface wherever that guest appears (CRS today, RevioPMS once the property
+> runs it). Surfaced as a "Notes" card on the guest detail page (`edited` badge when updatedAt > createdAt).
+
 ---
 
 ## 5. Inventory Calendar — align to RevioLink
@@ -209,6 +215,15 @@ email/phone**.
   product, all acting on the one identity. **Do not create divergent user stores.** Roles come from the
   role×permission matrix in Settings. Prefer **deactivate over hard-delete** (audit trail). Password reset
   uses shared auth (emailed reset link preferred over plaintext temporary password).
+
+> **BUILT (H8, 2026-07-21).** The read-only Staff card is now full CRUD on the **one shared `User`
+> identity** (`apps/reservation/lib/actions-users.ts` + `components/settings/StaffManagement.tsx`): add
+> (invite), inline role change, deactivate/reactivate (preferred over hard-delete — no delete offered),
+> reset password (demo → shared demo password; production → emailed reset link), and edit name/email/phone.
+> Added a nullable `phone` to the shared `User` model (migration `20260721180000_user_phone`) so
+> "change email/phone" acts on the one identity. Owner/Admin-gated; guards the last active owner and
+> self-deactivation. **§8.1 low-availability threshold was already built** (Settings input → dashboard
+> Action Center, evaluated per room-type/date with `≤`, `metrics.ts`).
 
 ---
 

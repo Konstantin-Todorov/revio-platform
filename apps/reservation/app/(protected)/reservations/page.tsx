@@ -2,17 +2,12 @@ import Link from "next/link";
 import { CalendarPlus, CalendarCheck } from "lucide-react";
 import { getActiveHolds, getReservationsList, type CrsDateType } from "@/lib/data";
 import { HoldCountdown } from "@/components/reservations/HoldCountdown";
+import { ReservationsTable, type ResRow } from "@/components/reservations/ReservationsTable";
 import { releaseExpiredHolds } from "@/lib/holds";
-import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
+import { Card, PageHeader } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_TONES: Record<string, Tone> = {
-  confirmed: "success", modified: "info", cancelled: "neutral", no_show: "warning",
-  overbooked: "danger", failed_import: "danger", expired: "neutral", hold: "warning", draft: "neutral",
-};
 
 // Full lifecycle (spec §3.3): Draft → Hold → Confirmed → Archived (+ Expired, Failed) —
 // holds and drafts are filterable states, not hidden behind "Any status".
@@ -42,6 +37,19 @@ export default async function ReservationsPage({
     getActiveHolds(),
   ]);
   const filtered = Boolean(sp.q || sp.status || sp.from || sp.to);
+  // Serialize the (already filtered) rows for the client sortable table (§3.1 — sort respects filters).
+  const rows: ResRow[] = reservations.map((r) => {
+    const line = r.lines[0];
+    return {
+      id: r.id, guestName: r.guestName, externalId: r.externalId,
+      checkIn: line ? line.checkIn.toISOString().slice(0, 10) : null,
+      checkOut: line ? line.checkOut.toISOString().slice(0, 10) : null,
+      roomTypeName: line?.roomType.name ?? null, quantity: line?.quantity ?? 1,
+      source: r.channel?.name ?? r.bookingSource?.name ?? "Direct",
+      totalMinor: r.totalMinor, currency: r.currency, status: r.status,
+      bookedIso: r.importedAt.toISOString().slice(0, 10),
+    };
+  });
 
   return (
     <div className="space-y-4">
@@ -108,42 +116,7 @@ export default async function ReservationsPage({
         />
       ) : (
         <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
-              <thead>
-                <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                  <th className="px-4 py-2.5">Guest</th>
-                  <th className="px-4 py-2.5">Stay</th>
-                  <th className="px-4 py-2.5">Room</th>
-                  <th className="px-4 py-2.5">Source</th>
-                  <th className="px-4 py-2.5 text-right">Total</th>
-                  <th className="px-4 py-2.5">Status</th>
-                  <th className="px-4 py-2.5">Booked</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reservations.map((r) => {
-                  const line = r.lines[0];
-                  return (
-                    <tr key={r.id} className="border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
-                      <td className="px-4 py-2.5">
-                        <Link href={`/reservations/${r.id}`} className="font-semibold text-brand-700 hover:underline">{r.guestName}</Link>
-                        <div className="tnum text-[11px] text-ink-400">#{r.externalId ?? r.id.slice(-6)}</div>
-                      </td>
-                      <td className="tnum px-4 py-2.5 text-ink-600">
-                        {line ? `${line.checkIn.toISOString().slice(0, 10)} → ${line.checkOut.toISOString().slice(0, 10)}` : "—"}
-                      </td>
-                      <td className="px-4 py-2.5 text-ink-600">{line ? `${line.roomType.name}${line.quantity > 1 ? ` ×${line.quantity}` : ""}` : "—"}</td>
-                      <td className="px-4 py-2.5 text-ink-600">{r.channel?.name ?? r.bookingSource?.name ?? "Direct"}</td>
-                      <td className="tnum px-4 py-2.5 text-right font-semibold text-ink-900">{money(r.totalMinor, r.currency)}</td>
-                      <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONES[r.status] ?? "neutral"}>{r.status.replace("_", " ")}</StatusPill></td>
-                      <td className="tnum px-4 py-2.5 text-ink-500">{r.importedAt.toISOString().slice(0, 10)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ReservationsTable rows={rows} />
         </Card>
       )}
     </div>
