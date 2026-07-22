@@ -188,6 +188,15 @@ Already deep + correct (split, stay extras, deposits, void-kept-visible, "no car
   folio (rates are the CRS's job), anything resembling a general ledger (**export** to accounting, don't
   become it).
 
+> **BUILT — J4 slice (2026-07-21).** Folios & Billing split into **Open / History** tabs (§4.1): **Open** =
+> live in-house bills with search + a "Who owes" balance sort (§4.3, `components/folios/OpenFoliosTable.tsx`);
+> **History** = the read-only financial archive of departed stays — folio-centric, searchable by guest /
+> reservation # / invoice #, with balance + settled/closed status + attached invoice numbers
+> (`listFolioHistory`, §4.2/§4.6). **Deferred to a J4 follow-up:** §4.4 closed-folio-as-statement re-weighting,
+> §4.5 document-layer actions (print bill / issue invoice / credit note on the invoicing module), §4.7
+> split remove + nameable splits, **§4.8 mandatory-deposit check-in gate** (needs a `DepositType.mandatory`
+> flag + the check-in gate), §4.9 checkout-readiness signal + audit-on-hover.
+
 ## 5. Extras & Charges (renamed from "Minibar / POS")
 **Who / what:** any staff member posting an incidental charge — reception, later outlet staff under the
 charge-posting service. Built screen is good (tap-to-post + "Posted this stay" — keep).

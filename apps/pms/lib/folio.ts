@@ -273,6 +273,83 @@ export async function listFolios() {
   return { property, rows: [...byRes.values()] };
 }
 
+export type HistoryRow = {
+  reservationId: string;
+  guestName: string;
+  externalId: string | null;
+  units: string[];
+  checkIn: string | null;
+  checkOut: string | null;
+  balanceMinor: number | null;
+  currency: string;
+  settled: boolean; // balance resolved (0) — the financial record is clean
+  closed: boolean; // every folio closed
+  invoiceNumbers: string[];
+};
+
+/**
+ * Folio HISTORY (PMS-REFINEMENT-R1 §4.1/§4.2): the read-only financial archive — departed stays with
+ * their folios + issued invoices, searchable. Distinct from the Open list (in-house, live). Never an
+ * editing surface (§4.6 lock-on-settlement). Search matches guest name, reservation number, or invoice
+ * number.
+ */
+export async function listFolioHistory(q?: string): Promise<{ property: Awaited<ReturnType<typeof activeProperty>>["property"]; rows: HistoryRow[] }> {
+  const { property } = await activeProperty();
+  // A departed stay = a reservation with at least one checked-out assignment here.
+  const departed = await prisma.roomAssignment.findMany({
+    where: { propertyId: property.id, checkedOutAt: { not: null } },
+    include: {
+      unit: { select: { label: true } },
+      reservation: { include: { guest: true, folios: { include: { lines: true } } } },
+    },
+    orderBy: { checkedOutAt: "desc" },
+  });
+
+  const resIds = [...new Set(departed.map((a) => a.reservationId))];
+  const invoices = resIds.length
+    ? await prisma.taxInvoice.findMany({ where: { reservationId: { in: resIds } }, select: { reservationId: true, number: true } })
+    : [];
+  const invByRes = new Map<string, string[]>();
+  for (const inv of invoices) invByRes.set(inv.reservationId, [...(invByRes.get(inv.reservationId) ?? []), inv.number]);
+
+  const byRes = new Map<string, HistoryRow>();
+  for (const a of departed) {
+    const r = a.reservation;
+    const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
+    const row = byRes.get(r.id) ?? {
+      reservationId: r.id,
+      guestName,
+      externalId: r.externalId,
+      units: [],
+      checkIn: null,
+      checkOut: null,
+      balanceMinor: r.folios.length ? r.folios.reduce((s, f) => s + folioBalance(f.lines).balance, 0) : null,
+      currency: r.folios[0]?.currency ?? r.currency ?? property.baseCurrency,
+      settled: r.folios.length ? r.folios.reduce((s, f) => s + folioBalance(f.lines).balance, 0) === 0 : false,
+      closed: r.folios.length > 0 && r.folios.every((f) => f.status === "closed"),
+      invoiceNumbers: invByRes.get(r.id) ?? [],
+    };
+    if (!row.units.includes(a.unit.label)) row.units.push(a.unit.label);
+    const ci = ymd(a.checkIn), co = ymd(a.checkOut);
+    if (!row.checkIn || ci < row.checkIn) row.checkIn = ci;
+    if (!row.checkOut || co > row.checkOut) row.checkOut = co;
+    byRes.set(r.id, row);
+  }
+
+  let rows = [...byRes.values()];
+  const needle = q?.trim().toLowerCase();
+  if (needle) {
+    rows = rows.filter(
+      (r) =>
+        r.guestName.toLowerCase().includes(needle) ||
+        (r.externalId ?? "").toLowerCase().includes(needle) ||
+        r.reservationId.toLowerCase().includes(needle) ||
+        r.invoiceNumbers.some((n) => n.toLowerCase().includes(needle)),
+    );
+  }
+  return { property, rows };
+}
+
 /**
  * Accrue every in-house stay's recurring extras for one night (spec §3.6) — "breakfast for the whole
  * stay" posts one folio line per night at the night audit, separate from one-off POS. IDEMPOTENT: each
