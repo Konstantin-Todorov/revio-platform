@@ -19,7 +19,7 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     { href: "/dashboard", label: "Front Desk", icon: LayoutDashboard },
     { href: "/guests", label: "Guests", icon: Users },
     { href: "/folios", label: "Folios & Billing", icon: Receipt },
-    { href: "/minibar", label: "Minibar / POS", icon: Wine },
+    { href: "/minibar", label: "Extras & Charges", icon: Wine },
   ] },
   { title: "Rooms & housekeeping", items: [
     { href: "/housekeeping", label: "Housekeeping", icon: Sparkles },

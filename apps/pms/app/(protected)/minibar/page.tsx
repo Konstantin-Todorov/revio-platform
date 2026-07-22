@@ -12,8 +12,8 @@ export default async function MinibarPage() {
   return (
     <div>
       <PageHeader
-        title="Minibar / POS"
-        subtitle="Pick a room to post minibar items and extras to the guest’s folio."
+        title="Extras &amp; Charges"
+        subtitle="Pick a guest’s open folio to post minibar items, extras and other charges (§5.2)."
         action={
           <Link href="/minibar/catalog" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[13px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
             <Settings2 className="h-4 w-4" /> Manage catalog

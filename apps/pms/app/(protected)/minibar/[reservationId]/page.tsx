@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, Plus, Receipt, AlertTriangle, Wine, Sparkles, GlassWater, Utensils } from "lucide-react";
+import { ArrowLeft, Plus, Receipt, AlertTriangle, Wine, Sparkles, GlassWater, Utensils, Trash2 } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getMinibarBoard } from "@/lib/pos";
 import { postPosItem } from "@/lib/actions-pos";
+import { voidFolioLine } from "@/lib/actions-folio";
 import { POS_OUTLETS, POS_OUTLET_LABEL } from "@/lib/roles";
 import { money } from "@/lib/format";
 
@@ -43,7 +44,7 @@ export default async function MinibarStagePage({ params, searchParams }: { param
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/minibar" className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-ink-700">
-        <ArrowLeft className="h-4 w-4" /> Rooms
+        <ArrowLeft className="h-4 w-4" /> Extras &amp; Charges
       </Link>
       <PageHeader
         title={`Room ${rooms || "—"}`}
@@ -81,18 +82,31 @@ export default async function MinibarStagePage({ params, searchParams }: { param
         </div>
       )}
 
-      {/* What's already posted this stay */}
+      {/* Posted this stay = the control surface (§5.4): each line can be voided while the folio is open
+          (→ a credit note once closed, §4.6). */}
       {posted.length > 0 && (
         <Card className="mt-5">
           <div className="border-b border-surface-border px-4 py-2.5 text-[12px] font-bold uppercase tracking-wide text-ink-400">Posted this stay</div>
           <ul className="divide-y divide-surface-border">
             {posted.map((l) => (
-              <li key={l.id} className="flex items-center justify-between px-4 py-2 text-[12.5px]">
-                <span className="text-ink-700">{l.description}</span>
-                <span className="tnum font-semibold text-ink-900">{money(l.amountMinor, folio.currency)}</span>
+              <li key={l.id} className="flex items-center justify-between gap-3 px-4 py-2 text-[12.5px]">
+                <span className="min-w-0 truncate text-ink-700">{l.description}</span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="tnum font-semibold text-ink-900">{money(l.amountMinor, folio.currency)}</span>
+                  {!closed && (
+                    <form action={voidFolioLine}>
+                      <input type="hidden" name="reservationId" value={reservationId} />
+                      <input type="hidden" name="lineId" value={l.id} />
+                      <button type="submit" title="Void this charge" className="rounded p-1 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </form>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
+          <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">Voiding keeps the line visible on the folio, struck through — nothing is deleted.</p>
         </Card>
       )}
     </div>

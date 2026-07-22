@@ -222,6 +222,14 @@ charge-posting service. Built screen is good (tap-to-post + "Posted this stay" �
 - **5.8 Boundary.** Posts charges; **not** an inventory system or full POS terminal. Out: stock control,
   cash-drawer, table/tab management.
 
+> **BUILT — J5 slice (2026-07-21).** **§5.1** "Minibar / POS" renamed **"Extras & Charges"** (sidebar +
+> page titles + back-link); **§5.2** landing reframed to "pick a guest's open folio" (population is already
+> the open-folio list); **§5.4** posted lines are now the control surface — each carries an inline **void**
+> (while the folio is open; → credit note once closed, §4.6) that keeps the struck-through line visible.
+> **Deferred to a J5 follow-up:** §5.3 pre-check-in charge-type gate, §5.4 inline quantity stepper +
+> per-line note, §5.5 explicit split-folio routing on post, §5.6 catalog search/favourites + reverse
+> guest/room lookup.
+
 ## 6. Housekeeping
 **Who / what:** two different people — a **housekeeper** ("what next, mark done" — a focused, sequential,
 mobile worklist) and a **supervisor/reception** ("state of the whole floor" — the board). The build has the
