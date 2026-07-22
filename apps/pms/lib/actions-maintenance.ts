@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { takeUnitOoo, clearUnitOoo } from "./units";
 import { logAudit, str } from "./mutation-helpers";
+import { recordOpsEvent } from "./events";
 
 async function ctx() {
   const session = await getSession();
@@ -20,7 +21,8 @@ function refresh() {
 }
 
 const PRIORITIES = ["low", "normal", "high"];
-const STATUSES = ["open", "in_progress", "done"];
+// Maintenance lifecycle (§8.3): Reported(open) → In progress → On hold (awaiting parts) → Done.
+const STATUSES = ["open", "in_progress", "on_hold", "done"];
 
 /** Log a maintenance task; ticking "out of order" takes the unit off sale via the shared waterfall. */
 export async function createMaintenanceTask(fd: FormData): Promise<void> {
@@ -62,6 +64,12 @@ export async function setMaintenanceStatus(fd: FormData): Promise<void> {
     await prisma.maintenanceTask.update({ where: { id }, data: { setsOoo: false } });
   }
   await logAudit(session.activePropertyId, session.tenantId, { entity: "maintenance", field: task.title, newValue: status, userId: session.userId });
+  // Maintenance event stream (§8.7) — powers the manager-only maintenance analytics (tasks/tech, time-to-resolve).
+  await recordOpsEvent({
+    propertyId: session.activePropertyId, tenantId: session.tenantId, domain: "maintenance",
+    action: "status_change", unitId: task.unitId, actorId: session.userId,
+    fromState: task.status, toState: status, refId: task.id,
+  });
   refresh();
 }
 

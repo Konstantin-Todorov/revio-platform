@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { Plus, Trash2, AlertTriangle, PowerOff, History } from "lucide-react";
+import { Plus, Trash2, AlertTriangle, PowerOff, History, Clock, LogIn, LogOut } from "lucide-react";
 import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getMaintenanceBoard } from "@/lib/maintenance";
 import { createMaintenanceTask, deleteMaintenanceTask } from "@/lib/actions-maintenance";
 import { MaintStatusControl } from "@/components/maintenance/MaintStatusControl";
 import { TaskPhoto } from "@/components/maintenance/TaskPhoto";
+import { getSession } from "@/lib/session";
+import { getOpenShift } from "@/lib/workforce";
+import { clockInSelf, clockOutSelf } from "@/lib/actions-workforce";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +16,32 @@ const PRIORITY_TONE: Record<string, Tone> = { low: "neutral", normal: "info", hi
 
 export default async function MaintenancePage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
-  const { tasks, units } = await getMaintenanceBoard();
+  const session = await getSession();
+  const [{ tasks, units }, openShift] = await Promise.all([
+    getMaintenanceBoard(),
+    session ? getOpenShift(session.userId) : Promise.resolve(null),
+  ]);
   const openTasks = tasks.filter((t) => t.status !== "done");
   const doneTasks = tasks.filter((t) => t.status === "done");
 
   return (
     <div>
       <PageHeader title="Maintenance" subtitle="Log repairs and faults. Flag a room out of order to take it off sale." />
+
+      {/* Crew clock-in (§8.1 — one shared mechanism with Housekeeping). Availability + light KPI, not payroll. */}
+      <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3">
+        <div className="flex items-center gap-2 text-[12.5px]">
+          <Clock className="h-4 w-4 text-ink-400" />
+          {openShift
+            ? <span className="text-ink-700">You’re <span className="font-semibold text-success-700">clocked in</span> since {openShift.clockInAt.toISOString().slice(11, 16)}</span>
+            : <span className="text-ink-500">You’re not clocked in.</span>}
+        </div>
+        {openShift ? (
+          <form action={clockOutSelf}><button className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted"><LogOut className="h-3.5 w-3.5" /> Clock out</button></form>
+        ) : (
+          <form action={clockInSelf}><button className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-accent-500"><LogIn className="h-3.5 w-3.5" /> Clock in</button></form>
+        )}
+      </Card>
 
       {error === "title" && (
         <div className="mb-4 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">

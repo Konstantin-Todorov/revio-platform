@@ -319,6 +319,12 @@ generate-rooms). This is refinement.
   reservations must not be one trash-click away. **Connecting-rooms picker tidy** — default/filter to
   same-floor + make it searchable.
 
+> **J7 status (2026-07-21).** **§7.4 self-populating room timeline is already satisfied** —
+> `getRoomTimeline` builds from the audit log (unit-status changes) + maintenance tasks + assignments, so
+> HK/maintenance/guest events land automatically. **Deferred to a J7 follow-up (need schema):** §7.1
+> structured beds + max-occupancy, §7.3 floor/zone-as-object, §7.5 bulk edit; §7.2 collapse/By-floor/search
+> and §7.4 who-attribution are UI refinements on top.
+
 ## 8. Maintenance
 **Who / what:** a maintenance **crew** (mobile — my tasks, in order) + a **manager** (board + analytics).
 Same shape as Housekeeping — **reuse the pattern** with maintenance's own priority logic, lifecycle, and
@@ -347,6 +353,14 @@ the OOO-revenue twist. Built screen is a good manager-board start.
   priority, **which rooms generate the most maintenance** (capex signal), repair spend by room/type. Same
   EU worker-data caution.
 - **8.8 Deferred:** preventive / recurring maintenance (build the reactive engine first).
+
+> **BUILT — J8 slice (2026-07-21).** Maintenance: **§8.3** added the **On hold — awaiting parts** status to
+> the lifecycle (Reported → In progress → On hold → Done); **§8.7** every status change appends to the ops
+> event stream (`recordOpsEvent`, domain=maintenance) for the manager analytics; **§8.1** a crew **clock-in /
+> clock-out** control (shared J0 mechanism). **§8.4 OOO↔revenue loop already works** — completing an OOO
+> task auto-returns the room to Dirty (back on sale via the waterfall). **Deferred:** §8.1 crew mobile
+> single-advance view, §8.2 severity/revenue priority ordering, §8.5 cost/parts capture, §8.7 the analytics
+> display view.
 
 ## 9. Configuration
 **Who / what:** the owner/manager setting up the property. ⚠ **doc says "locked (E7 — not built yet)" but
@@ -413,6 +427,13 @@ on the single cross-product account); **not payroll/HR** (clock-in = availabilit
   **Employee personal data** — action/login/device/IP history + clock-in KPIs are worker-monitoring data:
   manager/owner-only, legitimate purpose (security + audit), EU/GDPR handling. **Open decision:** is
   login/device history product-scoped (PMS) or global (identity everywhere)? Global is more complete — flag.
+
+> **BUILT — J9 slice (2026-07-21).** **§10.1** "User Management" renamed **"Staff & Access Management"**
+> (sidebar + page); **§10.2** a live **Working today** workforce dashboard at the top — active staff grouped
+> by role/department with clock-in time (fed by the J0 `StaffShift` clock-in mechanism, `getWorkforceSummary`).
+> The existing shared-identity CRUD (invite/role/deactivate/reset) is kept (§10.4). **Deferred to a J9
+> follow-up:** §10.3 delegated clock-in UI (the action exists — `clockInUser`), §10.5 user detail (action /
+> login / device history, temporary restriction).
 
 ## 11. Close Day — **PENDING** (founder to add)
 The founder marked "PENDING – CLOSE DAY SCREEN – will add later today." Fold in when it arrives. Current
