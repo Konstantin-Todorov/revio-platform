@@ -5,6 +5,7 @@ import { getInventoryBoard } from "@/lib/data";
 import { getCancellationReport, getPickupReport, getProductPerformance, getProductionByDay, getRangeMetrics, resolveRange, comparisonRange, type CompareBasis, type RangePreset } from "@/lib/metrics";
 import { getProperty, getScope, todayInTz } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { EvolutionChart, type EvoBucket } from "@/components/reports/EvolutionChart";
 import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -163,74 +164,19 @@ function bucket(perDay: { date: string; available: number; soldNights: number; r
 }
 
 /** A period summary card (§2.3): value + basis-labelled delta (green up / red down) + the prior value. */
-function SummaryCard({ label, value, delta, prior }: { label: string; value: string; delta: { text: string; up: boolean } | null; prior: string }) {
+function SummaryCard({ label, value, delta, prior, hint }: { label: string; value: string; delta: { text: string; up: boolean } | null; prior: string; hint?: string }) {
   return (
-    <div className="rounded-lg border border-surface-border bg-white px-4 py-3.5 shadow-card">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{label}</div>
+    <div className="rounded-lg border border-surface-border bg-white px-4 py-3.5 shadow-card transition-shadow hover:shadow-md">
+      <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+        <span>{label}</span>
+        {hint && <span title={hint} className="cursor-help select-none text-ink-300 hover:text-ink-500">ⓘ</span>}
+      </div>
       <div className="tnum mt-1 text-[22px] font-bold leading-none text-ink-900">{value}</div>
       <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
         {delta ? (
           <span className={`rounded px-1 py-0.5 font-bold tabular-nums ${delta.up ? "bg-success-50 text-success-600" : "bg-danger-50 text-danger-600"}`}>{delta.up ? "▲" : "▼"} {delta.text}</span>
         ) : <span className="text-ink-300">no baseline</span>}
         <span className="text-ink-400">{prior}</span>
-      </div>
-    </div>
-  );
-}
-
-type EvoBucket = { label: string; rnNow: number; rnThen: number; adrNow: number; adrThen: number };
-
-/** Combined bar + line evolution chart (§2.4, [match reference]): grouped Room-night bars (this period vs
- * comparison) on the left axis, ADR lines (this period vs comparison) on the right axis. Server-rendered SVG. */
-function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket[]; currency: string; basisLabel: string }) {
-  const W = 1000, H = 300, padL = 44, padR = 48, padT = 16, padB = 46;
-  const plotW = W - padL - padR, plotH = H - padT - padB;
-  const n = data.length;
-  const rnMax = Math.max(1, ...data.map((d) => Math.max(d.rnNow, d.rnThen)));
-  const adrMax = Math.max(1, ...data.map((d) => Math.max(d.adrNow, d.adrThen)));
-  const niceMax = (v: number) => { const step = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / step) * step; };
-  const rnTop = niceMax(rnMax), adrTop = niceMax(adrMax);
-  const step = plotW / n;
-  const barW = Math.min(18, step * 0.3);
-  const yRn = (v: number) => padT + plotH - (v / rnTop) * plotH;
-  const yAdr = (v: number) => padT + plotH - (v / adrTop) * plotH;
-  const cx = (i: number) => padL + step * i + step / 2;
-  const line = (pick: (d: EvoBucket) => number) => data.map((d, i) => `${cx(i)},${yAdr(pick(d))}`).join(" ");
-  const gridVals = [0, 0.25, 0.5, 0.75, 1];
-
-  return (
-    <div className="px-4 py-4">
-      <div className="mb-1 flex justify-between text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
-        <span>Room-nights</span><span>ADR ({currency})</span>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: "auto" }} preserveAspectRatio="xMidYMid meet">
-        {/* gridlines + axes */}
-        {gridVals.map((g) => (
-          <g key={g}>
-            <line x1={padL} x2={W - padR} y1={padT + plotH * (1 - g)} y2={padT + plotH * (1 - g)} stroke="#e9edf3" strokeWidth={1} />
-            <text x={padL - 6} y={padT + plotH * (1 - g) + 3} textAnchor="end" className="fill-[#98a2b3]" fontSize={10}>{Math.round(rnTop * g)}</text>
-            <text x={W - padR + 6} y={padT + plotH * (1 - g) + 3} textAnchor="start" className="fill-[#98a2b3]" fontSize={10}>{Math.round(adrTop * g)}</text>
-          </g>
-        ))}
-        {/* grouped room-night bars: comparison (teal) + current (blue) */}
-        {data.map((d, i) => (
-          <g key={i}>
-            <rect x={cx(i) - barW - 1} y={yRn(d.rnThen)} width={barW} height={Math.max(0, padT + plotH - yRn(d.rnThen))} rx={2} className="fill-[#14b8a6]" opacity={0.85} />
-            <rect x={cx(i) + 1} y={yRn(d.rnNow)} width={barW} height={Math.max(0, padT + plotH - yRn(d.rnNow))} rx={2} className="fill-[#2f5bd8]" />
-            <text x={cx(i)} y={H - padB + 16} textAnchor="middle" className="fill-[#98a2b3]" fontSize={9.5}>{d.label.replace("wk ", "")}</text>
-          </g>
-        ))}
-        {/* ADR lines: comparison (red) + current (amber) */}
-        <polyline points={line((d) => d.adrThen)} fill="none" stroke="#ef4444" strokeWidth={2} strokeLinejoin="round" opacity={0.85} />
-        <polyline points={line((d) => d.adrNow)} fill="none" stroke="#f59e0b" strokeWidth={2.5} strokeLinejoin="round" />
-        {data.map((d, i) => <circle key={`m-${i}`} cx={cx(i)} cy={yAdr(d.adrNow)} r={3} className="fill-white" stroke="#f59e0b" strokeWidth={2} />)}
-      </svg>
-      {/* legend */}
-      <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-[11px] text-ink-500">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#2f5bd8]" /> Room-nights</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[#14b8a6]" /> Room-nights ({basisLabel})</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[#f59e0b]" /> ADR</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-[#ef4444]" /> ADR ({basisLabel})</span>
       </div>
     </div>
   );
@@ -269,18 +215,18 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
   const ppDelta = (now: number, then: number) => ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp ${basisLabel}`, up: now >= then });
 
   const summary = [
-    { label: "Occupancy", value: pct(m.cards.occupancyPct), delta: ppDelta(m.cards.occupancyPct, cmp.cards.occupancyPct), prior: `${cmp.cards.occupancyPct.toFixed(1)}% prior` },
-    { label: "ADR", value: money(m.cards.adrMinor, currency), delta: relDelta(m.cards.adrMinor, cmp.cards.adrMinor), prior: `${money(cmp.cards.adrMinor, currency)} prior` },
-    { label: "RevPAR", value: money(m.cards.revparMinor, currency), delta: relDelta(m.cards.revparMinor, cmp.cards.revparMinor), prior: `${money(cmp.cards.revparMinor, currency)} prior` },
-    { label: `Revenue (${m.cards.revenueDisplay})`, value: money(m.cards.revenueMinor, currency), delta: relDelta(m.cards.revenueMinor, cmp.cards.revenueMinor), prior: `${money(cmp.cards.revenueMinor, currency)} prior` },
-    { label: "Room-nights", value: String(m.cards.roomsSoldNights), delta: relDelta(m.cards.roomsSoldNights, cmp.cards.roomsSoldNights), prior: `${cmp.cards.roomsSoldNights} prior` },
+    { label: "Occupancy", value: pct(m.cards.occupancyPct), delta: ppDelta(m.cards.occupancyPct, cmp.cards.occupancyPct), prior: `${cmp.cards.occupancyPct.toFixed(1)}% prior`, hint: "Room-nights sold ÷ room-nights available, for the period. Δ shown in percentage points vs the comparison basis." },
+    { label: "ADR", value: money(m.cards.adrMinor, currency), delta: relDelta(m.cards.adrMinor, cmp.cards.adrMinor), prior: `${money(cmp.cards.adrMinor, currency)} prior`, hint: "Average Daily Rate = room revenue ÷ room-nights sold. Recomputed Σ/Σ across the period, not an average of daily ADRs." },
+    { label: "RevPAR", value: money(m.cards.revparMinor, currency), delta: relDelta(m.cards.revparMinor, cmp.cards.revparMinor), prior: `${money(cmp.cards.revparMinor, currency)} prior`, hint: "Revenue Per Available Room = room revenue ÷ room-nights available (= ADR × occupancy). The truest single yield metric." },
+    { label: `Revenue (${m.cards.revenueDisplay})`, value: money(m.cards.revenueMinor, currency), delta: relDelta(m.cards.revenueMinor, cmp.cards.revenueMinor), prior: `${money(cmp.cards.revenueMinor, currency)} prior`, hint: `Room revenue for the period (${m.cards.revenueDisplay}). Gross = as sold; Net subtracts channel commission — toggled in Settings.` },
+    { label: "Room-nights", value: String(m.cards.roomsSoldNights), delta: relDelta(m.cards.roomsSoldNights, cmp.cards.roomsSoldNights), prior: `${cmp.cards.roomsSoldNights} prior`, hint: "Total room-nights sold in the period — the volume behind ADR and occupancy." },
   ];
 
   return (
     <div className="space-y-4">
-      {/* Metric summary cards for the period (§2.3). */}
+      {/* Metric summary cards for the period (§2.3) — each with a hover ⓘ explaining its formula. */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-        {summary.map((c) => <SummaryCard key={c.label} label={c.label} value={c.value} delta={c.delta} prior={c.prior} />)}
+        {summary.map((c) => <SummaryCard key={c.label} label={c.label} value={c.value} delta={c.delta} prior={c.prior} hint={c.hint} />)}
       </div>
 
       {/* Combined bar + line evolution chart at the selected granularity (§2.4, matches the reference). */}
