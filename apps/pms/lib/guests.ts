@@ -97,9 +97,14 @@ export async function getPmsGuestProfile(key: string) {
   if (guest?.specialRequests) notes.push(guest.specialRequests);
   for (const r of reservations) if (r.notes) notes.push(r.notes);
 
+  // n≥2 preference guard (spec §3.3): a "preferred room/floor" derived from a single stay is a false
+  // signal that feeds the Front Desk VIP/returning logic — gate it behind ≥2 stays.
+  const enoughHistory = stays.length >= 2;
+
   return {
     property,
     key,
+    guestId: guest?.id ?? null, // real id (merge only applies to guests with a Guest row), null for name-keyed
     guest: {
       name,
       email: guest?.email ?? null,
@@ -114,8 +119,9 @@ export async function getPmsGuestProfile(key: string) {
       ancillaryMinor,
       avgNightlyMinor: nights > 0 ? Math.round(accommodationMinor / nights) : 0,
       avgAncillaryPerStayMinor: stays.length > 0 ? Math.round(ancillaryMinor / stays.length) : 0,
-      preferredRoom: top(roomAgg),
-      preferredFloor: top(floorAgg),
+      enoughHistory,
+      preferredRoom: enoughHistory ? top(roomAgg) : null,
+      preferredFloor: enoughHistory ? top(floorAgg) : null,
     },
     favouriteItems,
     notes: [...new Set(notes)],

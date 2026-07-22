@@ -127,6 +127,15 @@ deliberately isn't. Issue is **under-populated data shown at full weight**, not 
 - **`[boundary — don't cross]`** This stays an **operational profile** — no segmentation, campaigns,
   loyalty programs, or email marketing. It is **not a CRM**.
 
+> **BUILT — J3 slice (2026-07-21).** Guests refined on the J0 identity foundation: **§3.1** list gains
+> search (name/email) + 3-click sortable columns + the dev caption removed (`components/guests/GuestsTable.tsx`);
+> **§3.3** the n≥2 preference guard — preferred room/floor suppressed below 2 stays with "Not enough history
+> yet"; **§3.5 (headline)** duplicate detection + merge on the profile — a "possible duplicates" panel
+> (same email/phone/name, via `findDuplicateGuests`) with a one-click **Merge into this guest** that
+> re-parents the loser's stays + notes and flags it (`mergeGuests`), verified end-to-end. **Deferred to a J3
+> follow-up** (need schema): **§3.2** fuller degrade-gracefully polish, **§3.4** standing-request vs per-stay-note
+> split, and **§3.5** blacklist/do-not-rebook + GDPR consent/export/erase + action-paired one-tap actions.
+
 ## 4. Folios & Billing
 **Who / what:** front-office staff running the bill — post, pay, split, settle, close cleanly at checkout.
 Already deep + correct (split, stay extras, deposits, void-kept-visible, "no card stored").

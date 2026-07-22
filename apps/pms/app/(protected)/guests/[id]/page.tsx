@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Mail, Phone, Building2, Bed, MapPin, Wine, StickyNote } from "lucide-react";
+import { ArrowLeft, Mail, Phone, Building2, Bed, MapPin, Wine, StickyNote, GitMerge, Users } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getPmsGuestProfile } from "@/lib/guests";
+import { findDuplicateGuests } from "@/lib/guest-identity";
+import { mergeGuests } from "@/lib/actions-guests";
 import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+
+const DUP_REASON: Record<string, string> = { email: "same email", phone: "same phone", name: "same name" };
 
 const TONES: Record<string, Tone> = {
   confirmed: "success", modified: "info", checked_in: "success", checked_out: "neutral",
@@ -26,8 +30,10 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ i
   const { id } = await params;
   const data = await getPmsGuestProfile(decodeURIComponent(id));
   if (!data) notFound();
-  const { property, guest, stats, favouriteItems, notes, reservations } = data;
+  const { property, guestId, guest, stats, favouriteItems, notes, reservations } = data;
   const cur = property.baseCurrency;
+  // Duplicate detection (spec §3.5) — only for guests with a real Guest record (identity foundation, J0).
+  const duplicates = guestId ? await findDuplicateGuests(guestId) : [];
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -46,6 +52,40 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ i
         }
       />
 
+      {/* Possible duplicates (spec §3.5) — same email/phone/name. Merging collapses the other record onto
+          THIS one (re-parents its stays + notes), so every metric stops fragmenting. */}
+      {duplicates.length > 0 && (
+        <Card className="mb-4 border-warning-500/40 bg-warning-50/50">
+          <div className="flex items-start gap-2 px-4 py-3">
+            <Users className="mt-0.5 h-4 w-4 shrink-0 text-warning-700" />
+            <div className="w-full">
+              <div className="text-[12.5px] font-semibold text-warning-800">
+                {duplicates.length} possible duplicate{duplicates.length === 1 ? "" : "s"} — likely the same guest across bookings
+              </div>
+              <ul className="mt-2 space-y-1.5">
+                {duplicates.map((d) => (
+                  <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-warning-500/30 bg-white px-3 py-2">
+                    <div className="min-w-0 text-[12.5px]">
+                      <Link href={`/guests/${d.id}`} className="font-semibold text-ink-900 hover:text-accent-600 hover:underline">{d.name}</Link>
+                      <span className="ml-1.5 text-ink-400">{d.email ?? d.phone ?? ""}</span>
+                      <StatusPill tone="warning">{DUP_REASON[d.reason]}</StatusPill>
+                    </div>
+                    <form action={mergeGuests}>
+                      <input type="hidden" name="winnerId" value={guestId!} />
+                      <input type="hidden" name="loserId" value={d.id} />
+                      <button className="inline-flex items-center gap-1.5 rounded-md bg-warning-700 px-2.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-warning-600">
+                        <GitMerge className="h-3.5 w-3.5" /> Merge into this guest
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 text-[11px] text-warning-700/80">Merging re-points the other record’s stays and notes here and can’t leave a stray duplicate behind. Nothing is deleted.</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Derived operational stats (spec §3.3) */}
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Lifetime value" value={money(stats.lifetimeMinor, cur)} hint="room + ancillary" />
@@ -58,16 +98,21 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ i
         {/* Preferences derived from operational history */}
         <Card>
           <CardHeader title="Preferences" subtitle="Derived from assignment & consumption history" />
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
-            <div>
-              <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400"><Bed className="h-3.5 w-3.5" /> Preferred room</dt>
-              <dd className="mt-0.5 font-semibold text-ink-900">{stats.preferredRoom ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400"><MapPin className="h-3.5 w-3.5" /> Preferred floor</dt>
-              <dd className="mt-0.5 font-semibold text-ink-900">{stats.preferredFloor ?? "—"}</dd>
-            </div>
-          </dl>
+          {!stats.enoughHistory ? (
+            /* n≥2 guard (§3.3): one stay is not a preference — a wrong "usual" is worse than none. */
+            <p className="px-4 py-3 text-[12.5px] text-ink-400">Not enough history yet — preferences appear after a 2nd stay (a single stay isn’t a reliable “usual”).</p>
+          ) : (
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
+              <div>
+                <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400"><Bed className="h-3.5 w-3.5" /> Preferred room</dt>
+                <dd className="mt-0.5 font-semibold text-ink-900">{stats.preferredRoom ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400"><MapPin className="h-3.5 w-3.5" /> Preferred floor</dt>
+                <dd className="mt-0.5 font-semibold text-ink-900">{stats.preferredFloor ?? "—"}</dd>
+              </div>
+            </dl>
+          )}
           <div className="border-t border-surface-border/60 px-4 py-3">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400"><Wine className="h-3.5 w-3.5" /> Favourite items</div>
             {favouriteItems.length === 0 ? (
