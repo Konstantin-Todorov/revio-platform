@@ -279,6 +279,16 @@ grid, not a work tool.
   payroll/HR. Out: shift scheduling, pay calc, break/labour-law, HR attendance.
 - **6.10 Deferred:** sampled inspection (inspect X%).
 
+> **BUILT — J6 slice (2026-07-21).** Activated the J0 foundations in Housekeeping: **§6.8/§7.4** every HK
+> state change now appends to the **ops event stream** (`recordOpsEvent` wired into `setUnitStatus` /
+> `startCleaning` / `finishCleaning`, pipeline vocab: in_progress → awaiting_inspection|ready, clean→inspected
+> = inspection_pass) — this powers `getHousekeepingPerformance` (§6.8) + the self-populating room timeline
+> (§7.4); **§6.7** a **clock-in / clock-out** control on the board (self, via J0 `clockInSelf`/`clockOutSelf`)
+> with the **active-cleaner count** for feasibility. Verified end-to-end (clock-in → StaffShift + OpsEvent).
+> **Deferred to a J6 follow-up:** §6.1 role-scoped views (housekeeper list vs supervisor board vs FD
+> readiness), §6.6 per-cleaner assignment + auto-distribute, §6.3 full pipeline relabel UI, §6.8 the
+> manager-only performance display view.
+
 ## 7. Rooms
 **Who / what:** a manager setting the property up + occasionally maintaining it — a **configuration/setup**
 screen, not daily-ops. Already well-built (attributes, connecting links, per-room lifecycle timeline,

@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { User, TriangleAlert, ListOrdered, LayoutGrid } from "lucide-react";
+import { User, TriangleAlert, ListOrdered, LayoutGrid, Clock, LogIn, LogOut } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getHousekeepingUnits, statusCounts, type UnitRow } from "@/lib/data";
 import { StatusControl } from "@/components/housekeeping/StatusControl";
 import { RoomActions } from "@/components/housekeeping/RoomActions";
 import { HK_LABEL, HK_TILE, HK_STATUSES, type HkStatus } from "@/lib/hk-meta";
+import { getSession } from "@/lib/session";
+import { getOpenShift, getActiveCleanerCount } from "@/lib/workforce";
+import { clockInSelf, clockOutSelf } from "@/lib/actions-workforce";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +62,12 @@ const GRID = "grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-col
 
 export default async function HousekeepingPage({ searchParams }: { searchParams: Promise<{ view?: string; blocked?: string }> }) {
   const { view, blocked } = await searchParams;
-  const { property, units } = await getHousekeepingUnits();
+  const session = await getSession();
+  const [{ property, units }, openShift, activeCleaners] = await Promise.all([
+    getHousekeepingUnits(),
+    session ? getOpenShift(session.userId) : Promise.resolve(null),
+    getActiveCleanerCount(),
+  ]);
   const counts = statusCounts(units);
   const smart = view !== "floor"; // smart routing is the default
 
@@ -92,6 +100,29 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
           </div>
         }
       />
+
+      {/* Clock-in / active workforce (§6.7): only clocked-in cleaners receive assignments; the active
+          count feeds feasibility (rooms-to-clean vs cleaners). Availability + light KPI, not payroll. */}
+      <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3">
+        <div className="flex items-center gap-2 text-[12.5px]">
+          <Clock className="h-4 w-4 text-ink-400" />
+          {openShift ? (
+            <span className="text-ink-700">You’re <span className="font-semibold text-success-700">clocked in</span> since {openShift.clockInAt.toISOString().slice(11, 16)}</span>
+          ) : (
+            <span className="text-ink-500">You’re not clocked in — clock in to receive room assignments.</span>
+          )}
+          <span className="ml-1 rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-bold text-brand-700">{activeCleaners} active</span>
+        </div>
+        {openShift ? (
+          <form action={clockOutSelf}>
+            <button className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-1.5 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"><LogOut className="h-3.5 w-3.5" /> Clock out</button>
+          </form>
+        ) : (
+          <form action={clockInSelf}>
+            <button className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-accent-500"><LogIn className="h-3.5 w-3.5" /> Clock in</button>
+          </form>
+        )}
+      </Card>
 
       {blocked && (
         <Card className="mb-4 border-danger-500/50 bg-danger-50 p-3.5">

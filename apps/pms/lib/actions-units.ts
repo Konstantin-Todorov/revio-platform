@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { logAudit, recordSync, str, int, utcDay } from "./mutation-helpers";
+import { recordOpsEvent } from "./events";
 import { todayInTz, addDaysYmd } from "./format";
 
 const HK_STATUSES = ["clean", "dirty", "in_progress", "inspected", "out_of_order"];
@@ -200,6 +201,13 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
   }
 
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: prev, newValue: status, userId: session.userId });
+  // Ops event stream (J0 §6.8/§7.4): a supervisor moving clean → inspected is an inspection pass.
+  await recordOpsEvent({
+    propertyId: unit.propertyId, tenantId: session.tenantId, domain: "housekeeping",
+    action: prev === "clean" && status === "inspected" ? "inspection_pass" : "status_change",
+    unitId: unit.id, actorId: session.userId,
+    fromState: prev, toState: status === "inspected" ? "ready" : status,
+  });
   refresh();
 }
 
@@ -230,6 +238,12 @@ export async function startCleaning(fd: FormData): Promise<void> {
 
   await prisma.unit.update({ where: { id: unitId }, data: { hkStatus: "in_progress" } });
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: unit.hkStatus, newValue: "in_progress", userId: session.userId });
+  // The cleaner who starts a room is the one measured for its clean time (J0 analytics §6.8).
+  await recordOpsEvent({
+    propertyId: unit.propertyId, tenantId: session.tenantId, domain: "housekeeping",
+    action: "status_change", unitId: unit.id, userId: session.userId, actorId: session.userId,
+    fromState: unit.hkStatus, toState: "in_progress",
+  });
   refresh();
 }
 
@@ -242,6 +256,14 @@ export async function finishCleaning(fd: FormData): Promise<void> {
   if (!unit || unit.propertyId !== session.activePropertyId) return;
   await prisma.unit.update({ where: { id: unitId }, data: { hkStatus: "clean" } });
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: unit.hkStatus, newValue: "clean", userId: session.userId });
+  // Finishing a clean lands in "awaiting inspection" when the property gates on inspection, else straight
+  // to "ready" (J0 pipeline vocab §6.3) — closes the clean-time measurement started at startCleaning.
+  const defs = await prisma.propertyDefaults.findUnique({ where: { propertyId: unit.propertyId }, select: { inspectionGate: true } });
+  await recordOpsEvent({
+    propertyId: unit.propertyId, tenantId: session.tenantId, domain: "housekeeping",
+    action: "status_change", unitId: unit.id, userId: session.userId, actorId: session.userId,
+    fromState: unit.hkStatus, toState: defs?.inspectionGate ? "awaiting_inspection" : "ready",
+  });
   refresh();
 }
 
