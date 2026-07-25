@@ -434,3 +434,131 @@ ${pre ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esca
     ...(args.brand.replyTo ? { replyTo: args.brand.replyTo } : {}),
   };
 }
+
+// --- Languages -------------------------------------------------------------
+//
+// Guest-facing mail is written per language. Bulgarian is a first-class language, not a machine
+// translation of the English: the register is the formal "Вие" a Bulgarian hotel actually uses with
+// guests. Adding a language = adding an entry here; the themes and renderer need no changes.
+
+export const EMAIL_LOCALES = [
+  { key: "en", label: "English" },
+  { key: "bg", label: "Български" },
+] as const;
+
+export type EmailLocale = (typeof EMAIL_LOCALES)[number]["key"];
+
+/** Labels for the standard reservation detail rows, per language. Callers pass these so the detail
+ * panel is localised together with the prose — an English "ARRIVAL" above Bulgarian text looks broken. */
+export const DETAIL_LABELS: Record<string, Record<string, string>> = {
+  en: { reference: "Reference", arrival: "Arrival", departure: "Departure", accommodation: "Accommodation", total: "Total" },
+  bg: { reference: "Номер", arrival: "Настаняване", departure: "Напускане", accommodation: "Настаняване в", total: "Общо" },
+};
+
+/** Per-language default wording. English lives on the template definition itself; other languages here.
+ * A language with no entry for a template falls back to English rather than sending nothing. */
+export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string; body: string }>> = {
+  bg: {
+    booking_confirmation: {
+      subject: "Потвърждение на резервацията Ви в {{propertyName}} — {{reference}}",
+      body: `Уважаеми {{guestName}},
+
+Благодарим Ви, че избрахте {{propertyName}}. Вашата резервация е потвърдена и вече очакваме с
+нетърпение да Ви посрещнем.
+
+{{details}}
+
+Ако желаете да уредите нещо преди пристигането си — ранно настаняване, трансфер или специален
+повод — просто отговорете на това съобщение и ще се погрижим.
+
+С уважение,
+{{propertyName}}`,
+    },
+    booking_modified: {
+      subject: "Вашата резервация е обновена — {{reference}}",
+      body: `Уважаеми {{guestName}},
+
+Вашата резервация при нас беше обновена. Ето актуалните данни:
+
+{{details}}
+
+Ако нещо по-горе не изглежда правилно, отговорете на това съобщение и ще го коригираме веднага.
+
+С уважение,
+{{propertyName}}`,
+    },
+    booking_cancelled: {
+      subject: "Вашата резервация е анулирана — {{reference}}",
+      body: `Уважаеми {{guestName}},
+
+Пишем Ви, за да потвърдим, че Вашата резервация беше анулирана.
+
+{{details}}
+
+Ако това не е било Вашето намерение, моля свържете се с нас възможно най-скоро и ще направим
+всичко възможно да я възстановим. Надяваме се да Ви посрещнем друг път.
+
+С уважение,
+{{propertyName}}`,
+    },
+    pre_arrival: {
+      subject: "Очакваме Ви в {{propertyName}}",
+      body: `Уважаеми {{guestName}},
+
+Очакваме с нетърпение да Ви посрещнем съвсем скоро. Настаняването започва от {{checkInTime}} ч.
+
+{{details}}
+
+Ако желаете да уредите ранно пристигане, трансфер от летището или нещо специално за повода, просто
+отговорете и с радост ще помогнем.
+
+До скоро,
+{{propertyName}}`,
+    },
+    post_stay: {
+      subject: "Благодарим Ви за престоя в {{propertyName}}",
+      body: `Уважаеми {{guestName}},
+
+Благодарим Ви, че отседнахте при нас. Надяваме се да сте прекарали приятно време в {{propertyName}}.
+
+Ако разполагате с момент, ще се радваме на Вашето мнение — а ако резервирате директно при нас
+следващия път, винаги ще се постараем да се погрижим за Вас.
+
+Приятен път,
+{{propertyName}}`,
+    },
+    folio_receipt: {
+      subject: "Вашата сметка от {{propertyName}} — {{reference}}",
+      body: `Уважаеми {{guestName}},
+
+Благодарим Ви, че отседнахте при нас. По-долу ще намерите обобщение на Вашата сметка.
+
+{{details}}
+
+Ако имате какъвто и да е въпрос относно тези суми, отговорете на това съобщение и ще проверим лично.
+
+С уважение,
+{{propertyName}}`,
+    },
+  },
+};
+
+/** The platform default wording for a template in a given language (English if untranslated). */
+export function defaultsFor(def: EmailTemplateDef, locale: string): { subject: string; body: string } {
+  const t = EMAIL_TRANSLATIONS[locale]?.[def.key];
+  return t ?? { subject: def.defaultSubject, body: def.defaultBody };
+}
+
+/** Sample details for the Settings preview, localised so the panel matches the prose. */
+export function sampleDetails(locale: string): EmailDetail[] {
+  const L = DETAIL_LABELS[locale] ?? DETAIL_LABELS.en!;
+  return locale === "bg"
+    ? [
+        { label: L.reference!, value: "RV-10482" },
+        { label: L.arrival!, value: "петък, 14 август 2026 — от 14:00 ч." },
+        { label: L.departure!, value: "понеделник, 17 август 2026 — до 12:00 ч." },
+        { label: L.accommodation!, value: "Двойна стая Делукс · 3 нощувки" },
+        { label: L.total!, value: "540,00 €", emphasis: true },
+      ]
+    : SAMPLE_DETAILS;
+}

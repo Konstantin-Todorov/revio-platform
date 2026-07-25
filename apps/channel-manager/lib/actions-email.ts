@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { EMAIL_TEMPLATE_BY_KEY } from "@revio/core";
+import { EMAIL_TEMPLATE_BY_KEY, defaultsFor } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { getSession } from "./session";
@@ -34,18 +34,20 @@ export async function saveEmailTemplate(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const session = await getSession();
   const key = str(fd, "key");
+  const locale = str(fd, "locale") || "en";
   const def = EMAIL_TEMPLATE_BY_KEY[key];
   if (!def) return;
 
   // A confirmation/cancellation is a transactional obligation, not a marketing choice — the catalogue
   // marks those canDisable:false and we enforce it here too, not only in the UI.
   const enabled = def.canDisable ? fd.get("enabled") != null : true;
-  const subject = str(fd, "subject").trim() || def.defaultSubject;
-  const body = str(fd, "body").trim() || def.defaultBody;
+  const fallback = defaultsFor(def, locale);
+  const subject = str(fd, "subject").trim() || fallback.subject;
+  const body = str(fd, "body").trim() || fallback.body;
 
   await prisma.emailTemplate.upsert({
-    where: { propertyId_key: { propertyId, key } },
-    create: { tenantId, propertyId, key, enabled, subject, body, updatedBy: session?.userId ?? null },
+    where: { propertyId_key_locale: { propertyId, key, locale } },
+    create: { tenantId, propertyId, key, locale, enabled, subject, body, updatedBy: session?.userId ?? null },
     update: { enabled, subject, body, updatedBy: session?.userId ?? null },
   });
   await logAudit(propertyId, tenantId, {
@@ -60,7 +62,8 @@ export async function resetEmailTemplate(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const session = await getSession();
   const key = str(fd, "key");
-  await prisma.emailTemplate.deleteMany({ where: { propertyId, key } });
+  const locale = str(fd, "locale") || "en";
+  await prisma.emailTemplate.deleteMany({ where: { propertyId, key, locale } });
   await logAudit(propertyId, tenantId, {
     entity: "Email settings", field: EMAIL_TEMPLATE_BY_KEY[key]?.label ?? key,
     newValue: "reset to default",

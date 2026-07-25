@@ -186,6 +186,9 @@ model EmailTemplate {
   tenantId   String
   propertyId String
   key        String // booking_confirmation | booking_modified | … (see core catalog)
+  // Guest-facing mail is written per language: one row per property+key+locale. The guest's own
+  // language wins, then the property default, then English.
+  locale     String   @default("en")
   enabled    Boolean  @default(true)
   subject    String
   body       String
@@ -194,7 +197,7 @@ model EmailTemplate {
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  @@unique([propertyId, key])
+  @@unique([propertyId, key, locale])
   @@index([propertyId])
 }
 

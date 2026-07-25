@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, Mail, Palette, RotateCcw, Users } from "lucide-react";
-import { renderEmail, SAMPLE_DETAILS, EMAIL_THEMES, EMAIL_FONTS } from "@revio/core";
+import { renderEmail, SAMPLE_DETAILS, sampleDetails, EMAIL_THEMES, EMAIL_FONTS, EMAIL_LOCALES } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getProperty } from "@/lib/data";
 import { listPropertyTemplates, brandOf } from "@/lib/email-engine";
@@ -12,9 +12,11 @@ const inputCls =
   "w-full rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] text-ink-900 outline-none transition-colors focus:border-brand-600";
 const labelCls = "mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-ink-400";
 
-export default async function EmailSettingsPage() {
+export default async function EmailSettingsPage({ searchParams }: { searchParams: Promise<{ lang?: string }> }) {
+  const sp = await searchParams;
+  const locale = EMAIL_LOCALES.some((l) => l.key === sp.lang) ? sp.lang! : "en";
   const property = await getProperty();
-  const templates = await listPropertyTemplates(property.id);
+  const templates = await listPropertyTemplates(property.id, locale);
   const brand = brandOf(property);
 
   // Live preview for EVERY template, rendered with the property's real branding — so a hotel can see
@@ -27,7 +29,7 @@ export default async function EmailSettingsPage() {
         body: t.body,
         brand,
         vars: t.def.variables,
-        details: t.def.audience === "guest" ? SAMPLE_DETAILS : [],
+        details: t.def.audience === "guest" ? sampleDetails(locale) : [],
         preheader: t.def.description,
       }),
     ]),
@@ -154,7 +156,26 @@ export default async function EmailSettingsPage() {
         <CardHeader
           title={`Emails (${templates.length})`}
           subtitle="Switch each one on or off and edit the wording. {{placeholders}} are filled in automatically."
+          action={
+            <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
+              {EMAIL_LOCALES.map((l) => (
+                <Link
+                  key={l.key}
+                  href={`/settings/emails?lang=${l.key}`}
+                  className={`rounded px-2.5 py-1 text-[12px] font-semibold transition-colors ${
+                    locale === l.key ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"
+                  }`}
+                >
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+          }
         />
+        <p className="border-b border-surface-border bg-surface-muted/40 px-4 py-2 text-[11.5px] text-ink-500">
+          Each language is edited separately. A guest receives their own language when we know it, otherwise
+          the property default. Untranslated emails fall back to English rather than not sending.
+        </p>
         <div className="divide-y divide-surface-border">
           {templates.map((t) => (
             <details key={t.def.key} className="group">
@@ -174,6 +195,7 @@ export default async function EmailSettingsPage() {
 
               <form action={saveEmailTemplate} className="space-y-3 border-t border-surface-border/60 bg-surface-muted/30 p-4">
                 <input type="hidden" name="key" value={t.def.key} />
+                <input type="hidden" name="locale" value={locale} />
                 {t.def.canDisable && (
                   <label className="flex items-center gap-2 text-[12.5px] font-medium text-ink-700">
                     <input type="checkbox" name="enabled" defaultChecked={t.enabled} className="h-4 w-4 rounded border-surface-border text-brand-600" />
