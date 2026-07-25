@@ -53,6 +53,16 @@ export async function POST(req: NextRequest) {
 
     for (const job of jobs) {
       if (job.to.length === 0) continue;
+      // Idempotence guard: the "due" window is 15 minutes wide, but a scheduler may fire more often
+      // than that (and GitHub-style crons drift). One digest per property/label/day — if we already
+      // logged this digest today, skip it rather than emailing the hotel two or three times.
+      const alreadySent = await db.auditEntry.findFirst({
+        where: {
+          propertyId: property.id, entity: "Arrival notification", field: job.label,
+          createdAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) },
+        },
+      });
+      if (alreadySent) continue;
       const day = new Date(`${job.day}T00:00:00Z`);
       const arrivals = await db.reservation.findMany({
         where: { propertyId: property.id, status: { in: [...SOLD_STATUSES] }, lines: { some: { checkIn: day } } },
