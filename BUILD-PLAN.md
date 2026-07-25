@@ -32,9 +32,10 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
 - Add `@types/node` to `packages/db` (its standalone typecheck warns; build/tests unaffected).
 
 **Deploy / ops**
-- **reservation-service auto-deploy** — still doesn't fire on `git push` (needs the founder to connect
-  repo + branch `main` in the Railway dashboard → Service → Settings → Source). Today: manual
-  `railway up --service reservation`.
+- **reservation-service auto-deploy** — the Railway service now shows repo `Konstantin-Todorov/revio-platform`
+  + branch `main` connected with "Auto deploys when pushed to GitHub" **enabled** and Wait-for-CI off
+  (founder screenshot 2026-07-22). Being re-verified with a live push; if it still doesn't fire, the
+  fallback is a manual deploy (`railway up --service reservation`, or the Railway MCP `deploy` tool).
 
 **Per-product polish / V2**
 - CM: channel logos (cosmetic); Settings reservation-delivery emails (needs email infra).
@@ -42,6 +43,14 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
 - PMS: automated nightly Close Day (manual today); lock/key hardware integration; hostel bed-mode UI;
   registration-card fields at check-in.
 - Operator: real **Stripe** billing (mocked today — no live payments); an operator audit-log screen.
+
+**Go-live readiness (founder directive 2026-07-22 — "we are close to first clients")**
+- **Production-readiness pass across all four products** — remove any demo-flavoured copy/scaffolding,
+  real empty states, error + loading states, responsive check, per-role gating, form validation, and a
+  clean **zero-data onboarding** path (every screen must look right for a brand-new hotel with no seed).
+- **Email engine** — per-hotel branded templates (logo, sender name, phone, reply-to), per-email-type
+  on/off toggles, and editable content, so each hotel controls what its guests receive. Research how
+  competing engines do it; build on our own sending system.
 
 **Websites (new — see `docs/POSITIONING.md`)**
 - Build **4 marketing sites**: one general (routes to each product) + three product sites (Link / CRS /
