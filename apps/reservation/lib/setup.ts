@@ -13,7 +13,12 @@ export async function getSetup(): Promise<SetupProgress & { show: boolean }> {
   const alreadyDone = property.setupCompleted.includes(PRODUCT);
 
   if (progress.complete && !alreadyDone) {
-    await prisma.property.update({ where: { id: property.id }, data: { setupCompleted: { push: PRODUCT } } });
+    // Guarded in the WHERE clause, not in JS: two dashboard loads racing each other would otherwise
+    // both see "not marked" and push the key twice.
+    await prisma.property.updateMany({
+      where: { id: property.id, NOT: { setupCompleted: { has: PRODUCT } } },
+      data: { setupCompleted: { push: PRODUCT } },
+    });
     return { ...progress, show: false };
   }
   return { ...progress, show: !progress.complete && !alreadyDone };
