@@ -31,6 +31,19 @@ export default async function Page() {
             <div className="p-5">
               <DeliverySettingsForm property={property} emailMode={process.env.RESEND_API_KEY ? "resend" : "mock"} />
             </div>
+            {/* Guest-facing mail is a separate concern from internal delivery — its own screen. */}
+            <Link
+              href="/settings/emails"
+              className="flex items-center justify-between gap-3 border-t border-surface-border px-5 py-3.5 transition-colors hover:bg-surface-muted"
+            >
+              <span>
+                <span className="block text-[13px] font-semibold text-ink-900">Guest emails →</span>
+                <span className="block text-[11.5px] text-ink-500">
+                  Your branding, and the wording of every email your guests receive
+                </span>
+              </span>
+              <span className="text-ink-300">›</span>
+            </Link>
           </Card>
 
           <Card>

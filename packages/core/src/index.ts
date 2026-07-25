@@ -12,3 +12,4 @@ export * from "./restrictions/advance-purchase.js";
 export * from "./adapters/channel-adapter.js";
 export * from "./adapters/cm-connector.js";
 export * from "./adapters/mock-channel-adapter.js";
+export * from "./email/templates.js";

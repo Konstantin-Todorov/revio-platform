@@ -118,6 +118,14 @@ model Property {
   notifyTomorrowArrivals    Boolean   @default(false)
   notifyTomorrowTime        String    @default("18:00")
   notifyTomorrowTo          String    @default("primary")
+  // Guest-facing email branding (email engine): each hotel's mail looks like THEIRS, not like Revio's.
+  // The sending domain stays ours (deliverability), but the name, reply-to, logo and accent are the
+  // hotel's. Null = fall back to the property name / platform default.
+  emailSenderName           String?
+  emailReplyTo              String?
+  emailLogoUrl              String? // absolute URL or data URI; shown at the top of every guest email
+  emailBrandColor           String? // hex, e.g. "#0E7C86" — headings + button colour
+  emailFooterText           String? // address / legal line under the signature
   // CRS Distribution (spec §3.8): exactly ONE connected channel manager per property.
   // reviolink_internal = the platform's own CM (shared core, automatic mapping); third-party
   // kinds plug into the identical ChannelManagerConnector interface later — never a second path.
@@ -158,8 +166,33 @@ model Property {
   maintenanceTasks     MaintenanceTask[]
   staffShifts          StaffShift[]
   opsEvents            OpsEvent[]
+  emailTemplates       EmailTemplate[]
 
   @@index([tenantId])
+}
+
+// One editable email per property per type (email engine). A row exists only once a hotel customises
+// that email — until then the platform default (packages/core/email-templates) is used, so a new
+// property sends sensible mail on day one with nothing configured.
+//
+// `enabled` is the hotel's on/off switch for that email type; `subject`/`body` are their wording, with
+// {{placeholders}} substituted at send time. Body is plain text with simple markers — deliberately not
+// a rich HTML editor, so a hotel cannot break rendering or accessibility.
+model EmailTemplate {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  key        String // booking_confirmation | booking_modified | … (see core catalog)
+  enabled    Boolean  @default(true)
+  subject    String
+  body       String
+  updatedAt  DateTime @updatedAt
+  updatedBy  String?
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, key])
+  @@index([propertyId])
 }
 
 model RoomType {
