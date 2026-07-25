@@ -106,6 +106,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
         {guest.reservations.length === 0 ? (
           <div className="px-4 py-5 text-[13px] text-ink-500">No reservations for this guest yet.</div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
@@ -135,6 +136,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
               })}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
     </div>

@@ -4,15 +4,25 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { getSession } from "./session";
+import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { logAudit, recordSync, str, int, utcDay } from "./mutation-helpers";
 import { recordOpsEvent } from "./events";
 import { todayInTz, addDaysYmd } from "./format";
 
 const HK_STATUSES = ["clean", "dirty", "in_progress", "inspected", "out_of_order"];
 
-async function ctx() {
+/**
+ * Session + capability gate for every action in this file.
+ *
+ * The nav and the layout route-guard hide screens from scoped roles, but neither stops a WRITE:
+ * Next runs a server action first and re-renders (re-guards) afterwards, so a crafted POST from a
+ * housekeeper or outlet account would otherwise commit before the guard ever fired. Denial
+ * redirects the caller to their own home screen, so nothing downstream in the action runs.
+ */
+async function ctx(cap: Capability) {
   const session = await getSession();
   if (!session) throw new Error("No session");
+  if (!roleHasCapability(session.role, cap)) redirect(roleHome(session.role));
   return session;
 }
 
@@ -24,7 +34,7 @@ function refresh() {
 
 /** Add one physical unit under a room type. */
 export async function createUnit(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const roomTypeId = str(fd, "roomTypeId");
   const label = str(fd, "label");
   const floor = str(fd, "floor") || null;
@@ -51,7 +61,7 @@ export async function createUnit(fd: FormData): Promise<void> {
 
 /** Bulk-generate numbered units (e.g. 101…110) under a room type. */
 export async function generateUnits(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const roomTypeId = str(fd, "roomTypeId");
   const n = Math.min(200, Math.max(1, int(fd, "count", 0)));
   const start = int(fd, "start", 1);
@@ -83,7 +93,7 @@ const UNIT_FEATURES = ["quiet", "accessible", "view", "smoking"];
  * Connecting-room links are kept SYMMETRIC (both units list each other) because the one-room-in-
  * progress rule and family/group assignment read them from either side (spec §3.5). */
 export async function updateUnit(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
   if (!unit || unit.propertyId !== session.activePropertyId) return;
@@ -133,7 +143,7 @@ export async function updateUnit(fd: FormData): Promise<void> {
  * than fail silently, so the user learns why.
  */
 export async function deleteUnit(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
   if (!unit || unit.propertyId !== session.activePropertyId) return;
@@ -163,7 +173,7 @@ export async function deleteUnit(fd: FormData): Promise<void> {
  * period, restoring the room. (docs/PMS-REFERENCE.md "Housekeeping status model".)
  */
 export async function setUnitStatus(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const status = str(fd, "status");
   if (!HK_STATUSES.includes(status)) return;
@@ -220,7 +230,7 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
  * select, which is unconstrained; per-user role scoping formalizes in D8.)
  */
 export async function startCleaning(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
   if (!unit || unit.propertyId !== session.activePropertyId) return;
@@ -250,7 +260,7 @@ export async function startCleaning(fd: FormData): Promise<void> {
 /** Finish cleaning (in_progress → clean). Under the inspection gate `clean` is "cleaned, pending
  * inspection" (not sellable) until a supervisor approves; off, it's directly sellable (spec §3.4). */
 export async function finishCleaning(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
   if (!unit || unit.propertyId !== session.activePropertyId) return;
@@ -270,7 +280,7 @@ export async function finishCleaning(fd: FormData): Promise<void> {
 /** Report-an-issue from housekeeping (spec §3.4): a cleaner flags damage/a fault → a Maintenance
  * task, linked to the room. Photo attachment arrives in D7. */
 export async function reportRoomIssue(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const title = str(fd, "title");
   if (!title) return;

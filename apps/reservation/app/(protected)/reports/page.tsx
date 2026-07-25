@@ -336,6 +336,7 @@ async function ProductsReport({ range, lens }: { range: ReturnType<typeof resolv
   const table = (title: string, rows: typeof r.roomTypes) => (
     <Card>
       <CardHeader title={title} />
+      <div className="overflow-x-auto">
       <table className="w-full text-[13px]">
         <thead>
           <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
@@ -355,6 +356,7 @@ async function ProductsReport({ range, lens }: { range: ReturnType<typeof resolv
           {rows.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-[13px] text-ink-400">No sold nights in this range.</td></tr>}
         </tbody>
       </table>
+      </div>
     </Card>
   );
   return (
@@ -429,6 +431,7 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
   return (
     <Card>
       <CardHeader title={`Source mix · ${range.label}`} />
+      <div className="overflow-x-auto">
       <table className="w-full text-[13px]">
         <thead>
           <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
@@ -447,6 +450,7 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
           ))}
         </tbody>
       </table>
+      </div>
     </Card>
   );
 }
@@ -459,6 +463,7 @@ async function CancellationReport({ range }: { range: ReturnType<typeof resolveR
       {r.cancelled.length === 0 ? (
         <div className="px-4 py-6 text-[13px] text-ink-500">No cancellations among reservations created in this range.</div>
       ) : (
+        <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
@@ -481,6 +486,7 @@ async function CancellationReport({ range }: { range: ReturnType<typeof resolveR
             })}
           </tbody>
         </table>
+        </div>
       )}
     </Card>
   );

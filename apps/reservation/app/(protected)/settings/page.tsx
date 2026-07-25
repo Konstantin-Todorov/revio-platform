@@ -182,6 +182,7 @@ export default async function SettingsPage() {
       <Card>
         <CardHeader title="Taxes & Fees" />
         {taxes.length > 0 && (
+          <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
@@ -206,6 +207,7 @@ export default async function SettingsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
         <form action={saveTaxFee} className="grid grid-cols-2 items-end gap-3 border-t border-surface-border/60 p-4 lg:grid-cols-7">
           <div><label className={labelCls}>Name</label><input name="name" required placeholder="City tax" className={inputCls} /></div>

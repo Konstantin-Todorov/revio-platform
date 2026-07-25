@@ -90,7 +90,7 @@ export function RestrictionDialog({ rule, roomTypes, channels }: { rule?: Rule; 
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Priority" hint="Higher wins"><input name="priority" type="number" defaultValue={rule?.priority ?? 5} className={inputCls} /></Field>
+            <Field label="Priority" hint="Higher wins"><input name="priority" type="number" min={0} max={100} defaultValue={rule?.priority ?? 5} className={inputCls} /></Field>
             <label className="flex items-end gap-2 pb-2 text-[13px] font-medium text-ink-700">
               <input type="checkbox" name="active" defaultChecked={rule?.active ?? true} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Active
             </label>

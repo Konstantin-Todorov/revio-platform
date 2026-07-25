@@ -4,13 +4,23 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
+import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { ensureFolio } from "./folio";
 import { postFolioLine, type Outlet } from "./posting";
 import { logAudit, str } from "./mutation-helpers";
 
-async function ctx() {
+/**
+ * Session + capability gate for every action in this file.
+ *
+ * The nav and the layout route-guard hide screens from scoped roles, but neither stops a WRITE:
+ * Next runs a server action first and re-renders (re-guards) afterwards, so a crafted POST from a
+ * housekeeper or outlet account would otherwise commit before the guard ever fired. Denial
+ * redirects the caller to their own home screen, so nothing downstream in the action runs.
+ */
+async function ctx(cap: Capability) {
   const session = await getSession();
   if (!session) throw new Error("No session");
+  if (!roleHasCapability(session.role, cap)) redirect(roleHome(session.role));
   return session;
 }
 
@@ -21,7 +31,7 @@ function moneyMinor(fd: FormData, key: string): number {
 
 /** Tap-to-post a catalog item to a stay's folio (kind = the item's category). */
 export async function postPosItem(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("outlet");
   const reservationId = str(fd, "reservationId");
   const posItemId = str(fd, "posItemId");
 
@@ -46,7 +56,7 @@ export async function postPosItem(fd: FormData): Promise<void> {
 const OUTLETS = ["minibar", "spa", "bar", "restaurant"];
 
 export async function createPosItem(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const name = str(fd, "name");
   const category = str(fd, "category") === "extra" ? "extra" : "minibar";
   const outlet = OUTLETS.includes(str(fd, "outlet")) ? str(fd, "outlet") : "minibar";
@@ -61,7 +71,7 @@ export async function createPosItem(fd: FormData): Promise<void> {
 }
 
 export async function updatePosItem(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const id = str(fd, "id");
   const item = await prisma.posItem.findFirst({ where: { id, propertyId: session.activePropertyId } });
   if (!item) return;
@@ -82,7 +92,7 @@ export async function updatePosItem(fd: FormData): Promise<void> {
 }
 
 export async function deletePosItem(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const id = str(fd, "id");
   const item = await prisma.posItem.findFirst({ where: { id, propertyId: session.activePropertyId } });
   if (!item) return;

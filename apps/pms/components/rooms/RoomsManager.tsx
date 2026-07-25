@@ -196,7 +196,7 @@ export function RoomsManager({ roomTypes, allUnits, blocked }: { roomTypes: Room
                   </label>
                   <label className="flex flex-col gap-1">
                     <span className="text-[11px] font-semibold text-ink-600">Start #</span>
-                    <input name="start" type="number" defaultValue={101} className={`${inputCls} w-20`} />
+                    <input name="start" type="number" min={1} defaultValue={101} className={`${inputCls} w-20`} />
                   </label>
                   <label className="flex flex-col gap-1">
                     <span className="text-[11px] font-semibold text-ink-600">How many</span>

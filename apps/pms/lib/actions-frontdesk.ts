@@ -4,14 +4,24 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
+import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { availableUnitsFor } from "./data";
 import { ensureFolio, reservationBalance } from "./folio";
 import { logAudit, recordSync, str, int } from "./mutation-helpers";
 import { todayInTz, addDaysYmd, utcDay } from "./format";
 
-async function ctx() {
+/**
+ * Session + capability gate for every action in this file.
+ *
+ * The nav and the layout route-guard hide screens from scoped roles, but neither stops a WRITE:
+ * Next runs a server action first and re-renders (re-guards) afterwards, so a crafted POST from a
+ * housekeeper or outlet account would otherwise commit before the guard ever fired. Denial
+ * redirects the caller to their own home screen, so nothing downstream in the action runs.
+ */
+async function ctx(cap: Capability) {
   const session = await getSession();
   if (!session) throw new Error("No session");
+  if (!roleHasCapability(session.role, cap)) redirect(roleHome(session.role));
   return session;
 }
 
@@ -30,7 +40,7 @@ const SERVICEABLE = ["clean", "inspected"];
  * Form: hidden reservationId + N `slot` fields each "lineId:unitId", optional `override` checkbox.
  */
 export async function checkIn(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const override = fd.get("override") != null;
 
@@ -93,7 +103,7 @@ export async function checkIn(fd: FormData): Promise<void> {
  * unless `override` is set — then the outstanding balance + reason are logged.
  */
 export async function checkOut(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const override = fd.get("override") != null;
   const reason = str(fd, "reason");
@@ -128,7 +138,7 @@ export async function checkOut(fd: FormData): Promise<void> {
 const MOVE_REASONS = ["request", "upgrade", "maintenance", "noise"];
 
 export async function roomMove(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const assignmentId = str(fd, "assignmentId");
   const newUnitId = str(fd, "unitId");
   const reason = MOVE_REASONS.includes(str(fd, "reason")) ? str(fd, "reason") : "request";
@@ -167,7 +177,7 @@ export async function roomMove(fd: FormData): Promise<void> {
  * availability on the shared waterfall (channels see it on the next push).
  */
 export async function walkIn(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const roomTypeId = str(fd, "roomTypeId");
   const firstName = str(fd, "firstName");
   const lastName = str(fd, "lastName");

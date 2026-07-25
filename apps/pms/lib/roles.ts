@@ -37,3 +37,29 @@ export function roleAllowsPath(role: string, pathname: string): boolean {
   if (!allowed) return true; // full-access role
   return allowed.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
+
+// --- Capabilities -----------------------------------------------------------
+// WHO may perform a write, as opposed to SCOPED_NAV above which decides who may SEE a screen. The
+// two are separate because hiding a screen does not protect the action behind it: a server action is
+// a POST that Next runs before the layout re-renders and re-guards. Pure data, so it is unit-tested.
+
+const MANAGERS = ["owner", "admin", "manager"] as const;
+
+export const CAPABILITY_ROLES = {
+  /** Configuration, staff, deposit types, invoicing, close day, room inventory. */
+  manage: [...MANAGERS],
+  /** Check-in/out, room moves, walk-ins, folios, payments. */
+  frontDesk: [...MANAGERS, "reception"],
+  /** Room status, cleaning start/finish, reporting an issue. */
+  housekeeping: [...MANAGERS, "reception", "hk_supervisor", "housekeeper"],
+  /** Raising and working maintenance tasks. */
+  maintenance: [...MANAGERS, "hk_supervisor", "maintenance"],
+  /** Posting outlet items to a folio. */
+  outlet: [...MANAGERS, "reception", "outlet_pos"],
+} satisfies Record<string, readonly string[]>;
+
+export type Capability = keyof typeof CAPABILITY_ROLES;
+
+export function roleHasCapability(role: string, cap: Capability): boolean {
+  return (CAPABILITY_ROLES[cap] as readonly string[]).includes(role);
+}

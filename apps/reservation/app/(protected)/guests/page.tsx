@@ -34,6 +34,7 @@ export default async function GuestsPage({ searchParams }: { searchParams: Promi
         />
       ) : (
         <Card>
+          <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
@@ -58,6 +59,7 @@ export default async function GuestsPage({ searchParams }: { searchParams: Promi
               ))}
             </tbody>
           </table>
+          </div>
         </Card>
       )}
     </div>

@@ -38,8 +38,8 @@ export function ChannelSettingsDialog({ channel }: { channel: Channel }) {
             </Field>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="FX markup %"><input name="markupPct" type="number" step="0.1" defaultValue={channel.markupPct} className={inputCls} /></Field>
-            <Field label="Commission %"><input name="commissionPct" type="number" step="0.1" defaultValue={channel.commissionPct} className={inputCls} /></Field>
+            <Field label="FX markup %"><input name="markupPct" type="number" step="0.1" min={0} max={100} defaultValue={channel.markupPct} className={inputCls} /></Field>
+            <Field label="Commission %"><input name="commissionPct" type="number" step="0.1" min={0} max={100} defaultValue={channel.commissionPct} className={inputCls} /></Field>
             <Field label="Rounding">
               <select name="rounding" defaultValue={channel.rounding} className={inputCls}>
                 <option value="none">None</option>

@@ -4,14 +4,24 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
+import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { ensureFolio, createSplitFolio, folioBalance } from "./folio";
 import { postFolioLine } from "./posting";
 import { chargeCard, refundCard } from "./gateway";
 import { logAudit, str } from "./mutation-helpers";
 
-async function ctx() {
+/**
+ * Session + capability gate for every action in this file.
+ *
+ * The nav and the layout route-guard hide screens from scoped roles, but neither stops a WRITE:
+ * Next runs a server action first and re-renders (re-guards) afterwards, so a crafted POST from a
+ * housekeeper or outlet account would otherwise commit before the guard ever fired. Denial
+ * redirects the caller to their own home screen, so nothing downstream in the action runs.
+ */
+async function ctx(cap: Capability) {
   const session = await getSession();
   if (!session) throw new Error("No session");
+  if (!roleHasCapability(session.role, cap)) redirect(roleHome(session.role));
   return session;
 }
 
@@ -41,7 +51,7 @@ async function openFolioId(session: { tenantId: string; activePropertyId: string
 
 /** Post a charge (minibar / extra / fee) to a stay's folio. */
 export async function postCharge(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const kind = str(fd, "kind");
   const description = str(fd, "description");
@@ -58,7 +68,7 @@ export async function postCharge(fd: FormData): Promise<void> {
 
 /** Record a payment (label + amount only — no card data). */
 export async function postPayment(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const method = str(fd, "method");
   const amountMinor = moneyMinor(fd, "amount");
@@ -89,7 +99,7 @@ export async function postPayment(fd: FormData): Promise<void> {
  * booked; the rate plan stays as sold and the folio reflects reality.
  */
 export async function addStayExtra(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const name = str(fd, "name");
   const priceMinor = moneyMinor(fd, "price");
@@ -106,7 +116,7 @@ export async function addStayExtra(fd: FormData): Promise<void> {
 
 /** Stop a recurring extra. Nights already accrued stay on the folio — only future nights stop. */
 export async function removeStayExtra(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const id = str(fd, "id");
   const extra = await prisma.stayExtra.findFirst({ where: { id, propertyId: session.activePropertyId }, select: { id: true, name: true } });
@@ -124,7 +134,7 @@ export async function removeStayExtra(fd: FormData): Promise<void> {
  *   applied → recorded straight as a `payment`: the balance drops now (consumption-prepayment model).
  */
 export async function captureDeposit(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const depositTypeId = str(fd, "depositTypeId");
   const method = str(fd, "method") || "cash";
@@ -160,7 +170,7 @@ export async function captureDeposit(fd: FormData): Promise<void> {
 /** Apply held deposit money to the bill — only NOW does it count as a payment (and the VAT point
  * triggers for a vatTiming=use type). Capped at what's actually held. */
 export async function useDeposit(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
@@ -183,7 +193,7 @@ export async function useDeposit(fd: FormData): Promise<void> {
 
 /** Return held deposit money to the guest — reduces the liability, never touches revenue. */
 export async function refundDeposit(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const reservationId = str(fd, "reservationId");
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) redirect(`/folio/${reservationId}?error=closed`);
@@ -214,7 +224,7 @@ export async function refundDeposit(fd: FormData): Promise<void> {
 
 /** Add a split / company folio to the stay (spec §3.6). Charge lines can then be moved onto it. */
 export async function createFolio(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const label = str(fd, "label") || "Company";
   await createSplitFolio(session.tenantId, session.activePropertyId, reservationId, label);
@@ -225,7 +235,7 @@ export async function createFolio(fd: FormData): Promise<void> {
 /** Move a charge line onto another folio of the SAME stay — the one mechanism behind every split
  * (room→company, extras→guest, 50/50). Payments and closed folios are off-limits. */
 export async function moveFolioLine(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const lineId = str(fd, "lineId");
   const targetFolioId = str(fd, "targetFolioId");
@@ -243,7 +253,7 @@ export async function moveFolioLine(fd: FormData): Promise<void> {
 
 /** Void a folio line (flagged, never deleted — audit trail). Accommodation lines are authoritative and can't be voided. */
 export async function voidFolioLine(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const reservationId = str(fd, "reservationId");
   const lineId = str(fd, "lineId");
   const line = await prisma.folioLine.findFirst({ where: { id: lineId, propertyId: session.activePropertyId } });

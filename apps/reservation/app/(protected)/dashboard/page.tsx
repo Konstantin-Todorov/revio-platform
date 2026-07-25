@@ -214,6 +214,7 @@ export default async function DashboardPage({
         {/* Forecast */}
         <Card>
           <CardHeader title="Forecast — the same data read forward" />
+          <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
@@ -238,6 +239,7 @@ export default async function DashboardPage({
               ))}
             </tbody>
           </table>
+          </div>
           <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
             Expected values from confirmed bookings — not a prediction model.
           </p>

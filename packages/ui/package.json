@@ -8,7 +8,9 @@
   "exports": {
     ".": "./src/tokens.ts",
     "./tokens.css": "./src/tokens.css",
-    "./setup-checklist": "./src/setup-checklist.tsx"
+    "./setup-checklist": "./src/setup-checklist.tsx",
+    "./status-page": "./src/status-page.tsx",
+    "./skeleton": "./src/skeleton.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

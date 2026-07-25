@@ -67,6 +67,7 @@ export function UsersManager({ users, meId, canManage }: { users: StaffUser[]; m
 
       <div className="overflow-hidden rounded-lg border border-surface-border bg-white shadow-card">
         <div className="border-b border-surface-border px-4 py-2.5 text-[12px] font-bold uppercase tracking-wide text-ink-400">Staff · {users.length}</div>
+        <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
@@ -111,6 +112,7 @@ export function UsersManager({ users, meId, canManage }: { users: StaffUser[]; m
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       <p className="flex items-center gap-1.5 text-[11.5px] text-ink-400">

@@ -4,13 +4,23 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
+import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { takeUnitOoo, clearUnitOoo } from "./units";
 import { logAudit, str } from "./mutation-helpers";
 import { recordOpsEvent } from "./events";
 
-async function ctx() {
+/**
+ * Session + capability gate for every action in this file.
+ *
+ * The nav and the layout route-guard hide screens from scoped roles, but neither stops a WRITE:
+ * Next runs a server action first and re-renders (re-guards) afterwards, so a crafted POST from a
+ * housekeeper or outlet account would otherwise commit before the guard ever fired. Denial
+ * redirects the caller to their own home screen, so nothing downstream in the action runs.
+ */
+async function ctx(cap: Capability) {
   const session = await getSession();
   if (!session) throw new Error("No session");
+  if (!roleHasCapability(session.role, cap)) redirect(roleHome(session.role));
   return session;
 }
 
@@ -26,7 +36,7 @@ const STATUSES = ["open", "in_progress", "on_hold", "done"];
 
 /** Log a maintenance task; ticking "out of order" takes the unit off sale via the shared waterfall. */
 export async function createMaintenanceTask(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("maintenance");
   const title = str(fd, "title");
   const unitId = str(fd, "unitId") || null;
   const priority = PRIORITIES.includes(str(fd, "priority")) ? str(fd, "priority") : "normal";
@@ -51,7 +61,7 @@ export async function createMaintenanceTask(fd: FormData): Promise<void> {
 
 /** Move a task through open → in_progress → done. Completing an OOO task returns the room (as Dirty). */
 export async function setMaintenanceStatus(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("maintenance");
   const id = str(fd, "id");
   const status = str(fd, "status");
   if (!STATUSES.includes(status)) return;
@@ -76,7 +86,7 @@ export async function setMaintenanceStatus(fd: FormData): Promise<void> {
 /** Attach (or replace) a photo of the fault (spec §3.8). The client downscales to a small JPEG data
  * URL before posting; we cap the stored size so the demo DB stays lean. Empty clears the photo. */
 export async function setTaskPhoto(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("maintenance");
   const id = str(fd, "id");
   const photoUrl = str(fd, "photoUrl");
   const task = await prisma.maintenanceTask.findFirst({ where: { id, propertyId: session.activePropertyId }, select: { id: true, title: true } });
@@ -90,7 +100,7 @@ export async function setTaskPhoto(fd: FormData): Promise<void> {
 
 /** Delete a task; if it had the unit out of order, return the room to sale (as Dirty). */
 export async function deleteMaintenanceTask(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const id = str(fd, "id");
   const task = await prisma.maintenanceTask.findFirst({ where: { id, propertyId: session.activePropertyId }, include: { unit: { select: { id: true, label: true } } } });
   if (!task) return;

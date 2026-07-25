@@ -27,6 +27,7 @@ export function RateCell({ roomTypeId, date, value }: { roomTypeId: string; date
       <input
         ref={inputRef}
         type="number"
+        min={0}
         defaultValue={value === "—" ? "" : value.replace(/[^0-9.]/g, "")}
         onBlur={(e) => commit(e.target.value)}
         onKeyDown={(e) => {

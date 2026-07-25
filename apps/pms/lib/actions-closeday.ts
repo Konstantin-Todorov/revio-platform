@@ -4,19 +4,29 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
+import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { logAudit, recordSync, str } from "./mutation-helpers";
 import { accrueStayExtras } from "./folio";
 import { todayInTz, addDaysYmd, utcDay, ymd } from "./format";
 
-async function ctx() {
+/**
+ * Session + capability gate for every action in this file.
+ *
+ * The nav and the layout route-guard hide screens from scoped roles, but neither stops a WRITE:
+ * Next runs a server action first and re-renders (re-guards) afterwards, so a crafted POST from a
+ * housekeeper or outlet account would otherwise commit before the guard ever fired. Denial
+ * redirects the caller to their own home screen, so nothing downstream in the action runs.
+ */
+async function ctx(cap: Capability) {
   const session = await getSession();
   if (!session) throw new Error("No session");
+  if (!roleHasCapability(session.role, cap)) redirect(roleHome(session.role));
   return session;
 }
 
 /** Mark a single un-arrived reservation as a no-show (never checked in). */
 export async function markNoShow(fd: FormData): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const res = await prisma.reservation.findFirst({
     where: { id: reservationId, propertyId: session.activePropertyId },
@@ -35,7 +45,7 @@ export async function markNoShow(fd: FormData): Promise<void> {
  * (Full nightly accommodation posting isn't needed — folios post the whole stay up front.)
  */
 export async function closeDay(): Promise<void> {
-  const session = await ctx();
+  const session = await ctx("manage");
   const property = await prisma.property.findUnique({ where: { id: session.activePropertyId } });
   if (!property) redirect("/closeday");
   const today = todayInTz(property!.timezone);

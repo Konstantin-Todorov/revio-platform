@@ -56,6 +56,7 @@ export function EditableCell({
       <input
         ref={inputRef}
         type="number"
+        min={0}
         defaultValue={value === "—" ? "" : value.replace(/[^0-9.]/g, "")}
         onBlur={(e) => commit(e.target.value)}
         onKeyDown={(e) => {
