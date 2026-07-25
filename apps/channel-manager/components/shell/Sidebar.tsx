@@ -43,13 +43,23 @@ const ACCOUNT_SECTION: { title: string; items: Item[] } = {
   ],
 };
 
+// Every nav destination, so the active check can pick the MOST SPECIFIC match. Without this a nested
+// route lights up its parent too (/settings/emails matched both "Guest Emails" and "Settings").
+const ALL_HREFS = [...SECTIONS.flatMap((s) => s.items), ...ACCOUNT_SECTION.items].map((i) => i.href);
+
+function bestMatch(pathname: string): string | null {
+  const matches = ALL_HREFS.filter((h) => pathname === h || pathname.startsWith(h + "/"));
+  return matches.sort((a, b) => b.length - a.length)[0] ?? null;
+}
+
 export function Sidebar() {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
+  const activeHref = bestMatch(pathname);
 
   const renderItems = (items: Item[]) =>
     items.map((item) => {
-      const active = pathname === item.href || pathname.startsWith(item.href + "/");
+      const active = item.href === activeHref;
       const Icon = item.icon;
       return (
         <Link

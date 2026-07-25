@@ -22,6 +22,8 @@ export interface PropertyEmailBrandRow {
   emailLogoUrl: string | null;
   emailBrandColor: string | null;
   emailFooterText: string | null;
+  emailTheme: string;
+  emailFont: string;
 }
 
 export function brandOf(property: PropertyEmailBrandRow): EmailBrand {
@@ -32,6 +34,8 @@ export function brandOf(property: PropertyEmailBrandRow): EmailBrand {
     logoUrl: property.emailLogoUrl,
     brandColor: property.emailBrandColor,
     footerText: property.emailFooterText,
+    theme: property.emailTheme,
+    font: property.emailFont,
   };
 }
 

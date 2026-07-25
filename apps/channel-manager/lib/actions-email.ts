@@ -19,6 +19,8 @@ export async function saveEmailBranding(fd: FormData): Promise<void> {
       emailLogoUrl: str(fd, "emailLogoUrl") || null,
       emailBrandColor: str(fd, "emailBrandColor") || null,
       emailFooterText: str(fd, "emailFooterText") || null,
+      emailTheme: str(fd, "emailTheme") || "classic",
+      emailFont: str(fd, "emailFont") || "serif",
     },
   });
   await logAudit(propertyId, tenantId, {

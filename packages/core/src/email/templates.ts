@@ -195,7 +195,25 @@ export interface EmailBrand {
   logoUrl?: string | null;
   brandColor?: string | null;
   footerText?: string | null;
+  /** Visual identity of the email itself — see EMAIL_THEMES. */
+  theme?: string | null;
+  font?: string | null;
 }
+
+/** Four genuinely different layouts, so two Revio hotels never send identical-looking mail. Each is a
+ * complete visual treatment — masthead, rules, detail panel and spacing all change, not just a colour. */
+export const EMAIL_THEMES = [
+  { key: "classic", label: "Classic", blurb: "Serif masthead, hairline rules, centred. Traditional luxury." },
+  { key: "modern", label: "Modern", blurb: "Solid colour banner, bold left-aligned type, tinted detail block." },
+  { key: "minimal", label: "Minimal", blurb: "No frame, no rules. Wide margins and quiet type." },
+  { key: "boutique", label: "Boutique", blurb: "Letter-spaced small caps, framed panel, editorial feel." },
+] as const;
+
+export const EMAIL_FONTS = [
+  { key: "serif", label: "Serif", stack: "Georgia,'Times New Roman',serif" },
+  { key: "sans", label: "Sans", stack: "'Helvetica Neue',Helvetica,Arial,sans-serif" },
+  { key: "mixed", label: "Serif headings, sans body", stack: "Georgia,'Times New Roman',serif" },
+] as const;
 
 const DEFAULT_BRAND_COLOR = "#0E7C86";
 
@@ -255,20 +273,23 @@ export function renderEmail(args: {
   brand: EmailBrand;
   vars: Record<string, string>;
   details?: EmailDetail[];
-  /** Optional call to action, e.g. { label: "View your booking", url: "https://…" }. */
   cta?: { label: string; url: string } | null;
-  /** One line shown in the inbox preview next to the subject. */
   preheader?: string;
 }): RenderedEmail {
   const vars = { propertyName: args.brand.propertyName, ...args.vars };
   const subject = fillPlaceholders(args.subject, vars);
   const color = args.brand.brandColor?.trim() || DEFAULT_BRAND_COLOR;
   const details = args.details ?? [];
+  const theme = (args.brand.theme || "classic") as "classic" | "modern" | "minimal" | "boutique";
+  const fontKey = (args.brand.font || "serif") as "serif" | "sans" | "mixed";
 
-  // ---- plain text ----------------------------------------------------------
-  const textDetails = details.length
-    ? details.map((d) => `${d.label}: ${d.value}`).join("\n")
-    : "";
+  const SANS = "'Helvetica Neue',Helvetica,Arial,sans-serif";
+  const SERIF = "Georgia,'Times New Roman',serif";
+  const displayFont = fontKey === "sans" ? SANS : SERIF;
+  const bodyFont = fontKey === "serif" ? SERIF : SANS;
+
+  // ---- plain text (identical across themes — the words are the words) -------
+  const textDetails = details.length ? details.map((d) => `${d.label}: ${d.value}`).join("\n") : "";
   let text = fillPlaceholders(args.body, vars);
   text = text.includes("{{details}}")
     ? text.replace(/\{\{details\}\}/g, textDetails)
@@ -278,19 +299,62 @@ export function renderEmail(args: {
   if (args.cta) text += `\n\n${args.cta.label}: ${args.cta.url}`;
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
-  // ---- HTML ----------------------------------------------------------------
-  const detailPanel = details.length
-    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;border-collapse:collapse">
-${details
-  .map(
-    (d, i) => `<tr>
-<td style="padding:${i === 0 ? "0" : "11px"} 16px 11px 0;${i === 0 ? "" : "border-top:1px solid #ECEEF1;"}font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;white-space:nowrap;vertical-align:top">${escapeHtml(d.label)}</td>
-<td style="padding:${i === 0 ? "0" : "11px"} 0 11px 0;${i === 0 ? "" : "border-top:1px solid #ECEEF1;"}font-size:${d.emphasis ? "17px" : "15px"};${d.emphasis ? `font-weight:700;color:${escapeHtml(color)};` : "color:#1A2230;"}text-align:right;vertical-align:top">${escapeHtml(d.value)}</td>
-</tr>`,
-  )
-  .join("\n")}
+  // ---- per-theme visual treatment -----------------------------------------
+  const T = {
+    classic: {
+      pageBg: "#F4F5F7", cardBg: "#FFFFFF", cardBorder: "1px solid #E7E9ED", radius: "0",
+      pad: "40px", topRule: `<tr><td style="height:3px;background:${color};font-size:0;line-height:0">&nbsp;</td></tr>`,
+      mastheadAlign: "center", detailStyle: "rules", labelTransform: "uppercase", labelSpacing: ".06em",
+    },
+    modern: {
+      pageBg: "#EEF1F4", cardBg: "#FFFFFF", cardBorder: "none", radius: "10px",
+      pad: "36px", topRule: "", mastheadAlign: "left", detailStyle: "block",
+      labelTransform: "none", labelSpacing: "0",
+    },
+    minimal: {
+      pageBg: "#FFFFFF", cardBg: "#FFFFFF", cardBorder: "none", radius: "0",
+      pad: "48px", topRule: "", mastheadAlign: "left", detailStyle: "plain",
+      labelTransform: "none", labelSpacing: "0",
+    },
+    boutique: {
+      pageBg: "#F7F5F2", cardBg: "#FFFFFF", cardBorder: "1px solid #E3DED6", radius: "0",
+      pad: "44px", topRule: "", mastheadAlign: "center", detailStyle: "framed",
+      labelTransform: "uppercase", labelSpacing: ".14em",
+    },
+  }[theme];
+
+  // Detail panel — a different object in each theme, not the same table recoloured.
+  const detailPanel = !details.length
+    ? ""
+    : T.detailStyle === "block"
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0;background:#F6F8FA;border-radius:8px">
+<tr><td style="padding:20px 22px">
+${details.map((d) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+<td style="padding:6px 0;font-size:13px;color:#67707E;font-family:${SANS}">${escapeHtml(d.label)}</td>
+<td style="padding:6px 0;text-align:right;font-size:${d.emphasis ? "17px" : "14px"};font-weight:${d.emphasis ? "700" : "600"};color:${d.emphasis ? color : "#1A2230"};font-family:${SANS}">${escapeHtml(d.value)}</td>
+</tr></table>`).join("")}
+</td></tr></table>`
+      : T.detailStyle === "framed"
+        ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:30px 0;border:1px solid ${color}33">
+<tr><td style="padding:24px 26px">
+${details.map((d, i) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+<td style="padding:${i === 0 ? "0" : "10px"} 0 10px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#9A8F7F;font-family:${SANS}">${escapeHtml(d.label)}</td>
+<td style="padding:${i === 0 ? "0" : "10px"} 0 10px;text-align:right;font-size:${d.emphasis ? "18px" : "15px"};color:${d.emphasis ? color : "#2A2520"};font-family:${displayFont}">${escapeHtml(d.value)}</td>
+</tr></table>`).join("")}
+</td></tr></table>`
+        : T.detailStyle === "plain"
+          ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0">
+${details.map((d) => `<tr>
+<td style="padding:5px 16px 5px 0;font-size:14px;color:#8C939E;font-family:${SANS};white-space:nowrap">${escapeHtml(d.label)}</td>
+<td style="padding:5px 0;font-size:${d.emphasis ? "16px" : "14px"};color:${d.emphasis ? color : "#20262F"};font-weight:${d.emphasis ? "600" : "400"};font-family:${SANS}">${escapeHtml(d.value)}</td>
+</tr>`).join("")}
 </table>`
-    : "";
+          : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;border-collapse:collapse">
+${details.map((d, i) => `<tr>
+<td style="padding:${i === 0 ? "0" : "11px"} 16px 11px 0;${i === 0 ? "" : "border-top:1px solid #ECEEF1;"}font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;white-space:nowrap;vertical-align:top;font-family:${SANS}">${escapeHtml(d.label)}</td>
+<td style="padding:${i === 0 ? "0" : "11px"} 0 11px 0;${i === 0 ? "" : "border-top:1px solid #ECEEF1;"}font-size:${d.emphasis ? "17px" : "15px"};${d.emphasis ? `font-weight:700;color:${color};` : "color:#1A2230;"}text-align:right;vertical-align:top;font-family:${SANS}">${escapeHtml(d.value)}</td>
+</tr>`).join("")}
+</table>`;
 
   const bodyFilled = fillPlaceholders(args.body, vars);
   const hasMarker = bodyFilled.includes("{{details}}");
@@ -299,26 +363,40 @@ ${details
     .map((block) => {
       if (block.trim() === "{{details}}") return detailPanel;
       const safe = escapeHtml(block.trim()).replace(/\n/g, "<br>");
-      return `<p style="margin:0 0 18px;font-size:15.5px;line-height:1.68;color:#313B4A">${safe}</p>`;
+      return `<p style="margin:0 0 18px;font-size:15.5px;line-height:1.7;color:#313B4A;font-family:${bodyFont}">${safe}</p>`;
     })
     .join("\n");
 
   const ctaBlock = args.cta
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 24px">
-<tr><td style="background:${escapeHtml(color)};border-radius:3px">
-<a href="${escapeHtml(args.cta.url)}" style="display:inline-block;padding:13px 26px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:.02em">${escapeHtml(args.cta.label)}</a>
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 26px${T.mastheadAlign === "center" ? ";margin-left:auto;margin-right:auto" : ""}">
+<tr><td style="background:${color};border-radius:${theme === "modern" ? "6px" : "2px"}">
+<a href="${escapeHtml(args.cta.url)}" style="display:inline-block;padding:13px 28px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:.02em;font-family:${SANS}">${escapeHtml(args.cta.label)}</a>
 </td></tr></table>`
     : "";
 
-  const serif = "Georgia,'Times New Roman',serif";
+  const nameStyle =
+    theme === "boutique"
+      ? `font-family:${displayFont};font-size:20px;letter-spacing:.22em;text-transform:uppercase;color:#2A2520`
+      : theme === "modern"
+        ? `font-family:${displayFont};font-size:22px;font-weight:700;color:#FFFFFF`
+        : theme === "minimal"
+          ? `font-family:${displayFont};font-size:19px;color:#20262F`
+          : `font-family:${displayFont};font-size:25px;letter-spacing:.02em;color:#1A2230`;
+
   const masthead = args.brand.logoUrl
-    ? `<img src="${escapeHtml(args.brand.logoUrl)}" alt="${escapeHtml(args.brand.propertyName)}" style="max-height:56px;max-width:220px;display:block;margin:0 auto">`
-    : `<div style="font-family:${serif};font-size:25px;letter-spacing:.02em;color:#1A2230;text-align:center">${escapeHtml(args.brand.propertyName)}</div>`;
+    ? `<img src="${escapeHtml(args.brand.logoUrl)}" alt="${escapeHtml(args.brand.propertyName)}" style="max-height:56px;max-width:220px;display:block${T.mastheadAlign === "center" ? ";margin:0 auto" : ""}">`
+    : `<div style="${nameStyle};text-align:${T.mastheadAlign}">${escapeHtml(args.brand.propertyName)}</div>`;
+
+  // Modern puts the masthead in a solid colour banner; the others sit on the card.
+  const mastheadRow =
+    theme === "modern"
+      ? `<tr><td style="padding:26px ${T.pad};background:${color}">${masthead}</td></tr>`
+      : `<tr><td style="padding:${theme === "minimal" ? "8px" : "34px"} ${T.pad} 22px">${masthead}</td></tr>`;
 
   const footer = args.brand.footerText
-    ? `<tr><td style="padding:22px 40px 30px;text-align:center">
-<div style="height:1px;background:#ECEEF1;margin:0 0 18px"></div>
-<p style="margin:0;color:#8A93A0;font-size:12px;line-height:1.65">${escapeHtml(args.brand.footerText).replace(/\n/g, "<br>")}</p>
+    ? `<tr><td style="padding:20px ${T.pad} 30px;text-align:${T.mastheadAlign}">
+<div style="height:1px;background:${theme === "boutique" ? "#E3DED6" : "#ECEEF1"};margin:0 0 16px"></div>
+<p style="margin:0;color:#8A93A0;font-size:12px;line-height:1.65;font-family:${SANS}">${escapeHtml(args.brand.footerText).replace(/\n/g, "<br>")}</p>
 </td></tr>`
     : "";
 
@@ -330,20 +408,20 @@ ${details
 <meta name="x-apple-disable-message-reformatting">
 <title>${escapeHtml(subject)}</title>
 </head>
-<body style="margin:0;padding:0;background:#F4F5F7;-webkit-font-smoothing:antialiased">
+<body style="margin:0;padding:0;background:${T.pageBg};-webkit-font-smoothing:antialiased">
 ${pre ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(pre)}</div>` : ""}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F5F7">
-<tr><td align="center" style="padding:36px 16px">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background:#FFFFFF;border:1px solid #E7E9ED">
-    <tr><td style="height:3px;background:${escapeHtml(color)};font-size:0;line-height:0">&nbsp;</td></tr>
-    <tr><td style="padding:34px 40px 26px">${masthead}</td></tr>
-    <tr><td style="padding:0 40px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${T.pageBg}">
+<tr><td align="center" style="padding:${theme === "minimal" ? "48px" : "36px"} 16px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:${theme === "minimal" ? "520px" : "580px"};background:${T.cardBg};border:${T.cardBorder};border-radius:${T.radius};overflow:hidden">
+    ${T.topRule}
+    ${mastheadRow}
+    <tr><td style="padding:0 ${T.pad}">
       ${htmlBody}
       ${ctaBlock}
     </td></tr>
     ${footer}
   </table>
-  <p style="margin:16px 0 0;font-size:11px;color:#A3AAB5;font-family:system-ui,sans-serif">Sent by ${escapeHtml(args.brand.propertyName)}</p>
+  <p style="margin:16px 0 0;font-size:11px;color:#A3AAB5;font-family:${SANS}">Sent by ${escapeHtml(args.brand.propertyName)}</p>
 </td></tr>
 </table>
 </body></html>`;

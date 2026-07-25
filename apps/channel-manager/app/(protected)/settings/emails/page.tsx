@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, Mail, Palette, RotateCcw, Users } from "lucide-react";
-import { renderEmail, SAMPLE_DETAILS } from "@revio/core";
+import { renderEmail, SAMPLE_DETAILS, EMAIL_THEMES, EMAIL_FONTS } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getProperty } from "@/lib/data";
 import { listPropertyTemplates, brandOf } from "@/lib/email-engine";
@@ -33,6 +33,19 @@ export default async function EmailSettingsPage() {
     ]),
   );
   const preview = previews.get("booking_confirmation")!;
+
+  // One miniature of the confirmation per theme, so a hotel picks by eye rather than by name.
+  const confirmation = templates.find((t) => t.def.key === "booking_confirmation")!;
+  const themeSwatches = EMAIL_THEMES.map((th) => ({
+    ...th,
+    html: renderEmail({
+      subject: confirmation.subject,
+      body: confirmation.body,
+      brand: { ...brand, theme: th.key },
+      vars: confirmation.def.variables,
+      details: SAMPLE_DETAILS,
+    }).html,
+  }));
 
   return (
     <div className="space-y-5">
@@ -73,9 +86,47 @@ export default async function EmailSettingsPage() {
             <label className={labelCls}>Footer (address / legal line)</label>
             <input name="emailFooterText" defaultValue={property.emailFooterText ?? ""} placeholder="1 Vitosha Blvd, Sofia · +359 2 000 0000" className={inputCls} />
           </div>
-          <div className="col-span-2 flex justify-end lg:col-span-3">
+          {/* Design — a different look per hotel, chosen by eye. */}
+          <div className="col-span-2 lg:col-span-3">
+            <label className={labelCls}>Design</label>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {themeSwatches.map((th) => (
+                <label key={th.key} className="cursor-pointer">
+                  <input
+                    type="radio"
+                    name="emailTheme"
+                    value={th.key}
+                    defaultChecked={(property.emailTheme || "classic") === th.key}
+                    className="peer sr-only"
+                  />
+                  <div className="overflow-hidden rounded-lg border-2 border-surface-border transition-colors peer-checked:border-brand-600 peer-checked:ring-2 peer-checked:ring-brand-600/20">
+                    <div className="h-[150px] overflow-hidden bg-white">
+                      <iframe
+                        title={`${th.label} theme`}
+                        srcDoc={th.html}
+                        tabIndex={-1}
+                        className="pointer-events-none h-[500px] w-[580px] origin-top-left"
+                        style={{ transform: "scale(0.44)", border: "0" }}
+                      />
+                    </div>
+                    <div className="border-t border-surface-border bg-white px-2.5 py-2">
+                      <div className="text-[12px] font-semibold text-ink-900">{th.label}</div>
+                      <div className="text-[10.5px] leading-snug text-ink-400">{th.blurb}</div>
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className={labelCls}>Typeface</label>
+            <select name="emailFont" defaultValue={property.emailFont || "serif"} className={inputCls}>
+              {EMAIL_FONTS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+            </select>
+          </div>
+          <div className="col-span-2 flex items-end justify-end lg:col-span-2">
             <button className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-              <Palette className="mr-1.5 inline h-3.5 w-3.5" /> Save branding
+              <Palette className="mr-1.5 inline h-3.5 w-3.5" /> Save branding &amp; design
             </button>
           </div>
         </form>
