@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { BedDouble, Wrench, CircleCheck, LogIn, LogOut, Users, ArrowRightLeft, UserPlus, DoorOpen, Receipt, AlertTriangle, Star, Clock, TriangleAlert } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { SetupChecklist } from "@revio/ui/setup-checklist";
 import { getFrontDeskOverview, type StayRow } from "@/lib/data";
+import { getSetup } from "@/lib/setup";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
 import { money } from "@/lib/format";
@@ -60,8 +62,8 @@ function KpiCard({ icon: Icon, label, value, tint }: { icon: typeof BedDouble; l
 }
 
 export default async function DashboardPage() {
-  const { property, today, totalUnits, arrivals, inHouse, departures, departedToday, conflicts, kpis, exceptions } =
-    await getFrontDeskOverview();
+  const [{ property, today, totalUnits, arrivals, inHouse, departures, departedToday, conflicts, kpis, exceptions }, setup] =
+    await Promise.all([getFrontDeskOverview(), getSetup()]);
 
   const stayovers = inHouse.filter((s) => !s.dueOutToday && !s.overdueState); // rows shown in the in-house roster
   const overdueCount = exceptions.overstayed.length + exceptions.pastTime.length;
@@ -93,16 +95,15 @@ export default async function DashboardPage() {
         }
       />
 
-      {totalUnits === 0 && (
-        <Card className="mb-5 border-accent-500/40 bg-accent-50 p-4">
-          <div className="flex items-start gap-3">
-            <BedDouble className="mt-0.5 h-5 w-5 shrink-0 text-accent-600" />
-            <div className="text-[13px] text-ink-700">
-              <span className="font-semibold text-ink-900">No rooms set up yet.</span> Add your physical rooms in{" "}
-              <Link href="/rooms" className="font-semibold text-accent-600 underline">Rooms</Link> to start checking guests in.
-            </div>
-          </div>
-        </Card>
+      {/* First run: the shortest honest path to checking a guest in. Gone for good once complete. */}
+      {setup.show && (
+        <SetupChecklist
+          productName="RevioPMS"
+          promise="Four steps and your front desk can check a guest into a real room."
+          steps={setup.steps}
+          done={setup.done}
+          total={setup.total}
+        />
       )}
 
       {/* "Needs attention" exception strip (§1.8a) — the headline pattern: exceptions find the receptionist,

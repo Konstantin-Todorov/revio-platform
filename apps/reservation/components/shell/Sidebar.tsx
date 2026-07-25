@@ -36,7 +36,7 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   ] },
 ];
 
-export function Sidebar() {
+export function Sidebar({ footer }: { footer: string }) {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
   return (
@@ -121,9 +121,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
-        RevioCRS V1 · all 5 phases live
-      </div>
+      {/* The account this session belongs to — useful for a group, and never build metadata. */}
+      <div className="truncate border-t border-white/10 px-5 py-3 text-[11px] text-white/40">{footer}</div>
       </aside>
     </>
   );

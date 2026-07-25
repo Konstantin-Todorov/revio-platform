@@ -29,7 +29,7 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
   enforces. One pass covers all four products. Runbook in `DEPLOY.md`. (On prod today the role is superuser
   → policies are inert but correct.)
 - Drop the unused `ProductMapping` table (superseded by two-stream mapping).
-- Add `@types/node` to `packages/db` (its standalone typecheck warns; build/tests unaffected).
+- ~~Add `@types/node` to `packages/db`~~ — done 2026-07-26; `pnpm -r typecheck` is clean.
 
 **Deploy / ops**
 - **reservation-service auto-deploy** — the Railway service now shows repo `Konstantin-Todorov/revio-platform`
@@ -45,9 +45,19 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
 - Operator: real **Stripe** billing (mocked today — no live payments); an operator audit-log screen.
 
 **Go-live readiness (founder directive 2026-07-22 — "we are close to first clients")**
-- **Production-readiness pass across all four products** — remove any demo-flavoured copy/scaffolding,
-  real empty states, error + loading states, responsive check, per-role gating, form validation, and a
-  clean **zero-data onboarding** path (every screen must look right for a brand-new hotel with no seed).
+- **Production-readiness pass across all four products** — ✅ **round 1 done 2026-07-26.** Swept every
+  screen of all four apps against a brand-new tenant with no seed data (tenant + owner + one rate plan,
+  exactly what the Operator provisions). Delivered: a first-run **setup checklist** on each product's
+  dashboard (steps in `@revio/core/onboarding`, shared card in `@revio/ui/setup-checklist`, completion
+  recorded once on `Property.setupCompleted` so it never reappears); **honest day-one status** on the
+  RevioLink dashboard (no more "Healthy · all channels connected · queue empty — all delivered" with
+  zero channels); missing empty states (Channels, Reservations, Room Types ×2, Inventory Calendar, both
+  Bulk screens, dashboard tables); **room-type CRUD in RevioCRS** — previously a CRS-only hotel had no
+  way to define what it sells, which broke the sold-separately promise; and removal of dev-facing copy
+  (`@revio/core` mentions, `§` spec refs, "all 5 phases live", "Demo · mock connectivity" → the real
+  connection state, unused `Placeholder` components).
+  Still open for a later round: error + loading states, a responsive pass, per-role gating review,
+  form-validation review.
 - **Email engine** — per-hotel branded templates (logo, sender name, phone, reply-to), per-email-type
   on/off toggles, and editable content, so each hotel controls what its guests receive. Research how
   competing engines do it; build on our own sending system.

@@ -1,4 +1,5 @@
 import "server-only";
+import type { SetupFacts } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { todayInTz, ymd, utcDay } from "./format";
@@ -527,4 +528,21 @@ export async function getWalkInOptions() {
     prisma.ratePlan.findFirst({ where: { propertyId: property.id, priceLogic: "manual" }, orderBy: { sortOrder: "asc" } }),
   ]);
   return { property, roomTypes, standardPlanId: standardPlan?.id ?? null };
+}
+
+/** First-run facts for the setup checklist — see `reviopmsSetup` in @revio/core. */
+export async function getSetupFacts(): Promise<SetupFacts> {
+  const { session, property } = await activeProperty();
+  const propertyId = property.id;
+  const [roomTypes, units, taxes, staff, catalogItems] = await Promise.all([
+    prisma.roomType.count({ where: { propertyId } }),
+    prisma.unit.count({ where: { propertyId } }),
+    prisma.taxFee.count({ where: { propertyId, active: true } }),
+    prisma.user.count({ where: { tenantId: session.tenantId, active: true } }),
+    prisma.posItem.count({ where: { propertyId, active: true } }),
+  ]);
+  return {
+    roomTypes, ratePlans: 0, hasRates: true, channels: 0, mappingComplete: true,
+    units, staff, hasTaxes: taxes > 0, catalogItems, reservations: 0,
+  };
 }

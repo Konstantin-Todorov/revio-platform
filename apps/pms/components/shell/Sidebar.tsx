@@ -35,7 +35,7 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   ] },
 ];
 
-export function Sidebar({ role }: { role: string }) {
+export function Sidebar({ role, footer }: { role: string; footer: string }) {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
   // Scoped roles (housekeeper, outlet/POS…) see only their allowed sections (spec §3.4 / §3.7).
@@ -124,9 +124,8 @@ export function Sidebar({ role }: { role: string }) {
         ))}
       </nav>
 
-      <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
-        RevioPMS V1 · all 5 phases live
-      </div>
+      {/* The open business date — the thing night-audit staff need at a glance, not build metadata. */}
+      <div className="truncate border-t border-white/10 px-5 py-3 text-[11px] text-white/40">{footer}</div>
       </aside>
     </>
   );

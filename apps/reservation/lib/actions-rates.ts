@@ -488,3 +488,88 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   revalidatePath("/rooms-rates");
   return { ok: true };
 }
+
+// --- Room types --------------------------------------------------------------
+// The same shared room-type records RevioLink authors. A hotel that bought ONLY RevioCRS has no
+// RevioLink to create them in, so the CRS must be able to define its own inventory — otherwise the
+// product cannot be sold standalone at all.
+
+export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const { id: propertyId, tenantId } = await getProperty();
+
+  const name = str(fd, "name");
+  const code = str(fd, "code").toUpperCase();
+  const rowId = str(fd, "id");
+  if (!name) return { ok: false, error: "Name is required." };
+  if (!code) return { ok: false, error: "Code is required." };
+
+  const totalRooms = Math.max(0, int(fd, "totalRooms"));
+  const maxGuests = Math.max(1, int(fd, "maxGuests", 1));
+  const unitKind = str(fd, "unitKind") || "room";
+  const active = fd.get("active") != null;
+  const description = str(fd, "description") || null;
+
+  const clash = await prisma.roomType.findFirst({
+    where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) },
+  });
+  if (clash) return { ok: false, error: `Code "${code}" is already used by another room type.` };
+
+  if (rowId) {
+    const before = await prisma.roomType.findUnique({ where: { id: rowId } });
+    if (!before || before.propertyId !== propertyId) return { ok: false, error: "Room type not found." };
+    await prisma.roomType.update({
+      where: { id: rowId },
+      data: { name, code, unitKind, totalRooms, maxGuests, description, active },
+    });
+    await logAudit(propertyId, tenantId, {
+      entity: `Room Type · ${name}`, field: "edit",
+      oldValue: `${before.name} (${before.totalRooms})`, newValue: `${name} (${totalRooms})`,
+    });
+    await recordPush(propertyId, tenantId, `Room type "${name}" updated`);
+  } else {
+    const count = await prisma.roomType.count({ where: { propertyId } });
+    const created = await prisma.roomType.create({
+      data: { tenantId, propertyId, name, code, unitKind, totalRooms, maxGuests, description, active, sortOrder: count },
+    });
+    // A new room type becomes sellable under every existing rate plan (room × rate = product).
+    const plans = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true } });
+    if (plans.length) {
+      await prisma.ratePlanRoomType.createMany({ data: plans.map((p) => ({ ratePlanId: p.id, roomTypeId: created.id })) });
+    }
+    await logAudit(propertyId, tenantId, { entity: `Room Type · ${name}`, field: "create", newValue: `${name} · ${totalRooms} units` });
+    await recordPush(propertyId, tenantId, `Room type "${name}" created`);
+  }
+
+  revalidatePath("/rooms-rates");
+  revalidateRates();
+  return { ok: true };
+}
+
+export async function deleteRoomType(fd: FormData): Promise<void> {
+  const property = await getProperty();
+  const id = str(fd, "id");
+  if (!id) return;
+  const rt = await prisma.roomType.findUnique({
+    where: { id },
+    include: { _count: { select: { resLines: true, units: true } } },
+  });
+  if (!rt || rt.propertyId !== property.id) return;
+
+  // Same deletion guard as the rate plans: a room type mapped to the channel manager can't go —
+  // the OTA side would keep selling a product we no longer have.
+  const mapped = await prisma.channelRoomTypeMapping.count({ where: { roomTypeId: id, externalRoomId: { not: null } } });
+  if (mapped > 0) redirect(`/rooms-rates?blocked=${encodeURIComponent(rt.name)}`);
+
+  // Anything with history or physical rooms behind it is deactivated, never deleted — deleting
+  // would orphan past reservations and the housekeeping board.
+  if (rt._count.resLines > 0 || rt._count.units > 0) {
+    await prisma.roomType.update({ where: { id }, data: { active: false } });
+    await logAudit(property.id, property.tenantId, { entity: `Room Type · ${rt.name}`, field: "deactivate", newValue: "inactive (in use)" });
+  } else {
+    await prisma.roomType.delete({ where: { id } });
+    await logAudit(property.id, property.tenantId, { entity: `Room Type · ${rt.name}`, field: "delete", oldValue: rt.name });
+    await recordPush(property.id, property.tenantId, `Room type "${rt.name}" removed`);
+  }
+  revalidatePath("/rooms-rates");
+  revalidateRates();
+}

@@ -33,12 +33,19 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
   return (
     <div>
       <PageHeader title="Bulk Rates & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
+      {roomTypes.length === 0 ? (
+        <Card className="p-8 text-center text-[13px] text-ink-400">
+          A bulk update changes rates and restrictions across your room types — so you need at least one first.{" "}
+          <a href="/rooms-rates" className="font-semibold text-brand-600 hover:underline">Add a room type</a>.
+        </Card>
+      ) : (
       <BulkUpdatePanel
         roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))}
         ratePlans={ratePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
         today={today}
         {...(preselect ? { preselectRoomTypeIds: preselect } : {})}
       />
+      )}
 
       <Card className="mt-4">
         <CardHeader title="Your active restriction rules" action={<RestrictionDialog roomTypes={rtOpts} channels={chOpts} />} />
@@ -83,9 +90,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
         </div>
       </Card>
       <p className="mt-3 text-[12px] text-ink-400">
-        Precedence resolved by <span className="font-semibold text-ink-500">@revio/core</span> (two-tier):
-        date-scoped edit (calendar or bulk — most recent wins) &gt; restriction rule &gt; rate-plan default &gt;
-        property default.
+        Which value wins, in order: a date-scoped edit (calendar or bulk — the most recent one) &gt; a restriction
+        rule &gt; the rate-plan default &gt; the property default.
       </p>
     </div>
   );

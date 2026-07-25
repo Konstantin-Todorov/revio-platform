@@ -80,10 +80,10 @@ export default async function Page() {
           </Card>
 
           <Card>
-            <CardHeader title="API / PMS Connection" />
+            <CardHeader title="Connect another system" />
             <div className="px-4 py-4 text-[12.5px] text-ink-500">
-              API credentials and webhooks live here — a placeholder for connecting a foreign PMS, built out when
-              standalone mode is extended.
+              Already running a different PMS? We can connect it to RevioLink so your availability stays in one place.
+              Talk to us and we’ll set it up with you.
             </div>
           </Card>
         </div>

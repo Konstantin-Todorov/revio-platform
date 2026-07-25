@@ -13,3 +13,4 @@ export * from "./adapters/channel-adapter.js";
 export * from "./adapters/cm-connector.js";
 export * from "./adapters/mock-channel-adapter.js";
 export * from "./email/templates.js";
+export * from "./onboarding/setup.js";

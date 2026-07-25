@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download, Radio } from "lucide-react";
 import { getChannels } from "@/lib/data";
 import { pullChannelBookings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -52,6 +52,22 @@ export default async function ChannelsPage() {
         subtitle="Connected OTAs, mapping health and per-channel settings"
         action={<AddChannelDialog connectedCodes={channels.map((c) => c.code)} />}
       />
+
+      {channels.length === 0 && (
+        <Card className="border-dashed p-10 text-center">
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
+            <Radio className="h-5 w-5" />
+          </div>
+          <h2 className="text-[15px] font-bold text-ink-900">No channels connected yet</h2>
+          <p className="mx-auto mt-1.5 max-w-md text-[13px] text-ink-500">
+            Connecting a channel is what puts your rooms on sale. Add Booking.com, Expedia or any other OTA you
+            work with, then map your room types to their listings.
+          </p>
+          <div className="mt-4 flex justify-center">
+            <AddChannelDialog connectedCodes={[]} />
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {active.map((ch) => {

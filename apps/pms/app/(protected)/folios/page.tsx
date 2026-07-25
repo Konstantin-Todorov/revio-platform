@@ -102,7 +102,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
             </div>
           )}
           <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-            History is read-only (§4.6) — a closed folio is corrected with a credit note, never edited.
+            History is read-only — a closed folio is corrected with a credit note, never edited.
           </p>
         </Card>
       )}

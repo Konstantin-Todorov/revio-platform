@@ -175,7 +175,7 @@ async function ErrorsTab() {
       {real.map((e) => <ErrorCard key={e.id} e={e} />)}
       {capability.length > 0 && (
         <div className="mt-4 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-ink-400">
-          <Ban className="h-3.5 w-3.5" /> Channel limitations — known in advance, not failures (spec §5.2)
+          <Ban className="h-3.5 w-3.5" /> Channel limitations — known in advance, not failures
         </div>
       )}
       {capability.map((e) => <ErrorCard key={e.id} e={e} limitation />)}

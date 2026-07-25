@@ -69,7 +69,7 @@ export default async function CloseDayPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
         <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-          Revenue accrues nightly at the audit — room charge per occupied stay plus any recurring stay extras (§3.6).
+          Revenue accrues nightly at the audit — the room charge for each occupied stay plus any recurring extras.
         </p>
       </Card>
 

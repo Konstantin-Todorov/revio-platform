@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { deriveRate, isAdvancePurchaseClosed, SOLD_STATUSES, unsupportedRestrictions, type DerivedRateConfig } from "@revio/core";
+import { deriveRate, isAdvancePurchaseClosed, SOLD_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts } from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -127,6 +127,46 @@ export async function getDashboard() {
     reservations,
     syncEvents,
     errorItems,
+  };
+}
+
+/**
+ * What this property's channel connection actually is, in the hotel's words. Shown in the sidebar
+ * so nobody has to guess whether they are looking at live OTA traffic or a demonstration.
+ */
+export async function getConnectivityLabel(): Promise<string> {
+  const property = await getProperty();
+  const channels = await prisma.channel.findMany({
+    where: { propertyId: property.id, status: { not: "disconnected" } },
+    select: { connectivityMode: true },
+  });
+  if (channels.length === 0) return "No channels connected";
+  const live = channels.filter((c) => c.connectivityMode === "channex_prod").length;
+  const sandbox = channels.filter((c) => c.connectivityMode === "channex_sandbox").length;
+  if (live === channels.length) return `Live · ${live} channel${live === 1 ? "" : "s"}`;
+  if (live > 0) return `${live} live · ${channels.length - live} in test`;
+  if (sandbox > 0) return "Test connection (sandbox)";
+  return "Demo mode · simulated channels";
+}
+
+/** First-run facts for the setup checklist — see `reviolinkSetup` in @revio/core. */
+export async function getSetupFacts(): Promise<SetupFacts> {
+  const property = await getProperty();
+  const propertyId = property.id;
+  const [roomTypes, ratePlans, prices, channels, unmappedRt, unmappedRp, taxes, reservations] = await Promise.all([
+    prisma.roomType.count({ where: { propertyId } }),
+    prisma.ratePlan.count({ where: { propertyId } }),
+    prisma.ratePrice.count({ where: { propertyId } }),
+    prisma.channel.count({ where: { propertyId, status: { not: "disconnected" } } }),
+    prisma.channelRoomTypeMapping.count({ where: { channel: { propertyId }, status: { not: "complete" } } }),
+    prisma.channelRatePlanMapping.count({ where: { channel: { propertyId }, status: { not: "complete" } } }),
+    prisma.taxFee.count({ where: { propertyId, active: true } }),
+    prisma.reservation.count({ where: { propertyId } }),
+  ]);
+  return {
+    roomTypes, ratePlans, hasRates: prices > 0, channels,
+    mappingComplete: unmappedRt + unmappedRp === 0,
+    units: 0, staff: 0, hasTaxes: taxes > 0, catalogItems: 0, reservations,
   };
 }
 

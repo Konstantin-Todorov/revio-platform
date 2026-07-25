@@ -73,7 +73,7 @@ export default async function DistributionPage() {
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-success-50 text-success-600"><Link2 className="h-4.5 w-4.5" /></span>
           <div className="text-[13px] text-ink-600">
             <span className="font-semibold text-success-600">Automatic.</span> The CM is RevioLink — both products edit the{" "}
-            <span className="font-semibold text-ink-800">same shared-core room types and rate plans</span>, so there is nothing to map
+            <span className="font-semibold text-ink-800">same room types and rate plans</span>, so there is nothing to map
             (one record, two windows). With a third-party CM you would explicitly map CRS room types ↔ the CM's rooms here.
             <div className="mt-1.5 text-[12px] text-ink-400">
               Channel-manager ↔ OTA mapping is a different layer and stays inside RevioLink → Mapping — never in the CRS.
@@ -104,7 +104,7 @@ export default async function DistributionPage() {
           </table>
         </div>
         <p className="border-t border-surface-border/60 px-4 py-2.5 text-[11.5px] text-ink-400">
-          Per-OTA configuration (mapping, commissions, re-sync) lives inside the channel manager — never in the CRS (spec rule).
+          Per-OTA configuration (mapping, commissions, re-sync) lives inside the channel manager, never here.
         </p>
       </Card>
 

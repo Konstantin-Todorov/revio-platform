@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, Layers, TrendingUp } from "lucide-react";
+import { SetupChecklist } from "@revio/ui/setup-checklist";
 import { getInventoryBoard, getScope } from "@/lib/data";
+import { getSetup } from "@/lib/setup";
 import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolveRange, comparisonRange, type CompareBasis, type RangePreset } from "@/lib/metrics";
 import { DashboardView, type KpiCard } from "@/components/dashboard/DashboardView";
 import { ensurePickupSnapshot } from "@/lib/pickup";
@@ -32,7 +34,7 @@ export default async function DashboardPage({
   const sp = await searchParams;
   await Promise.all([ensurePickupSnapshot(), releaseExpiredHolds()]);
 
-  const [ops, scope] = await Promise.all([getOperations(), getScope()]);
+  const [ops, scope, setup] = await Promise.all([getOperations(), getScope(), getSetup()]);
   const range = resolveRange(ops.todayIso, sp.range, sp.from, sp.to);
   // Comparison basis (§1.2): one toggle governs every card. YoY = 364d back, LW = 7d back.
   const basis: CompareBasis = sp.basis === "lw" ? "lw" : "yoy";
@@ -81,13 +83,24 @@ export default async function DashboardPage({
     <div className="space-y-5">
       <PageHeader
         title="Dashboard"
-        subtitle={`${isGroup ? `${scope.label}` : ops.property.name} · ${range.label} · every number from the shared formula sheet`}
+        subtitle={`${isGroup ? `${scope.label}` : ops.property.name} · ${range.label}`}
         action={
           <Link href="/reports" className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
             <TrendingUp className="h-3.5 w-3.5" /> Reports
           </Link>
         }
       />
+
+      {/* First run: the shortest honest path to taking a booking. Gone for good once complete. */}
+      {setup.show && (
+        <SetupChecklist
+          productName="RevioCRS"
+          promise="Four steps and you can take, price and invoice a booking."
+          steps={setup.steps}
+          done={setup.done}
+          total={setup.total}
+        />
+      )}
 
       {/* Date selector + KPI grid — per-user customizable, YoY vs STLY-364 on every card. */}
       <DashboardView

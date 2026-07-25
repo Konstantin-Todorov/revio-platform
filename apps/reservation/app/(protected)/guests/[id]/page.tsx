@@ -76,7 +76,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
         </Card>
 
         <Card>
-          <CardHeader title="From the property's PMS / POS" subtitle="Display-only — written by RevioPMS to the shared core; never computed here" />
+          <CardHeader title="From the property's PMS / POS" subtitle="Recorded by RevioPMS during the guest’s stay — shown here, not editable" />
           {fromPms.hasPmsData ? (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
               <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Ancillary spend (lifetime)</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.ancillarySpendMinor, property.baseCurrency)}</dd></div>

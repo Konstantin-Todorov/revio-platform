@@ -63,7 +63,7 @@ export default async function ConfigurationPage() {
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Housekeeping & assignment" subtitle="Inspection gate (§3.4) + room auto-assign (§4.1)" />
+            <CardHeader title="Housekeeping & assignment" subtitle="Whether cleaned rooms need inspecting, and how rooms get assigned" />
             <div className="divide-y divide-surface-border/60">
               <label className="flex cursor-pointer items-start gap-2.5 p-4">
                 <input type="checkbox" name="inspectionGate" defaultChecked={d?.inspectionGate ?? false} className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
@@ -81,7 +81,7 @@ export default async function ConfigurationPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Compliance pack" subtitle="Fiscalization / e-invoicing (spec §4.7) — gated per market" />
+            <CardHeader title="Compliance pack" subtitle="Fiscalization and e-invoicing rules for your country" />
             <div className="space-y-2.5 p-4">
               <div>
                 <label className={labelCls}><Landmark className="mr-1 inline h-3 w-3" />Jurisdiction</label>
@@ -105,7 +105,7 @@ export default async function ConfigurationPage() {
 
       {/* Deposit types */}
       <Card>
-        <CardHeader title="Deposit types" subtitle="A deposit is a liability, not revenue (spec §4.4) — behaviour + VAT timing per type" />
+        <CardHeader title="Deposit types" subtitle="A deposit is money you hold, not money you have earned — set when each type becomes revenue" />
         <div className="divide-y divide-surface-border/60">
           {depositTypes.map((t) => (
             <form key={t.id} action={saveDepositType} className="flex flex-wrap items-center gap-2 px-4 py-2.5">

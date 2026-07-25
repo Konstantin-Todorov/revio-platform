@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, SOLD_STATUSES, type RestrictionRuleHit, type WaterfallResult } from "@revio/core";
+import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type WaterfallResult } from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -778,4 +778,21 @@ export async function globalSearch(q: string) {
     take: 50,
   });
   return { property, reservations };
+}
+
+/** First-run facts for the setup checklist — see `reviocrsSetup` in @revio/core. */
+export async function getSetupFacts(): Promise<SetupFacts> {
+  const property = await getProperty();
+  const propertyId = property.id;
+  const [roomTypes, ratePlans, prices, taxes, reservations] = await Promise.all([
+    prisma.roomType.count({ where: { propertyId } }),
+    prisma.ratePlan.count({ where: { propertyId } }),
+    prisma.ratePrice.count({ where: { propertyId } }),
+    prisma.taxFee.count({ where: { propertyId, active: true } }),
+    prisma.reservation.count({ where: { propertyId } }),
+  ]);
+  return {
+    roomTypes, ratePlans, hasRates: prices > 0, channels: 0, mappingComplete: true,
+    units: 0, staff: 0, hasTaxes: taxes > 0, catalogItems: 0, reservations,
+  };
 }

@@ -246,7 +246,7 @@ export default async function SettingsPage() {
         <p className="border-t border-surface-border/60 px-4 py-2.5 text-[11.5px] text-ink-400">
           Profile & currency are edited in RevioLink → Settings. Metric defaults (no-shows, gross/net, pickup window,
           alert thresholds, hold TTL) live under <Link href="/rates" className="font-semibold text-brand-700 hover:underline">Rates → Property defaults</Link>.
-          Notifications and the API/PMS connection arrive with RevioPMS.
+          Housekeeping, folios and the night audit live in RevioPMS.
         </p>
       </Card>
     </div>

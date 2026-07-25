@@ -52,7 +52,7 @@ function bestMatch(pathname: string): string | null {
   return matches.sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
-export function Sidebar() {
+export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
   const activeHref = bestMatch(pathname);
@@ -142,9 +142,9 @@ export function Sidebar() {
         {renderItems(ACCOUNT_SECTION.items)}
       </div>
 
-      <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">
-        Demo · mock connectivity
-      </div>
+      {/* Says what this hotel's connection actually is — a paying client never sees the word "demo"
+          unless its channels really are running on the mock adapter. */}
+      <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">{connectivityLabel}</div>
       </aside>
     </>
   );

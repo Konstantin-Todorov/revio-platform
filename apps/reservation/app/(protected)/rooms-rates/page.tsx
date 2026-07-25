@@ -1,8 +1,9 @@
 import { CalendarOff } from "lucide-react";
 import { getRatesData, getSetupData } from "@/lib/data";
-import { deleteRatePlan } from "@/lib/actions-rates";
+import { deleteRatePlan, deleteRoomType } from "@/lib/actions-rates";
 import { deleteInventoryPeriod } from "@/lib/actions-inventory";
 import { RatePlanDialog } from "@/components/rates/RatePlanDialog";
+import { RoomTypeDialog } from "@/components/rates/RoomTypeDialog";
 import { RatePlanLinkageBoard } from "@/components/rates/RatePlanLinkageBoard";
 import { PeriodDialog } from "@/components/inventory/PeriodDialog";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -46,7 +47,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
     <div className="space-y-5">
       <PageHeader
         title="Rooms & Rates"
-        subtitle={`${property.name} · product definitions — the same shared-core records RevioLink edits (one record, two windows)`}
+        subtitle={`${property.name} · what you sell — the same room types and rate plans RevioLink uses`}
       />
 
       {blocked && (
@@ -56,7 +57,11 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
       )}
 
       <Card>
-        <CardHeader title="Room types & physical counts" subtitle="Physical count is the cap & safety net — rooms-to-sell is managed per date on the calendar" />
+        <CardHeader
+          title="Room types & physical counts"
+          subtitle="Physical count is the cap & safety net — rooms-to-sell is managed per date on the calendar"
+          action={<RoomTypeDialog />}
+        />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
@@ -67,9 +72,18 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
                 <th className="px-4 py-2.5 text-right">Physical count</th>
                 <th className="px-4 py-2.5 text-right">Max guests</th>
                 <th className="px-4 py-2.5">Status</th>
+                <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody>
+              {roomTypes.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-10 text-center text-[13px] text-ink-400">
+                    No room types yet. Add the rooms you sell — a Double, a Suite — and how many of each you have.
+                    Availability, rates and every quote build on them.
+                  </td>
+                </tr>
+              )}
               {roomTypes.map((rt) => (
                 <tr key={rt.id} className="border-b border-surface-border/60 last:border-0">
                   <td className="px-4 py-2.5 font-semibold text-ink-900">{rt.name}</td>
@@ -78,6 +92,17 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
                   <td className="tnum px-4 py-2.5 text-right font-semibold text-ink-900">{rt.totalRooms}</td>
                   <td className="tnum px-4 py-2.5 text-right text-ink-500">{rt.maxGuests}</td>
                   <td className="px-4 py-2.5"><StatusPill tone={rt.active ? "success" : "neutral"}>{rt.active ? "active" : "inactive"}</StatusPill></td>
+                  <td className="px-2 py-2.5">
+                    <div className="flex items-center justify-end gap-0.5">
+                      <RoomTypeDialog roomType={rt} />
+                      <DeleteButton
+                        action={deleteRoomType}
+                        id={rt.id}
+                        label={rt.name}
+                        note="Room types with reservations or physical rooms behind them are deactivated instead, so history stays intact."
+                      />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

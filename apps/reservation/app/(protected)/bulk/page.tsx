@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getRatesData } from "@/lib/data";
 import { deleteRestrictionRule } from "@/lib/actions-rates";
 import { CrsBulkPanel } from "@/components/rates/CrsBulkPanel";
@@ -33,12 +34,19 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
 
       <Card>
         <CardHeader title="Bulk update" subtitle="One run = one audit entry + one push to the connected channel manager" />
+        {roomTypes.length === 0 ? (
+          <p className="px-4 py-8 text-center text-[13px] text-ink-400">
+            A bulk update changes rates and restrictions across your room types — so you need at least one first.{" "}
+            <Link href="/rooms-rates" className="font-semibold text-brand-600 hover:underline">Add a room type</Link>.
+          </p>
+        ) : (
         <CrsBulkPanel
           {...(preselect && preselect.length > 0 ? { preselectRoomTypeIds: preselect } : {})}
           roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name }))}
           ratePlans={ratePlans.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
           today={today}
         />
+        )}
       </Card>
 
       <Card>

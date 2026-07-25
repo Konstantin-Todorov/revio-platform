@@ -398,9 +398,8 @@ export default async function CalendarPage({
       </div>
 
       <p className="mt-3 text-[12px] text-ink-400">
-        Rooms sold is derived from confirmed reservations; bookable = rooms to sell − sold. Derived rates follow the
-        standard rate via <span className="font-semibold text-ink-500">@revio/core</span>. Edits push automatically to
-        channels on real connectivity.
+        Rooms sold comes from your confirmed reservations; bookable = rooms to sell − sold. Derived rates follow the
+        standard rate automatically. Every edit is pushed to your connected channels.
       </p>
     </div>
   );

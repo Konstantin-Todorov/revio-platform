@@ -94,6 +94,15 @@ export default async function ReservationsPage({
               </tr>
             </thead>
             <tbody>
+              {reservations.length === 0 && (
+                <tr>
+                  <td colSpan={11} className="px-4 py-10 text-center text-[13px] text-ink-400">
+                    {filtered
+                      ? "No bookings match these filters."
+                      : "No channel bookings yet. They land here automatically as soon as a connected channel sells a room."}
+                  </td>
+                </tr>
+              )}
               {reservations.map((r) => {
                 const line = r.lines[0];
                 return (

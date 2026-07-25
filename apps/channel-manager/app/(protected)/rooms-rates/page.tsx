@@ -97,6 +97,14 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
                 </tr>
               </thead>
               <tbody>
+                {roomTypes.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-10 text-center text-[13px] text-ink-400">
+                      No room types yet. Add the rooms you sell — a Double, a Suite — and how many of each you have.
+                      Everything else on this screen builds on them.
+                    </td>
+                  </tr>
+                )}
                 {roomTypes.map((rt) => (
                   <tr key={rt.id} className="group border-b border-surface-border/60 align-top transition-colors last:border-0 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{rt.name}</td>
@@ -166,8 +174,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
       </div>
 
       <p className="mt-3 text-[12px] text-ink-400">
-        Every change is written through <span className="font-semibold text-ink-500">@revio/core</span>, recorded in the
-        Audit Log, and pushed to connected channels (mock) — visible in the Sync Center.
+        Every change is recorded in the Audit Log and pushed to your connected channels — follow it in the Sync Center.
       </p>
     </div>
   );

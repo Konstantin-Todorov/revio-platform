@@ -13,7 +13,7 @@ export default async function MinibarPage() {
     <div>
       <PageHeader
         title="Extras &amp; Charges"
-        subtitle="Pick a guest’s open folio to post minibar items, extras and other charges (§5.2)."
+        subtitle="Pick a guest’s open folio to post minibar items, extras and other charges."
         action={
           <Link href="/minibar/catalog" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[13px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
             <Settings2 className="h-4 w-4" /> Manage catalog

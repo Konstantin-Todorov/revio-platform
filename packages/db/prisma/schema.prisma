@@ -108,6 +108,10 @@ model Property {
   status                    String    @default("active")
   // PMS Phase 5: the current open operational date (night audit rolls it forward). Null until first close.
   businessDate              DateTime? @db.Date
+  // Which products this property has finished first-run setup for ("cm" | "crs" | "pms"). Written
+  // once, the first time a product's checklist comes out complete, so the welcome card never
+  // reappears later — e.g. when adding a room type temporarily leaves a mapping unmapped.
+  setupCompleted            String[]  @default([])
   // Reservation delivery (CM-UPDATES-V1 Settings): where channel bookings are emailed when the
   // property is NOT connected to a PMS/CRS — plus the arrival-summary notification toggles.
   reservationEmailPrimary   String?

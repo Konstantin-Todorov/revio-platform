@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { ChevronDown, ChevronLeft, ChevronRight, Wrench } from "lucide-react";
+import { BedDouble, ChevronDown, ChevronLeft, ChevronRight, Wrench } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getInventoryBoard, addDays, ymd } from "@/lib/data";
 import { ensurePickupSnapshot } from "@/lib/pickup";
 import { PageHeader } from "@/components/ui/primitives";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { RateCell } from "@/components/inventory/RateCell";
 import { CollapseAll } from "@/components/inventory/CollapseAll";
 import { ParamMultiSelect } from "@/components/inventory/ParamMultiSelect";
@@ -84,11 +85,27 @@ export default async function InventoryCalendarPage({
   const navCls =
     "flex h-8 items-center gap-1 rounded-md border border-surface-border bg-white px-2.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted";
 
+  // Nothing to draw a calendar of until the hotel has said what it sells.
+  if (board.sections.length === 0) {
+    return (
+      <div>
+        <PageHeader title="Inventory Calendar" subtitle={board.property.name} />
+        <EmptyState
+          icon={<BedDouble className="h-6 w-6" />}
+          title="No room types yet"
+          body="The calendar shows availability and rates for each room type you sell. Add your first room type and it appears here."
+          actionLabel="Go to Rooms & Rates"
+          actionHref="/rooms-rates"
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
         title="Inventory Calendar"
-        subtitle={`${board.property.name} · every number below comes from the availability waterfall`}
+        subtitle={`${board.property.name} · availability, rates and restrictions`}
         action={
           <div className="flex items-center gap-2">
             <Link href={`/inventory?start=${prev}&days=${board.days}`} className={navCls} aria-label="Earlier"><ChevronLeft className="h-4 w-4" /></Link>

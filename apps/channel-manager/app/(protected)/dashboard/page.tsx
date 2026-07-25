@@ -3,7 +3,9 @@ import {
   Coins, CalendarPlus, Upload, Wrench, RotateCw, ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
+import { SetupChecklist } from "@revio/ui/setup-checklist";
 import { getDashboard, getReservationSummary } from "@/lib/data";
+import { getSetup } from "@/lib/setup";
 import { PauseChannelButton, ResumeChannelButton, DisconnectChannelButton, FullSyncButton } from "@/components/channels/ChannelActions";
 import { ReservationSummaryCard } from "@/components/dashboard/ReservationSummaryCard";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -15,26 +17,66 @@ const CHANNEL_INITIALS: Record<string, string> = { booking: "B", expedia: "E", t
 
 export default async function DashboardPage() {
   const { property, stats, channels, realErrorsByChannel, reservations, syncEvents, errorItems } = await getDashboard();
-  const resSummary = await getReservationSummary();
+  const [resSummary, setup] = await Promise.all([getReservationSummary(), getSetup()]);
 
   // Pending age (spec §5.3): ten items two seconds old is healthy; two hours old means stuck.
   const pendingAgeMs = stats.oldestPendingAt ? Date.now() - stats.oldestPendingAt.getTime() : null;
   const pendingStuck = pendingAgeMs != null && pendingAgeMs > 30 * 60 * 1000;
-  const pendingSub = pendingAgeMs == null ? "Queue empty — all delivered" : `Oldest waiting ${relativeTime(stats.oldestPendingAt)}`;
+
+  // A dashboard that reports "Healthy · all channels connected · queue empty — all delivered" to a
+  // hotel with zero channels is lying to it on day one. Every pill below is derived from what has
+  // actually happened, so an empty property reads as "not set up yet", never as green.
+  const hasChannels = stats.totalChannels > 0;
+  const allConnected = hasChannels && stats.connectedChannels === stats.totalChannels;
+  const everSynced = stats.lastSync != null;
+
+  const pendingSub = pendingAgeMs != null
+    ? `Oldest waiting ${relativeTime(stats.oldestPendingAt)}`
+    : everSynced ? "Queue empty — all delivered" : "Nothing queued yet";
 
   // Every KPI clicks through to its filtered destination (spec §3.1).
   const cards = [
-    { icon: Radio, tone: "success", href: "/channels", value: `${stats.connectedChannels} / ${stats.totalChannels}`, label: "Connected Channels", sub: "All channels connected", pill: { tone: "success" as const, text: "Healthy" } },
-    { icon: Boxes, tone: "info", href: "/rooms-rates", value: String(stats.activeProducts), label: "Active Products", sub: "Room types × rate plans", pill: { tone: "info" as const, text: "Sellable" } },
-    { icon: Unlink, tone: "warning", href: "/mapping", value: String(stats.unmappedProducts), label: "Unmapped Products", sub: "Require mapping", pill: { tone: "warning" as const, text: "Action" } },
-    { icon: ArrowUpDown, tone: pendingStuck ? "danger" : "info", href: "/sync?tab=activity", value: String(stats.pendingUpdates), label: "Pending Updates", sub: pendingSub, pill: pendingStuck ? { tone: "danger" as const, text: "Stuck?" } : { tone: "info" as const, text: "Queued" } },
-    { icon: AlertCircle, tone: "danger", href: "/sync?tab=errors", value: String(stats.failedSyncs), label: "Failed Syncs", sub: "Real failures · 24h (limitations excluded)", pill: { tone: "danger" as const, text: "Review" } },
-    { icon: CheckCircle2, tone: "success", href: "/sync", value: relativeTime(stats.lastSync), label: "Last Successful Sync", sub: "Across all channels", pill: { tone: "success" as const, text: "Live" } },
+    {
+      icon: Radio, tone: hasChannels ? "success" : "neutral", href: "/channels",
+      value: `${stats.connectedChannels} / ${stats.totalChannels}`, label: "Connected Channels",
+      sub: !hasChannels ? "No channels connected yet" : allConnected ? "All channels connected" : `${stats.totalChannels - stats.connectedChannels} not connected`,
+      pill: !hasChannels ? { tone: "neutral" as const, text: "None" } : allConnected ? { tone: "success" as const, text: "Healthy" } : { tone: "warning" as const, text: "Partial" },
+    },
+    {
+      icon: Boxes, tone: stats.activeProducts > 0 ? "info" : "neutral", href: "/rooms-rates",
+      value: String(stats.activeProducts), label: "Active Products",
+      sub: stats.activeProducts > 0 ? "Room types × rate plans" : "Add a room type to start",
+      pill: stats.activeProducts > 0 ? { tone: "info" as const, text: "Sellable" } : { tone: "neutral" as const, text: "None" },
+    },
+    {
+      icon: Unlink, tone: stats.unmappedProducts > 0 ? "warning" : "success", href: "/mapping",
+      value: String(stats.unmappedProducts), label: "Unmapped Products",
+      sub: stats.unmappedProducts > 0 ? "Require mapping" : hasChannels ? "Everything is mapped" : "Nothing to map yet",
+      pill: stats.unmappedProducts > 0 ? { tone: "warning" as const, text: "Action" } : { tone: "neutral" as const, text: "Clear" },
+    },
+    {
+      icon: ArrowUpDown, tone: pendingStuck ? "danger" : "info", href: "/sync?tab=activity",
+      value: String(stats.pendingUpdates), label: "Pending Updates", sub: pendingSub,
+      pill: pendingStuck ? { tone: "danger" as const, text: "Stuck?" } : { tone: "info" as const, text: "Queued" },
+    },
+    {
+      icon: AlertCircle, tone: stats.failedSyncs > 0 ? "danger" : "success", href: "/sync?tab=errors",
+      value: String(stats.failedSyncs), label: "Failed Syncs",
+      sub: "Real failures · 24h (limitations excluded)",
+      pill: stats.failedSyncs > 0 ? { tone: "danger" as const, text: "Review" } : { tone: "success" as const, text: "Clear" },
+    },
+    {
+      icon: CheckCircle2, tone: everSynced ? "success" : "neutral", href: "/sync",
+      value: everSynced ? relativeTime(stats.lastSync) : "—", label: "Last Successful Sync",
+      sub: everSynced ? "Across all channels" : "No sync has run yet",
+      pill: everSynced ? { tone: "success" as const, text: "Live" } : { tone: "neutral" as const, text: "Idle" },
+    },
   ];
 
   const TONE_BG: Record<string, string> = {
     success: "bg-success-50 text-success-600", info: "bg-accent-50 text-accent-600",
     warning: "bg-warning-50 text-warning-600", danger: "bg-danger-50 text-danger-600",
+    neutral: "bg-surface-sunken text-ink-400",
   };
 
   return (
@@ -43,11 +85,29 @@ export default async function DashboardPage() {
         title="Dashboard"
         subtitle={`${property.name} · distribution health`}
         action={
-          <span className="inline-flex items-center gap-2 rounded-md bg-success-50 px-3 py-1.5 text-[12.5px] font-semibold text-success-600">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-success-500" /> Syncing live
-          </span>
+          allConnected ? (
+            <span className="inline-flex items-center gap-2 rounded-md bg-success-50 px-3 py-1.5 text-[12.5px] font-semibold text-success-600">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-success-500" /> Syncing live
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-2 rounded-md bg-surface-sunken px-3 py-1.5 text-[12.5px] font-semibold text-ink-500">
+              <span className="h-2 w-2 rounded-full bg-ink-300" />
+              {hasChannels ? "Some channels are not connected" : "No channels connected"}
+            </span>
+          )
         }
       />
+
+      {/* First run: the shortest honest path to being on sale. Disappears for good once complete. */}
+      {setup.show && (
+        <SetupChecklist
+          productName="RevioLink"
+          promise="Four steps and your rooms are on sale across every channel you connect."
+          steps={setup.steps}
+          done={setup.done}
+          total={setup.total}
+        />
+      )}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
@@ -91,6 +151,13 @@ export default async function DashboardPage() {
               </tr>
             </thead>
             <tbody>
+              {channels.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-[12.5px] text-ink-400">
+                    No channels yet. <Link href="/channels" className="font-semibold text-brand-600 hover:underline">Connect your first channel</Link> to put your rooms on sale.
+                  </td>
+                </tr>
+              )}
               {channels.map((ch) => (
                 <tr key={ch.id} className="border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
                   <td className="px-4 py-2.5">
@@ -162,6 +229,11 @@ export default async function DashboardPage() {
         <Card className="lg:col-span-2">
           <CardHeader title="Recent Activity" action={<a href="/sync" className="text-[12px] font-semibold text-brand-600 hover:underline">Sync Center</a>} />
           <ul className="divide-y divide-surface-border/60">
+            {syncEvents.length === 0 && (
+              <li className="px-4 py-8 text-center text-[12.5px] text-ink-400">
+                Nothing has been pushed or pulled yet. Activity appears here the moment a channel is connected.
+              </li>
+            )}
             {syncEvents.map((e) => (
               <li key={e.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
                 <span className={`h-2 w-2 shrink-0 rounded-full ${e.status === "failed" ? "bg-danger-500" : e.status === "pending" ? "bg-warning-500" : "bg-success-500"}`} />
@@ -180,6 +252,11 @@ export default async function DashboardPage() {
           <Card>
             <CardHeader title="Latest Reservations" action={<a href="/reservations" className="text-[12px] font-semibold text-brand-600 hover:underline">All</a>} />
             <ul className="divide-y divide-surface-border/60">
+              {reservations.length === 0 && (
+                <li className="px-4 py-6 text-center text-[12.5px] text-ink-400">
+                  No bookings imported yet.
+                </li>
+              )}
               {reservations.slice(0, 5).map((r) => (
                 <li key={r.id} className="flex items-center gap-3 px-4 py-2.5">
                   <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-50 text-[11px] font-bold text-brand-700">
