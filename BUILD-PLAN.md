@@ -56,8 +56,17 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
   way to define what it sells, which broke the sold-separately promise; and removal of dev-facing copy
   (`@revio/core` mentions, `§` spec refs, "all 5 phases live", "Demo · mock connectivity" → the real
   connection state, unused `Placeholder` components).
-  Still open for a later round: error + loading states, a responsive pass, per-role gating review,
-  form-validation review.
+  **✅ Round 2 done 2026-07-26** (commit `8a4078c`): **server-action authorization** — RevioPMS hid
+  screens from scoped roles but did NOT gate the writes behind them (a server action commits before
+  the layout re-guards), so a housekeeper/outlet account could post a payment, void a line, check a
+  guest out or issue an invoice via a crafted POST. Every money/occupancy/config action now requires
+  a capability (`manage` · `frontDesk` · `housekeeping` · `maintenance` · `outlet`), policy pinned by
+  10 tests in `apps/pms/lib/roles.test.ts`, proven end-to-end (same POST: 200 + row as owner, 303 +
+  no row as housekeeper). Plus **error/loading/404 boundaries** in all four apps (there were none —
+  `@revio/ui/status-page` + `@revio/ui/skeleton`), **eight tables** that scrolled the page sideways on
+  a phone wrapped, and **numeric bounds** (commission/FX markup accepted negatives).
+  Still open for a later round: a broader responsive pass beyond the phone-critical screens, and
+  server-side validation messages (today several actions fail closed silently).
 - **Email engine** — per-hotel branded templates (logo, sender name, phone, reply-to), per-email-type
   on/off toggles, and editable content, so each hotel controls what its guests receive. Research how
   competing engines do it; build on our own sending system.
