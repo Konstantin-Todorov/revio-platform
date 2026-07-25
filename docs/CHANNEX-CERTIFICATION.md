@@ -129,6 +129,35 @@ needs steps 1–4.
       live: a UI Re-sync pushed 56/56 to Channex, task success)
 - [x] Booking **modify + cancel** + switch pull to the `/booking_revisions` feed (§3)
 - [x] Rate-limit queue (§5.12)
-- [ ] Fill the form: task IDs (`pnpm channex:cert`), booking IDs + screenshots from the cert property,
-      written answers (§5)
+- [ ] Fill the form: task IDs (below — regenerate any time with `pnpm channex:cert`), booking IDs +
+      screenshots from the cert property, written answers (§5)
 - [ ] Schedule the screenshare and drive every scenario from the RevioLink UI on the cert property
+
+### Task IDs — generated 2026-07-25 (all 10 ARI tests `success:true`)
+
+Paste straight into the matching form fields. Re-run `pnpm channex:cert` for a fresh set if the form is
+submitted later (task IDs stay verifiable at `GET /api/v1/tasks/{id}` on staging).
+
+| Test | Task ID |
+| --- | --- |
+| 1 · Full sync (500 days, 2 rooms, 4 rates — 2 calls) | `0036ea57-a11f-414e-9569-99998399946f` |
+| 1 · (second call) | `8487d70e-3524-4532-b84d-34f392983097` |
+| 2 · Single date, single rate (Twin/BAR 22 Nov = €333) | `dd0f1e8b-0617-4297-96b8-db3ac0d31e30` |
+| 3 · Single date, multiple rates (3 changes, batched) | `2ab4bf60-d317-4783-becf-69d36537418a` |
+| 4 · Multi-date, multi-rate ranges (37 rate-days) | `1d99de32-440a-480b-80f2-2f79a5e18b21` |
+| 5 · Min-stay (3 combos: 3/2/5 nights) | `72718070-fecc-461c-9887-5ae1dc75f5f6` |
+| 6 · Stop-sell (3 pairs) | `14c97c7e-b88e-4523-afb6-5b4c88bc8592` |
+| 7 · Multiple restrictions (CTA/CTD/min/max, 20 rate-days) | `ca12c7af-4d74-4c51-b2c7-0b90abd32e30` |
+| 8 · Half-year update (Dec 26 → May 27, 364 rate-days) | `52c6e80b-b674-4116-851d-16cefe6a016d` |
+| 9 · Single-date availability (Twin 8→7, Double 1→0) | `29b85844-c420-419b-85d3-019ee2b593c0` |
+| 10 · Multi-date availability ranges (15 room-days) | `5b9f2697-6d0a-4ba6-9daa-295a6da2ead7` |
+
+### Process — how contact actually works
+
+1. **Submit the Google form** (link at the top) — that is the entry point; there is no cold email needed.
+   It carries the task IDs above, the booking IDs + screenshots (Test 11), and the §5 written answers.
+2. **Channex replies and arranges the screenshare** — the call is the real gate. Every scenario must be
+   driven live from the RevioLink UI on the cert property; a scripted/faked event fails certification
+   regardless of the task IDs submitted.
+3. Only **after** a pass do per-hotel steps begin (each hotel's own Channex account/property, their own
+   OTA credentials, mapping, and switching that channel `channex_sandbox` → `channex_prod`).
