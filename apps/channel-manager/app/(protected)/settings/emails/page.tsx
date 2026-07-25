@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, Mail, Palette, RotateCcw, Users } from "lucide-react";
-import { renderEmail } from "@revio/core";
+import { renderEmail, SAMPLE_DETAILS } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getProperty } from "@/lib/data";
 import { listPropertyTemplates, brandOf } from "@/lib/email-engine";
@@ -17,9 +17,22 @@ export default async function EmailSettingsPage() {
   const templates = await listPropertyTemplates(property.id);
   const brand = brandOf(property);
 
-  // Live preview of the confirmation email, rendered with the property's real branding.
-  const sample = templates.find((t) => t.def.key === "booking_confirmation")!;
-  const preview = renderEmail({ subject: sample.subject, body: sample.body, brand, vars: sample.def.variables });
+  // Live preview for EVERY template, rendered with the property's real branding — so a hotel can see
+  // each email exactly as its guest receives it, not just the confirmation.
+  const previews = new Map(
+    templates.map((t) => [
+      t.def.key,
+      renderEmail({
+        subject: t.subject,
+        body: t.body,
+        brand,
+        vars: t.def.variables,
+        details: t.def.audience === "guest" ? SAMPLE_DETAILS : [],
+        preheader: t.def.description,
+      }),
+    ]),
+  );
+  const preview = previews.get("booking_confirmation")!;
 
   return (
     <div className="space-y-5">
@@ -129,6 +142,16 @@ export default async function EmailSettingsPage() {
                   {Object.keys(t.def.variables).map((v) => (
                     <code key={v} className="rounded bg-white px-1.5 py-0.5 text-[11px] text-brand-700">{`{{${v}}}`}</code>
                   ))}
+                </div>
+                <div className="rounded-lg border border-surface-border bg-white p-3">
+                  <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
+                    Preview — as the guest receives it
+                  </div>
+                  <iframe
+                    title={`Preview ${t.def.label}`}
+                    srcDoc={previews.get(t.def.key)!.html}
+                    className="h-[360px] w-full rounded border border-surface-border bg-white"
+                  />
                 </div>
                 <div className="flex items-center justify-end gap-2">
                   {t.customised && (
