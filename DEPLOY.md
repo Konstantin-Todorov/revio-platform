@@ -84,7 +84,31 @@ Rollout in two deliberate phases:
 migration. On deploy, `migrate deploy` adds the policies. The app still connects as the Railway Postgres
 role (a superuser), so policies are bypassed → **zero behaviour change**, but the whole path is live.
 
-**Phase 2 — flip enforcement (do with care + rollback ready).** Point the apps at a restricted role:
+**Phase 2 — flip enforcement (do with care + rollback ready).** Point the apps at a restricted role.
+
+> **⚠ Sequencing trap, found the hard way 2026-07-26.** Prisma 5's `directUrl` is **required once
+> declared** — it does *not* fall back to `DATABASE_URL` when the env var is missing. Adding it to
+> `schema.prisma` and pushing would fail `prisma migrate deploy` on **every** service at once, since
+> migrate runs on each Railway deploy. So the order below is not optional:
+>
+> 1. Set `DIRECT_DATABASE_URL=${{Postgres.DATABASE_URL}}` on **all four** app services first
+>    (a Railway reference, not a literal — no secret is copied anywhere). Skip deploys.
+> 2. *Then* add `directUrl = env("DIRECT_DATABASE_URL")` to the datasource and push.
+>    At this point nothing has changed behaviourally: migrate and runtime both use the owner.
+> 3. *Then* create the restricted role and swap `DATABASE_URL` per service, one service at a time,
+>    verifying each before moving to the next.
+>
+> **Verified 2026-07-26 (local, as `revio_app`)** — the policies themselves are correct, so only the
+> credential swap remains:
+>
+> | Check | Result |
+> | --- | --- |
+> | No `app.tenant_id` set | `0` rows — fails closed |
+> | Scoped to tenant A | only A's rows (20) |
+> | Scoped to A, filtering for B's rows | `0` |
+> | INSERT tagged with another tenant's id | `ERROR: new row violates row-level security policy` |
+> | Operator-only table (`Invoice`) read by a hotel role | `0` rows |
+
 
 ```bash
 # Public URL of the shared DB (owner/superuser connection — for the one-time role setup)
