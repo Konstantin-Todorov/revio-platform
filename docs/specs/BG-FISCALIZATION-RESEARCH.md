@@ -57,3 +57,47 @@ its API contract, then implement `fiscal.ts`'s `provider` mode against it.
 **Developer rule:** fiscalization/e-invoicing is a boundary like the payment gateway — route through a
 certified provider, gate by jurisdiction pack, keep the invoice/receipt core generic. Building the seam
 now is cheap; retrofitting a real-time fiscal-device requirement into a direct-print flow later is not.
+
+---
+
+## Go-live gate — verified status (2026-07-26)
+
+Re-checked against the code, not against memory. **Fiscalization is a hard blocker for a Bulgarian
+property and it is NOT satisfied today.**
+
+**What exists:** the *boundary*, and only the boundary. `apps/pms/lib/fiscal.ts` mints a deterministic
+pseudo-seal and returns `mode: "mock"`. The `"provider"` mode is declared in the `FiscalResult` type
+but **never returned by any code path** — there is no provider API call anywhere in the repo. The
+invoice module stores the returned reference on `TaxInvoice.fiscalRef`, and `PropertyDefaults`
+carries the `bg` jurisdiction flags. So the wiring is real and the seal is not.
+
+**What that means commercially:** a VAT-registered Bulgarian hotel may not legally take a consumer
+sale unless it flows through a certified fiscal device (ФУ/ЕКАФП) or NRA-registered SUPTO software in
+real time. Revio currently produces an invoice with a **fake** fiscal reference. Shipping that to a
+real BG property would put *the hotel* in breach — this is their licence, not just our feature gap.
+
+**Therefore:** either (a) integrate a certified provider before the first Bulgarian client goes live,
+or (b) land the first client under an arrangement where their existing certified device/software
+remains the system of record for receipts, and Revio does not claim to fiscalize.
+
+**Cannot be retrofitted quietly.** Receipts already issued without a УНП are not made compliant by a
+later integration, so the decision must precede the first real sale — not follow it.
+
+### What the founder must procure (not a coding task)
+
+1. **Choose a certified provider** currently on the NRA SUPTO register with a documented REST API
+   (report sale → receive УНП, void/refund, daily Z-report) and a sandbox.
+2. **Contract + register** — SUPTO usage is registered with the NRA by the *hotel*; confirm who files
+   what, and whether our software must itself appear on the register for this model.
+3. **Obtain sandbox credentials** so `fiscal.ts`'s `provider` mode can be implemented and tested
+   against something real.
+
+Only step 3 unblocks engineering; steps 1–2 are commercial/legal lead time and should start now if a
+Bulgarian launch is intended. **Accountant/legal confirmation is required — this summary is research,
+not tax advice.**
+
+### Non-blockers (design-for, don't build yet)
+
+- **SAF-T** — phased from Jan 2026, large enterprises first. Keep the data model exportable.
+- **B2B e-invoicing / ViDA** — EN 16931, cross-border mandate from 1 July 2030. Voluntary in BG today.
+- **EUR** — Bulgaria adopted the euro Jan 2026; the folio currency is already correct.
