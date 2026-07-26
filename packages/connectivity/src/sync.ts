@@ -361,7 +361,7 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
       continue;
     }
 
-    const lines: { roomTypeId: string; ratePlanId: string; quantity: number; checkIn: Date; checkOut: Date }[] = [];
+    const lines: { roomTypeId: string; ratePlanId: string; quantity: number; checkIn: Date; checkOut: Date; priceMinor?: number }[] = [];
     let unmapped = false;
     for (const l of raw.lines) {
       const room = roomByExternal.get(l.externalRoomId);
@@ -376,6 +376,8 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
         quantity: l.quantity,
         checkIn: new Date(`${l.checkIn}T00:00:00Z`),
         checkOut: new Date(`${l.checkOut}T00:00:00Z`),
+        // Carried so the PMS folio bills the room rather than seeding a zero line.
+        ...(l.priceMinor != null ? { priceMinor: l.priceMinor } : {}),
       });
     }
 

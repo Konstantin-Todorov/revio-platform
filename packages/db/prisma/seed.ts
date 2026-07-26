@@ -42,7 +42,7 @@ async function main() {
     "PickupSnapshot", "Hold", "RoomInventoryPeriod", "Guest", "RoleAccess", "PermissionRole",
     "TaxFee", "PropertyDefaults", "BookingSource",
     "AuditEntry", "ErrorItem", "SyncEvent", "ReservationLine", "Reservation",
-    "RestrictionRule", "DailyCell", "RatePrice", "ProductMapping", "ChannelRoomTypeMapping", "ChannelRatePlanMapping", "OccupancyAdjustment",
+    "RestrictionRule", "DailyCell", "RatePrice", "ChannelRoomTypeMapping", "ChannelRatePlanMapping", "OccupancyAdjustment",
     "RatePlanRoomType", "RatePlan", "MealPlan", "CancellationPolicy", "RoomType",
     "Channel", "Property", "User", "Tenant",
   ];

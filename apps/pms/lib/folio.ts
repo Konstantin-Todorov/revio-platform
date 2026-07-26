@@ -77,8 +77,16 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
   const cos = reservation.lines.map((l) => l.checkOut.getTime());
   if (cis.length) nights = Math.max(1, Math.round((Math.max(...cos) - Math.min(...cis)) / 86_400_000));
 
+  // Safety net for a line that arrived without its own price. Some channels only send a booking
+  // total, and reservations imported before the per-line price was carried have none stored. Falling
+  // back to zero would silently hand the guest a bill with the room at 0.00 — so apportion the
+  // booking total across its lines instead, weighted by quantity.
+  const totalQty = reservation.lines.reduce((s, l) => s + (l.quantity || 1), 0) || 1;
+  const bookingTotal = reservation.propertyTotalMinor ?? reservation.totalMinor ?? 0;
+  const missingPrice = reservation.lines.some((l) => l.priceMinor == null);
+
   for (const line of reservation.lines) {
-    const price = line.priceMinor ?? 0;
+    const price = line.priceMinor ?? (missingPrice ? Math.round((bookingTotal * (line.quantity || 1)) / totalQty) : 0);
     accomTotal += price;
     rooms += line.quantity;
     guests += line.guestsCount ?? line.quantity;

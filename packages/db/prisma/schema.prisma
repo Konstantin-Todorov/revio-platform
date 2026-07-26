@@ -229,7 +229,6 @@ model RoomType {
 
   property         Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   ratePlanLinks    RatePlanRoomType[]
-  mappings         ProductMapping[]
   channelMappings  ChannelRoomTypeMapping[]
   ratePrices       RatePrice[]
   dailyCells       DailyCell[]
@@ -313,7 +312,6 @@ model RatePlan {
   cancellationPolicy   CancellationPolicy?      @relation(fields: [cancellationPolicyId], references: [id])
   mealPlan             MealPlan?                @relation(fields: [mealPlanId], references: [id])
   roomTypeLinks        RatePlanRoomType[]
-  mappings             ProductMapping[]
   channelMappings      ChannelRatePlanMapping[]
   ratePrices           RatePrice[]
   resLines             ReservationLine[]
@@ -379,7 +377,6 @@ model Channel {
 
   property         Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   bookingSource    BookingSource?           @relation(fields: [bookingSourceId], references: [id])
-  mappings         ProductMapping[]
   roomTypeMappings ChannelRoomTypeMapping[]
   ratePlanMappings ChannelRatePlanMapping[]
   reservations     Reservation[]
@@ -389,27 +386,9 @@ model Channel {
   @@index([propertyId])
 }
 
-model ProductMapping {
-  id             String  @id @default(cuid())
-  tenantId       String
-  channelId      String
-  roomTypeId     String
-  ratePlanId     String
-  externalRoomId String?
-  externalRateId String?
-  status         String  @default("complete") // complete|incomplete|missing_room|missing_rate|channel_error|disabled|pending_confirmation
-
-  channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
-  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
-
-  @@unique([channelId, roomTypeId, ratePlanId])
-  @@index([channelId])
-}
-
 // Two-stream mapping (V2): a channel maps each Room Type and each Rate Plan to the channel's own id,
 // independently — mirrors Channex (availability keyed on room type, rates/restrictions on rate plan).
-// Replaces the per-product externalRoomId/externalRateId redundancy in ProductMapping.
+// Replaced the earlier single-row-per-product mapping, which carried both external ids at once.
 model ChannelRoomTypeMapping {
   id             String  @id @default(cuid())
   tenantId       String

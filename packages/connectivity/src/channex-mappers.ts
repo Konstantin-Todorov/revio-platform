@@ -145,12 +145,17 @@ export function toRawReservation(b: ChannexBooking): RawReservation {
       const nights = Object.keys(room.days ?? {}).sort();
       const checkIn = nights[0] ?? a.arrival_date ?? "";
       const checkOut = nights.length ? nextDay(nights[nights.length - 1]!) : (a.departure_date ?? "");
+      // Channex gives each room a per-night price map; the room's stay total is their sum. Carry it
+      // so the PMS can bill the guest — the booking's overall `amount` can cover several rooms.
+      const perNight = Object.values(room.days ?? {}).map((v) => Number(v)).filter((n) => Number.isFinite(n));
+      const priceMinor = perNight.length ? Math.round(perNight.reduce((a, b) => a + b, 0) * 100) : undefined;
       return {
         externalRoomId: room.room_type_id,
         externalRateId: room.rate_plan_id,
         quantity: 1,
         checkIn,
         checkOut,
+        ...(priceMinor != null ? { priceMinor } : {}),
       };
     }),
     totalMinor: a.amount != null ? Math.round(Number(a.amount) * 100) : 0,

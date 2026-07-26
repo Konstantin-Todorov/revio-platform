@@ -101,9 +101,46 @@ describe("Channex booking -> RawReservation", () => {
       currency: "EUR",
       lines: [
         // checkout = last night (07-07) + 1 day
-        { externalRoomId: "room-uuid", externalRateId: "rate-uuid", quantity: 1, checkIn: "2026-07-06", checkOut: "2026-07-08" },
+        // priceMinor is the sum of the room's own per-night prices — the PMS seeds the guest's
+        // folio from it, so losing it means billing the room at zero.
+        { externalRoomId: "room-uuid", externalRateId: "rate-uuid", quantity: 1, checkIn: "2026-07-06", checkOut: "2026-07-08", priceMinor: 24000 },
       ],
     });
+  });
+
+  it("carries each room's own price, not the booking total, when a booking has several rooms", () => {
+    // Regression: the per-line price used to be dropped at this boundary, so an OTA guest checked in
+    // with a 0.00 room charge on the folio. With two rooms the booking total is also the wrong
+    // number to fall back on — each line must carry its own.
+    const r = toRawReservation({
+      id: "b-multi",
+      attributes: {
+        status: "new",
+        amount: "300.00",
+        currency: "EUR",
+        customer: { name: "Ana", surname: "Ivanova" },
+        rooms: [
+          { room_type_id: "std", rate_plan_id: "bar", days: { "2026-09-01": "100.00" } },
+          { room_type_id: "sui", rate_plan_id: "bar", days: { "2026-09-01": "200.00" } },
+        ],
+      },
+    });
+    expect(r.totalMinor).toBe(30000);
+    expect(r.lines.map((l) => l.priceMinor)).toEqual([10000, 20000]);
+  });
+
+  it("omits priceMinor rather than inventing one when the channel sends no per-night prices", () => {
+    const r = toRawReservation({
+      id: "b-nodays",
+      attributes: {
+        status: "new", amount: "80.00", currency: "EUR",
+        arrival_date: "2026-08-01", departure_date: "2026-08-02",
+        customer: { name: "Sam", surname: "Ng" },
+        rooms: [{ room_type_id: "r", rate_plan_id: "p" }],
+      },
+    });
+    // Undefined, so the PMS knows to apportion the booking total instead of billing zero.
+    expect(r.lines[0]!.priceMinor).toBeUndefined();
   });
 
   it("falls back to booking-level arrival/departure when a room has no days map", () => {

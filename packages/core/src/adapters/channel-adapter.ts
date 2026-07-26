@@ -48,6 +48,12 @@ export interface RawReservation {
     quantity: number;
     checkIn: IsoDate;
     checkOut: IsoDate;
+    /**
+     * What this room costs for the whole stay, in minor units. Optional because not every channel
+     * breaks the total down per room — but when it is known it MUST be carried, because the PMS
+     * seeds the guest's folio from it. Without it the room line on the bill is zero.
+     */
+    priceMinor?: number;
   }>;
   totalMinor: number;
   currency: string;

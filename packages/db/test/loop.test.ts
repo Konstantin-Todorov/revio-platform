@@ -14,7 +14,7 @@ const prisma = new PrismaClient({ datasources: { db: { url } } });
 
 const TABLES = [
   "AuditEntry", "ErrorItem", "SyncEvent", "ReservationLine", "Reservation",
-  "RestrictionRule", "DailyCell", "RatePrice", "ProductMapping", "OccupancyAdjustment",
+  "RestrictionRule", "DailyCell", "RatePrice", "OccupancyAdjustment",
   "RatePlanRoomType", "RatePlan", "MealPlan", "CancellationPolicy", "RoomType",
   "Channel", "Property", "User", "Tenant",
 ];

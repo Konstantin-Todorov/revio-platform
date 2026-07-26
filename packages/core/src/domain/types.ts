@@ -121,16 +121,6 @@ export type MappingStatus =
   | "disabled"
   | "pending_confirmation";
 
-/** Links our internal product to the channel's own IDs. Updates only land when mapping is complete. */
-export interface ProductMapping {
-  channelId: ChannelId;
-  roomTypeId: RoomTypeId;
-  ratePlanId: RatePlanId;
-  externalRoomId?: string;
-  externalRateId?: string;
-  status: MappingStatus;
-}
-
 // --- Restrictions ----------------------------------------------------------
 
 export type RestrictionType =

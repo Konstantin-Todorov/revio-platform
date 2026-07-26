@@ -269,7 +269,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
       guestName, status: overbooked ? "overbooked" : "confirmed",
       totalMinor, currency: property.baseCurrency,
       propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
-      lines: { create: [{ roomTypeId, ratePlanId, quantity, checkIn: checkInDate, checkOut: checkOutDate }] },
+      lines: { create: [{ roomTypeId, ratePlanId, quantity, checkIn: checkInDate, checkOut: checkOutDate, priceMinor: totalMinor }] },
     },
   });
 
