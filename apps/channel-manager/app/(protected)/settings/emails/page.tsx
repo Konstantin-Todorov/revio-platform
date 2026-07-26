@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ArrowLeft, Mail, Palette, RotateCcw, Users } from "lucide-react";
+import { ArrowLeft, ChevronRight, Mail, Palette, Users } from "lucide-react";
 import { renderEmail, SAMPLE_DETAILS, sampleDetails, EMAIL_THEMES, EMAIL_FONTS, EMAIL_LOCALES } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getProperty } from "@/lib/data";
 import { listPropertyTemplates, brandOf } from "@/lib/email-engine";
-import { saveEmailBranding, saveEmailTemplate, resetEmailTemplate } from "@/lib/actions-email";
+import { saveEmailBranding } from "@/lib/actions-email";
+import { LogoUpload } from "@/components/email/LogoUpload";
 
 export const dynamic = "force-dynamic";
 
@@ -18,33 +19,28 @@ export default async function EmailSettingsPage({ searchParams }: { searchParams
   const property = await getProperty();
   const templates = await listPropertyTemplates(property.id, locale);
   const brand = brandOf(property);
+  const logoUrl = brand.logoUrl ?? null;
 
-  // Live preview for EVERY template, rendered with the property's real branding — so a hotel can see
-  // each email exactly as its guest receives it, not just the confirmation.
-  const previews = new Map(
-    templates.map((t) => [
-      t.def.key,
-      renderEmail({
-        subject: t.subject,
-        body: t.body,
-        brand,
-        vars: t.def.variables,
-        details: t.def.audience === "guest" ? sampleDetails(locale) : [],
-        preheader: t.def.description,
-      }),
-    ]),
-  );
-  const preview = previews.get("booking_confirmation")!;
+  // Only the confirmation is previewed on this page — the other seven are previewed live, per
+  // keystroke, inside the focused editor.
+  const confirmationTpl = templates.find((t) => t.def.key === "booking_confirmation")!;
+  const preview = renderEmail({
+    subject: confirmationTpl.subject,
+    body: confirmationTpl.body,
+    brand,
+    vars: confirmationTpl.def.variables,
+    details: sampleDetails(locale),
+    preheader: confirmationTpl.def.description,
+  });
 
   // One miniature of the confirmation per theme, so a hotel picks by eye rather than by name.
-  const confirmation = templates.find((t) => t.def.key === "booking_confirmation")!;
   const themeSwatches = EMAIL_THEMES.map((th) => ({
     ...th,
     html: renderEmail({
-      subject: confirmation.subject,
-      body: confirmation.body,
+      subject: confirmationTpl.subject,
+      body: confirmationTpl.body,
       brand: { ...brand, theme: th.key },
-      vars: confirmation.def.variables,
+      vars: confirmationTpl.def.variables,
       details: SAMPLE_DETAILS,
     }).html,
   }));
@@ -80,13 +76,15 @@ export default async function EmailSettingsPage({ searchParams }: { searchParams
             <label className={labelCls}>Brand colour</label>
             <input name="emailBrandColor" defaultValue={property.emailBrandColor ?? ""} placeholder="#0E7C86" className={inputCls} />
           </div>
-          <div className="col-span-2">
-            <label className={labelCls}>Logo URL</label>
-            <input name="emailLogoUrl" defaultValue={property.emailLogoUrl ?? ""} placeholder="https://yourhotel.com/logo.png" className={inputCls} />
-          </div>
+
           <div className="col-span-2 lg:col-span-3">
             <label className={labelCls}>Footer (address / legal line)</label>
             <input name="emailFooterText" defaultValue={property.emailFooterText ?? ""} placeholder="1 Vitosha Blvd, Sofia · +359 2 000 0000" className={inputCls} />
+          </div>
+          {/* The logo is uploaded, not pasted: we host it so it still resolves years later. */}
+          <div className="col-span-2 lg:col-span-3">
+            <label className={labelCls}>Logo</label>
+            <LogoUpload currentUrl={logoUrl} />
           </div>
           {/* Design — a different look per hotel, chosen by eye. */}
           <div className="col-span-2 lg:col-span-3">
@@ -178,64 +176,32 @@ export default async function EmailSettingsPage({ searchParams }: { searchParams
         </p>
         <div className="divide-y divide-surface-border">
           {templates.map((t) => (
-            <details key={t.def.key} className="group">
-              <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-4 py-3 hover:bg-surface-muted">
-                <Mail className="h-4 w-4 shrink-0 text-ink-400" />
-                <span className="text-[13px] font-semibold text-ink-900">{t.def.label}</span>
-                {t.def.audience === "staff" && (
-                  <span className="inline-flex items-center gap-1 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] font-bold uppercase text-ink-500">
-                    <Users className="h-3 w-3" /> internal
-                  </span>
-                )}
-                {t.customised && <StatusPill tone="info">edited</StatusPill>}
-                {!t.enabled && <StatusPill tone="neutral">off</StatusPill>}
-                {!t.def.canDisable && <span className="text-[10.5px] text-ink-400">always sent</span>}
-                <span className="ml-auto text-[11.5px] text-ink-400">{t.def.description}</span>
-              </summary>
-
-              <form action={saveEmailTemplate} className="space-y-3 border-t border-surface-border/60 bg-surface-muted/30 p-4">
-                <input type="hidden" name="key" value={t.def.key} />
-                <input type="hidden" name="locale" value={locale} />
-                {t.def.canDisable && (
-                  <label className="flex items-center gap-2 text-[12.5px] font-medium text-ink-700">
-                    <input type="checkbox" name="enabled" defaultChecked={t.enabled} className="h-4 w-4 rounded border-surface-border text-brand-600" />
-                    Send this email
-                  </label>
-                )}
-                <div>
-                  <label className={labelCls}>Subject</label>
-                  <input name="subject" defaultValue={t.subject} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Message</label>
-                  <textarea name="body" defaultValue={t.body} rows={10} className={`${inputCls} font-mono leading-relaxed`} />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">Available:</span>
-                  {Object.keys(t.def.variables).map((v) => (
-                    <code key={v} className="rounded bg-white px-1.5 py-0.5 text-[11px] text-brand-700">{`{{${v}}}`}</code>
-                  ))}
-                </div>
-                <div className="rounded-lg border border-surface-border bg-white p-3">
-                  <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
-                    Preview — as the guest receives it
-                  </div>
-                  <iframe
-                    title={`Preview ${t.def.label}`}
-                    srcDoc={previews.get(t.def.key)!.html}
-                    className="h-[360px] w-full rounded border border-surface-border bg-white"
-                  />
-                </div>
-                <div className="flex items-center justify-end gap-2">
-                  {t.customised && (
-                    <button formAction={resetEmailTemplate} className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted">
-                      <RotateCcw className="h-3.5 w-3.5" /> Reset to default
-                    </button>
+            /* Each email opens in focus mode — one email, full screen, live preview. Editing wording
+               a guest will read deserves the whole window, not an accordion inside a settings page. */
+            <Link
+              key={t.def.key}
+              href={`/email/${t.def.key}?lang=${locale}`}
+              className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-surface-muted"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-50 text-brand-600">
+                <Mail className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13.5px] font-semibold text-ink-900">{t.def.label}</span>
+                  {t.def.audience === "staff" && (
+                    <span className="inline-flex items-center gap-1 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px] font-bold uppercase text-ink-500">
+                      <Users className="h-3 w-3" /> internal
+                    </span>
                   )}
-                  <button className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Save</button>
-                </div>
-              </form>
-            </details>
+                  {t.customised && <StatusPill tone="info">edited</StatusPill>}
+                  {!t.enabled && <StatusPill tone="neutral">off</StatusPill>}
+                  {!t.def.canDisable && <span className="text-[10.5px] text-ink-400">always sent</span>}
+                </span>
+                <span className="mt-0.5 block truncate text-[11.5px] text-ink-400">{t.def.description}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-ink-300" />
+            </Link>
           ))}
         </div>
       </Card>

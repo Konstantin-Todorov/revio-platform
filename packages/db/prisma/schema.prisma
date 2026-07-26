@@ -127,7 +127,11 @@ model Property {
   // hotel's. Null = fall back to the property name / platform default.
   emailSenderName           String?
   emailReplyTo              String?
-  emailLogoUrl              String? // absolute URL or data URI; shown at the top of every guest email
+  emailLogoUrl              String? // absolute URL, if the hotel pastes one instead of uploading
+  // An uploaded logo is served from our own domain by /api/brand/[propertyId]/logo. Email clients
+  // block data: URIs and won't authenticate, so the logo must be a plain public HTTPS URL — which
+  // means we host it. Bumped on every upload so the cached copy in a client is replaced.
+  emailLogoVersion          Int       @default(0)
   emailBrandColor           String? // hex, e.g. "#0E7C86" — headings + button colour
   emailFooterText           String? // address / legal line under the signature
   // Visual identity of the mail itself — so two hotels on Revio never send identical-looking email.
@@ -174,6 +178,7 @@ model Property {
   staffShifts          StaffShift[]
   opsEvents            OpsEvent[]
   emailTemplates       EmailTemplate[]
+  brandAssets          BrandAsset[]
 
   @@index([tenantId])
 }
@@ -486,6 +491,24 @@ model DailyCell {
 
   @@unique([roomTypeId, date])
   @@index([propertyId, date])
+}
+
+// Binary brand assets (today: the guest-email logo). Separate from Property so the row stays cheap
+// to read — every screen loads the property, almost none of them need the image.
+model BrandAsset {
+  id         String   @id @default(cuid())
+  tenantId   String
+  propertyId String
+  kind       String   @default("email_logo") // email_logo (more later: invoice logo, favicon)
+  mimeType   String // image/png | image/jpeg | image/gif — never SVG (it can carry script)
+  bytes      Bytes
+  byteSize   Int
+  updatedAt  DateTime @updatedAt
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, kind])
+  @@index([propertyId])
 }
 
 // --- Restrictions ----------------------------------------------------------

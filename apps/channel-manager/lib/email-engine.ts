@@ -20,10 +20,32 @@ export interface PropertyEmailBrandRow {
   emailSenderName: string | null;
   emailReplyTo: string | null;
   emailLogoUrl: string | null;
+  emailLogoVersion: number;
   emailBrandColor: string | null;
   emailFooterText: string | null;
   emailTheme: string;
   emailFont: string;
+}
+
+/**
+ * Where the app is reachable from the outside. A guest's mail client fetches the logo from here, so
+ * it must be an absolute, public URL — a relative path renders as a broken image in every inbox.
+ * Railway injects RAILWAY_PUBLIC_DOMAIN; PUBLIC_BASE_URL overrides it once a custom domain exists.
+ */
+export function publicBaseUrl(): string {
+  const explicit = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, "");
+  if (explicit) return explicit;
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railway) return `https://${railway}`;
+  return "http://localhost:3000";
+}
+
+/** An uploaded logo wins over a pasted URL — it's the one we can guarantee still resolves. */
+function logoUrlFor(property: PropertyEmailBrandRow): string | null {
+  if (property.emailLogoVersion > 0) {
+    return `${publicBaseUrl()}/api/brand/${property.id}/logo?v=${property.emailLogoVersion}`;
+  }
+  return property.emailLogoUrl;
 }
 
 export function brandOf(property: PropertyEmailBrandRow): EmailBrand {
@@ -31,7 +53,7 @@ export function brandOf(property: PropertyEmailBrandRow): EmailBrand {
     propertyName: property.name,
     senderName: property.emailSenderName,
     replyTo: property.emailReplyTo,
-    logoUrl: property.emailLogoUrl,
+    logoUrl: logoUrlFor(property),
     brandColor: property.emailBrandColor,
     footerText: property.emailFooterText,
     theme: property.emailTheme,
