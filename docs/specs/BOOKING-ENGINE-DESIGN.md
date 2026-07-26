@@ -149,6 +149,76 @@ and the hotel confirms manually — so a hotel is never blocked from starting.
 
 ---
 
+## 2.6 Room photos — storage decision (2026-07-26)
+
+Founder asked the right two questions: is the volume a problem, and is it a lot of new work?
+
+### Volume is a non-issue; location is the real decision
+
+An optimised web photo (≈1600px, WebP) is ~300 KB. A typical small hotel: 5 room types × 6 photos
+≈ 9 MB, plus thumbnails ≈ **10 MB per hotel**.
+
+| Hotels | Stored | Railway bucket cost @ $0.015/GB-month |
+| --- | --- | --- |
+| 100 | ~1 GB | **~$0.02 / month** |
+| 1,000 | ~10 GB | **~$0.15 / month** |
+
+So cost is not a consideration at any plausible scale. Railway buckets also make **all S3 operations
+and all bucket egress free** — which suits this shape exactly: written rarely, read constantly by
+guests. (Uploads *from* our service to the bucket count as service egress, but that is one small
+transfer per photo, once.)
+
+### But NOT in Postgres — unlike the email logo
+
+`BrandAsset` stores logo bytes directly in Postgres, and that was right for a logo: one small file
+per property, fetched by mail clients that need a plain HTTPS URL. Room photos are a different
+problem — ~30× the files, ~5× the size each, served to guests at page-load speed. Keeping them in
+Postgres would:
+
+1. **Wreck backups.** Every `pg_dump` would carry every photo, turning a ~50 MB database into a
+   multi-GB one and a fast restore into a long one. That directly undermines the backup/restore drill
+   (R4) — the thing that protects client data.
+2. **Cost more per GB** than object storage, on the pricier resource.
+3. **Put every image request through the Next server**, reading `bytea` out of Postgres, with no CDN.
+   The booking engine's speed is a stated selling point (principle 7); this would quietly break it.
+
+**Decision: room photos go to a Railway bucket (S3-compatible), served by URL. The email logo stays
+in Postgres — it is a different problem with a different right answer.**
+
+### How much of this do we already have?
+
+Genuinely reusable, already built and hardened for the logo upload:
+
+- The **upload server action pattern**, including **magic-byte validation** — we check the file's
+  actual header bytes rather than trusting the declared MIME type, and refuse SVG because it can
+  carry script. That security work transfers directly.
+- A **public serving route** with the right headers: immutable caching, `X-Content-Type-Options:
+  nosniff`, and a CSP sandbox on attacker-influenced bytes.
+- **Cache-busting** via a `?v=` that changes on write.
+- The **tenant + RLS pattern** for a new table, and the hotel-facing editor screen patterns.
+
+Genuinely new:
+
+- An **S3 client + bucket config** — standard library work, small.
+- **Schema**: `RoomTypePhoto` (many per room type, `sortOrder`, `isPrimary`, `altText`).
+- **Image processing** — resize, convert to WebP, generate a thumbnail (`sharp`). Small in code,
+  easy to underestimate in fiddliness.
+- **The gallery editor** — multi-upload, drag to reorder, set primary, delete. This is the single
+  biggest chunk of new UI in phase K.
+
+**Honest summary: the architecture is there; the new work is conventional, not novel.** The parts of
+a booking engine that are genuinely hard to get right — inventory truth, pricing, holds — are exactly
+the parts we already have.
+
+### The real risk is not technical
+
+**The hotel has to actually supply photos**, and that is the most likely cause of a delayed launch.
+So the engine must **degrade gracefully**: a room type with no photo shows a clean placeholder plus
+its amenity text, and the hotel can go live and add photos later. Never block a launch on a
+photo shoot.
+
+---
+
 ## 3. Design principles
 
 1. **Three steps, never four.** Dates & guests → choose room → confirm & pay. Everything else is
