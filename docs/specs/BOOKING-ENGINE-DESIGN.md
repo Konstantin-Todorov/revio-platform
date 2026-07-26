@@ -79,6 +79,76 @@ instead of syncing to it.*
 
 ---
 
+## 2.5 Founder decisions — LOCKED (2026-07-26)
+
+Three questions that would otherwise have been guessed. Each has consequences that ripple through the
+whole design, so they are recorded here as the contract the build works to.
+
+### ① Distribution: a Revio-hosted page, not an embed
+
+`book.revio.app/<hotel-slug>` — the hotel's branding, our infrastructure. **The hotel's entire
+technical task is pasting one link into a "Book now" button.**
+
+Why this is the right call and not the lazy one:
+- A small Bulgarian hotel may have a WordPress site nobody has logged into for two years, a Wix site,
+  a Facebook page, or **no website at all**. An embed excludes every one of them; a link works for all
+  of them — including from an Instagram bio or a QR code at reception.
+- We control the runtime completely: no fighting a host theme's CSS, no jQuery conflicts, no
+  Content-Security-Policy surprises. Performance and accessibility become *ours* to guarantee.
+- It ships sooner and breaks less, which matters more than domain purity for the first clients.
+
+The honest cost: the guest leaves the hotel's domain. We mitigate with full branding (logo, colour,
+typeface — the email-engine branding model, already built and reused), the hotel's own name in the
+page title, and a `<link rel="canonical">` back to their site. **A widget stays on the roadmap as an
+upgrade for hotels with a webmaster — the engine is built API-first specifically so the widget is a
+second front-end over the same endpoints, not a second product.**
+
+### ② Money at booking: card guarantee, payment at the hotel
+
+The guest enters a card; it is **verified and stored, not charged**. The hotel takes payment at
+arrival or departure through the folio that already exists.
+
+Why this is genuinely better here, not just easier:
+- **It matches how a small European hotel already works.** Reception takes payment on site. We are
+  digitising their booking, not forcing a new financial model on them.
+- **It removes an entire class of failure from V1**: no refunds, no partial refunds, no cancellation
+  windows tied to money already taken, no chargeback handling, no reconciliation of money we hold
+  against money owed. Every one of those is a way to get a hotel's money wrong.
+- **The no-show protection is the point.** The card on file is what makes a free-cancellation rate
+  safe to offer, and the PMS deposit machinery (E4) is already built if a hotel later wants to charge
+  a no-show fee.
+- Booking.com's dominant model is exactly this, so it is what guests expect.
+
+**Non-negotiable rule: Revio never sees or stores a card number.** Stripe's hosted element collects
+it; we store the token. This is already the platform-wide rule for the PMS and it does not bend for
+the booking engine.
+
+Prepayment and non-refundable rates are a **deliberate V2**, not an oversight — see §5.
+
+### ③ The money is the hotel's, and never touches us
+
+Each hotel connects **their own Stripe account** (Stripe Connect, standard accounts). The guest's card
+is authorised against the hotel's account; funds go directly to the hotel.
+
+This is the most consequential of the three:
+- **We never hold client funds**, so we avoid payment-institution licensing, safeguarding
+  obligations, and payout reconciliation — a regulatory burden that would dwarf the rest of the
+  platform for a company at this stage.
+- **The hotel's existing accountant sees their own Stripe account**, which is what they already
+  understand. No "where is my money" support burden.
+- **Our liability drops sharply.** A dispute is between the guest and the hotel, where it belongs.
+
+The trade-off, stated plainly: we cannot take a per-booking commission this way without becoming a
+payment facilitator. **That is the correct trade for now** — the business model is SaaS subscription,
+and staying out of the money path is what keeps that simple. If commission ever becomes the model, it
+is a deliberate re-architecture with legal advice, not a config change.
+
+Onboarding cost to the hotel: one Stripe Connect flow (they may already have an account). Until they
+complete it, the engine can still run in **request-to-book** mode — the booking arrives unguaranteed
+and the hotel confirms manually — so a hotel is never blocked from starting.
+
+---
+
 ## 3. Design principles
 
 1. **Three steps, never four.** Dates & guests → choose room → confirm & pay. Everything else is
@@ -115,9 +185,12 @@ per-night breakdown and the cancellation terms in plain language.
 quiet "You stayed in a Deluxe Double last September" note. Never creepy, never a discount they didn't
 earn — recognition, not surveillance.
 
-### Step 3 — Confirm and pay
-One screen. Guest details (name, email, phone), any stay extras, payment via the existing gateway
-boundary, and the total that has not changed since step 1.
+### Step 3 — Confirm and guarantee
+One screen. Guest details (name, email, phone), any stay extras, and the card that **guarantees** the
+booking — not a charge. The wording matters and is part of the product: *"You won't be charged now.
+Pay at the hotel."* is a conversion argument, so say it at the card field, not in the small print.
+
+The total has not changed since step 1 — that invariant is what the whole flow is built around.
 
 **Hold-then-confirm:** the room is held the moment step 3 opens (the CRS `Hold` with TTL already
 exists), so a guest filling in a card cannot lose the room to an OTA mid-checkout. The TTL countdown
@@ -134,11 +207,16 @@ in PMS Front Desk as an arrival, with no further integration.
 
 Explicitly out, to keep the surface honest and shippable:
 
+- **No prepayment or non-refundable rates.** Deliberate (§2.5②). They need refunds, partial refunds
+  and cancellation-window logic — the exact surface where money goes wrong. V2, once the guarantee
+  flow has run against real bookings.
+- **No embeddable widget.** V2 (§2.5①); the API-first build makes it a front-end, not a rewrite.
 - No loyalty programme or member rates (a later, separate decision).
 - No multi-property search (the addendum's optional §6 note — design for it, don't build it).
 - No upsell engine beyond the stay-extras the PMS already defines.
 - No A/B testing framework.
 - No AI concierge chat.
+- **No commission on bookings** — a consequence of §2.5③, not an omission.
 
 ---
 
@@ -148,25 +226,34 @@ Phase **K**, after founder sign-off. Estimated shape, not a commitment:
 
 | Task | What |
 | --- | --- |
-| K1 | Public app shell — a new Next app (`apps/booking`, port 3004) or a public route group on the CRS. **Recommend a separate app**: it is the only internet-facing, unauthenticated surface and deserves its own deploy, its own error budget and its own security posture. |
+| K1 | Public app shell — a new Next app (`apps/booking`, port 3004), resolving `book.revio.app/<slug>` → property. Separate app because it is the only internet-facing, unauthenticated, money-adjacent surface and deserves its own deploy, error budget and security posture. **Hold-abuse protection ships here, not later.** |
 | K2 | Step 1 — calendar + availability, all-in pricing from the tax rules |
-| K3 | Step 2 — room cards, honest scarcity, the off-site answers, room-type content model (photos, amenities) |
-| K4 | Step 3 — hold-on-open, guest details, gateway payment, confirm |
-| K5 | Returning-guest recognition (email → shared guest record, opt-out respected, GDPR-clean) |
-| K6 | CRS Distribution → booking-engine settings: enable, branding, which rate plans, deposit policy, embed snippet |
-| K7 | Direct-vs-OTA analytics incl. commission saved |
-| K8 | Verify + deploy |
+| K3 | Room-type **content model** (photos, amenities, the off-site answers) + Step 2 room cards with honest scarcity |
+| K4 | Step 3 — hold-on-open, guest details, **Stripe Connect card guarantee (no charge)**, confirm |
+| K5 | **Stripe Connect onboarding** in CRS Distribution + request-to-book fallback when unconnected |
+| K6 | Returning-guest recognition (email → shared guest record, opt-out respected, GDPR-clean) |
+| K7 | CRS Distribution → booking-engine settings: enable, branding, which rate plans, the shareable link |
+| K8 | Direct-vs-OTA analytics incl. commission saved |
+| K9 | Verify + deploy |
 
-**Prerequisites before K4 can go live for a real hotel:** live Stripe keys (§7), a sending domain
-(#127) for the confirmation email, and — for Bulgaria — the fiscalization decision from `F3`.
+**Sequencing note:** K3 is the sleeper. Everything else is logic we already have; a room-type content
+model is new schema, an upload path, and a hotel-facing editor. Do not let it hide inside "step 2".
+
+**Prerequisites before a real hotel goes live on it:** the hotel's Stripe Connect account (§2.5③), a
+sending domain (#127) for the confirmation email, and — for Bulgaria — the fiscalization decision from
+`F3`. Note that the guarantee model means **no money moves at booking**, so the fiscalization gate
+applies at the hotel's point of sale, not at the booking step: this is a real sequencing advantage of
+decision ②.
 
 ---
 
 ## 7. Risks and honest constraints
 
-- **Payments are test-mode today.** The platform holds Stripe *test* keys by deliberate policy. A
-  real hotel taking real deposits needs live keys and the associated compliance/PCI posture review.
-  This is the single largest gap between this design and revenue.
+- **Payments are test-mode today.** The platform holds Stripe *test* keys by deliberate policy.
+  Decision ③ changes the shape of this risk rather than removing it: each hotel supplies their own
+  live Stripe account via Connect, so *we* need no live keys and hold no funds — but the Connect
+  onboarding, webhook handling and the card-on-file (SetupIntent) flow are all still unbuilt and
+  unverified against a real account.
 - **Room-type content doesn't exist yet.** We store commercial data (name, code, occupancy) but no
   photos or amenity copy. A booking engine cannot sell a room it cannot show. K3 must add a content
   model — this is real, unglamorous scope that is easy to underestimate.
