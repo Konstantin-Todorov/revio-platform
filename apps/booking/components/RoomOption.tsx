@@ -46,10 +46,21 @@ export function RoomOption({
     <article className="card-raised overflow-hidden">
       <div className="grid sm:grid-cols-[minmax(0,13.5rem)_1fr]">
         {cover ? (
-          <div className="relative hidden min-h-[11rem] sm:block" style={{ borderRight: "1px solid hsl(var(--line))" }}>
+          /*
+            The photo keeps a 4:3 shape instead of stretching to the card's full height. A room card
+            grows with its rate rows, and a landscape photograph forced into that tall column gets
+            cropped to a narrow strip through the middle — the guest sees a wall, not a room. The
+            panel behind it carries the hotel's tint so the remaining space reads as designed.
+          */
+          <div
+            className="relative hidden sm:block"
+            /* Card surface, not a tint: on a tall card the space under the photo should disappear
+               into the card rather than read as an empty coloured block. */
+            style={{ borderRight: "1px solid hsl(var(--line))", backgroundColor: "hsl(var(--surface))" }}
+          >
             {/* Not next/image: this is already our own resized WebP, so a second optimisation pass
-                would burn CPU to produce the same bytes. Dimensions are set so the browser reserves
-                the right box and the card does not jump as photos arrive. */}
+                would burn CPU to produce the same bytes. Width/height reserve the box, so the card
+                does not jump as photos arrive. */}
             <img
               src={mediaUrl(cover.thumbKey)}
               alt={cover.alt || `${option.name} at this hotel`}
@@ -57,11 +68,11 @@ export function RoomOption({
               height={cover.height}
               loading="lazy"
               decoding="async"
-              className="absolute inset-0 h-full w-full object-cover"
+              className="aspect-[4/3] w-full object-cover"
             />
             {option.photos.length > 1 && (
               <span
-                className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold"
+                className="absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold"
                 style={{ backgroundColor: "hsl(var(--ink) / 0.62)", color: "#fff" }}
               >
                 <Images size={11} aria-hidden />

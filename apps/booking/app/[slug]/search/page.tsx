@@ -2,11 +2,11 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { CalendarSearch, Phone } from "lucide-react";
-import { clientIp } from "@revio/booking";
+import { clientIp, type AlternativeStay } from "@revio/booking";
 import { getObjectStore } from "@revio/storage";
 import { getPublicProperty, type PublicProperty } from "@/lib/property";
 import { searchAvailability } from "@/lib/availability";
-import { addDays, fmtDay, isValidISO, nightsBetween, todayISO } from "@/lib/dates";
+import { fmtDay, isValidISO, money, nightsBetween } from "@/lib/dates";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { RoomOption } from "@/components/RoomOption";
@@ -137,11 +137,25 @@ async function Results({
   if (outcome.error) return <Notice property={property}>{outcome.error}</Notice>;
 
   if (options.length === 0) {
+    const alternatives = outcome.alternatives ?? [];
     return (
-      <Notice property={property} title="No rooms free for those dates">
-        The hotel may be full, or those nights may not be open for booking yet. These nearby dates
-        are worth a try.
-        <AlternativeDates slug={property.slug} q={q} nights={nights} />
+      <Notice
+        property={property}
+        title={alternatives.length ? "Those dates are full — but these are free" : "No rooms free for those dates"}
+      >
+        {alternatives.length ? (
+          <>
+            Same {nights === 1 ? "night" : `${nights} nights`}, moved a little. We checked each one —
+            these have rooms right now.
+            <AlternativeDates slug={property.slug} guests={q.guests} alternatives={alternatives} />
+          </>
+        ) : (
+          <>
+            We also checked the week either side and could not find {nights}{" "}
+            {nights === 1 ? "night" : "nights"} anywhere near these dates. The hotel may be full, or
+            those nights may not be open for booking yet.
+          </>
+        )}
       </Notice>
     );
   }
@@ -174,45 +188,57 @@ async function Results({
 }
 
 /**
- * A dead end is the worst thing a booking engine can produce, and "sold out" is the most common one.
+ * Nearby dates that are ACTUALLY free.
  *
- * Shifting the same-length stay by a few days is the search a guest would run next by hand, so we
- * run it for them. These are plain links, not a second round of queries — the point is to keep them
- * moving, not to pre-compute every answer.
+ * Every chip here was really searched — the server ran the same availability function that will run
+ * when the guest clicks it, so a chip cannot promise a room that is not there. That is the whole
+ * difference between a helpful dead end and a second disappointment.
+ *
+ * The price is shown because "free" and "affordable" are different questions, and a guest deciding
+ * whether to move their trip is asking both at once.
  */
 function AlternativeDates({
   slug,
-  q,
-  nights,
+  guests,
+  alternatives,
 }: {
   slug: string;
-  q: { checkIn: string; checkOut: string; guests: number };
-  nights: number;
+  guests: number;
+  alternatives: AlternativeStay[];
 }) {
-  const today = todayISO();
-  const shifts = [-3, -2, -1, 1, 2, 3]
-    .map((by) => ({ checkIn: addDays(q.checkIn, by), checkOut: addDays(q.checkOut, by), guests: q.guests }))
-    .filter((alt) => alt.checkIn >= today);
-
-  if (shifts.length === 0) return null;
-
   return (
-    <div className="mt-5 flex flex-wrap justify-center gap-2">
-      {shifts.map((alt) => (
+    <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      {alternatives.map((alt) => (
         <a
           key={alt.checkIn}
-          href={searchHref(slug, alt)}
-          className="btn btn-outline min-h-[40px] px-3.5 text-[13px] font-medium"
+          href={searchHref(slug, { checkIn: alt.checkIn, checkOut: alt.checkOut, guests })}
+          className="card flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:border-[hsl(var(--brand))]"
         >
-          {fmtDay(alt.checkIn)}
-          <span style={{ color: "hsl(var(--ink-faint))" }}>
-            · {nights}
-            {nights === 1 ? " night" : " nights"}
+          <span className="min-w-0">
+            <span className="block text-[13.5px] font-bold">
+              {fmtDay(alt.checkIn)} — {fmtDay(alt.checkOut)}
+            </span>
+            <span className="block text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
+              {shiftLabel(alt.offsetDays)}
+            </span>
+          </span>
+          <span className="shrink-0 text-right">
+            <span className="price block text-[15px]">{money(alt.fromMinor, alt.currency)}</span>
+            <span className="block text-[11px]" style={{ color: "hsl(var(--ink-faint))" }}>
+              total
+            </span>
           </span>
         </a>
       ))}
     </div>
   );
+}
+
+/** "2 days earlier" reads faster than a second date range the guest has to diff themselves. */
+function shiftLabel(offsetDays: number): string {
+  const n = Math.abs(offsetDays);
+  const unit = n === 1 ? "day" : "days";
+  return offsetDays < 0 ? `${n} ${unit} earlier` : `${n} ${unit} later`;
 }
 
 function Notice({

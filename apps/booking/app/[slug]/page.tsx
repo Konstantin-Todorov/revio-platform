@@ -83,27 +83,32 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
           </div>
         </section>
 
+        {/*
+          The hero ends on a hard edge in the Bold preset, so the content below needs real ground
+          between it and the band. Without it the cards read as hanging off the hero rather than as
+          the next section, which is the "two unrelated slabs" look.
+        */}
         {property.showTrust && (
-          <section className="mx-auto w-full max-w-[72rem] px-5 sm:px-8">
+          <section className="mx-auto w-full max-w-[72rem] px-5 pt-12 sm:px-8 sm:pt-16">
             <div className="rise" style={{ animationDelay: "300ms" }}>
               <TrustRow checkInTime={property.checkInTime} checkOutTime={property.checkOutTime} />
             </div>
           </section>
         )}
 
-        <section className="mx-auto w-full max-w-[72rem] px-5 pb-20 pt-12 sm:px-8">
+        <section className="mx-auto w-full max-w-[72rem] px-5 pb-20 pt-12 sm:px-8 sm:pt-16">
           <h2 className="display text-[1.5rem]">Good to know</h2>
           <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Fact icon={<Clock size={16} aria-hidden />} term="Check-in & check-out">
+            <Fact icon={<Clock size={17} strokeWidth={2} aria-hidden />} term="Check-in & check-out">
               From {property.checkInTime}, out by {property.checkOutTime}
             </Fact>
             {property.address && (
-              <Fact icon={<MapPin size={16} aria-hidden />} term="Where you'll stay">
+              <Fact icon={<MapPin size={17} strokeWidth={2} aria-hidden />} term="Where you'll stay">
                 {property.address}
               </Fact>
             )}
             {property.phone && (
-              <Fact icon={<Phone size={16} aria-hidden />} term="Prefer to talk to someone?">
+              <Fact icon={<Phone size={17} strokeWidth={2} aria-hidden />} term="Prefer to talk to someone?">
                 <a href={`tel:${property.phone.replace(/\s+/g, "")}`} className="link-quiet font-semibold">
                   {property.phone}
                 </a>
@@ -118,14 +123,26 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
   );
 }
 
+/**
+ * Deliberately the same shape as a TrustRow card — same padding, same icon chip, same rhythm.
+ * Two informational rows sitting one above the other in two different treatments is what makes a
+ * page look assembled rather than designed.
+ */
 function Fact({ icon, term, children }: { icon: React.ReactNode; term: string; children: React.ReactNode }) {
   return (
     <div className="card p-5">
-      <dt className="flex items-center gap-2 text-[12.5px] font-semibold" style={{ color: "hsl(var(--ink-faint))" }}>
-        <span style={{ color: "hsl(var(--brand-text))" }}>{icon}</span>
-        {term}
+      <dt>
+        <span
+          className="flex h-9 w-9 items-center justify-center rounded-[10px]"
+          style={{ backgroundColor: "hsl(var(--brand-wash))", color: "hsl(var(--brand-text))" }}
+        >
+          {icon}
+        </span>
+        <span className="mt-3.5 block text-[12.5px] font-semibold" style={{ color: "hsl(var(--ink-faint))" }}>
+          {term}
+        </span>
       </dt>
-      <dd className="mt-2 text-[14px] leading-relaxed">{children}</dd>
+      <dd className="mt-1.5 text-[14px] leading-relaxed">{children}</dd>
     </div>
   );
 }

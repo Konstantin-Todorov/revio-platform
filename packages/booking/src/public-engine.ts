@@ -394,3 +394,93 @@ export async function publicCreateReservation(
     currency: property.baseCurrency,
   };
 }
+
+/**
+ * Real alternatives for a stay that came back empty.
+ *
+ * "Sold out" is the single worst screen a booking engine produces, and the honest fix is not a row
+ * of hopeful links — it is to actually run the searches the guest would have run next and show only
+ * the ones that come back with rooms. A chip that says a date is free and then isn't is worse than
+ * no chip at all, because the guest has now been let down twice.
+ *
+ * So each candidate is evaluated by `publicAvailability` — the SAME function that runs when they
+ * click it. Nothing here approximates availability, which means a suggestion cannot disagree with
+ * the page it leads to. It costs a handful of extra queries, but only on a search that already
+ * failed, which is the moment worth spending on.
+ *
+ * Candidates are the same LENGTH of stay shifted around the requested dates, nearest first — a
+ * guest who asked for three nights in August wants three nights in August, not a different trip.
+ */
+export interface AlternativeStay {
+  checkIn: string;
+  checkOut: string;
+  nights: number;
+  /** Cheapest all-in total across every room and rate — what the chip promises. */
+  fromMinor: number;
+  currency: string;
+  /** Days from the original check-in; negative is earlier. Drives the "2 days earlier" wording. */
+  offsetDays: number;
+}
+
+export async function publicAlternativeStays(
+  db: Db,
+  property: PropertyRow,
+  q: PublicStayQuery,
+  opts: { maxResults?: number; windowDays?: number } = {},
+): Promise<AlternativeStay[]> {
+  const maxResults = opts.maxResults ?? 4;
+  const windowDays = opts.windowDays ?? 7;
+
+  if (validStay(q)) return [];
+
+  const start = utcDay(q.checkIn);
+  const nights = Math.round((utcDay(q.checkOut).getTime() - start.getTime()) / DAY_MS);
+  if (nights < 1) return [];
+
+  const today = todayInTz(property.timezone);
+  const shift = (iso: string, days: number) => ymd(new Date(utcDay(iso).getTime() + days * DAY_MS));
+
+  // Nearest first, and earlier before later at the same distance — moving a trip forward is usually
+  // the easier ask, and ties should be ordered by something rather than by chance.
+  const offsets: number[] = [];
+  for (let d = 1; d <= windowDays; d++) offsets.push(-d, d);
+
+  const candidates = offsets
+    .map((offsetDays) => ({
+      offsetDays,
+      checkIn: shift(q.checkIn, offsetDays),
+      checkOut: shift(q.checkOut, offsetDays),
+    }))
+    .filter((c) => c.checkIn >= today);
+
+  const found: AlternativeStay[] = [];
+
+  // Batched rather than all-at-once: a sold-out search should not fire fourteen concurrent
+  // availability loads at the database, and we stop as soon as we have enough to show.
+  const BATCH = 3;
+  for (let i = 0; i < candidates.length && found.length < maxResults; i += BATCH) {
+    const batch = candidates.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map(async (c) => {
+        const res = await publicAvailability(db, property, {
+          checkIn: c.checkIn, checkOut: c.checkOut, guests: q.guests,
+        });
+        const totals = (res.options ?? []).flatMap((o) => o.plans.map((p) => p.totalMinor));
+        if (totals.length === 0) return null;
+        return {
+          checkIn: c.checkIn,
+          checkOut: c.checkOut,
+          nights,
+          fromMinor: Math.min(...totals),
+          currency: property.baseCurrency,
+          offsetDays: c.offsetDays,
+        } satisfies AlternativeStay;
+      }),
+    );
+    for (const r of results) if (r) found.push(r);
+  }
+
+  return found
+    .sort((a, b) => Math.abs(a.offsetDays) - Math.abs(b.offsetDays) || a.offsetDays - b.offsetDays)
+    .slice(0, maxResults);
+}

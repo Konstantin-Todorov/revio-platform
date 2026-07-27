@@ -1,6 +1,9 @@
 import "server-only";
 import { forTenant } from "@revio/db";
-import { publicAvailability, checkSearch, type PublicRoomOption } from "@revio/booking";
+import {
+  publicAvailability, publicAlternativeStays, checkSearch,
+  type PublicRoomOption, type AlternativeStay,
+} from "@revio/booking";
 import type { PublicProperty } from "./property";
 
 /**
@@ -15,6 +18,8 @@ import type { PublicProperty } from "./property";
 
 export interface SearchOutcome {
   options?: PublicRoomOption[];
+  /** Nearby dates that are GENUINELY bookable — each one was really searched. Only when empty. */
+  alternatives?: AlternativeStay[];
   /** Shown to the guest. Never leaks whether the problem was them, the hotel, or us. */
   error?: string;
   rateLimited?: boolean;
@@ -30,7 +35,16 @@ export async function searchAvailability(
   }
 
   const db = forTenant(property.tenantId);
-  const result = await publicAvailability(db, { ...property, id: property.id }, q);
+  const scoped = { ...property, id: property.id };
+  const result = await publicAvailability(db, scoped, q);
   if (result.error) return { error: result.error };
-  return { options: result.options ?? [] };
+
+  const options = result.options ?? [];
+
+  // Only when the answer is "nothing". The extra queries are worth it precisely because this is the
+  // screen where a guest otherwise leaves, and they are never spent on a search that succeeded.
+  if (options.length === 0) {
+    return { options, alternatives: await publicAlternativeStays(db, scoped, q) };
+  }
+  return { options };
 }
