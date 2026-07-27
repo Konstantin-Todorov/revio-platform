@@ -7,6 +7,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 type RatePlan = {
   id: string; name: string; code: string; tags: string[]; priceLogic: string; active: boolean;
+  directChannelEnabled: boolean;
   parentRatePlanId: string | null; derivedType: string | null; derivedDirection: string | null;
   derivedValue: number | null; derivedRounding: string | null;
   defMinLos: number | null; defMaxLos: number | null;
@@ -108,9 +109,28 @@ export function RatePlanDialog({ ratePlan, parents }: { ratePlan?: RatePlan; par
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
-            <input type="checkbox" name="active" defaultChecked={ratePlan?.active ?? true} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Active
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
+              <input type="checkbox" name="active" defaultChecked={ratePlan?.active ?? true} className="h-4 w-4 cursor-pointer rounded border-surface-border text-brand-600" /> Active
+            </label>
+            {/* Switching this off is how a corporate or tour-operator rate stays off the hotel's own
+                public page while still going to the OTAs it was negotiated for. */}
+            <label className="flex items-start gap-2 text-[13px] font-medium text-ink-700">
+              <input
+                type="checkbox"
+                name="directChannelEnabled"
+                defaultChecked={ratePlan?.directChannelEnabled ?? true}
+                className="mt-0.5 h-4 w-4 cursor-pointer rounded border-surface-border text-brand-600"
+              />
+              <span>
+                Sell on our own booking page
+                <span className="block text-[11.5px] font-normal text-ink-400">
+                  Off for rates that belong to a specific partner — corporate, tour operator, an
+                  OTA-only promotion.
+                </span>
+              </span>
+            </label>
+          </div>
 
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
 

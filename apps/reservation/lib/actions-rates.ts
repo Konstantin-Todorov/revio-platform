@@ -32,6 +32,10 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
   const tags = str(fd, "tags").split(",").map((t) => t.trim()).filter(Boolean);
   const priceLogic = str(fd, "priceLogic") || "manual";
   const active = fd.get("active") != null;
+  // Whether this rate is sold on the hotel's OWN booking page. Enforced in
+  // `publicAvailability`, but until now only the seed could set it — so a hotel had no way
+  // to keep a corporate or tour-operator rate off their public site.
+  const directChannelEnabled = fd.get("directChannelEnabled") != null;
 
   const derived =
     priceLogic === "derived"
@@ -64,13 +68,13 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
   if (clash) return { ok: false, error: `Code "${code}" is already used by another rate plan.` };
 
   if (rowId) {
-    await prisma.ratePlan.update({ where: { id: rowId }, data: { name, code, tags, priceLogic, active, ...derived, ...restrictions } });
+    await prisma.ratePlan.update({ where: { id: rowId }, data: { name, code, tags, priceLogic, active, directChannelEnabled, ...derived, ...restrictions } });
     await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${name}`, field: "edit", newValue: name });
     await recordPush(propertyId, tenantId, `Rate plan "${name}" updated`);
   } else {
     const count = await prisma.ratePlan.count({ where: { propertyId } });
     const rp = await prisma.ratePlan.create({
-      data: { tenantId, propertyId, name, code, tags, priceLogic, active, sortOrder: count, ...derived, ...restrictions },
+      data: { tenantId, propertyId, name, code, tags, priceLogic, active, directChannelEnabled, sortOrder: count, ...derived, ...restrictions },
     });
     const roomTypes = await prisma.roomType.findMany({ where: { propertyId } });
     await prisma.ratePlanRoomType.createMany({ data: roomTypes.map((rt) => ({ ratePlanId: rp.id, roomTypeId: rt.id })) });
