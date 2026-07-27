@@ -49,6 +49,13 @@
 > CRUD on the one shared `User` identity** — invite / role / deactivate / reset-pw / edit email+phone, with
 > a new nullable `User.phone` (H8). Migrations `20260721174110_guest_notes` + `20260721180000_user_phone`.
 
+> **Booking Engine screen (new, 2026-07-27).** `/booking-engine` under Configuration owns RevioDirect:
+> the public slug + on/off switch, and the page's appearance (base preset → colour / headings / logo /
+> hero copy, with a live preview). Deliberately **separate from Settings → Emails**: every `booking*`
+> column is nullable and NULL means "inherit the email branding", so a hotel adopts one field at a
+> time and editing the booking page never restyles their confirmation emails. Presets are shared via
+> `BOOKING_PRESETS` in `@revio/core` so the preview and the real page cannot drift.
+
 **Full V1 spec: `docs/CRS-REFERENCE.md` (founder spec v2, 2026-07-02)** — exact metric formulas,
 reservation lifecycle, system rules, sitemap, and the 5-phase MVP build order. Read it before writing
 any code here. The CRS is the **system of record for every reservation** (from any source) and computes

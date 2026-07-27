@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { Clock, MapPin, Phone } from "lucide-react";
+import { bookingPreset } from "@revio/core";
 import { getPublicProperty } from "@/lib/property";
 import { SearchBar } from "@/components/SearchBar";
 import { PropertyHeader } from "@/components/PropertyHeader";
@@ -24,51 +25,71 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
   const property = await getPublicProperty(slug);
   if (!property) notFound();
 
+  const hero = bookingPreset(property.preset).tokens.hero;
+  const solid = hero === "solid";
+
   return (
     <>
       <PropertyHeader property={property} />
 
       <main>
         <section className="relative overflow-hidden">
-          {/* A wash of the hotel's own colour, fading into the page. It is the only large area of
-              brand on the site, which is what lets a navy and a gold both look deliberate here. */}
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(130% 90% at 50% -10%, hsl(var(--brand-wash)) 0%, hsl(var(--ground)) 62%)",
-            }}
-          />
+          {/* The preset decides how the hero reads. `solid` reverses the headline out of a full
+              band of the hotel's colour; `wash` fades a tint of it into the page; `plain` leaves
+              the search bar to carry the page alone. */}
+          {hero !== "plain" && (
+            <div
+              aria-hidden
+              className="absolute inset-0"
+              style={
+                hero === "solid"
+                  ? { backgroundColor: "hsl(var(--brand))" }
+                  : {
+                      background:
+                        "radial-gradient(130% 90% at 50% -10%, hsl(var(--brand-wash)) 0%, hsl(var(--ground)) 62%)",
+                    }
+              }
+            />
+          )}
 
           <div className="relative mx-auto w-full max-w-[72rem] px-5 pb-14 pt-14 sm:px-8 sm:pb-20 sm:pt-24">
             <div className="mx-auto max-w-[46rem] text-center">
-              <p className="eyebrow rise" style={{ animationDelay: "40ms" }}>
+              <p
+                className="eyebrow rise"
+                style={{ animationDelay: "40ms", ...(solid ? { color: "hsl(var(--brand-ink) / 0.75)" } : {}) }}
+              >
                 Official booking · {property.name}
               </p>
-              <h1 className="display rise mt-4 text-[2.4rem] sm:text-[3.75rem]" style={{ animationDelay: "100ms" }}>
-                Book direct. <span style={{ color: "hsl(var(--brand-text))" }}>Pay less.</span>
+              <h1
+                className="display rise mt-4 text-[2.4rem] sm:text-[3.75rem]"
+                style={{ animationDelay: "100ms", ...(solid ? { color: "hsl(var(--brand-ink))" } : {}) }}
+              >
+                {property.headline}
               </h1>
               <p
                 className="rise mx-auto mt-5 max-w-[46ch] text-[15.5px] leading-relaxed sm:text-[17px]"
-                style={{ animationDelay: "160ms", color: "hsl(var(--ink-soft))" }}
+                style={{
+                  animationDelay: "160ms",
+                  color: solid ? "hsl(var(--brand-ink) / 0.85)" : "hsl(var(--ink-soft))",
+                }}
               >
-                No commission goes to a travel site, so the rate you see is the one the hotel
-                actually wants to give you — with taxes and fees already in the number.
+                {property.subheadline}
               </p>
             </div>
 
             <div className="rise mx-auto mt-10 max-w-[58rem] sm:mt-12" style={{ animationDelay: "220ms" }}>
-              <SearchBar slug={property.slug} />
+              <SearchBar slug={property.slug} onDark={solid} />
             </div>
           </div>
         </section>
 
-        <section className="mx-auto w-full max-w-[72rem] px-5 sm:px-8">
-          <div className="rise" style={{ animationDelay: "300ms" }}>
-            <TrustRow checkInTime={property.checkInTime} checkOutTime={property.checkOutTime} />
-          </div>
-        </section>
+        {property.showTrust && (
+          <section className="mx-auto w-full max-w-[72rem] px-5 sm:px-8">
+            <div className="rise" style={{ animationDelay: "300ms" }}>
+              <TrustRow checkInTime={property.checkInTime} checkOutTime={property.checkOutTime} />
+            </div>
+          </section>
+        )}
 
         <section className="mx-auto w-full max-w-[72rem] px-5 pb-20 pt-12 sm:px-8">
           <h2 className="display text-[1.5rem]">Good to know</h2>

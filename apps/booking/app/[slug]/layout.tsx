@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { bookingPreset } from "@revio/core";
 import { getPublicProperty } from "@/lib/property";
 import { brandTokens, fontVars } from "@/lib/brand";
 
@@ -36,12 +37,28 @@ export default async function PropertyLayout({
 
   const tokens = brandTokens(property.brandColor);
   const fonts = fontVars(property.font);
+  // The preset supplies only neutrals and shape; the accent is always the hotel's own colour. That
+  // separation is what lets "pick a base, then edit" compose — the two choices cannot fight.
+  const { tokens: p } = bookingPreset(property.preset);
 
   return (
     <div
-      className="relative"
+      /* Paints the ground itself: <body> resolved --ground from :root before this subtree existed,
+         so a preset that only overrides the variable would leave the page behind it unchanged. */
+      className="relative min-h-screen bg-[hsl(var(--ground))]"
       style={
         {
+          "--ground": p.ground,
+          "--surface": p.surface,
+          "--surface-sunk": p.surfaceSunk,
+          "--ink": p.ink,
+          "--ink-soft": p.inkSoft,
+          "--ink-faint": p.inkFaint,
+          "--line": p.line,
+          "--line-strong": p.lineStrong,
+          "--r": `${p.radius}px`,
+          "--r-sm": `${Math.max(6, p.radius - 4)}px`,
+          "--r-lg": `${p.radius + 6}px`,
           "--brand": tokens.brand,
           "--brand-ink": tokens.brandInk,
           "--brand-text": tokens.brandText,

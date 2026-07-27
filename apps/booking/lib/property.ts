@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { forSystem } from "@revio/db";
+import { BOOKING_COPY_DEFAULTS } from "@revio/core";
 
 /**
  * Resolving a public slug → the hotel it belongs to.
@@ -29,10 +30,18 @@ export interface PublicProperty {
   address: string | null;
   phone: string | null;
   contactEmail: string | null;
-  /** Branding, reused wholesale from the email engine so the hotel configures its look once. */
+  /**
+   * Presentation. Each field is the engine's OWN setting where the hotel has made one, falling back
+   * to their email branding where they have not — so switching the engine on inherits a coherent
+   * look with no second round of branding work, and editing it here never touches their email.
+   */
   brandColor: string | null;
   logoUrl: string | null;
   font: string;
+  preset: string;
+  headline: string;
+  subheadline: string;
+  showTrust: boolean;
 }
 
 /**
@@ -56,6 +65,8 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
       defaultLanguage: true, checkInTime: true, checkOutTime: true, address: true, phone: true,
       contactEmail: true, status: true, bookingEngineEnabled: true,
       emailBrandColor: true, emailLogoUrl: true, emailLogoVersion: true, emailFont: true,
+      bookingPreset: true, bookingBrandColor: true, bookingFont: true, bookingLogoUrl: true,
+      bookingHeadline: true, bookingSubheadline: true, bookingShowTrust: true,
       tenant: { select: { status: true, hasReservation: true } },
     },
   });
@@ -81,9 +92,17 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
     address: property.address,
     phone: property.phone,
     contactEmail: property.contactEmail,
-    brandColor: property.emailBrandColor,
-    logoUrl: logoFor(property),
-    font: property.emailFont,
+    // `??` not `||`: an empty string is a hotel who cleared the field, which should still fall back,
+    // and `trim() || null` upstream turns blanks into nulls — so both spellings land on the default.
+    brandColor: property.bookingBrandColor ?? property.emailBrandColor,
+    logoUrl: property.bookingLogoUrl?.trim() || logoFor(property),
+    // The engine offers sans/serif only; an email hotel on "mixed" means serif headings there, and
+    // serif headings are the closest honest equivalent here.
+    font: property.bookingFont ?? (property.emailFont === "sans" ? "sans" : "serif"),
+    preset: property.bookingPreset,
+    headline: property.bookingHeadline?.trim() || BOOKING_COPY_DEFAULTS.headline,
+    subheadline: property.bookingSubheadline?.trim() || BOOKING_COPY_DEFAULTS.subheadline,
+    showTrust: property.bookingShowTrust,
   };
 });
 

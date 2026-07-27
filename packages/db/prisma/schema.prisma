@@ -143,6 +143,18 @@ model Property {
   // switched on, and unique because it resolves a single property with no tenant context.
   publicSlug                String?   @unique
   bookingEngineEnabled      Boolean   @default(false)
+  // The engine's OWN presentation, deliberately not shared with the email* fields above. A hotel can
+  // reasonably want a quiet, traditional confirmation email and a bold booking page; one shared
+  // column would force each to follow the other. NULL means "inherit from the email branding", so a
+  // hotel that configures nothing still gets a coherent page from day one and only the fields they
+  // actually touched diverge.
+  bookingPreset             String    @default("clean") // clean | warm | bold — see BOOKING_PRESETS
+  bookingBrandColor         String? // hex; null = inherit emailBrandColor
+  bookingFont               String? // serif | sans; null = inherit emailFont
+  bookingLogoUrl            String? // absolute URL; null = inherit the email logo
+  bookingHeadline           String? // hero headline; null = platform default
+  bookingSubheadline        String?
+  bookingShowTrust          Boolean   @default(true) // the "why book direct" row
   // CRS Distribution (spec §3.8): exactly ONE connected channel manager per property.
   // reviolink_internal = the platform's own CM (shared core, automatic mapping); third-party
   // kinds plug into the identical ChannelManagerConnector interface later — never a second path.

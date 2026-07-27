@@ -285,8 +285,21 @@ export function renderEmail(args: {
 
   const SANS = "'Helvetica Neue',Helvetica,Arial,sans-serif";
   const SERIF = "Georgia,'Times New Roman',serif";
+
+  /**
+   * Three roles, so the hotel's choice reaches everything a guest actually reads.
+   *
+   * An earlier version resolved these two correctly and then hardcoded SANS into ten of the sixteen
+   * font declarations — the detail table, the button, the footer. Picking "Serif" produced a serif
+   * masthead on an otherwise sans email, which reads as a broken setting rather than a style.
+   *
+   * `labelFont` is the deliberate exception: the small uppercase letterspaced labels stay sans in
+   * every theme, because Georgia at 10.5px with 0.14em tracking is genuinely harder to read. That is
+   * a typographic decision, not an oversight.
+   */
   const displayFont = fontKey === "sans" ? SANS : SERIF;
   const bodyFont = fontKey === "serif" ? SERIF : SANS;
+  const labelFont = SANS;
 
   // ---- plain text (identical across themes — the words are the words) -------
   const textDetails = details.length ? details.map((d) => `${d.label}: ${d.value}`).join("\n") : "";
@@ -330,29 +343,29 @@ export function renderEmail(args: {
       ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0;background:#F6F8FA;border-radius:8px">
 <tr><td style="padding:20px 22px">
 ${details.map((d) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td style="padding:6px 0;font-size:13px;color:#67707E;font-family:${SANS}">${escapeHtml(d.label)}</td>
-<td style="padding:6px 0;text-align:right;font-size:${d.emphasis ? "17px" : "14px"};font-weight:${d.emphasis ? "700" : "600"};color:${d.emphasis ? color : "#1A2230"};font-family:${SANS}">${escapeHtml(d.value)}</td>
+<td style="padding:6px 0;font-size:13px;color:#67707E;font-family:${bodyFont}">${escapeHtml(d.label)}</td>
+<td style="padding:6px 0;text-align:right;font-size:${d.emphasis ? "17px" : "14px"};font-weight:${d.emphasis ? "700" : "600"};color:${d.emphasis ? color : "#1A2230"};font-family:${d.emphasis ? displayFont : bodyFont}">${escapeHtml(d.value)}</td>
 </tr></table>`).join("")}
 </td></tr></table>`
       : T.detailStyle === "framed"
         ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:30px 0;border:1px solid ${color}33">
 <tr><td style="padding:24px 26px">
 ${details.map((d, i) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-<td style="padding:${i === 0 ? "0" : "10px"} 0 10px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#9A8F7F;font-family:${SANS}">${escapeHtml(d.label)}</td>
+<td style="padding:${i === 0 ? "0" : "10px"} 0 10px;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#9A8F7F;font-family:${labelFont}">${escapeHtml(d.label)}</td>
 <td style="padding:${i === 0 ? "0" : "10px"} 0 10px;text-align:right;font-size:${d.emphasis ? "18px" : "15px"};color:${d.emphasis ? color : "#2A2520"};font-family:${displayFont}">${escapeHtml(d.value)}</td>
 </tr></table>`).join("")}
 </td></tr></table>`
         : T.detailStyle === "plain"
           ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:26px 0">
 ${details.map((d) => `<tr>
-<td style="padding:5px 16px 5px 0;font-size:14px;color:#8C939E;font-family:${SANS};white-space:nowrap">${escapeHtml(d.label)}</td>
-<td style="padding:5px 0;font-size:${d.emphasis ? "16px" : "14px"};color:${d.emphasis ? color : "#20262F"};font-weight:${d.emphasis ? "600" : "400"};font-family:${SANS}">${escapeHtml(d.value)}</td>
+<td style="padding:5px 16px 5px 0;font-size:14px;color:#8C939E;font-family:${bodyFont};white-space:nowrap">${escapeHtml(d.label)}</td>
+<td style="padding:5px 0;font-size:${d.emphasis ? "16px" : "14px"};color:${d.emphasis ? color : "#20262F"};font-weight:${d.emphasis ? "600" : "400"};font-family:${d.emphasis ? displayFont : bodyFont}">${escapeHtml(d.value)}</td>
 </tr>`).join("")}
 </table>`
           : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;border-collapse:collapse">
 ${details.map((d, i) => `<tr>
-<td style="padding:${i === 0 ? "0" : "11px"} 16px 11px 0;${i === 0 ? "" : "border-top:1px solid #ECEEF1;"}font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;white-space:nowrap;vertical-align:top;font-family:${SANS}">${escapeHtml(d.label)}</td>
-<td style="padding:${i === 0 ? "0" : "11px"} 0 11px 0;${i === 0 ? "" : "border-top:1px solid #ECEEF1;"}font-size:${d.emphasis ? "17px" : "15px"};${d.emphasis ? `font-weight:700;color:${color};` : "color:#1A2230;"}text-align:right;vertical-align:top;font-family:${SANS}">${escapeHtml(d.value)}</td>
+<td style="padding:${i === 0 ? "0" : "11px"} 16px 11px 0;${i === 0 ? "" : "border-top:1px solid #ECEEF1;"}font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#8A93A0;white-space:nowrap;vertical-align:top;font-family:${labelFont}">${escapeHtml(d.label)}</td>
+<td style="padding:${i === 0 ? "0" : "11px"} 0 11px 0;${i === 0 ? "" : "border-top:1px solid #ECEEF1;"}font-size:${d.emphasis ? "17px" : "15px"};${d.emphasis ? `font-weight:700;color:${color};` : "color:#1A2230;"}text-align:right;vertical-align:top;font-family:${d.emphasis ? displayFont : bodyFont}">${escapeHtml(d.value)}</td>
 </tr>`).join("")}
 </table>`;
 
@@ -370,7 +383,7 @@ ${details.map((d, i) => `<tr>
   const ctaBlock = args.cta
     ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 26px${T.mastheadAlign === "center" ? ";margin-left:auto;margin-right:auto" : ""}">
 <tr><td style="background:${color};border-radius:${theme === "modern" ? "6px" : "2px"}">
-<a href="${escapeHtml(args.cta.url)}" style="display:inline-block;padding:13px 28px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:.02em;font-family:${SANS}">${escapeHtml(args.cta.label)}</a>
+<a href="${escapeHtml(args.cta.url)}" style="display:inline-block;padding:13px 28px;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;letter-spacing:.02em;font-family:${bodyFont}">${escapeHtml(args.cta.label)}</a>
 </td></tr></table>`
     : "";
 
@@ -396,7 +409,7 @@ ${details.map((d, i) => `<tr>
   const footer = args.brand.footerText
     ? `<tr><td style="padding:20px ${T.pad} 30px;text-align:${T.mastheadAlign}">
 <div style="height:1px;background:${theme === "boutique" ? "#E3DED6" : "#ECEEF1"};margin:0 0 16px"></div>
-<p style="margin:0;color:#8A93A0;font-size:12px;line-height:1.65;font-family:${SANS}">${escapeHtml(args.brand.footerText).replace(/\n/g, "<br>")}</p>
+<p style="margin:0;color:#8A93A0;font-size:12px;line-height:1.65;font-family:${bodyFont}">${escapeHtml(args.brand.footerText).replace(/\n/g, "<br>")}</p>
 </td></tr>`
     : "";
 

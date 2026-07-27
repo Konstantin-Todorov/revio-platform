@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, CalendarRange, Wrench, CalendarCheck, Tags, BarChart3,
-  Share2, Users, Settings, X, type LucideIcon,
+  Share2, Users, Settings, Globe, X, type LucideIcon,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
@@ -32,6 +32,9 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   ] },
   { title: "Configuration", items: [
     { href: "/distribution", label: "Distribution", icon: Share2 },
+    // The direct channel gets its own screen next to the OTA one — it is a sales channel the hotel
+    // configures, not a preference buried in Settings.
+    { href: "/booking-engine", label: "Booking Engine", icon: Globe },
     { href: "/settings", label: "Settings", icon: Settings },
   ] },
 ];

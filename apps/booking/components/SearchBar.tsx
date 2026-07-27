@@ -28,6 +28,7 @@ export function SearchBar({
   defaultCheckOut,
   defaultGuests = 2,
   compact = false,
+  onDark = false,
 }: {
   slug: string;
   defaultCheckIn?: string;
@@ -35,6 +36,12 @@ export function SearchBar({
   defaultGuests?: number;
   /** The results-page variant: shorter segments, no helper line — it sits above live results. */
   compact?: boolean;
+  /**
+   * The helper line below the bar sits on the page, not on the card, so on the Bold preset's solid
+   * brand banner it needs reversed ink. Only that one line — everything else is inside a white card
+   * and must keep the normal palette.
+   */
+  onDark?: boolean;
 }) {
   /**
    * Dates start filled in — tomorrow, two nights.
@@ -172,7 +179,10 @@ export function SearchBar({
       </form>
 
       {!compact && (
-        <p className="mt-3 text-center text-[13px] sm:text-left" style={{ color: "hsl(var(--ink-faint))" }}>
+        <p
+          className="mt-3 text-center text-[13px] sm:text-left"
+          style={{ color: onDark ? "hsl(var(--brand-ink) / 0.8)" : "hsl(var(--ink-faint))" }}
+        >
           {ready ? (
             <>
               {nights} {nights === 1 ? "night" : "nights"} · prices shown include every tax and fee

@@ -26,8 +26,20 @@ and inventory-touching**, which changes the rules:
 
 ## Branding
 
-Nothing new to configure. Colour, logo and typeface are read from the fields the hotel already set
-for its guest emails, so switching the engine on inherits a look rather than asking for one again.
+**Configured in RevioCRS → Booking Engine** (`apps/reservation/app/(protected)/booking-engine/`),
+NOT in the email settings. The booking page and the confirmation email are two different pieces of
+the hotel's identity, and a shared control means editing one silently restyles the other.
+
+Every `booking*` column on `Property` is nullable, and **NULL means "inherit from the email
+branding"**. So switching the engine on still inherits a coherent look with no second round of
+branding work, and only the fields a hotel actually edits diverge. The resolution lives in one place
+(`lib/property.ts`) — screens never read the raw columns.
+
+A hotel picks a **base preset** (`BOOKING_PRESETS` in `@revio/core`) and then edits colour, headings,
+logo and hero copy on top of it. A preset sets ONLY neutrals and shape, never the accent — that is
+always the hotel's own colour. That separation is what makes "pick a base, then edit" compose: the
+two choices cannot fight each other. The presets live in core because both the public page and the
+CRS's live preview render from them, and a preview that approximates the result is worse than none.
 
 `lib/brand.ts` derives five tokens from the single hex the hotel gave us:
 
