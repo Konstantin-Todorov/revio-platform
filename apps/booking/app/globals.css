@@ -5,30 +5,59 @@
 /**
  * RevioDirect — the guest-facing booking surface.
  *
- * Design direction: hotel stationery, not SaaS. Warm paper ground, hairline rules, editorial
- * headings, generous air. The reason is practical as well as aesthetic — this page wears a
- * DIFFERENT hotel's accent colour on every visit, so the canvas has to stay quiet enough that any
- * accent looks deliberate on it. A branded SaaS palette would fight the hotel; paper never does.
+ * Direction: CALM PRECISION. This page asks a stranger for their name and their card, so clarity
+ * outranks decoration at every fork. The visual language is modern-product rather than
+ * modern-decorative: white surfaces, one soft shadow family, generous radii, and type that carries
+ * the hierarchy through weight and spacing instead of ornament.
  *
- * --brand is injected per property at request time (see BrandStyle). Everything else is fixed.
+ * The hard constraint that shapes all of it: this page wears a DIFFERENT hotel's accent colour on
+ * every visit. The canvas has to stay neutral enough that a navy, a gold and a forest green all look
+ * deliberate on it — so the neutrals are cool and near-achromatic, and the brand colour is the only
+ * saturated thing on screen. That makes the accent read as the hotel's AND makes the primary action
+ * impossible to miss, from one decision.
+ *
+ * --brand* is injected per property at request time (see lib/brand.ts). Everything else is fixed.
  */
 
 :root {
-  /* Warm paper rather than #fff — pure white reads as "web app", off-white reads as printed. */
-  --paper: 42 33% 97%;
-  --paper-raised: 40 40% 99%;
-  --ink: 30 8% 12%;
-  --ink-soft: 30 6% 38%;
-  --ink-faint: 30 6% 56%;
-  --rule: 30 12% 87%;
+  /* Cool near-neutral ground. Not white — white cards need something to sit ON to read as raised. */
+  --ground: 220 24% 97%;
+  --surface: 0 0% 100%;
+  --surface-sunk: 220 20% 96%;
 
-  /* Overridden per hotel. This default is a deep neutral that flatters most brand colours. */
-  --brand: 202 45% 24%;
+  --ink: 222 32% 11%;
+  --ink-soft: 222 12% 38%;
+  /* 46%, not the 52% that looks right in a mockup — below that it measures under 4.5:1 on white,
+     and this token carries the per-night price and the check-in times. */
+  --ink-faint: 222 11% 46%;
+
+  --line: 220 16% 90%;
+  --line-strong: 220 14% 80%;
+
+  /* Overridden per hotel. This default flatters most brand colours. */
+  --brand: 222 60% 30%;
   --brand-ink: 0 0% 100%;
-  --brand-text: 202 45% 24%;
+  --brand-text: 222 60% 30%;
+  --brand-wash: 222 60% 96%;
+  --brand-soft: 222 45% 90%;
 
-  --positive: 152 40% 32%;
-  --caution: 28 70% 42%;
+  --positive: 158 64% 28%;
+  --caution: 25 84% 38%;
+
+  /* Overridden per hotel by fontVars(). The fallbacks matter: the 404 shell renders outside any
+     property layout, and unset font variables there would drop it to a system face. */
+  --font-display: var(--font-ui);
+  --font-body: var(--font-ui);
+
+  --r-sm: 10px;
+  --r: 14px;
+  --r-lg: 20px;
+
+  /* One shadow family, four depths. Consistency here is most of what makes a UI feel built. */
+  --shadow-sm: 0 1px 2px hsl(222 32% 11% / 0.05), 0 1px 3px hsl(222 32% 11% / 0.04);
+  --shadow: 0 2px 4px -2px hsl(222 32% 11% / 0.06), 0 8px 20px -8px hsl(222 32% 11% / 0.12);
+  --shadow-lg: 0 4px 8px -4px hsl(222 32% 11% / 0.08), 0 24px 48px -20px hsl(222 32% 11% / 0.2);
+  --shadow-pop: 0 8px 16px -8px hsl(222 32% 11% / 0.14), 0 32px 64px -24px hsl(222 32% 11% / 0.28);
 }
 
 @layer base {
@@ -38,112 +67,314 @@
   }
 
   body {
-    background-color: hsl(var(--paper));
+    background-color: hsl(var(--ground));
     color: hsl(var(--ink));
     font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: "kern", "liga", "calt";
     -webkit-font-smoothing: antialiased;
-    text-rendering: optimizeLegibility;
-  }
-
-  /* A whisper of grain. Kills the flatness of a solid fill without ever being noticeable. */
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 0.028;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+    /* Removes the 300ms mobile tap delay without disabling pinch-zoom. */
+    touch-action: manipulation;
   }
 
   ::selection {
-    background-color: hsl(var(--brand) / 0.16);
+    background-color: hsl(var(--brand) / 0.18);
   }
 
-  /* Focus is a trust signal on a page that asks for a card — never remove it, make it good. */
+  /* Focus is a trust signal on a page that asks for a card. Never remove it — make it good. */
   :focus-visible {
     outline: 2px solid hsl(var(--brand));
-    outline-offset: 3px;
-    border-radius: 2px;
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
 @layer components {
+  /**
+   * Headings. The hotel's own font choice drives --font-display, and --display-weight /
+   * --display-tracking move with it: an 800-weight geometric sans and a 400-weight display serif
+   * need completely different optical settings to look equally intentional at the same size.
+   */
   .display {
-    font-family: var(--font-display), Georgia, serif;
-    font-weight: 400;
-    letter-spacing: -0.021em;
-    line-height: 1.04;
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-weight: var(--display-weight, 800);
+    letter-spacing: var(--display-tracking, -0.035em);
+    line-height: 1.05;
   }
 
-  /* Small caps label — the "PROPERTY / DATES" microcopy on a printed folio card. */
+  /**
+   * Prices are DATA, not brand voice, so they never take the hotel's display face.
+   *
+   * A guest scanning a column of totals is comparing figures, and Plus Jakarta Sans has properly
+   * tabular numerals where a 400-weight display serif has thin, unevenly-spaced ones. The hotel's
+   * font gets its name and its headings; the money stays legible.
+   */
+  .price {
+    font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
   .eyebrow {
     font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.15em;
+    font-weight: 700;
+    letter-spacing: 0.11em;
     text-transform: uppercase;
     color: hsl(var(--ink-faint));
   }
 
-  .rule {
-    border-color: hsl(var(--rule));
+  /* Prices, dates and counts a guest compares must line up in a column. */
+  .nums {
+    font-variant-numeric: tabular-nums;
   }
 
   .card {
-    background-color: hsl(var(--paper-raised));
-    border: 1px solid hsl(var(--rule));
-    box-shadow:
-      0 1px 2px hsl(var(--ink) / 0.03),
-      0 8px 24px -16px hsl(var(--ink) / 0.16);
+    background-color: hsl(var(--surface));
+    border: 1px solid hsl(var(--line));
+    border-radius: var(--r);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .card-raised {
+    background-color: hsl(var(--surface));
+    border: 1px solid hsl(var(--line));
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow);
+  }
+
+  /* ---- Buttons -------------------------------------------------------------------------- */
+
+  /* 44px minimum everywhere — the WCAG touch target, applied on desktop too so nothing shifts. */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0 1.25rem;
+    border-radius: var(--r-sm);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 180ms ease, color 180ms ease, border-color 180ms ease,
+      box-shadow 180ms ease, opacity 180ms ease;
+  }
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .btn-brand {
     background-color: hsl(var(--brand));
     color: hsl(var(--brand-ink));
-    transition: transform 140ms cubic-bezier(0.2, 0, 0, 1), filter 140ms ease;
+    box-shadow: var(--shadow-sm);
   }
-  .btn-brand:hover {
-    filter: brightness(1.12);
-  }
-  .btn-brand:active {
-    transform: translateY(1px);
+  /* Hover moves colour and shadow, never scale — a transform here nudges the layout under it. */
+  .btn-brand:hover:not(:disabled) {
+    background-color: hsl(var(--brand) / 0.88);
+    box-shadow: var(--shadow);
   }
 
-  /* Field styling shared by the date and guest inputs so the search bar reads as one object. */
-  .field {
+  .btn-outline {
+    background-color: hsl(var(--surface));
+    color: hsl(var(--ink));
+    border: 1px solid hsl(var(--line-strong));
+  }
+  .btn-outline:hover:not(:disabled) {
+    border-color: hsl(var(--ink-faint));
+    background-color: hsl(var(--surface-sunk));
+  }
+
+  .btn-ghost {
     background-color: transparent;
+    color: hsl(var(--ink-soft));
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background-color: hsl(var(--surface-sunk));
+    color: hsl(var(--ink));
+  }
+
+  /* ---- Search bar ----------------------------------------------------------------------- */
+
+  /**
+   * One segmented control rather than three loose inputs. Each segment is a button that opens a
+   * panel — the pattern every serious booking engine converged on, because a native date input
+   * cannot express a RANGE and a bare <select> hides how many people a room actually sleeps.
+   */
+  .seg {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.125rem;
+    min-height: 60px;
+    padding: 0.5rem 1.125rem;
+    border-radius: var(--r);
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 160ms ease;
+  }
+  .seg:hover {
+    background-color: hsl(var(--surface-sunk));
+  }
+  .seg[data-open="true"] {
+    background-color: hsl(var(--brand-wash));
+  }
+  .seg-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: hsl(var(--ink-faint));
+  }
+  .seg-value {
+    font-size: 0.9375rem;
+    font-weight: 600;
     color: hsl(var(--ink));
     font-variant-numeric: tabular-nums;
   }
-  .field::-webkit-calendar-picker-indicator {
-    opacity: 0.45;
+  .seg-value[data-empty="true"] {
+    color: hsl(var(--ink-faint));
+    font-weight: 500;
+  }
+
+  .pop {
+    background-color: hsl(var(--surface));
+    border: 1px solid hsl(var(--line));
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-pop);
+  }
+
+  /* ---- Calendar ------------------------------------------------------------------------- */
+
+  .day {
+    position: relative;
+    height: 42px;
+    width: 100%;
+    border-radius: var(--r-sm);
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease;
+  }
+  /* Excludes the chosen days explicitly. A bare `.day:hover` out-specifies `[data-selected]`, so
+     the date under the cursor — which is exactly the one being picked — would grey out instead of
+     filling with the brand colour. */
+  .day:hover:not(:disabled):not([data-selected]):not([data-in-range]) {
+    background-color: hsl(var(--surface-sunk));
+  }
+  .day:disabled {
+    color: hsl(var(--ink-faint) / 0.45);
+    cursor: default;
+  }
+  /* The nights between the two ends: tinted, not filled — the ENDS are what the guest chose. */
+  .day[data-in-range="true"] {
+    background-color: hsl(var(--brand-soft) / 0.6);
+    border-radius: 0;
+  }
+  .day[data-edge="start"] {
+    border-radius: var(--r-sm) 0 0 var(--r-sm);
+  }
+  .day[data-edge="end"] {
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  }
+  .day[data-selected="true"] {
+    background-color: hsl(var(--brand));
+    color: hsl(var(--brand-ink));
+    font-weight: 700;
+  }
+  .day[data-today="true"]::after {
+    content: "";
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    width: 3px;
+    height: 3px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+    background-color: currentColor;
+    opacity: 0.55;
+  }
+
+  /* ---- Small parts ---------------------------------------------------------------------- */
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3125rem 0.6875rem;
+    border-radius: 999px;
+    background-color: hsl(var(--surface-sunk));
+    color: hsl(var(--ink-soft));
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .badge-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    padding: 0.25rem 0.5625rem;
+    border-radius: 999px;
+    background-color: hsl(var(--brand-wash));
+    color: hsl(var(--brand-text));
+    font-size: 0.6875rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .link-quiet {
+    color: hsl(var(--ink-soft));
+    transition: color 160ms ease;
     cursor: pointer;
   }
+  .link-quiet:hover {
+    color: hsl(var(--ink));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  /* Reserves the row height while results load, so nothing jumps when they arrive. */
+  .skel {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--surface-sunk)) 25%,
+      hsl(var(--line) / 0.55) 37%,
+      hsl(var(--surface-sunk)) 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+    border-radius: var(--r-sm);
+  }
 }
 
-/* Staggered entrance — one orchestrated reveal on load reads as craft; scattered micro-animations
-   read as noise. Respects the user's motion preference. */
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+/* One orchestrated reveal on load reads as craft; scattered micro-animations read as noise. */
 @keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
 }
+.rise { animation: rise 560ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
-.rise {
-  animation: rise 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
+.pop-in { animation: pop-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise {
+  .rise,
+  .pop-in,
+  .skel {
     animation: none;
   }
-  html {
-    scroll-behavior: auto;
-  }
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 1ms !important; }
 }

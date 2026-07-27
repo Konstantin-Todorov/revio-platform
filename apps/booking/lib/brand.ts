@@ -13,16 +13,26 @@ export interface BrandTokens {
   /** Text colour that is readable ON the brand fill. */
   brandInk: string;
   /**
-   * For TEXT set in the brand colour on the paper background — a headline, a small dash.
+   * For TEXT set in the brand colour on the page background — a headline, a total, a link.
    *
    * It has to be a separate token: a mid-lightness brand colour (a gold, a sky blue) makes a
    * perfectly good button but an unreadable headline, and one value cannot serve both jobs. This is
    * the same hue, darkened until it actually reads against the page.
    */
   brandText: string;
+  /** Barely-there tint — selected segments, badges, the hero wash. Must stay lighter than a card. */
+  brandWash: string;
+  /** The mid tint — nights inside a selected date range, hover states on brand surfaces. */
+  brandSoft: string;
 }
 
-const DEFAULT: BrandTokens = { brand: "202 45% 24%", brandInk: "0 0% 100%", brandText: "202 45% 24%" };
+const DEFAULT: BrandTokens = {
+  brand: "222 60% 30%",
+  brandInk: "0 0% 100%",
+  brandText: "222 60% 30%",
+  brandWash: "222 60% 96%",
+  brandSoft: "222 45% 90%",
+};
 
 export function brandTokens(hex: string | null | undefined): BrandTokens {
   const rgb = parseHex(hex);
@@ -30,21 +40,98 @@ export function brandTokens(hex: string | null | undefined): BrandTokens {
 
   const { h, s, l } = rgbToHsl(rgb);
 
-  // A very light or very desaturated "brand" colour cannot carry a primary button. Rather than
-  // render something illegible, deepen it — the hotel still reads as itself, but the page works.
-  const usableL = l > 62 ? Math.max(28, l - 26) : l;
+  const fill = readableFill(h, s, l);
 
-  // Text on paper needs to be genuinely dark; 42% is where a saturated hue starts passing WCAG AA
-  // against our off-white ground. Saturation is nudged up so the darkened colour keeps its identity
-  // instead of drifting toward grey.
-  const textL = Math.min(usableL, 42);
-  const textS = textL < usableL ? Math.min(100, s + 8) : s;
+  // Tints are built from the hue, not from the fill — a dark navy and a pale gold should both
+  // produce a wash you can read dark text on, which means fixing lightness rather than lightening
+  // the brand colour by a percentage.
+  const tintS = Math.min(70, Math.max(18, s));
+
+  // Saturation is nudged up so the darkened text colour keeps its identity instead of drifting grey.
+  const textS = Math.min(100, s + 8);
 
   return {
-    brand: `${Math.round(h)} ${Math.round(s)}% ${Math.round(usableL)}%`,
-    brandInk: contrastInk(rgb, usableL),
-    brandText: `${Math.round(h)} ${Math.round(textS)}% ${Math.round(textL)}%`,
+    brand: `${Math.round(h)} ${Math.round(s)}% ${fill.lightness}%`,
+    brandInk: fill.ink,
+    brandText: `${Math.round(h)} ${Math.round(textS)}% ${readableTextL(h, textS, l, tintS)}%`,
+    brandWash: `${Math.round(h)} ${Math.round(tintS)}% 96%`,
+    brandSoft: `${Math.round(h)} ${Math.round(tintS)}% 89%`,
   };
+}
+
+/** The near-black used for text throughout the page (--ink). */
+const DARK_INK = "222 32% 11%";
+const WHITE_INK = "0 0% 100%";
+
+/**
+ * A button fill the label can actually be read on.
+ *
+ * The obvious approach — pick white or black by a luminance threshold — has a dead zone. A sky
+ * blue, a hot pink and a mid grey all sit at a lightness where NEITHER white nor near-black reaches
+ * 4.5:1, so whichever you pick is unreadable. The previous version made this worse by force-
+ * darkening any pale colour by a fixed amount, which pushed bright colours *into* that dead zone.
+ *
+ * So instead of guessing, we walk the colour down one percent at a time and stop at the first
+ * lightness where a real ink measures 4.5:1. Dark ink is preferred when it works, because it lets a
+ * yellow stay yellow and a sky blue stay sky blue rather than being darkened into something the
+ * hotel would not recognise.
+ *
+ * The second condition keeps the button visible as an object: a near-white brand colour can carry
+ * black text perfectly well and still vanish into a white card, so the fill must also stay
+ * distinguishable from the surface it sits on.
+ */
+function readableFill(h: number, s: number, l: number): { lightness: number; ink: string } {
+  const darkInkLum = relativeLuminance(hslToRgb(222, 32, 11));
+
+  for (let L = Math.round(l); L >= 12; L--) {
+    const lum = relativeLuminance(hslToRgb(h, s, L));
+
+    // Against a white card: below this the button reads as a shape, not as blank paper.
+    if ((1 + 0.05) / (lum + 0.05) < 1.25) continue;
+
+    if ((lum + 0.05) / (darkInkLum + 0.05) >= 4.5) return { lightness: L, ink: DARK_INK };
+    if ((1 + 0.05) / (lum + 0.05) >= 4.5) return { lightness: L, ink: WHITE_INK };
+  }
+  return { lightness: 12, ink: WHITE_INK };
+}
+
+/**
+ * How dark the brand colour must go before it is readable as TEXT.
+ *
+ * Measured, not assumed. A fixed lightness cap cannot work here: at 42% lightness a saturated blue
+ * clears WCAG AA comfortably and a saturated gold sits at 2.6:1, because lightness and perceived
+ * luminance are not the same thing. So we walk the colour down one percent at a time and stop at
+ * the first value that actually measures 4.5:1.
+ *
+ * The target background is --brand-wash, not white: brand text appears on the "Best price" badge
+ * and other tinted chips, and that tint is the darkest ground it ever sits on. Passing there means
+ * passing everywhere else on the page.
+ */
+function readableTextL(h: number, s: number, startL: number, tintS: number): number {
+  const bg = relativeLuminance(hslToRgb(h, tintS, 96));
+
+  for (let L = Math.min(startL, 50); L >= 8; L--) {
+    const ratio = (bg + 0.05) / (relativeLuminance(hslToRgb(h, s, L)) + 0.05);
+    if (ratio >= 4.5) return L;
+  }
+  return 8;
+}
+
+function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
+  const S = s / 100;
+  const L = l / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = S * Math.min(L, 1 - L);
+  const f = (n: number) => L - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  return { r: Math.round(255 * f(0)), g: Math.round(255 * f(8)), b: Math.round(255 * f(4)) };
+}
+
+function relativeLuminance({ r, g, b }: { r: number; g: number; b: number }): number {
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
 function parseHex(hex: string | null | undefined): { r: number; g: number; b: number } | null {
@@ -76,26 +163,24 @@ function rgbToHsl({ r, g, b }: { r: number; g: number; b: number }): { h: number
 }
 
 /**
- * Black or white text on this colour, whichever the eye can actually read. Uses relative luminance
- * (WCAG) rather than lightness, because a saturated yellow and a saturated blue can share an L value
- * while differing enormously in perceived brightness.
+ * The hotel's typeface choice → the heading family AND the optical settings that go with it.
+ *
+ * Weight and tracking ship alongside the family because they are not independent of it. Plus Jakarta
+ * Sans needs 800 and tight negative tracking to read as a headline; Instrument Serif at 400 is
+ * already a display face and the same tracking would crush it. Returning one without the other is
+ * how a font swap ends up looking broken.
  */
-function contrastInk(rgb: { r: number; g: number; b: number }, adjustedL: number): string {
-  // Approximate the lightness adjustment applied above so the ink matches the colour we'll paint.
-  const scale = adjustedL / Math.max(1, rgbToHsl(rgb).l);
-  const lin = (c: number) => {
-    const v = Math.min(255, c * scale) / 255;
-    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  const luminance = 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
-  // 0.36 sits near the crossover where white stops being the more readable choice.
-  return luminance > 0.36 ? "30 8% 12%" : "0 0% 100%";
+export interface FontVars {
+  display: string;
+  body: string;
+  displayWeight: string;
+  displayTracking: string;
 }
 
-/** The hotel's typeface choice → which loaded family drives headings. */
-export function fontVars(font: string): { display: string; body: string } {
-  const sans = "var(--font-karla)";
-  const serif = "var(--font-fraunces)";
-  if (font === "sans") return { display: sans, body: sans };
-  return { display: serif, body: sans }; // serif + mixed both get the editorial pairing
+export function fontVars(font: string): FontVars {
+  const ui = "var(--font-ui)";
+  if (font === "serif" || font === "mixed") {
+    return { display: "var(--font-serif)", body: ui, displayWeight: "400", displayTracking: "-0.015em" };
+  }
+  return { display: ui, body: ui, displayWeight: "800", displayTracking: "-0.035em" };
 }

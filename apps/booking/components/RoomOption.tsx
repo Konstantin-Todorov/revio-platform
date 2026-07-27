@@ -1,23 +1,26 @@
-import type { PublicRoomOption } from "@revio/booking";
-import { money } from "@/lib/availability";
+import type { PublicPlanQuote, PublicRoomOption } from "@revio/booking";
+import { BedDouble, ChevronDown, Coffee, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { money } from "@/lib/dates";
 
 /**
  * One room type and its rates.
  *
  * The headline number is the ALL-IN total for the whole stay. Per-night sits underneath in small
- * type, which is the opposite of how an OTA presents it — they lead with a per-night figure that
- * grows once taxes appear. Leading with the true total is the entire point, so it gets the emphasis.
+ * type — the opposite of an OTA, which leads with a nightly figure that grows once taxes appear.
+ * Leading with the true total is the entire point of this product, so it gets the emphasis, and the
+ * itemised breakdown sits beside it in plain sight rather than behind a tooltip.
  *
- * The breakdown is always visible rather than hidden behind a tooltip: a total you have to hunt for
- * is only marginally better than one that surprises you.
+ * Only the cheapest rate is open. A hotel with four rate plans across four room types produces
+ * sixteen near-identical rows, and a guest scrolling past all of them is doing the hotel's pricing
+ * homework. The best price is the answer to the question they actually asked; the rest are there
+ * for anyone who wants breakfast or a refundable rate, one click away.
+ *
+ * The media panel is a real slot, not decoration: K3 drops the room's photograph into it. Until
+ * then it renders a brand-tinted panel rather than a grey box, so a hotel that has uploaded nothing
+ * still looks finished instead of broken.
  */
 export function RoomOption({
-  option,
-  nights,
-  slug,
-  checkIn,
-  checkOut,
-  guests,
+  option, nights, slug, checkIn, checkOut, guests,
 }: {
   option: PublicRoomOption;
   nights: number;
@@ -26,71 +29,163 @@ export function RoomOption({
   checkOut: string;
   guests: number;
 }) {
-  // Cheapest first — the rate a guest is most likely to want, and the fairest comparison to an OTA.
+  // Cheapest first — the rate most guests want, and the fairest comparison against an OTA listing.
   const plans = [...option.plans].sort((a, b) => a.totalMinor - b.totalMinor);
+  const [best, ...rest] = plans;
+  if (!best) return null;
+
+  const href = (plan: PublicPlanQuote) =>
+    `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
 
   return (
-    <article className="card overflow-hidden rounded-xl">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b px-5 py-4 rule">
-        <div>
-          <h2 className="display text-[1.45rem]">{option.name}</h2>
-          <p className="mt-1 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-            Sleeps up to {option.maxGuests}
-          </p>
+    <article className="card-raised overflow-hidden">
+      <div className="grid sm:grid-cols-[minmax(0,13.5rem)_1fr]">
+        <div
+          className="relative hidden min-h-[11rem] items-center justify-center sm:flex"
+          style={{
+            background: "linear-gradient(150deg, hsl(var(--brand-wash)), hsl(var(--brand-soft) / 0.65))",
+            borderRight: "1px solid hsl(var(--line))",
+          }}
+          aria-hidden
+        >
+          <BedDouble size={30} strokeWidth={1.4} style={{ color: "hsl(var(--brand-text) / 0.35)" }} />
         </div>
-        {/* Honest scarcity only — a real count, and only when it is genuinely low. */}
-        {option.remaining <= 3 && (
-          <span className="text-[12.5px] font-semibold" style={{ color: "hsl(var(--caution))" }}>
-            {option.remaining === 1 ? "Last room at this price" : `Only ${option.remaining} left`}
-          </span>
-        )}
+
+        <div className="min-w-0">
+          <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 px-5 pt-5">
+            <div className="min-w-0">
+              <h2 className="display text-[1.3rem] sm:text-[1.5rem]">{option.name}</h2>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <span className="chip">
+                  <Users size={13} aria-hidden />
+                  Sleeps {option.maxGuests}
+                </span>
+                {rest.length > 0 && (
+                  <span className="chip">
+                    {plans.length} rates available
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Honest scarcity only — a real count, and only when it is genuinely low. */}
+            {option.remaining <= 3 && (
+              <span
+                className="rounded-full px-2.5 py-1 text-[12px] font-bold"
+                style={{ backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}
+              >
+                {option.remaining === 1 ? "Last room" : `Only ${option.remaining} left`}
+              </span>
+            )}
+          </header>
+
+          <div className="mt-4">
+            <RateRow plan={best} nights={nights} href={href(best)} highlight={rest.length > 0} />
+          </div>
+
+          {rest.length > 0 && (
+            /* Native <details>: no JavaScript, works before hydration, and the browser gives us
+               keyboard and screen-reader behaviour for free. */
+            <details className="group border-t" style={{ borderColor: "hsl(var(--line))" }}>
+              <summary
+                className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-[13px] font-semibold transition-colors hover:bg-[hsl(var(--surface-sunk))] [&::-webkit-details-marker]:hidden"
+                style={{ color: "hsl(var(--brand-text))" }}
+              >
+                <span>
+                  {rest.length} other {rest.length === 1 ? "rate" : "rates"} — breakfast, flexible
+                  cancellation
+                </span>
+                <ChevronDown
+                  size={16}
+                  aria-hidden
+                  className="transition-transform duration-200 group-open:rotate-180"
+                />
+              </summary>
+              {rest.map((plan) => (
+                <div key={plan.ratePlanId} className="border-t" style={{ borderColor: "hsl(var(--line))" }}>
+                  <RateRow plan={plan} nights={nights} href={href(plan)} />
+                </div>
+              ))}
+            </details>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function RateRow({
+  plan, nights, href, highlight = false,
+}: {
+  plan: PublicPlanQuote;
+  nights: number;
+  href: string;
+  /** The cheapest rate, when there is something to be cheaper than. */
+  highlight?: boolean;
+}) {
+  return (
+    <div className="grid gap-4 px-5 pb-5 pt-1 sm:grid-cols-[1fr_auto] sm:gap-8">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-[14.5px] font-bold">{plan.name}</h3>
+          {highlight && (
+            <span className="badge-brand">
+              <Sparkles size={11} aria-hidden />
+              Best price
+            </span>
+          )}
+        </div>
+
+        <div
+          className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px]"
+          style={{ color: "hsl(var(--ink-soft))" }}
+        >
+          {plan.mealPlan && (
+            <span className="flex items-center gap-1.5">
+              <Coffee size={13} aria-hidden style={{ color: "hsl(var(--positive))" }} />
+              {plan.mealPlan}
+            </span>
+          )}
+          {plan.cancellationPolicy && (
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck size={13} aria-hidden style={{ color: "hsl(var(--positive))" }} />
+              {plan.cancellationPolicy}
+            </span>
+          )}
+        </div>
+
+        {/* Always visible. A total you have to hunt for is only marginally better than one that
+            surprises you at the end. */}
+        <dl
+          className="mt-3 inline-flex flex-wrap gap-x-5 gap-y-1 rounded-[var(--r-sm)] px-3 py-2 text-[12px]"
+          style={{ backgroundColor: "hsl(var(--surface-sunk))", color: "hsl(var(--ink-soft))" }}
+        >
+          <div className="flex gap-1.5">
+            <dt>
+              Rooms, {nights} {nights === 1 ? "night" : "nights"}
+            </dt>
+            <dd className="nums font-semibold">{money(plan.accommodationMinor, plan.currency)}</dd>
+          </div>
+          {plan.charges.map((c) => (
+            <div key={c.name} className="flex gap-1.5">
+              <dt>{c.name}</dt>
+              <dd className="nums font-semibold">{money(c.amountMinor, plan.currency)}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
 
-      <ul className="divide-y divide-[hsl(var(--rule))]">
-        {plans.map((plan) => (
-          <li key={plan.ratePlanId} className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 px-5 py-5">
-            <div className="min-w-[15rem] flex-1">
-              <h3 className="text-[14.5px] font-semibold">{plan.name}</h3>
-              <p className="mt-1 flex flex-wrap gap-x-3 text-[12.5px]" style={{ color: "hsl(var(--ink-soft))" }}>
-                {plan.mealPlan && <span>{plan.mealPlan}</span>}
-                {plan.cancellationPolicy && <span>{plan.cancellationPolicy}</span>}
-              </p>
-
-              <dl className="mt-3 space-y-0.5 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-                <div className="flex gap-2">
-                  <dt>
-                    Rooms · {nights} {nights === 1 ? "night" : "nights"}
-                  </dt>
-                  <dd className="tabular-nums">{money(plan.accommodationMinor, plan.currency)}</dd>
-                </div>
-                {plan.charges.map((c) => (
-                  <div key={c.name} className="flex gap-2">
-                    <dt>{c.name}</dt>
-                    <dd className="tabular-nums">{money(c.amountMinor, plan.currency)}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-
-            <div className="flex items-end gap-5">
-              <div className="text-right">
-                <div className="display text-[1.75rem] tabular-nums leading-none">
-                  {money(plan.totalMinor, plan.currency)}
-                </div>
-                <div className="mt-1.5 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
-                  total · {money(plan.perNightMinor, plan.currency)} a night
-                </div>
-              </div>
-              <a
-                href={`/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`}
-                className="btn-brand shrink-0 rounded-lg px-6 py-3 text-[13.5px] font-semibold"
-              >
-                Select
-              </a>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </article>
+      <div className="flex items-end justify-between gap-4 sm:flex-col sm:items-end sm:justify-center">
+        <div className="text-left sm:text-right">
+          <div className="price text-[1.6rem]">{money(plan.totalMinor, plan.currency)}</div>
+          <div className="nums mt-1.5 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
+            total · {money(plan.perNightMinor, plan.currency)} a night
+          </div>
+        </div>
+        <a href={href} className="btn btn-brand shrink-0 sm:w-[9rem]">
+          Select
+        </a>
+      </div>
+    </div>
   );
 }

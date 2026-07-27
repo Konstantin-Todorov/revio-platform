@@ -29,20 +29,51 @@ and inventory-touching**, which changes the rules:
 Nothing new to configure. Colour, logo and typeface are read from the fields the hotel already set
 for its guest emails, so switching the engine on inherits a look rather than asking for one again.
 
-`lib/brand.ts` derives three tokens from the single hex the hotel gave us:
+`lib/brand.ts` derives five tokens from the single hex the hotel gave us:
 
 | Token | Job |
 | --- | --- |
-| `--brand` | Fills — the button, rules, dots. |
-| `--brand-ink` | Text **on** the fill. Computed from relative luminance, because a pale gold needs dark text and a navy needs white. |
-| `--brand-text` | Brand-coloured text **on paper** — darkened to stay readable. A mid-lightness colour makes a fine button and an unreadable headline; one value cannot do both jobs. |
+| `--brand` | Fills — the button, the current step, the calendar selection. |
+| `--brand-ink` | Text **on** the fill. |
+| `--brand-text` | Brand-coloured text on a light ground — a headline, a link, a badge. |
+| `--brand-wash` / `--brand-soft` | Tints — badges, the hero gradient, nights inside a selected range. |
+
+**Contrast is measured, never assumed.** Both `--brand-ink` and `--brand-text` are found by walking
+the colour down one percent at a time until it *actually measures* 4.5:1, rather than by clamping
+lightness. Lightness and perceived luminance are not the same thing: a fixed cap that passes
+comfortably for a navy fails at 2.6:1 for a gold. Two consequences worth knowing:
+
+- **Dark ink is preferred when it works**, so a sky blue stays sky blue and a yellow stays yellow
+  instead of being darkened into something the hotel would not recognise. A hotel's exact hex is
+  usually rendered untouched.
+- **The fill also has a separation floor** against the card behind it — near-white brand colours
+  carry black text perfectly well and still vanish into the page, which the label check alone
+  cannot catch.
+
+`lib/brand.test.ts` runs every assertion across twelve deliberately awkward hotel colours. That file
+exists because a real WCAG failure shipped here once; "it looked fine on the demo hotel" is not
+evidence when the page wears an arbitrary colour on every visit.
 
 ## Design direction
 
-Hotel stationery, not SaaS: warm paper ground, hairline rules, editorial headings (Fraunces),
-generous air. That is a practical choice as much as an aesthetic one — the page wears a **different
-hotel's colour on every visit**, so the canvas has to be quiet enough that any accent looks
-deliberate on it.
+**Calm precision.** This page asks a stranger for their name and their card, so clarity outranks
+decoration at every fork: white surfaces on a cool near-neutral ground, one shadow family, generous
+radii, and hierarchy carried by weight and spacing rather than ornament.
+
+The neutrals are near-achromatic on purpose — the page wears a **different hotel's colour on every
+visit**, and the brand colour must be the only saturated thing on screen. That is what lets a navy,
+a gold and a forest green all look deliberate on the same canvas, and it makes the primary action
+impossible to miss, from the same decision.
+
+**Type:** Plus Jakarta Sans does nearly all the work — its numerals matter more here than anywhere
+else in the platform, because this page is a column of prices a guest reads by comparing them.
+Instrument Serif appears only for hotels that chose a serif identity, and only for headings.
+**Prices never take the hotel's display font** (`.price`): money is data, not brand voice.
+
+**Interaction patterns are the ones real booking engines converged on**, for reasons rather than
+fashion — a two-month date-**range** calendar (a native date input cannot express a range), a guest
+stepper, a search bar that stays pinned to the results and collapses to one row on mobile, and a
+four-step progress bar so nobody wonders how much is left.
 
 **Honest scarcity only.** "2 rooms left" only when 2 rooms are genuinely left. No countdown theatre,
 no "12 people viewing". Fake urgency is how OTAs became distrusted, and it would undermine the one

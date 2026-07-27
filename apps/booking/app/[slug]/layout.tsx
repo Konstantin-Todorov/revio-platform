@@ -39,14 +39,18 @@ export default async function PropertyLayout({
 
   return (
     <div
-      className="relative z-10"
+      className="relative"
       style={
         {
           "--brand": tokens.brand,
           "--brand-ink": tokens.brandInk,
           "--brand-text": tokens.brandText,
+          "--brand-wash": tokens.brandWash,
+          "--brand-soft": tokens.brandSoft,
           "--font-display": fonts.display,
           "--font-body": fonts.body,
+          "--display-weight": fonts.displayWeight,
+          "--display-tracking": fonts.displayTracking,
         } as React.CSSProperties
       }
     >

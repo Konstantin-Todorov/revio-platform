@@ -1,7 +1,9 @@
 import { notFound } from "next/navigation";
+import { Clock, MapPin, Phone } from "lucide-react";
 import { getPublicProperty } from "@/lib/property";
-import { SearchForm } from "@/components/SearchForm";
+import { SearchBar } from "@/components/SearchBar";
 import { PropertyHeader } from "@/components/PropertyHeader";
+import { PropertyFooter } from "@/components/PropertyFooter";
 import { TrustRow } from "@/components/TrustRow";
 
 export const dynamic = "force-dynamic";
@@ -9,9 +11,13 @@ export const dynamic = "force-dynamic";
 /**
  * The hotel's front door.
  *
- * One job: get the guest to a date range without making them think. Everything below the search bar
- * exists to answer "why book here rather than on Booking.com" — and every claim on it is one we can
- * actually keep, because fake urgency is how OTAs became distrusted.
+ * One job: get the guest to a date range without making them think. The search bar is the only
+ * interactive thing above the fold, and it sits centred in the hero deliberately — a guest who
+ * lands here should never have to work out where the booking starts.
+ *
+ * Everything below it answers "why book here rather than on Booking.com", and every claim is one we
+ * can actually keep. Fake urgency is how OTAs became distrusted; it would poison the one claim on
+ * this page that is genuinely unusual.
  */
 export default async function PropertyPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -19,56 +25,86 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
   if (!property) notFound();
 
   return (
-    <main className="mx-auto w-full max-w-[68rem] px-5 pb-24 pt-8 sm:px-8 sm:pt-14">
+    <>
       <PropertyHeader property={property} />
 
-      <section className="mt-14 sm:mt-24">
-        <p className="eyebrow rise" style={{ animationDelay: "60ms" }}>
-          Book direct
-        </p>
-        <h1
-          className="display rise mt-3 max-w-[16ch] text-[2.6rem] sm:text-[4.25rem]"
-          style={{ animationDelay: "120ms" }}
-        >
-          Reserve your stay
-          <span className="block" style={{ color: "hsl(var(--brand-text))" }}>
-            at the best rate.
-          </span>
-        </h1>
-        <p
-          className="rise mt-5 max-w-[46ch] text-[15px] leading-relaxed"
-          style={{ animationDelay: "180ms", color: "hsl(var(--ink-soft))" }}
-        >
-          Booking here costs you nothing extra and pays no commission to a travel site — so the rate
-          you see is the rate the hotel actually wants to give you.
-        </p>
+      <main>
+        <section className="relative overflow-hidden">
+          {/* A wash of the hotel's own colour, fading into the page. It is the only large area of
+              brand on the site, which is what lets a navy and a gold both look deliberate here. */}
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(130% 90% at 50% -10%, hsl(var(--brand-wash)) 0%, hsl(var(--ground)) 62%)",
+            }}
+          />
 
-        <div className="rise mt-9 sm:mt-11" style={{ animationDelay: "240ms" }}>
-          <SearchForm slug={property.slug} />
-        </div>
+          <div className="relative mx-auto w-full max-w-[72rem] px-5 pb-14 pt-14 sm:px-8 sm:pb-20 sm:pt-24">
+            <div className="mx-auto max-w-[46rem] text-center">
+              <p className="eyebrow rise" style={{ animationDelay: "40ms" }}>
+                Official booking · {property.name}
+              </p>
+              <h1 className="display rise mt-4 text-[2.4rem] sm:text-[3.75rem]" style={{ animationDelay: "100ms" }}>
+                Book direct. <span style={{ color: "hsl(var(--brand-text))" }}>Pay less.</span>
+              </h1>
+              <p
+                className="rise mx-auto mt-5 max-w-[46ch] text-[15.5px] leading-relaxed sm:text-[17px]"
+                style={{ animationDelay: "160ms", color: "hsl(var(--ink-soft))" }}
+              >
+                No commission goes to a travel site, so the rate you see is the one the hotel
+                actually wants to give you — with taxes and fees already in the number.
+              </p>
+            </div>
 
-        <div className="rise mt-10" style={{ animationDelay: "320ms" }}>
-          <TrustRow checkInTime={property.checkInTime} checkOutTime={property.checkOutTime} />
-        </div>
-      </section>
-
-      <footer className="mt-28 border-t pt-8 text-[13px] rule" style={{ color: "hsl(var(--ink-faint))" }}>
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div>
-            <p className="font-semibold" style={{ color: "hsl(var(--ink-soft))" }}>
-              {property.name}
-            </p>
-            {property.address && <p className="mt-1 max-w-[32ch]">{property.address}</p>}
-            <p className="mt-1 flex flex-wrap gap-x-4">
-              {property.phone && <span>{property.phone}</span>}
-              {property.contactEmail && <span>{property.contactEmail}</span>}
-            </p>
+            <div className="rise mx-auto mt-10 max-w-[58rem] sm:mt-12" style={{ animationDelay: "220ms" }}>
+              <SearchBar slug={property.slug} />
+            </div>
           </div>
-          <p className="text-[12px]">
-            Check-in from {property.checkInTime} · Check-out by {property.checkOutTime}
-          </p>
-        </div>
-      </footer>
-    </main>
+        </section>
+
+        <section className="mx-auto w-full max-w-[72rem] px-5 sm:px-8">
+          <div className="rise" style={{ animationDelay: "300ms" }}>
+            <TrustRow checkInTime={property.checkInTime} checkOutTime={property.checkOutTime} />
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-[72rem] px-5 pb-20 pt-12 sm:px-8">
+          <h2 className="display text-[1.5rem]">Good to know</h2>
+          <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Fact icon={<Clock size={16} aria-hidden />} term="Check-in & check-out">
+              From {property.checkInTime}, out by {property.checkOutTime}
+            </Fact>
+            {property.address && (
+              <Fact icon={<MapPin size={16} aria-hidden />} term="Where you'll stay">
+                {property.address}
+              </Fact>
+            )}
+            {property.phone && (
+              <Fact icon={<Phone size={16} aria-hidden />} term="Prefer to talk to someone?">
+                <a href={`tel:${property.phone.replace(/\s+/g, "")}`} className="link-quiet font-semibold">
+                  {property.phone}
+                </a>
+              </Fact>
+            )}
+          </dl>
+        </section>
+      </main>
+
+      <PropertyFooter property={property} />
+    </>
+  );
+}
+
+function Fact({ icon, term, children }: { icon: React.ReactNode; term: string; children: React.ReactNode }) {
+  return (
+    <div className="card p-5">
+      <dt className="flex items-center gap-2 text-[12.5px] font-semibold" style={{ color: "hsl(var(--ink-faint))" }}>
+        <span style={{ color: "hsl(var(--brand-text))" }}>{icon}</span>
+        {term}
+      </dt>
+      <dd className="mt-2 text-[14px] leading-relaxed">{children}</dd>
+    </div>
   );
 }
