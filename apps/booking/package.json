@@ -14,6 +14,7 @@
     "@revio/booking": "workspace:*",
     "@revio/core": "workspace:*",
     "@revio/db": "workspace:*",
+    "@revio/storage": "workspace:*",
     "@revio/ui": "workspace:*",
     "lucide-react": "^0.460.0",
     "next": "^15.1.3",

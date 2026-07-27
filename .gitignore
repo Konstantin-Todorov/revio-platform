@@ -26,3 +26,6 @@ _intake/
 
 # railway
 .railway/
+
+# Locally stored uploads (dev object store). Production uses a bucket — never commit media.
+.storage/

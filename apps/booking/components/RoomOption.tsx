@@ -1,5 +1,5 @@
 import type { PublicPlanQuote, PublicRoomOption } from "@revio/booking";
-import { BedDouble, ChevronDown, Coffee, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { BedDouble, ChevronDown, Coffee, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { money } from "@/lib/dates";
 
 /**
@@ -15,12 +15,12 @@ import { money } from "@/lib/dates";
  * homework. The best price is the answer to the question they actually asked; the rest are there
  * for anyone who wants breakfast or a refundable rate, one click away.
  *
- * The media panel is a real slot, not decoration: K3 drops the room's photograph into it. Until
- * then it renders a brand-tinted panel rather than a grey box, so a hotel that has uploaded nothing
- * still looks finished instead of broken.
+ * The media panel shows the room's cover photograph — the one the hotel dragged to the front of its
+ * gallery. A hotel that has uploaded nothing gets a brand-tinted panel instead of a grey box, so it
+ * can go live before its photo shoot and still look finished rather than broken.
  */
 export function RoomOption({
-  option, nights, slug, checkIn, checkOut, guests,
+  option, nights, slug, checkIn, checkOut, guests, mediaUrl,
 }: {
   option: PublicRoomOption;
   nights: number;
@@ -28,11 +28,16 @@ export function RoomOption({
   checkIn: string;
   checkOut: string;
   guests: number;
+  /** Object key → URL. Injected because only the app knows whether a bucket or our route serves it. */
+  mediaUrl: (key: string) => string;
 }) {
   // Cheapest first — the rate most guests want, and the fairest comparison against an OTA listing.
   const plans = [...option.plans].sort((a, b) => a.totalMinor - b.totalMinor);
   const [best, ...rest] = plans;
   if (!best) return null;
+
+  // Cover = lowest sortOrder, which is exactly what the hotel dragged to the front.
+  const cover = option.photos[0];
 
   const href = (plan: PublicPlanQuote) =>
     `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
@@ -40,16 +45,44 @@ export function RoomOption({
   return (
     <article className="card-raised overflow-hidden">
       <div className="grid sm:grid-cols-[minmax(0,13.5rem)_1fr]">
-        <div
-          className="relative hidden min-h-[11rem] items-center justify-center sm:flex"
-          style={{
-            background: "linear-gradient(150deg, hsl(var(--brand-wash)), hsl(var(--brand-soft) / 0.65))",
-            borderRight: "1px solid hsl(var(--line))",
-          }}
-          aria-hidden
-        >
-          <BedDouble size={30} strokeWidth={1.4} style={{ color: "hsl(var(--brand-text) / 0.35)" }} />
-        </div>
+        {cover ? (
+          <div className="relative hidden min-h-[11rem] sm:block" style={{ borderRight: "1px solid hsl(var(--line))" }}>
+            {/* Not next/image: this is already our own resized WebP, so a second optimisation pass
+                would burn CPU to produce the same bytes. Dimensions are set so the browser reserves
+                the right box and the card does not jump as photos arrive. */}
+            <img
+              src={mediaUrl(cover.thumbKey)}
+              alt={cover.alt || `${option.name} at this hotel`}
+              width={cover.width}
+              height={cover.height}
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            {option.photos.length > 1 && (
+              <span
+                className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold"
+                style={{ backgroundColor: "hsl(var(--ink) / 0.62)", color: "#fff" }}
+              >
+                <Images size={11} aria-hidden />
+                {option.photos.length}
+              </span>
+            )}
+          </div>
+        ) : (
+          /* No photo is a normal state, not a failure: a hotel can go live before its photo shoot,
+             and a designed panel reads as intentional where a grey box reads as broken. */
+          <div
+            className="relative hidden min-h-[11rem] items-center justify-center sm:flex"
+            style={{
+              background: "linear-gradient(150deg, hsl(var(--brand-wash)), hsl(var(--brand-soft) / 0.65))",
+              borderRight: "1px solid hsl(var(--line))",
+            }}
+            aria-hidden
+          >
+            <BedDouble size={30} strokeWidth={1.4} style={{ color: "hsl(var(--brand-text) / 0.35)" }} />
+          </div>
+        )}
 
         <div className="min-w-0">
           <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 px-5 pt-5">

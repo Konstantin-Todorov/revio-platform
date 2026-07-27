@@ -1,10 +1,12 @@
 import { CalendarOff } from "lucide-react";
+import { getObjectStore } from "@revio/storage";
 import { getRatesData, getSetupData } from "@/lib/data";
 import { deleteRatePlan, deleteRoomType } from "@/lib/actions-rates";
 import { deleteInventoryPeriod } from "@/lib/actions-inventory";
 import { RatePlanDialog } from "@/components/rates/RatePlanDialog";
 import { RoomTypeDialog } from "@/components/rates/RoomTypeDialog";
 import { RatePlanLinkageBoard } from "@/components/rates/RatePlanLinkageBoard";
+import { PhotoGallery } from "@/components/rates/PhotoGallery";
 import { PeriodDialog } from "@/components/inventory/PeriodDialog";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
@@ -33,7 +35,14 @@ function restrictionLabel(rp: { defMinLos: number | null; defMaxLos: number | nu
  * surfaces, never two tables that sync. */
 export default async function RoomsRatesPage({ searchParams }: { searchParams: Promise<{ blocked?: string }> }) {
   const { blocked } = await searchParams;
-  const [{ property, ratePlans }, { roomTypes, periods, todayIso }] = await Promise.all([getRatesData(), getSetupData()]);
+  const [{ property, ratePlans }, { roomTypes, periods, todayIso }, store] = await Promise.all([
+    getRatesData(),
+    getSetupData(),
+    getObjectStore(),
+  ]);
+  // Resolved once per render: with a bucket configured this returns a CDN origin, and on a laptop
+  // it returns our own /api/media route — the screen never needs to know which.
+  const mediaUrl = (key: string) => store.publicUrl(key);
   const parents = ratePlans.map((rp) => ({ id: rp.id, name: rp.name }));
   const linkPlans = ratePlans.map((rp) => ({
     id: rp.id, name: rp.name, priceLogic: rp.priceLogic, active: rp.active,
@@ -107,6 +116,47 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
               ))}
             </tbody>
           </table>
+        </div>
+      </Card>
+
+      {/*
+        Photos live here rather than on the Booking Engine screen because they belong to the ROOM,
+        not to the page that displays them — the same photograph will feed the OTA push and the
+        confirmation email later, and moving it then would be a migration.
+      */}
+      <Card>
+        <CardHeader
+          title="Room photos"
+          subtitle="Shown to guests on your own booking page. The first photo of each room is its cover."
+        />
+        <div className="divide-y divide-surface-border/60">
+          {roomTypes.length === 0 && (
+            <p className="px-4 py-6 text-[13px] text-ink-500">Add a room type first.</p>
+          )}
+          {roomTypes.map((rt) => (
+            <section key={rt.id} className="px-4 py-4">
+              <div className="mb-2.5 flex items-baseline gap-2">
+                <h3 className="text-[13.5px] font-bold text-ink-900">{rt.name}</h3>
+                <span className="text-[11.5px] text-ink-400">
+                  {rt.photos.length === 0
+                    ? "no photos yet"
+                    : `${rt.photos.length} photo${rt.photos.length === 1 ? "" : "s"}`}
+                </span>
+              </div>
+              <PhotoGallery
+                roomTypeId={rt.id}
+                roomTypeName={rt.name}
+                photos={rt.photos.map((p) => ({
+                  id: p.id,
+                  thumbUrl: mediaUrl(p.thumbKey),
+                  alt: p.alt,
+                  width: p.width,
+                  height: p.height,
+                  byteSize: p.byteSize,
+                }))}
+              />
+            </section>
+          ))}
         </div>
       </Card>
 

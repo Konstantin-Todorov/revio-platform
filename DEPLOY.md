@@ -174,3 +174,40 @@ kept as an idempotent, re-runnable example at `packages/db/scripts/pms-prod-back
 
 Push the repo to GitHub (`revio-platform`, private) and connect it to each Railway service in the
 dashboard. After that every `git push` redeploys automatically.
+
+## Object storage (room photos)
+
+Room photographs are **not** in Postgres — only their object keys are (`RoomTypePhoto`). A hundred
+properties at ~50 MB of photos each would put 5 GB inside the row store, which bloats every backup
+and restore, costs an order of magnitude more per GB than object storage, and routes every image
+request through the Next server instead of a CDN edge. (The email *logo* is in Postgres and that is
+correct — one ~20 KB file per property. The difference is volume, not principle.)
+
+**With no configuration at all, the local-disk driver is used** and everything works: uploads,
+gallery, the public page. That is what runs on a laptop, writing to `.storage/` at the repo root
+(gitignored). Nothing about the photo feature is blocked on provisioning a bucket.
+
+**To switch to a Railway bucket**, create it and set these on **both** `reservation` (writes) and
+`booking` (reads):
+
+```bash
+railway add --database # or: create an object storage bucket in the Railway dashboard
+```
+
+| Variable | What it is |
+| --- | --- |
+| `STORAGE_BUCKET` | Bucket name. **Presence of this variable is what selects the S3 driver.** |
+| `STORAGE_ENDPOINT` | Bucket endpoint. Required for Railway/MinIO — anything that is not AWS. |
+| `STORAGE_REGION` | Defaults to `us-east-1`; most S3-compatible stores ignore it. |
+| `STORAGE_ACCESS_KEY_ID` / `STORAGE_SECRET_ACCESS_KEY` | Credentials. |
+| `STORAGE_PUBLIC_BASE` | Public origin (bucket URL or CDN). **Set this** — without it images fall back to being served through our own server, which gives up the whole point of a bucket. |
+
+`forcePathStyle` is on whenever `STORAGE_ENDPOINT` is set, because Railway and MinIO address buckets
+as `endpoint/bucket/key` rather than as a `bucket.` subdomain. Leaving that off is the most common
+reason an otherwise-correct S3 client 404s against a non-AWS endpoint.
+
+⚠️ **The S3 driver has not been exercised against a real bucket yet** — none exists on the account.
+It is written against the AWS SDK and typechecks, but the first deploy with `STORAGE_BUCKET` set
+should be verified by uploading one photo and confirming it loads from `STORAGE_PUBLIC_BASE`.
+Existing photos do not migrate themselves: the keys stay valid, but the bytes have to be copied from
+`.storage/` into the bucket with the same key layout (`t/<tenant>/p/<property>/rooms/<roomType>/…`).

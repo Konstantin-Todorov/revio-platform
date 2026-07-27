@@ -91,6 +91,27 @@ four-step progress bar so nobody wonders how much is left.
 no "12 people viewing". Fake urgency is how OTAs became distrusted, and it would undermine the one
 claim here that is genuinely unusual — that the availability is real.
 
+## Room photos
+
+Uploaded in **RevioCRS → Rooms & Rates → Room photos**, because a photograph belongs to the ROOM,
+not to the page that happens to display it — the same image will feed the OTA push and the
+confirmation email later, and moving it then would be a migration.
+
+Bytes live in object storage (`@revio/storage`), never in Postgres; only keys are in
+`RoomTypePhoto`. Every upload is re-encoded with `sharp` into two WebP variants (1600px card/gallery,
+480px thumbnail) — hotels upload 6 MB phone photos, and re-encoding also means we never serve back
+the exact bytes a stranger handed us. EXIF orientation is applied then stripped, because browsers
+disagree about whether to honour it.
+
+With no configuration the **local-disk driver** is used and everything works; a bucket is an
+environment variable away (`DEPLOY.md` → Object storage). A relative storage dir resolves against the
+**workspace root**, not the process cwd — otherwise RevioCRS would write to `apps/reservation/.storage`
+and RevioDirect would 404 reading `apps/booking/.storage`.
+
+**No photo is a designed state, not a failure.** A room with no photograph renders a brand-tinted
+panel and its name, size and inclusions. A hotel can go live before its photo shoot; nothing about
+launching is blocked on content.
+
 ## Boundaries
 
 - Guest-facing domain logic lives in **`@revio/booking`**, not here, because the CRS's own public API

@@ -59,12 +59,25 @@ export interface PublicPlanQuote {
   cancellationPolicy: string | null;
 }
 
+/** One photograph, already resized. Object KEYS — the caller turns them into URLs, because only the
+ *  app knows whether a bucket origin or its own media route is serving them. */
+export interface PublicRoomPhoto {
+  fullKey: string;
+  thumbKey: string;
+  width: number;
+  height: number;
+  alt: string;
+}
+
 export interface PublicRoomOption {
   roomTypeId: string;
   name: string;
   code: string;
   maxGuests: number;
   remaining: number; // min remaining across the stay's nights
+  /** Cover first (lowest sortOrder). Empty is normal and must render as a designed state, never
+   *  as a broken card — a hotel can go live before its photo shoot. */
+  photos: PublicRoomPhoto[];
   plans: PublicPlanQuote[];
 }
 
@@ -85,7 +98,13 @@ async function loadStayContext(db: Db, property: PropertyRow, q: PublicStayQuery
   for (let t = start.getTime(); t < end.getTime(); t += DAY_MS) nights.push(ymd(new Date(t)));
 
   const [roomTypes, plans, cells, prices, periods, holds, resLines, defaults, rules, fees] = await Promise.all([
-    db.roomType.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" } }),
+    db.roomType.findMany({
+      where: { propertyId: property.id, active: true },
+      // Included rather than fetched per room: this is the guest's first paint, and a query per
+      // room type is the difference between one round-trip and six.
+      include: { photos: { orderBy: { sortOrder: "asc" }, take: 8 } },
+      orderBy: { sortOrder: "asc" },
+    }),
     db.ratePlan.findMany({
       where: { propertyId: property.id, active: true, directChannelEnabled: true },
       include: { roomTypeLinks: true, cancellationPolicy: true, mealPlan: true },
@@ -241,7 +260,15 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
         cancellationPolicy: rp.cancellationPolicy?.name ?? null,
       });
     }
-    if (quotes.length > 0) options.push({ roomTypeId: rt.id, name: rt.name, code: rt.code, maxGuests: rt.maxGuests, remaining, plans: quotes });
+    if (quotes.length > 0) {
+      options.push({
+        roomTypeId: rt.id, name: rt.name, code: rt.code, maxGuests: rt.maxGuests, remaining,
+        photos: rt.photos.map((ph) => ({
+          fullKey: ph.fullKey, thumbKey: ph.thumbKey, width: ph.width, height: ph.height, alt: ph.alt,
+        })),
+        plans: quotes,
+      });
+    }
   }
   return { options };
 }

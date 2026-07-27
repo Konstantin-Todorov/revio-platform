@@ -255,7 +255,46 @@ model RoomType {
   holds            Hold[]
   pickupSnapshots  PickupSnapshot[]
   units            Unit[]
+  photos           RoomTypePhoto[]
 
+  @@index([propertyId])
+}
+
+// A photograph of a room type, shown on the hotel's own booking page.
+//
+// The IMAGE BYTES are not here — only the object keys. Photos live in object storage (see
+// @revio/storage): a hundred properties at ~50 MB each would put 5 GB inside the row store, which
+// bloats every backup, costs an order of magnitude more per GB, and routes every image request
+// through the Next server instead of a CDN. The email logo IS in Postgres and that is correct; it
+// is one 20 KB file per property. The difference is volume, not principle.
+//
+// Two keys per photo because the gallery and the card need very different sizes, and shipping a
+// 1600px image into a 200px slot is most of what makes a booking page feel slow on a phone.
+model RoomTypePhoto {
+  id         String @id @default(cuid())
+  tenantId   String
+  propertyId String
+  roomTypeId String
+
+  // Object keys, not URLs — the public origin can change (bucket → CDN) with no data migration.
+  fullKey  String
+  thumbKey String
+
+  width  Int
+  height Int
+  // Bytes of the full variant, so a hotel's storage footprint is answerable without listing a bucket.
+  byteSize Int
+
+  // Guest-visible alt text. Empty is allowed and renders decorative rather than leaking a filename.
+  alt String @default("")
+
+  // Lowest sortOrder is the card image. Reordering is how a hotel picks its hero shot.
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+
+  @@index([roomTypeId, sortOrder])
   @@index([propertyId])
 }
 

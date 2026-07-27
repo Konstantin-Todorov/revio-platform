@@ -260,7 +260,14 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
 export async function getSetupData() {
   const property = await getProperty();
   const [roomTypes, periods] = await Promise.all([
-    prisma.roomType.findMany({ where: { propertyId: property.id }, orderBy: { sortOrder: "asc" } }),
+    prisma.roomType.findMany({
+      where: { propertyId: property.id },
+      // Photos come along because Rooms & Rates is where a hotel edits its room CONTENT, and a
+      // second round-trip per room type to render a gallery would be N+1 on a page that already
+      // renders every room type.
+      include: { photos: { orderBy: { sortOrder: "asc" } } },
+      orderBy: { sortOrder: "asc" },
+    }),
     prisma.roomInventoryPeriod.findMany({
       where: { propertyId: property.id },
       include: { roomType: { select: { name: true, code: true, totalRooms: true } } },

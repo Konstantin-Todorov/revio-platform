@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { CalendarSearch, Phone } from "lucide-react";
 import { clientIp } from "@revio/booking";
+import { getObjectStore } from "@revio/storage";
 import { getPublicProperty, type PublicProperty } from "@/lib/property";
 import { searchAvailability } from "@/lib/availability";
 import { addDays, fmtDay, isValidISO, nightsBetween, todayISO } from "@/lib/dates";
@@ -126,8 +127,12 @@ async function Results({
   q: { checkIn: string; checkOut: string; guests: number };
   nights: number;
 }) {
-  const outcome = await searchAvailability(property, clientIp(await headers()), q);
+  const [outcome, store] = await Promise.all([
+    searchAvailability(property, clientIp(await headers()), q),
+    getObjectStore(),
+  ]);
   const options = outcome.options ?? [];
+  const mediaUrl = (key: string) => store.publicUrl(key);
 
   if (outcome.error) return <Notice property={property}>{outcome.error}</Notice>;
 
@@ -156,6 +161,7 @@ async function Results({
             checkIn={q.checkIn}
             checkOut={q.checkOut}
             guests={q.guests}
+            mediaUrl={mediaUrl}
           />
         ))}
       </div>
