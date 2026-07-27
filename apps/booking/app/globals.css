@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * RevioDirect — the guest-facing booking surface.
+ *
+ * Design direction: hotel stationery, not SaaS. Warm paper ground, hairline rules, editorial
+ * headings, generous air. The reason is practical as well as aesthetic — this page wears a
+ * DIFFERENT hotel's accent colour on every visit, so the canvas has to stay quiet enough that any
+ * accent looks deliberate on it. A branded SaaS palette would fight the hotel; paper never does.
+ *
+ * --brand is injected per property at request time (see BrandStyle). Everything else is fixed.
+ */
+
+:root {
+  /* Warm paper rather than #fff — pure white reads as "web app", off-white reads as printed. */
+  --paper: 42 33% 97%;
+  --paper-raised: 40 40% 99%;
+  --ink: 30 8% 12%;
+  --ink-soft: 30 6% 38%;
+  --ink-faint: 30 6% 56%;
+  --rule: 30 12% 87%;
+
+  /* Overridden per hotel. This default is a deep neutral that flatters most brand colours. */
+  --brand: 202 45% 24%;
+  --brand-ink: 0 0% 100%;
+  --brand-text: 202 45% 24%;
+
+  --positive: 152 40% 32%;
+  --caution: 28 70% 42%;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: hsl(var(--paper));
+    color: hsl(var(--ink));
+    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    font-feature-settings: "kern", "liga", "calt";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* A whisper of grain. Kills the flatness of a solid fill without ever being noticeable. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.028;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::selection {
+    background-color: hsl(var(--brand) / 0.16);
+  }
+
+  /* Focus is a trust signal on a page that asks for a card — never remove it, make it good. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--brand));
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  .display {
+    font-family: var(--font-display), Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.021em;
+    line-height: 1.04;
+  }
+
+  /* Small caps label — the "PROPERTY / DATES" microcopy on a printed folio card. */
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: hsl(var(--ink-faint));
+  }
+
+  .rule {
+    border-color: hsl(var(--rule));
+  }
+
+  .card {
+    background-color: hsl(var(--paper-raised));
+    border: 1px solid hsl(var(--rule));
+    box-shadow:
+      0 1px 2px hsl(var(--ink) / 0.03),
+      0 8px 24px -16px hsl(var(--ink) / 0.16);
+  }
+
+  .btn-brand {
+    background-color: hsl(var(--brand));
+    color: hsl(var(--brand-ink));
+    transition: transform 140ms cubic-bezier(0.2, 0, 0, 1), filter 140ms ease;
+  }
+  .btn-brand:hover {
+    filter: brightness(1.12);
+  }
+  .btn-brand:active {
+    transform: translateY(1px);
+  }
+
+  /* Field styling shared by the date and guest inputs so the search bar reads as one object. */
+  .field {
+    background-color: transparent;
+    color: hsl(var(--ink));
+    font-variant-numeric: tabular-nums;
+  }
+  .field::-webkit-calendar-picker-indicator {
+    opacity: 0.45;
+    cursor: pointer;
+  }
+}
+
+/* Staggered entrance — one orchestrated reveal on load reads as craft; scattered micro-animations
+   read as noise. Respects the user's motion preference. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 620ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

@@ -8,7 +8,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { forSystem, forTenant } from "@revio/db";
-import { publicCreateReservation, type PublicBookingPayload } from "@/lib/public-engine";
+import { publicCreateReservation, type PublicBookingPayload } from "@revio/booking";
 
 export const dynamic = "force-dynamic";
 

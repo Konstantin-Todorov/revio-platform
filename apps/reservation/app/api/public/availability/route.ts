@@ -6,7 +6,7 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { forSystem, forTenant } from "@revio/db";
-import { publicAvailability } from "@/lib/public-engine";
+import { publicAvailability } from "@revio/booking";
 
 export const dynamic = "force-dynamic";
 

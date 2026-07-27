@@ -4,37 +4,79 @@
     {
       "name": "reviolink",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@revio/channel-manager", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@revio/channel-manager",
+        "dev"
+      ],
       "port": 3000
     },
     {
       "name": "operator",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@revio/operator", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@revio/operator",
+        "dev"
+      ],
       "port": 3001
     },
     {
       "name": "reviocrs",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@revio/reservation", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@revio/reservation",
+        "dev"
+      ],
       "port": 3002
     },
     {
       "name": "reviopms",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@revio/pms", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@revio/pms",
+        "dev"
+      ],
       "port": 3003
+    },
+    {
+      "name": "reviodirect",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@revio/booking-app",
+        "dev"
+      ],
+      "port": 3004
     },
     {
       "name": "revio-websites",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "/Users/a516065/Work/Claude Projects/revio-websites", "run", "dev", "--", "--port", "4321"],
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/a516065/Work/Claude Projects/revio-websites",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "4321"
+      ],
       "port": 4321
     },
     {
       "name": "revio-websites-prod",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "/Users/a516065/Work/Claude Projects/revio-websites", "run", "preview", "--", "--port", "4323"],
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/a516065/Work/Claude Projects/revio-websites",
+        "run",
+        "preview",
+        "--",
+        "--port",
+        "4323"
+      ],
       "port": 4323
     }
   ]

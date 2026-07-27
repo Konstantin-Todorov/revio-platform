@@ -137,6 +137,12 @@ model Property {
   // Visual identity of the mail itself — so two hotels on Revio never send identical-looking email.
   emailTheme                String    @default("classic") // classic | modern | minimal | boutique
   emailFont                 String    @default("serif") // serif | sans | mixed
+  // Booking engine (RevioDirect). `publicSlug` is the hotel's PUBLIC address —
+  // book.revio.app/<slug> — so it ends up in printed QR codes and Instagram bios and is treated as
+  // permanent once issued. Nullable because a property has no public presence until the engine is
+  // switched on, and unique because it resolves a single property with no tenant context.
+  publicSlug                String?   @unique
+  bookingEngineEnabled      Boolean   @default(false)
   // CRS Distribution (spec §3.8): exactly ONE connected channel manager per property.
   // reviolink_internal = the platform's own CM (shared core, automatic mapping); third-party
   // kinds plug into the identical ChannelManagerConnector interface later — never a second path.
