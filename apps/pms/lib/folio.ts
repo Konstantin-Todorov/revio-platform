@@ -1,4 +1,5 @@
 import "server-only";
+import { computeStayCharges, isCityTax } from "@revio/core";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { postFolioLine } from "./posting";
@@ -37,17 +38,9 @@ export function folioBalance(lines: { kind: string; amountMinor: number; voided:
 }
 
 /** The property's city-tax fee, by name — the one fee the CRS's cityTaxMode can suppress. */
-export function isCityTax(name: string): boolean {
-  return /city\s*tax/i.test(name);
-}
-
-/** Fee/tax amount for a TaxFee against a stay (percent = % of accommodation; fixed × basis multiplier). */
-function feeAmount(f: { type: string; pct: number | null; amountMinor: number | null; basis: string }, subtotal: number, nights: number, rooms: number, guests: number): number {
-  if (f.type === "percent") return f.pct ? Math.round((subtotal * f.pct) / 100) : 0;
-  const unit = f.amountMinor ?? 0;
-  const mult = f.basis === "per_night" ? nights : f.basis === "per_room" ? rooms : f.basis === "per_person" ? guests : 1;
-  return unit * mult;
-}
+// Re-exported so existing PMS imports keep working; the rule itself lives in @revio/core alongside
+// the fee maths that honours it.
+export { isCityTax };
 
 /**
  * Ensure a stay has a folio, creating + seeding it on first use (accommodation from the reservation
@@ -100,11 +93,17 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
   const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId }, select: { cityTaxMode: true } });
   const cityTaxIncluded = defaults?.cityTaxMode === "included";
 
+  // The SAME function the booking engine quotes with (@revio/core). If these two ever computed
+  // fees separately they would drift, and a guest quoted 240.00 online would be billed something
+  // else on arrival — the one thing the booking flow promises cannot happen.
   const fees = await prisma.taxFee.findMany({ where: { propertyId, active: true, inclusion: "excluded" } });
-  for (const f of fees) {
-    if (cityTaxIncluded && isCityTax(f.name)) continue;
-    const amt = feeAmount(f, accomTotal, nights, rooms, guests);
-    if (amt > 0) await postFolioLine({ ...base, kind: f.type === "percent" ? "tax" : "fee", description: f.name, amountMinor: amt });
+  const charges = computeStayCharges({
+    stay: { accommodationMinor: accomTotal, nights, rooms, guests },
+    fees,
+    cityTaxIncluded,
+  });
+  for (const line of charges.lines) {
+    await postFolioLine({ ...base, kind: line.kind, description: line.name, amountMinor: line.amountMinor });
   }
 
   if (reservation.paymentGuarantee === "prepaid_ota") {

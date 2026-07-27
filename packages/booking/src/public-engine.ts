@@ -13,7 +13,7 @@
  */
 import type { forTenant } from "@revio/db";
 import {
-  computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction,
+  computeStayCharges, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction,
   SOLD_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
 } from "@revio/core";
 import { syncRealChannels } from "@revio/connectivity";
@@ -40,7 +40,20 @@ export interface PublicPlanQuote {
   ratePlanId: string;
   name: string;
   code: string;
+  /** Rooms only, for the whole stay. Shown as a line in the breakdown, never as the headline. */
+  accommodationMinor: number;
+  /** Taxes and fees the guest actually pays on top, itemised so nothing is a surprise. */
+  charges: { name: string; amountMinor: number }[];
+  /**
+   * THE number. Everything included, for the whole stay.
+   *
+   * This is deliberately what the guest sees first: the most-cited reason people abandon a hotel
+   * booking is a total that grows at checkout. Computed with the same @revio/core function the PMS
+   * folio bills with, so the quote and the eventual bill cannot disagree.
+   */
   totalMinor: number;
+  /** Average per night, for comparison against an OTA's headline rate. Display only. */
+  perNightMinor: number;
   currency: string;
   mealPlan: string | null;
   cancellationPolicy: string | null;
@@ -71,7 +84,7 @@ async function loadStayContext(db: Db, property: PropertyRow, q: PublicStayQuery
   const nights: string[] = [];
   for (let t = start.getTime(); t < end.getTime(); t += DAY_MS) nights.push(ymd(new Date(t)));
 
-  const [roomTypes, plans, cells, prices, periods, holds, resLines, defaults, rules] = await Promise.all([
+  const [roomTypes, plans, cells, prices, periods, holds, resLines, defaults, rules, fees] = await Promise.all([
     db.roomType.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" } }),
     db.ratePlan.findMany({
       where: { propertyId: property.id, active: true, directChannelEnabled: true },
@@ -88,6 +101,7 @@ async function loadStayContext(db: Db, property: PropertyRow, q: PublicStayQuery
     }),
     db.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
     db.restrictionRule.findMany({ where: { propertyId: property.id, active: true, dateFrom: { lte: end }, dateTo: { gte: start } } }),
+    db.taxFee.findMany({ where: { propertyId: property.id, active: true } }),
   ]);
 
   const cellOf = (rtId: string, k: string) => cells.find((c) => c.roomTypeId === rtId && ymd(c.date) === k);
@@ -181,14 +195,16 @@ async function loadStayContext(db: Db, property: PropertyRow, q: PublicStayQuery
     return null;
   };
 
-  return { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked };
+  return { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked, fees, defaults };
 }
 
 /** GET /api/public/availability — the widget's search. */
 export async function publicAvailability(db: Db, property: PropertyRow, q: PublicStayQuery): Promise<{ error?: string; options?: PublicRoomOption[] }> {
   const bad = validStay(q);
   if (bad) return { error: bad };
-  const { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked } = await loadStayContext(db, property, q);
+  const { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked, fees, defaults } =
+    await loadStayContext(db, property, q);
+  const cityTaxIncluded = defaults?.cityTaxMode === "included";
 
   const options: PublicRoomOption[] = [];
   for (const rt of roomTypes) {
@@ -207,9 +223,20 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
         total += p;
       }
       if (!complete) continue;
+      // All-in from here on: the same fee engine the folio bills with, so this total is the
+      // total — on this screen, at checkout, and on the bill at the hotel.
+      const charged = computeStayCharges({
+        stay: { accommodationMinor: total, nights: nights.length, rooms: 1, guests: q.guests },
+        fees,
+        cityTaxIncluded,
+      });
       quotes.push({
         ratePlanId: rp.id, name: rp.name, code: rp.code,
-        totalMinor: total, currency: property.baseCurrency,
+        accommodationMinor: total,
+        charges: charged.lines.map((l) => ({ name: l.name, amountMinor: l.amountMinor })),
+        totalMinor: charged.totalMinor,
+        perNightMinor: Math.round(charged.totalMinor / Math.max(1, nights.length)),
+        currency: property.baseCurrency,
         mealPlan: rp.mealPlan?.name ?? null,
         cancellationPolicy: rp.cancellationPolicy?.name ?? null,
       });
@@ -228,13 +255,24 @@ export interface PublicBookingPayload extends PublicStayQuery {
 /** POST /api/public/reservations — the widget's create. Writes the ONE shared reservation record. */
 export async function publicCreateReservation(
   db: Db, property: PropertyRow, p: PublicBookingPayload,
-): Promise<{ error?: string; reservationId?: string; status?: string; totalMinor?: number; currency?: string }> {
+): Promise<{
+  error?: string;
+  reservationId?: string;
+  status?: string;
+  /** Rooms only — what the reservation stores, and what room-revenue metrics are built on. */
+  accommodationMinor?: number;
+  /** All-in, including taxes and fees. THIS is what the guest owes and what we confirm back. */
+  totalMinor?: number;
+  charges?: { name: string; amountMinor: number }[];
+  currency?: string;
+}> {
   const bad = validStay(p);
   if (bad) return { error: bad };
   if (!p.guest?.firstName?.trim() || !p.guest?.lastName?.trim() || !/.+@.+\..+/.test(p.guest?.email ?? "")) {
     return { error: "Guest first name, last name and a valid email are required." };
   }
-  const { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked } = await loadStayContext(db, property, p);
+  const { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked, fees, defaults } =
+    await loadStayContext(db, property, p);
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
   if (!rt || !rp) return { error: "Unknown room type or rate plan (or not bookable on the direct channel)." };
@@ -244,12 +282,29 @@ export async function publicCreateReservation(
   if (blocked) return { error: `Not bookable: ${blocked}.` };
   if (remainingFor(rt.id, rt.totalRooms) < 1) return { error: "No availability left for those dates." };
 
-  let totalMinor = 0;
+  let accommodationMinor = 0;
   for (const k of nights) {
     const price = priceFor(rt.id, rp, k);
     if (price == null) return { error: "This rate isn't fully priced for those dates." };
-    totalMinor += price;
+    accommodationMinor += price;
   }
+
+  /**
+   * Two different numbers, deliberately.
+   *
+   * The RESERVATION stores accommodation, because room revenue is what ADR and RevPAR are built on
+   * — folding taxes in would silently inflate every metric in the CRS.
+   *
+   * The GUEST is told the all-in total, because that is what they will actually pay. The folio adds
+   * these same fees on arrival (same @revio/core function), so the two agree by construction rather
+   * than by luck.
+   */
+  const charged = computeStayCharges({
+    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: p.guests },
+    fees,
+    cityTaxIncluded: defaults?.cityTaxMode === "included",
+  });
+  const totalMinor = accommodationMinor;
 
   const email = p.guest.email.trim().toLowerCase();
   const guest =
@@ -287,7 +342,7 @@ export async function publicCreateReservation(
     data: {
       tenantId: property.tenantId, propertyId: property.id,
       entity: `Reservation #${reservation.id.slice(-6)} · ${reservation.guestName}`,
-      field: "booking_engine", newValue: `${rt.name} · ${nights.length}n · €${(totalMinor / 100).toFixed(2)}`,
+      field: "booking_engine", newValue: `${rt.name} · ${nights.length}n · €${(charged.totalMinor / 100).toFixed(2)} all-in`,
       source: "api",
     },
   });
@@ -303,5 +358,12 @@ export async function publicCreateReservation(
   // The one availability truth changed — push the effect to any real channels immediately.
   try { await syncRealChannels(db, property.id); } catch { /* channel push must never fail the booking */ }
 
-  return { reservationId: reservation.id, status: reservation.status, totalMinor, currency: property.baseCurrency };
+  return {
+    reservationId: reservation.id,
+    status: reservation.status,
+    accommodationMinor,
+    totalMinor: charged.totalMinor,
+    charges: charged.lines.map((l) => ({ name: l.name, amountMinor: l.amountMinor })),
+    currency: property.baseCurrency,
+  };
 }
