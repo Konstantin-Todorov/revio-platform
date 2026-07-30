@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { EMAIL_TEMPLATE_BY_KEY, defaultsFor } from "@revio/core";
+import { EMAIL_LOCALES, EMAIL_TEMPLATE_BY_KEY, defaultsFor } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { getSession } from "./session";
@@ -131,5 +131,26 @@ export async function removeEmailLogo(): Promise<void> {
   await prisma.brandAsset.deleteMany({ where: { propertyId, kind: "email_logo" } });
   await prisma.property.update({ where: { id: propertyId }, data: { emailLogoVersion: { increment: 1 } } });
   await logAudit(propertyId, tenantId, { entity: "Email settings", field: "logo", newValue: "removed" });
+  revalidatePath("/settings/emails");
+}
+
+/**
+ * Which language a guest receives when we do not know theirs.
+ *
+ * A separate decision from "which language am I editing", and the only one of the two that changes
+ * what a guest actually gets — so it is an explicit, saved choice rather than a side effect of
+ * opening a tab. Stored on the property because a chain can run one hotel in Bulgarian and another
+ * in English.
+ */
+export async function setDefaultLanguage(fd: FormData): Promise<void> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const locale = str(fd, "locale");
+  // An unknown locale would silently send nothing recognisable, so a bad value is simply ignored.
+  if (!EMAIL_LOCALES.some((l) => l.key === locale)) return;
+
+  await prisma.property.update({ where: { id: propertyId }, data: { defaultLanguage: locale } });
+  await logAudit(propertyId, tenantId, {
+    entity: "Email settings", field: "default language", newValue: locale,
+  });
   revalidatePath("/settings/emails");
 }

@@ -45,10 +45,18 @@ export function DateRangePanel({
   const dayRefs = useRef(new Map<string, HTMLButtonElement>());
   const gridRef = useRef<HTMLDivElement>(null);
 
-  // Move real focus to wherever the arrow keys pointed. Without this the grid is tabbable but not
-  // navigable, which is worse than a plain input for anyone not using a mouse.
+  /**
+   * Move real focus to wherever the arrow keys pointed. Without this the grid is tabbable but not
+   * navigable, which is worse than a plain input for anyone not using a mouse.
+   *
+   * `preventScroll` matters more than it looks. This effect also runs on mount, so opening the
+   * calendar focused a day button — and the browser scrolled that button into view, dragging the
+   * whole hero up the screen the instant a guest touched the date field. It was invisible on the
+   * results page only because the bar already sits at the top there. The day is always rendered
+   * (paging follows the focus), so nothing needs scrolling into view.
+   */
   useEffect(() => {
-    dayRefs.current.get(focusISO)?.focus();
+    dayRefs.current.get(focusISO)?.focus({ preventScroll: true });
   }, [focusISO]);
 
   const firstAllowed = useMemo(() => ({ year: parseISO(today).getUTCFullYear(), month: parseISO(today).getUTCMonth() }), [today]);

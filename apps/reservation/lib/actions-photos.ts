@@ -25,6 +25,13 @@ export interface PhotoResult {
 /** How many photos one room type may hold. Beyond this a gallery stops being browsed. */
 const MAX_PER_ROOM_TYPE = 12;
 
+/**
+ * Per-file ceiling, comfortably above a phone photo and well below the action body limit set in
+ * `next.config.mjs`. Checked here so an oversized file gets a sentence naming the file and its size,
+ * rather than Next rejecting the whole request with a 413 and the screen showing a generic crash.
+ */
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
+
 async function ownedRoomType(roomTypeId: string) {
   const property = await getProperty();
   if (!roomTypeId) return null;
@@ -42,6 +49,15 @@ export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData):
 
   const files = fd.getAll("photos").filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length === 0) return { ok: false, error: "Choose at least one image." };
+
+  const tooBig = files.find((f) => f.size > MAX_FILE_BYTES);
+  if (tooBig) {
+    const mb = (tooBig.size / 1024 / 1024).toFixed(1);
+    return {
+      ok: false,
+      error: `“${tooBig.name}” is ${mb} MB — the limit is 15 MB per photo. Most phone photos are well under it.`,
+    };
+  }
 
   const existing = await prisma.roomTypePhoto.count({ where: { roomTypeId: roomType.id } });
   if (existing + files.length > MAX_PER_ROOM_TYPE) {

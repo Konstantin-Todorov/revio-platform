@@ -5,7 +5,7 @@ import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primit
 import { getProperty } from "@/lib/data";
 import { listPropertyTemplates, brandOf } from "@revio/email";
 import { prisma } from "@/lib/db";
-import { saveEmailBranding } from "@/lib/actions-email";
+import { saveEmailBranding, setDefaultLanguage } from "@/lib/actions-email";
 import { LogoUpload } from "@/components/email/LogoUpload";
 
 export const dynamic = "force-dynamic";
@@ -195,6 +195,19 @@ export default async function EmailSettingsPage({ searchParams }: { searchParams
               </Link>
             ))}
           </div>
+          {/*
+            Two different decisions, and only this one changes what a guest receives. Shown as an
+            action on the language you are looking at rather than a select, because there is nothing
+            to choose — you are already looking at the language you mean.
+          */}
+          {(property.defaultLanguage ?? "en") !== locale && (
+            <form action={setDefaultLanguage}>
+              <input type="hidden" name="locale" value={locale} />
+              <button className="cursor-pointer rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-700 transition-colors hover:border-brand-600 hover:text-brand-700">
+                Make {EMAIL_LOCALES.find((l) => l.key === locale)?.label} the default for guests
+              </button>
+            </form>
+          )}
           <p className="w-full text-[11.5px] text-ink-500 sm:w-auto sm:flex-1">
             Each language is edited separately. A guest receives their own language when we know it,
             otherwise your default. Untranslated emails fall back to English rather than not sending.
