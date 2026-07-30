@@ -112,6 +112,38 @@ and RevioDirect would 404 reading `apps/booking/.storage`.
 panel and its name, size and inclusions. A hotel can go live before its photo shoot; nothing about
 launching is blocked on content.
 
+## The booking flow (K4)
+
+`search → /book → /booking/<reference>`. Four steps, and the guest can always see which one.
+
+**Hold-on-open.** Reaching step 3 takes the room off sale for 15 minutes, before a single field is
+typed. Without it two guests fill in the last room at once and one fails *after* entering their
+details — the worst possible moment. A hold is cheap to release and expires by itself; a
+double-booking is not recoverable. The hold id lives in the URL so a refresh reuses it instead of
+taking a second room, and `loadStayContext` excludes the guest's OWN hold when they confirm —
+otherwise the person holding the last room is told there is none.
+
+**Nothing is re-used from the previous page except identifiers.** The stay is re-quoted on step 3
+and again on submit, so a tab left open for an hour books today's price, and a tampered hidden field
+changes what is booked rather than what is paid.
+
+**No card fields exist.** The guarantee is created through `@revio/payments`, which is mock-first
+and accepts only `sk_test_` keys — a live key is refused by construction. We store a token plus
+brand/last4 (`Reservation.guarantee*`), never a number. Collecting a real card would need Stripe
+Elements and a live-mode decision; both are deliberately out of scope, which is why the page can
+honestly say *your card details never reach us*.
+
+**The countdown is real.** The room genuinely is held and genuinely is released at zero. Everything
+else on this site is honest, so a fake timer here would cost all of it.
+
+The confirmation email uses the hotel's own template and branding through `@revio/email` — the same
+engine RevioLink sends from — and never blocks the booking: the room is already theirs, and a mail
+provider having a bad minute must not turn a completed reservation into an error page.
+
+**Step 3 has an extras slot** (see the comment in `BookingForm`). Upsells belong there, after the
+room is chosen — never beside the price on the results page, which would undermine the one promise
+the product makes.
+
 ## Boundaries
 
 - Guest-facing domain logic lives in **`@revio/booking`**, not here, because the CRS's own public API

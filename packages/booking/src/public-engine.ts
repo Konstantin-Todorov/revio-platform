@@ -91,7 +91,12 @@ function validStay(q: PublicStayQuery): string | null {
 }
 
 /** Shared loader: everything needed to price + gate a stay window. */
-async function loadStayContext(db: Db, property: PropertyRow, q: PublicStayQuery) {
+async function loadStayContext(
+  db: Db,
+  property: PropertyRow,
+  q: PublicStayQuery,
+  opts: { excludeHoldId?: string } = {},
+) {
   const start = utcDay(q.checkIn);
   const end = utcDay(q.checkOut); // exclusive
   const nights: string[] = [];
@@ -113,7 +118,16 @@ async function loadStayContext(db: Db, property: PropertyRow, q: PublicStayQuery
     db.dailyCell.findMany({ where: { propertyId: property.id, date: { gte: start, lt: end } } }),
     db.ratePrice.findMany({ where: { propertyId: property.id, date: { gte: start, lt: end } } }),
     db.roomInventoryPeriod.findMany({ where: { propertyId: property.id, dateFrom: { lt: end }, dateTo: { gte: start } } }),
-    db.hold.findMany({ where: { propertyId: property.id, status: "active", expiresAt: { gt: new Date() }, checkIn: { lt: end }, checkOut: { gt: start } } }),
+    db.hold.findMany({
+      where: {
+        propertyId: property.id, status: "active", expiresAt: { gt: new Date() },
+        checkIn: { lt: end }, checkOut: { gt: start },
+        // The guest's OWN hold must not count against them. Without this, someone who holds the
+        // last room is told "no availability left" the moment they try to confirm it — the exact
+        // room they are standing on.
+        ...(opts.excludeHoldId ? { NOT: { id: opts.excludeHoldId } } : {}),
+      },
+    }),
     db.reservationLine.findMany({
       where: { reservation: { propertyId: property.id, status: { in: [...SOLD_STATUSES] } }, checkIn: { lt: end }, checkOut: { gt: start } },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
@@ -277,6 +291,13 @@ export interface PublicBookingPayload extends PublicStayQuery {
   roomTypeId: string;
   ratePlanId: string;
   guest: { firstName: string; lastName: string; email: string; phone?: string };
+  /** The hold taken when the guest opened the form. Converted on success, so the room is never
+   *  released between "I am filling this in" and "it is mine". */
+  holdId?: string;
+  /** Gateway token + display bits. NEVER a card number — that stays with the gateway. */
+  guarantee?: { ref: string; brand?: string | undefined; last4?: string | undefined };
+  /** Anything the guest typed in "requests". Stored on the reservation, shown to the front desk. */
+  guestNote?: string;
 }
 
 /** POST /api/public/reservations — the widget's create. Writes the ONE shared reservation record. */
@@ -290,6 +311,8 @@ export async function publicCreateReservation(
   accommodationMinor?: number;
   /** All-in, including taxes and fees. THIS is what the guest owes and what we confirm back. */
   totalMinor?: number;
+  /** For the confirmation email, so the caller needn't re-query what it just booked. */
+  roomTypeName?: string;
   charges?: { name: string; amountMinor: number }[];
   currency?: string;
 }> {
@@ -299,7 +322,7 @@ export async function publicCreateReservation(
     return { error: "Guest first name, last name and a valid email are required." };
   }
   const { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked, fees, defaults } =
-    await loadStayContext(db, property, p);
+    await loadStayContext(db, property, p, p.holdId ? { excludeHoldId: p.holdId } : {});
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
   if (!rt || !rp) return { error: "Unknown room type or rate plan (or not bookable on the direct channel)." };
@@ -359,11 +382,26 @@ export async function publicCreateReservation(
       status: "confirmed",
       totalMinor, currency: property.baseCurrency,
       propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
-      guestId: guest.id, bookingSourceId: source.id, paymentGuarantee: "none",
-      notes: "Booked via the booking-engine API",
+      guestId: guest.id, bookingSourceId: source.id,
+      // A LABEL plus a gateway token — never a card number. `card_on_file` is what the front desk
+      // reads as "we can charge a no-show"; the ref is what actually lets them.
+      paymentGuarantee: p.guarantee?.ref ? "card_on_file" : "none",
+      guaranteeRef: p.guarantee?.ref ?? null,
+      guaranteeBrand: p.guarantee?.brand ?? null,
+      guaranteeLast4: p.guarantee?.last4 ?? null,
+      notes: p.guestNote?.trim() ? `Guest note: ${p.guestNote.trim().slice(0, 500)}` : null,
       lines: { create: [{ roomTypeId: rt.id, ratePlanId: rp.id, quantity: 1, checkIn, checkOut, priceMinor: totalMinor, guestsCount: p.guests }] },
     },
   });
+
+  // The hold becomes the reservation. Marked converted rather than released, so the inventory it was
+  // protecting is handed straight to the booking with no window in between.
+  if (p.holdId) {
+    await db.hold.updateMany({
+      where: { id: p.holdId, propertyId: property.id, status: "active" },
+      data: { status: "converted", reservationId: reservation.id },
+    });
+  }
 
   await db.auditEntry.create({
     data: {
@@ -388,6 +426,7 @@ export async function publicCreateReservation(
   return {
     reservationId: reservation.id,
     status: reservation.status,
+    roomTypeName: rt.name,
     accommodationMinor,
     totalMinor: charged.totalMinor,
     charges: charged.lines.map((l) => ({ name: l.name, amountMinor: l.amountMinor })),
@@ -483,4 +522,88 @@ export async function publicAlternativeStays(
   return found
     .sort((a, b) => Math.abs(a.offsetDays) - Math.abs(b.offsetDays) || a.offsetDays - b.offsetDays)
     .slice(0, maxResults);
+}
+
+/**
+ * Hold-on-open — the room is taken off sale the moment the guest reaches the form.
+ *
+ * This is the single most important correctness decision in the flow. Without it, two guests fill
+ * in the last room simultaneously and one of them gets an error after typing their details and
+ * their card — which is both the worst possible moment to fail and a guaranteed support call. The
+ * CRS already works this way for staff bookings (spec §4), and the public engine uses the same
+ * mechanism rather than inventing a second one.
+ *
+ * A hold is cheap to release and expires by itself, so the failure mode is a room briefly unsellable
+ * — recoverable. The alternative failure mode is a double-booking, which is not.
+ */
+export const HOLD_MINUTES = 15;
+
+export interface PublicHold {
+  id: string;
+  expiresAt: Date;
+  roomTypeId: string;
+}
+
+export async function publicCreateHold(
+  db: Db,
+  property: PropertyRow,
+  q: PublicStayQuery & { roomTypeId: string },
+): Promise<{ error?: string; hold?: PublicHold }> {
+  const bad = validStay(q);
+  if (bad) return { error: bad };
+
+  const { roomTypes, remainingFor } = await loadStayContext(db, property, q);
+  const rt = roomTypes.find((r) => r.id === q.roomTypeId);
+  if (!rt) return { error: "That room is no longer available." };
+  if (remainingFor(rt.id, rt.totalRooms) < 1) return { error: "That room has just been taken." };
+
+  const hold = await db.hold.create({
+    data: {
+      tenantId: property.tenantId,
+      propertyId: property.id,
+      roomTypeId: rt.id,
+      quantity: 1,
+      checkIn: utcDay(q.checkIn),
+      checkOut: utcDay(q.checkOut),
+      status: "active",
+      expiresAt: new Date(Date.now() + HOLD_MINUTES * 60_000),
+    },
+  });
+
+  // The waterfall changed, so every channel's availability changed. Pushing here — rather than only
+  // on confirmation — is what stops an OTA selling the room a guest is currently paying for.
+  try { await syncRealChannels(db, property.id); } catch { /* a push failure must not block a hold */ }
+
+  return { hold: { id: hold.id, expiresAt: hold.expiresAt, roomTypeId: hold.roomTypeId } };
+}
+
+/** The live hold behind a form, or null when it expired / was released / never existed. */
+export async function publicGetHold(db: Db, propertyId: string, holdId: string): Promise<PublicHold | null> {
+  if (!holdId) return null;
+  const hold = await db.hold.findFirst({
+    where: { id: holdId, propertyId, status: "active", expiresAt: { gt: new Date() } },
+    select: { id: true, expiresAt: true, roomTypeId: true },
+  });
+  return hold ?? null;
+}
+
+/**
+ * Give the room back.
+ *
+ * Called when a guest abandons the form. Best-effort on purpose: a hold that outlives its guest
+ * expires on its own within the TTL, so a failure here costs one room for a few minutes rather than
+ * anything a guest can see.
+ */
+export async function publicReleaseHold(db: Db, propertyId: string, holdId: string): Promise<void> {
+  if (!holdId) return;
+  await db.hold.updateMany({
+    where: { id: holdId, propertyId, status: "active" },
+    data: { status: "released" },
+  });
+  try { await syncRealChannels(db, propertyId); } catch { /* nothing a guest can see */ }
+}
+
+/** Short, human, sayable-over-the-phone. Derived from the id so it needs no extra column or sequence. */
+export function bookingReference(reservationId: string): string {
+  return `RV-${reservationId.slice(-6).toUpperCase()}`;
 }

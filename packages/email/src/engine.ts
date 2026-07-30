@@ -1,7 +1,32 @@
-import "server-only";
 import { EMAIL_TEMPLATES, EMAIL_TEMPLATE_BY_KEY, renderEmail, defaultsFor, type EmailBrand } from "@revio/core";
-import { prisma } from "./db";
-import { sendEmail } from "./email";
+
+/**
+ * A stored template row — the hotel's own wording for one email in one language.
+ */
+export interface EmailTemplateRow {
+  key: string;
+  enabled: boolean;
+  subject: string;
+  body: string;
+}
+
+/**
+ * The Prisma surface this engine needs, structurally typed.
+ *
+ * Passed in rather than imported, exactly like the connectivity package: the CALLER owns the tenant
+ * perimeter decision, so one implementation serves a staff request (tenant-scoped client) and an
+ * anonymous booking (resolved from a public slug through the system perimeter).
+ */
+export interface EmailDb {
+  property: { findUnique: (args: { where: { id: string } }) => Promise<PropertyEmailBrandRow & { defaultLanguage?: string | null } | null> };
+  emailTemplate: {
+    findMany: (args: { where: { propertyId: string; locale: string } }) => Promise<EmailTemplateRow[]>;
+    findUnique: (args: {
+      where: { propertyId_key_locale: { propertyId: string; key: string; locale: string } };
+    }) => Promise<EmailTemplateRow | null>;
+  };
+}
+import { sendEmail } from "./transport.js";
 
 /**
  * The email engine's app half: resolve a property's template + branding, render, and send.
@@ -62,9 +87,9 @@ export function brandOf(property: PropertyEmailBrandRow): EmailBrand {
 }
 
 /** Every template for a property IN ONE LANGUAGE, saved-or-default (drives the Settings screen). */
-export async function listPropertyTemplates(propertyId: string, locale = "en") {
-  const saved = await prisma.emailTemplate.findMany({ where: { propertyId, locale } });
-  const byKey = new Map(saved.map((t) => [t.key, t]));
+export async function listPropertyTemplates(db: EmailDb, propertyId: string, locale = "en") {
+  const saved = await db.emailTemplate.findMany({ where: { propertyId, locale } });
+  const byKey = new Map(saved.map((t) => [t.key, t] as const));
   return EMAIL_TEMPLATES.map((def) => {
     const row = byKey.get(def.key);
     const fallback = defaultsFor(def, locale);
@@ -82,29 +107,37 @@ export async function listPropertyTemplates(propertyId: string, locale = "en") {
  * Send one templated email. Returns `skipped` when the hotel switched that email off, so callers can
  * tell "the hotel doesn't want this" apart from "sending failed".
  */
-export async function sendTemplatedEmail(args: {
+export async function sendTemplatedEmail(db: EmailDb, args: {
   propertyId: string;
   key: string;
   to: string[];
   vars: Record<string, string>;
   /** The guest's language when known; falls back to the property default, then English. */
   locale?: string | null;
+  /**
+   * The stay itself — dates, room, total — rendered into the template's `{{details}}` block.
+   *
+   * Without these a "confirmation" arrives with no dates and no price, which is not a confirmation.
+   * They are passed rather than looked up because the caller has just computed them and a second
+   * query could disagree with what the guest was shown.
+   */
+  details?: { label: string; value: string; emphasis?: boolean }[];
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const def = EMAIL_TEMPLATE_BY_KEY[args.key];
   if (!def) return { ok: false, error: `Unknown email template "${args.key}"` };
   if (args.to.length === 0) return { ok: true, skipped: true };
 
-  const property = await prisma.property.findUnique({ where: { id: args.propertyId } });
+  const property = await db.property.findUnique({ where: { id: args.propertyId } });
   if (!property) return { ok: false, error: "Unknown property" };
 
   // Language: the guest's own, else the property default, else English.
   const locale = args.locale?.trim() || property.defaultLanguage || "en";
   const row =
-    (await prisma.emailTemplate.findUnique({
+    (await db.emailTemplate.findUnique({
       where: { propertyId_key_locale: { propertyId: args.propertyId, key: args.key, locale } },
     })) ??
     (locale !== "en"
-      ? await prisma.emailTemplate.findUnique({
+      ? await db.emailTemplate.findUnique({
           where: { propertyId_key_locale: { propertyId: args.propertyId, key: args.key, locale: "en" } },
         })
       : null);
@@ -116,8 +149,9 @@ export async function sendTemplatedEmail(args: {
     body: row?.body ?? fallback.body,
     brand: brandOf(property),
     vars: args.vars,
+    ...(args.details?.length ? { details: args.details } : {}),
   });
 
   const res = await sendEmail({ to: args.to, subject: rendered.subject, text: rendered.text });
-  return res.ok ? { ok: true } : { ok: false, error: res.error };
+  return res.ok ? { ok: true } : { ok: false, ...(res.error ? { error: res.error } : {}) };
 }

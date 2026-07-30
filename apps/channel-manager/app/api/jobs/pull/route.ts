@@ -13,7 +13,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { forSystem } from "@revio/db";
 import { pullChannel } from "@revio/connectivity";
-import { sendEmail, deliveryRecipients } from "@/lib/email";
+import { sendEmail, deliveryRecipients } from "@revio/email";
 
 export const dynamic = "force-dynamic";
 

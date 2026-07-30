@@ -1,12 +1,12 @@
-import "server-only";
-
 /**
  * Outbound email — the same adapter pattern as connectivity (mock-first, real provider behind an
  * env key). With RESEND_API_KEY set, mail goes out through Resend; without it, sends are logged
  * and reported as mode "mock" so the demo and tests never depend on an external service.
  *
- * Used for reservation delivery (channel bookings emailed to the property when no PMS/CRS is
- * connected) and the arrival-summary notifications (CM-UPDATES-V1 Settings).
+ * Shared because THREE products send guest mail and an app may never import another app's
+ * internals (root CLAUDE.md): RevioLink delivers channel bookings and arrival summaries, RevioDirect
+ * confirms a guest's own booking, and the PMS mails a folio. One transport means one place where a
+ * missing key degrades to a log instead of an exception.
  */
 
 export interface EmailResult {

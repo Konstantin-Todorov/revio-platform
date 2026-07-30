@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { syncChannel, pullChannel, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
-import { sendEmail, deliveryRecipients } from "./email";
+import { sendEmail, deliveryRecipients } from "@revio/email";
 import { getSession } from "./session";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 

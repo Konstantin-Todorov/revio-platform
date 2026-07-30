@@ -3,7 +3,8 @@ import { ArrowLeft, ChevronRight, Mail, Palette, Users } from "lucide-react";
 import { renderEmail, SAMPLE_DETAILS, sampleDetails, EMAIL_THEMES, EMAIL_FONTS, EMAIL_LOCALES } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getProperty } from "@/lib/data";
-import { listPropertyTemplates, brandOf } from "@/lib/email-engine";
+import { listPropertyTemplates, brandOf } from "@revio/email";
+import { prisma } from "@/lib/db";
 import { saveEmailBranding } from "@/lib/actions-email";
 import { LogoUpload } from "@/components/email/LogoUpload";
 
@@ -17,7 +18,7 @@ export default async function EmailSettingsPage({ searchParams }: { searchParams
   const sp = await searchParams;
   const locale = EMAIL_LOCALES.some((l) => l.key === sp.lang) ? sp.lang! : "en";
   const property = await getProperty();
-  const templates = await listPropertyTemplates(property.id, locale);
+  const templates = await listPropertyTemplates(prisma, property.id, locale);
   const brand = brandOf(property);
   const logoUrl = brand.logoUrl ?? null;
 

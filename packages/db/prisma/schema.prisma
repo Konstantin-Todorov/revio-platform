@@ -604,6 +604,12 @@ model Reservation {
   guestId            String?
   bookingSourceId    String?
   paymentGuarantee   String? // card_on_file | company_account | prepaid_ota | none
+  // A card guarantee taken by the booking engine. The TOKEN only — never a card number, which stays
+  // with the gateway (PCI scope). brand/last4 exist so the front desk can recognise the card the
+  // guest will present, and so a no-show charge can be raised against the right instrument.
+  guaranteeRef       String?
+  guaranteeBrand     String?
+  guaranteeLast4     String?
   notes              String?
   cancelledAt        DateTime?
   createdById        String? // staff user who entered a manual booking

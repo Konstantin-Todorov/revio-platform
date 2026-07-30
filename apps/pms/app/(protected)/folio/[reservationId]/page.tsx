@@ -5,7 +5,7 @@ import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/component
 import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat, FileText } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
 import { listInvoicesForReservation, DOC_LABEL } from "@/lib/invoice";
-import { gatewayMode } from "@/lib/gateway";
+import { gatewayMode } from "@revio/payments";
 import { OUTLET_LABEL } from "@/lib/posting";
 import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
 import { issueInvoice } from "@/lib/actions-invoice";

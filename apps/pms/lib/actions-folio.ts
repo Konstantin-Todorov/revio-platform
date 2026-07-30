@@ -7,7 +7,7 @@ import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { ensureFolio, createSplitFolio, folioBalance } from "./folio";
 import { postFolioLine } from "./posting";
-import { chargeCard, refundCard } from "./gateway";
+import { chargeCard, refundCard } from "@revio/payments";
 import { logAudit, str } from "./mutation-helpers";
 
 /**
