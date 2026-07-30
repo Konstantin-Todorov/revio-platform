@@ -1,6 +1,7 @@
 import type { PublicPlanQuote, PublicRoomOption } from "@revio/booking";
 import { BedDouble, ChevronDown, Coffee, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { money } from "@/lib/dates";
+import { RoomPhoto } from "./RoomPhoto";
 
 /**
  * One room type and its rates.
@@ -61,14 +62,11 @@ export function RoomOption({
             {/* Not next/image: this is already our own resized WebP, so a second optimisation pass
                 would burn CPU to produce the same bytes. Width/height reserve the box, so the card
                 does not jump as photos arrive. */}
-            <img
+            <RoomPhoto
               src={mediaUrl(cover.thumbKey)}
               alt={cover.alt || `${option.name} at this hotel`}
               width={cover.width}
               height={cover.height}
-              loading="lazy"
-              decoding="async"
-              className="aspect-[4/3] w-full object-cover"
             />
             {option.photos.length > 1 && (
               <span
