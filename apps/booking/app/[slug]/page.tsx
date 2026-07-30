@@ -33,7 +33,14 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
       <PropertyHeader property={property} />
 
       <main>
-        <section className="relative overflow-hidden">
+        {/*
+          NOT `overflow-hidden`. The search bar's calendar and guest popovers are absolutely
+          positioned children of this section, and they extend past the hero band by design — a
+          clipping container cut them off at the coloured edge, so the guest saw half a calendar.
+          The decorative layer below is `inset-0`, so it is already bounded by the section and needs
+          no clipping of its own.
+        */}
+        <section className="relative">
           {/* The preset decides how the hero reads. `solid` reverses the headline out of a full
               band of the hotel's colour; `wash` fades a tint of it into the page; `plain` leaves
               the search bar to carry the page alone. */}
