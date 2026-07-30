@@ -34,7 +34,14 @@ export default async function BookingEnginePage() {
   const configured = process.env.BOOKING_ENGINE_ORIGIN?.trim().replace(/\/+$/, "");
   const origin = configured || (process.env.NODE_ENV === "development" ? "http://localhost:3004" : null);
   const published = origin !== null;
-  const live = property.bookingEngineEnabled && !!property.publicSlug && published;
+  /**
+   * The badge reports the HOTEL's decision, not our deployment status.
+   *
+   * These were conflated: a hotel that had switched bookings on saw "Switched off" purely because
+   * the booking service isn't published yet, directly above a line saying guests can book right now.
+   * Whether we have shipped the page is our problem and is stated separately, below.
+   */
+  const accepting = property.bookingEngineEnabled && !!property.publicSlug;
   const url = property.publicSlug && origin ? `${origin}/${property.publicSlug}` : null;
 
   return (
@@ -61,9 +68,9 @@ export default async function BookingEnginePage() {
           title="Your link"
           subtitle="Where guests book. Printed on QR codes and pasted into bios, so treat it as permanent once you share it."
           action={
-            <StatusPill tone={live ? "success" : "neutral"}>
+            <StatusPill tone={accepting ? "success" : "neutral"}>
               <Power className="mr-1 inline h-3 w-3" />
-              {live ? "Live" : property.publicSlug ? "Switched off" : "Not set up"}
+              {accepting ? "Taking bookings" : property.publicSlug ? "Paused" : "Not set up"}
             </StatusPill>
           }
         />
@@ -73,9 +80,18 @@ export default async function BookingEnginePage() {
           enabled={property.bookingEngineEnabled}
           suggestion={slugifyPropertyName(property.name)}
         />
-        {live && url && (
-          <div className="border-t border-surface-border/60 px-4 py-2.5 text-[12px] text-ink-500">
-            Guests can book at <span className="font-semibold text-ink-900">{url}</span>
+        {accepting && url && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-surface-border/60 px-4 py-2.5 text-[12px] text-ink-500">
+            Guests can book at
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 font-semibold text-brand-700 underline underline-offset-2 hover:text-brand-800"
+            >
+              {url}
+              <ExternalLink className="h-3 w-3" />
+            </a>
           </div>
         )}
         {!published && (

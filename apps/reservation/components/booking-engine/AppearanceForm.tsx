@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import { BOOKING_PRESETS, BOOKING_FONTS, BOOKING_COPY_DEFAULTS } from "@revio/core";
-import { Palette, RotateCcw } from "lucide-react";
+import { AlertCircle, Check, Palette, RotateCcw } from "lucide-react";
 import { EnginePreview } from "./EnginePreview";
+import type { LookResult } from "@/lib/actions-booking-engine";
 
 /**
  * Appearance: pick a base, then edit.
@@ -20,7 +21,7 @@ import { EnginePreview } from "./EnginePreview";
 export function AppearanceForm({
   action, propertyName, inherited, saved,
 }: {
-  action: (fd: FormData) => void;
+  action: (prev: LookResult | null, fd: FormData) => Promise<LookResult>;
   propertyName: string;
   /** What the email branding would give them, shown as the placeholder for each blank field. */
   inherited: { color: string; font: string; logoUrl: string | null };
@@ -41,6 +42,7 @@ export function AppearanceForm({
   const [headline, setHeadline] = useState(saved.headline ?? "");
   const [subheadline, setSubheadline] = useState(saved.subheadline ?? "");
   const [showTrust, setShowTrust] = useState(saved.showTrust);
+  const [state, formAction, pending] = useActionState<LookResult | null, FormData>(action, null);
 
   // What the guest will actually see: the hotel's own value where set, the inherited one otherwise.
   const effective = {
@@ -50,7 +52,7 @@ export function AppearanceForm({
   };
 
   return (
-    <form action={action} className="grid gap-5 p-4 lg:grid-cols-[1fr_20rem]">
+    <form action={formAction} className="grid gap-5 p-4 lg:grid-cols-[1fr_20rem]">
       <div className="space-y-5">
         <Field label="Base" hint="Sets the neutrals and the shape. Your colour sits on top of whichever you choose.">
           <input type="hidden" name="bookingPreset" value={preset} />
@@ -163,9 +165,28 @@ export function AppearanceForm({
           </span>
         </label>
 
-        <div className="flex justify-end">
-          <button className="cursor-pointer rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-            <Palette className="mr-1.5 inline h-3.5 w-3.5" /> Save appearance
+        {/*
+          Saving has to be visible. Every field here is already reflected in the live preview, so a
+          successful save changes nothing on screen — which made the button look broken. The button
+          reports its own progress and confirms.
+        */}
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {state?.error && (
+            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-danger-600">
+              <AlertCircle className="h-3.5 w-3.5" /> {state.error}
+            </span>
+          )}
+          {state?.ok && !pending && (
+            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-success-600">
+              <Check className="h-3.5 w-3.5" /> Saved — your booking page is updated
+            </span>
+          )}
+          <button
+            disabled={pending}
+            className="cursor-pointer rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
+          >
+            <Palette className="mr-1.5 inline h-3.5 w-3.5" />
+            {pending ? "Saving…" : "Save appearance"}
           </button>
         </div>
       </div>

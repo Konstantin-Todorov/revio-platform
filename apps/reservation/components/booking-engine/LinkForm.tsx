@@ -131,9 +131,14 @@ export function LinkForm({
           </p>
         </div>
 
-        {/* One switch, one sentence about what it does to a guest. */}
+        {/*
+          One switch, one sentence about what it does to a guest.
+
+          The hidden field carries the state we want AFTER the click, not the one we are in. Sending
+          the current state made the button a no-op: pressing "Pause bookings" re-submitted "on".
+        */}
         <form action={formAction} className="pb-5">
-          {enabled && <input type="hidden" name="bookingEngineEnabled" value="on" />}
+          {!enabled && <input type="hidden" name="bookingEngineEnabled" value="on" />}
           <button
             disabled={pending}
             className={`flex cursor-pointer items-center gap-1.5 rounded-md px-3.5 py-2 text-[12.5px] font-semibold transition-colors disabled:opacity-50 ${

@@ -39,8 +39,20 @@ function orNull(fd: FormData, key: string): string | null {
   return str(fd, key).trim() || null;
 }
 
-export async function saveBookingEngineLook(fd: FormData): Promise<void> {
-  if (await assertSingleProperty()) return;
+/** Saving the look reports back, so the button can show progress and confirm. A save that produces
+ *  no visible change is indistinguishable from a dead button — which is exactly how it read. */
+export interface LookResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function saveBookingEngineLook(
+  _prev: LookResult | null,
+  fd: FormData,
+): Promise<LookResult> {
+  const scopeProblem = await assertSingleProperty();
+  if (scopeProblem) return { ok: false, error: scopeProblem };
+
   const { id: propertyId, tenantId } = await getProperty();
 
   const preset = str(fd, "bookingPreset");
@@ -67,6 +79,7 @@ export async function saveBookingEngineLook(fd: FormData): Promise<void> {
     entity: "Booking engine", field: "appearance", newValue: preset,
   });
   revalidatePath("/booking-engine");
+  return { ok: true };
 }
 
 /**
