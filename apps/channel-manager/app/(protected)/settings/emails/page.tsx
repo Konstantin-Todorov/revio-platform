@@ -82,11 +82,6 @@ export default async function EmailSettingsPage({ searchParams }: { searchParams
             <label className={labelCls}>Footer (address / legal line)</label>
             <input name="emailFooterText" defaultValue={property.emailFooterText ?? ""} placeholder="1 Vitosha Blvd, Sofia · +359 2 000 0000" className={inputCls} />
           </div>
-          {/* The logo is uploaded, not pasted: we host it so it still resolves years later. */}
-          <div className="col-span-2 lg:col-span-3">
-            <label className={labelCls}>Logo</label>
-            <LogoUpload currentUrl={logoUrl} />
-          </div>
           {/* Design — a different look per hotel, chosen by eye. */}
           <div className="col-span-2 lg:col-span-3">
             <label className={labelCls}>Design</label>
@@ -131,6 +126,20 @@ export default async function EmailSettingsPage({ searchParams }: { searchParams
             </button>
           </div>
         </form>
+
+        {/*
+          The logo sits OUTSIDE the branding form, not inside it.
+
+          `LogoUpload` is its own form with its own action, and a form nested in a form is invalid
+          HTML: the browser drops the inner one, so pressing "Upload logo" submitted the BRANDING
+          form instead — saving branding and never uploading. It also produced a hydration error on
+          every render of this page. Uploading is a separate action from saving branding, and now the
+          markup says so.
+        */}
+        <div className="border-t border-surface-border px-4 py-4">
+          <label className={labelCls}>Logo</label>
+          <LogoUpload currentUrl={logoUrl} />
+        </div>
       </Card>
 
       {/* Live preview */}
@@ -155,26 +164,42 @@ export default async function EmailSettingsPage({ searchParams }: { searchParams
         <CardHeader
           title={`Emails (${templates.length})`}
           subtitle="Switch each one on or off and edit the wording. {{placeholders}} are filled in automatically."
-          action={
-            <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
-              {EMAIL_LOCALES.map((l) => (
-                <Link
-                  key={l.key}
-                  href={`/settings/emails?lang=${l.key}`}
-                  className={`rounded px-2.5 py-1 text-[12px] font-semibold transition-colors ${
-                    locale === l.key ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"
-                  }`}
-                >
-                  {l.label}
-                </Link>
-              ))}
-            </div>
-          }
         />
-        <p className="border-b border-surface-border bg-surface-muted/40 px-4 py-2 text-[11.5px] text-ink-500">
-          Each language is edited separately. A guest receives their own language when we know it, otherwise
-          the property default. Untranslated emails fall back to English rather than not sending.
-        </p>
+        {/*
+          The language sits on its own row above the list, labelled, rather than as a control in the
+          card header. It changes what every row below means — open a row and you edit THAT language —
+          so it is a mode, not an option, and a mode the reader has to notice before clicking anything.
+          As a header action it was mistaken for decoration.
+        */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-surface-border bg-surface-muted/40 px-4 py-3">
+          <span className="text-[12px] font-semibold text-ink-700">Editing language</span>
+          <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
+            {EMAIL_LOCALES.map((l) => (
+              <Link
+                key={l.key}
+                href={`/settings/emails?lang=${l.key}`}
+                className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                  locale === l.key ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"
+                }`}
+              >
+                {l.label}
+                {(property.defaultLanguage ?? "en") === l.key && (
+                  <span
+                    className={`text-[9px] font-bold uppercase tracking-wide ${
+                      locale === l.key ? "text-white/70" : "text-ink-400"
+                    }`}
+                  >
+                    default
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+          <p className="w-full text-[11.5px] text-ink-500 sm:w-auto sm:flex-1">
+            Each language is edited separately. A guest receives their own language when we know it,
+            otherwise your default. Untranslated emails fall back to English rather than not sending.
+          </p>
+        </div>
         <div className="divide-y divide-surface-border">
           {templates.map((t) => (
             /* Each email opens in focus mode — one email, full screen, live preview. Editing wording

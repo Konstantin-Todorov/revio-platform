@@ -5,7 +5,24 @@ import { BOOKING_PRESET_BY_KEY } from "@revio/core";
 import { slugifyPropertyName, slugRejectionReason } from "@revio/booking";
 import { prisma } from "./db";
 import { getProperty } from "./data";
+import { getSession } from "./session";
 import { logAudit, str } from "./mutation-helpers";
+
+/**
+ * Refuse to write while the user is in portfolio scope.
+ *
+ * In group scope `activePropertyId` resolves to whichever property sorts first, so a write here
+ * would land on a hotel the user was not looking at — and the address it writes is permanent. The
+ * layout already shows a property picker instead of this screen, but that is the render; this is
+ * the POST, and only one of them is a security boundary.
+ */
+async function assertSingleProperty(): Promise<string | null> {
+  const session = await getSession();
+  if (session?.scope === "group") {
+    return "Choose a hotel first — you are viewing all properties, and this setting belongs to one.";
+  }
+  return null;
+}
 
 /**
  * The booking engine's own settings.
@@ -23,6 +40,7 @@ function orNull(fd: FormData, key: string): string | null {
 }
 
 export async function saveBookingEngineLook(fd: FormData): Promise<void> {
+  if (await assertSingleProperty()) return;
   const { id: propertyId, tenantId } = await getProperty();
 
   const preset = str(fd, "bookingPreset");
@@ -65,6 +83,9 @@ export interface LinkResult {
 }
 
 export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormData): Promise<LinkResult> {
+  const scopeProblem = await assertSingleProperty();
+  if (scopeProblem) return { ok: false, error: scopeProblem };
+
   const { id: propertyId, tenantId, name, publicSlug } = await getProperty();
 
   const raw = str(fd, "publicSlug");
