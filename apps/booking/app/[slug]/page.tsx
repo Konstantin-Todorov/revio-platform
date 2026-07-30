@@ -39,8 +39,15 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
           clipping container cut them off at the coloured edge, so the guest saw half a calendar.
           The decorative layer below is `inset-0`, so it is already bounded by the section and needs
           no clipping of its own.
+
+          `z-20` is the other half of that fix, and it is not optional. The entry animation
+          (`.rise`) uses a transform, and a transform creates a stacking context — so the cards in
+          the sections BELOW became their own stacking contexts that paint after this one in DOM
+          order, straight over an open calendar. The popover's own `z-50` could not reach them: it
+          only ranks inside its own context. Raising the whole hero above its later siblings is what
+          actually decides the order.
         */}
-        <section className="relative">
+        <section className="relative z-20">
           {/* The preset decides how the hero reads. `solid` reverses the headline out of a full
               band of the hotel's colour; `wash` fades a tint of it into the page; `plain` leaves
               the search bar to carry the page alone. */}
