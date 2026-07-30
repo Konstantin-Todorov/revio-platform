@@ -41,7 +41,10 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} notifItems={notifItems} />
           <main className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
-            <div className="mx-auto max-w-[1400px]">{children}</div>
+            {/* Keyed by the property in view — switching hotels re-renders the server components but
+                leaves CLIENT components mounted, holding the previous hotel's form values. A form
+                pre-filled from hotel A and submitted under hotel B writes A's values onto B. */}
+            <div key={session.activePropertyId} className="mx-auto max-w-[1400px]">{children}</div>
           </main>
         </div>
       </div>

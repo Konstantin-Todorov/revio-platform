@@ -35,7 +35,22 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} scope={session.scope} canGroup={canGroup} role={session.role} userName={session.userName} notifItems={notifItems} />
           <main className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
-            <div className="mx-auto max-w-[1400px]">{children}</div>
+            {/*
+              Keyed by the property in view.
+
+              Switching hotels re-renders the server components, but React keeps every CLIENT
+              component mounted at the same position — so their `useState(props)` and uncontrolled
+              `defaultValue` still hold the PREVIOUS hotel's values. That is not just a stale label:
+              a form pre-filled from hotel A, submitted while hotel B is selected, writes A's values
+              onto B. It showed up as the booking address suggesting the wrong hotel's name, and the
+              appearance form was one click away from copying one hotel's branding onto another.
+
+              Changing the key remounts the subtree, which is exactly the intent: a different hotel
+              is different data, not the same screen with new props.
+            */}
+            <div key={`${session.scope}:${session.activePropertyId}`} className="mx-auto max-w-[1400px]">
+              {children}
+            </div>
           </main>
         </div>
       </div>
