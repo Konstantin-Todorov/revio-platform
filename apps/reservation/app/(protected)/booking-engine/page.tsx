@@ -23,9 +23,19 @@ export const dynamic = "force-dynamic";
 export default async function BookingEnginePage() {
   const property = await getProperty();
 
-  const origin = process.env.BOOKING_ENGINE_ORIGIN ?? "http://localhost:3004";
-  const live = property.bookingEngineEnabled && !!property.publicSlug;
-  const url = property.publicSlug ? `${origin}/${property.publicSlug}` : null;
+  /**
+   * The address guests actually use.
+   *
+   * `BOOKING_ENGINE_ORIGIN` is where the booking service runs for this deployment. In development
+   * that genuinely is localhost:3004. In production, if it is unset the service is not published
+   * yet — and showing a hotel a `localhost` URL would be worse than showing none, because they would
+   * copy it. So the screen says the page isn't live rather than inventing an address.
+   */
+  const configured = process.env.BOOKING_ENGINE_ORIGIN?.trim().replace(/\/+$/, "");
+  const origin = configured || (process.env.NODE_ENV === "development" ? "http://localhost:3004" : null);
+  const published = origin !== null;
+  const live = property.bookingEngineEnabled && !!property.publicSlug && published;
+  const url = property.publicSlug && origin ? `${origin}/${property.publicSlug}` : null;
 
   return (
     <div className="space-y-5">
@@ -66,6 +76,12 @@ export default async function BookingEnginePage() {
         {live && url && (
           <div className="border-t border-surface-border/60 px-4 py-2.5 text-[12px] text-ink-500">
             Guests can book at <span className="font-semibold text-ink-900">{url}</span>
+          </div>
+        )}
+        {!published && (
+          <div className="border-t border-surface-border/60 px-4 py-2.5 text-[12px] text-ink-500">
+            Your booking page isn&apos;t published yet. Choose your address now — we reserve it, and it
+            becomes a working link the moment your page goes live.
           </div>
         )}
       </Card>

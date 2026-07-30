@@ -65,10 +65,31 @@ export interface LinkResult {
 }
 
 export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormData): Promise<LinkResult> {
-  const { id: propertyId, tenantId, name } = await getProperty();
+  const { id: propertyId, tenantId, name, publicSlug } = await getProperty();
 
   const raw = str(fd, "publicSlug");
   const enabled = fd.get("bookingEngineEnabled") != null;
+
+  /**
+   * The address is issued ONCE and then frozen.
+   *
+   * It is the one value here that escapes the product: printed on QR cards at reception, pasted into
+   * an Instagram bio, handed to a print shop. Letting it be edited later means a hotel silently
+   * breaks material already in the world — and because the old slug then resolves to nothing, the
+   * failure lands on a guest trying to book, where nobody sees it.
+   *
+   * A rename is a support action with a redirect from the old address, not a text field. Enforced
+   * HERE and not only in the UI: a read-only input is a suggestion, and this form is a POST.
+   */
+  if (publicSlug) {
+    // The on/off switch stays editable — taking the channel down is reversible; the address is not.
+    await prisma.property.update({ where: { id: propertyId }, data: { bookingEngineEnabled: enabled } });
+    await logAudit(propertyId, tenantId, {
+      entity: "Booking engine", field: "accepting bookings", newValue: enabled ? "on" : "off",
+    });
+    revalidatePath("/booking-engine");
+    return { ok: true, slug: publicSlug };
+  }
 
   // Falls back to the hotel's name so a hotel that just flips the switch still gets a working link.
   const slug = slugifyPropertyName(raw || name);

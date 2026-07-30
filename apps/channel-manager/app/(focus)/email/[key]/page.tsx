@@ -22,13 +22,23 @@ export default async function EmailEditorPage({
 
   const locale = EMAIL_LOCALES.some((l) => l.key === sp.lang) ? sp.lang! : "en";
   const property = await getProperty();
-  const row = await prisma.emailTemplate.findUnique({
-    where: { propertyId_key_locale: { propertyId: property.id, key, locale } },
-  });
+  /**
+   * Every language's row, not just the one being edited — so each tab can say whether the hotel has
+   * actually written that language or is still showing our wording. Without it a hotel opens
+   * Bulgarian, sees text, and has no way to tell it is ours rather than theirs.
+   */
+  const rows = await prisma.emailTemplate.findMany({ where: { propertyId: property.id, key } });
+  const row = rows.find((r) => r.locale === locale) ?? null;
   const fallback = defaultsFor(def, locale);
 
   return (
+    /**
+     * `key` matters: switching language is a navigation to the SAME route, so React keeps the editor
+     * mounted and its useState-from-props would hold the previous language's text — the tab would
+     * change while the words did not. Remounting per locale is the fix.
+     */
     <EmailEditor
+      key={locale}
       templateKey={key}
       label={def.label}
       description={def.description}
@@ -36,7 +46,14 @@ export default async function EmailEditorPage({
       canDisable={def.canDisable}
       variables={def.variables}
       locale={locale}
-      locales={EMAIL_LOCALES.map((l) => ({ key: l.key, label: l.label }))}
+      locales={EMAIL_LOCALES.map((l) => ({
+        key: l.key,
+        label: l.label,
+        /** Has the hotel written this language, or is it still our wording? */
+        edited: rows.some((r) => r.locale === l.key),
+        /** The language most guests actually receive — worth knowing before you spend time on another. */
+        primary: (property.defaultLanguage ?? "en") === l.key,
+      }))}
       enabled={row?.enabled ?? true}
       subject={row?.subject ?? fallback.subject}
       body={row?.body ?? fallback.body}

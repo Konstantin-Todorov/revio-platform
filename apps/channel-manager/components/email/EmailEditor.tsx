@@ -26,7 +26,7 @@ export function EmailEditor({
   canDisable: boolean;
   variables: Record<string, string>;
   locale: string;
-  locales: { key: string; label: string }[];
+  locales: { key: string; label: string; edited: boolean; primary: boolean }[];
   enabled: boolean;
   subject: string;
   body: string;
@@ -43,6 +43,7 @@ export function EmailEditor({
   const [pending, startTransition] = useTransition();
 
   const dirty = subject !== initialSubject || body !== initialBody || enabled !== initialEnabled;
+  const localeLabel = locales.find((l) => l.key === locale)?.label ?? locale;
 
   const preview = useMemo(
     () => renderEmail({ subject, body, brand, vars: variables, details, preheader: description }),
@@ -114,17 +115,51 @@ export function EmailEditor({
           )}
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            {/* Language: each one is its own wording, so switching is a navigation, not a toggle. */}
+            {/*
+              Language. Each one is its OWN wording — switching is a navigation, and the page
+              remounts this editor so the text always matches the tab.
+
+              Deliberately here and not in Settings: a hotel translates one email at a time, and
+              flipping a global setting to do it would mean four navigations per email and would
+              conflate "which language am I writing" with "which language do guests receive".
+              The second one is a real setting and lives in Settings — it is marked below.
+            */}
             <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
               {locales.map((l) => (
                 <Link
                   key={l.key}
                   href={`/email/${templateKey}?lang=${l.key}`}
-                  className={`rounded px-2.5 py-1 text-[12px] font-semibold transition-colors ${
+                  onClick={(e) => {
+                    // Losing typed wording to a mis-click is worse than one confirm.
+                    if (dirty && !confirm("You have unsaved changes. Leave them and switch language?")) {
+                      e.preventDefault();
+                    }
+                  }}
+                  title={
+                    l.edited ? `${l.label} — your own wording` : `${l.label} — our wording, not yet edited`
+                  }
+                  className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[12px] font-semibold transition-colors ${
                     locale === l.key ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"
                   }`}
                 >
                   {l.label}
+                  {l.primary && (
+                    <span
+                      className={`text-[9px] font-bold uppercase tracking-wide ${
+                        locale === l.key ? "text-white/70" : "text-ink-400"
+                      }`}
+                    >
+                      default
+                    </span>
+                  )}
+                  <span
+                    aria-hidden
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      l.edited
+                        ? locale === l.key ? "bg-white" : "bg-success-500"
+                        : locale === l.key ? "bg-white/35" : "bg-ink-200"
+                    }`}
+                  />
                 </Link>
               ))}
             </div>
@@ -152,6 +187,18 @@ export function EmailEditor({
       <div className="mx-auto grid w-full max-w-[1500px] flex-1 grid-cols-1 gap-5 p-5 lg:grid-cols-2">
         {/* Left — the wording */}
         <div className="space-y-4">
+          {/*
+            Say whose words these are. Our translation is good enough to send unedited, so a hotel
+            that opens Bulgarian sees real Bulgarian — but it must never be ambiguous whether the
+            text on screen is theirs or ours, because that decides whether they need to do anything.
+          */}
+          {!customised && (
+            <p className="rounded-lg border border-surface-border bg-surface-muted px-4 py-2.5 text-[12px] text-ink-600">
+              This is <span className="font-semibold text-ink-900">our {localeLabel} wording</span> — it
+              sends as it is. Edit and save to make it yours; a Reset button will appear if you want ours back.
+            </p>
+          )}
+
           {canDisable && (
             <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-surface-border bg-white p-4 shadow-card">
               <input
