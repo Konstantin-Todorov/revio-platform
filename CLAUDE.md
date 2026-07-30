@@ -17,8 +17,9 @@ The **platform brand is Revio**; each product has a market name. Engineering pat
 | App (folder) | Product name | What it does | Sold to |
 | --- | --- | --- | --- |
 | `apps/channel-manager` | **RevioLink** | Push availability/rates/restrictions to OTAs, pull bookings back, keep them in sync. **First product, the demo, the priority sale.** | A hotel that already has a PMS |
-| `apps/reservation` | **RevioCRS** | Direct booking engine, folio, guests, payments, reports. *(Phase 2)* | A small property with no OTA needs |
-| `apps/pms` | **RevioPMS** | Front desk, housekeeping, minibar, operations. *(Phase 3)* | An operations layer over a foreign system |
+| `apps/reservation` | **RevioCRS** | Reservations, rates & restrictions, guests, analytics. The system of record for every booking, from any source. | A small property with no OTA needs |
+| `apps/pms` | **RevioPMS** | Front desk, housekeeping, folios & invoicing, outlets, maintenance. | An operations layer over a foreign system |
+| `apps/booking` | **RevioDirect** | The hotel's **own** booking page — the only public, unauthenticated surface. Configured from RevioCRS, not sold on its own. | An existing customer's guests |
 | `apps/operator` | **Revio Operator** | **Our** admin console: all hotels, billing, integration keys, entitlements, sync health. | Internal (the SaaS operator) |
 
 ## The one rule that governs everything
@@ -28,7 +29,7 @@ reason the Channel Manager exists is to stop two guests booking the same room. I
 own copies of inventory, we would recreate that exact double-booking problem *inside our own
 platform*. So:
 
-- **One database. One inventory core.** All four apps read and write inventory **only** through
+- **One database. One inventory core.** Every app reads and writes inventory **only** through
   `@revio/core` — never with their own ad-hoc queries against inventory tables.
 - Apps **never import another app's internals.** Apps depend on `packages/*`, not on each other.
 - "Sold separately" is a **licensing** decision, not a code-separation decision — see Entitlements.
@@ -39,6 +40,11 @@ A hotel account has **entitlements** (which modules it bought). The same login s
 hotel is entitled to. Buying another product later just flips an entitlement — the data is already
 shared. This is our edge over all-in-one suites (Mews/Cloudbeds) and pure channel managers
 (SiteMinder): land with CM, expand into CRS/PMS without re-onboarding.
+
+Three tenant entitlements exist — `hasChannelManager` · `hasReservation` · `hasPms`. **RevioDirect is
+deliberately not one of them:** it is switched on per *property* (`Property.bookingEngineEnabled`),
+because a chain can sell one hotel direct and not another, and because the booking page is a surface
+of the hotel's own CRS rather than a product with its own login.
 
 ## Multi-tenancy & isolation
 
@@ -75,11 +81,17 @@ Error Center, Audit Log). See `apps/channel-manager/CLAUDE.md` and `docs/`.
 ## Layout
 
 ```
-apps/        channel-manager · reservation · pms · operator   (front-ends, each with its own CLAUDE.md)
-packages/    core (domain + inventory + rates + restrictions + adapters) · ui (tokens)
+apps/        channel-manager · reservation · pms · operator · booking   (each with its own CLAUDE.md)
+packages/    core (domain + inventory + rates + restrictions + adapters) · db · ui (tokens)
+             connectivity (Channex + push/pull orchestration) · booking (public guest domain)
+             email (templates → transport) · payments (the only card path) · storage (uploaded media)
 docs/        spec & architecture (questionnaire answers, CM developer reference, architecture analysis)
 design/      Atlas/Haven/Pulse handoff prototypes + Revio brand
 ```
+
+The five non-`core` packages all exist for the same reason: **two apps needed the same thing, and an
+app may never import another app's internals.** Each was extracted at the moment a second caller
+appeared — never speculatively.
 
 ## Conventions
 
@@ -94,6 +106,10 @@ design/      Atlas/Haven/Pulse handoff prototypes + Revio brand
 - **Live — RevioLink (CM):** https://channel-manager-production-59bb.up.railway.app
 - **Live — Operator Console:** https://operator-production-5eed.up.railway.app
 - **Live — RevioCRS:** https://reservation-production-f8c5.up.railway.app
+- **Live — RevioPMS:** https://pms-production-a64b.up.railway.app
+- **NOT deployed — RevioDirect:** local only (`localhost:3004`) until phase K9. It needs its own
+  service, a `book.revio.app` domain and an object-storage bucket (`DEPLOY.md` → Object storage);
+  until then room photos are served from local disk, which does not survive a container restart.
 - **Railway project:** `revio-platform` — one Postgres shared by all services; each app is its own web
   service. **Each service defines its own build/start via Railway config** (NOT a root `railway.json` —
   that applied to every service and was removed): build = Nixpacks `pnpm install → db:generate → next
@@ -113,6 +129,10 @@ each app outside the `(protected)` route group. CM cookie `revio_session`, opera
 CRS `revio_crs_session`.
 `AUTH_SECRET` is set per Railway service. **Demo logins (password `revio1234`):** RevioLink + RevioCRS →
 `admin@hotelsofia.demo` or `owner@blacksea.demo`; Operator → `operator@revio.app`.
+
+**RevioDirect has no auth and no session** — it is the public surface, so it has no tenant context
+until a slug resolves. That inversion is why it gets its own app and its own rules; see
+`apps/booking/CLAUDE.md` before touching anything in it.
 
 ## Status
 
@@ -160,6 +180,27 @@ Channex (distribution) · **Stripe test-mode** (payments §4.5, F2 — TEST keys
 **fiscalization** (§4.7, F3 — `TaxInvoice.fiscalRef` + jurisdiction pack; `docs/specs/BG-FISCALIZATION-
 RESEARCH.md`). Real email (Resend) is wired (mock-log until `RESEND_API_KEY` set). Every screen's **Keep**
 list was honoured. Older `docs/CM-REVISIONS.md` (2026-06-27) is superseded where the specs overlap it.
+
+**→ 🟡 REVIODIRECT (phase K) — K1–K4 SHIPPED, local only, 2026-07-27→30.** The fifth app, `apps/booking`
+(port 3004), governed by `docs/specs/BOOKING-ENGINE-DESIGN.md` + the founder's `BOOKING-ENGINE-ADDENDUM.md`.
+**A guest can now book end to end**: `search → choose a room → hold + details + card guarantee → confirmed`,
+writing the one shared reservation tagged `source = Direct` — so it lands in RevioCRS and on the RevioPMS
+front desk with no integration step. That is the product's structural claim, and it is now demonstrated
+rather than argued. Shipped: **all-in pricing** (K2 — one `computeStayCharges` used by the quote, the
+summary, the confirmation, the email and the folio, so the first number a guest sees is the number they
+pay); a **UX/UI overhaul** (K2b — two-month range calendar, pinned search bar, four-step progress, mobile
+first); **room photos** (K3 — `RoomTypePhoto` + `@revio/storage`, bytes in object storage and never in
+Postgres, `sharp` re-encode to WebP); **hold-on-open + the card guarantee** (K4 — a SetupIntent through
+`@revio/payments`, no card fields anywhere, token + last4 only). Sold-out dates return **real** alternative
+stays, re-quoted from the same availability engine. Branding is configured in **RevioCRS → Booking Engine**
+(base preset, then edits; every `booking*` column nullable = inherit the email branding) and every derived
+brand colour is **measured** to 4.5:1 rather than assumed — `apps/booking/lib/brand.test.ts` pins that
+across twelve awkward hotel colours. Four shared packages came out of this work, each at the moment a
+second caller appeared: `@revio/booking` · `@revio/email` · `@revio/payments` · `@revio/storage`.
+**Still open:** K5 Stripe Connect onboarding + request-to-book fallback · K6 returning-guest recognition ·
+K7 CRS distribution settings · K8 direct-vs-OTA analytics incl. commission saved · K9 deploy. **Not built
+and deliberately so:** real card collection (needs Stripe Elements + a live-mode decision), extras/upsell
+(the step-3 slot exists and is empty), and any Operator visibility into the booking engine.
 
 **→ 🔜 REFINEMENT ROUND intake (founder docs 2026-07-20, `docs/specs/`) — NOT yet built; plan pending
 founder sign-off.** **THREE systems, three docs** (one doc per system; the `Revio Development Docs.docx`

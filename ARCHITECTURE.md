@@ -34,10 +34,14 @@ ONE database (Postgres + RLS)
    packages/core  ── the shared inventory source of truth
         │  domain types · availability · derived rates · restrictions · channel adapters
         │
-   ┌────┼─────────────┬──────────────┬───────────────┐
-  CM   CRS           PMS          Operator        (four apps on the same core)
- (V1)  (phase 2)   (phase 3)    (thin now)
+   ┌────┼───────┬───────┬──────────┬──────────┐
+  CM   CRS     PMS   Operator   RevioDirect      (five apps on the same core)
+ live  live    live    live     in build · the only PUBLIC one
 ```
+
+RevioDirect is the odd one out and deliberately so: no login, no session, **no tenant context until a
+slug resolves**. Everything the other four take for granted at the top of a request, it has to
+establish. That inversion is the reason it is a separate app rather than a route group inside the CRS.
 
 - **Apps never touch inventory directly** — only through `@revio/core`. Apps never import each other.
 - **Two access perimeters:** Operator (all hotels) vs Hotel (its own data + purchased modules only).
@@ -58,12 +62,24 @@ ONE database (Postgres + RLS)
 3. **Restriction priority** — manual edit / Bulk Update > Restriction Rule > Rate Plan default
    > Property default (the CRS adds the property-level fallback).
 
-## Two adapter boundaries (the same pattern, twice)
+## Adapter boundaries (the same pattern, five times)
+
+Every outside system is reached through one interface with a **mock implementation that is a first-class
+citizen, not a stub**. The consequence is that the whole platform demos and develops with no external
+account at all, and switching on the real thing is configuration rather than a rewrite.
+
 - **CM ↔ OTA** — `ChannelAdapter` (`@revio/connectivity`: Mock | Channex | …). Built + sandbox-verified.
-- **CRS ↔ Channel Manager** — a future `ChannelManagerConnector` with **RevioLink-internal** (shared
-  core/DB, no network) and **third-party** (real push/pull) impls. The CRS connects to exactly one CM and
-  can't tell internal from external — exactly the spec's requirement. Reservations are the CRS's system of
-  record; when CM + CRS are both on, they share one reservation table that grows additively.
+- **CRS ↔ Channel Manager** — `ChannelManagerConnector` with **RevioLink-internal** (shared core/DB, no
+  network) and third-party impls. The CRS connects to exactly one CM and can't tell internal from
+  external — exactly the spec's requirement. Reservations are the CRS's system of record; when CM + CRS
+  are both on, they share one reservation table that grows additively.
+- **Anything ↔ a card** — `@revio/payments`. Mock-first; **only** a `sk_test_` key selects Stripe, so a
+  live key cannot move real money by accident.
+- **Anything ↔ a tax authority** — the fiscalization boundary (`TaxInvoice.fiscalRef` + a jurisdiction
+  pack). Bulgaria is researched; no jurisdiction is hardcoded into the invoicing module.
+- **Anything ↔ uploaded bytes** — `@revio/storage`. Local disk with zero configuration; any
+  S3-compatible bucket when `STORAGE_BUCKET` is set. The driver is chosen by environment, never by a
+  caller, so no screen can behave differently in production than it did in review.
 
 ## Tech stack
 
@@ -87,6 +103,11 @@ already lives in `packages/core`.
 - **OTA access timelines** (Airbnb invite-only, Booking waitlists) → adapter abstraction; mock now,
   aggregator (Channex) and direct connections behind the same interface later.
 - **Silent sync failures** → visible Sync Center status, Error Center, retry queue.
-- **Guest data & payments** → separate guest domain + PSP tokenization (never store card data) — a
-  CRS/PMS-phase concern, but the boundary is set now.
+- **Guest data & payments** → separate guest domain + PSP tokenization (never store card data). **Now
+  realized:** `@revio/payments` is the only path to a card, we store a token + brand + last4 and never a
+  number, and the public booking page has no card fields at all — the number would go browser → Stripe
+  if we ever collect one.
+- **A public, unauthenticated, inventory-touching surface** (new with RevioDirect) → the threat is not
+  scraping but **hold exhaustion**, which reads as a sold-out weekend until the bookings never arrive.
+  Rate limiting is per-IP *and* per-property, shipped with the app shell rather than added later.
 - **Premature complexity** → modular monolith, not early microservices.

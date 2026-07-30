@@ -1,7 +1,8 @@
 # Revio — Access Model (top to bottom)
 
-How identity, tenancy, products, and roles fit together — so every app (CM now; Operator, CRS, PMS
-later) enforces access the same way and nothing leaks. This is the spine; get it right once.
+How identity, tenancy, products, and roles fit together — so every app enforces access the same way and
+nothing leaks. This is the spine; get it right once. All four staff apps now run on it, and the public
+booking page is the one deliberate exception (below).
 
 ## The two perimeters
 
@@ -20,6 +21,29 @@ manages entitlements, billing, keys     uses the products it bought
   business data (contracts, billing, OTA tokens) sits in an admin area a hotel can never read.
 - **Hotel** = one tenant. Locked to its own `tenantId`. Sees only its data, only the products it bought.
 
+### A third perimeter: **public** (RevioDirect, 2026-07-27)
+
+The booking page has **no session and therefore no tenant context** — the inversion of everything
+above. It cannot ask "who are you?" and derive a tenant; it has to resolve one from a URL slug and then
+scope itself.
+
+```
+PUBLIC  (a guest, no account)
+────────────────────────────
+apps/booking · one slug → one property → that property's tenant, and nothing else
+```
+
+Three rules follow, and they are enforced in `apps/booking/lib/property.ts`, the single choke point:
+
+1. **The slug lookup runs on the system perimeter** — deliberately, because there is no tenant yet to
+   scope to. It is the *only* unscoped read, it resolves exactly one property, and everything
+   downstream uses the tenant it returned.
+2. **Every "no" is identical.** Unknown slug, engine switched off, suspended tenant, inactive property
+   → one generic 404. Distinguishing them leaks which hotels are Revio customers and which stopped
+   paying.
+3. **Abuse protection is part of the perimeter, not hardening.** An unauthenticated endpoint that
+   consumes inventory needs limits before it ships, per-IP *and* per-property.
+
 ## The single choke point: `getSession()`
 
 Every read and write flows through one function — `apps/*/lib/session.ts` → `getSession()` — which
@@ -36,8 +60,10 @@ Session = {
 }
 ```
 
-- Today `getSession()` is a **dev resolver** (active property from a cookie). Real auth (login/SSO)
-  replaces **only this function** — nothing downstream changes. That is the whole point of the choke point.
+- ~~Today `getSession()` is a **dev resolver**.~~ **Real auth shipped** — email + password (bcryptjs)
+  and a signed JWT cookie (jose), per app. Exactly as designed, **only this function changed**;
+  nothing downstream did. That is the whole point of the choke point, and it is now demonstrated
+  rather than claimed.
 - The data layer (`lib/data.ts`) scopes every query to `session.tenantId` / `activePropertyId`. A hotel
   query can never name another tenant's id because it never has it.
 
@@ -49,7 +75,10 @@ Session = {
    written to the **Audit Log**.
 4. **Row-Level Security (DB)** — Postgres policies on every tenant-owned table key off a per-request
    `app.tenant_id`; the database physically refuses cross-tenant rows even if app code has a bug.
-   *(RLS migration lands with the switch to Prisma Migrate, just before deploy.)*
+   **Built and verified locally.** ⚠️ **On production the policies are inert**, because RLS does not
+   apply to a superuser and prod still connects as one. Switching to the restricted `revio_app` role
+   is RLS Phase 2 (`DEPLOY.md`, task R3) — until then layers 1–3 are the real enforcement and layer 4
+   is correct but not yet load-bearing. Don't count it twice.
 
 ## How products are sold separately
 

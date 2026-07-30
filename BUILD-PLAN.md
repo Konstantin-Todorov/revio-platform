@@ -76,7 +76,9 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
   PMS), each with a small cross-sell section for the other two. Content is drafted in `docs/POSITIONING.md`.
 
 **Future products**
-- Direct **Booking Engine** (consumer-facing) — parked as a future product.
+- ~~Direct **Booking Engine** (consumer-facing) — parked as a future product.~~ **Un-parked and in
+  build since 2026-07-27 — see Phase K at the bottom of this file.** K1–K4 shipped (a guest can book
+  end to end, locally); K5–K9 open.
 
 ---
 
@@ -376,3 +378,38 @@ tests DB `revio_test`. Full detail in `CLAUDE.md`, `ACCESS-MODEL.md`, `DEPLOY.md
 - Real connectivity (Channex first, then direct OTA adapters), per channel, behind the same interface.
 - Reservation/CRS (Booking Engine, payments, folio, reports).
 - PMS (front desk, housekeeping PWA, minibar).
+
+---
+
+## 🟡 Phase K — RevioDirect, the booking engine (K1–K4 done, 2026-07-27→30)
+
+Spec: `docs/specs/BOOKING-ENGINE-DESIGN.md` §6, governed by the founder's `BOOKING-ENGINE-ADDENDUM.md`.
+App: `apps/booking` (port 3004) — read `apps/booking/CLAUDE.md` first; it is the only unauthenticated,
+internet-facing, inventory-touching surface we have, and its rules are different from the other four.
+
+| Task | State | Notes |
+| --- | --- | --- |
+| K1 | ✅ | Public app shell, slug → property choke point, one generic 404 for every "no", per-IP **and** per-property hold rate limiting. |
+| K2 | ✅ | Step 1 — range calendar, guests, **all-in pricing** from the tax/fee rules. |
+| K2b | ✅ | *Not in the original plan.* Full UX/UI overhaul after the founder rejected the first pass: type system, calm-precision tokens, two-month range calendar, pinned collapsing search bar, four-step progress. |
+| K3 | ✅ | Room content model — `RoomTypePhoto` + `@revio/storage` + `sharp` re-encode; CRS upload screen; Step 2 cards with honest scarcity. |
+| K4 | ✅ | Step 3 — hold-on-open (15 min, id in the URL, own hold excluded on confirm), guest details, **card guarantee**, confirmation page + branded email. |
+| K7 | ✅ | *Shipped early, out of order* — the CRS **Booking Engine** screen (slug, on/off, preset → colour/headings/logo/hero, live preview) was needed to demo K2b at all. |
+| K5 | ⬜ | **Stripe Connect onboarding** in CRS Distribution + request-to-book fallback when unconnected. |
+| K6 | ⬜ | Returning-guest recognition (email → shared guest record, opt-out respected, GDPR-clean). |
+| K8 | ⬜ | Direct-vs-OTA analytics incl. commission saved. |
+| K9 | ⬜ | Deploy — own Railway service, `book.revio.app`, object-storage bucket. |
+
+**Two deviations from the spec worth knowing.** K4 planned the guarantee "via Stripe Connect"; it
+shipped on the **platform's own test-mode SetupIntent** through `@revio/payments` instead, because
+Connect onboarding is a hotel-facing flow with its own screens and belongs with K5 rather than being
+smuggled into the guest checkout. And the design doc's sequencing note was right — **K3 was the
+sleeper**: photos meant object storage, an upload pipeline, an image processor and a hotel-facing
+editor, none of which existed.
+
+**Not built, deliberately:** real card collection (needs Stripe Elements + a live-mode decision),
+extras/upsell (the step-3 slot exists and is empty), and Operator visibility into the booking engine.
+
+**Blocked on the founder before a real hotel can go live:** each hotel's Stripe Connect account, a
+sending domain (#127), and — in Bulgaria — the fiscalization gate from F3 (which the guarantee model
+defers to the hotel's point of sale, since no money moves at booking).

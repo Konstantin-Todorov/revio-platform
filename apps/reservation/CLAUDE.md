@@ -55,6 +55,21 @@
 > column is nullable and NULL means "inherit the email branding", so a hotel adopts one field at a
 > time and editing the booking page never restyles their confirmation emails. Presets are shared via
 > `BOOKING_PRESETS` in `@revio/core` so the preview and the real page cannot drift.
+>
+> **Room photos live in Rooms & Rates, not here** (`/rooms-rates` → a room type → Room photos): a
+> photograph belongs to the ROOM, and the same image will feed the OTA push and the confirmation email
+> later — moving it then would be a migration. Uploads go through `@revio/storage` (bytes in object
+> storage, only keys in `RoomTypePhoto`) and are re-encoded by `sharp` into two WebP variants. **A
+> CRS-only hotel with the engine switched off should still fill these in**, which is the whole reason
+> they are not on the Booking Engine screen.
+>
+> **Which rate plans are sold direct** is `RatePlan.directChannelEnabled`, edited on the rate plan
+> itself. A hotel almost always sells a *subset* direct, and the flag being on the plan is what lets
+> RevioDirect and a future OTA channel disagree without a second source of truth.
+>
+> The engine itself is `apps/booking` (**RevioDirect**, port 3004) — read `apps/booking/CLAUDE.md`
+> before changing anything a guest sees. Guest-facing domain logic is in **`@revio/booking`**, shared
+> by the public app and this app's own public API routes.
 
 **Full V1 spec: `docs/CRS-REFERENCE.md` (founder spec v2, 2026-07-02)** — exact metric formulas,
 reservation lifecycle, system rules, sitemap, and the 5-phase MVP build order. Read it before writing
@@ -69,7 +84,8 @@ with date-sensitive out-of-order/closure periods) · Rates & Restrictions (+ pro
 Taxes & Fees · Global Search · Permission Groups.
 
 ## NOT V1 (explicitly future)
-Booking Engine (consumer site) · Payments · Folio/POS · full PMS ops · housekeeping · check-in/out ·
+~~Booking Engine (consumer site)~~ — **built since 2026-07-27 as its own app** (`apps/booking`); what
+lives in the CRS is only its configuration, above. Payments · Folio/POS · full PMS ops · housekeeping · check-in/out ·
 CRM/loyalty · revenue-management automation · AI forecasting · occupancy/LOS/package pricing ·
 same-time-last-year pace · scheduled report emails.
 

@@ -10,6 +10,12 @@ sharing that database.
 - **Operator Console:** https://operator-production-5eed.up.railway.app
 - **RevioCRS (Reservation):** https://reservation-production-f8c5.up.railway.app
 - **RevioPMS (Operations):** https://pms-production-a64b.up.railway.app
+- **RevioDirect (booking engine): NOT deployed** — `apps/booking` runs locally on `:3004` only. Phase
+  K9 adds it. It needs three things the other services didn't: its own Railway service, a
+  `book.revio.app` domain (it is the only app a *guest* visits, so it must not sit on a
+  `*.up.railway.app` URL a hotel would be embarrassed to print), and an **object-storage bucket** —
+  without one, room photos land on the container's local disk and vanish on the next deploy. See
+  *Object storage* below and finish that first.
 - **Railway project `revio-platform`:** services `channel-manager`, `operator`, `reservation`, `pms`,
   `Postgres` (one shared DB).
 - **No root `railway.json`** — it applied to every service. Each app service sets its **own** build/start

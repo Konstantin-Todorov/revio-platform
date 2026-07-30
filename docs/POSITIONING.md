@@ -128,6 +128,38 @@ existing reservation platform.
 
 ---
 
+## 3.5 RevioDirect — the hotel's own booking page ⏳ *built, not yet live*
+
+> ⚠️ **Do not put this on a website yet.** The rule at the top of this file is that every claim is
+> grounded in something live; RevioDirect runs locally only until phase K9. It is here so the copy is
+> ready and nobody writes a fourth product site by accident — **it is not a fourth site.** It is a
+> feature of RevioCRS: configured from the CRS, switched on per property, no separate login and no
+> separate price yet.
+
+**One line:** *Take direct bookings on the same rooms you sell everywhere else — and keep the commission.*
+
+**Differentiators** (all structural, all already true in the build)
+- **The availability is real.** The page sells from the same waterfall the OTAs are pushed from. There
+  is no separate booking-engine inventory and nothing to sync — the usual cause of a direct-booking
+  double-booking simply does not exist here.
+- **The first number is the number you pay.** Taxes and fees are computed into the displayed price by
+  the same engine that produces the folio. No "+ fees at the property" surprise at step three.
+- **No card data anywhere.** The guest's card is verified as a guarantee and charged at the hotel.
+  Nothing sensitive reaches us to be breached.
+- **Honest scarcity.** "2 rooms left" appears only when 2 rooms are genuinely left. No countdown
+  theatre, no "12 people are looking at this". This is a *positioning* choice: the distrust OTAs earned
+  is the opening.
+- **It looks like the hotel, not like us.** The hotel picks a base style then edits colour, headings,
+  logo and hero copy; the booking page and the confirmation email are branded separately, because a
+  hotel can reasonably want a bold page and a quiet email.
+
+**Ideal buyer:** any existing RevioCRS hotel that is paying OTA commission on business it could have
+had directly.
+
+**Before it can be sold:** the hotel's own Stripe account (K5), a sending domain, and the deploy (K9).
+
+---
+
 ## 4. Cross-sell blurbs (the "rest of the platform" section on each product site)
 
 Each product site ends with a short section (2 cards) upselling the other two. Keep it light — the hook is

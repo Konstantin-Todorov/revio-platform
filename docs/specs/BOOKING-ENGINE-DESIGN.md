@@ -3,7 +3,11 @@
 > Design proposal, 2026-07-26. Governed by the founder's `BOOKING-ENGINE-ADDENDUM.md` (2026-07-09),
 > which remains binding on placement, boundaries and sequencing. This document adds the *how*:
 > what the market does, where Revio can beat it structurally, and a build plan.
-> **Status: awaiting founder sign-off. Nothing here is built.**
+>
+> **Status: signed off and IN BUILD. K1–K4 shipped 2026-07-27→30 — a guest can book end to end on
+> `localhost:3004`; K5–K9 open (§6).** The living description of what exists is
+> `apps/booking/CLAUDE.md`; this document stays as the *reasoning*, and is only amended where a
+> decision here turned out to be wrong.
 
 ---
 
@@ -292,22 +296,31 @@ Explicitly out, to keep the surface honest and shippable:
 
 ## 6. Build plan
 
-Phase **K**, after founder sign-off. Estimated shape, not a commitment:
+Phase **K**. Estimated shape, not a commitment — with what actually happened:
 
-| Task | What |
-| --- | --- |
-| K1 | Public app shell — a new Next app (`apps/booking`, port 3004), resolving `book.revio.app/<slug>` → property. Separate app because it is the only internet-facing, unauthenticated, money-adjacent surface and deserves its own deploy, error budget and security posture. **Hold-abuse protection ships here, not later.** |
-| K2 | Step 1 — calendar + availability, all-in pricing from the tax rules |
-| K3 | Room-type **content model** (photos, amenities, the off-site answers) + Step 2 room cards with honest scarcity |
-| K4 | Step 3 — hold-on-open, guest details, **Stripe Connect card guarantee (no charge)**, confirm |
-| K5 | **Stripe Connect onboarding** in CRS Distribution + request-to-book fallback when unconnected |
-| K6 | Returning-guest recognition (email → shared guest record, opt-out respected, GDPR-clean) |
-| K7 | CRS Distribution → booking-engine settings: enable, branding, which rate plans, the shareable link |
-| K8 | Direct-vs-OTA analytics incl. commission saved |
-| K9 | Verify + deploy |
+| Task | State | What |
+| --- | --- | --- |
+| K1 | ✅ | Public app shell — a new Next app (`apps/booking`, port 3004), resolving `book.revio.app/<slug>` → property. Separate app because it is the only internet-facing, unauthenticated, money-adjacent surface and deserves its own deploy, error budget and security posture. **Hold-abuse protection ships here, not later.** |
+| K2 | ✅ | Step 1 — calendar + availability, all-in pricing from the tax rules |
+| K2b | ✅ | *Unplanned.* Full UX/UI overhaul — the first pass was competent and generic, which for the one page a guest judges the hotel by is a failure. |
+| K3 | ✅ | Room-type **content model** (photos, amenities, the off-site answers) + Step 2 room cards with honest scarcity |
+| K4 | ✅ | Step 3 — hold-on-open, guest details, card guarantee (no charge), confirm. **Shipped on the platform's own test-mode SetupIntent, not Connect** — see below. |
+| K5 | ⬜ | **Stripe Connect onboarding** in CRS Distribution + request-to-book fallback when unconnected |
+| K6 | ⬜ | Returning-guest recognition (email → shared guest record, opt-out respected, GDPR-clean) |
+| K7 | ✅ | CRS → **Booking Engine** screen: enable, slug, branding, which rate plans, the shareable link. *Pulled forward* — K2b could not be demonstrated without it. |
+| K8 | ⬜ | Direct-vs-OTA analytics incl. commission saved |
+| K9 | ⬜ | Verify + deploy |
 
 **Sequencing note:** K3 is the sleeper. Everything else is logic we already have; a room-type content
 model is new schema, an upload path, and a hotel-facing editor. Do not let it hide inside "step 2".
+*(This held. K3 was the largest task in the phase.)*
+
+**Where K4 departed from this plan.** The guarantee was specified as Stripe **Connect**; it shipped on
+the platform's own **test-mode** SetupIntent through `@revio/payments`. Connect onboarding is a
+hotel-facing flow with its own screens, its own failure states and its own support burden, and
+folding it into the guest checkout would have blocked a working end-to-end booking behind an
+unrelated piece of hotel admin. It stays where it belongs, in K5. The guest-side code does not care
+which account the SetupIntent is created against, so this is a swap rather than a rewrite.
 
 **Prerequisites before a real hotel goes live on it:** the hotel's Stripe Connect account (§2.5③), a
 sending domain (#127) for the confirmation email, and — for Bulgaria — the fiscalization decision from
