@@ -13,28 +13,22 @@ import { useState } from "react";
  * Its own client component so the card around it stays a server component — this is the only part
  * of a room card that needs to react to anything.
  */
-export function RoomPhoto({
-  src, alt, width, height,
-}: {
-  src: string;
-  alt: string;
-  width: number;
-  height: number;
-}) {
+export function RoomPhoto({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) return null;
 
   return (
-    /* Not next/image: these are already our own resized WebP, so a second optimisation pass would
-       burn CPU to produce the same bytes. Width/height reserve the box so the card does not jump. */
+    /*
+      Absolutely filling its column rather than carrying its own aspect ratio: the card's height is
+      set by the rate rows beside it, and the photo's job is to occupy that whole side. `object-cover`
+      centres the crop, which on a room photograph is the bed and the window.
+    */
     <img
       src={src}
       alt={alt}
-      width={width}
-      height={height}
       loading="lazy"
       decoding="async"
-      className="aspect-[4/3] w-full object-cover"
+      className="absolute inset-0 h-full w-full object-cover"
       onError={() => setFailed(true)}
     />
   );

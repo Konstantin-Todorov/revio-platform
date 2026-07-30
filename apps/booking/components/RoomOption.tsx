@@ -48,25 +48,23 @@ export function RoomOption({
       <div className="grid sm:grid-cols-[minmax(0,13.5rem)_1fr]">
         {cover ? (
           /*
-            The photo keeps a 4:3 shape instead of stretching to the card's full height. A room card
-            grows with its rate rows, and a landscape photograph forced into that tall column gets
-            cropped to a narrow strip through the middle — the guest sees a wall, not a room. The
-            panel behind it carries the hotel's tint so the remaining space reads as designed.
+            The photo FILLS its column.
+
+            It used to hold a 4:3 shape, on the theory that cropping a landscape photo into a tall
+            column would show a strip of wall rather than a room. In practice the empty surface under
+            the photo read as a broken image, and the crop does not: a room photograph is mostly bed
+            and window through the middle, which is exactly the band a centred cover crop keeps. The
+            filled column is also what every engine a guest has already used looks like.
           */
           <div
-            className="relative hidden sm:block"
-            /* Card surface, not a tint: on a tall card the space under the photo should disappear
-               into the card rather than read as an empty coloured block. */
+            className="relative hidden min-h-[13rem] sm:block"
             style={{ borderRight: "1px solid hsl(var(--line))", backgroundColor: "hsl(var(--surface))" }}
           >
             {/* Not next/image: this is already our own resized WebP, so a second optimisation pass
-                would burn CPU to produce the same bytes. Width/height reserve the box, so the card
-                does not jump as photos arrive. */}
+                would burn CPU to produce the same bytes. */}
             <RoomPhoto
               src={mediaUrl(cover.thumbKey)}
               alt={cover.alt || `${option.name} at this hotel`}
-              width={cover.width}
-              height={cover.height}
             />
             {option.photos.length > 1 && (
               <span

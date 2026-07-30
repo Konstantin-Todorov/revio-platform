@@ -5,7 +5,7 @@ import { getObjectStore, photoToken, roomPhotoKey } from "@revio/storage";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { logAudit, str } from "./mutation-helpers";
-import { ImageRejected, processRoomPhoto } from "./images";
+import { ImageRejected, MAX_UPLOAD_BYTES, processRoomPhoto } from "./images";
 
 /**
  * Room photographs.
@@ -26,11 +26,12 @@ export interface PhotoResult {
 const MAX_PER_ROOM_TYPE = 12;
 
 /**
- * Per-file ceiling, comfortably above a phone photo and well below the action body limit set in
- * `next.config.mjs`. Checked here so an oversized file gets a sentence naming the file and its size,
- * rather than Next rejecting the whole request with a 413 and the screen showing a generic crash.
+ * The per-file ceiling is `MAX_UPLOAD_BYTES` from the image pipeline — ONE number, not two.
+ *
+ * It is checked here as well as there so an oversized file gets a sentence naming the file and its
+ * size before anything is read, rather than Next rejecting the whole request with a 413 (which the
+ * screen can only show as a generic crash) or the pipeline throwing halfway through a batch.
  */
-const MAX_FILE_BYTES = 15 * 1024 * 1024;
 
 async function ownedRoomType(roomTypeId: string) {
   const property = await getProperty();
@@ -50,12 +51,12 @@ export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData):
   const files = fd.getAll("photos").filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length === 0) return { ok: false, error: "Choose at least one image." };
 
-  const tooBig = files.find((f) => f.size > MAX_FILE_BYTES);
+  const tooBig = files.find((f) => f.size > MAX_UPLOAD_BYTES);
   if (tooBig) {
     const mb = (tooBig.size / 1024 / 1024).toFixed(1);
     return {
       ok: false,
-      error: `“${tooBig.name}” is ${mb} MB — the limit is 15 MB per photo. Most phone photos are well under it.`,
+      error: `“${tooBig.name}” is ${mb} MB — the limit is 25 MB per photo. Most phone photos are well under it.`,
     };
   }
 
