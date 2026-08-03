@@ -110,18 +110,15 @@ export function AppearanceForm({
           </Field>
         </div>
 
-        <Field label="Logo" hint="Blank uses the logo from your email branding — usually what you want.">
-          <div className="flex items-center gap-2">
-            <input
-              name="bookingLogoUrl"
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              placeholder={inherited.logoUrl ? "Inherited from email branding" : "https://… (optional)"}
-              className={INPUT}
-            />
-            {logoUrl && <Reset onClick={() => setLogoUrl("")} />}
-          </div>
-        </Field>
+        {/*
+          The logo control is NOT here — it is rendered above this form by the page.
+
+          An upload is its own request with its own failure mode, and a <form> inside a <form> makes
+          the browser submit the wrong one. The URL field stays, hidden, so a hotel that pasted a
+          link keeps it: uploading clears it deliberately, but saving the rest of the appearance
+          must not.
+        */}
+        <input type="hidden" name="bookingLogoUrl" value={logoUrl} />
 
         <Field label="Headline" hint="The first thing a guest reads. Blank uses the platform wording.">
           <input

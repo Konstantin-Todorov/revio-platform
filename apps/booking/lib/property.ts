@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { forSystem } from "@revio/db";
-import { BOOKING_COPY_DEFAULTS } from "@revio/core";
+import { BOOKING_COPY_DEFAULTS, resolveBrandLogo } from "@revio/core";
 
 /**
  * Resolving a public slug → the hotel it belongs to.
@@ -65,6 +65,8 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
       defaultLanguage: true, checkInTime: true, checkOutTime: true, address: true, phone: true,
       contactEmail: true, status: true, bookingEngineEnabled: true,
       emailBrandColor: true, emailLogoUrl: true, emailLogoVersion: true, emailFont: true,
+      // Which logos exist, and when they last changed — see `logoFor`.
+      brandAssets: { select: { kind: true, updatedAt: true } },
       bookingPreset: true, bookingBrandColor: true, bookingFont: true, bookingLogoUrl: true,
       bookingHeadline: true, bookingSubheadline: true, bookingShowTrust: true,
       tenant: { select: { status: true, hasReservation: true } },
@@ -95,7 +97,10 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
     // `??` not `||`: an empty string is a hotel who cleared the field, which should still fall back,
     // and `trim() || null` upstream turns blanks into nulls — so both spellings land on the default.
     brandColor: property.bookingBrandColor ?? property.emailBrandColor,
-    logoUrl: property.bookingLogoUrl?.trim() || logoFor(property),
+    // All four cases (own upload → email upload → own pasted URL → email pasted URL) resolve in one
+    // place. Checking `bookingLogoUrl` here as well would let a stale pasted link outrank the file
+    // the hotel just uploaded.
+    logoUrl: logoFor(property),
     // The engine offers sans/serif only; an email hotel on "mixed" means serif headings there, and
     // serif headings are the closest honest equivalent here.
     font: property.bookingFont ?? (property.emailFont === "sans" ? "sans" : "serif"),
@@ -107,14 +112,31 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
 });
 
 /**
- * The hotel's logo. An uploaded logo is served from the CM's public brand route — the same bytes the
- * guest emails use, so a hotel that has set up its email branding already has a branded booking page
- * with no extra step.
+ * The hotel's logo: its own if it uploaded one for this page, otherwise the email one.
+ *
+ * Served from **this app's** `/api/brand/…` route. It used to point at the CM's copy via a
+ * `BRAND_ASSET_ORIGIN` variable, which was never set on this service — so the URL came out relative,
+ * hit a route that does not exist here, and a hotel that had uploaded a perfectly good logo got a
+ * broken image on its own guest-facing booking page. Every app shares one database; each can serve
+ * the bytes itself, and then there is no variable to forget.
+ *
+ * `updatedAt` is the cache-buster, so replacing a logo replaces it everywhere immediately.
  */
-function logoFor(p: { id: string; emailLogoUrl: string | null; emailLogoVersion: number }): string | null {
-  if (p.emailLogoVersion > 0) {
-    const base = process.env.BRAND_ASSET_ORIGIN ?? "";
-    return `${base}/api/brand/${p.id}/logo?v=${p.emailLogoVersion}`;
-  }
-  return p.emailLogoUrl?.trim() || null;
+function logoFor(p: {
+  id: string;
+  emailLogoUrl: string | null;
+  bookingLogoUrl: string | null;
+  brandAssets: { kind: string; updatedAt: Date }[];
+}): string | null {
+  return resolveBrandLogo(p.id, {
+    prefer: "booking",
+    uploaded: p.brandAssets
+      .filter((a) => a.kind === "booking_logo" || a.kind === "email_logo")
+      .map((a) => ({
+        kind: a.kind === "booking_logo" ? ("booking" as const) : ("email" as const),
+        version: a.updatedAt.getTime(),
+      })),
+    // Only consulted when nothing was uploaded — uploading clears these by design.
+    pastedUrl: p.bookingLogoUrl?.trim() || p.emailLogoUrl,
+  });
 }

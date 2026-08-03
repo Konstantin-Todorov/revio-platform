@@ -17,3 +17,4 @@ export * from "./onboarding/setup.js";
 export * from "./pricing/fees.js";
 export * from "./booking/presets.js";
 export * from "./rooms/amenities.js";
+export * from "./branding/logo.js";

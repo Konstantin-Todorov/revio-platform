@@ -1,9 +1,12 @@
 import { ExternalLink, Power } from "lucide-react";
 import { slugifyPropertyName } from "@revio/booking";
+import { brandLogoPath } from "@revio/core";
 import { getProperty } from "@/lib/data";
+import { prisma } from "@/lib/db";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { AppearanceForm } from "@/components/booking-engine/AppearanceForm";
 import { LinkForm } from "@/components/booking-engine/LinkForm";
+import { LogoPicker } from "@/components/booking-engine/LogoPicker";
 import { saveBookingEngineLook } from "@/lib/actions-booking-engine";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +25,30 @@ export const dynamic = "force-dynamic";
  */
 export default async function BookingEnginePage() {
   const property = await getProperty();
+
+  /*
+   * Which logos this hotel actually has.
+   *
+   * Read from `BrandAsset`, not from the `*LogoUrl` columns — those hold a *pasted* URL, and
+   * uploading a file deliberately clears them. Reading the column alone reported "no logo" for
+   * every hotel that used the upload button, which is precisely how a logo sitting in the database
+   * ended up invisible on this screen and broken on the live page.
+   *
+   * `updatedAt` is the cache-buster: the URL changes when the bytes do, so a replaced logo is never
+   * served from a stale cache and no version column had to be invented for it.
+   */
+  const assets = await prisma.brandAsset.findMany({
+    where: { propertyId: property.id, kind: { in: ["email_logo", "booking_logo"] } },
+    select: { kind: true, updatedAt: true },
+  });
+  const asset = (kind: string) => assets.find((a) => a.kind === kind);
+
+  const ownLogo = asset("booking_logo")
+    ? brandLogoPath(property.id, { kind: "booking", version: asset("booking_logo")!.updatedAt.getTime() })
+    : property.bookingLogoUrl;
+  const emailLogo = asset("email_logo")
+    ? brandLogoPath(property.id, { kind: "email", version: asset("email_logo")!.updatedAt.getTime() })
+    : property.emailLogoUrl;
 
   /**
    * The address guests actually use.
@@ -107,19 +134,23 @@ export default async function BookingEnginePage() {
           title="Appearance"
           subtitle="Pick a base, then change only what you want. Anything left blank follows your email branding — editing here never changes your emails."
         />
+        <div className="border-b border-surface-border px-5 py-4">
+          <LogoPicker current={ownLogo} inherited={emailLogo} />
+        </div>
+
         <AppearanceForm
           action={saveBookingEngineLook}
           propertyName={property.name}
           inherited={{
             color: property.emailBrandColor ?? "#1E3A8A",
             font: property.emailFont === "sans" ? "sans" : "serif",
-            logoUrl: property.emailLogoUrl ?? null,
+            logoUrl: emailLogo,
           }}
           saved={{
             preset: property.bookingPreset,
             color: property.bookingBrandColor,
             font: property.bookingFont,
-            logoUrl: property.bookingLogoUrl,
+            logoUrl: ownLogo,
             headline: property.bookingHeadline,
             subheadline: property.bookingSubheadline,
             showTrust: property.bookingShowTrust,
