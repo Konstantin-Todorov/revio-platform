@@ -225,8 +225,10 @@ beside the housekeeping board's green "Finish" button, two identical greens mean
 `accent` now mirrors `brand`. **RevioDirect deliberately gets no Revio identity at all** — it wears the
 hotel's brand colour and the hotel's own logo as its favicon. See `packages/ui/CLAUDE.md`.
 
-**→ 🔜 REFINEMENT ROUND intake (founder docs 2026-07-20, `docs/specs/`) — NOT yet built; plan pending
-founder sign-off.** **THREE systems, three docs** (one doc per system; the `Revio Development Docs.docx`
+**→ ✅ REFINEMENT ROUND (founder docs 2026-07-20, `docs/specs/`) — BUILT AND SHIPPED as phases G · H · J.**
+Everything described below is **done and live** except **J10 (PMS Close Day)**, which is still blocked on the
+founder's §11 section. The intake is kept verbatim as the record of what was asked for; read it as
+requirements that were met, not as a backlog. **THREE systems, three docs** (one doc per system; the `Revio Development Docs.docx`
 title reads "RevioCRS" but that's a **typo — it's the RevioLink/CM doc**, founder-confirmed; the founder is
 re-sending the corrected file). **RevioLink R1** (`CM-REFINEMENT-R1.md`) + **RevioCRS R2**
 (`CRS-REFINEMENT-R2.md`) + **RevioPMS R1** (`PMS-REFINEMENT-R1.md`). CM + CRS **share** the Calendar / Bulk
@@ -247,4 +249,4 @@ check-in gate + checkout-readiness; **Extras & Charges** rename + void/qty + rea
 view + On-hold + **OOO↔revenue loop**; **Configuration expansion** (E7 already shipped a base — §9 is the
 target); **Staff & Access Management** rename + workforce roster + clock-in + user security. **Two pending
 founder items:** PMS **§11 Close Day** section ("will add later today") and the re-sent corrected RevioLink
-doc. Task phases **G (RevioLink R1)** + **H (RevioCRS R2)** + **J (RevioPMS R1)** to be created on sign-off.
+doc. Task phases **G (RevioLink R1)** + **H (RevioCRS R2)** + **J (RevioPMS R1)** — **all shipped**, J10 excepted.
