@@ -53,16 +53,21 @@ export function RoomOption({
       <div className="grid sm:grid-cols-[minmax(0,13.5rem)_1fr]">
         {cover ? (
           /*
-            The photo FILLS its column.
+            The photo FILLS its column, and the column is now height-bounded.
 
             It used to hold a 4:3 shape, on the theory that cropping a landscape photo into a tall
             column would show a strip of wall rather than a room. In practice the empty surface under
             the photo read as a broken image, and the crop does not: a room photograph is mostly bed
             and window through the middle, which is exactly the band a centred cover crop keeps. The
             filled column is also what every engine a guest has already used looks like.
+
+            Filling only works while the column stays a sane shape, which is why the expanded rates
+            were moved out of this grid — see the comment below. `max-h` is the belt to that braces:
+            a room with a very long name or five headline amenities still cannot stretch the crop
+            past the point where it reads as a photograph of a room.
           */
           <div
-            className="relative hidden min-h-[13rem] sm:block"
+            className="relative hidden min-h-[13rem] max-h-[20rem] sm:block"
             style={{ borderRight: "1px solid hsl(var(--line))", backgroundColor: "hsl(var(--surface))" }}
           >
             {/* Not next/image: this is already our own resized WebP, so a second optimisation pass
@@ -178,34 +183,47 @@ export function RoomOption({
           <div className="mt-4">
             <RateRow plan={best} nights={nights} href={href(best)} highlight={rest.length > 0} />
           </div>
-
-          {rest.length > 0 && (
-            /* Native <details>: no JavaScript, works before hydration, and the browser gives us
-               keyboard and screen-reader behaviour for free. */
-            <details className="group border-t" style={{ borderColor: "hsl(var(--line))" }}>
-              <summary
-                className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-[13px] font-semibold transition-colors hover:bg-[hsl(var(--surface-sunk))] [&::-webkit-details-marker]:hidden"
-                style={{ color: "hsl(var(--brand-text))" }}
-              >
-                <span>
-                  {rest.length} other {rest.length === 1 ? "rate" : "rates"} — breakfast, flexible
-                  cancellation
-                </span>
-                <ChevronDown
-                  size={16}
-                  aria-hidden
-                  className="transition-transform duration-200 group-open:rotate-180"
-                />
-              </summary>
-              {rest.map((plan) => (
-                <div key={plan.ratePlanId} className="border-t" style={{ borderColor: "hsl(var(--line))" }}>
-                  <RateRow plan={plan} nights={nights} href={href(plan)} />
-                </div>
-              ))}
-            </details>
-          )}
         </div>
       </div>
+
+      {/*
+        The other rates sit OUTSIDE the photo/detail grid, spanning the whole card.
+
+        They used to live in the right-hand column, which quietly made the photograph responsible for
+        matching their height: open four extra rates and the media column grew to ~800px, so a
+        `cover` crop of a landscape room photo became a tall narrow slice of duvet. The photo was not
+        the problem — being asked to be 216px wide and 800px tall was.
+
+        Out here the media column is only ever as tall as the header plus one rate row, which is a
+        shape a room photograph actually suits. The rates get the full card width as a bonus, which
+        is more readable than the squeezed column they were in.
+
+        Native <details>: no JavaScript, works before hydration, and the browser gives us keyboard
+        and screen-reader behaviour for free.
+      */}
+      {rest.length > 0 && (
+        <details className="group border-t" style={{ borderColor: "hsl(var(--line))" }}>
+          <summary
+            className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-[13px] font-semibold transition-colors hover:bg-[hsl(var(--surface-sunk))] [&::-webkit-details-marker]:hidden"
+            style={{ color: "hsl(var(--brand-text))" }}
+          >
+            <span>
+              {rest.length} other {rest.length === 1 ? "rate" : "rates"} — breakfast, flexible
+              cancellation
+            </span>
+            <ChevronDown
+              size={16}
+              aria-hidden
+              className="transition-transform duration-200 group-open:rotate-180"
+            />
+          </summary>
+          {rest.map((plan) => (
+            <div key={plan.ratePlanId} className="border-t" style={{ borderColor: "hsl(var(--line))" }}>
+              <RateRow plan={plan} nights={nights} href={href(plan)} />
+            </div>
+          ))}
+        </details>
+      )}
     </article>
   );
 }

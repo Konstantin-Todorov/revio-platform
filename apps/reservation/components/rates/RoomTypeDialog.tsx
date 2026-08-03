@@ -135,7 +135,15 @@ export function RoomTypeDialog({ roomType }: { roomType?: RoomType }) {
 
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
 
-          <div className="flex justify-end gap-2 pt-1">
+          {/*
+            Pinned to the bottom of the scrolling area.
+
+            This form roughly tripled when the room-content half arrived — thirty-five amenity chips
+            below the commercial fields — and the buttons went with it, so saving meant scrolling to
+            the end of a list you had just finished reading. Sticky keeps the two decisions (keep or
+            discard) in reach from anywhere in the form.
+          */}
+          <div className="sticky bottom-0 -mx-5 -mb-4 flex justify-end gap-2 border-t border-surface-border bg-white px-5 py-3">
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Cancel</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">
               {pending ? "Saving…" : isEdit ? "Save changes" : "Create room type"}

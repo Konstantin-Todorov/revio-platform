@@ -126,7 +126,10 @@ export function RoomDetail({
               </button>
             </header>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            {/* `overscroll-contain` stops the wheel chaining to the results behind once the gallery
+                and amenity list bottom out — closing the dialog should return you to where you were
+                looking, not to wherever the page drifted while you read. */}
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {photos.length > 0 && current && (
                 <div>
                   {/*
