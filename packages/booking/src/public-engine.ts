@@ -13,7 +13,8 @@
  */
 import type { forTenant } from "@revio/db";
 import {
-  computeStayCharges, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction,
+  computeStayCharges, computeWaterfall, deriveRate, expandInventoryPeriods, extrasTotalMinor,
+  isAdvancePurchaseClosed, resolveChosenExtras, resolveRestriction, type SellableExtra,
   ROOM_OCCUPYING_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
 } from "@revio/core";
 import { syncRealChannels } from "@revio/connectivity";
@@ -322,6 +323,38 @@ export interface PublicBookingPayload extends PublicStayQuery {
   requestOnly?: boolean;
   /** Anything the guest typed in "requests". Stored on the reservation, shown to the front desk. */
   guestNote?: string;
+  /**
+   * Extras the guest ticked, as IDs.
+   *
+   * Ids, never amounts — the price is re-derived here from the hotel's catalogue, so editing the
+   * form changes *what is booked*, not *what is paid*. An id that is not on offer is dropped rather
+   * than priced.
+   */
+  extraIds?: string[];
+}
+
+/**
+ * The extras this hotel offers a guest at booking time.
+ *
+ * Reads the PMS's OWN catalogue (`PosItem`, `category = "extra"`) rather than a second table — the
+ * spec is explicit that there is "no upsell engine beyond the stay-extras the PMS already defines",
+ * and a separate list would drift from the one the front desk actually posts. `directSellable` is
+ * the single opt-in: a hotel's catalogue contains staff-only lines, so nothing appears on a public
+ * page until somebody says it should.
+ */
+export async function publicSellableExtras(db: Db, propertyId: string): Promise<SellableExtra[]> {
+  const rows = await db.posItem.findMany({
+    where: { propertyId, category: "extra", active: true, directSellable: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, description: true, priceMinor: true, basis: true },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    priceMinor: r.priceMinor,
+    basis: r.basis === "per_night" ? "per_night" : "per_stay",
+  }));
 }
 
 /** POST /api/public/reservations — the widget's create. Writes the ONE shared reservation record. */
@@ -373,10 +406,22 @@ export async function publicCreateReservation(
    * these same fees on arrival (same @revio/core function), so the two agree by construction rather
    * than by luck.
    */
+  /*
+   * Extras, re-priced here from the catalogue.
+   *
+   * The form posted ids. Anything not currently on offer is dropped by `resolveChosenExtras`, and
+   * the amount comes from the hotel's own row — so a tampered field can change which breakfast is
+   * booked but never what it costs. This is the same rule the room price already follows.
+   */
+  const offeredExtras = await publicSellableExtras(db, property.id);
+  const chosenExtras = resolveChosenExtras(offeredExtras, p.extraIds ?? []);
+  const extrasMinor = extrasTotalMinor(chosenExtras, nights.length);
+
   const charged = computeStayCharges({
     stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: p.guests },
     fees,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
+    extrasMinor,
   });
   const totalMinor = accommodationMinor;
 
@@ -420,6 +465,29 @@ export async function publicCreateReservation(
       lines: { create: [{ roomTypeId: rt.id, ratePlanId: rp.id, quantity: 1, checkIn, checkOut, priceMinor: totalMinor, guestsCount: p.guests }] },
     },
   });
+
+  /*
+   * The chosen extras become `StayExtra` rows — the SAME record the PMS already accrues onto the
+   * folio each night audit. Nothing new posts them, and nothing new has to be taught about them:
+   * a guest ticking "Breakfast" at 11pm produces the row a front-desk agent would have typed.
+   *
+   * The name and price are COPIED, not referenced. A hotel that re-prices breakfast next month must
+   * not silently re-price a stay somebody already booked at the old number — that is the all-in
+   * promise again, held past the moment of sale.
+   */
+  if (chosenExtras.length > 0) {
+    await db.stayExtra.createMany({
+      data: chosenExtras.map((e) => ({
+        tenantId: property.tenantId,
+        propertyId: property.id,
+        reservationId: reservation.id,
+        name: e.name,
+        priceMinor: e.priceMinor,
+        basis: e.basis,
+        active: true,
+      })),
+    });
+  }
 
   // The hold becomes the reservation. Marked converted rather than released, so the inventory it was
   // protecting is handed straight to the booking with no window in between.

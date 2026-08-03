@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { BedDouble, Users } from "lucide-react";
-import { checkHold, clientIp, publicCreateHold, publicGetHold } from "@revio/booking";
+import { checkHold, clientIp, publicCreateHold, publicGetHold, publicSellableExtras } from "@revio/booking";
 import { forTenant } from "@revio/db";
 import { getObjectStore } from "@revio/storage";
 import { getPublicProperty } from "@/lib/property";
@@ -11,6 +11,7 @@ import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
 import { BookingForm } from "@/components/BookingForm";
+import { LiveTotal } from "@/components/LiveTotal";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,9 @@ export default async function BookPage({
    * let one indecisive person quietly take a small hotel's whole inventory off sale.
    */
   const db = forTenant(property.tenantId);
+
+  // What this hotel sells alongside the room. Empty is the normal case and renders nothing.
+  const extras = await publicSellableExtras(db, property.id);
   const existing = sp.hold ? await publicGetHold(db, property.id, sp.hold) : null;
   let hold = existing;
 
@@ -113,6 +117,9 @@ export default async function BookPage({
             cancellationPolicy={plan.cancellationPolicy}
             expiresAt={hold.expiresAt.toISOString()}
             paymentReady={property.paymentReady}
+            extras={extras}
+            nights={nights}
+            currency={plan.currency}
           />
 
           {/* The summary follows on desktop so the total is never off-screen while they type. */}
@@ -153,10 +160,8 @@ export default async function BookPage({
                 ))}
               </dl>
 
-              <div className="mt-3 flex items-baseline justify-between border-t pt-3" style={{ borderColor: "hsl(var(--line))" }}>
-                <span className="text-[13px] font-semibold">Total</span>
-                <span className="price text-[1.4rem]">{money(plan.totalMinor, plan.currency)}</span>
-              </div>
+              {/* One total, and it follows the extras — see LiveTotal. */}
+              <LiveTotal baseTotalMinor={plan.totalMinor} currency={plan.currency} />
               <p className="mt-1.5 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
                 Everything included. Paid at the hotel.
               </p>

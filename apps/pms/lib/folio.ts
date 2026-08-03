@@ -374,13 +374,22 @@ export async function accrueStayExtras(tenantId: string, propertyId: string, bus
   const extras = await prisma.stayExtra.findMany({ where: { propertyId, active: true, reservationId: { in: reservationIds } } });
   let posted = 0;
   for (const e of extras) {
-    const ref = `stayextra:${e.id}:${businessDate}`;
+    /*
+     * A per-STAY extra posts once; a per-NIGHT extra posts on every night audit.
+     *
+     * The whole implementation is the ref. It was already the idempotency key — "have we accrued
+     * this extra for this date?" — so dropping the date for a per-stay extra turns that same guard
+     * into "have we accrued this extra at all?". An airport transfer chosen at booking is charged
+     * once however long the guest stays, and no second code path exists to get that wrong.
+     */
+    const perStay = e.basis === "per_stay";
+    const ref = perStay ? `stayextra:${e.id}:once` : `stayextra:${e.id}:${businessDate}`;
     if (await prisma.folioLine.findFirst({ where: { ref }, select: { id: true } })) continue; // already accrued
     const folioId = await ensureFolio(tenantId, propertyId, e.reservationId);
     if (!folioId) continue;
     await postFolioLine({
       tenantId, propertyId, folioId, kind: "extra", outlet: "extra",
-      description: `${e.name} · ${businessDate}`, amountMinor: e.priceMinor, ref,
+      description: perStay ? e.name : `${e.name} · ${businessDate}`, amountMinor: e.priceMinor, ref,
     });
     posted++;
   }

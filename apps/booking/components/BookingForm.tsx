@@ -2,7 +2,10 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { AlertCircle, Lock, ShieldCheck } from "lucide-react";
+import { extrasTotalMinor, type SellableExtra } from "@revio/core";
 import { confirmBooking, type BookResult } from "@/lib/actions-book";
+import { ExtrasPicker } from "./ExtrasPicker";
+import { setExtrasTotal } from "@/lib/extras-store";
 
 /**
  * Step 3 — who you are, and the card that holds the room.
@@ -31,6 +34,9 @@ export function BookingForm({
   cancellationPolicy,
   expiresAt,
   paymentReady,
+  extras,
+  nights,
+  currency,
 }: {
   stay: StaySelection;
   cancellationPolicy: string | null;
@@ -45,6 +51,11 @@ export function BookingForm({
    * "Confirm booking", and only one of them is true here.
    */
   paymentReady: boolean;
+  /** What the hotel offers. Empty is normal and renders nothing at all. */
+  extras: SellableExtra[];
+  nights: number;
+  /** Currency code, passed down to the picker. Never a formatter — see ExtrasPicker. */
+  currency: string;
 }) {
   const [state, action, pending] = useActionState<BookResult | null, FormData>(confirmBooking, null);
 
@@ -62,6 +73,23 @@ export function BookingForm({
    */
   const [guest, setGuest] = useState({ firstName: "", lastName: "", email: "", phone: "", note: "" });
   const set = (k: keyof typeof guest) => (v: string) => setGuest((g) => ({ ...g, [k]: v }));
+
+  /*
+   * Chosen extras, and the running total.
+   *
+   * Computed in the browser purely so the summary moves the instant a box is ticked — the SERVER
+   * re-derives every amount from the catalogue on submit (`resolveChosenExtras`). This number is a
+   * preview of the truth, never the source of it, which is why the form posts ids.
+   */
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const toggleExtra = (id: string) =>
+    setChosen((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      // Publishes to the shared store the summary card reads — see lib/extras-store.
+      setExtrasTotal(extrasTotalMinor(extras.filter((e) => next.has(e.id)), nights));
+      return next;
+    });
 
   return (
     <form action={action} className="space-y-5">
@@ -108,11 +136,18 @@ export function BookingForm({
       </section>
 
       {/*
-        The extras slot. K5 fills it with the hotel's own catalogue — breakfast, parking, a transfer.
-        It sits AFTER the room is chosen and before the card on purpose: putting an upsell next to
-        the price on the results page would undermine the one promise this product makes, that the
-        first number you see is the number you pay.
+        The extras slot, filled (K10) from the hotel's OWN catalogue — the same `PosItem` rows the
+        front desk posts, so there is no second list to drift. It sits AFTER the room is chosen and
+        before the card on purpose: an upsell next to the price on the results page would turn the
+        headline figure into a starting price, which is exactly the promise this product makes.
       */}
+      <ExtrasPicker
+        extras={extras}
+        nights={nights}
+        chosen={chosen}
+        onToggle={toggleExtra}
+        currency={currency}
+      />
 
       <section className="card-raised p-5 sm:p-6">
         <h2 className="display text-[1.25rem]">

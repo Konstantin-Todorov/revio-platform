@@ -90,6 +90,9 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
     ...(holdId ? { holdId } : {}),
     ...(guarantee ? { guarantee: { ref: guarantee.ref, brand: guarantee.brand, last4: guarantee.last4 } } : {}),
     requestOnly,
+    // Ids only. Everything about what they cost is re-derived server-side from the hotel's
+    // catalogue, so a tampered checkbox changes what is booked, never what is paid.
+    extraIds: fd.getAll("extraIds").filter((v): v is string => typeof v === "string"),
     guestNote: str(fd, "note"),
   });
 

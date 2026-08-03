@@ -9,6 +9,7 @@ import { AppearanceForm } from "@/components/booking-engine/AppearanceForm";
 import { LinkForm } from "@/components/booking-engine/LinkForm";
 import { LogoPicker } from "@/components/booking-engine/LogoPicker";
 import { PaymentsCard } from "@/components/booking-engine/PaymentsCard";
+import { ExtrasEditor, type EditableExtra } from "@/components/booking-engine/ExtrasEditor";
 import { saveBookingEngineLook } from "@/lib/actions-booking-engine";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +61,17 @@ export default async function BookingEnginePage() {
    * yet — and showing a hotel a `localhost` URL would be worse than showing none, because they would
    * copy it. So the screen says the page isn't live rather than inventing an address.
    */
+  /*
+   * The extras catalogue — the PMS's own `PosItem` rows, not a second list. Inactive ones are hidden
+   * rather than deleted, because folio lines from past stays still reference what a guest bought.
+   */
+  const extraRows = await prisma.posItem.findMany({
+    where: { propertyId: property.id, category: "extra", active: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, description: true, priceMinor: true, basis: true, directSellable: true },
+  });
+  const extras: EditableExtra[] = extraRows;
+
   const configured = process.env.BOOKING_ENGINE_ORIGIN?.trim().replace(/\/+$/, "");
   const origin = configured || (process.env.NODE_ENV === "development" ? "http://localhost:3004" : null);
   const published = origin !== null;
@@ -143,6 +155,16 @@ export default async function BookingEnginePage() {
             checkedAt={property.stripeCheckedAt}
             mode={connectMode()}
           />
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Extras you sell"
+          subtitle="Offered after a guest has picked a room, added to the same bill, and posted by your front desk from this same list."
+        />
+        <div className="px-5 py-4">
+          <ExtrasEditor extras={extras} currency={property.baseCurrency} />
         </div>
       </Card>
 

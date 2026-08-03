@@ -158,9 +158,30 @@ The confirmation email uses the hotel's own template and branding through `@revi
 engine RevioLink sends from — and never blocks the booking: the room is already theirs, and a mail
 provider having a bad minute must not turn a completed reservation into an error page.
 
-**Step 3 has an extras slot** (see the comment in `BookingForm`). Upsells belong there, after the
-room is chosen — never beside the price on the results page, which would undermine the one promise
-the product makes.
+**Extras (K10) are the PMS's own catalogue, not a second list.** The spec is explicit — "no upsell
+engine beyond the stay-extras the PMS already defines" — so the picker reads `PosItem` rows with
+`category = "extra"` and the new `directSellable` opt-in (off by default: a hotel's catalogue holds
+staff-only lines like a corkage fee). A chosen extra is written as a **`StayExtra`**, the same record
+the front desk creates, so the PMS accrues it onto the folio with no new posting path. Name and price
+are **copied**, never referenced — re-pricing breakfast next month must not re-price a stay somebody
+already bought.
+
+They sit AFTER the room is chosen and before the card, never beside the price on the results page:
+that would turn the headline figure into a starting price, which is the one thing this product
+promises it is not. Nothing is pre-ticked. The summary shows **one** total and it moves as boxes are
+ticked (`LiveTotal` + `lib/extras-store`) — a room-only figure next to a picker that changes the
+price is the same lie in slower motion. The browser's number is a preview; the server re-derives
+every amount from the catalogue on submit, which is why the form posts ids.
+
+`basis` decides the accrual: `per_night` posts each night audit (the original behaviour, unchanged),
+`per_stay` posts once — implemented purely by dropping the date from the folio line's idempotency
+`ref`, so there is no second code path to get wrong.
+
+**Request-to-book (K5).** When the hotel has not finished connecting Stripe (`paymentReady` false,
+mirroring its account's `charges_enabled`), the card step disappears and the booking arrives as
+`requested` for the hotel to accept. It **occupies a room** the whole time — `ROOM_OCCUPYING_STATUSES`
+in `@revio/core`, deliberately split from `SOLD_STATUSES` — because a request that did not hold
+inventory would leave the night on sale on an OTA. It is never counted as revenue until accepted.
 
 ## Boundaries
 

@@ -344,3 +344,74 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
   revalidatePath("/reservations");
   return { ok: true };
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * Extras the booking page sells (K10).
+ *
+ * These are the PMS's OWN catalogue rows (`PosItem`, `category = "extra"`) — the spec is explicit
+ * that there is no upsell engine beyond the stay-extras the PMS already defines, and a second list
+ * would drift from the one the front desk posts. What lives here is the editor a **CRS-only** hotel
+ * needs: without RevioPMS there is no other screen where this catalogue exists, and a hotel should
+ * not have to buy a second product to sell breakfast on its own booking page.
+ * ------------------------------------------------------------------------------------------- */
+
+const EXTRA_BASES = new Set(["per_stay", "per_night"]);
+
+export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): Promise<LookResult> {
+  const scopeError = await assertSingleProperty();
+  if (scopeError) return { ok: false, error: scopeError };
+  const { id: propertyId, tenantId } = await getProperty();
+
+  const name = str(fd, "name").trim();
+  if (!name) return { ok: false, error: "Give it a name guests will recognise." };
+
+  // Money arrives as a decimal string from a human; it is stored in minor units like everything else.
+  const price = Number.parseFloat(str(fd, "price").replace(",", "."));
+  if (!Number.isFinite(price) || price < 0) return { ok: false, error: "Enter a price, or 0 if it's free." };
+  const priceMinor = Math.round(price * 100);
+
+  const basis = str(fd, "basis");
+  const description = str(fd, "description").trim() || null;
+  const id = str(fd, "id");
+
+  const data = {
+    name,
+    priceMinor,
+    basis: EXTRA_BASES.has(basis) ? basis : "per_stay",
+    description,
+    directSellable: fd.get("directSellable") != null,
+  };
+
+  if (id) {
+    // Scoped by propertyId as well as id: an id from a form is user input, and this is the line
+    // between editing your own catalogue and editing somebody else's.
+    const updated = await prisma.posItem.updateMany({ where: { id, propertyId, category: "extra" }, data });
+    if (updated.count === 0) return { ok: false, error: "That extra no longer exists." };
+  } else {
+    await prisma.posItem.create({
+      data: { ...data, tenantId, propertyId, category: "extra", outlet: "extra", active: true },
+    });
+  }
+
+  await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: name });
+  revalidatePath("/booking-engine");
+  return { ok: true };
+}
+
+/**
+ * Retire an extra.
+ *
+ * Deactivated, never deleted. Folio lines and `StayExtra` rows already reference the name and price
+ * of what a guest bought; removing the catalogue row would leave past bookings pointing at nothing and
+ * break a bill somebody is going to be handed at checkout.
+ */
+export async function retireBookingExtra(id: string): Promise<void> {
+  if (await assertSingleProperty()) return;
+  const { id: propertyId, tenantId } = await getProperty();
+  await prisma.posItem.updateMany({
+    where: { id, propertyId, category: "extra" },
+    data: { active: false, directSellable: false },
+  });
+  await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: "retired" });
+  revalidatePath("/booking-engine");
+}

@@ -68,7 +68,9 @@ export async function getCloseDayView() {
     }),
     prisma.roomAssignment.count({ where: { propertyId: property.id, checkedInAt: { gte: bizStart, lt: bizNext } } }),
     prisma.roomAssignment.count({ where: { propertyId: property.id, checkedOutAt: { gte: bizStart, lt: bizNext } } }),
-    prisma.stayExtra.findMany({ where: { propertyId: property.id, active: true }, select: { reservationId: true, priceMinor: true } }),
+    // Per-night only: a per-stay extra is charged once, so counting it in every night's accrual
+    // would overstate the report for every night after the first.
+    prisma.stayExtra.findMany({ where: { propertyId: property.id, active: true, basis: "per_night" }, select: { reservationId: true, priceMinor: true } }),
   ]);
 
   const occupiedRooms = occAssignments.length;

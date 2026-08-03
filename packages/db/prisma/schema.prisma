@@ -1100,7 +1100,12 @@ model StayExtra {
   propertyId    String
   reservationId String
   name          String // Breakfast | Parking | Half-board | …
-  priceMinor    Int // per night
+  priceMinor    Int // per night, or once for the whole stay — see `basis`
+  // How often this posts. `per_night` is the original behaviour and stays the default, so every
+  // existing row keeps accruing exactly as before. `per_stay` posts ONCE (an airport transfer, a
+  // late checkout) — the night audit's idempotency ref drops the date for those, which is the whole
+  // implementation.
+  basis         String   @default("per_night") // per_night | per_stay
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
 
@@ -1143,6 +1148,14 @@ model PosItem {
   outlet     String   @default("minibar") // minibar | spa | bar | restaurant
   category   String   @default("minibar") // minibar (product/item) | extra (service)
   priceMinor Int
+  // Sold to a GUEST on the booking page, not just posted by staff at the desk. Off by default: a
+  // hotel's internal catalogue contains things no guest should be able to add to their own booking,
+  // so appearing publicly is an explicit decision per item rather than a side effect of existing.
+  directSellable Boolean @default(false)
+  // Only meaningful when directSellable — how the guest is quoted, and how it later accrues.
+  basis      String   @default("per_stay") // per_stay | per_night
+  // One line under the name on the booking page. Nothing a guest reads should need a hover.
+  description String?
   active     Boolean  @default(true)
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())

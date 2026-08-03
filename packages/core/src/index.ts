@@ -15,6 +15,7 @@ export * from "./adapters/mock-channel-adapter.js";
 export * from "./email/templates.js";
 export * from "./onboarding/setup.js";
 export * from "./pricing/fees.js";
+export * from "./pricing/extras.js";
 export * from "./booking/presets.js";
 export * from "./rooms/amenities.js";
 export * from "./branding/logo.js";
