@@ -41,6 +41,24 @@ always the hotel's own colour. That separation is what makes "pick a base, then 
 two choices cannot fight each other. The presets live in core because both the public page and the
 CRS's live preview render from them, and a preview that approximates the result is worse than none.
 
+**The logo has its own resolution order, and it is not the `*LogoUrl` columns.** A logo arrives two
+ways — a pasted URL (on the property) or an uploaded file (bytes in `BrandAsset`) — and **uploading
+deliberately clears the URL column**. Reading the column alone therefore reports "no logo" for every
+hotel that used the upload button, which is exactly how a real hotel's logo ended up invisible on
+this page while sitting in the database. `resolveBrandLogo` in `@revio/core` owns the order:
+
+> the booking engine's **own** upload → the **email** upload → a pasted URL → nothing (the hotel's
+> name renders as a wordmark).
+
+The path it returns is **relative**, and every app that shows a logo serves the bytes from its own
+`/api/brand/[propertyId]/logo` route. They share one database, so pointing at a sibling service
+bought nothing and cost a `BRAND_ASSET_ORIGIN` variable that had to be set on each — the one time it
+was missing here, guests saw a broken image. Duplicating thirty lines of route beats a config gap
+that can only fail in production.
+
+The booking engine's own logo is uploaded in **RevioCRS → Booking Engine**; removing it falls back to
+inheriting the email one rather than to nothing, because that is what a hotel means by "remove".
+
 `lib/brand.ts` derives five tokens from the single hex the hotel gave us:
 
 | Token | Job |
