@@ -28,6 +28,36 @@ export const colors = {
   accent: { 600: "#5b3fb0", 500: "#7c5cdb", "050": "#efe9fb" },
 } as const;
 
+/**
+ * Per-product accent — the one colour that differs between the four staff apps.
+ *
+ * Taken from the brand marks the founder supplied (`design/brand/`), not invented: the tile colour
+ * of each product's logo IS its accent, so the mark in the sidebar and the rail beside the active
+ * nav item are the same colour by construction rather than by anyone remembering to match them.
+ *
+ * Three roles, because one hex cannot do all three jobs. `mark` is the accent on the navy chrome and
+ * is only ever used there; `ink` is the same hue darkened until it actually reads as text on white
+ * (cyan-400 as a headline is unreadable — every `ink` here is measured ≥ 4.5:1); `wash` is the tint
+ * behind a selected row.
+ *
+ * **Operator has no accent, deliberately.** It is the platform, not a product — so its mark is the
+ * plain white/navy Revio identity and the slot where a product colour would go is left empty. If a
+ * fifth product ever appears, it gets a colour; the console never does.
+ *
+ * RevioDirect is absent for a different reason: the booking page wears the *hotel's* brand colour,
+ * computed per property in `apps/booking/lib/brand.ts`. Painting Revio's identity on a guest-facing
+ * page would contradict the entire product.
+ */
+export const productAccents = {
+  channelManager: { name: "RevioLink", mark: "#24d3ee", ink: "#0e7490", wash: "#ecfeff" },
+  reservation: { name: "RevioCRS", mark: "#818cf8", ink: "#4f46e5", wash: "#eef2ff" },
+  pms: { name: "RevioPMS", mark: "#34d399", ink: "#047857", wash: "#ecfdf5" },
+  operator: { name: "Revio Operator", mark: "#ffffff", ink: "#0e203c", wash: "#eef2f7" },
+} as const;
+
+/** The navy the marks are drawn in — darker than `brand.900`, and fixed by the artwork. */
+export const brandNavy = "#0e203c";
+
 export const fontFamily = {
   sans: '"Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
 } as const;

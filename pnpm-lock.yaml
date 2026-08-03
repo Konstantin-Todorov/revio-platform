@@ -452,10 +452,17 @@ importers:
         version: 2.1.9(@types/node@22.20.0)
 
   packages/ui:
+    dependencies:
+      '@revio/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.17
+      lucide-react:
+        specifier: ^0.460.0
+        version: 0.460.0(react@19.2.7)
       react:
         specifier: ^19.0.0
         version: 19.2.7

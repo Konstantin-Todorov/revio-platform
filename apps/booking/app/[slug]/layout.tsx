@@ -21,6 +21,17 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     title: `Book ${property.name}`,
     description: `Book direct at ${property.name}. Best rate, no booking fees.`,
     robots: { index: false, follow: false },
+    /*
+     * The HOTEL's logo in the tab — never Revio's.
+     *
+     * The other four apps each ship a Revio mark as `app/icon.png`; this one deliberately does not,
+     * because the whole claim of a direct booking page is that it belongs to the hotel. A guest with
+     * this tab open beside the hotel's own website should see the same little square in both.
+     *
+     * A hotel that has uploaded nothing gets the browser's default rather than ours: an anonymous
+     * tab is honest, a Revio tab on someone else's booking page is not.
+     */
+    icons: property.logoUrl ? { icon: property.logoUrl } : undefined,
   };
 }
 

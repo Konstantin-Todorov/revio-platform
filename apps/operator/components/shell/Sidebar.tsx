@@ -41,7 +41,7 @@ export function Sidebar() {
         <Logo className="h-8 w-8" />
         <div className="leading-none">
           <div className="text-[15px] font-bold tracking-tight text-white">Revio</div>
-          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-warning-500">Operator</div>
+          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Operator</div>
         </div>
         <button
           type="button"
@@ -71,7 +71,7 @@ export function Sidebar() {
                     active ? "bg-white/[0.13] text-white" : "text-white/65 hover:bg-white/[0.07] hover:text-white"
                   }`}
                 >
-                  {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-warning-500" />}
+                  {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-product-mark" />}
                   <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
                   <span className="flex-1">{item.label}</span>
                 </Link>

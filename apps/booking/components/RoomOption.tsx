@@ -1,6 +1,7 @@
 import type { PublicPlanQuote, PublicRoomOption } from "@revio/booking";
 import { BedDouble, ChevronDown, Coffee, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
-import { BED_SETUP_BY_KEY } from "@revio/core";
+import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, headlineAmenities } from "@revio/core";
+import { AmenityIcon } from "@revio/ui/amenity-icon";
 import { money } from "@/lib/dates";
 import { RoomPhoto } from "./RoomPhoto";
 import { RoomDetail, RoomDetailTrigger } from "./RoomDetail";
@@ -41,6 +42,8 @@ export function RoomOption({
 
   // Cover = lowest sortOrder, which is exactly what the hotel dragged to the front.
   const cover = option.photos[0];
+
+  const headline = headlineAmenities(option.amenities);
 
   const href = (plan: PublicPlanQuote) =>
     `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
@@ -104,7 +107,10 @@ export function RoomOption({
                 </span>
                 {option.sizeSqm && <span className="chip">{option.sizeSqm} m²</span>}
                 {option.bedSetup && BED_SETUP_BY_KEY[option.bedSetup] && (
-                  <span className="chip">{BED_SETUP_BY_KEY[option.bedSetup]}</span>
+                  <span className="chip">
+                    <AmenityIcon name={BED_SETUP_ICON_BY_KEY[option.bedSetup]} size={13} />
+                    {BED_SETUP_BY_KEY[option.bedSetup]}
+                  </span>
                 )}
                 {rest.length > 0 && (
                   <span className="chip">
@@ -112,6 +118,28 @@ export function RoomOption({
                   </span>
                 )}
               </div>
+
+              {/*
+                The four amenities that actually separate this room from the one below it.
+
+                Chosen by `headlineAmenities`, which ranks a sea view above air conditioning — the
+                obvious alternative, showing the first four of the list, would print "Air
+                conditioning · Heating · WiFi · TV" on every card in the hotel and help nobody
+                choose. The rest live one click away in the detail view.
+              */}
+              {headline.length > 0 && (
+                <div
+                  className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[12.5px]"
+                  style={{ color: "hsl(var(--ink-soft))" }}
+                >
+                  {headline.map((a) => (
+                    <span key={a.key} className="inline-flex items-center gap-1.5">
+                      <AmenityIcon name={a.icon} size={14} style={{ color: "hsl(var(--brand-text))" }} />
+                      {a.label}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/*
                 The way into everything else. Only shown when there IS something else — a room with

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Ruler, Users, X } from "lucide-react";
-import { BED_SETUP_BY_KEY, groupAmenities } from "@revio/core";
+import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, groupAmenities } from "@revio/core";
+import { AmenityIcon } from "@revio/ui/amenity-icon";
 import type { PublicRoomOption } from "@revio/booking";
 
 /**
@@ -107,7 +108,12 @@ export function RoomDetail({
                       <Ruler size={13} aria-hidden /> {option.sizeSqm} m²
                     </span>
                   )}
-                  {bed && <span>{bed}</span>}
+                  {bed && (
+                    <span className="inline-flex items-center gap-1.5">
+                      <AmenityIcon name={BED_SETUP_ICON_BY_KEY[option.bedSetup!]} size={13} />
+                      {bed}
+                    </span>
+                  )}
                 </div>
               </div>
               <button
@@ -181,10 +187,23 @@ export function RoomDetail({
                     {groups.map((g) => (
                       <div key={g.group}>
                         <div className="eyebrow mb-1.5">{g.label}</div>
-                        <ul className="grid grid-cols-1 gap-x-5 gap-y-1 sm:grid-cols-2">
+                        {/*
+                          An icon per row, not a bullet.
+
+                          A guest deciding between two rooms is scanning, not reading — and a
+                          picture of a balcony is found in one pass where the word "Balcony" in a
+                          column of thirty words is not. The label stays: an icon alone is a riddle,
+                          and a hairdryer and a fan are the same drawing at 15px.
+                        */}
+                        <ul className="grid grid-cols-1 gap-x-5 gap-y-1.5 sm:grid-cols-2">
                           {g.items.map((a) => (
                             <li key={a.key} className="flex items-center gap-2 text-[13.5px]">
-                              <span aria-hidden style={{ color: "hsl(var(--brand-text))" }}>·</span>
+                              <AmenityIcon
+                                name={a.icon}
+                                size={15}
+                                className="shrink-0"
+                                style={{ color: "hsl(var(--brand-text))" }}
+                              />
                               {a.label}
                             </li>
                           ))}

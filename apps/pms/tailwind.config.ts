@@ -20,7 +20,43 @@ const config: Config = {
         warning: { 600: "#e0822b", 500: "#e0a23b", 50: "#fbf1e0" },
         danger: { 600: "#b53528", 500: "#d6493b", 50: "#fbe9e7" },
         info: { 500: "#0d9aa8" },
-        accent: { 600: "#5b3fb0", 500: "#7c5cdb", 50: "#efe9fb" },
+        /*
+         * RevioPMS's `accent` is the PLATFORM BLUE — deliberately not its emerald mark.
+         *
+         * This app is the only one that made `accent` its primary action colour (a hundred-odd
+         * buttons, links and active states, where CM/CRS/Operator use `brand-800`), and it inherited
+         * the old platform purple, which appears nowhere in the brand the founder actually drew.
+         *
+         * Emerald was the obvious replacement and it is wrong here, for a reason only visible on a
+         * real screen: **`success` is already green.** The housekeeping board puts a solid
+         * `bg-success-600` "Finish" button in the same row as `bg-accent-600` controls, and
+         * emerald-700 (#047857) against success-600 (#0f7a52) is the same colour to anyone
+         * glancing at it — two greens meaning "done" and "primary action" side by side. The
+         * notification dots do the same thing with `info` and `success`.
+         *
+         * So the mark stays emerald and the *chrome* carries the identity (`product-*` below:
+         * sidebar mark, active rail, wordmark, avatar, favicon); the action colour matches the rest
+         * of the platform, which is also what a user moving between four apps on one login expects.
+         * Mirrors `brand` 800/700/50 exactly — kept as its own name so a hundred class names did not
+         * have to be swept to say the same thing.
+         */
+        accent: { 600: "#15366a", 500: "#1d4ea0", 50: "#e7eefb" },
+
+        /*
+         * The one scale that differs between the four apps — RevioPMS.
+         *
+         * The emerald of the RevioPMS tile. The floor of the hotel.
+         *
+         * Three roles because one hex cannot do all three jobs: `mark` is the accent on the navy
+         * chrome and belongs only there; `ink` is the same hue darkened until it reads as text on
+         * white (measured ≥ 4.5:1); `wash` is the tint behind a selected row. Mirrors
+         * `productAccents` in @revio/ui — and it is the tile colour of this app's own logo, so the
+         * mark and the rail beside the active nav item match by construction.
+         *
+         * Kept separate from `warning`/`accent`, which stayed semantic: an amber rail meant
+         * "identity" in one place and "something needs attention" in another.
+         */
+        product: { mark: "#34d399", ink: "#047857", wash: "#ecfdf5" },
       },
       borderRadius: { sm: "6px", md: "10px", lg: "14px" },
       boxShadow: {

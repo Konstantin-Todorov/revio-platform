@@ -1,11 +1,24 @@
+/**
+ * The real RevioLink mark, served from `public/mark.png`.
+ *
+ * A raster, not a hand-traced SVG. The shape is the founder's artwork (`design/brand/`) and a
+ * brand mark is never re-drawn by eye — a stem a few units off is invisible in review and wrong
+ * forever. At the sizes this renders (32–36px from a 128px source) there is nothing to gain from a
+ * vector, and nothing to lose to a bad trace.
+ *
+ * The tile is cyan because that is this product's accent; `product.mark` in the Tailwind config is
+ * the same value, which is why the rail beside the active nav item matches the logo without anyone
+ * having to keep two numbers in step.
+ */
 export function Logo({ className = "" }: { className?: string }) {
-  // Two linked nodes — "Link": the hub that connects a property to every channel.
   return (
-    <svg viewBox="0 0 32 32" className={className} fill="none" aria-hidden="true">
-      <rect width="32" height="32" rx="8" fill="#e0a23b" />
-      <circle cx="11" cy="16" r="4.2" stroke="#15366a" strokeWidth="2.4" />
-      <circle cx="21" cy="16" r="4.2" stroke="#15366a" strokeWidth="2.4" />
-      <path d="M14.5 16h3" stroke="#15366a" strokeWidth="2.4" strokeLinecap="round" />
-    </svg>
+    <img
+      src="/mark.png"
+      alt=""
+      width={128}
+      height={128}
+      className={className}
+      aria-hidden="true"
+    />
   );
 }

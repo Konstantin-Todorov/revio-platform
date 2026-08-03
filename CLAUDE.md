@@ -197,10 +197,33 @@ stays, re-quoted from the same availability engine. Branding is configured in **
 brand colour is **measured** to 4.5:1 rather than assumed — `apps/booking/lib/brand.test.ts` pins that
 across twelve awkward hotel colours. Four shared packages came out of this work, each at the moment a
 second caller appeared: `@revio/booking` · `@revio/email` · `@revio/payments` · `@revio/storage`.
+**K11 room content SHIPPED (2026-08-03)** — a room can now describe itself: free-text description,
+`sizeSqm`, a fixed `bedSetup` list and **35 curated amenities** in six groups (`packages/core/src/rooms/
+amenities.ts`), edited in **RevioCRS → Rooms & Rates** as icon toggle-chips and read by a guest in a
+**detail dialog over the results** (16:9 `object-contain` gallery, so the dialog stops resizing between
+portrait and landscape photos). The amenity list is **fixed, not free text**, because Channex takes a room
+type's `facilities` as a list of ids — fill it in once, push it to Booking.com later. Cards show only the
+**four amenities that differentiate** (`headlineAmenities` ranks a sea view above air conditioning; the
+first-four-of-the-list alternative prints "Air conditioning · Heating · WiFi · TV" on every card in the
+hotel). Icon names live in core (pure data) and resolve to components in `@revio/ui/amenity-icon`, typed
+so a missing icon is a build error.
 **Still open:** K5 Stripe Connect onboarding + request-to-book fallback · K6 returning-guest recognition ·
 K7 CRS distribution settings · K8 direct-vs-OTA analytics incl. commission saved · K9 deploy. **Not built
 and deliberately so:** real card collection (needs Stripe Elements + a live-mode decision), extras/upsell
 (the step-3 slot exists and is empty), and any Operator visibility into the booking engine.
+
+**→ ✅ BRAND IDENTITY (phase M) — SHIPPED 2026-08-03.** The founder's real marks replaced the placeholder
+SVGs in all four staff apps (`design/brand/` holds the source PNGs; each app serves `public/mark.png` +
+`app/icon.png`/`apple-icon.png`). **A brand mark is never re-drawn by eye** — the artwork is used as
+delivered; only the Operator tile is synthesised, by mapping the RevioLink tile's accent to white so it
+keeps the exact silhouette. Each app now has **one accent**: RevioLink cyan `#24d3ee` · RevioCRS indigo
+`#818cf8` · RevioPMS emerald `#34d399` · **Operator none** (white/navy — it is the platform, not a
+product). It appears in the sidebar mark, the active-nav rail, the wordmark tail, the avatar, the favicon
+and selected chips, and **nowhere else**: primary buttons stay `brand-800` navy in all four. RevioPMS is
+why that rule is written down — it had made `accent` its primary colour, and emerald put a primary button
+beside the housekeeping board's green "Finish" button, two identical greens meaning different things; its
+`accent` now mirrors `brand`. **RevioDirect deliberately gets no Revio identity at all** — it wears the
+hotel's brand colour and the hotel's own logo as its favicon. See `packages/ui/CLAUDE.md`.
 
 **→ 🔜 REFINEMENT ROUND intake (founder docs 2026-07-20, `docs/specs/`) — NOT yet built; plan pending
 founder sign-off.** **THREE systems, three docs** (one doc per system; the `Revio Development Docs.docx`

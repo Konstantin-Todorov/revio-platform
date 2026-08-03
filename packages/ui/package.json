@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/tokens.ts",
     "./tokens.css": "./src/tokens.css",
+    "./amenity-icon": "./src/amenity-icon.tsx",
     "./setup-checklist": "./src/setup-checklist.tsx",
     "./status-page": "./src/status-page.tsx",
     "./skeleton": "./src/skeleton.tsx"
@@ -15,11 +16,16 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@revio/core": "workspace:*"
+  },
   "peerDependencies": {
+    "lucide-react": "^0.460.0",
     "react": "^19.0.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
+    "lucide-react": "^0.460.0",
     "react": "^19.0.0",
     "typescript": "^5.6.0"
   }

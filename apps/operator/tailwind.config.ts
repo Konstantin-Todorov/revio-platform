@@ -21,6 +21,23 @@ const config: Config = {
         danger: { 600: "#b53528", 500: "#d6493b", 50: "#fbe9e7" },
         info: { 500: "#0d9aa8" },
         accent: { 600: "#5b3fb0", 500: "#7c5cdb", 50: "#efe9fb" },
+
+        /*
+         * The one scale that differs between the four apps — Revio Operator.
+         *
+         * No accent, deliberately: the console is the platform, not a product, so it wears the plain
+         *          white/navy Revio identity and leaves the product-colour slot empty.
+         *
+         * Three roles because one hex cannot do all three jobs: `mark` is the accent on the navy
+         * chrome and belongs only there; `ink` is the same hue darkened until it reads as text on
+         * white (measured ≥ 4.5:1); `wash` is the tint behind a selected row. Mirrors
+         * `productAccents` in @revio/ui — and it is the tile colour of this app's own logo, so the
+         * mark and the rail beside the active nav item match by construction.
+         *
+         * Kept separate from `warning`/`accent`, which stayed semantic: an amber rail meant
+         * "identity" in one place and "something needs attention" in another.
+         */
+        product: { mark: "#ffffff", ink: "#0e203c", wash: "#eef2f7" },
       },
       borderRadius: { sm: "6px", md: "10px", lg: "14px" },
       boxShadow: {

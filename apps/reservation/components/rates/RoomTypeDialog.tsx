@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { BED_SETUPS, ROOM_AMENITIES, ROOM_AMENITY_GROUPS } from "@revio/core";
+import { AmenityIcon } from "@revio/ui/amenity-icon";
 import { saveRoomType, type ActionResult } from "@/lib/actions-rates";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
@@ -95,21 +96,34 @@ export function RoomTypeDialog({ roomType }: { roomType?: RoomType }) {
 
             <div>
               <div className="mb-1.5 text-[12px] font-semibold text-ink-700">Amenities</div>
+              {/*
+                Toggle chips with icons, not a column of tick boxes.
+
+                Thirty-five checkboxes is a wall of near-identical rows, and a hotel filling one in
+                for the fourth room type is reading every label again to find the two that changed.
+                An icon gives each option a shape you can aim at, and a chip that visibly fills in
+                shows what is on without tracing a line back to a small square. The real <input> is
+                still there under `sr-only` — the form posts the same field, and the checkbox stays
+                keyboard-reachable and readable by a screen reader.
+              */}
               <div className="space-y-2.5">
                 {ROOM_AMENITY_GROUPS.map((g) => (
                   <div key={g.key}>
-                    <div className="mb-1 text-[10.5px] font-bold uppercase tracking-wide text-ink-400">{g.label}</div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                    <div className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wide text-ink-400">{g.label}</div>
+                    <div className="flex flex-wrap gap-1.5">
                       {ROOM_AMENITIES.filter((a) => a.group === g.key).map((a) => (
-                        <label key={a.key} className="flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-700">
+                        <label key={a.key} className="cursor-pointer">
                           <input
                             type="checkbox"
                             name="amenities"
                             value={a.key}
                             defaultChecked={roomType?.amenities?.includes(a.key) ?? false}
-                            className="h-3.5 w-3.5 rounded border-surface-border text-brand-600"
+                            className="peer sr-only"
                           />
-                          {a.label}
+                          <span className="flex items-center gap-1.5 rounded-full border border-surface-border bg-white px-2.5 py-1 text-[12px] text-ink-500 transition-colors hover:border-ink-300 peer-checked:border-product-ink peer-checked:bg-product-wash peer-checked:font-semibold peer-checked:text-product-ink peer-focus-visible:ring-2 peer-focus-visible:ring-product-ink/40">
+                            <AmenityIcon name={a.icon} size={13} />
+                            {a.label}
+                          </span>
                         </label>
                       ))}
                     </div>

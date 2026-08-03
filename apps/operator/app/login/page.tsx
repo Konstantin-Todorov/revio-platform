@@ -12,7 +12,7 @@ export default function LoginPage() {
           <Logo className="h-9 w-9" />
           <div className="leading-none">
             <div className="text-[17px] font-bold">Revio</div>
-            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-warning-500">Operator</div>
+            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Operator</div>
           </div>
         </div>
         <div>

@@ -33,7 +33,7 @@ export function Topbar({
           name="q"
           placeholder="Search rooms, guests, reservations…"
           aria-label="Global search"
-          className="h-9 w-full max-w-md rounded-md border border-surface-border bg-surface-muted pl-9 pr-3 text-[13px] text-ink-700 outline-none transition-colors placeholder:text-ink-400 focus:border-accent-600 focus:bg-white"
+          className="h-9 w-full max-w-md rounded-md border border-surface-border bg-surface-muted pl-9 pr-3 text-[13px] text-ink-700 outline-none transition-colors placeholder:text-ink-400 focus:border-product-ink focus:bg-white"
         />
       </form>
 

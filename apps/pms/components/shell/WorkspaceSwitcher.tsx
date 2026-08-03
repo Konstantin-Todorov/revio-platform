@@ -29,7 +29,7 @@ export function WorkspaceSwitcher({ properties, activeId, activeName }: { proper
         onClick={() => setOpen((o) => !o)}
         className="flex items-center gap-2.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[13px] font-semibold text-ink-900 transition-colors hover:bg-surface-muted"
       >
-        <Building2 className="h-4 w-4 text-accent-600" />
+        <Building2 className="h-4 w-4 text-product-ink" />
         {activeName}
         <ChevronDown className="h-4 w-4 text-ink-400" />
       </button>
@@ -47,11 +47,11 @@ export function WorkspaceSwitcher({ properties, activeId, activeName }: { proper
                   <button
                     key={p.id}
                     onClick={() => { setActiveProperty(p.id); setOpen(false); }}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors hover:bg-surface-muted ${p.id === activeId ? "font-semibold text-accent-600" : "text-ink-700"}`}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors hover:bg-surface-muted ${p.id === activeId ? "font-semibold text-product-ink" : "text-ink-700"}`}
                   >
                     <Building2 className="h-3.5 w-3.5 text-ink-300" />
                     <span className="flex-1">{p.name}</span>
-                    {p.id === activeId && <Check className="h-4 w-4 text-accent-600" />}
+                    {p.id === activeId && <Check className="h-4 w-4 text-product-ink" />}
                   </button>
                 ))}
               </div>

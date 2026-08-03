@@ -11,7 +11,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-2.5">
           <Logo className="h-9 w-9" />
           <div className="leading-none">
-            <div className="text-[17px] font-bold">Revio<span className="text-warning-500">Link</span></div>
+            <div className="text-[17px] font-bold">Revio<span className="text-product-mark">Link</span></div>
             <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Channel Manager</div>
           </div>
         </div>
