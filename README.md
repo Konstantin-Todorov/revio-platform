@@ -22,7 +22,7 @@ apps/
   operator/          Our admin console: all hotels, entitlements, billing, sync health       :3001
   reservation/       RevioCRS — reservations, rates, guests, analytics                       :3002
   pms/               RevioPMS — front desk, housekeeping, folios, invoicing                  :3003
-  booking/           RevioDirect — the hotel's public booking page (in build, local only)    :3004
+  booking/           RevioDirect — the hotel's public booking page (live)                    :3004
 packages/
   core/              Shared inventory source of truth — domain + availability + rates + restrictions + adapters
   db/                Prisma schema, client, RLS perimeters, demo seed

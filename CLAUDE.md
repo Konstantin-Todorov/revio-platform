@@ -107,9 +107,12 @@ appeared — never speculatively.
 - **Live — Operator Console:** https://operator-production-5eed.up.railway.app
 - **Live — RevioCRS:** https://reservation-production-f8c5.up.railway.app
 - **Live — RevioPMS:** https://pms-production-a64b.up.railway.app
-- **NOT deployed — RevioDirect:** local only (`localhost:3004`) until phase K9. It needs its own
-  service, a `book.revio.app` domain and an object-storage bucket (`DEPLOY.md` → Object storage);
-  until then room photos are served from local disk, which does not survive a container restart.
+- **Live — RevioDirect:** https://booking-production-8e50.up.railway.app/&lt;slug&gt; — e.g.
+  `/hotel-sofia`. **All five apps are deployed.** The object-storage bucket is live and shared with
+  `reservation` (which writes photos; this one reads them), so room photographs survive a container
+  restart. Still on the Railway subdomain: `book.revio.app` is a DNS change, not a build change, and
+  the CRS's `BOOKING_ENGINE_ORIGIN` is the single place that has to follow it.
+- **Auto-deploy:** every service tracks `main`, so one `git push` builds and deploys all five.
 - **Railway project:** `revio-platform` — one Postgres shared by all services; each app is its own web
   service. **Each service defines its own build/start via Railway config** (NOT a root `railway.json` —
   that applied to every service and was removed): build = Nixpacks `pnpm install → db:generate → next
@@ -207,8 +210,19 @@ type's `facilities` as a list of ids — fill it in once, push it to Booking.com
 first-four-of-the-list alternative prints "Air conditioning · Heating · WiFi · TV" on every card in the
 hotel). Icon names live in core (pure data) and resolve to components in `@revio/ui/amenity-icon`, typed
 so a missing icon is a build error.
+**K9 DEPLOYED + the cross-system run PROVEN on production (2026-08-03).** RevioDirect is live at
+`booking-production-8e50.up.railway.app/<slug>`, and the structural claim is now demonstrated rather than
+argued. One booking made as a guest on the live site — `RV-07NR0F`, Deluxe Double, 4→6 Aug, €195 all-in —
+appeared with **no integration step**: in **RevioCRS** Reservations tagged `source = Booking Engine`; as a
+**RevioPMS** guest profile carrying the guest's own free-text request through untouched; on the **PMS
+reservation view**, which states the point on screen ("one shared record, two phases … it is never a
+synced copy") with the commercial half read-only from the CRS and the operational half empty and correct
+(*no room assigned — assigned at check-in*, *no folio yet*); and on the **folio**, which reconciles to
+`€192 room + €3 city tax = €195` — **the exact number the guest was quoted**, which is the all-in pricing
+promise closing the loop. The card guarantee shows as *Card on file* (Stripe test-mode, token only).
 **Still open:** K5 Stripe Connect onboarding + request-to-book fallback · K6 returning-guest recognition ·
-K7 CRS distribution settings · K8 direct-vs-OTA analytics incl. commission saved · K9 deploy. **Not built
+K7 CRS distribution settings · K8 direct-vs-OTA analytics incl. commission saved · `book.revio.app` DNS.
+**Not built
 and deliberately so:** real card collection (needs Stripe Elements + a live-mode decision), extras/upsell
 (the step-3 slot exists and is empty), and any Operator visibility into the booking engine.
 

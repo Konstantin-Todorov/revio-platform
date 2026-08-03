@@ -38,6 +38,21 @@ export function BookingForm({
 }) {
   const [state, action, pending] = useActionState<BookResult | null, FormData>(confirmBooking, null);
 
+  /*
+   * The guest's own words are held in React state, not left to the DOM.
+   *
+   * `<form action={…}>` **resets uncontrolled fields on every dispatch** — that is React's
+   * behaviour, not a bug in it. So any rejection the server makes (the hold lapsed while they were
+   * typing, the last room went, the card guarantee failed) hands back an error message above four
+   * blank boxes. Being asked to retype your name and email at the moment something already went
+   * wrong is how a booking becomes an abandoned tab.
+   *
+   * Controlled inputs are the whole fix: the values survive the round trip, so the guest fixes the
+   * one thing that was wrong and presses the button again.
+   */
+  const [guest, setGuest] = useState({ firstName: "", lastName: "", email: "", phone: "", note: "" });
+  const set = (k: keyof typeof guest) => (v: string) => setGuest((g) => ({ ...g, [k]: v }));
+
   return (
     <form action={action} className="space-y-5">
       {(Object.keys(stay) as (keyof StaySelection)[]).map((k) => (
@@ -49,11 +64,15 @@ export function BookingForm({
       <section className="card-raised p-5 sm:p-6">
         <h2 className="display text-[1.25rem]">Who's staying?</h2>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="First name" name="firstName" autoComplete="given-name" required />
-          <Field label="Last name" name="lastName" autoComplete="family-name" required />
+          <Field label="First name" name="firstName" autoComplete="given-name" required
+                 value={guest.firstName} onValue={set("firstName")} />
+          <Field label="Last name" name="lastName" autoComplete="family-name" required
+                 value={guest.lastName} onValue={set("lastName")} />
           <Field label="Email" name="email" type="email" autoComplete="email" required
+                 value={guest.email} onValue={set("email")}
                  hint="Your confirmation goes here." />
           <Field label="Phone" name="phone" type="tel" autoComplete="tel"
+                 value={guest.phone} onValue={set("phone")}
                  hint="Only if the hotel needs to reach you." />
         </div>
 
@@ -66,6 +85,8 @@ export function BookingForm({
             name="note"
             rows={2}
             maxLength={500}
+            value={guest.note}
+            onChange={(e) => set("note")(e.target.value)}
             placeholder="Late arrival, a quiet room, celebrating something…"
             className="w-full rounded-[var(--r-sm)] border px-3 py-2 text-[14px] outline-none"
             style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
@@ -111,9 +132,20 @@ export function BookingForm({
         )}
 
         <label className="mt-4 flex cursor-pointer items-start gap-2.5">
+          {/*
+            `required` so the BROWSER stops the submit.
+
+            The server checks this too and always will — a client check is a courtesy, not a
+            control. But without the attribute the only thing that catches a missed tick is a round
+            trip, and a round trip through a server action **resets the form**: the guest gets
+            "please accept the conditions" next to four empty fields and has to retype their name,
+            their email and their request. That is the single most expensive moment on the site to
+            make somebody start again.
+          */}
           <input
             type="checkbox"
             name="acceptTerms"
+            required
             className="mt-0.5 h-4 w-4 cursor-pointer"
             style={{ accentColor: "hsl(var(--brand))" }}
           />
@@ -146,7 +178,7 @@ export function BookingForm({
 }
 
 function Field({
-  label, name, type = "text", required, autoComplete, hint,
+  label, name, type = "text", required, autoComplete, hint, value, onValue,
 }: {
   label: string;
   name: string;
@@ -154,6 +186,9 @@ function Field({
   required?: boolean;
   autoComplete?: string;
   hint?: string;
+  /** Controlled — see the note in BookingForm about form resets eating the guest's typing. */
+  value: string;
+  onValue: (v: string) => void;
 }) {
   return (
     <div>
@@ -169,6 +204,8 @@ function Field({
         type={type}
         required={required}
         autoComplete={autoComplete}
+        value={value}
+        onChange={(e) => onValue(e.target.value)}
         className="w-full rounded-[var(--r-sm)] border px-3 py-2.5 text-[14.5px] outline-none"
         style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
       />

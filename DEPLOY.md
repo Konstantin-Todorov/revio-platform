@@ -10,14 +10,15 @@ sharing that database.
 - **Operator Console:** https://operator-production-5eed.up.railway.app
 - **RevioCRS (Reservation):** https://reservation-production-f8c5.up.railway.app
 - **RevioPMS (Operations):** https://pms-production-a64b.up.railway.app
-- **RevioDirect (booking engine): NOT deployed** — `apps/booking` runs locally on `:3004` only. Phase
-  K9 adds it. It needs three things the other services didn't: its own Railway service, a
-  `book.revio.app` domain (it is the only app a *guest* visits, so it must not sit on a
-  `*.up.railway.app` URL a hotel would be embarrassed to print), and an **object-storage bucket** —
-  without one, room photos land on the container's local disk and vanish on the next deploy. See
-  *Object storage* below and finish that first.
+- **RevioDirect (booking engine):** https://booking-production-8e50.up.railway.app/&lt;slug&gt; — live,
+  e.g. `/hotel-sofia`. The object-storage bucket it needed is provisioned and shared with
+  `reservation`, so room photos survive a deploy. **Still on the Railway subdomain**, and that is the
+  one thing left: this is the only app a *guest* visits, so it should not sit on a `*.up.railway.app`
+  URL a hotel would be embarrassed to print. Pointing `book.revio.app` at it is a DNS change plus one
+  variable — `BOOKING_ENGINE_ORIGIN` on the `reservation` service, which is where the CRS builds the
+  link it shows the hotel. Nothing else refers to the host.
 - **Railway project `revio-platform`:** services `channel-manager`, `operator`, `reservation`, `pms`,
-  `Postgres` (one shared DB).
+  `booking`, `Postgres` (one shared DB).
 - **No root `railway.json`** — it applied to every service. Each app service sets its **own** build/start
   via Railway config (`railway environment edit --json` with `build.buildCommand` + `deploy.startCommand`
   using that app's `--filter`). Both target `prisma migrate deploy` → `next start` on `$PORT`.
