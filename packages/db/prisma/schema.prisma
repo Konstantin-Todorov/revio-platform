@@ -242,6 +242,13 @@ model RoomType {
   totalRooms  Int
   maxGuests   Int
   description String?
+  // Guest-facing room content (K11). All optional: a hotel goes live before its copywriting, and
+  // every surface renders correctly with any subset of these, including none of them.
+  sizeSqm     Int? // floor area, the single most-asked question about a room
+  bedSetup    String? // key from BED_SETUPS in @revio/core — a fixed list so rooms compare
+  // Keys from ROOM_AMENITIES. A fixed vocabulary, because this is what Channex takes as a room
+  // type's `facilities` list — fill it in once here and the OTAs get it later without re-entry.
+  amenities   String[] @default([])
   active      Boolean @default(true)
   sortOrder   Int     @default(0)
 

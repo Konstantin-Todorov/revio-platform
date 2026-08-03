@@ -1,7 +1,9 @@
 import type { PublicPlanQuote, PublicRoomOption } from "@revio/booking";
 import { BedDouble, ChevronDown, Coffee, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { BED_SETUP_BY_KEY } from "@revio/core";
 import { money } from "@/lib/dates";
 import { RoomPhoto } from "./RoomPhoto";
+import { RoomDetail, RoomDetailTrigger } from "./RoomDetail";
 
 /**
  * One room type and its rates.
@@ -100,12 +102,38 @@ export function RoomOption({
                   <Users size={13} aria-hidden />
                   Sleeps {option.maxGuests}
                 </span>
+                {option.sizeSqm && <span className="chip">{option.sizeSqm} m²</span>}
+                {option.bedSetup && BED_SETUP_BY_KEY[option.bedSetup] && (
+                  <span className="chip">{BED_SETUP_BY_KEY[option.bedSetup]}</span>
+                )}
                 {rest.length > 0 && (
                   <span className="chip">
                     {plans.length} rates available
                   </span>
                 )}
               </div>
+
+              {/*
+                The way into everything else. Only shown when there IS something else — a room with
+                no photos, no description and no amenities has nothing behind this link, and offering
+                it anyway teaches a guest that our links go nowhere.
+              */}
+              {(option.photos.length > 0 || option.description || option.amenities.length > 0) && (
+                <div className="mt-2.5">
+                  {/* Keys resolved here, on the server — a function cannot cross into a client
+                      component, and the URL shape is this app's business anyway. */}
+                  <RoomDetail
+                    option={option}
+                    photos={option.photos.map((p) => ({
+                      full: mediaUrl(p.fullKey),
+                      thumb: mediaUrl(p.thumbKey),
+                      alt: p.alt || "",
+                    }))}
+                  >
+                    <RoomDetailTrigger photoCount={option.photos.length} />
+                  </RoomDetail>
+                </div>
+              )}
             </div>
 
             {/* Honest scarcity only — a real count, and only when it is genuinely low. */}

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { BED_SETUPS, ROOM_AMENITY_BY_KEY } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
@@ -511,7 +512,21 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   const maxGuests = Math.max(1, int(fd, "maxGuests", 1));
   const unitKind = str(fd, "unitKind") || "room";
   const active = fd.get("active") != null;
-  const description = str(fd, "description") || null;
+  const description = str(fd, "description").trim() || null;
+
+  /**
+   * Guest-facing content. Amenity keys are filtered against the platform list rather than trusted:
+   * this is a multi-select posted as a form field, so an unknown key is either a stale build or a
+   * crafted POST, and neither should end up rendered to a guest or pushed to an OTA.
+   */
+  const sizeRaw = int(fd, "sizeSqm");
+  const sizeSqm = sizeRaw > 0 && sizeRaw <= 2000 ? sizeRaw : null;
+  const bedRaw = str(fd, "bedSetup");
+  const bedSetup = BED_SETUPS.some((b) => b.key === bedRaw) ? bedRaw : null;
+  const amenities = fd
+    .getAll("amenities")
+    .filter((v): v is string => typeof v === "string")
+    .filter((k) => k in ROOM_AMENITY_BY_KEY);
 
   const clash = await prisma.roomType.findFirst({
     where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) },
@@ -523,7 +538,7 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
     if (!before || before.propertyId !== propertyId) return { ok: false, error: "Room type not found." };
     await prisma.roomType.update({
       where: { id: rowId },
-      data: { name, code, unitKind, totalRooms, maxGuests, description, active },
+      data: { name, code, unitKind, totalRooms, maxGuests, description, active, sizeSqm, bedSetup, amenities },
     });
     await logAudit(propertyId, tenantId, {
       entity: `Room Type · ${name}`, field: "edit",
@@ -533,7 +548,7 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   } else {
     const count = await prisma.roomType.count({ where: { propertyId } });
     const created = await prisma.roomType.create({
-      data: { tenantId, propertyId, name, code, unitKind, totalRooms, maxGuests, description, active, sortOrder: count },
+      data: { tenantId, propertyId, name, code, unitKind, totalRooms, maxGuests, description, active, sizeSqm, bedSetup, amenities, sortOrder: count },
     });
     // A new room type becomes sellable under every existing rate plan (room × rate = product).
     const plans = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true } });

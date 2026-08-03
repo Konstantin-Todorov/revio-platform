@@ -75,6 +75,16 @@ export interface PublicRoomOption {
   code: string;
   maxGuests: number;
   remaining: number; // min remaining across the stay's nights
+  /**
+   * Guest-facing content (K11). Every field is optional and the page is built to say less rather
+   * than break: a hotel goes live before its copywriting, and a half-described room must still be
+   * bookable. `amenities` are keys from `ROOM_AMENITIES` — resolve them through `@revio/core` so an
+   * unknown or stale key is dropped rather than shown raw.
+   */
+  description: string | null;
+  sizeSqm: number | null;
+  bedSetup: string | null;
+  amenities: string[];
   /** Cover first (lowest sortOrder). Empty is normal and must render as a designed state, never
    *  as a broken card — a hotel can go live before its photo shoot. */
   photos: PublicRoomPhoto[];
@@ -277,6 +287,11 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
     if (quotes.length > 0) {
       options.push({
         roomTypeId: rt.id, name: rt.name, code: rt.code, maxGuests: rt.maxGuests, remaining,
+        // Content is optional everywhere: a room with none of it still renders, it just says less.
+        description: rt.description?.trim() || null,
+        sizeSqm: rt.sizeSqm ?? null,
+        bedSetup: rt.bedSetup || null,
+        amenities: rt.amenities ?? [],
         photos: rt.photos.map((ph) => ({
           fullKey: ph.fullKey, thumbKey: ph.thumbKey, width: ph.width, height: ph.height, alt: ph.alt,
         })),

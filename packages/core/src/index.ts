@@ -16,3 +16,4 @@ export * from "./email/templates.js";
 export * from "./onboarding/setup.js";
 export * from "./pricing/fees.js";
 export * from "./booking/presets.js";
+export * from "./rooms/amenities.js";
