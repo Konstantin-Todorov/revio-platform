@@ -267,6 +267,9 @@ importers:
       '@revio/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@revio/payments':
+        specifier: workspace:*
+        version: link:../../packages/payments
       '@revio/storage':
         specifier: workspace:*
         version: link:../../packages/storage

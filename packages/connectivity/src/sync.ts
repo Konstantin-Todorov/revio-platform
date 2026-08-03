@@ -10,7 +10,7 @@
 import { forSystem, decryptSecret, forTenant } from "@revio/db";
 import {
   channelSupports, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed,
-  resolveRestriction, SOLD_STATUSES, type AriUpdate, type DerivedRateConfig, type RestrictionRuleHit,
+  resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type DerivedRateConfig, type RestrictionRuleHit,
   type RestrictionType,
 } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
@@ -95,7 +95,7 @@ export async function syncChannel(prisma: Db, channelId: string, opts?: { horizo
     prisma.dailyCell.findMany({ where: { roomTypeId: { in: roomTypeIds }, date: { gte: start, lte: end } } }),
     prisma.ratePrice.findMany({ where: { propertyId, date: { gte: start, lte: end } } }),
     prisma.reservationLine.findMany({
-      where: { roomTypeId: { in: roomTypeIds }, reservation: { propertyId, status: { in: [...SOLD_STATUSES] } } },
+      where: { roomTypeId: { in: roomTypeIds }, reservation: { propertyId, status: { in: [...ROOM_OCCUPYING_STATUSES] } } },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
     }),
     prisma.roomInventoryPeriod.findMany({ where: { roomTypeId: { in: roomTypeIds }, dateFrom: { lte: end }, dateTo: { gte: start } } }),
@@ -414,7 +414,7 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
           prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date: d } } }),
           prisma.reservationLine.aggregate({
             _sum: { quantity: true },
-            where: { roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d }, reservation: { status: { in: [...SOLD_STATUSES] } } },
+            where: { roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d }, reservation: { status: { in: [...ROOM_OCCUPYING_STATUSES] } } },
           }),
           prisma.hold.aggregate({
             _sum: { quantity: true },

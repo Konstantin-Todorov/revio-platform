@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, isOverbooking, SOLD_STATUSES, type DerivedRateConfig } from "@revio/core";
+import { computeWaterfall, deriveRate, isOverbooking, ROOM_OCCUPYING_STATUSES, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, eachDate, utcDay } from "./mutation-helpers";
 
@@ -230,7 +230,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
     prisma.reservationLine.findMany({
       where: {
         roomTypeId,
-        reservation: { propertyId, status: { in: [...SOLD_STATUSES] } },
+        reservation: { propertyId, status: { in: [...ROOM_OCCUPYING_STATUSES] } },
         checkIn: { lt: checkOutDate },
         checkOut: { gt: checkInDate },
       },

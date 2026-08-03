@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type WaterfallResult } from "@revio/core";
+import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, type RestrictionRuleHit, type SetupFacts, type WaterfallResult } from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -163,7 +163,7 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
     prisma.reservationLine.findMany({
       where: {
         roomTypeId: { in: rtIds },
-        reservation: { propertyId, status: { in: [...SOLD_STATUSES] } },
+        reservation: { propertyId, status: { in: [...ROOM_OCCUPYING_STATUSES] } },
         checkIn: { lt: end },
         checkOut: { gt: start },
       },
@@ -325,7 +325,7 @@ export async function remainingByNight(
     prisma.reservationLine.findMany({
       where: {
         roomTypeId,
-        reservation: { status: { in: [...SOLD_STATUSES] } },
+        reservation: { status: { in: [...ROOM_OCCUPYING_STATUSES] } },
         checkIn: { lt: end }, checkOut: { gt: start },
         ...(exclude.reservationId ? { reservationId: { not: exclude.reservationId } } : {}),
       },

@@ -30,11 +30,21 @@ export function BookingForm({
   stay,
   cancellationPolicy,
   expiresAt,
+  paymentReady,
 }: {
   stay: StaySelection;
   cancellationPolicy: string | null;
   /** When the hold lapses. Drives the countdown, and the reason this screen has any urgency at all. */
   expiresAt: string;
+  /**
+   * Whether the hotel can take a card guarantee (Stripe `charges_enabled` on its own account).
+   *
+   * False switches this screen to **request-to-book**: the card panel disappears entirely rather
+   * than being disabled, because a greyed-out card field asks the guest to wonder what is broken.
+   * The promise on the button changes with it — "Request this room" is a different commitment from
+   * "Confirm booking", and only one of them is true here.
+   */
+  paymentReady: boolean;
 }) {
   const [state, action, pending] = useActionState<BookResult | null, FormData>(confirmBooking, null);
 
@@ -105,19 +115,37 @@ export function BookingForm({
       */}
 
       <section className="card-raised p-5 sm:p-6">
-        <h2 className="display text-[1.25rem]">Holding your room</h2>
+        <h2 className="display text-[1.25rem]">
+          {paymentReady ? "Holding your room" : "What happens next"}
+        </h2>
         <div
           className="mt-4 flex items-start gap-3 rounded-[var(--r-sm)] p-4"
           style={{ backgroundColor: "hsl(var(--brand-wash))" }}
         >
           <Lock size={17} aria-hidden className="mt-0.5 shrink-0" style={{ color: "hsl(var(--brand-text))" }} />
           <div className="text-[13.5px] leading-relaxed">
-            <p className="font-bold">Nothing is charged now.</p>
-            <p className="mt-1" style={{ color: "hsl(var(--ink-soft))" }}>
-              Your card guarantees the room and you settle the whole amount at the hotel.{" "}
-              <strong className="font-semibold">Your card details never reach us</strong> — they are
-              held by our payment provider, and this booking page never sees a card number.
-            </p>
+            {paymentReady ? (
+              <>
+                <p className="font-bold">Nothing is charged now.</p>
+                <p className="mt-1" style={{ color: "hsl(var(--ink-soft))" }}>
+                  Your card guarantees the room and you settle the whole amount at the hotel.{" "}
+                  <strong className="font-semibold">Your card details never reach us</strong> — they are
+                  held by our payment provider, and this booking page never sees a card number.
+                </p>
+              </>
+            ) : (
+              /* Say what actually happens. "The hotel will confirm" is a weaker promise than an
+                 instant booking, and pretending otherwise is how a guest arrives at a room nobody
+                 kept for them. The room genuinely is held while they decide, so we say that too. */
+              <>
+                <p className="font-bold">No card needed — the hotel confirms this one.</p>
+                <p className="mt-1" style={{ color: "hsl(var(--ink-soft))" }}>
+                  Your room is held while they check, and you&rsquo;ll get an email as soon as
+                  it&rsquo;s confirmed. Nothing is charged now, and nothing is charged online at all —
+                  you settle the whole amount at the hotel.
+                </p>
+              </>
+            )}
           </div>
         </div>
 
@@ -150,8 +178,8 @@ export function BookingForm({
             style={{ accentColor: "hsl(var(--brand))" }}
           />
           <span className="text-[13px] leading-relaxed">
-            I accept the booking conditions and the cancellation policy above, and I understand my
-            card is used as a guarantee.
+            I accept the booking conditions and the cancellation policy above
+            {paymentReady ? ", and I understand my card is used as a guarantee" : ""}.
           </span>
         </label>
       </section>
@@ -168,10 +196,14 @@ export function BookingForm({
       )}
 
       <button type="submit" disabled={pending} className="btn btn-brand w-full text-[15px]">
-        {pending ? "Confirming…" : "Confirm booking"}
+        {pending
+          ? paymentReady ? "Confirming…" : "Sending…"
+          : paymentReady ? "Confirm booking" : "Request this room"}
       </button>
       <p className="text-center text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-        You&rsquo;ll get a confirmation by email straight away.
+        {paymentReady
+          ? "You’ll get a confirmation by email straight away."
+          : "You’ll get an email the moment the hotel confirms."}
       </p>
     </form>
   );

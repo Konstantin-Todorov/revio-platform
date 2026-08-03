@@ -12,7 +12,7 @@ const nextConfig = {
     serverActions: { bodySizeLimit: "40mb" },
   },
   // Workspace TS packages must be transpiled by Next…
-  transpilePackages: ["@revio/booking", "@revio/core", "@revio/ui", "@revio/db", "@revio/connectivity"],
+  transpilePackages: ["@revio/booking", "@revio/core", "@revio/ui", "@revio/db", "@revio/connectivity", "@revio/payments"],
   // …but Prisma's client must stay external to the server bundle.
   serverExternalPackages: ["@prisma/client", ".prisma/client"],
   // The workspace packages use NodeNext-style ".js" import specifiers that point at ".ts" sources.

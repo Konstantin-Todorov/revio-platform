@@ -151,7 +151,17 @@ export type ReservationStatus =
   | "modified"
   | "cancelled"
   | "failed_import"
-  | "overbooked";
+  | "overbooked"
+  /**
+   * A stay the guest asked for and the hotel has not answered yet.
+   *
+   * Only RevioDirect creates these, and only while the hotel has not finished connecting its Stripe
+   * account — with no gateway there is no card guarantee, so the honest thing is to take the request
+   * and let the hotel accept it rather than to promise a confirmation nobody has underwritten. It
+   * occupies a room from the moment it lands (`ROOM_OCCUPYING_STATUSES`) and counts as revenue only
+   * once accepted, at which point it becomes `confirmed`.
+   */
+  | "requested";
 
 export interface ReservationLine {
   roomTypeId: RoomTypeId;

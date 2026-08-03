@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeWaterfall, expandInventoryPeriods } from "./waterfall.js";
+import { computeWaterfall, expandInventoryPeriods, SOLD_STATUSES, ROOM_OCCUPYING_STATUSES } from "./waterfall.js";
 
 describe("availability waterfall", () => {
   it("computes the spec's worked example (50 total, 2 OOO, 1 hold, 35 confirmed → 12 remaining)", () => {
@@ -58,5 +58,29 @@ describe("expandInventoryPeriods", () => {
     );
     expect(map.get("2026-07-02")).toEqual({ outOfOrder: 3, closed: 5 });
     expect(map.get("2026-07-03")).toEqual({ outOfOrder: 1, closed: 5 });
+  });
+});
+
+describe("ROOM_OCCUPYING_STATUSES vs SOLD_STATUSES", () => {
+  /**
+   * These two lists were one list until request-to-book arrived. Keeping them apart is the whole
+   * safety property: a request must take the room off sale everywhere (or an OTA sells it too) while
+   * never counting as revenue the hotel has agreed to.
+   */
+  it("counts a request as occupying a room", () => {
+    expect(ROOM_OCCUPYING_STATUSES).toContain("requested");
+  });
+
+  it("does NOT count a request as sold", () => {
+    expect(SOLD_STATUSES).not.toContain("requested");
+  });
+
+  it("keeps every sold status occupying — a sale always holds its room", () => {
+    for (const s of SOLD_STATUSES) expect(ROOM_OCCUPYING_STATUSES).toContain(s);
+  });
+
+  it("differs by exactly the request state, so nothing else drifted in", () => {
+    const extra = ROOM_OCCUPYING_STATUSES.filter((s) => !SOLD_STATUSES.includes(s as never));
+    expect(extra).toEqual(["requested"]);
   });
 });

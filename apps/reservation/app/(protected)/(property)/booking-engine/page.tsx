@@ -1,12 +1,14 @@
 import { ExternalLink, Power } from "lucide-react";
 import { slugifyPropertyName } from "@revio/booking";
 import { brandLogoPath } from "@revio/core";
+import { connectMode } from "@revio/payments";
 import { getProperty } from "@/lib/data";
 import { prisma } from "@/lib/db";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { AppearanceForm } from "@/components/booking-engine/AppearanceForm";
 import { LinkForm } from "@/components/booking-engine/LinkForm";
 import { LogoPicker } from "@/components/booking-engine/LogoPicker";
+import { PaymentsCard } from "@/components/booking-engine/PaymentsCard";
 import { saveBookingEngineLook } from "@/lib/actions-booking-engine";
 
 export const dynamic = "force-dynamic";
@@ -127,6 +129,21 @@ export default async function BookingEnginePage() {
             becomes a working link the moment your page goes live.
           </div>
         )}
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Taking payment"
+          subtitle="Whether a guest gets an instant confirmation, or sends you a request to accept. Either way your page sells."
+        />
+        <div className="px-5 py-4">
+          <PaymentsCard
+            chargesEnabled={property.stripeChargesEnabled}
+            hasAccount={!!property.stripeAccountId}
+            checkedAt={property.stripeCheckedAt}
+            mode={connectMode()}
+          />
+        </div>
       </Card>
 
       <Card>

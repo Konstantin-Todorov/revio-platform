@@ -112,6 +112,7 @@ export default async function BookPage({
             stay={{ slug, checkIn, checkOut, guests, roomTypeId, ratePlanId, holdId: hold.id }}
             cancellationPolicy={plan.cancellationPolicy}
             expiresAt={hold.expiresAt.toISOString()}
+            paymentReady={property.paymentReady}
           />
 
           {/* The summary follows on desktop so the total is never off-screen while they type. */}

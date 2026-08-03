@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { BOOKING_PRESET_BY_KEY } from "@revio/core";
+import { createConnectAccount, createOnboardingLink, getConnectStatus } from "@revio/payments";
+import { syncRealChannels } from "@revio/connectivity";
 import { slugifyPropertyName, slugRejectionReason } from "@revio/booking";
 import { prisma } from "./db";
 import { getProperty } from "./data";
@@ -218,4 +220,127 @@ export async function removeBookingLogo(): Promise<void> {
   await prisma.property.update({ where: { id: propertyId }, data: { bookingLogoUrl: null } });
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "logo", newValue: "removed" });
   revalidatePath("/booking-engine");
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * Stripe Connect — the hotel's own account (spec §2.5③).
+ *
+ * The money never touches us: the guest's card is authorised against the hotel's account and funds
+ * settle to the hotel. That is what keeps us out of payment-institution licensing, and the reason
+ * this screen sends the hotel to Stripe rather than collecting anything itself.
+ *
+ * Until `chargesEnabled` is true the booking engine runs in request-to-book mode. That is the
+ * important half: a hotel starts selling on day one and only *loses the instant confirmation* until
+ * its paperwork clears, instead of being blocked behind a verification queue it does not control.
+ * ------------------------------------------------------------------------------------------- */
+
+/** Start (or resume) onboarding. Returns a one-time Stripe URL for the browser to follow. */
+export async function startStripeOnboarding(): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const scopeError = await assertSingleProperty();
+  if (scopeError) return { ok: false, error: scopeError };
+  const property = await getProperty();
+
+  let accountId = property.stripeAccountId;
+  if (!accountId) {
+    const created = await createConnectAccount({
+      propertyName: property.name,
+      email: property.contactEmail,
+      /*
+       * ⚠ Hardcoded, and it must not stay that way.
+       *
+       * Stripe fixes an account's country at creation and it is IMMUTABLE — an account opened in
+       * the wrong one has to be abandoned and redone, with the hotel repeating identity checks. The
+       * Property carries no country field yet, so there is nothing honest to read; BG is where the
+       * first clients are. Before onboarding a hotel outside Bulgaria, add `Property.country` and
+       * read it here. Deliberately not derived from `jurisdiction`, which is a tax-compliance
+       * setting and would be a coincidence, not a source of truth.
+       */
+      country: "BG",
+    });
+    if (!created.ok || !created.accountId) {
+      return { ok: false, error: created.error ?? "Stripe could not create the account." };
+    }
+    accountId = created.accountId;
+    await prisma.property.update({ where: { id: property.id }, data: { stripeAccountId: accountId } });
+    await logAudit(property.id, property.tenantId, {
+      entity: "Booking engine", field: "stripe account", newValue: "created",
+    });
+  }
+
+  const origin = process.env.CRS_ORIGIN ?? "";
+  const link = await createOnboardingLink(accountId, {
+    // Stripe expires these links fast. `refresh` comes back to us so we can mint another one —
+    // without it, a hotel that pauses for coffee is stuck on a dead Stripe page.
+    refreshUrl: `${origin}/booking-engine?stripe=refresh`,
+    returnUrl: `${origin}/booking-engine?stripe=done`,
+  });
+  if (!link.ok || !link.url) return { ok: false, error: link.error ?? "Stripe could not start onboarding." };
+  return { ok: true, url: link.url };
+}
+
+/**
+ * Ask Stripe what the account can do, and store it.
+ *
+ * Polled rather than pushed. A webhook is the better long-term answer and writes the same field, but
+ * polling works today with no public endpoint, no signing secret and no replay story — and the
+ * screen calls this on load, so a hotel that finished onboarding sees the truth immediately.
+ */
+export async function refreshStripeStatus(): Promise<void> {
+  if (await assertSingleProperty()) return;
+  const property = await getProperty();
+  if (!property.stripeAccountId) return;
+
+  const status = await getConnectStatus(property.stripeAccountId);
+  await prisma.property.update({
+    where: { id: property.id },
+    data: { stripeChargesEnabled: status.chargesEnabled, stripeCheckedAt: new Date() },
+  });
+  revalidatePath("/booking-engine");
+}
+
+/**
+ * Accept a request-to-book: it becomes a real reservation.
+ *
+ * The room was already occupied by the request (`ROOM_OCCUPYING_STATUSES`), so accepting changes no
+ * availability and needs no re-check — which is exactly why requests hold inventory in the first
+ * place. Declining is the case that frees a room, and that one re-pushes.
+ */
+export async function acceptBookingRequest(reservationId: string): Promise<{ ok: boolean; error?: string }> {
+  const scopeError = await assertSingleProperty();
+  if (scopeError) return { ok: false, error: scopeError };
+  const property = await getProperty();
+
+  const updated = await prisma.reservation.updateMany({
+    where: { id: reservationId, propertyId: property.id, status: "requested" },
+    data: { status: "confirmed" },
+  });
+  if (updated.count === 0) return { ok: false, error: "That request has already been answered." };
+
+  await logAudit(property.id, property.tenantId, {
+    entity: "Reservation", field: "status", newValue: "confirmed (request accepted)",
+  });
+  revalidatePath("/reservations");
+  return { ok: true };
+}
+
+/** Decline a request — the room goes back on sale, everywhere, immediately. */
+export async function declineBookingRequest(reservationId: string): Promise<{ ok: boolean; error?: string }> {
+  const scopeError = await assertSingleProperty();
+  if (scopeError) return { ok: false, error: scopeError };
+  const property = await getProperty();
+
+  const updated = await prisma.reservation.updateMany({
+    where: { id: reservationId, propertyId: property.id, status: "requested" },
+    data: { status: "cancelled" },
+  });
+  if (updated.count === 0) return { ok: false, error: "That request has already been answered." };
+
+  await logAudit(property.id, property.tenantId, {
+    entity: "Reservation", field: "status", newValue: "cancelled (request declined)",
+  });
+  // A declined request releases a room that was off sale. Every channel has to hear about that, and
+  // hear about it now — a room the hotel just freed is the one most likely to sell tonight.
+  try { await syncRealChannels(prisma, property.id); } catch { /* never fail the decline on a push */ }
+  revalidatePath("/reservations");
+  return { ok: true };
 }

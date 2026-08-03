@@ -53,12 +53,29 @@ export function computeWaterfall(input: WaterfallInput): WaterfallResult {
 }
 
 /**
- * Reservation statuses that count as "sold" in every availability/metric derivation.
+ * Reservation statuses that count as **sold** — a booking the hotel has money coming for.
  * "modified" = a confirmed reservation that was modified (flag-as-status); "overbooked" still
  * occupies a room; "no_show" counts as sold by default (the room was held and usually charged —
  * PropertyDefaults.countNoShowsAsSold toggles it OFF in metric queries only).
  */
 export const SOLD_STATUSES = ["confirmed", "modified", "overbooked", "no_show"] as const;
+
+/**
+ * Reservation statuses that **occupy a room** — the availability question, which is not the same
+ * question as "is it sold".
+ *
+ * A request-to-book (`requested`) is the case that forced these apart. It arrives when a hotel has
+ * not finished connecting its Stripe account, so the guest could not leave a card guarantee and the
+ * hotel has not accepted the stay yet. It is emphatically **not a sale** — counting it in pickup or
+ * ADR would report revenue the hotel has not agreed to. But the room is spoken for: if a request did
+ * not occupy it, the same night stays on sale on Booking.com and the hotel accepts a request for a
+ * room an OTA has meanwhile sold. That is the exact double-booking this platform exists to prevent,
+ * so the room is held from the moment the request lands and released only if the hotel declines.
+ *
+ * Use this for **anything that decides whether a room can be sold** — the waterfall, the calendar,
+ * the ARI push. Use `SOLD_STATUSES` for anything that counts money or greets a guest.
+ */
+export const ROOM_OCCUPYING_STATUSES = [...SOLD_STATUSES, "requested"] as const;
 
 export interface InventoryPeriodLike {
   kind: string; // out_of_order | closure

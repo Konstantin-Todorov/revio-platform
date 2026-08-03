@@ -155,6 +155,15 @@ model Property {
   bookingHeadline           String? // hero headline; null = platform default
   bookingSubheadline        String?
   bookingShowTrust          Boolean   @default(true) // the "why book direct" row
+  // Stripe Connect (spec §2.5③). The hotel's OWN Stripe account — the guest's card is authorised
+  // against it and funds go straight to them, so we never hold client money and never need a
+  // payment-institution licence. `chargesEnabled` mirrors Stripe's own flag rather than being our
+  // opinion: onboarding can be "submitted" and still not accept charges, and only Stripe knows.
+  // Until it is true the booking engine runs in REQUEST-TO-BOOK mode, so a hotel is never blocked
+  // from selling while its paperwork clears.
+  stripeAccountId           String?   @unique
+  stripeChargesEnabled      Boolean   @default(false)
+  stripeCheckedAt           DateTime? // last time we asked Stripe, so the screen can say how fresh it is
   // CRS Distribution (spec §3.8): exactly ONE connected channel manager per property.
   // reviolink_internal = the platform's own CM (shared core, automatic mapping); third-party
   // kinds plug into the identical ChannelManagerConnector interface later — never a second path.

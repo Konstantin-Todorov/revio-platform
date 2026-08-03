@@ -66,6 +66,9 @@ export default async function ConfirmationPage({
   });
 
   const cancelled = reservation.status === "cancelled";
+  // The hotel has not accepted this yet — it happens when they have not finished connecting Stripe,
+  // so no card guarantee could be taken and an instant confirmation would be a promise nobody made.
+  const requested = reservation.status === "requested";
 
   return (
     <>
@@ -85,12 +88,23 @@ export default async function ConfirmationPage({
           >
             <Check size={26} strokeWidth={2.6} aria-hidden />
           </span>
+          {/*
+            Three outcomes, three headlines. A request-to-book is NOT a confirmation and must never
+            be dressed as one — the hotel has not accepted it yet, and a guest who reads "You're
+            booked" and turns up to nothing has been lied to by a UI copy decision.
+          */}
           <h1 className="display mt-5 text-[2rem] sm:text-[2.6rem]">
-            {cancelled ? "This booking was cancelled" : "You're booked"}
+            {cancelled ? "This booking was cancelled" : requested ? "Request sent" : "You're booked"}
           </h1>
           <p className="mt-3 text-[15px]" style={{ color: "hsl(var(--ink-soft))" }}>
             {cancelled ? (
               <>Contact the hotel if this wasn&rsquo;t what you intended.</>
+            ) : requested ? (
+              <>
+                {property.name} has your request and will confirm by email to{" "}
+                <strong style={{ color: "hsl(var(--ink))" }}>{reservation.guest?.email}</strong>. The
+                room is held for you in the meantime — nothing has been charged.
+              </>
             ) : (
               <>
                 We&rsquo;ve sent a confirmation to{" "}
@@ -144,7 +158,7 @@ export default async function ConfirmationPage({
           </div>
         </section>
 
-        {!cancelled && <WhatNext property={property} />}
+        {!cancelled && <WhatNext property={property} requested={requested} />}
       </main>
 
       <PropertyFooter property={property} />
@@ -152,24 +166,49 @@ export default async function ConfirmationPage({
   );
 }
 
-/** The questions a guest actually has once the booking is done. */
-function WhatNext({ property }: { property: PublicProperty }) {
+/** The questions a guest actually has once the booking is done — or once they have asked for it. */
+function WhatNext({ property, requested }: { property: PublicProperty; requested: boolean }) {
   return (
     <section className="mt-6">
       <h2 className="display text-[1.2rem]">What happens now</h2>
+      {/*
+        A request is not a booking, so this list must not read like one. The old copy — "your
+        confirmation email", "you're booked with them" — contradicted the "Request sent" headline
+        directly above it, which is the sort of mixed message that has a guest turning up certain
+        they had a room.
+      */}
       <ul className="mt-4 space-y-2.5">
-        <Next>
-          Your confirmation email has everything on this page. Keep the reference — it&rsquo;s all the
-          hotel needs to find you.
-        </Next>
-        <Next>
-          Arrive any time after {property.checkInTime}. Nothing to print, nothing to pay in advance.
-        </Next>
-        <Next>
-          Need to change or cancel? Call the hotel directly
-          {property.phone ? <> on <strong className="font-semibold">{property.phone}</strong></> : null} — you&rsquo;re
-          booked with them, not through an agency, so they can just do it.
-        </Next>
+        {requested ? (
+          <>
+            <Next>
+              {property.name} will confirm by email, usually within a few hours. Keep the reference —
+              it&rsquo;s all they need to find your request.
+            </Next>
+            <Next>
+              Your room is held until they answer, so nobody else can take it while you wait.
+            </Next>
+            <Next>
+              Changed your mind, or need it sooner? Call them directly
+              {property.phone ? <> on <strong className="font-semibold">{property.phone}</strong></> : null} —
+              you&rsquo;re dealing with the hotel, not an agency.
+            </Next>
+          </>
+        ) : (
+          <>
+            <Next>
+              Your confirmation email has everything on this page. Keep the reference — it&rsquo;s all the
+              hotel needs to find you.
+            </Next>
+            <Next>
+              Arrive any time after {property.checkInTime}. Nothing to print, nothing to pay in advance.
+            </Next>
+            <Next>
+              Need to change or cancel? Call the hotel directly
+              {property.phone ? <> on <strong className="font-semibold">{property.phone}</strong></> : null} — you&rsquo;re
+              booked with them, not through an agency, so they can just do it.
+            </Next>
+          </>
+        )}
       </ul>
 
       {(property.address || property.phone) && (

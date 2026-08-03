@@ -57,14 +57,26 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
   }
 
   /**
-   * The card guarantee. Charges nothing — it verifies the card so the hotel can hold the room and
-   * recover a no-show. No card number is collected by this form or stored by us; see @revio/payments.
+   * The card guarantee — but only when the hotel can actually take one.
+   *
+   * `paymentReady` mirrors Stripe's `charges_enabled` on the hotel's OWN connected account. Until
+   * that is true there is no account to authorise against, so taking a "guarantee" would mean
+   * storing a token nobody can ever capture: the front desk would read *card on file* and find
+   * nothing behind it on the night a guest failed to arrive. So the engine falls back to
+   * **request-to-book** — no card, and the hotel accepts the stay itself.
+   *
+   * Decided ONCE, here, and passed down. Reading `paymentReady` again further in would risk a
+   * booking that tells the guest "confirmed" and the hotel "please review".
    */
-  const guarantee = await createCardGuarantee(
-    property.baseCurrency,
-    `Guarantee · ${property.name} · ${str(fd, "checkIn")}`,
-  );
-  if (!guarantee.ok) {
+  const requestOnly = !property.paymentReady;
+
+  const guarantee = requestOnly
+    ? null
+    : await createCardGuarantee(
+        property.baseCurrency,
+        `Guarantee · ${property.name} · ${str(fd, "checkIn")}`,
+      );
+  if (guarantee && !guarantee.ok) {
     return { ok: false, error: "We couldn't confirm your card guarantee. Please try again, or call the hotel." };
   }
 
@@ -76,7 +88,8 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
     ratePlanId: str(fd, "ratePlanId"),
     guest: { firstName, lastName, email, ...(phone ? { phone } : {}) },
     ...(holdId ? { holdId } : {}),
-    guarantee: { ref: guarantee.ref, brand: guarantee.brand, last4: guarantee.last4 },
+    ...(guarantee ? { guarantee: { ref: guarantee.ref, brand: guarantee.brand, last4: guarantee.last4 } } : {}),
+    requestOnly,
     guestNote: str(fd, "note"),
   });
 

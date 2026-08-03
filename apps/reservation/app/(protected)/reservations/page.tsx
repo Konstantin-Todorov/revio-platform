@@ -3,6 +3,8 @@ import { CalendarPlus, CalendarCheck } from "lucide-react";
 import { getActiveHolds, getReservationsList, type CrsDateType } from "@/lib/data";
 import { HoldCountdown } from "@/components/reservations/HoldCountdown";
 import { ReservationsTable, type ResRow } from "@/components/reservations/ReservationsTable";
+import { RequestQueue, type BookingRequest } from "@/components/reservations/RequestQueue";
+import { prisma } from "@/lib/db";
 import { releaseExpiredHolds } from "@/lib/holds";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -11,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 // Full lifecycle (spec §3.3): Draft → Hold → Confirmed → Archived (+ Expired, Failed) —
 // holds and drafts are filterable states, not hidden behind "Any status".
-const STATUSES = ["confirmed", "modified", "hold", "draft", "cancelled", "no_show", "overbooked", "failed_import", "expired"];
+const STATUSES = ["requested", "confirmed", "modified", "hold", "draft", "cancelled", "no_show", "overbooked", "failed_import", "expired"];
 
 const DATE_TYPES: { value: CrsDateType; label: string }[] = [
   { value: "check_in", label: "Check-in" },
@@ -51,6 +53,36 @@ export default async function ReservationsPage({
     };
   });
 
+  /*
+   * Requests the hotel has not answered. Loaded here rather than inside the table because they are
+   * not a filtered view of the list — they are work, and work belongs above the thing you search.
+   */
+  const requestRows = await prisma.reservation.findMany({
+    where: { propertyId: property.id, status: "requested" },
+    orderBy: { importedAt: "asc" },
+    take: 20,
+    include: {
+      lines: { include: { roomType: { select: { name: true } } }, take: 1 },
+    },
+  });
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const requests: BookingRequest[] = requestRows.map((r) => {
+    const line = r.lines[0];
+    const nights = line
+      ? Math.round((line.checkOut.getTime() - line.checkIn.getTime()) / 86_400_000)
+      : 0;
+    return {
+      id: r.id,
+      guestName: r.guestName,
+      roomTypeName: line?.roomType?.name ?? "Room",
+      checkIn: line ? ymd(line.checkIn) : "—",
+      checkOut: line ? ymd(line.checkOut) : "—",
+      nights,
+      totalLabel: `${(r.totalMinor / 100).toLocaleString(undefined, { style: "currency", currency: r.currency })}`,
+      requestedAt: ymd(r.importedAt),
+    };
+  });
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -62,6 +94,8 @@ export default async function ReservationsPage({
           </Link>
         }
       />
+
+      <RequestQueue requests={requests} />
 
       <Card className="p-3">
         <form method="GET" className="flex flex-wrap items-center gap-2">

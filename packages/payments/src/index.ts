@@ -6,3 +6,4 @@
  * real money.
  */
 export * from "./gateway.js";
+export * from "./connect.js";

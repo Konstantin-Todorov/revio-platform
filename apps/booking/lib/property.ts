@@ -42,6 +42,15 @@ export interface PublicProperty {
   headline: string;
   subheadline: string;
   showTrust: boolean;
+  /**
+   * Can this hotel actually take a card guarantee right now?
+   *
+   * Mirrors Stripe's own `charges_enabled` on the hotel's connected account (spec §2.5③). False
+   * means the booking engine runs in **request-to-book** mode: no card step, and the stay arrives as
+   * `requested` for the hotel to accept. A hotel is never blocked from selling while its Stripe
+   * paperwork clears — it just cannot promise an instant confirmation, and the page says so.
+   */
+  paymentReady: boolean;
 }
 
 /**
@@ -67,6 +76,7 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
       emailBrandColor: true, emailLogoUrl: true, emailLogoVersion: true, emailFont: true,
       // Which logos exist, and when they last changed — see `logoFor`.
       brandAssets: { select: { kind: true, updatedAt: true } },
+      stripeChargesEnabled: true,
       bookingPreset: true, bookingBrandColor: true, bookingFont: true, bookingLogoUrl: true,
       bookingHeadline: true, bookingSubheadline: true, bookingShowTrust: true,
       tenant: { select: { status: true, hasReservation: true } },
@@ -108,6 +118,7 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
     headline: property.bookingHeadline?.trim() || BOOKING_COPY_DEFAULTS.headline,
     subheadline: property.bookingSubheadline?.trim() || BOOKING_COPY_DEFAULTS.subheadline,
     showTrust: property.bookingShowTrust,
+    paymentReady: property.stripeChargesEnabled,
   };
 });
 

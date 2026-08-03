@@ -14,7 +14,7 @@
 import type { forTenant } from "@revio/db";
 import {
   computeStayCharges, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction,
-  SOLD_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
+  ROOM_OCCUPYING_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
 } from "@revio/core";
 import { syncRealChannels } from "@revio/connectivity";
 
@@ -139,7 +139,7 @@ async function loadStayContext(
       },
     }),
     db.reservationLine.findMany({
-      where: { reservation: { propertyId: property.id, status: { in: [...SOLD_STATUSES] } }, checkIn: { lt: end }, checkOut: { gt: start } },
+      where: { reservation: { propertyId: property.id, status: { in: [...ROOM_OCCUPYING_STATUSES] } }, checkIn: { lt: end }, checkOut: { gt: start } },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
     }),
     db.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
@@ -311,6 +311,15 @@ export interface PublicBookingPayload extends PublicStayQuery {
   holdId?: string;
   /** Gateway token + display bits. NEVER a card number — that stays with the gateway. */
   guarantee?: { ref: string; brand?: string | undefined; last4?: string | undefined };
+  /**
+   * Request-to-book: the hotel has not finished connecting Stripe, so no card could be taken and the
+   * stay is not confirmed until the hotel accepts it.
+   *
+   * Passed in rather than read here because the caller already loaded the property and because this
+   * must be decided by ONE reading of `stripeChargesEnabled` — deciding it twice invites a booking
+   * that shows the guest a confirmation and the hotel a request.
+   */
+  requestOnly?: boolean;
   /** Anything the guest typed in "requests". Stored on the reservation, shown to the front desk. */
   guestNote?: string;
 }
@@ -394,7 +403,10 @@ export async function publicCreateReservation(
       tenantId: property.tenantId, propertyId: property.id,
       channelId: null, externalId: null, // direct channel — never touches RevioLink/Channex inbound
       guestName: `${guest.firstName} ${guest.lastName}`,
-      status: "confirmed",
+      // `requested` occupies the room (ROOM_OCCUPYING_STATUSES) but is not a sale until the hotel
+      // accepts. Holding inventory from the moment the request lands is the whole point: otherwise
+      // the same night stays on sale on an OTA and the hotel accepts a room that is already gone.
+      status: p.requestOnly ? "requested" : "confirmed",
       totalMinor, currency: property.baseCurrency,
       propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
       guestId: guest.id, bookingSourceId: source.id,
@@ -432,7 +444,9 @@ export async function publicCreateReservation(
     data: {
       tenantId: property.tenantId, propertyId: property.id,
       kind: "push", status: "success",
-      summary: "Availability reduced — new reservation confirmed (Booking Engine)",
+      summary: p.requestOnly
+        ? "Availability reduced — booking request received (Booking Engine)"
+        : "Availability reduced — new reservation confirmed (Booking Engine)",
     },
   });
   // The one availability truth changed — push the effect to any real channels immediately.
