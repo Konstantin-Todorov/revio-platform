@@ -9,13 +9,19 @@ because the drill below was actually run, and because it found things that reaso
 
 | Layer | Status | Notes |
 | --- | --- | --- |
-| Railway **volume backups** (daily/weekly/monthly snapshots) | ❌ **not enabled** | Two clicks: Postgres service → **Backups** tab → pick schedules. Daily keeps 6 days, weekly 1 month, monthly 3 months. |
-| Railway **point-in-time recovery** (continuous WAL archiving) | ❌ **not enabled** | Same tab → **Enable PITR**. ~4-week window. **The window starts when you enable it** — switching it on after an incident recovers nothing. |
-| **Logical dumps** (`pg_dump`) | ⚠️ manual only | `packages/db/scripts/backup.sh`. The only layer that survives deleting the Railway project itself. |
-| **Storage bucket** (room photos, brand assets) | ⚠️ manual only | Covered by the same script. **No database backup contains these bytes.** |
+| Railway **volume backups** (daily/weekly/monthly snapshots) | 🚫 **unavailable — Pro plan only** | Verified in the dashboard 2026-08-05: *"Backups and point-in-time recovery (PITR) are only available for customers on the Pro plan."* The account is on **Hobby**. There is no toggle to click. |
+| Railway **point-in-time recovery** (continuous WAL archiving) | 🚫 **unavailable — Pro plan only** | Same gate. Note the window only covers time *after* enabling, so it recovers nothing retroactively. |
+| **Logical dumps** (`pg_dump`) | ✅ **automatic before every migrating push** | `.githooks/pre-push` → `packages/db/scripts/backup.sh`. The only layer that survives deleting the Railway project itself. |
+| **Storage bucket** (room photos, brand assets) | ✅ same run | **No database backup contains these bytes.** |
 
-Neither Railway layer can be switched on from the CLI or the API — they are dashboard-only, so they
-are the one part of this that has to be done by hand.
+**The plan gate, priced honestly.** Hobby is $5/month and includes $5 of usage; Pro is $20 and
+includes $20. Current usage is **$5.15/month**, so today the upgrade costs about **+$15/month** — and
+the gap closes to nothing as usage approaches $20, where the two plans cost the same.
+
+Worth knowing before paying it: **both Railway layers live inside the project they protect**, and
+Railway's own docs state that wiping a volume deletes its backups. The `pg_dump` layer below is the
+only copy that survives losing the project. What Pro buys is *granularity* (restore to 14:32 rather
+than to the last push) and *unattended* operation — real value, but not a superset.
 
 ## Drill results
 
@@ -96,7 +102,43 @@ is luck, not a safeguard.
 
 There are **zero orphans in the other direction**: every object in the bucket is referenced by a row.
 
-## Taking a backup
+## Automatic: the push that migrates production takes a backup first
+
+Every service runs `prisma migrate deploy` on deploy, and every deploy is a push to `main`. So
+**`git push` IS the schema change** — there is no later moment to take a "before" snapshot, and no
+earlier one where you know a migration is genuinely going out. `.githooks/pre-push` hooks exactly
+there.
+
+```bash
+git config core.hooksPath .githooks     # one-time, per clone
+```
+
+- **Fires only when the push actually carries migration files.** A docs commit does not need a
+  snapshot, and a hook that costs thirty seconds on every push is a hook people turn off.
+- **A failed backup blocks the push.** That is the point. Warn-and-continue means the one time the
+  backup was broken is also the time you migrated production without one — and you learn both facts
+  in the same minute you needed it. Fail closed.
+- **Bypass deliberately:** `SKIP_BACKUP=1 git push`.
+- Version-controlled in `.githooks/` rather than living unreviewed inside someone's `.git`.
+
+**Size is a non-issue: ~850 KB per backup** (389 KB database + 457 KB bucket). `BACKUP_KEEP` (default
+20) prunes oldest-first *after* the new backup completes, so a failed run can never delete a good
+backup to make room for nothing. Twenty backups is under 20 MB. `backups/` is gitignored.
+
+Run it by hand before anything else risky — a demo, a bulk edit, a manual data change:
+
+```bash
+BACKUP_REASON="pre-demo" ./packages/db/scripts/backup.sh
+```
+
+The reason is recorded in the manifest, because at 2am the only label that helps is *"the one taken
+right before the thing that broke it."*
+
+**What this does not cover:** it runs when *you* push. It cannot catch a bad data edit made through
+the UI on a Tuesday afternoon. That gap closes with either Railway PITR (needs Pro) or an unattended
+scheduled dump — see *Do this next*.
+
+## Taking a backup manually
 
 ```bash
 ./packages/db/scripts/backup.sh            # writes ./backups/<timestamp>/
@@ -133,9 +175,18 @@ Then compare row counts against whatever you still have, and expect append-only 
 
 ## Do this next
 
-1. **Enable PITR and daily volume backups in the Railway dashboard.** The single highest-value action
-   here, and it cannot be scripted. PITR's window only covers time *after* you switch it on.
-2. **Schedule `backup.sh`** — a Railway cron service uploading to a separate bucket gives an offsite
-   copy that survives losing the project. Until then the RPO is "whenever someone last remembered".
+1. **Nothing, until there is a paying hotel.** What is at risk today is demo data and test bookings;
+   losing it costs an afternoon of reseeding. The pre-push hook covers the operation most likely to
+   destroy real data — a migration — and it covers it precisely.
+2. **When the first real client signs, close the unattended gap.** The hook runs when *you* push; it
+   cannot catch a bad edit made through the UI on a Tuesday afternoon. Two ways, and the choice is
+   about money rather than engineering:
+   - **Upgrade to Pro** (~+$15/month today) for volume backups + PITR — restore to any minute, no
+     maintenance, but the copies die with the project.
+   - **A Railway cron service** running `backup.sh` on a schedule and uploading to a *separate*
+     bucket — a few cents of compute, no plan change, and it survives losing the project. More setup,
+     and one more thing to keep working.
+
+   Doing both is the actual answer for a production SaaS holding other people's reservations.
 3. **Decide what to do about Plovdiv's four photos**: re-upload them, or delete the rows so the
    database stops promising an image it cannot produce.

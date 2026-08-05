@@ -16,6 +16,14 @@
 set -euo pipefail
 
 OUT="${1:-backups}"
+# Why this backup was taken — "pre-push · 2 new migrations", "manual", "pre-demo". Recorded in the
+# manifest and in the directory name, because when you are choosing which backup to restore at 2am,
+# "the one taken right before the migration that broke it" is the only label that helps.
+REASON="${BACKUP_REASON:-manual}"
+# Keep this many. Each backup is under a megabyte (386 KB database + 457 KB bucket at the time of
+# writing), so retention is generous on purpose — pruning aggressively to save kilobytes would be
+# trading the thing that has value for the thing that costs nothing.
+KEEP="${BACKUP_KEEP:-20}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DEST="$OUT/$STAMP"
 mkdir -p "$DEST"
@@ -49,12 +57,28 @@ cp "$(dirname "$0")/../prisma/rls-role.sql" "$DEST/rls-role.sql"
 
 {
   echo "taken:            $STAMP"
+  echo "reason:           $REASON"
   echo "server version:   $(psql "$PROD_URL" -tAc 'SHOW server_version;')"
   echo "database size:    $(psql "$PROD_URL" -tAc 'SELECT pg_size_pretty(pg_database_size(current_database()));')"
   echo "latest migration: $(psql "$PROD_URL" -tAc 'SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL ORDER BY finished_at DESC LIMIT 1;')"
   echo "dump bytes:       $(wc -c < "$DEST/database.dump" | tr -d ' ')"
   echo "bucket objects:   $(find "$DEST/bucket" -type f 2>/dev/null | wc -l | tr -d ' ')"
 } > "$DEST/MANIFEST.txt"
+
+# Prune oldest, keeping $KEEP. Done AFTER the new backup is complete and verified non-empty, so a
+# failed run can never delete a good backup to make room for nothing.
+# `head -n -N` is a GNU extension and this runs on macOS, where it fails outright — which the pre-push
+# hook then reports as a failed backup and blocks the push. Count and take from the front instead;
+# it is portable, and the timestamped names sort chronologically by construction.
+if [ "$KEEP" -gt 0 ]; then
+  total="$(find "$OUT" -mindepth 1 -maxdepth 1 -type d -name '20*' | wc -l | tr -d ' ')"
+  if [ "$total" -gt "$KEEP" ]; then
+    find "$OUT" -mindepth 1 -maxdepth 1 -type d -name '20*' | sort | head -n "$((total - KEEP))" | while read -r old; do
+      rm -rf "$old"
+      echo "  pruned $(basename "$old")"
+    done
+  fi
+fi
 
 echo
 cat "$DEST/MANIFEST.txt"

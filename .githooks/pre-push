@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+#
+# Back up production before the push that migrates it.
+#
+# Every Railway service runs `prisma migrate deploy` on deploy, and every deploy is triggered by a
+# push to main. So `git push` IS the schema change — there is no later moment to take a "before"
+# backup, and no earlier one where you know a migration is really going out.
+#
+# It fires ONLY when the push actually carries new migrations. A docs commit does not need a database
+# snapshot, and a hook that costs thirty seconds on every push is a hook people disable.
+#
+# **A failed backup blocks the push.** That is the entire point. The alternative — warn and continue —
+# means the one time the backup was broken is also the time you migrated production without one, and
+# you find out in the same minute you needed it. Fail closed.
+#
+# Bypass, when you have thought about it:  SKIP_BACKUP=1 git push
+#
+# Installed via `git config core.hooksPath .githooks` (see docs/RESTORE.md), so the hook is version-
+# controlled rather than living un-reviewed in someone's .git directory.
+set -euo pipefail
+
+REMOTE_REF_MAIN="refs/heads/main"
+ROOT="$(git rev-parse --show-toplevel)"
+
+if [ "${SKIP_BACKUP:-}" = "1" ]; then
+  echo "pre-push: SKIP_BACKUP=1 — skipping the production backup."
+  exit 0
+fi
+
+# stdin gives us "<local ref> <local sha> <remote ref> <remote sha>" per ref being pushed.
+migrations=0
+while read -r _local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "$REMOTE_REF_MAIN" ] || continue          # only main deploys
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue  # branch deletion
+
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    range="$local_sha"                                        # new branch — inspect its tip
+  else
+    range="$remote_sha..$local_sha"
+  fi
+
+  # Only migration FILES count. Touching seed.ts or the schema without a migration changes nothing
+  # about production's shape on deploy.
+  if git diff --name-only "$range" -- 'packages/db/prisma/migrations/**/migration.sql' | grep -q .; then
+    migrations=$(git diff --name-only "$range" -- 'packages/db/prisma/migrations/**/migration.sql' | wc -l | tr -d ' ')
+  fi
+done
+
+if [ "$migrations" = "0" ]; then
+  exit 0
+fi
+
+echo
+echo "pre-push: this push carries $migrations migration file(s) — backing up production first."
+echo "          (SKIP_BACKUP=1 git push  to override, if you have a reason)"
+echo
+
+# Prefer client tools matching the server. The script itself aborts on a mismatch; this just spares
+# the common macOS case where an older pg_dump is first on PATH.
+for v in 18 17 16; do
+  if [ -x "/opt/homebrew/opt/postgresql@$v/bin/pg_dump" ]; then
+    export PG_DUMP="/opt/homebrew/opt/postgresql@$v/bin/pg_dump"
+    break
+  fi
+done
+
+if ! BACKUP_REASON="pre-push · $migrations migration file(s)" "$ROOT/packages/db/scripts/backup.sh" "$ROOT/backups"; then
+  echo
+  echo "pre-push: BACKUP FAILED — push aborted." >&2
+  echo "          Production is about to run migrations and there is no fresh snapshot to go back to." >&2
+  echo "          Fix the backup, or push with SKIP_BACKUP=1 if you accept that." >&2
+  exit 1
+fi
+
+echo
+echo "pre-push: backup complete — continuing with the push."
