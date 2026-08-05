@@ -30,9 +30,23 @@ found by a test, not in production.
 `forcePathStyle` is on whenever `STORAGE_ENDPOINT` is set: Railway and MinIO address buckets by path,
 AWS by subdomain, and that mismatch is the usual reason a correct-looking S3 client 404s.
 
-⚠️ **The S3 driver has not been exercised against a real bucket yet.** It typechecks and is written
-against the AWS SDK; the first deploy with `STORAGE_BUCKET` set must be verified by uploading one
-photo and confirming it loads from `STORAGE_PUBLIC_BASE`.
+✅ **The S3 driver is live and exercised.** Verified 2026-08-05 against the production bucket: objects
+list, download and serve (`/api/media/…` → HTTP 200).
+
+⚠️ **Rows can outlive their bytes, and nothing currently notices.** The keys in `RoomTypePhoto` and
+`BrandAsset` are a reference to a different system, so the database cannot enforce that the object
+exists — there is no foreign key across that boundary. The R4 drill found **4 of 7 production room
+photos pointing at objects that are gone** (`docs/RESTORE.md` §3): they were uploaded while the
+**local-disk driver** was active, into a container filesystem that a deploy replaced. The database
+kept promising an image nobody can produce.
+
+Two consequences worth carrying:
+
+- **Switching a property to the bucket does not migrate what it already had.** Photos uploaded before
+  `STORAGE_BUCKET` was set need re-uploading; the rows will not tell you which.
+- **Back the bucket up with the database, not separately.** `packages/db/scripts/backup.sh` takes both
+  in one run for exactly this reason — restoring one without the other yields rows that are
+  individually correct and collectively useless.
 
 ## Keys are derived, never accepted
 

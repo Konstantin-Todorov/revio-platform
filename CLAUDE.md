@@ -168,7 +168,9 @@ Channex (verified on prod: a PMS OOO and a CRS save each produced a Channex task
 across one/some/all product combos. Marketing/positioning copy for the future product websites is drafted
 in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. See `BUILD-PLAN.md` for
 the phased order, `ARCHITECTURE.md` for rationale,
-`ACCESS-MODEL.md` for the access model, and `DEPLOY.md` for the deploy runbook.
+`ACCESS-MODEL.md` for the access model, `DEPLOY.md` for the deploy runbook, and **`docs/RESTORE.md`** for
+backup/restore (drilled 2026-08-05 — RTO ≈1 min, and it found that four production room photos already
+point at bytes that no longer exist).
 
 **→ ✅ V2 PLATFORM OVERHAUL COMPLETE (founder specs 2026-07-09, `docs/specs/`) — all phases A–F shipped,
 tested, live.** Governed by six specs: `HIERARCHY.md`, `CM-GUIDE-V2.md` + `CM-UPDATES-V1.md` (RevioLink),
