@@ -31,8 +31,40 @@ export default async function ClientsPage() {
               {clients.map((c) => (
                 <tr key={c.id} className="border-b border-surface-border/60 align-top transition-colors last:border-0 hover:bg-surface-muted/60">
                   <td className="px-4 py-3">
-                    <div className="font-semibold text-ink-900">{c.name}</div>
+                    <div className="flex items-center gap-1.5">
+                      {/* A dot, not a badge: it has to be scannable down a column of forty hotels,
+                          and colour alone carries no meaning without the flag text beside it below. */}
+                      {c.worst && (
+                        <span
+                          aria-hidden
+                          className={`h-2 w-2 shrink-0 rounded-full ${
+                            c.worst === "act" ? "bg-danger-600" : c.worst === "soon" ? "bg-warning-500" : "bg-ink-300"
+                          }`}
+                        />
+                      )}
+                      <span className="font-semibold text-ink-900">{c.name}</span>
+                    </div>
                     <div className="text-[11px] text-ink-400">/{c.slug}</div>
+                    {/* The reason, in words. A row that says only "something is wrong" makes you open
+                        four other screens to find out what — which is the problem this replaces. */}
+                    {c.attention.length > 0 && (
+                      <ul className="mt-1.5 space-y-0.5">
+                        {c.attention.slice(0, 3).map((f) => (
+                          <li
+                            key={f.title}
+                            title={f.detail}
+                            className={`text-[11px] ${
+                              f.severity === "act" ? "font-semibold text-danger-600" : f.severity === "soon" ? "text-warning-600" : "text-ink-400"
+                            }`}
+                          >
+                            {f.title}
+                          </li>
+                        ))}
+                        {c.attention.length > 3 && (
+                          <li className="text-[11px] text-ink-300">+{c.attention.length - 3} more</li>
+                        )}
+                      </ul>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {c.owner ? <><div className="text-ink-800">{c.owner.name}</div><div className="text-[11px] text-ink-400">{c.owner.email}</div></> : <span className="text-ink-300">—</span>}

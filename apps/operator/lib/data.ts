@@ -1,6 +1,7 @@
 import "server-only";
 import { forSystem, decryptSecret, keyHint } from "@revio/db";
 import { monthlyPriceMinor, billedProducts, type Entitlements } from "./pricing";
+import { clientAttention, sortBySeverity, worstSeverity } from "./attention";
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
@@ -53,6 +54,7 @@ export type ClientRow = Awaited<ReturnType<typeof getClients>>[number];
 
 /** Every client (tenant) with its entitlements, plan, status, and per-tenant counts. */
 export async function getClients() {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
   const tenants = await prisma.tenant.findMany({
     include: { properties: { select: { id: true, name: true } }, users: { where: { role: "owner" }, take: 1 } },
     orderBy: { createdAt: "asc" },
@@ -60,22 +62,57 @@ export async function getClients() {
 
   return Promise.all(
     tenants.map(async (t) => {
-      const [roomTypes, channels, channelsConnected, reservations, openErrors, lastSync] = await Promise.all([
+      const [roomTypes, channels, channelsConnected, reservations, openErrors, lastSync,
+             units, lastReservation, reservationsLast30d, bookingEngineProperties, directLast30d, unpaidInvoices] = await Promise.all([
         prisma.roomType.count({ where: { tenantId: t.id } }),
         prisma.channel.count({ where: { tenantId: t.id } }),
         prisma.channel.count({ where: { tenantId: t.id, status: "connected" } }),
         prisma.reservation.count({ where: { tenantId: t.id } }),
         prisma.errorItem.count({ where: { tenantId: t.id, resolved: false } }),
         prisma.channel.findFirst({ where: { tenantId: t.id, lastSyncAt: { not: null } }, orderBy: { lastSyncAt: "desc" }, select: { lastSyncAt: true } }),
+        // Signals for `clientAttention` — each one exists to answer a question the counts cannot:
+        // is a product they pay for actually set up, and are they still using the thing at all.
+        prisma.unit.count({ where: { tenantId: t.id } }),
+        prisma.reservation.findFirst({ where: { tenantId: t.id }, orderBy: { importedAt: "desc" }, select: { importedAt: true } }),
+        prisma.reservation.count({ where: { tenantId: t.id, importedAt: { gte: thirtyDaysAgo } } }),
+        prisma.property.count({ where: { tenantId: t.id, bookingEngineEnabled: true } }),
+        prisma.reservation.count({
+          where: { tenantId: t.id, importedAt: { gte: thirtyDaysAgo }, bookingSource: { category: "direct" } },
+        }),
+        prisma.invoice.findMany({
+          where: { tenantId: t.id, status: { not: "paid" } },
+          orderBy: { period: "asc" },
+          select: { period: true, amountMinor: true, status: true },
+        }),
       ]);
+
+      const entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
+      const attention = sortBySeverity(
+        clientAttention({
+          status: t.status,
+          createdAt: t.createdAt,
+          entitlements,
+          properties: t.properties.length,
+          roomTypes, units, channels, channelsConnected, openErrors,
+          lastSyncAt: lastSync?.lastSyncAt ?? null,
+          lastReservationAt: lastReservation?.importedAt ?? null,
+          reservationsLast30d,
+          bookingEngineProperties,
+          directReservationsLast30d: directLast30d,
+          unpaidInvoices,
+          monthlyPriceMinor: monthlyPriceMinor(t.plan, entitlements),
+        }),
+      );
+
       return {
+        attention,
+        worst: worstSeverity(attention),
         id: t.id,
         name: t.name,
         slug: t.slug,
         plan: t.plan,
         status: t.status,
-        createdAt: t.createdAt,
-        entitlements: { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms },
+        entitlements,
         owner: t.users[0] ? { name: t.users[0].name, email: t.users[0].email } : null,
         properties: t.properties,
         counts: { roomTypes, channels, channelsConnected, reservations, openErrors },
