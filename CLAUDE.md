@@ -165,7 +165,33 @@ tenant-scoped Prisma proxy), so a CRS booking or a PMS walk-in/OOO **immediately
 Channex (verified on prod: a PMS OOO and a CRS save each produced a Channex task `success:true`). The
 **Operator console is complete** (Overview · Clients · Connectivity · Platform Health · Settings · Billing
 — billing UI + `Invoice` model with operator-only RLS, **payments mocked**). **Entitlement gating verified**
-across one/some/all product combos. Marketing/positioning copy for the future product websites is drafted
+across one/some/all product combos.
+
+**→ ✅ OPERATOR ROUND 2 (phase L) — L1–L5 SHIPPED + LIVE 2026-08-05.** The console stopped counting and
+started saying what to do. Three pure, tested modules in `apps/operator/lib/` (29 tests):
+`clientAttention` derives what needs a call — stalled onboarding, a product billed for and never
+switched on, unpaid invoices, sync failures, a client that used to book and stopped — with severity
+meaning *how soon*, not how bad; `clientOpportunities` carries **two numbers per opportunity and the
+UI leads with theirs** (`clientValueMinor` = worth to the hotel, `monthlyUpliftMinor` = our MRR),
+`null` rather than a flattering guess when their side is not computable; `tierForRooms`/`tierDrift`
+finally implement the **room-count pricing tiers** stated since the first architecture note and never
+computed, reporting **over-billing as plainly as under-billing**. The RevioDirect pitch is priced by
+**`channelEconomics` — the same function behind the hotel's own Cost of distribution screen**, so the
+number quoted in a call is one the customer can open and verify. Screens: **`/clients/[id]`** ordered
+like a renewal call, and an **Overview** leading with MRR, unbilled drift, the clients' own
+**forward bookings** (their pipeline is our leading indicator) and one attention feed across the
+portfolio. It found real money on first load — one client under-billed €150/mo. **L6 remains**: the
+CRM half (contacts, lifecycle, renewal date, notes, timeline) on an operator-only `ClientAccount`.
+See `apps/operator/CLAUDE.md`.
+
+**→ 🔴 PHASE N (accounts & auth) IS NEXT, and N1 is a live hole.** There is **no rate limiting on any
+login form** — RevioLink, RevioCRS, RevioPMS and the Operator console all accept unlimited password
+attempts, and the operator console is one password away from every hotel's data. `auth.ts` also falls
+back to a hardcoded dev secret when `AUTH_SECRET` is unset (fail-open; all four staff services do have
+it set — `apps/booking` correctly has none, it has no auth). Sessions are stateless 7-day JWTs, so
+**deactivating staff does not sign them out** and nothing can be revoked. Tasks N1–N5 cover
+brute-force protection, password reset + invite flow, revocable sessions + remember-me, TOTP 2FA
+(operator first), and password policy + auth audit + key rotation. Marketing/positioning copy for the future product websites is drafted
 in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. See `BUILD-PLAN.md` for
 the phased order, `ARCHITECTURE.md` for rationale,
 `ACCESS-MODEL.md` for the access model, `DEPLOY.md` for the deploy runbook, and **`docs/RESTORE.md`** for

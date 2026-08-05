@@ -138,6 +138,12 @@ right before the thing that broke it."*
 the UI on a Tuesday afternoon. That gap closes with either Railway PITR (needs Pro) or an unattended
 scheduled dump — see *Do this next*.
 
+**Used in anger 2026-08-05**, before a manual `UPDATE` backfilling `ReservationLine.priceMinor` on
+production: backup taken with `BACKUP_REASON="pre-data-fix · OTA line priceMinor"`, then the change
+inspected with a `SELECT` first, scoped to single-line reservations only (a header total cannot be
+split across two lines without guessing), and run inside a transaction. 10 rows, verified after. The
+manifest's reason field is what makes that backup findable later.
+
 ## Taking a backup manually
 
 ```bash
