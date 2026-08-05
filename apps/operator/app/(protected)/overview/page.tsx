@@ -1,30 +1,41 @@
 import Link from "next/link";
-import { Building2, Boxes, Radio, CalendarCheck, AlertCircle, PauseCircle, Hotel } from "lucide-react";
-import { getOverviewStats, getClients } from "@/lib/data";
+import { Building2, Boxes, Radio, CalendarCheck, AlertCircle, Hotel } from "lucide-react";
+import { getOverviewStats, getOperatorDashboard } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { TrendChart } from "@/components/overview/TrendChart";
 
 export const dynamic = "force-dynamic";
 
-const PLAN_TONE = { starter: "neutral", growth: "info", scale: "success" } as const;
+const PLAN_TONE = { starter: "neutral", growth: "info", scale: "success", enterprise: "success" } as const;
 
-function relative(d: Date | null): string {
-  if (!d) return "—";
-  const m = Math.round((Date.now() - new Date(d).getTime()) / 60000);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60);
-  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
-}
+const money = (minor: number) =>
+  (minor / 100).toLocaleString(undefined, { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const moneyExact = (minor: number) =>
+  (minor / 100).toLocaleString(undefined, { style: "currency", currency: "EUR" });
 
+/**
+ * The operator's morning screen.
+ *
+ * Ordered by the questions actually asked at 9am, in order: what am I earning, what is coming, who
+ * needs me today, and who is worth the most of my time. The seven raw counters the page used to open
+ * with are still here — they are useful — but they are the footer now, because "37 properties" has
+ * never once told anyone what to do next.
+ */
 export default async function OverviewPage() {
-  const [stats, clients] = await Promise.all([getOverviewStats(), getClients()]);
+  const [stats, d] = await Promise.all([getOverviewStats(), getOperatorDashboard()]);
 
-  const cards = [
-    { icon: Building2, tone: "info", value: stats.clients, label: "Clients", sub: "Organizations" },
-    { icon: Hotel, tone: "info", value: stats.properties, label: "Properties", sub: "Hotels managed" },
-    { icon: Boxes, tone: "success", value: stats.products, label: "Products live", sub: "Room × rate" },
-    { icon: Radio, tone: "success", value: stats.connectedChannels, label: "Channels", sub: "Connected" },
-    { icon: CalendarCheck, tone: "info", value: stats.reservations, label: "Reservations", sub: "Imported" },
-    { icon: AlertCircle, tone: stats.openErrors ? "danger" : "neutral", value: stats.openErrors, label: "Open errors", sub: "Across all" },
+  const forwardTotal = d.forward.reduce((s, f) => s + f.revenueMinor, 0);
+  const forwardNights = d.forward.reduce((s, f) => s + f.roomNights, 0);
+  const acts = d.feed.filter((f) => f.severity === "act").length;
+  const soons = d.feed.filter((f) => f.severity === "soon").length;
+
+  const counters = [
+    { icon: Building2, tone: "info", value: stats.clients, label: "Clients" },
+    { icon: Hotel, tone: "info", value: stats.properties, label: "Properties" },
+    { icon: Boxes, tone: "success", value: stats.products, label: "Products live" },
+    { icon: Radio, tone: "success", value: stats.connectedChannels, label: "Channels connected" },
+    { icon: CalendarCheck, tone: "info", value: stats.reservations, label: "Reservations" },
+    { icon: AlertCircle, tone: stats.openErrors ? "danger" : "neutral", value: stats.openErrors, label: "Open errors" },
   ];
   const TONE_BG: Record<string, string> = {
     success: "bg-success-50 text-success-600", info: "bg-accent-50 text-accent-600",
@@ -32,61 +43,170 @@ export default async function OverviewPage() {
   };
 
   return (
-    <div>
-      <PageHeader title="Overview" subtitle="Every hotel on the platform, at a glance" />
+    <div className="space-y-4">
+      <PageHeader title="Overview" subtitle="What happened, what is coming, and who needs you today" />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        {cards.map((c, i) => {
-          const Icon = c.icon;
-          return (
-            <Card key={c.label} className="p-4">
-              <div style={{ animationDelay: `${i * 45}ms` }} className="animate-rise">
-                <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-md ${TONE_BG[c.tone]}`}><Icon className="h-[18px] w-[18px]" /></div>
-                <div className="tnum text-[26px] font-bold leading-none tracking-tight text-ink-900">{c.value}</div>
-                <div className="mt-1.5 text-[12.5px] font-semibold text-ink-700">{c.label}</div>
-                <div className="text-[11.5px] text-ink-400">{c.sub}</div>
-              </div>
-            </Card>
-          );
-        })}
+      {/* 1. The money, in the order it matters: what we earn, what we have earned and not billed. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Monthly recurring</div>
+          <div className="tnum mt-1 text-[28px] font-bold leading-none text-ink-900">{money(d.money.mrrMinor)}</div>
+          <div className="mt-1.5 text-[11.5px] text-ink-400">{d.money.active} active client{d.money.active === 1 ? "" : "s"}</div>
+        </Card>
+
+        {/* Revenue already earned and never invoiced. It reads as an alert because that is what it is. */}
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Unbilled tier drift</div>
+          <div className={`tnum mt-1 text-[28px] font-bold leading-none ${d.money.unbilledDriftMinor > 0 ? "text-warning-600" : "text-ink-900"}`}>
+            {money(d.money.unbilledDriftMinor)}
+          </div>
+          <div className="mt-1.5 text-[11.5px] text-ink-400">
+            {d.money.unbilledDriftMinor > 0 ? "per month, already earned" : "every plan matches its room count"}
+          </div>
+        </Card>
+
+        {/* The forward view — our clients' bookings, which is our leading indicator, not a lagging one. */}
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Clients&rsquo; next 6 months</div>
+          <div className="tnum mt-1 text-[28px] font-bold leading-none text-ink-900">{money(forwardTotal)}</div>
+          <div className="mt-1.5 text-[11.5px] text-ink-400">{forwardNights.toLocaleString()} room-nights on the books</div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Needs attention</div>
+          <div className={`tnum mt-1 text-[28px] font-bold leading-none ${acts > 0 ? "text-danger-600" : "text-ink-900"}`}>{acts}</div>
+          <div className="mt-1.5 text-[11.5px] text-ink-400">
+            {acts === 0 && soons === 0 ? "nothing outstanding" : `now · ${soons} drifting`}
+          </div>
+        </Card>
       </div>
 
-      <Card className="mt-4">
-        <CardHeader title="Clients — health" action={<Link href="/clients" className="text-[12px] font-semibold text-brand-600 hover:underline">Manage clients</Link>} />
+      {/* 2. Last 12 months and next 6, side by side, because the pair is the story. */}
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader title="Billed — last 12 months" action={<Link href="/billing" className="text-[12px] font-semibold text-brand-600 hover:underline">Billing</Link>} />
+          <TrendChart
+            data={d.back.map((b) => ({ label: b.label, value: b.billedMinor, secondary: b.paidMinor }))}
+            format={moneyExact}
+            primaryLabel="billed"
+            secondaryLabel="paid"
+          />
+        </Card>
+
+        <Card>
+          <CardHeader title="Clients' bookings on the books — next 6 months" />
+          {/* Their forward revenue, not ours. A portfolio whose next quarter is filling is a portfolio
+              that renews, and we can see it months before any churn model would. */}
+          <TrendChart
+            data={d.forward.map((f) => ({ label: f.label, value: f.revenueMinor }))}
+            format={moneyExact}
+            primaryLabel="on the books"
+            accent="#14b8a6"
+          />
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader title="Bookings processed — last 12 months" />
+        <TrendChart
+          data={d.back.map((b) => ({ label: b.label, value: b.bookings }))}
+          format={(v) => v.toLocaleString()}
+          primaryLabel="reservations"
+          accent="#7c6cf5"
+        />
+      </Card>
+
+      {/* 3. Who needs you today — every client's flags in one feed, most urgent first. */}
+      <Card>
+        <CardHeader
+          title={d.feed.length === 0 ? "Needs attention — all clear" : `Needs attention (${d.feed.length})`}
+          action={<Link href="/clients" className="text-[12px] font-semibold text-brand-600 hover:underline">All clients</Link>}
+        />
+        {d.feed.length === 0 ? (
+          <p className="px-4 py-6 text-[13px] text-ink-500">
+            Nothing outstanding across the portfolio — no stalled onboarding, no unpaid invoices, no sync failures.
+          </p>
+        ) : (
+          <ul className="divide-y divide-surface-border">
+            {d.feed.slice(0, 12).map((f, i) => (
+              <li key={`${f.clientId}-${f.title}-${i}`} className="flex items-start gap-3 px-4 py-2.5">
+                <span
+                  aria-hidden
+                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                    f.severity === "act" ? "bg-danger-600" : f.severity === "soon" ? "bg-warning-500" : "bg-ink-300"
+                  }`}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <Link href={`/clients/${f.clientId}`} className="text-[13px] font-semibold text-ink-900 hover:text-brand-700 hover:underline">
+                      {f.clientName}
+                    </Link>
+                    <span className={`text-[13px] ${f.severity === "act" ? "font-semibold text-danger-600" : "text-ink-700"}`}>{f.title}</span>
+                  </span>
+                  <span className="mt-0.5 block text-[12px] text-ink-500">{f.detail}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* 4. Who is worth the most of your time — ranked by what they pay, with what is wrong beside it. */}
+      <Card>
+        <CardHeader title="Clients by value" action={<Link href="/clients" className="text-[12px] font-semibold text-brand-600 hover:underline">Manage</Link>} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                {["Client", "Plan", "Products", "Rooms", "Channels", "Reservations", "Errors", "Last sync", "Status"].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
+                {["Client", "Plan", "Monthly", "Unbilled", "Reservations", "Errors", "Status"].map((h) => (
+                  <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {clients.map((c) => (
-                <tr key={c.id} className="border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
+              {d.rows.map((r) => (
+                <tr key={r.id} className="border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
                   <td className="px-4 py-2.5">
-                    <div className="font-semibold text-ink-900">{c.name}</div>
-                    <div className="text-[11px] text-ink-400">{c.properties.length} propert{c.properties.length === 1 ? "y" : "ies"}</div>
-                  </td>
-                  <td className="px-4 py-2.5"><StatusPill tone={PLAN_TONE[c.plan as keyof typeof PLAN_TONE] ?? "neutral"}>{c.plan}</StatusPill></td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex gap-1">
-                      {c.entitlements.channelManager && <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[10.5px] font-bold text-brand-700">CM</span>}
-                      {c.entitlements.reservation && <span className="rounded bg-accent-50 px-1.5 py-0.5 text-[10.5px] font-bold text-accent-600">CRS</span>}
-                      {c.entitlements.pms && <span className="rounded bg-success-50 px-1.5 py-0.5 text-[10.5px] font-bold text-success-600">PMS</span>}
+                    <div className="flex items-center gap-1.5">
+                      {r.worst && (
+                        <span
+                          aria-hidden
+                          className={`h-2 w-2 shrink-0 rounded-full ${
+                            r.worst === "act" ? "bg-danger-600" : r.worst === "soon" ? "bg-warning-500" : "bg-ink-300"
+                          }`}
+                        />
+                      )}
+                      <Link href={`/clients/${r.id}`} className="font-semibold text-ink-900 hover:text-brand-700 hover:underline">{r.name}</Link>
                     </div>
                   </td>
-                  <td className="tnum px-4 py-2.5 text-ink-700">{c.counts.roomTypes}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-700">{c.counts.channelsConnected}/{c.counts.channels}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-700">{c.counts.reservations}</td>
-                  <td className="tnum px-4 py-2.5">{c.counts.openErrors > 0 ? <span className="font-bold text-danger-500">{c.counts.openErrors}</span> : <span className="text-ink-300">0</span>}</td>
-                  <td className="px-4 py-2.5 text-[12px] text-ink-400">{relative(c.lastSyncAt)}</td>
-                  <td className="px-4 py-2.5">{c.status === "active" ? <StatusPill tone="success">active</StatusPill> : <StatusPill tone="warning">suspended</StatusPill>}</td>
+                  <td className="px-4 py-2.5"><StatusPill tone={PLAN_TONE[r.plan as keyof typeof PLAN_TONE] ?? "neutral"}>{r.plan}</StatusPill></td>
+                  <td className="tnum px-4 py-2.5 font-semibold text-ink-900">{moneyExact(r.monthlyMinor)}</td>
+                  <td className="tnum px-4 py-2.5">
+                    {r.driftMinor > 0 ? <span className="font-semibold text-warning-600">+{moneyExact(r.driftMinor)}</span> : <span className="text-ink-300">—</span>}
+                  </td>
+                  <td className="tnum px-4 py-2.5 text-ink-700">{r.reservations}</td>
+                  <td className="tnum px-4 py-2.5">{r.openErrors > 0 ? <span className="font-bold text-danger-500">{r.openErrors}</span> : <span className="text-ink-300">0</span>}</td>
+                  <td className="px-4 py-2.5">{r.status === "active" ? <StatusPill tone="success">active</StatusPill> : <StatusPill tone="warning">suspended</StatusPill>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </Card>
+
+      {/* 5. The raw counters. Still useful, no longer the headline. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {counters.map((c) => {
+          const Icon = c.icon;
+          return (
+            <Card key={c.label} className="p-3.5">
+              <div className={`mb-2 flex h-8 w-8 items-center justify-center rounded-md ${TONE_BG[c.tone]}`}><Icon className="h-4 w-4" /></div>
+              <div className="tnum text-[20px] font-bold leading-none tracking-tight text-ink-900">{c.value}</div>
+              <div className="mt-1 text-[11.5px] text-ink-500">{c.label}</div>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }

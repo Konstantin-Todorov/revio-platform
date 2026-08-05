@@ -118,11 +118,123 @@ export async function getClients() {
         entitlements,
         owner: t.users[0] ? { name: t.users[0].name, email: t.users[0].email } : null,
         properties: t.properties,
-        counts: { roomTypes, channels, channelsConnected, reservations, openErrors },
+        counts: { roomTypes, units, channels, channelsConnected, reservations, openErrors },
         lastSyncAt: lastSync?.lastSyncAt ?? null,
       };
     }),
   );
+}
+
+export type OperatorDashboard = Awaited<ReturnType<typeof getOperatorDashboard>>;
+
+/**
+ * The operator's morning screen: what happened, what is coming, and who needs me most.
+ *
+ * The old Overview was seven counters. Counters answer "is it alive"; running a business needs the
+ * other three questions, and two of them are only answerable because we hold one shared core.
+ *
+ * **Backward** is our own billed revenue (from `Invoice`, so it is what we actually charged rather
+ * than a recomputed guess) plus platform booking volume. **Forward** is the part no ordinary SaaS
+ * dashboard can show: our clients' on-the-books reservations for the months ahead. Their pipeline is
+ * our leading indicator — a portfolio whose next quarter is filling is a portfolio that renews, and
+ * we can see it months before a churn model would.
+ */
+export async function getOperatorDashboard() {
+  const now = new Date();
+  const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  const monthLabel = (key: string) => {
+    const [y, m] = key.split("-").map(Number);
+    return new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
+  };
+  const shiftMonth = (n: number) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + n, 1));
+
+  const backKeys = Array.from({ length: 12 }, (_, i) => monthKey(shiftMonth(-11 + i)));
+  const fwdKeys = Array.from({ length: 6 }, (_, i) => monthKey(shiftMonth(i)));
+  const backFrom = shiftMonth(-11);
+  const fwdTo = shiftMonth(6);
+
+  const [clients, invoices, booked, onTheBooks] = await Promise.all([
+    getClients(),
+    prisma.invoice.findMany({ where: { period: { in: backKeys } }, select: { period: true, amountMinor: true, status: true } }),
+    prisma.reservation.findMany({ where: { importedAt: { gte: backFrom } }, select: { importedAt: true } }),
+    // Every client's future room-nights and revenue. This is the forward view.
+    prisma.reservationLine.findMany({
+      where: { checkIn: { gte: shiftMonth(0), lt: fwdTo }, reservation: { status: { in: [...SOLD_STATUSES] } } },
+      select: { checkIn: true, quantity: true, priceMinor: true },
+    }),
+  ]);
+
+  const zero = <T,>(keys: string[], make: () => T) => new Map(keys.map((k) => [k, make()]));
+
+  const billedByMonth = zero(backKeys, () => ({ billedMinor: 0, paidMinor: 0 }));
+  for (const i of invoices) {
+    const b = billedByMonth.get(i.period);
+    if (!b) continue;
+    b.billedMinor += i.amountMinor;
+    if (i.status === "paid") b.paidMinor += i.amountMinor;
+  }
+
+  const bookingsByMonth = zero(backKeys, () => 0);
+  for (const r of booked) {
+    const k = monthKey(r.importedAt);
+    if (bookingsByMonth.has(k)) bookingsByMonth.set(k, bookingsByMonth.get(k)! + 1);
+  }
+
+  const futureByMonth = zero(fwdKeys, () => ({ roomNights: 0, revenueMinor: 0 }));
+  for (const l of onTheBooks) {
+    const k = monthKey(l.checkIn);
+    const f = futureByMonth.get(k);
+    if (!f) continue;
+    f.roomNights += l.quantity;
+    f.revenueMinor += l.priceMinor ?? 0;
+  }
+
+  const active = clients.filter((c) => c.status === "active");
+  const mrrMinor = active.reduce((s, c) => s + monthlyPriceMinor(c.plan, c.entitlements), 0);
+
+  // Per-client rollup for the leaderboard + the attention feed. getClients already did the per-tenant
+  // work, so this is arithmetic rather than another N queries.
+  const rows = clients.map((c) => {
+    // Physical rooms, never room types — the tier is priced on rooms, and the detail page agrees.
+    const drift = tierDrift(c.plan, c.counts.units);
+    return {
+      id: c.id, name: c.name, status: c.status, plan: c.plan,
+      monthlyMinor: monthlyPriceMinor(c.plan, c.entitlements),
+      attention: c.attention, worst: c.worst,
+      openErrors: c.counts.openErrors, reservations: c.counts.reservations,
+      driftMinor: drift && drift.monthlyDeltaMinor > 0 ? drift.monthlyDeltaMinor : 0,
+    };
+  });
+
+  // The attention feed: every flag from every client, most urgent first, each carrying who it is
+  // about. A per-client list you have to open forty times is not a morning screen.
+  const RANK = { act: 0, soon: 1, note: 2 } as const;
+  const feed = rows
+    .flatMap((r) => r.attention.map((f) => ({ ...f, clientId: r.id, clientName: r.name })))
+    .sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+
+  return {
+    money: {
+      mrrMinor,
+      unbilledDriftMinor: rows.reduce((s, r) => s + r.driftMinor, 0),
+      clients: clients.length,
+      active: active.length,
+      suspended: clients.length - active.length,
+    },
+    back: backKeys.map((k) => ({
+      key: k, label: monthLabel(k),
+      billedMinor: billedByMonth.get(k)!.billedMinor,
+      paidMinor: billedByMonth.get(k)!.paidMinor,
+      bookings: bookingsByMonth.get(k)!,
+    })),
+    forward: fwdKeys.map((k) => ({
+      key: k, label: monthLabel(k),
+      roomNights: futureByMonth.get(k)!.roomNights,
+      revenueMinor: futureByMonth.get(k)!.revenueMinor,
+    })),
+    feed,
+    rows: [...rows].sort((a, b) => b.monthlyMinor - a.monthlyMinor),
+  };
 }
 
 export type ClientDetail = NonNullable<Awaited<ReturnType<typeof getClientDetail>>>;
