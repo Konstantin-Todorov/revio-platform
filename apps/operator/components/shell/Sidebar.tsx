@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, X } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, X } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 
@@ -12,6 +12,8 @@ const SECTIONS: { title?: string; items: { href: string; label: string; icon: ty
     { href: "/clients", label: "Clients", icon: Building2 },
   ] },
   { title: "Platform", items: [
+    // Plans sits above Billing: the price list is the decision, the invoices are the consequence.
+    { href: "/plans", label: "Plans & pricing", icon: Tags },
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/connectivity", label: "Connectivity", icon: KeyRound },
     { href: "/health", label: "Platform Health", icon: Activity },

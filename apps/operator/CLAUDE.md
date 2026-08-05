@@ -103,6 +103,49 @@ that screen is revenue already being earned; this is revenue that has to be re-w
 
 `lib/account.ts` — 31 tests. Total across the four derivation modules: **72**.
 
+## Plans & pricing (`/plans`, 2026-08-05)
+
+The pricing was always real — four constants in `lib/pricing.ts`, correctly applied to every invoice —
+and completely invisible to the person who has to decide whether it is right. **A price nobody can
+read is a price nobody can argue with**, which sounds like an advantage until the first customer asks
+why the third product costs what it does. `/plans` is the price list, and it is computed by the same
+functions that produce the invoices, so the published price and the charged price cannot drift apart.
+**There is deliberately no `docs/PRICING.md`** — a second copy of these numbers in markdown would be
+wrong within a month.
+
+Three parts, each priced on a **different thing on purpose**:
+
+| Part | Priced on | Why |
+| --- | --- | --- |
+| Platform fee | room count | cost to serve — a 200-room resort costs more to carry than a 12-room guesthouse whatever it bought |
+| Module fee | per product | value — what the product does for them |
+| Bundle discount | number of modules (0 · 0 · 10% · 20%) | the 2nd and 3rd products cost us almost nothing: same database, same onboarding, **no migration** |
+
+The discount applies to **module fees only, never the platform fee** — that fee does not get cheaper
+because they bought more software. It is steepest at the third product because the platform thesis is
+"land with one, expand with zero migration"; if the third module cost the same as the first, the price
+list would be arguing against the architecture.
+
+Plus one **usage** component: `DIRECT_BOOKING_FEE_PCT` (2%) on RevioDirect. It is the only place we
+earn more when the customer earns more, and it is charged on `BOOKING_ENGINE_SOURCE_NAME` — bookings
+*our engine* produced — **not** on every `category = "direct"` booking. A hotel's own phone
+reservations are business they won without us; charging for them would make the fee feel like a tax on
+their own guests, which is exactly the resentment OTAs create.
+
+⚠️ **Two invariants are tested exhaustively, not by spot-check**, because both are one edited constant
+away from being false:
+- **Buying more never costs less.** Push the 3-module discount high enough and the full platform slips
+  below the price of the most expensive pair. The test walks every combination × every tier.
+- **`attributeRevenue` sums to exactly MRR.** Revenue-by-product is a *convention* — once a discount
+  exists there is no true answer to which product surrendered it, and the platform fee is nobody's —
+  and the page says so on screen. What must not happen is the parts disagreeing with the total by a
+  few cents, which makes every other number on the page suspect. `splitProportionally` uses
+  largest-remainder for this; rounding each share independently loses or invents money.
+
+The page ends with **what the model changes about today's bills**, per client, against the last
+invoice actually sent. A repricing that can only be discovered from an invoice is not a decision, it
+is an accident — and nothing moves until someone generates invoices on `/billing`.
+
 ## Boundary
 Reads cross-tenant data through `@revio/core` admin APIs that bypass tenant RLS **only** under an
 operator identity. Never embed hotel-facing screens here; link out instead. Keep operator business data

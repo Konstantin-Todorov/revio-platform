@@ -192,6 +192,21 @@ decides on renewal usually has no login. The timeline **merges written notes wit
 (created, first booking, invoices), so a client has a history the first time the page is opened.
 Overview gained **Renewals ahead** — our forward book beside the clients'. See `apps/operator/CLAUDE.md`.
 
+**→ ✅ PLANS & PRICING (`/plans`) — SHIPPED 2026-08-05.** The pricing was always real (four constants,
+correctly invoiced) and completely unreadable by the person who has to decide whether it is right.
+Now it is a screen, computed by the **same functions that produce the invoices** — so there is
+deliberately **no `docs/PRICING.md`**, which would be wrong within a month. Three parts, each priced
+on a different thing on purpose: **platform fee by room count** (cost to serve), **module fee per
+product** (value), **bundle discount by module count** (0 · 10% · 20%, on modules only — never on the
+platform fee) because the 2nd and 3rd products cost us almost nothing to deliver: same database, same
+onboarding, **no migration**. That discount is the price list finally agreeing with the architecture.
+Plus one usage component — **2% on RevioDirect**, charged on bookings *our engine* produced and never
+on the hotel's own phone reservations, against ~15% an OTA takes. The page also shows **all seven ways
+to buy it**, who buys which, **what each product earns** (a stated *convention*, since no product
+"owns" the discount — but `splitProportionally` guarantees the parts sum to MRR exactly), room-tier
+spread, and **what the model changes about today's bills**. Two invariants are tested exhaustively
+rather than spot-checked: **buying more never costs less**, and attribution always sums to MRR.
+
 **→ 🔴 PHASE N (accounts & auth) IS NEXT, and N1 is a live hole.** There is **no rate limiting on any
 login form** — RevioLink, RevioCRS, RevioPMS and the Operator console all accept unlimited password
 attempts, and the operator console is one password away from every hotel's data. `auth.ts` also falls

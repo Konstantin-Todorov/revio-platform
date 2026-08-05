@@ -1,6 +1,10 @@
 import "server-only";
 import { forSystem, decryptSecret, keyHint } from "@revio/db";
-import { monthlyPriceMinor, billedProducts, type Entitlements } from "./pricing";
+import {
+  BOOKING_ENGINE_SOURCE_NAME, COMBINATIONS, PLAN_BASE_MINOR, PRODUCT_KEYS, ROOM_TIERS,
+  TYPICAL_OTA_COMMISSION_PCT, attributeRevenue, billedProducts, combinationKeyOf, directBookingFeeMinor,
+  entitlementsFor, monthlyPriceMinor, priceBreakdown, tierForRooms, type Entitlements, type ProductKey,
+} from "./pricing";
 import { clientAttention, sortBySeverity, worstSeverity } from "./attention";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
@@ -478,6 +482,132 @@ export async function getClientDetail(id: string) {
     lastContactAt: contactedAt,
     timeline,
     operators,
+  };
+}
+
+/**
+ * The price list, and what the portfolio actually looks like against it.
+ *
+ * Two halves that belong on one screen. The **matrix** is pure — every room tier × every way to buy
+ * it, straight out of `priceBreakdown`, so the published price and the invoiced price cannot drift
+ * apart. The **portfolio** half answers the questions the matrix cannot: which shapes people
+ * actually buy, what each product earns, and what the model would change about today's bills.
+ */
+export async function getPlans() {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
+
+  const [tenants, unitCounts, engineLines, invoices] = await Promise.all([
+    prisma.tenant.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, plan: true, status: true, hasChannelManager: true, hasReservation: true, hasPms: true },
+    }),
+    prisma.unit.groupBy({ by: ["tenantId"], _count: { _all: true } }),
+    // The billing basis for the usage fee: what OUR engine produced, not every direct booking.
+    prisma.reservationLine.findMany({
+      where: {
+        reservation: {
+          importedAt: { gte: thirtyDaysAgo },
+          status: { in: [...SOLD_STATUSES] },
+          bookingSource: { name: BOOKING_ENGINE_SOURCE_NAME },
+        },
+      },
+      select: { priceMinor: true, reservation: { select: { tenantId: true } } },
+    }),
+    prisma.invoice.findMany({ orderBy: { period: "desc" }, select: { tenantId: true, period: true, amountMinor: true } }),
+  ]);
+
+  const units = new Map(unitCounts.map((u) => [u.tenantId, u._count._all]));
+  // findMany is newest-first, so the first invoice seen for a tenant is its latest.
+  const latestInvoice = new Map<string, { period: string; amountMinor: number }>();
+  for (const i of invoices) if (!latestInvoice.has(i.tenantId)) latestInvoice.set(i.tenantId, i);
+
+  const priced = tenants.map((t) => {
+    const entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
+    const rooms = units.get(t.id) ?? 0;
+    const invoiced = latestInvoice.get(t.id) ?? null;
+    const monthlyMinor = monthlyPriceMinor(t.plan, entitlements);
+    return {
+      id: t.id, name: t.name, plan: t.plan, status: t.status, entitlements, rooms,
+      combination: combinationKeyOf(entitlements),
+      breakdown: priceBreakdown(t.plan, entitlements),
+      monthlyMinor,
+      drift: tierDrift(t.plan, rooms),
+      lastInvoiced: invoiced,
+      // What this model changes about the bill they last received. Zero when nothing moves.
+      repriceDeltaMinor: invoiced ? monthlyMinor - invoiced.amountMinor : null,
+    };
+  });
+  const active = priced.filter((p) => p.status === "active");
+
+  // Adoption: which of the seven shapes people actually buy.
+  const adoption = COMBINATIONS.map((c) => {
+    const clients = active.filter((p) => p.combination === c.key);
+    return {
+      ...c,
+      clients: clients.map((p) => ({ id: p.id, name: p.name, monthlyMinor: p.monthlyMinor })),
+      count: clients.length,
+      mrrMinor: clients.reduce((s, p) => s + p.monthlyMinor, 0),
+    };
+  });
+  const unsold = active.filter((p) => p.combination === "none");
+
+  // Revenue by product. `attributeRevenue` guarantees the parts sum to MRR exactly.
+  const byProduct: Record<ProductKey, { minor: number; clients: number }> = {
+    channelManager: { minor: 0, clients: 0 }, reservation: { minor: 0, clients: 0 }, pms: { minor: 0, clients: 0 },
+  };
+  let unallocatedMinor = 0;
+  for (const p of active) {
+    const a = attributeRevenue(p.plan, p.entitlements);
+    unallocatedMinor += a.unallocatedMinor;
+    for (const k of PRODUCT_KEYS) {
+      byProduct[k].minor += a.byProduct[k];
+      if (p.entitlements[k]) byProduct[k].clients += 1;
+    }
+  }
+  const mrrMinor = active.reduce((s, p) => s + p.monthlyMinor, 0);
+
+  // The usage half, on real bookings rather than an assumption.
+  const engineRevenueMinor = engineLines.reduce((s, l) => s + (l.priceMinor ?? 0), 0);
+  const engineTenants = new Set(engineLines.map((l) => l.reservation.tenantId)).size;
+
+  // How the portfolio sits across the room tiers — and how many are on the wrong one.
+  const tierSpread = ROOM_TIERS.map((t) => ({
+    plan: t.plan,
+    label: t.label,
+    onThisPlan: active.filter((p) => p.plan === t.plan).length,
+    shouldBeHere: active.filter((p) => tierForRooms(p.rooms).plan === t.plan).length,
+  }));
+
+  return {
+    matrix: ROOM_TIERS.map((tier) => ({
+      plan: tier.plan,
+      label: tier.label,
+      platformMinor: PLAN_BASE_MINOR[tier.plan] ?? 0,
+      cells: COMBINATIONS.map((c) => ({
+        key: c.key,
+        breakdown: priceBreakdown(tier.plan, entitlementsFor(c.products)),
+      })),
+    })),
+    adoption,
+    unsold: unsold.map((p) => ({ id: p.id, name: p.name, monthlyMinor: p.monthlyMinor })),
+    byProduct,
+    unallocatedMinor,
+    mrrMinor,
+    clients: priced,
+    activeCount: active.length,
+    usage: {
+      revenueMinor: engineRevenueMinor,
+      feeMinor: directBookingFeeMinor(engineRevenueMinor),
+      otaEquivalentMinor: Math.round((engineRevenueMinor * TYPICAL_OTA_COMMISSION_PCT) / 100),
+      bookings: engineLines.length,
+      tenants: engineTenants,
+    },
+    tierSpread,
+    repricing: {
+      // Only clients we have actually invoiced can have a delta; the rest are new-price by default.
+      changed: priced.filter((p) => p.repriceDeltaMinor !== null && p.repriceDeltaMinor !== 0),
+      neverInvoiced: priced.filter((p) => p.lastInvoiced === null).length,
+    },
   };
 }
 
