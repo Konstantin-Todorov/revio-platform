@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { CalendarCheck, Check, Clock, MapPin, Phone } from "lucide-react";
 import { forTenant } from "@revio/db";
-import { computeStayCharges } from "@revio/core";
+import { computeStayCharges, ordinal, recogniseGuest, SOLD_STATUSES } from "@revio/core";
 import { getPublicProperty, type PublicProperty } from "@/lib/property";
 import { fmtDay, money, nightsBetween } from "@/lib/dates";
 import { PropertyHeader } from "@/components/PropertyHeader";
@@ -43,6 +43,30 @@ export default async function ConfirmationPage({
 
   const line = reservation.lines[0];
   if (!line) notFound();
+
+  // Returning-guest recognition (K6). Counted excluding THIS reservation, and silent when the guest
+  // has opted out. Sold statuses only — a past cancellation is not a stay, and greeting someone as a
+  // regular because they once cancelled is the kind of small wrongness that discredits the feature.
+  const priorStays = reservation.guest
+    ? await db.reservation.findMany({
+        where: {
+          propertyId: property.id,
+          guestId: reservation.guest.id,
+          id: { not: reservation.id },
+          status: { in: [...SOLD_STATUSES] },
+        },
+        select: { lines: { select: { checkIn: true }, orderBy: { checkIn: "desc" }, take: 1 } },
+      })
+    : [];
+  const lastPrior = priorStays
+    .map((r) => r.lines[0]?.checkIn)
+    .filter((d): d is Date => d != null)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const recognition = recogniseGuest({
+    priorStayCount: priorStays.length,
+    lastStayDate: lastPrior ? lastPrior.toISOString().slice(0, 10) : null,
+    optedOut: reservation.guest?.recognitionOptOut ?? false,
+  });
 
   const checkIn = line.checkIn.toISOString().slice(0, 10);
   const checkOut = line.checkOut.toISOString().slice(0, 10);
@@ -116,6 +140,17 @@ export default async function ConfirmationPage({
              style={{ backgroundColor: "hsl(var(--brand-wash))", color: "hsl(var(--brand-text))" }}>
             Reference {reference.toUpperCase()}
           </p>
+
+          {/* K6. Computed server-side from the shared guest record, never passed in a query param a
+              stranger could fake — this page is reachable by reference alone, so anything shown here
+              has to be true for everyone who can reach it, not just for whoever just booked.
+              It says the guest is known; it does not repeat anything about their past stays. */}
+          {recognition.isReturning && (
+            <p className="mt-3 text-[13.5px]" style={{ color: "hsl(var(--ink-soft))" }}>
+              Welcome back — this is your {ordinal(recognition.priorStayCount + 1)} stay with us.
+              The front desk has your details already.
+            </p>
+          )}
         </div>
 
         <section className="card-raised mt-8 overflow-hidden">

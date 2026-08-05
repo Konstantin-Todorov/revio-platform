@@ -333,6 +333,42 @@ export async function updateGuest(fd: FormData): Promise<void> {
   redirect(`/guests/${id}`);
 }
 
+/**
+ * Recognition opt-out (K6) — a guest asked not to be greeted as a returning guest.
+ *
+ * It is deliberately a toggle a human sets on the guest's behalf rather than a self-service switch:
+ * the request arrives at the front desk or by email, and there is no guest login to put it behind.
+ *
+ * Writing it leaves an audit entry, because "why did we stop recognising this guest?" is a question
+ * someone will ask, and a silent boolean is a bad answer. Nothing about their history changes —
+ * a hotel keeps the records it is required to keep.
+ */
+export async function setGuestRecognitionOptOut(fd: FormData): Promise<void> {
+  const property = await getProperty();
+  const session = await getSession();
+  if (!session) redirect("/logout");
+  const guestId = str(fd, "guestId");
+  const optOut = fd.get("optOut") === "on";
+  const guest = await prisma.guest.findFirst({ where: { id: guestId, propertyId: property.id } });
+  if (!guest) redirect("/guests");
+
+  await prisma.guest.update({ where: { id: guestId }, data: { recognitionOptOut: optOut } });
+  await prisma.auditEntry.create({
+    data: {
+      tenantId: guest.tenantId,
+      propertyId: property.id,
+      userId: session.userId,
+      entity: `Guest · ${guest.firstName} ${guest.lastName}`,
+      field: "recognitionOptOut",
+      oldValue: String(guest.recognitionOptOut),
+      newValue: String(optOut),
+      source: "ui",
+    },
+  });
+  revalidatePath(`/guests/${guestId}`);
+  redirect(`/guests/${guestId}`);
+}
+
 // --- Guest notes (CRS-REFINEMENT-R2 §4) — multi-note, author + timestamp, on the shared record ---
 
 /** Add a note to a guest. Author identity is taken from the session (never client-supplied), and

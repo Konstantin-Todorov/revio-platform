@@ -747,6 +747,11 @@ model Guest {
   // of lists/metrics but its id stays resolvable (nothing is deleted). Stable identity underwrites every
   // guest metric across all products.
   mergedIntoId    String?
+  // The guest asked not to be recognised across stays (K6). Set from the CRS guest profile when
+  // someone exercises it. Suppresses every "welcome back" and every carried-over preference, while
+  // leaving the booking history itself intact — a hotel still has to keep records it is legally
+  // required to keep, and "don't greet me by name" is a different request from "erase me".
+  recognitionOptOut Boolean @default(false)
 
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   reservations Reservation[]

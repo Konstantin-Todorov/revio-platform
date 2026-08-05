@@ -224,8 +224,14 @@ synced copy") with the commercial half read-only from the CRS and the operationa
 (*no room assigned — assigned at check-in*, *no folio yet*); and on the **folio**, which reconciles to
 `€192 room + €3 city tax = €195` — **the exact number the guest was quoted**, which is the all-in pricing
 promise closing the loop. The card guarantee shows as *Card on file* (Stripe test-mode, token only).
-**Still open:** K5 Stripe Connect onboarding + request-to-book fallback · K6 returning-guest recognition ·
-K7 CRS distribution settings · K8 direct-vs-OTA analytics incl. commission saved · `book.revio.app` DNS.
+**PHASE K IS COMPLETE (2026-08-05)** — K5 · K6 · K8 · K10 shipped; K7 was pulled forward during K2b.
+**K8** gives RevioCRS a **Cost of distribution** view that keeps commission *paid* (a fact, each
+channel's own rate × the revenue it brought) visually and structurally apart from commission *avoided*
+(a counterfactual, and `null` rather than a guess when there is no OTA revenue to derive a rate from) —
+`channelEconomics` in `@revio/core`. **K6** recognises a returning guest **server-side after submit**,
+never through a live email lookup: on an unauthenticated page that endpoint is a guest-enumeration
+oracle. `Guest.recognitionOptOut` silences it guest- *and* staff-facing, and is deliberately narrower
+than erasure. **Still open:** `book.revio.app` DNS.
 **Not built
 and deliberately so:** real card collection (needs Stripe Elements + a live-mode decision), extras/upsell
 (the step-3 slot exists and is empty), and any Operator visibility into the booking engine.

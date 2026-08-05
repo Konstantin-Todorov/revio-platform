@@ -14,8 +14,8 @@
 import type { forTenant } from "@revio/db";
 import {
   computeStayCharges, computeWaterfall, deriveRate, expandInventoryPeriods, extrasTotalMinor,
-  isAdvancePurchaseClosed, resolveChosenExtras, resolveRestriction, type SellableExtra,
-  ROOM_OCCUPYING_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
+  isAdvancePurchaseClosed, recogniseGuest, resolveChosenExtras, resolveRestriction, type SellableExtra,
+  ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
 } from "@revio/core";
 import { syncRealChannels } from "@revio/connectivity";
 
@@ -366,6 +366,12 @@ export async function publicCreateReservation(
   status?: string;
   /** Rooms only — what the reservation stores, and what room-revenue metrics are built on. */
   accommodationMinor?: number;
+  /**
+   * K6. Booleans and counts only — deliberately never a name, a past room or a preference. This
+   * crosses to an unauthenticated page, and the guest has proved nothing beyond typing an address.
+   */
+  returningGuest?: boolean;
+  priorStayCount?: number;
   /** All-in, including taxes and fees. THIS is what the guest owes and what we confirm back. */
   totalMinor?: number;
   /** For the confirmation email, so the caller needn't re-query what it just booked. */
@@ -426,8 +432,21 @@ export async function publicCreateReservation(
   const totalMinor = accommodationMinor;
 
   const email = p.guest.email.trim().toLowerCase();
+  /*
+   * Resolve the guest to the record the hotel actually uses (K6).
+   *
+   * Matching on email alone is not enough once the front desk starts merging duplicates: a merged
+   * record keeps its email but carries `mergedIntoId`, and it has deliberately dropped out of every
+   * list and metric. Attaching a new booking to it files the reservation under a person the PMS no
+   * longer shows — the returning guest we are trying to recognise becomes invisible instead.
+   * So follow the merge pointer to the survivor.
+   */
+  const matched = await db.guest.findFirst({ where: { propertyId: property.id, email } });
+  const survivor = matched?.mergedIntoId
+    ? await db.guest.findUnique({ where: { id: matched.mergedIntoId } })
+    : matched;
   const guest =
-    (await db.guest.findFirst({ where: { propertyId: property.id, email } })) ??
+    survivor ??
     (await db.guest.create({
       data: {
         tenantId: property.tenantId, propertyId: property.id,
@@ -435,6 +454,27 @@ export async function publicCreateReservation(
         email, phone: p.guest.phone?.trim() || null,
       },
     }));
+
+  /*
+   * Prior stays, counted BEFORE this booking is written so the current one cannot count itself.
+   *
+   * Statuses are the sold set rather than "anything with this guestId": a cancelled booking is not a
+   * stay, and greeting someone as a returning guest because they once cancelled is the kind of small
+   * wrongness that makes a hotel distrust the whole feature.
+   */
+  const priorStays = await db.reservation.findMany({
+    where: { propertyId: property.id, guestId: guest.id, status: { in: [...SOLD_STATUSES] } },
+    select: { lines: { select: { checkIn: true }, orderBy: { checkIn: "desc" }, take: 1 } },
+  });
+  const lastStay = priorStays
+    .map((r) => r.lines[0]?.checkIn)
+    .filter((d): d is Date => d != null)
+    .sort((a, b) => b.getTime() - a.getTime())[0];
+  const recognition = recogniseGuest({
+    priorStayCount: priorStays.length,
+    lastStayDate: lastStay ? lastStay.toISOString().slice(0, 10) : null,
+    optedOut: guest.recognitionOptOut,
+  });
 
   // source = Booking Engine (category "direct") — first-class in the source/channel mix from day one.
   const source =
@@ -461,7 +501,16 @@ export async function publicCreateReservation(
       guaranteeRef: p.guarantee?.ref ?? null,
       guaranteeBrand: p.guarantee?.brand ?? null,
       guaranteeLast4: p.guarantee?.last4 ?? null,
-      notes: p.guestNote?.trim() ? `Guest note: ${p.guestNote.trim().slice(0, 500)}` : null,
+      // Recognition reaches staff through the notes the front desk already reads, rather than through
+      // a new field every screen would have to learn. It is prepended so it is visible before the
+      // agent scrolls, and it is absent entirely when the guest opted out — a receptionist cannot
+      // honour a preference they were never shown.
+      notes: [
+        recognition.staffSummary,
+        p.guestNote?.trim() ? `Guest note: ${p.guestNote.trim().slice(0, 500)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n") || null,
       lines: { create: [{ roomTypeId: rt.id, ratePlanId: rp.id, quantity: 1, checkIn, checkOut, priceMinor: totalMinor, guestsCount: p.guests }] },
     },
   });
@@ -528,6 +577,17 @@ export async function publicCreateReservation(
     totalMinor: charged.totalMinor,
     charges: charged.lines.map((l) => ({ name: l.name, amountMinor: l.amountMinor })),
     currency: property.baseCurrency,
+    /*
+     * Recognition, resolved server-side from the email the guest just typed — never from a live
+     * lookup while they type. See `recogniseGuest` in @revio/core: an unauthenticated endpoint that
+     * answers "has this address stayed here?" is a guest-enumeration oracle, and a hotel's guest
+     * list is exactly the fact a guest expects a hotel to keep.
+     *
+     * Only the booleans and counts cross this boundary — no name, no history, nothing the guest did
+     * not just supply themselves.
+     */
+    returningGuest: recognition.isReturning,
+    priorStayCount: recognition.isReturning ? recognition.priorStayCount : 0,
   };
 }
 

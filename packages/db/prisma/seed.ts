@@ -85,6 +85,12 @@ async function main() {
       address: "1 Vitosha Blvd, Sofia",
       contactEmail: "reservations@hotelsofia.demo",
       phone: "+359 2 000 0000",
+      // RevioDirect on, with a slug, from the first seed. Without these the booking engine 404s on a
+      // freshly seeded database — deliberately, since every "no" on that public surface looks the
+      // same — so the whole of phase K is invisible until someone thinks to switch it on by hand.
+      // A demo seed whose newest product cannot be reached is not a demo seed.
+      publicSlug: "hotel-sofia",
+      bookingEngineEnabled: true,
     },
   });
   const propertyId = property.id;

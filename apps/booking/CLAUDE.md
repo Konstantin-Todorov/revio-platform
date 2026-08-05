@@ -183,6 +183,30 @@ mirroring its account's `charges_enabled`), the card step disappears and the boo
 in `@revio/core`, deliberately split from `SOLD_STATUSES` — because a request that did not hold
 inventory would leave the night on sale on an OTA. It is never counted as revenue until accepted.
 
+**Returning-guest recognition (K6) — and the endpoint we refuse to build.** The obvious feature is a
+live lookup on step one: type an email, get "welcome back, Ivan — your usual quiet room?". **That must
+never exist here.** This page is unauthenticated and internet-facing, so such an endpoint is a
+guest-enumeration oracle: anyone could type addresses and learn, one request at a time, who has stayed
+at the hotel. For a hotel that is not a minor leak — it is precisely the fact a guest expects a hotel
+to keep.
+
+So recognition resolves **server-side after the booking is submitted**, from the email the guest just
+typed themselves. `recogniseGuest` in `@revio/core` owns the decision; only booleans and counts cross
+back to the page — never a name, a past room, or a preference. Three details matter:
+
+- **The guest is resolved through merges.** Matching on email alone attaches a new booking to a record
+  the front desk merged away, filing the reservation under someone the PMS no longer shows — the exact
+  guest we were trying to recognise becomes invisible. `mergedIntoId` is followed to the survivor.
+- **Only sold statuses count as a stay.** Greeting someone as a regular because they once cancelled is
+  the kind of small wrongness that discredits the whole feature.
+- **`recognitionOptOut` silences everything**, guest-facing *and* staff-facing — a receptionist cannot
+  honour a preference they were never shown. It is narrower than erasure by design: a hotel keeps the
+  booking and invoice records it is legally required to keep. Set in **RevioCRS → Guests → Privacy**.
+
+The confirmation page computes it itself rather than trusting a query param, because that page is
+reachable by reference alone — anything shown there has to be true for everyone who can reach it, not
+just for whoever just booked.
+
 ## Boundaries
 
 - Guest-facing domain logic lives in **`@revio/booking`**, not here, because the CRS's own public API

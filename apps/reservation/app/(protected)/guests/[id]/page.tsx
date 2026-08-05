@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getGuestDetail } from "@/lib/data";
-import { updateGuest } from "@/lib/actions-reservations";
+import { setGuestRecognitionOptOut, updateGuest } from "@/lib/actions-reservations";
 import { GuestNotes, type GuestNoteRow } from "@/components/guests/GuestNotes";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
@@ -91,6 +91,41 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
           )}
         </Card>
       </div>
+
+      {/* Recognition opt-out (K6). A guest who asks not to be greeted as a regular gets that honoured
+          everywhere at once, because there is one guest record — the booking page stops saying
+          "welcome back" and the front desk stops being told to. Deliberately separate from erasure:
+          a hotel keeps the booking and invoice records it is legally required to keep. */}
+      <Card>
+        <CardHeader
+          title="Privacy"
+          subtitle="What this guest has asked us not to do — honoured across RevioDirect, RevioCRS and RevioPMS at once"
+        />
+        <form action={setGuestRecognitionOptOut} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+          <input type="hidden" name="guestId" value={guest.id} />
+          <label className="flex cursor-pointer items-start gap-2.5 text-[13px] text-ink-700">
+            <input
+              type="checkbox"
+              name="optOut"
+              defaultChecked={guest.recognitionOptOut}
+              className="mt-0.5 h-4 w-4 rounded border-surface-border text-brand-600"
+            />
+            <span>
+              <span className="font-semibold text-ink-900">Do not recognise this guest across stays</span>
+              <span className="mt-0.5 block text-[12px] text-ink-500">
+                Suppresses &ldquo;welcome back&rdquo; on the booking page and the returning-guest note for the
+                front desk. Their stay history is unchanged and still counts in every report.
+              </span>
+            </span>
+          </label>
+          <button
+            type="submit"
+            className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
+          >
+            Save
+          </button>
+        </form>
+      </Card>
 
       {/* Staff notes (spec §4) — on the SHARED guest record, so they travel wherever the guest does. */}
       <Card>
