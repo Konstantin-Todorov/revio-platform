@@ -31,6 +31,13 @@ be re-derived at the call site.
 
 ## Perimeters
 
+Two policies exist, not one. `tenant_isolation` scopes a row to its owner — the hotel is *entitled*
+to that data, it just may not see anyone else's. `operator_only` (`ConnectivityCredential` · `Invoice`
+· `OperatorUser` · `ClientAccount` · `ClientContact` · `ClientNote`) is stricter: those rows are ours
+*about* a hotel — OTA tokens, what we bill them, our renewal risk assessment, the note that the owner
+is unhappy — and are visible only under `app.bypass = 'on'`, which only the Operator console sets.
+When adding a table, the question is not "does it have a `tenantId`" but "**whose data is this?**"
+
 `src/rls.ts` exposes `forTenant(id)` and `forSystem()`. Choosing between them **is** the security
 decision — everything downstream inherits it — so it belongs at the top of a request, not deep in a
 data function. The public booking app is the interesting case: it has no session, so `lib/property.ts`

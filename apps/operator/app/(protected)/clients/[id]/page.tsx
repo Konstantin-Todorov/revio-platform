@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { getClientDetail } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
+import { AccountPanel } from "@/components/clients/AccountPanel";
+import { ContactsPanel } from "@/components/clients/ContactsPanel";
+import { RelationshipLog } from "@/components/clients/RelationshipLog";
 
 export const dynamic = "force-dynamic";
 
@@ -60,8 +63,28 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </Card>
       )}
 
+      {/* 2. Who they are and when this renews. The relationship comes before the arithmetic, because
+          the arithmetic is useless if nobody knows who to phone about it. */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <AccountPanel
+          tenantId={tenant.id}
+          account={{
+            stage: c.stage,
+            ownerOperatorId: c.account?.ownerOperatorId ?? null,
+            ownerOperatorName: c.account?.ownerOperator?.name ?? null,
+            renewalDate: c.account?.renewalDate ? c.account.renewalDate.toISOString().slice(0, 10) : null,
+            contractTermMonths: c.account?.contractTermMonths ?? null,
+            summary: c.account?.summary ?? null,
+          }}
+          observed={c.observedStage}
+          operators={c.operators}
+          lastContactAt={c.lastContactAt ? c.lastContactAt.toISOString() : null}
+        />
+        <ContactsPanel tenantId={tenant.id} contacts={c.contacts} />
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* 2. What they are worth today. */}
+        {/* 3. What they are worth today. */}
         <Card>
           <CardHeader title="Billing" />
           <div className="px-4 py-4">
@@ -83,7 +106,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           </div>
         </Card>
 
-        {/* 3. What their business is doing — the thing a normal SaaS admin cannot see. */}
+        {/* …and what their business is doing — the thing a normal SaaS admin cannot see. */}
         <Card>
           <CardHeader title="Their last 30 days" />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-4 text-[13px]">
@@ -106,6 +129,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       </div>
 
       {/* 4. What to sell them, priced from their own data. */}
+      {/* (the log follows the pitch, because it is what you scan while the phone is ringing) */}
       <Card>
         <CardHeader
           title={
@@ -147,6 +171,20 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           </ul>
         )}
       </Card>
+
+      {/* 5. What was said last time — ours, plus the moments the platform already knew about. */}
+      <RelationshipLog
+        tenantId={tenant.id}
+        items={c.timeline.map((i) => ({
+          id: i.id,
+          at: i.at.toISOString(),
+          kind: i.kind,
+          title: i.title,
+          detail: i.detail,
+          author: i.author,
+          pinned: i.pinned,
+        }))}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

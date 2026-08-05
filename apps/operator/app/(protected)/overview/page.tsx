@@ -28,6 +28,9 @@ export default async function OverviewPage() {
   const forwardNights = d.forward.reduce((s, f) => s + f.roomNights, 0);
   const acts = d.feed.filter((f) => f.severity === "act").length;
   const soons = d.feed.filter((f) => f.severity === "soon").length;
+  // MRR standing on a renewal date inside the next 90 days — the part of the top-line number that is
+  // not guaranteed to still be there next quarter.
+  const renewalMrr = d.renewals.filter((r) => r.days <= 90).reduce((s, r) => s + r.monthlyMinor, 0);
 
   const counters = [
     { icon: Building2, tone: "info", value: stats.clients, label: "Clients" },
@@ -116,40 +119,81 @@ export default async function OverviewPage() {
         />
       </Card>
 
-      {/* 3. Who needs you today — every client's flags in one feed, most urgent first. */}
-      <Card>
-        <CardHeader
-          title={d.feed.length === 0 ? "Needs attention — all clear" : `Needs attention (${d.feed.length})`}
-          action={<Link href="/clients" className="text-[12px] font-semibold text-brand-600 hover:underline">All clients</Link>}
-        />
-        {d.feed.length === 0 ? (
-          <p className="px-4 py-6 text-[13px] text-ink-500">
-            Nothing outstanding across the portfolio — no stalled onboarding, no unpaid invoices, no sync failures.
-          </p>
-        ) : (
-          <ul className="divide-y divide-surface-border">
-            {d.feed.slice(0, 12).map((f, i) => (
-              <li key={`${f.clientId}-${f.title}-${i}`} className="flex items-start gap-3 px-4 py-2.5">
-                <span
-                  aria-hidden
-                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                    f.severity === "act" ? "bg-danger-600" : f.severity === "soon" ? "bg-warning-500" : "bg-ink-300"
-                  }`}
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="flex flex-wrap items-baseline gap-x-2">
-                    <Link href={`/clients/${f.clientId}`} className="text-[13px] font-semibold text-ink-900 hover:text-brand-700 hover:underline">
-                      {f.clientName}
-                    </Link>
-                    <span className={`text-[13px] ${f.severity === "act" ? "font-semibold text-danger-600" : "text-ink-700"}`}>{f.title}</span>
+      {/* 3. Who needs you today — every client's flags in one feed, most urgent first — beside our
+          own forward book, which is the only thing on this page with a deadline attached. */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <CardHeader
+            title={d.feed.length === 0 ? "Needs attention — all clear" : `Needs attention (${d.feed.length})`}
+            action={<Link href="/clients" className="text-[12px] font-semibold text-brand-600 hover:underline">All clients</Link>}
+          />
+          {d.feed.length === 0 ? (
+            <p className="px-4 py-6 text-[13px] text-ink-500">
+              Nothing outstanding across the portfolio — no stalled onboarding, no unpaid invoices, no sync failures.
+            </p>
+          ) : (
+            <ul className="divide-y divide-surface-border">
+              {d.feed.slice(0, 12).map((f, i) => (
+                <li key={`${f.clientId}-${f.title}-${i}`} className="flex items-start gap-3 px-4 py-2.5">
+                  <span
+                    aria-hidden
+                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                      f.severity === "act" ? "bg-danger-600" : f.severity === "soon" ? "bg-warning-500" : "bg-ink-300"
+                    }`}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <Link href={`/clients/${f.clientId}`} className="text-[13px] font-semibold text-ink-900 hover:text-brand-700 hover:underline">
+                        {f.clientName}
+                      </Link>
+                      <span className={`text-[13px] ${f.severity === "act" ? "font-semibold text-danger-600" : "text-ink-700"}`}>{f.title}</span>
+                    </span>
+                    <span className="mt-0.5 block text-[12px] text-ink-500">{f.detail}</span>
                   </span>
-                  <span className="mt-0.5 block text-[12px] text-ink-500">{f.detail}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        {/* Every other number here is revenue already being earned. This is the revenue that has to
+            be re-won, with a date on it — the one deadline that arrives whether or not anyone
+            prepared for it. */}
+        <Card>
+          <CardHeader
+            title="Renewals ahead"
+            action={renewalMrr > 0 ? <span className="tnum text-[12px] font-semibold text-ink-600">{money(renewalMrr)}/mo</span> : undefined}
+          />
+          {d.renewals.length === 0 ? (
+            <p className="px-4 py-6 text-[13px] text-ink-500">
+              No renewal dates inside four months. Ones with no date set are not counted — record them on the
+              client&rsquo;s account.
+            </p>
+          ) : (
+            <ul className="divide-y divide-surface-border">
+              {d.renewals.slice(0, 8).map((r) => (
+                <li key={r.id} className="flex items-baseline justify-between gap-2 px-4 py-2.5">
+                  <span className="min-w-0">
+                    <Link href={`/clients/${r.id}`} className="block truncate text-[13px] font-semibold text-ink-900 hover:text-brand-700 hover:underline">
+                      {r.name}
+                    </Link>
+                    <span className="text-[11.5px] text-ink-400">
+                      {r.at.toISOString().slice(0, 10)}
+                      {r.accountManager ? ` · ${r.accountManager}` : " · unassigned"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className={`block text-[12px] font-semibold ${r.days < 0 ? "text-danger-600" : r.days <= 30 ? "text-danger-600" : r.days <= 60 ? "text-warning-600" : "text-ink-500"}`}>
+                      {r.days < 0 ? `${-r.days}d overdue` : r.days === 0 ? "today" : `in ${r.days}d`}
+                    </span>
+                    <span className="tnum block text-[11.5px] text-ink-400">{money(r.monthlyMinor)}/mo</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
 
       {/* 4. Who is worth the most of your time — ranked by what they pay, with what is wrong beside it. */}
       <Card>

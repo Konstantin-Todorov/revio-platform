@@ -39,6 +39,12 @@ model Tenant {
 
   properties Property[]
   users      User[]
+
+  // Operator-only CRM. Named `crm*` so no call site can mistake our private record of a client for
+  // the client's own data — RLS blocks it from a hotel connection either way.
+  crmAccount  ClientAccount?
+  crmContacts ClientContact[]
+  crmNotes    ClientNote[]
 }
 
 model User {
@@ -67,6 +73,8 @@ model OperatorUser {
   role         String   @default("super_admin") // super_admin | support
   passwordHash String
   createdAt    DateTime @default(now())
+
+  ownedAccounts ClientAccount[]
 }
 
 // Per-tenant connectivity credential (e.g. a Channex API key), AES-256-GCM encrypted at rest.
@@ -100,6 +108,81 @@ model Invoice {
 
   @@unique([tenantId, period])
   @@index([tenantId])
+}
+
+// --- Operator CRM (L6) ------------------------------------------------------
+// Everything in this block is OURS, *about* a client, and the hotel must never read a word of it.
+// Same `operator_only` RLS as Invoice / ConnectivityCredential / OperatorUser: rows exist only under
+// `app.bypass = 'on'`. "Called the owner, he is unhappy about the March invoice" is exactly the kind
+// of note that must be impossible to leak through an application bug, so it is locked at the database
+// rather than by remembering to filter it.
+//
+// The back-relations on Tenant are named `crm*` so a call site cannot mistake this perimeter for the
+// hotel's own data — `tenant.notes` would read like guest notes; `tenant.crmNotes` cannot.
+
+// The commercial relationship with one client: who owns it, where it is in its life, when it renews.
+// One row per tenant, created lazily the first time an operator writes anything to it.
+model ClientAccount {
+  id       String @id @default(cuid())
+  tenantId String @unique
+  /// STATED stage — what we believe. Deliberately not derived: the console derives an *observed*
+  /// stage from behaviour and shows the two side by side, because the disagreement ("you have them
+  /// down as live; they have not taken a booking in six weeks") is the useful signal. A single
+  /// auto-computed field would silently overwrite the human judgement instead of arguing with it.
+  stage            String    @default("onboarding") // prospect | onboarding | live | at_risk | churned
+  /// Which of our staff owns this relationship. SetNull, so removing an operator never orphans a client.
+  ownerOperatorId  String?
+  /// Contract renewal / anniversary. Date-only: a renewal is a calendar day, not an instant.
+  renewalDate      DateTime? @db.Date
+  contractTermMonths Int?
+  /// The one line you want in front of you before dialling.
+  summary          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerOperator OperatorUser? @relation(fields: [ownerOperatorId], references: [id], onDelete: SetNull)
+}
+
+// A person we talk to. NOT a `User` — the person who signs the contract and the person who logs in
+// are routinely different people, and the owner who decides on renewal often has no login at all.
+// Modelling them as staff accounts would mean inventing logins for people who must never have one.
+model ClientContact {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  /// Their job, in their words: "Owner", "General Manager", "Revenue", "Accounts payable".
+  role      String?
+  email     String?
+  phone     String?
+  isPrimary Boolean  @default(false)
+  /// Where invoices should go. Separate from primary: the person who pays is rarely the one who buys.
+  isBilling Boolean  @default(false)
+  note      String?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// One entry in the relationship log. `occurredAt` is separate from `createdAt` because a call is
+// logged after it happens — sorting a timeline by row-creation time puts last week's call at the top.
+model ClientNote {
+  id         String   @id @default(cuid())
+  tenantId   String
+  kind       String   @default("note") // note | call | email | meeting | issue
+  body       String
+  authorId   String?
+  /// Snapshot of who wrote it, so the log still reads correctly after that operator leaves.
+  authorName String
+  pinned     Boolean  @default(false)
+  occurredAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, occurredAt])
 }
 
 // --- Property & sellable products -----------------------------------------

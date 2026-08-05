@@ -53,7 +53,7 @@ async function main() {
   const pw = await bcrypt.hash(DEMO_PASSWORD, 10);
 
   // Operator login (us): operator@revio.app
-  await prisma.operatorUser.create({
+  const operator = await prisma.operatorUser.create({
     data: { name: "Revio Operator", email: "operator@revio.app", role: "super_admin", passwordHash: pw },
   });
 
@@ -464,6 +464,49 @@ async function main() {
   await prisma.ratePrice.createMany({ data: prices2.map((r) => ({ ...r, source: "seed" })) });
   await prisma.reservation.create({ data: { ...t2, channelId: ch2[0]!.id, externalId: "BS-7714", guestName: "Ivan Petrov", status: "confirmed", totalMinor: 48000, currency: "EUR", propertyCurrency: "EUR", propertyTotalMinor: 48000, fxRate: 1, fxAt: minsAgo(7), importedAt: minsAgo(7), lines: { create: [{ roomTypeId: rt2[0]!.id, ratePlanId: std2.id, quantity: 1, checkIn: monday, checkOut: addDays(monday, 3), priceMinor: 48000 }] } } });
   await prisma.syncEvent.create({ data: { ...t2, channelId: ch2[0]!.id, kind: "pull", status: "success", summary: "New reservation imported (Booking.com)", createdAt: minsAgo(7) } });
+
+  // --- Operator CRM (L6) -------------------------------------------------
+  // Operator-only: the hotels can never read a row of this. Dates are relative to the seed run so the
+  // renewal flags stay meaningful whenever it is re-seeded, and the two clients deliberately show
+  // DIFFERENT failure modes — one healthy and looked after, one paying and quietly neglected.
+  const today = date(new Date());
+  await prisma.clientAccount.create({
+    data: {
+      tenantId, stage: "live", ownerOperatorId: operator.id,
+      renewalDate: addDays(today, 41), contractTermMonths: 12,
+      summary: "Owner-run group, decisions go through Maria. Price sensitive on modules, not on support. Second building opens next spring — the RevioPMS conversation belongs there.",
+    },
+  });
+  await prisma.clientContact.createMany({
+    data: [
+      { tenantId, name: "Maria Petrova", role: "Owner", email: "maria@hotelsofia.demo", phone: "+359 88 412 7730", isPrimary: true, note: "Mornings only; prefers Bulgarian." },
+      { tenantId, name: "Georgi Dimitrov", role: "Accounts", email: "finance@hotelsofia.demo", isBilling: true },
+    ],
+  });
+  await prisma.clientNote.createMany({
+    data: [
+      { tenantId, kind: "call", body: "Quarterly check-in with Maria. Happy with sync reliability; asked whether RevioDirect can take deposits. Said we would come back on it.", occurredAt: addDays(today, -6), authorId: operator.id, authorName: operator.name },
+      { tenantId, kind: "note", body: "Renewal is theirs to lose — they have never missed an invoice and use all three products. Lead with the direct-booking savings, not the price.", occurredAt: addDays(today, -6), authorId: operator.id, authorName: operator.name, pinned: true },
+      { tenantId, kind: "email", body: "Sent the July invoice and the commission summary they asked for.", occurredAt: addDays(today, -24), authorId: operator.id, authorName: operator.name },
+      { tenantId, kind: "meeting", body: "On-site in Sofia. Walked the front desk through the housekeeping board with the two supervisors.", occurredAt: addDays(today, -71), authorId: operator.id, authorName: operator.name },
+    ],
+  });
+
+  // Black Sea: paying, live, and nobody has spoken to them since spring — with a renewal three weeks
+  // out. This is the exact shape of the account that gets lost, which is why the console now says so.
+  await prisma.clientAccount.create({
+    data: {
+      tenantId: tenant2.id, stage: "live", ownerOperatorId: operator.id,
+      renewalDate: addDays(today, 19), contractTermMonths: 12,
+      summary: "Seasonal resort — quiet out of season, which is normal for them. Bought on the OTA sync alone.",
+    },
+  });
+  await prisma.clientContact.create({
+    data: { tenantId: tenant2.id, name: "Dimitar Kolev", role: "General Manager", email: "owner@blacksea.demo", phone: "+359 87 900 1145", isPrimary: true },
+  });
+  await prisma.clientNote.create({
+    data: { tenantId: tenant2.id, kind: "call", body: "Onboarding follow-up. Mapping done, first pushes clean. Said to call back before the summer season.", occurredAt: addDays(today, -131), authorId: operator.id, authorName: operator.name },
+  });
 
   // --- Report ------------------------------------------------------------
   const counts = {

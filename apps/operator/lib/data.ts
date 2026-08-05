@@ -6,6 +6,10 @@ import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { channelEconomics, SOLD_STATUSES } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
+import {
+  CONTACT_KINDS, accountAttention, buildTimeline, lastContactAt, observedStage,
+  type Stage, type TimelineItem,
+} from "./account";
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
@@ -60,7 +64,20 @@ export type ClientRow = Awaited<ReturnType<typeof getClients>>[number];
 export async function getClients() {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
   const tenants = await prisma.tenant.findMany({
-    include: { properties: { select: { id: true, name: true } }, users: { where: { role: "owner" }, take: 1 } },
+    include: {
+      properties: { select: { id: true, name: true } },
+      users: { where: { role: "owner" }, take: 1 },
+      // The CRM half (L6). Only what the row and its flags need: the stage and renewal date we
+      // believe, whether anyone is recorded as the person to call, and the last time we spoke.
+      crmAccount: { select: { stage: true, renewalDate: true, ownerOperator: { select: { name: true } } } },
+      crmContacts: { where: { isPrimary: true }, take: 1, select: { name: true, email: true, phone: true } },
+      crmNotes: {
+        where: { kind: { in: [...CONTACT_KINDS] } },
+        orderBy: { occurredAt: "desc" },
+        take: 1,
+        select: { kind: true, occurredAt: true },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
 
@@ -91,8 +108,18 @@ export async function getClients() {
       ]);
 
       const entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
-      const attention = sortBySeverity(
-        clientAttention({
+      const monthly = monthlyPriceMinor(t.plan, entitlements);
+      const observed = observedStage({
+        status: t.status, createdAt: t.createdAt,
+        properties: t.properties.length, roomTypes,
+        lastReservationAt: lastReservation?.importedAt ?? null,
+      });
+
+      // Two flag sources, one sorted list. `clientAttention` asks whether their software is working;
+      // `accountAttention` asks whether we are looking after them. Both belong in the same feed —
+      // "renews in 12 days" and "5 open sync errors" are the same morning's work.
+      const attention = sortBySeverity([
+        ...clientAttention({
           status: t.status,
           createdAt: t.createdAt,
           entitlements,
@@ -104,9 +131,20 @@ export async function getClients() {
           bookingEngineProperties,
           directReservationsLast30d: directLast30d,
           unpaidInvoices,
-          monthlyPriceMinor: monthlyPriceMinor(t.plan, entitlements),
+          monthlyPriceMinor: monthly,
         }),
-      );
+        ...accountAttention({
+          status: t.status,
+          createdAt: t.createdAt,
+          // No account record yet means nobody has formed a view, so there is nothing to disagree with.
+          stage: (t.crmAccount?.stage ?? "onboarding") as Stage,
+          observed,
+          renewalDate: t.crmAccount?.renewalDate ?? null,
+          lastContactAt: lastContactAt(t.crmNotes),
+          hasPrimaryContact: t.crmContacts.length > 0,
+          monthlyPriceMinor: monthly,
+        }),
+      ]);
 
       return {
         attention,
@@ -121,6 +159,14 @@ export async function getClients() {
         properties: t.properties,
         counts: { roomTypes, units, channels, channelsConnected, reservations, openErrors },
         lastSyncAt: lastSync?.lastSyncAt ?? null,
+        account: {
+          stage: (t.crmAccount?.stage ?? "onboarding") as Stage,
+          observed,
+          renewalDate: t.crmAccount?.renewalDate ?? null,
+          accountManager: t.crmAccount?.ownerOperator?.name ?? null,
+          primaryContact: t.crmContacts[0] ?? null,
+          lastContactAt: lastContactAt(t.crmNotes),
+        },
       };
     }),
   );
@@ -220,6 +266,23 @@ export async function getOperatorDashboard() {
     .flatMap((r) => r.attention.map((f) => ({ ...f, clientId: r.id, clientName: r.name })))
     .sort((a, b) => RANK[a.severity] - RANK[b.severity]);
 
+  // Our own forward book, next to the clients'. Every other number on this screen is revenue we are
+  // already earning; this is the revenue that has to be re-won, with a date on it. A renewal is the
+  // one deadline in this business that arrives whether or not anyone prepared for it.
+  const RENEWAL_HORIZON_DAYS = 120;
+  const renewals = clients
+    .filter((c) => c.status === "active" && c.account.renewalDate)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      at: c.account.renewalDate!,
+      days: Math.ceil((c.account.renewalDate!.getTime() - now.getTime()) / 86_400_000),
+      monthlyMinor: monthlyPriceMinor(c.plan, c.entitlements),
+      accountManager: c.account.accountManager,
+    }))
+    .filter((r) => r.days <= RENEWAL_HORIZON_DAYS)
+    .sort((a, b) => a.days - b.days);
+
   return {
     money: {
       mrrMinor,
@@ -240,6 +303,7 @@ export async function getOperatorDashboard() {
       revenueMinor: futureByMonth.get(k)!.revenueMinor,
     })),
     feed,
+    renewals,
     rows: [...rows].sort((a, b) => b.monthlyMinor - a.monthlyMinor),
   };
 }
@@ -269,12 +333,18 @@ export async function getClientDetail(id: string) {
         select: { id: true, name: true, timezone: true, baseCurrency: true, publicSlug: true, bookingEngineEnabled: true, status: true },
       },
       users: { orderBy: { name: "asc" }, select: { id: true, name: true, email: true, role: true, active: true } },
+      // The CRM half (L6) — operator-only, and the reason this page can now be read before a call
+      // rather than only after one.
+      crmAccount: { include: { ownerOperator: { select: { id: true, name: true } } } },
+      crmContacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
+      crmNotes: { orderBy: { occurredAt: "desc" }, take: 100 },
     },
   });
   if (!tenant) return null;
 
   const [roomTypes, units, channels, channelsConnected, reservations, openErrors, lastSync,
-         lastReservation, reservationsLast30d, invoices, recentFailures, lines] = await Promise.all([
+         lastReservation, reservationsLast30d, invoices, recentFailures, lines,
+         firstReservation, operators] = await Promise.all([
     prisma.roomType.count({ where: { tenantId: id } }),
     prisma.unit.count({ where: { tenantId: id } }),
     prisma.channel.findMany({ where: { tenantId: id }, select: { id: true, name: true, code: true, status: true, commissionPct: true, lastSyncAt: true, errorCount: true } }),
@@ -300,6 +370,9 @@ export async function getClientDetail(id: string) {
         },
       },
     }),
+    // Timeline milestones.
+    prisma.reservation.findFirst({ where: { tenantId: id }, orderBy: { importedAt: "asc" }, select: { importedAt: true } }),
+    prisma.operatorUser.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
 
   // Aggregate by source the same way the CRS does, then hand it to the shared function.
@@ -327,8 +400,16 @@ export async function getClientDetail(id: string) {
   const bookingEngineProperties = tenant.properties.filter((p) => p.bookingEngineEnabled).length;
   const monthly = monthlyPriceMinor(tenant.plan, entitlements);
 
-  const attention = sortBySeverity(
-    clientAttention({
+  const observed = observedStage({
+    status: tenant.status, createdAt: tenant.createdAt,
+    properties: tenant.properties.length, roomTypes,
+    lastReservationAt: lastReservation?.importedAt ?? null,
+  });
+  const contactedAt = lastContactAt(tenant.crmNotes);
+  const statedStage = (tenant.crmAccount?.stage ?? "onboarding") as Stage;
+
+  const attention = sortBySeverity([
+    ...clientAttention({
       status: tenant.status, createdAt: tenant.createdAt, entitlements,
       properties: tenant.properties.length, roomTypes, units,
       channels: channels.length, channelsConnected, openErrors,
@@ -338,7 +419,37 @@ export async function getClientDetail(id: string) {
       directReservationsLast30d: economics.rows.filter((r) => r.category === "direct").reduce((s, r) => s + r.reservations, 0),
       unpaidInvoices, monthlyPriceMinor: monthly,
     }),
-  );
+    ...accountAttention({
+      status: tenant.status, createdAt: tenant.createdAt,
+      stage: statedStage, observed,
+      renewalDate: tenant.crmAccount?.renewalDate ?? null,
+      lastContactAt: contactedAt,
+      hasPrimaryContact: tenant.crmContacts.some((c) => c.isPrimary),
+      monthlyPriceMinor: monthly,
+    }),
+  ]);
+
+  /**
+   * One relationship log: what we wrote down, plus the moments the platform already knew about.
+   *
+   * The milestones are derived rather than stored. Writing "first booking taken" into a table at the
+   * time would mean a timeline that is only correct for clients onboarded after this feature existed;
+   * deriving it means every client already has a history the first time the page is opened.
+   */
+  const timeline = buildTimeline([
+    ...tenant.crmNotes.map((n): TimelineItem => ({
+      id: n.id, at: n.occurredAt, kind: n.kind, title: n.body,
+      author: n.authorName, pinned: n.pinned,
+    })),
+    { id: `m-created-${tenant.id}`, at: tenant.createdAt, kind: "milestone", title: "Client created", detail: `Onboarded on ${tenant.createdAt.toISOString().slice(0, 10)}` },
+    ...(firstReservation
+      ? [{ id: `m-first-${tenant.id}`, at: firstReservation.importedAt, kind: "milestone", title: "First booking taken", detail: "The platform started carrying real revenue for them." } as TimelineItem]
+      : []),
+    ...invoices.flatMap((i): TimelineItem[] => [
+      { id: `i-${i.id}`, at: i.createdAt, kind: "invoice", title: `Invoice ${i.period} issued`, detail: `€${(i.amountMinor / 100).toFixed(2)} — ${i.lineItems ?? ""}`.trim() },
+      ...(i.paidAt ? [{ id: `p-${i.id}`, at: i.paidAt, kind: "invoice", title: `Invoice ${i.period} paid`, detail: `€${(i.amountMinor / 100).toFixed(2)}` } as TimelineItem] : []),
+    ]),
+  ]);
 
   const opportunities = clientOpportunities({
     plan: tenant.plan, entitlements, rooms: units, properties: tenant.properties.length,
@@ -358,6 +469,15 @@ export async function getClientDetail(id: string) {
     channels, recentFailures, economics,
     lastSyncAt: lastSync?.lastSyncAt ?? null,
     lastReservationAt: lastReservation?.importedAt ?? null,
+    // The CRM half.
+    account: tenant.crmAccount,
+    stage: statedStage,
+    observedStage: observed,
+    contacts: tenant.crmContacts,
+    notes: tenant.crmNotes,
+    lastContactAt: contactedAt,
+    timeline,
+    operators,
   };
 }
 

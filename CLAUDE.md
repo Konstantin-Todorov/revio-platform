@@ -167,7 +167,7 @@ Channex (verified on prod: a PMS OOO and a CRS save each produced a Channex task
 — billing UI + `Invoice` model with operator-only RLS, **payments mocked**). **Entitlement gating verified**
 across one/some/all product combos.
 
-**→ ✅ OPERATOR ROUND 2 (phase L) — L1–L5 SHIPPED + LIVE 2026-08-05.** The console stopped counting and
+**→ ✅ OPERATOR ROUND 2 (phase L) — COMPLETE, L1–L6 SHIPPED + LIVE 2026-08-05.** The console stopped counting and
 started saying what to do. Three pure, tested modules in `apps/operator/lib/` (29 tests):
 `clientAttention` derives what needs a call — stalled onboarding, a product billed for and never
 switched on, unpaid invoices, sync failures, a client that used to book and stopped — with severity
@@ -180,9 +180,17 @@ computed, reporting **over-billing as plainly as under-billing**. The RevioDirec
 number quoted in a call is one the customer can open and verify. Screens: **`/clients/[id]`** ordered
 like a renewal call, and an **Overview** leading with MRR, unbilled drift, the clients' own
 **forward bookings** (their pipeline is our leading indicator) and one attention feed across the
-portfolio. It found real money on first load — one client under-billed €150/mo. **L6 remains**: the
-CRM half (contacts, lifecycle, renewal date, notes, timeline) on an operator-only `ClientAccount`.
-See `apps/operator/CLAUDE.md`.
+portfolio. It found real money on first load — one client under-billed €150/mo. **L6 closed the
+cycle** with the half that could *not* be derived — who to call, when the contract renews, what was
+said last time — on three **operator-only** tables (`ClientAccount` · `ClientContact` · `ClientNote`,
+`operator_only` RLS, so a hotel can never read our private assessment of them; `rls-verify` now runs
+**101/101** and proves a hotel connection sees 0 of the 10 seeded CRM rows). The stage is **stated by
+a human and argued with by the data** — `observedStage` derives one from behaviour, is never stored,
+and the screens remark only when the two disagree; one direction of that disagreement catches a hotel
+live in production and invoiced nothing. Contacts are deliberately **not `User` rows**: the owner who
+decides on renewal usually has no login. The timeline **merges written notes with derived milestones**
+(created, first booking, invoices), so a client has a history the first time the page is opened.
+Overview gained **Renewals ahead** — our forward book beside the clients'. See `apps/operator/CLAUDE.md`.
 
 **→ 🔴 PHASE N (accounts & auth) IS NEXT, and N1 is a live hole.** There is **no rate limiting on any
 login form** — RevioLink, RevioCRS, RevioPMS and the Operator console all accept unlimited password

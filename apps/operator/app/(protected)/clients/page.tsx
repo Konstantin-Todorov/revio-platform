@@ -4,10 +4,14 @@ import { setStatus } from "@/lib/actions";
 import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { CreateClientDialog } from "@/components/clients/CreateClientDialog";
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
+import { STAGE_LABEL, renewalStatus, type Stage } from "@/lib/account";
 
 export const dynamic = "force-dynamic";
 
 const PLAN_LABEL: Record<string, string> = { starter: "Starter", growth: "Growth", scale: "Scale" };
+const STAGE_TONE: Record<Stage, "success" | "info" | "warning" | "danger" | "neutral"> = {
+  prospect: "neutral", onboarding: "info", live: "success", at_risk: "warning", churned: "danger",
+};
 
 export default async function ClientsPage() {
   const clients = await getClients();
@@ -25,7 +29,7 @@ export default async function ClientsPage() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                {["Client", "Owner", "Properties", "Plan", "Products (click to toggle)", "Status", ""].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
+                {["Client", "Account", "Who to call", "Properties", "Plan", "Products (click to toggle)", "Status", ""].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -69,8 +73,41 @@ export default async function ClientsPage() {
                       </ul>
                     )}
                   </td>
+                  {/* Where the relationship stands: what we say, when it renews, and — where they
+                      disagree — what their usage says instead. */}
                   <td className="px-4 py-3">
-                    {c.owner ? <><div className="text-ink-800">{c.owner.name}</div><div className="text-[11px] text-ink-400">{c.owner.email}</div></> : <span className="text-ink-300">—</span>}
+                    <StatusPill tone={STAGE_TONE[c.account.stage]}>{STAGE_LABEL[c.account.stage]}</StatusPill>
+                    {c.account.observed !== c.account.stage && (
+                      <div className="mt-1 text-[11px] text-ink-400">looks {STAGE_LABEL[c.account.observed].toLowerCase()}</div>
+                    )}
+                    {/* The DATE, not the countdown. "Renews in 41 days" is already in the flag list
+                        beside the client name; printing the same sentence twice on one row is how a
+                        table stops being scannable. The colour carries the urgency instead. */}
+                    {c.account.renewalDate && (() => {
+                      const r = renewalStatus(c.account.renewalDate);
+                      return (
+                        <div className={`tnum mt-1 text-[11px] ${r?.severity === "act" ? "font-semibold text-danger-600" : r ? "font-semibold text-warning-600" : "text-ink-400"}`}>
+                          renews {c.account.renewalDate.toISOString().slice(0, 10)}
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  {/* The person, then the login. They are usually not the same human — the owner who
+                      decides on renewal often has no account at all. */}
+                  <td className="px-4 py-3">
+                    {c.account.primaryContact ? (
+                      <>
+                        <div className="text-ink-800">{c.account.primaryContact.name}</div>
+                        <div className="text-[11px] text-ink-400">{c.account.primaryContact.phone ?? c.account.primaryContact.email}</div>
+                      </>
+                    ) : c.owner ? (
+                      <>
+                        <div className="text-ink-800">{c.owner.name}</div>
+                        <div className="text-[11px] text-ink-300">login · no contact recorded</div>
+                      </>
+                    ) : (
+                      <span className="text-ink-300">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-ink-600">
                     {c.properties.map((p) => <div key={p.id}>{p.name}</div>)}

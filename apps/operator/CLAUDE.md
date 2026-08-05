@@ -51,18 +51,57 @@ from us is the difference between a credit note and a cancellation.
 Using the wrong one put the same client in two different tiers on two different screens; caught
 before shipping, and the reason `getClients` exposes `units`.
 
-Screens: **`/clients/[id]`** is ordered like a renewal call — what is wrong, what they are worth,
-what to sell them, then the evidence — because it has to survive being read thirty seconds before
-dialling. **Overview** leads with MRR, unbilled drift, the clients' own forward bookings and the
-attention feed; the seven raw counters are the footer.
+Screens: **`/clients/[id]`** is ordered like a renewal call — what is wrong, who to call and when it
+renews, what they are worth, what to sell them, then what was said last time — because it has to
+survive being read thirty seconds before dialling. **Overview** leads with MRR, unbilled drift, the
+clients' own forward bookings and the attention feed; the seven raw counters are the footer.
 
 `TrendChart` is deliberately **not** the CRS's `EvolutionChart` (a dual-axis room-nights-vs-ADR
 comparison — a shape this screen never needs). It stays in this app rather than `packages/ui`
 because the platform rule is to extract when a *second* caller appears, not speculatively.
 
-**Still open:** L6 — the CRM half (contacts, lifecycle stage, renewal date, notes, activity
-timeline), which needs an operator-only `ClientAccount` model with the same `operator_only` RLS that
-`Invoice` and `ConnectivityCredential` carry, so a hotel can never read our notes about them.
+## L6 (2026-08-05) — the relationship half, and the first thing here that needed storage
+
+L1–L5 derived everything from data the platform already held. L6 could not: **who to call, when the
+contract renews, and what was said last time** are not derivable — someone has to write them down.
+Three operator-only tables (`ClientAccount` · `ClientContact` · `ClientNote`), each carrying the
+`operator_only` policy, so a hotel cannot read a word of our private assessment of them. That is
+stricter than `tenant_isolation` **on purpose**: tenant-isolated data is the hotel's own and they are
+entitled to it; this is *ours about them*.
+
+**The stage is stated, not computed — and the console argues with it.** `observedStage` derives a
+stage from behaviour and is never written anywhere; the screens show it beside the stage an operator
+typed and remark only when the two disagree. Auto-computing would silently overwrite a human
+judgement; never checking would let that judgement rot for a year. The disagreement is the only part
+that tells you something you did not already know — and one direction of it (`Marked prospect but
+live`) catches a hotel running in production while being invoiced nothing.
+
+**`accountAttention` is separate from `clientAttention` and concatenated by the caller.** One asks
+whether their software is working, the other whether we are looking after them; both belong in the
+same morning feed, because "renews in 12 days" and "5 open sync errors" are the same day's work. The
+suspension rule is **restated** in the new module rather than inherited — it is exactly the kind of
+invariant that gets lost the moment two flag sources are merged, and there is a test for it.
+
+⚠️ **Only calls, emails and meetings count as contact** (`CONTACT_KINDS`). A note is you writing
+something down *about* them. Counting notes as contact would report a warm relationship with a
+customer nobody has actually spoken to since March — which is the failure this flag exists to catch.
+
+`rollRenewal` clamps the day of month (31 Jan + 1 month is 28 Feb, not 3 March) and anchors on the
+**old** renewal date, not today, so a contract renewed three weeks late keeps its anniversary. Both
+are tested, because a renewal date that drifts a little every year is a bug nobody notices for years.
+Marking a client renewed also **writes a log entry** — a renewal that only moves a date leaves no
+evidence it happened.
+
+The timeline **merges what we wrote with what the platform already knew** (created, first booking,
+invoices issued and paid), derived rather than stored, so every client has a history the first time
+the page is opened instead of starting blank on the day the feature shipped. Future-dated entries
+are excluded rather than sorted in — the renewal date is a real event with a real date, and dropped
+into a list headed "what happened" it sits above last week's call.
+
+**Overview** gained *Renewals ahead*: our own forward book beside the clients'. Every other number on
+that screen is revenue already being earned; this is revenue that has to be re-won, with a date on it.
+
+`lib/account.ts` — 31 tests. Total across the four derivation modules: **72**.
 
 ## Boundary
 Reads cross-tenant data through `@revio/core` admin APIs that bypass tenant RLS **only** under an
