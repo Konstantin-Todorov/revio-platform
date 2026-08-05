@@ -4,7 +4,8 @@ import { monthlyPriceMinor, billedProducts, type Entitlements } from "./pricing"
 import { clientAttention, sortBySeverity, worstSeverity } from "./attention";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
-import { channelEconomics, nightsInRange, stayNights, SOLD_STATUSES } from "@revio/core";
+import { channelEconomics, SOLD_STATUSES } from "@revio/core";
+import { bucketForward, monthBuckets } from "./forward";
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
@@ -181,29 +182,19 @@ export async function getOperatorDashboard() {
     if (bookingsByMonth.has(k)) bookingsByMonth.set(k, bookingsByMonth.get(k)! + 1);
   }
 
-  const futureByMonth = zero(fwdKeys, () => ({ roomNights: 0, revenueMinor: 0 }));
-  // Room-nights are quantity × NIGHTS, and a stay's revenue is prorated across the months it spans —
-  // the same `nightsInRange` proration the CRS metrics use, reused rather than reinvented so the two
-  // views of the same reservations cannot disagree. Counting lines and dumping a whole stay into its
-  // check-in month is how a five-night booking over a month boundary reads as one room-night in the
-  // wrong month.
-  const monthBounds = fwdKeys.map((k, i) => ({
-    key: k,
-    start: ymdUtc(shiftMonth(i)),
-    endExcl: ymdUtc(shiftMonth(i + 1)),
-  }));
-  for (const l of onTheBooks) {
-    const ci = ymdUtc(l.checkIn);
-    const co = ymdUtc(l.checkOut);
-    const total = stayNights(ci, co);
-    for (const b of monthBounds) {
-      const n = nightsInRange(ci, co, { start: b.start, endExcl: b.endExcl });
-      if (n === 0) continue;
-      const f = futureByMonth.get(b.key)!;
-      f.roomNights += l.quantity * n;
-      if (l.priceMinor != null && total > 0) f.revenueMinor += Math.round((l.priceMinor * n) / total);
-    }
-  }
+  // Forward view via the tested `bucketForward` — extracted precisely because production cannot
+  // exercise the cross-month case (every future stay currently begins and ends inside one month),
+  // so an implementation that ignored boundaries would render identical numbers and look correct.
+  const forwardTotals = bucketForward(
+    onTheBooks.map((l) => ({
+      checkIn: ymdUtc(l.checkIn),
+      checkOut: ymdUtc(l.checkOut),
+      quantity: l.quantity,
+      priceMinor: l.priceMinor,
+    })),
+    monthBuckets(now, 6),
+  );
+  const futureByMonth = new Map(forwardTotals.map((f) => [f.key, f]));
 
   const active = clients.filter((c) => c.status === "active");
   const mrrMinor = active.reduce((s, c) => s + monthlyPriceMinor(c.plan, c.entitlements), 0);
