@@ -4,7 +4,7 @@ import { monthlyPriceMinor, billedProducts, type Entitlements } from "./pricing"
 import { clientAttention, sortBySeverity, worstSeverity } from "./attention";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
-import { channelEconomics, SOLD_STATUSES } from "@revio/core";
+import { channelEconomics, nightsInRange, stayNights, SOLD_STATUSES } from "@revio/core";
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
@@ -147,6 +147,7 @@ export async function getOperatorDashboard() {
     return new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString("en-GB", { month: "short", year: "2-digit" });
   };
   const shiftMonth = (n: number) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + n, 1));
+  const ymdUtc = (d: Date) => d.toISOString().slice(0, 10);
 
   const backKeys = Array.from({ length: 12 }, (_, i) => monthKey(shiftMonth(-11 + i)));
   const fwdKeys = Array.from({ length: 6 }, (_, i) => monthKey(shiftMonth(i)));
@@ -160,7 +161,7 @@ export async function getOperatorDashboard() {
     // Every client's future room-nights and revenue. This is the forward view.
     prisma.reservationLine.findMany({
       where: { checkIn: { gte: shiftMonth(0), lt: fwdTo }, reservation: { status: { in: [...SOLD_STATUSES] } } },
-      select: { checkIn: true, quantity: true, priceMinor: true },
+      select: { checkIn: true, checkOut: true, quantity: true, priceMinor: true },
     }),
   ]);
 
@@ -181,12 +182,27 @@ export async function getOperatorDashboard() {
   }
 
   const futureByMonth = zero(fwdKeys, () => ({ roomNights: 0, revenueMinor: 0 }));
+  // Room-nights are quantity × NIGHTS, and a stay's revenue is prorated across the months it spans —
+  // the same `nightsInRange` proration the CRS metrics use, reused rather than reinvented so the two
+  // views of the same reservations cannot disagree. Counting lines and dumping a whole stay into its
+  // check-in month is how a five-night booking over a month boundary reads as one room-night in the
+  // wrong month.
+  const monthBounds = fwdKeys.map((k, i) => ({
+    key: k,
+    start: ymdUtc(shiftMonth(i)),
+    endExcl: ymdUtc(shiftMonth(i + 1)),
+  }));
   for (const l of onTheBooks) {
-    const k = monthKey(l.checkIn);
-    const f = futureByMonth.get(k);
-    if (!f) continue;
-    f.roomNights += l.quantity;
-    f.revenueMinor += l.priceMinor ?? 0;
+    const ci = ymdUtc(l.checkIn);
+    const co = ymdUtc(l.checkOut);
+    const total = stayNights(ci, co);
+    for (const b of monthBounds) {
+      const n = nightsInRange(ci, co, { start: b.start, endExcl: b.endExcl });
+      if (n === 0) continue;
+      const f = futureByMonth.get(b.key)!;
+      f.roomNights += l.quantity * n;
+      if (l.priceMinor != null && total > 0) f.revenueMinor += Math.round((l.priceMinor * n) / total);
+    }
   }
 
   const active = clients.filter((c) => c.status === "active");
