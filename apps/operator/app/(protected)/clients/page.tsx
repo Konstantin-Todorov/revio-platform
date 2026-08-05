@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getClients } from "@/lib/data";
 import { setStatus } from "@/lib/actions";
 import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -42,7 +43,9 @@ export default async function ClientsPage() {
                           }`}
                         />
                       )}
-                      <span className="font-semibold text-ink-900">{c.name}</span>
+                      <Link href={`/clients/${c.id}`} className="font-semibold text-ink-900 hover:text-brand-700 hover:underline">
+                        {c.name}
+                      </Link>
                     </div>
                     <div className="text-[11px] text-ink-400">/{c.slug}</div>
                     {/* The reason, in words. A row that says only "something is wrong" makes you open

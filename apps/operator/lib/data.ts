@@ -2,6 +2,9 @@ import "server-only";
 import { forSystem, decryptSecret, keyHint } from "@revio/db";
 import { monthlyPriceMinor, billedProducts, type Entitlements } from "./pricing";
 import { clientAttention, sortBySeverity, worstSeverity } from "./attention";
+import { clientOpportunities, pipelineMinor } from "./upsell";
+import { tierDrift } from "./pricing";
+import { channelEconomics, SOLD_STATUSES } from "@revio/core";
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
@@ -120,6 +123,123 @@ export async function getClients() {
       };
     }),
   );
+}
+
+export type ClientDetail = NonNullable<Awaited<ReturnType<typeof getClientDetail>>>;
+
+/**
+ * Everything about ONE client, on one page.
+ *
+ * The console could always answer "how many hotels do we have". It could not answer "how is Hotel
+ * Sofia doing", which is the question actually asked before a renewal call — that needed four screens
+ * and still left out their users, their booking-engine status and their invoices.
+ *
+ * The commission figures come from `channelEconomics`, the SAME function that renders the hotel's own
+ * Cost of distribution screen. That is deliberate: an upsell built on a number the customer can open
+ * and check is a different conversation from one they have to take on faith, and if the two ever
+ * disagreed the pitch would be worthless. One implementation, so they cannot.
+ */
+export async function getClientDetail(id: string) {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id },
+    include: {
+      properties: {
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, timezone: true, baseCurrency: true, publicSlug: true, bookingEngineEnabled: true, status: true },
+      },
+      users: { orderBy: { name: "asc" }, select: { id: true, name: true, email: true, role: true, active: true } },
+    },
+  });
+  if (!tenant) return null;
+
+  const [roomTypes, units, channels, channelsConnected, reservations, openErrors, lastSync,
+         lastReservation, reservationsLast30d, invoices, recentFailures, lines] = await Promise.all([
+    prisma.roomType.count({ where: { tenantId: id } }),
+    prisma.unit.count({ where: { tenantId: id } }),
+    prisma.channel.findMany({ where: { tenantId: id }, select: { id: true, name: true, code: true, status: true, commissionPct: true, lastSyncAt: true, errorCount: true } }),
+    prisma.channel.count({ where: { tenantId: id, status: "connected" } }),
+    prisma.reservation.count({ where: { tenantId: id } }),
+    prisma.errorItem.count({ where: { tenantId: id, resolved: false } }),
+    prisma.channel.findFirst({ where: { tenantId: id, lastSyncAt: { not: null } }, orderBy: { lastSyncAt: "desc" }, select: { lastSyncAt: true } }),
+    prisma.reservation.findFirst({ where: { tenantId: id }, orderBy: { importedAt: "desc" }, select: { importedAt: true } }),
+    prisma.reservation.count({ where: { tenantId: id, importedAt: { gte: thirtyDaysAgo } } }),
+    prisma.invoice.findMany({ where: { tenantId: id }, orderBy: { period: "desc" }, take: 12 }),
+    prisma.syncEvent.findMany({ where: { tenantId: id, status: "failed" }, orderBy: { createdAt: "desc" }, take: 5, include: { channel: { select: { name: true } } } }),
+    // Reservation lines for the last 30 days, shaped for channelEconomics.
+    prisma.reservationLine.findMany({
+      where: { reservation: { tenantId: id, importedAt: { gte: thirtyDaysAgo } } },
+      select: {
+        priceMinor: true, quantity: true,
+        reservation: {
+          select: {
+            id: true, status: true,
+            channel: { select: { name: true, commissionPct: true, bookingSource: { select: { name: true, category: true } } } },
+            bookingSource: { select: { name: true, category: true } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  // Aggregate by source the same way the CRS does, then hand it to the shared function.
+  const mix = new Map<string, { category: string; commissionPct: number | null; revenueMinor: number; roomNights: number; reservations: Set<string> }>();
+  for (const l of lines) {
+    const r = l.reservation;
+    if (!(SOLD_STATUSES as readonly string[]).includes(r.status)) continue;
+    const name = r.bookingSource?.name ?? r.channel?.bookingSource?.name ?? r.channel?.name ?? "Direct";
+    const category = r.bookingSource?.category ?? r.channel?.bookingSource?.category ?? (r.channel ? "ota" : "direct");
+    const e = mix.get(name) ?? { category, commissionPct: r.channel?.commissionPct ?? null, revenueMinor: 0, roomNights: 0, reservations: new Set<string>() };
+    e.revenueMinor += l.priceMinor ?? 0;
+    e.roomNights += l.quantity;
+    e.reservations.add(r.id);
+    mix.set(name, e);
+  }
+  const economics = channelEconomics(
+    [...mix.entries()].map(([sourceName, m]) => ({
+      sourceName, category: m.category, commissionPct: m.commissionPct,
+      revenueMinor: m.revenueMinor, roomNights: m.roomNights, reservations: m.reservations.size,
+    })),
+  );
+
+  const entitlements = { channelManager: tenant.hasChannelManager, reservation: tenant.hasReservation, pms: tenant.hasPms };
+  const unpaidInvoices = invoices.filter((i) => i.status !== "paid").map((i) => ({ period: i.period, amountMinor: i.amountMinor, status: i.status }));
+  const bookingEngineProperties = tenant.properties.filter((p) => p.bookingEngineEnabled).length;
+  const monthly = monthlyPriceMinor(tenant.plan, entitlements);
+
+  const attention = sortBySeverity(
+    clientAttention({
+      status: tenant.status, createdAt: tenant.createdAt, entitlements,
+      properties: tenant.properties.length, roomTypes, units,
+      channels: channels.length, channelsConnected, openErrors,
+      lastSyncAt: lastSync?.lastSyncAt ?? null,
+      lastReservationAt: lastReservation?.importedAt ?? null,
+      reservationsLast30d, bookingEngineProperties,
+      directReservationsLast30d: economics.rows.filter((r) => r.category === "direct").reduce((s, r) => s + r.reservations, 0),
+      unpaidInvoices, monthlyPriceMinor: monthly,
+    }),
+  );
+
+  const opportunities = clientOpportunities({
+    plan: tenant.plan, entitlements, rooms: units, properties: tenant.properties.length,
+    reservationsLast30d,
+    commissionPaidLast30dMinor: economics.commissionPaidMinor,
+    blendedOtaRatePct: economics.blendedOtaRatePct,
+    directRevenueLast30dMinor: economics.directRevenueMinor,
+    bookingEngineProperties, channelsConnected,
+  });
+
+  return {
+    tenant, entitlements, attention, opportunities,
+    pipelineMinor: pipelineMinor(opportunities),
+    drift: tierDrift(tenant.plan, units),
+    billing: { monthlyMinor: monthly, products: billedProducts(entitlements), invoices },
+    counts: { roomTypes, units, channels: channels.length, channelsConnected, reservations, openErrors, reservationsLast30d },
+    channels, recentFailures, economics,
+    lastSyncAt: lastSync?.lastSyncAt ?? null,
+    lastReservationAt: lastReservation?.importedAt ?? null,
+  };
 }
 
 /**
