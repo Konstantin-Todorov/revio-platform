@@ -148,8 +148,10 @@ modify/cancel/no-show) / Guests / Inventory Calendar / Rates & Restrictions (4-l
 source-scoped rules) / Reports+CSV / Global Search / Distribution / Settings (permissions matrix,
 taxes & fees), pickup-snapshot + hold-expiry jobs (see `apps/reservation/CLAUDE.md`).
 Operator onboards clients; **clients self-manage staff (roles) + properties** from RevioLink Settings.
-Both apps now have a **responsive (mobile) shell**; **RLS** is built + verified locally (prod = Phase 2,
-`DEPLOY.md`); and the **Channex adapter is built + live-verified against the sandbox** (`@revio/connectivity`,
+Both apps now have a **responsive (mobile) shell**; **RLS is ENFORCED IN PRODUCTION since 2026-08-05** —
+all five services connect as the restricted `revio_app` role (no superuser, no `BYPASSRLS`, no DDL), so
+tenant isolation is a database guarantee rather than an application convention; and the **Channex adapter
+is built + live-verified against the sandbox** (`@revio/connectivity`,
 not yet wired into the app). **RevioPMS V1 is COMPLETE — all 5 phases built, tested, live** (founder-confirmed
 spec `docs/PMS-REFERENCE.md`): `apps/pms` (port 3003, cookie `revio_pms_session`, `hasPms` gate) at
 https://pms-production-a64b.up.railway.app — the physical **Unit** model + housekeeping board (Phase 1),

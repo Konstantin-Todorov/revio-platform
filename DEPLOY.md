@@ -19,6 +19,11 @@ sharing that database.
   link it shows the hotel. Nothing else refers to the host.
 - **Railway project `revio-platform`:** services `channel-manager`, `operator`, `reservation`, `pms`,
   `booking`, `Postgres` (one shared DB).
+- **RLS is ENFORCED in production since 2026-08-05.** All five services run as the restricted
+  `revio_app` role (`rolsuper=f`, `rolbypassrls=f`, no DDL, no read on `_prisma_migrations`), while
+  `DIRECT_DATABASE_URL` keeps `prisma migrate deploy` on the owner. Tenant isolation is now a database
+  guarantee, not an application convention. The role's password lives only in Railway's variables —
+  rotate it by re-running `rls-role.sql` with a new one and re-setting `DATABASE_URL` per service.
 - **No root `railway.json`** — it applied to every service. Each app service sets its **own** build/start
   via Railway config (`railway environment edit --json` with `build.buildCommand` + `deploy.startCommand`
   using that app's `--filter`). Both target `prisma migrate deploy` → `next start` on `$PORT`.
