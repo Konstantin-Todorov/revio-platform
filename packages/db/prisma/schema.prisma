@@ -5,9 +5,21 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Two connections, because migrating and running want opposite privileges.
+//   url       — the RUNTIME connection. In production this is the restricted `revio_app` role, which
+//               is the only way RLS actually bites: Postgres ignores policies for superusers, and
+//               FORCE only reaches the table owner.
+//   directUrl — the OWNER connection, used by `prisma migrate` for DDL. The app role deliberately
+//               cannot create or alter tables, so without this every deploy would fail at
+//               `migrate deploy` before it ever started the server.
+//
+// `directUrl` is REQUIRED once declared — Prisma does not fall back to `url` when the env var is
+// missing. Since `migrate deploy` runs on every Railway deploy, adding this line before
+// DIRECT_DATABASE_URL exists on a service breaks that service's next deploy. It is set on all five.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // --- Tenancy ---------------------------------------------------------------

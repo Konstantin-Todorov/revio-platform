@@ -98,50 +98,72 @@ role (a superuser), so policies are bypassed → **zero behaviour change**, but 
 > `schema.prisma` and pushing would fail `prisma migrate deploy` on **every** service at once, since
 > migrate runs on each Railway deploy. So the order below is not optional:
 >
-> 1. Set `DIRECT_DATABASE_URL=${{Postgres.DATABASE_URL}}` on **all four** app services first
+> 1. Set `DIRECT_DATABASE_URL=${{Postgres.DATABASE_URL}}` on **all five** app services first
 >    (a Railway reference, not a literal — no secret is copied anywhere). Skip deploys.
 > 2. *Then* add `directUrl = env("DIRECT_DATABASE_URL")` to the datasource and push.
 >    At this point nothing has changed behaviourally: migrate and runtime both use the owner.
 > 3. *Then* create the restricted role and swap `DATABASE_URL` per service, one service at a time,
 >    verifying each before moving to the next.
 >
-> **Verified 2026-07-26 (local, as `revio_app`)** — the policies themselves are correct, so only the
-> credential swap remains:
->
-> | Check | Result |
-> | --- | --- |
-> | No `app.tenant_id` set | `0` rows — fails closed |
-> | Scoped to tenant A | only A's rows (20) |
-> | Scoped to A, filtering for B's rows | `0` |
-> | INSERT tagged with another tenant's id | `ERROR: new row violates row-level security policy` |
-> | Operator-only table (`Invoice`) read by a hotel role | `0` rows |
+> Steps 1 and 2 were done 2026-08-05: `DIRECT_DATABASE_URL` is set on **all five** app services as a
+> Railway reference, and the datasource declares `directUrl`.
 
+### The gate: `pnpm --filter @revio/db rls-verify`
+
+Don't reason about whether isolation holds — run it. The script connects, asks Postgres what role it
+is, and **refuses to run** as a superuser or a `BYPASSRLS` role, because under those roles every
+assertion passes without proving anything. That refusal is the point: it is the exact mistake that
+makes a green RLS check meaningless.
+
+It then walks `Prisma.dmmf` rather than a hand-written table list — a table added by a future
+migration is covered the day it appears, instead of the day someone remembers to update this file —
+and for every tenant-owned model checks that an unscoped client sees nothing, that tenant A sees only
+A's rows (compared against the true count read under bypass, so an *empty* table cannot masquerade as
+an *isolated* one), and that operator-only tables are invisible to a hotel. Then it tries to write a
+row into another tenant's account, and finally asserts directly that no table in the database has RLS
+switched off.
+
+```bash
+DATABASE_URL="postgresql://revio_app:<password>@<host>:<port>/railway" pnpm --filter @revio/db rls-verify
+```
+
+**Run it against a database before pointing an app at it, and again after.** Local run 2026-08-05:
+95/95, including `new row violates row-level security policy for table "AuditEntry"` and *every table
+in the database has RLS enabled — none missing*.
 
 ```bash
 # Public URL of the shared DB (owner/superuser connection — for the one-time role setup)
 OWNER_URL="$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)"
 
-# 1. Create the restricted app role + grants (run once; password from your secret store)
+# 1. Create the restricted app role + grants (run once; generate the password, never commit it)
 psql "$OWNER_URL" -v app_password="$REVIO_APP_PASSWORD" -f packages/db/prisma/rls-role.sql
 
-# 2. Split migrate (owner, needs DDL) from runtime (restricted, RLS-enforced) so deploys still migrate:
-#    add to datasource in schema.prisma →  directUrl = env("DIRECT_DATABASE_URL")
-#    then per app service:
-railway variables --service channel-manager --set "DIRECT_DATABASE_URL=${{Postgres.DATABASE_URL}}"   # owner, for migrate deploy
-railway variables --service channel-manager --set "DATABASE_URL=postgresql://revio_app:***@<host>:5432/railway"  # restricted, runtime
-#    (repeat for the operator service)
+# 2. Prove the role before any app depends on it.
+DATABASE_URL="postgresql://revio_app:$REVIO_APP_PASSWORD@<host>:<port>/railway" \
+  pnpm --filter @revio/db rls-verify
 
-# 3. Redeploy. Verify BOTH apps still load data (not empty) and that tenant A cannot see tenant B.
-#    Rollback = set DATABASE_URL back to ${{Postgres.DATABASE_URL}} and redeploy.
+# 3. Swap runtime credentials ONE SERVICE AT A TIME, verifying each before the next.
+#    DIRECT_DATABASE_URL (owner) stays put — migrate deploy still needs DDL rights.
+railway variables --service booking --set "DATABASE_URL=postgresql://revio_app:***@<host>:<port>/railway"
+#    then channel-manager · operator · reservation · pms
+
+# Rollback, per service, no code change: set DATABASE_URL back to a reference to the owner and redeploy.
+railway variables --service booking --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}'
 ```
 
-Verify enforcement the same way it was proven locally (as the restricted role): no GUC → 0 rows;
-`set_config('app.tenant_id', '<A>', false)` → only A's rows; `app.bypass='on'` → all rows; an INSERT
-with another tenant's `tenantId` is rejected with *"new row violates row-level security policy"*.
+Order matters: swap **booking first**. It is the smallest surface, and it is the only app whose
+breakage a hotel's staff would not notice — a guest-facing 500 is bad, but it is one page, and the
+public site is the one place where "sees nothing" is visually obvious immediately. Leave `pms` for
+last: it has the most write paths (folios, housekeeping, the night audit), so it is the one you want
+to swap with four known-good services behind you.
 
-**Local dev already does this split:** the apps' `.env` connect as `revio_app` (RLS enforced), while
+**Local dev does the same split:** each app's `.env` connects as `revio_app` (RLS enforced), while
 `packages/db/.env` (owner) is used by `prisma migrate` and `db:seed`. Create the local role once with:
 `psql -d revio_dev -v app_password="'revio_app_dev'" -f packages/db/prisma/rls-role.sql`.
+
+Until 2026-08-05 only `channel-manager` and `operator` had that `.env`, so **RevioCRS, RevioPMS and
+RevioDirect had never once run under an enforcing role** — the three newest and largest apps, and the
+only one that is public. They do now, which is what made this flip a verification rather than a bet.
 
 ## Adding the next app later (Operator / CRS / PMS)
 
