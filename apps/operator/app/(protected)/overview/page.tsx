@@ -87,7 +87,7 @@ export default async function OverviewPage() {
           <CardHeader title="Billed — last 12 months" action={<Link href="/billing" className="text-[12px] font-semibold text-brand-600 hover:underline">Billing</Link>} />
           <TrendChart
             data={d.back.map((b) => ({ label: b.label, value: b.billedMinor, secondary: b.paidMinor }))}
-            format={moneyExact}
+            format="money"
             primaryLabel="billed"
             secondaryLabel="paid"
           />
@@ -99,7 +99,7 @@ export default async function OverviewPage() {
               that renews, and we can see it months before any churn model would. */}
           <TrendChart
             data={d.forward.map((f) => ({ label: f.label, value: f.revenueMinor }))}
-            format={moneyExact}
+            format="money"
             primaryLabel="on the books"
             accent="#14b8a6"
           />
@@ -110,7 +110,7 @@ export default async function OverviewPage() {
         <CardHeader title="Bookings processed — last 12 months" />
         <TrendChart
           data={d.back.map((b) => ({ label: b.label, value: b.bookings }))}
-          format={(v) => v.toLocaleString()}
+          format="count"
           primaryLabel="reservations"
           accent="#7c6cf5"
         />

@@ -17,20 +17,38 @@ export type TrendBucket = { label: string; value: number; secondary?: number };
  * beside it, because the two are always a part and its whole here (billed vs paid) — side-by-side
  * bars would suggest they add up.
  */
+/**
+ * How to render a value — a NAME, never a formatter function.
+ *
+ * A function cannot cross the server→client boundary: it typechecks, it builds, and then it throws
+ * at render with "Functions cannot be passed directly to Client Components". This has now happened
+ * three times in this repo (K11's `mediaUrl`, K10's `format`, and this component's first version),
+ * twice despite a comment warning about it — so the comment is not the control. The prop is a closed
+ * union instead, which makes the mistake unrepresentable here rather than merely discouraged.
+ *
+ * The rule for this codebase: **client components take data, not behaviour.**
+ */
+export type ValueFormat = "money" | "count";
+
+const RENDER: Record<ValueFormat, (v: number) => string> = {
+  money: (v) => (v / 100).toLocaleString(undefined, { style: "currency", currency: "EUR" }),
+  count: (v) => v.toLocaleString(),
+};
+
 export function TrendChart({
   data,
-  format,
+  format: formatName,
   secondaryLabel,
   primaryLabel,
   accent = "#2f5bd8",
 }: {
   data: TrendBucket[];
-  /** How to render a value in the tooltip and axis — money, count, whatever the caller means. */
-  format: (v: number) => string;
+  format: ValueFormat;
   primaryLabel: string;
   secondaryLabel?: string;
   accent?: string;
 }) {
+  const format = RENDER[formatName];
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(1, ...data.map((d) => d.value));
   // Round the axis up to something a person would choose, so the tallest bar is not flush with the top.
