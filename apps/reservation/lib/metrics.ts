@@ -1,7 +1,7 @@
 import "server-only";
 import {
   adrMinor, averageLeadTimeDays, averageLosNights, cancellationRatePct,
-  cancelledRoomNightRatePct, expandInventoryPeriods, nightsInRange, occupancyPct,
+  cancelledRoomNightRatePct, channelEconomics, expandInventoryPeriods, nightsInRange, occupancyPct,
   pickup as pickupOf, revparMinor, soldStatusesFor, stayNights, stayTotals,
   type DateRange, type MetricLine,
 } from "@revio/core";
@@ -76,6 +76,17 @@ interface LoadedLine extends MetricLine {
   guestName: string;
   roomTypeName: string;
   sourceName: string;
+  /** `BookingSource.category`. Drives the direct-vs-OTA split — see `channelEconomics`. */
+  sourceCategory: string;
+  /**
+   * The channel's commission rate, or `null` when this booking came through no channel at all.
+   *
+   * Deliberately NOT the `commissionPct` above, which `stayTotals` uses for net revenue and which
+   * coerces "no channel" to 0. That coercion is right for revenue arithmetic and wrong for cost-of-
+   * distribution: 0% means "this cost nothing", `null` means "we do not know what this cost", and
+   * averaging the two together understates what a hotel pays to sell a room.
+   */
+  channelCommissionPct: number | null;
   importedAt: Date;
 }
 
@@ -98,8 +109,14 @@ async function loadRange(range: DateRange) {
         reservation: {
           select: {
             id: true, status: true, guestName: true, importedAt: true, cancelledAt: true,
-            channel: { select: { name: true, commissionPct: true, bookingSource: { select: { name: true } } } },
-            bookingSource: { select: { name: true } },
+            channel: {
+              select: {
+                name: true,
+                commissionPct: true,
+                bookingSource: { select: { name: true, category: true } },
+              },
+            },
+            bookingSource: { select: { name: true, category: true } },
           },
         },
       },
@@ -142,10 +159,15 @@ async function loadRange(range: DateRange) {
     checkOut: ymd(l.checkOut),
     priceMinor: l.priceMinor ?? null,
     commissionPct: l.reservation.channel?.commissionPct ?? 0,
+    channelCommissionPct: l.reservation.channel?.commissionPct ?? null,
     guestName: l.reservation.guestName,
     roomTypeName: l.roomType.name,
     sourceName:
       l.reservation.bookingSource?.name ?? l.reservation.channel?.bookingSource?.name ?? l.reservation.channel?.name ?? "Direct",
+    // A booking with no source and no channel was taken by the hotel itself — the fallback name is
+    // already "Direct", so the category has to agree with it or the two views contradict each other.
+    sourceCategory:
+      l.reservation.bookingSource?.category ?? l.reservation.channel?.bookingSource?.category ?? (l.reservation.channel ? "ota" : "direct"),
     importedAt: l.reservation.importedAt,
   }));
 
@@ -235,11 +257,28 @@ export async function getRangeMetrics(range: ResolvedRange) {
     pickup,
   };
 
-  // Source mix (reservations + room-nights + revenue share).
-  const mix = new Map<string, { reservations: Set<string>; roomNights: number; revenueMinor: number }>();
+  // Source mix (reservations + room-nights + revenue share), plus the category and commission rate
+  // the channel-economics view needs. Same single pass — the two views must never disagree about
+  // what a source earned, and computing them separately is how that drift starts.
+  const mix = new Map<
+    string,
+    {
+      reservations: Set<string>;
+      roomNights: number;
+      revenueMinor: number;
+      category: string;
+      commissionPct: number | null;
+    }
+  >();
   for (const l of lines) {
     if (!soldSet.has(l.status)) continue;
-    const entry = mix.get(l.sourceName) ?? { reservations: new Set(), roomNights: 0, revenueMinor: 0 };
+    const entry = mix.get(l.sourceName) ?? {
+      reservations: new Set<string>(),
+      roomNights: 0,
+      revenueMinor: 0,
+      category: l.sourceCategory,
+      commissionPct: l.channelCommissionPct,
+    };
     const inRange = nightsInRange(l.checkIn, l.checkOut, range);
     if (inRange === 0) continue;
     entry.reservations.add(l.reservationId);
@@ -259,7 +298,19 @@ export async function getRangeMetrics(range: ResolvedRange) {
     }))
     .sort((a, b) => b.revenueMinor - a.revenueMinor);
 
-  return { property, defaults, range, cards, perDay, sourceMix, todayIso };
+  // What distribution costs, and what direct booking avoids (K8). Pure + tested in @revio/core.
+  const economics = channelEconomics(
+    [...mix.entries()].map(([name, m]) => ({
+      sourceName: name,
+      category: m.category,
+      commissionPct: m.commissionPct,
+      revenueMinor: m.revenueMinor,
+      roomNights: m.roomNights,
+      reservations: m.reservations.size,
+    })),
+  );
+
+  return { property, defaults, range, cards, perDay, sourceMix, economics, todayIso };
 }
 
 /** Pickup vs the snapshot ~offset days back (or the earliest we have — snapshots started Phase 1).

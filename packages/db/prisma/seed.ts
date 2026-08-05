@@ -304,7 +304,11 @@ async function main() {
         totalMinor: total, currency: "EUR",
         propertyCurrency: "EUR", propertyTotalMinor: total, fxRate: 1, fxAt: minsAgo([2, 5, 8, 11, 12][i] ?? 15),
         importedAt: minsAgo([2, 5, 8, 11, 12][i] ?? 15),
-        lines: { create: [{ roomTypeId: rt.id, ratePlanId: rp.id, quantity: r.qty, checkIn, checkOut: addDays(checkIn, r.nights) }] },
+        // priceMinor on the LINE, not just totalMinor on the reservation. Every revenue metric
+        // (source mix, ADR, RevPAR, and the cost-of-distribution view) prorates from the line, so a
+        // line without a price makes an OTA booking look like it earned nothing — which read as
+        // "0% of revenue came from OTAs" on a demo whose whole point is the channel mix.
+        lines: { create: [{ roomTypeId: rt.id, ratePlanId: rp.id, quantity: r.qty, checkIn, checkOut: addDays(checkIn, r.nights), priceMinor: total }] },
       },
     });
   }
@@ -452,7 +456,7 @@ async function main() {
     }
   }
   await prisma.ratePrice.createMany({ data: prices2.map((r) => ({ ...r, source: "seed" })) });
-  await prisma.reservation.create({ data: { ...t2, channelId: ch2[0]!.id, externalId: "BS-7714", guestName: "Ivan Petrov", status: "confirmed", totalMinor: 48000, currency: "EUR", propertyCurrency: "EUR", propertyTotalMinor: 48000, fxRate: 1, fxAt: minsAgo(7), importedAt: minsAgo(7), lines: { create: [{ roomTypeId: rt2[0]!.id, ratePlanId: std2.id, quantity: 1, checkIn: monday, checkOut: addDays(monday, 3) }] } } });
+  await prisma.reservation.create({ data: { ...t2, channelId: ch2[0]!.id, externalId: "BS-7714", guestName: "Ivan Petrov", status: "confirmed", totalMinor: 48000, currency: "EUR", propertyCurrency: "EUR", propertyTotalMinor: 48000, fxRate: 1, fxAt: minsAgo(7), importedAt: minsAgo(7), lines: { create: [{ roomTypeId: rt2[0]!.id, ratePlanId: std2.id, quantity: 1, checkIn: monday, checkOut: addDays(monday, 3), priceMinor: 48000 }] } } });
   await prisma.syncEvent.create({ data: { ...t2, channelId: ch2[0]!.id, kind: "pull", status: "success", summary: "New reservation imported (Booking.com)", createdAt: minsAgo(7) } });
 
   // --- Report ------------------------------------------------------------

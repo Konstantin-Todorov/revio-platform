@@ -46,9 +46,15 @@ export async function GET(req: NextRequest) {
     ]);
   } else if (report === "source") {
     const m = await getRangeMetrics(range);
+    // Commission travels with the mix: this export is what gets pasted into an owner's board pack,
+    // and revenue-per-source without cost-per-source is the half of the story that flatters the OTAs.
+    // Blank (not 0) where no rate is configured — the spreadsheet must not imply a channel was free.
     body = csv([
-      ["source", "reservations", "room_nights", `revenue_${property.baseCurrency}`, "share_pct"],
-      ...m.sourceMix.map((s) => [s.name, s.reservations, s.roomNights, moneyCol(s.revenueMinor), s.sharePct.toFixed(1)]),
+      ["source", "category", "reservations", "room_nights", `revenue_${property.baseCurrency}`, "share_pct", "commission_pct", `commission_${property.baseCurrency}`],
+      ...m.economics.rows.map((s) => [
+        s.sourceName, s.category, s.reservations, s.roomNights, moneyCol(s.revenueMinor), s.sharePct.toFixed(1),
+        s.commissionPct ?? "", s.commissionMinor == null ? "" : moneyCol(s.commissionMinor),
+      ]),
     ]);
   } else if (report === "cancellation") {
     const r = await getCancellationReport(range);

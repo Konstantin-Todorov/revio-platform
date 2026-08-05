@@ -7,6 +7,7 @@ import { getProperty, getScope, todayInTz } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { EvolutionChart, type EvoBucket } from "@/components/reports/EvolutionChart";
 import { money } from "@/lib/format";
+import { isCommissionFreeCategory } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -428,30 +429,102 @@ async function PickupReport() {
 async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> }) {
   const m = await getRangeMetrics(range);
   const currency = m.property.baseCurrency;
+  const e = m.economics;
+
   return (
-    <Card>
-      <CardHeader title={`Source mix · ${range.label}`} />
-      <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-            {["Source", "Reservations", "Room-nights", "Revenue", "Share"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {m.sourceMix.map((s) => (
-            <tr key={s.name} className="border-b border-surface-border/60 last:border-0">
-              <td className="px-4 py-2.5 font-semibold text-ink-900">{s.name}</td>
-              <td className="tnum px-4 py-2.5 text-ink-700">{s.reservations}</td>
-              <td className="tnum px-4 py-2.5 text-ink-700">{s.roomNights}</td>
-              <td className="tnum px-4 py-2.5 font-semibold text-ink-900">{money(s.revenueMinor, currency)}</td>
-              <td className="tnum px-4 py-2.5 text-ink-700">{pct(s.sharePct)}</td>
+    <div className="space-y-4">
+      {/* K8 — what distribution costs. Two numbers of different KINDS sit on this screen, and the
+          design's whole job is to keep them apart: commission paid is money that left, commission
+          avoided is a counterfactual. Merging them into one "you saved" headline is the thing that
+          makes booking-engine marketing untrustworthy, and this product's argument is that its
+          numbers are real. So the estimate is visually quieter and carries its assumption inline. */}
+      <Card>
+        <CardHeader title={`Cost of distribution · ${range.label}`} />
+        <div className="grid grid-cols-1 gap-px bg-surface-border sm:grid-cols-3">
+          <div className="bg-white px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Commission paid</div>
+            <div className="tnum mt-1 text-[1.6rem] font-bold leading-none text-ink-900">
+              {money(e.commissionPaidMinor, currency)}
+            </div>
+            <div className="mt-1.5 text-[12px] text-ink-500">
+              {e.blendedOtaRatePct == null
+                ? "no OTA revenue in this period"
+                : `${pct(e.blendedOtaRatePct)} of ${money(e.otaRevenueMinor, currency)} OTA revenue`}
+            </div>
+          </div>
+
+          <div className="bg-white px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Booked direct</div>
+            <div className="tnum mt-1 text-[1.6rem] font-bold leading-none text-ink-900">
+              {pct(e.directSharePct)}
+            </div>
+            <div className="mt-1.5 text-[12px] text-ink-500">
+              {money(e.directRevenueMinor, currency)} of {money(e.totalRevenueMinor, currency)} · no commission
+            </div>
+          </div>
+
+          <div className="bg-white px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              Commission avoided <span className="font-normal normal-case text-ink-400">· estimate</span>
+            </div>
+            <div className="tnum mt-1 text-[1.6rem] font-bold leading-none text-ink-700">
+              {e.commissionAvoidedMinor == null ? "—" : money(e.commissionAvoidedMinor, currency)}
+            </div>
+            <div className="mt-1.5 text-[12px] text-ink-500">
+              {e.commissionAvoidedMinor == null
+                ? "needs OTA revenue in the period to have a rate to compare against"
+                : `if direct bookings had come through your channels at ${pct(e.blendedOtaRatePct!)}`}
+            </div>
+          </div>
+        </div>
+        <div className="border-t border-surface-border bg-surface-muted/40 px-4 py-2.5 text-[12px] text-ink-500">
+          <span className="font-semibold text-ink-600">Commission paid is actual</span> — your channels&rsquo; own
+          rates applied to the revenue they brought. <span className="font-semibold text-ink-600">Commission
+          avoided is an estimate</span>: it assumes those direct guests would otherwise have booked through an
+          OTA, which some would and some would not. Revenue kept after real commission:{" "}
+          <span className="tnum font-semibold text-ink-700">{money(e.netOfCommissionMinor, currency)}</span>.
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader title={`Source mix · ${range.label}`} />
+        <div className="overflow-x-auto">
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+              {["Source", "Reservations", "Room-nights", "Revenue", "Share", "Commission"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
-    </Card>
+          </thead>
+          <tbody>
+            {e.rows.map((s) => (
+              <tr key={s.sourceName} className="border-b border-surface-border/60 last:border-0">
+                <td className="px-4 py-2.5 font-semibold text-ink-900">{s.sourceName}</td>
+                <td className="tnum px-4 py-2.5 text-ink-700">{s.reservations}</td>
+                <td className="tnum px-4 py-2.5 text-ink-700">{s.roomNights}</td>
+                <td className="tnum px-4 py-2.5 font-semibold text-ink-900">{money(s.revenueMinor, currency)}</td>
+                <td className="tnum px-4 py-2.5 text-ink-700">{pct(s.sharePct)}</td>
+                <td className="tnum px-4 py-2.5 text-ink-700">
+                  {/* Classify by CATEGORY, never by the computed amount. A commissioned channel that
+                      earned nothing this period also computes to zero, and rendering that as "none"
+                      tells the hotel an OTA is free — the one claim this screen must never make. */}
+                  {isCommissionFreeCategory(s.category) ? (
+                    <span className="font-semibold text-success-600">none</span>
+                  ) : s.commissionMinor == null ? (
+                    <span className="text-ink-400" title="No commission rate configured for this channel">not set</span>
+                  ) : (
+                    <>
+                      {money(s.commissionMinor, currency)}
+                      <span className="ml-1 text-ink-400">({s.commissionPct}%)</span>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+      </Card>
+    </div>
   );
 }
 
