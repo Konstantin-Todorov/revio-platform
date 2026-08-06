@@ -347,19 +347,74 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
   let updated = 0;
   let unchanged = 0;
 
-  for (const raw of raws) {
-    const existing = await prisma.reservation.findFirst({ where: { channelId, externalId: raw.externalId } });
-    const status = raw.status === "cancelled" ? "cancelled" : raw.status === "modified" ? "modified" : "confirmed";
-
-    if (existing) {
-      if (existing.status !== status && existing.status !== "cancelled") {
-        await prisma.reservation.update({ where: { id: existing.id }, data: { status } });
-        updated++;
-      } else {
-        unchanged++;
+  /**
+   * Would these lines oversell the room type on any night?
+   *
+   * `excludeReservationId` matters on a modification: the booking being changed is already counted in
+   * the sold aggregate, so without it every modify would collide with its own previous stay and
+   * report an overbooking that does not exist.
+   */
+  async function isOverbooked(
+    lines: { roomTypeId: string; quantity: number; checkIn: Date; checkOut: Date }[],
+    excludeReservationId?: string,
+  ): Promise<boolean> {
+    for (const line of lines) {
+      const room = roomMaps.find((m) => m.roomTypeId === line.roomTypeId);
+      for (let t = line.checkIn.getTime(); t < line.checkOut.getTime(); t += DAY_MS) {
+        const d = new Date(t);
+        const [cell, soldAgg, heldAgg, dayPeriods] = await Promise.all([
+          prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date: d } } }),
+          prisma.reservationLine.aggregate({
+            _sum: { quantity: true },
+            where: {
+              roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d },
+              reservation: {
+                status: { in: [...ROOM_OCCUPYING_STATUSES] },
+                ...(excludeReservationId ? { id: { not: excludeReservationId } } : {}),
+              },
+            },
+          }),
+          prisma.hold.aggregate({
+            _sum: { quantity: true },
+            where: { roomTypeId: line.roomTypeId, status: "active", expiresAt: { gt: new Date() }, checkIn: { lte: d }, checkOut: { gt: d } },
+          }),
+          prisma.roomInventoryPeriod.findMany({ where: { roomTypeId: line.roomTypeId, dateFrom: { lte: d }, dateTo: { gte: d } } }),
+        ]);
+        const remaining = computeWaterfall({
+          physical: room?.roomType.totalRooms ?? 0,
+          outOfOrder: dayPeriods.filter((p) => p.kind === "out_of_order").reduce((s, p) => s + p.rooms, 0),
+          closed: dayPeriods.filter((p) => p.kind === "closure").reduce((s, p) => s + p.rooms, 0),
+          manualSellLimit: cell?.inventory ?? null,
+          holds: heldAgg._sum.quantity ?? 0,
+          confirmed: soldAgg._sum.quantity ?? 0,
+        }).remaining;
+        if (remaining - line.quantity < 0) return true;
       }
-      continue;
     }
+    return false;
+  }
+
+  /** Everything about a stay that a modification can change — used to tell a real edit from a re-send. */
+  const stayFingerprint = (
+    guestName: string,
+    totalMinor: number,
+    currency: string,
+    status: string,
+    lines: { roomTypeId: string; ratePlanId: string; quantity: number; checkIn: Date; checkOut: Date; priceMinor?: number | null }[],
+  ) =>
+    [
+      guestName, totalMinor, currency, status,
+      ...[...lines]
+        .map((l) => `${l.roomTypeId}|${l.ratePlanId}|${l.quantity}|${l.checkIn.toISOString().slice(0, 10)}|${l.checkOut.toISOString().slice(0, 10)}|${l.priceMinor ?? ""}`)
+        .sort(),
+    ].join("~");
+
+  for (const raw of raws) {
+    const existing = await prisma.reservation.findFirst({
+      where: { channelId, externalId: raw.externalId },
+      include: { lines: true },
+    });
+    const status = raw.status === "cancelled" ? "cancelled" : raw.status === "modified" ? "modified" : "confirmed";
 
     const lines: { roomTypeId: string; ratePlanId: string; quantity: number; checkIn: Date; checkOut: Date; priceMinor?: number }[] = [];
     let unmapped = false;
@@ -389,6 +444,75 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
       fxAt: new Date(),
     };
 
+    // --- an existing booking: apply the WHOLE revision, not just its status -------------------
+    //
+    // This used to write `{ status }` and nothing else, which silently discarded every modification
+    // a guest actually makes — new dates, an extra night, a different price. The booking would read
+    // "modified" in the list while still showing the original stay, and because availability is
+    // computed from reservation lines, the extra night was never taken off the market. That is an
+    // overselling bug, and it is also exactly what Channex Test 11 checks.
+    if (existing) {
+      // Cancelled is terminal. A late revision must never resurrect a room the hotel has resold.
+      if (existing.status === "cancelled") {
+        unchanged++;
+        continue;
+      }
+
+      // A modification we cannot map is worse than one we drop: replacing good lines with nothing
+      // would erase the stay. Flag it and keep what we have for a human to resolve.
+      if (unmapped || lines.length === 0) {
+        if (existing.status !== "failed_import") {
+          await prisma.reservation.update({ where: { id: existing.id }, data: { status: "failed_import" } });
+          await prisma.errorItem.create({
+            data: {
+              tenantId, propertyId, channelId, severity: "critical", code: "reservation_unmapped",
+              message: `Modification to booking #${raw.externalId} references an unmapped room or rate`,
+              productLabel: `${channel.name} · ${raw.guestName}`,
+              recommendedAction: "Complete the room/rate mapping for this channel, then pull again.", resolved: false,
+            },
+          });
+          updated++;
+        } else {
+          unchanged++;
+        }
+        continue;
+      }
+
+      const before = stayFingerprint(existing.guestName, existing.totalMinor, existing.currency, existing.status, existing.lines);
+      const after = stayFingerprint(raw.guestName, raw.totalMinor, raw.currency, status, lines);
+      if (before === after) {
+        unchanged++;
+        continue;
+      }
+
+      const overbooked = status !== "cancelled" && (await isOverbooked(lines, existing.id));
+      // One nested write, so the stay is never briefly line-less: Prisma deletes and recreates the
+      // lines inside the same statement the reservation is updated by.
+      await prisma.reservation.update({
+        where: { id: existing.id },
+        data: {
+          guestName: raw.guestName,
+          status: overbooked ? "overbooked" : status,
+          totalMinor: raw.totalMinor,
+          currency: raw.currency,
+          ...fx,
+          lines: { deleteMany: {}, create: lines },
+        },
+      });
+      if (overbooked) {
+        await prisma.errorItem.create({
+          data: {
+            tenantId, propertyId, channelId, severity: "critical", code: "overbooking_detected",
+            message: `Overbooking: modified booking #${raw.externalId} exceeds available rooms`,
+            productLabel: `${channel.name} · ${raw.guestName}`,
+            recommendedAction: "Resolve manually with the guest or move the booking.", resolved: false,
+          },
+        });
+      }
+      updated++;
+      continue;
+    }
+
     if (unmapped || lines.length === 0) {
       await prisma.reservation.create({
         data: { tenantId, propertyId, channelId, externalId: raw.externalId, guestName: raw.guestName, status: "failed_import", totalMinor: raw.totalMinor, currency: raw.currency, ...fx },
@@ -405,34 +529,7 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
       continue;
     }
 
-    let overbooked = false;
-    for (const line of lines) {
-      const room = roomMaps.find((m) => m.roomTypeId === line.roomTypeId);
-      for (let t = line.checkIn.getTime(); t < line.checkOut.getTime(); t += DAY_MS) {
-        const d = new Date(t);
-        const [cell, soldAgg, heldAgg, dayPeriods] = await Promise.all([
-          prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date: d } } }),
-          prisma.reservationLine.aggregate({
-            _sum: { quantity: true },
-            where: { roomTypeId: line.roomTypeId, checkIn: { lte: d }, checkOut: { gt: d }, reservation: { status: { in: [...ROOM_OCCUPYING_STATUSES] } } },
-          }),
-          prisma.hold.aggregate({
-            _sum: { quantity: true },
-            where: { roomTypeId: line.roomTypeId, status: "active", expiresAt: { gt: new Date() }, checkIn: { lte: d }, checkOut: { gt: d } },
-          }),
-          prisma.roomInventoryPeriod.findMany({ where: { roomTypeId: line.roomTypeId, dateFrom: { lte: d }, dateTo: { gte: d } } }),
-        ]);
-        const remaining = computeWaterfall({
-          physical: room?.roomType.totalRooms ?? 0,
-          outOfOrder: dayPeriods.filter((p) => p.kind === "out_of_order").reduce((s, p) => s + p.rooms, 0),
-          closed: dayPeriods.filter((p) => p.kind === "closure").reduce((s, p) => s + p.rooms, 0),
-          manualSellLimit: cell?.inventory ?? null,
-          holds: heldAgg._sum.quantity ?? 0,
-          confirmed: soldAgg._sum.quantity ?? 0,
-        }).remaining;
-        if (remaining - line.quantity < 0) overbooked = true;
-      }
-    }
+    const overbooked = await isOverbooked(lines);
 
     await prisma.reservation.create({
       data: {
