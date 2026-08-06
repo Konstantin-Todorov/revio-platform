@@ -129,6 +129,7 @@ needs steps 1–4.
       live: a UI Re-sync pushed 56/56 to Channex, task success)
 - [x] Booking **modify + cancel** + switch pull to the `/booking_revisions` feed (§3)
 - [x] Rate-limit queue (§5.12)
+- [x] Test 11 booking lifecycle received + acknowledged by the deployed app (§7)
 - [ ] Fill the form: task IDs (below — regenerate any time with `pnpm channex:cert`), booking IDs +
       screenshots from the cert property, written answers (§5)
 - [ ] Schedule the screenshare and drive every scenario from the RevioLink UI on the cert property
@@ -198,10 +199,42 @@ no callback URL registered anywhere, so moving off the Railway subdomain to `rev
 nothing about the integration or the certification. The only thing a domain change touches is what the
 screenshots and the screenshare happen to show.
 
+### Test 11 — the booking to submit
+
+**Booking ID `f370d52f-5e1f-48af-9611-6b42e7610d50`** (OTA code `REVIO-CERT-822740`, guest Maria
+Ivanova), created 2026-08-06 on the sandbox and taken through **create → modify → cancel**, every
+revision received *and acknowledged by the deployed RevioLink itself* over
+`GET /booking_revisions` — not by a script.
+
+That distinction is the whole point of `pnpm channex:cert-booking`, which replaced `channex:lifecycle`
+for cert purposes. `channex:lifecycle` acknowledges from the script process: it proves the adapter
+works, but it consumes the revision so the product never sees it, and leaves nothing to screenshot.
+The new script only plays the OTA and asks the deployed app to run its own pull.
+
+**Running it found a real bug, which is exactly what Test 11 is for.** `pullChannel` updated only the
+`status` of an existing reservation and discarded everything else, so a modification changed nothing.
+Proven, then fixed (`abab428`), then proven again — the two bookings sit side by side on production:
+
+| Booking | | Stay recorded by RevioLink |
+| --- | --- | --- |
+| `6b71927f…` | before the fix | 2 nights · €240 — **the modification was lost** |
+| `f370d52f…` | after the fix | **3 nights · €390** — correct |
+
+It was never only a certification problem: availability is computed from reservation lines, so the
+extra night was never taken off the market. The room stayed sellable while a guest had it booked.
+
+### Screenshots to attach
+
+Log into RevioLink as `admin@hotelsofia.demo`, property **Revio Cert Hotel**:
+
+1. **Reservations** — the row for Maria Ivanova, `f370d52f…`, showing 20→23 Aug, €390, cancelled,
+   acknowledged.
+2. **Sync Center** — the three consecutive pulls at 11:13:46 / 11:13:50 / 11:13:53 reading
+   `1 new`, `1 updated`, `1 updated`, all success. That is the create/modify/cancel lifecycle on one
+   screen, which is the single most convincing image for this test.
+
 ### Still to produce
 
-- **Test 11 booking IDs + screenshots** of those bookings inside RevioLink. Regenerate the bookings
-  with `pnpm channex:lifecycle`, then screenshot them on the Reservations screen of Revio Cert Hotel.
 - Optionally a **fresh set of task IDs** (`pnpm channex:cert`) if the form is submitted long after the
   set below was generated. Old ones stay verifiable at `GET /api/v1/tasks/{id}`.
 
