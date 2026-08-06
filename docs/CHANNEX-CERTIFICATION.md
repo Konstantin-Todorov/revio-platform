@@ -152,6 +152,59 @@ submitted later (task IDs stay verifiable at `GET /api/v1/tasks/{id}` on staging
 | 9 · Single-date availability (Twin 8→7, Double 1→0) | `29b85844-c420-419b-85d3-019ee2b593c0` |
 | 10 · Multi-date availability ranges (15 room-days) | `5b9f2697-6d0a-4ba6-9daa-295a6da2ead7` |
 
+---
+
+## 7. Fill-in sheet — every identifier the form and the call need
+
+Verified against production and `packages/connectivity/.env.local` on 2026-08-06. The property UUID
+below is the same value stored on the live `Channel.externalPropertyId`, so the sandbox, the runbook
+and the running app cannot disagree.
+
+### Environment
+
+| | |
+| --- | --- |
+| Sandbox API base | `https://staging.channex.io/api/v1` |
+| Production API base (after the pass) | `https://secure.channex.io/api/v1` |
+| Channex property (sandbox) | **`a1e9b246-4db1-4ccd-aa8b-08dea7ff89f9`** — "Revio Test Hotel" |
+| API key | **never written down here.** `CHANNEX_API_KEY` in `packages/connectivity/.env.local` (gitignored); the same value is set on Railway as `CHANNEX_SANDBOX_KEY` on the channel-manager service |
+
+### The certified data model — 2 room types × 2 rate plans
+
+| Room type | Rooms | Channex room-type UUID | Rate plan | Channex rate-plan UUID |
+| --- | --- | --- | --- | --- |
+| **Double Room** | 6 | `1e2f3c2b-94ca-4ae3-97db-ab0f7748ad9b` | Best Available Rate | `c650ca88-5762-4e93-baf5-d70e744b4d24` |
+| | | | Breakfast | `1659e89b-a740-4ba7-8530-44000b24059a` |
+| **Twin Room** | 8 | `9a029a40-1629-471a-9e14-dd65c55660b9` | Best Available Rate | `f1413ce8-5094-48fe-8722-6e54c709dc93` |
+| | | | Breakfast | `f9501de0-6559-47d5-97a2-4a06cb70fe47` |
+
+### The RevioLink side — what to show on the screenshare
+
+| | |
+| --- | --- |
+| App | https://channel-manager-production-59bb.up.railway.app |
+| Login | `admin@hotelsofia.demo` |
+| Property | **Revio Cert Hotel** (mirrors the Channex model exactly) |
+| Channel | **Channex Sandbox**, mode `channex_sandbox`, status connected |
+| Mappings | 2 room types + 4 rate plans, all `complete` |
+
+Drive every scenario from **this** property's Calendar / Bulk screens. A push from the UI is the whole
+point of the call; a scripted event fails certification regardless of the task IDs submitted.
+
+### Not domain-dependent
+
+The integration is **pull-based** — we call Channex, Channex never calls us. There is no webhook and
+no callback URL registered anywhere, so moving off the Railway subdomain to `revio.app` changes
+nothing about the integration or the certification. The only thing a domain change touches is what the
+screenshots and the screenshare happen to show.
+
+### Still to produce
+
+- **Test 11 booking IDs + screenshots** of those bookings inside RevioLink. Regenerate the bookings
+  with `pnpm channex:lifecycle`, then screenshot them on the Reservations screen of Revio Cert Hotel.
+- Optionally a **fresh set of task IDs** (`pnpm channex:cert`) if the form is submitted long after the
+  set below was generated. Old ones stay verifiable at `GET /api/v1/tasks/{id}`.
+
 ### Process — how contact actually works
 
 1. **Submit the Google form** (link at the top) — that is the entry point; there is no cold email needed.
