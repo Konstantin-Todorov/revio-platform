@@ -199,11 +199,25 @@ no callback URL registered anywhere, so moving off the Railway subdomain to `rev
 nothing about the integration or the certification. The only thing a domain change touches is what the
 screenshots and the screenshare happen to show.
 
-### Test 11 — the booking to submit
+### Test 11 — what to put in the form
 
-**Booking ID `f370d52f-5e1f-48af-9611-6b42e7610d50`** (OTA code `REVIO-CERT-822740`, guest Maria
-Ivanova), created 2026-08-06 on the sandbox and taken through **create → modify → cancel**, every
-revision received *and acknowledged by the deployed RevioLink itself* over
+| Form field | Value |
+| --- | --- |
+| **Booking ID** | `b5ca82a0-625f-4edc-9d68-bd28e45198f0` |
+| **Revision ID · New** | `ba5897ef-10ae-490c-bb6c-2dced37c9db8` |
+| **Revision ID · Modified** | `4343c774-6de1-41c3-be38-367c31bf80e1` |
+| **Revision ID · Cancelled** | `30912387-7a62-4925-bf15-310546f4e28b` |
+
+OTA code `REVIO-CERT-380239`, guest Maria Ivanova. Final state in RevioLink: **cancelled, 20→23 Aug,
+3 nights, €390** — i.e. the modification is reflected, not just the cancellation.
+
+⚠️ **Capture the revision IDs while the script runs.** An acknowledged revision leaves the feed
+permanently and `GET /booking_revisions` with a filter is not an endpoint (404) — there is no way to
+look one up afterwards. `channex:cert-booking` prints all three, in the window between Channex
+publishing each one and RevioLink acknowledging it. The first run of this lifecycle had to be redone
+for exactly this reason.
+
+Every revision was received *and acknowledged by the deployed RevioLink itself* over
 `GET /booking_revisions` — not by a script.
 
 That distinction is the whole point of `pnpm channex:cert-booking`, which replaced `channex:lifecycle`
@@ -227,11 +241,17 @@ extra night was never taken off the market. The room stayed sellable while a gue
 
 Log into RevioLink as `admin@hotelsofia.demo`, property **Revio Cert Hotel**:
 
-1. **Reservations** — the row for Maria Ivanova, `f370d52f…`, showing 20→23 Aug, €390, cancelled,
+1. **Reservations** — the row for Maria Ivanova, `b5ca82a0…`, showing 20→23 Aug, €390, cancelled,
    acknowledged.
-2. **Sync Center** — the three consecutive pulls at 11:13:46 / 11:13:50 / 11:13:53 reading
-   `1 new`, `1 updated`, `1 updated`, all success. That is the create/modify/cancel lifecycle on one
-   screen, which is the single most convincing image for this test.
+2. **Sync Center** — the pulls at **11:23:04 · 11:23:07 · 11:24:49** reading `1 new`, `1 updated`,
+   `1 updated`, all success. That is the create/modify/cancel lifecycle on one screen, which is the
+   single most convincing image for this test.
+
+⚠️ **Production also runs the scheduled pull every five minutes**, so the cron can consume a revision
+between the script publishing it and the script's own pull. That is harmless — the app receives and
+acknowledges either way — but it means the script must not assert "*my* pull counted the change".
+It briefly did, and made a correct app look broken. Whether the content landed is a question about
+the resulting reservation; check the database, not the pull counters.
 
 ### Still to produce
 

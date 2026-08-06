@@ -52,11 +52,20 @@ async function revioLinkPull(): Promise<{ imported: number; updated: number; fai
   return { imported: json?.imported ?? 0, updated: json?.updated ?? 0, failed: json?.failed ?? 0 };
 }
 
-/** How many revisions are still unacknowledged for this booking. 0 proves RevioLink acked. */
-async function pendingRevisions(bookingId: string): Promise<number> {
+/**
+ * The revisions still waiting to be acknowledged for this booking.
+ *
+ * Returned rather than counted because **the certification form asks for the revision ID of each
+ * stage**, and an acknowledged revision leaves the feed for good — `GET /booking_revisions` with a
+ * filter is not an endpoint, so there is no way to look one up afterwards. It has to be captured in
+ * the window between Channex publishing it and RevioLink acknowledging it.
+ */
+async function pendingRevisions(bookingId: string): Promise<{ id: string; status: string }[]> {
   const res = await fetch(`${baseUrl}/booking_revisions/feed?filter[property_id]=${propertyId}`, { headers });
-  const json = (await res.json().catch(() => null)) as { data?: { attributes?: Record<string, unknown> }[] } | null;
-  return (json?.data ?? []).filter((r) => r.attributes?.booking_id === bookingId).length;
+  const json = (await res.json().catch(() => null)) as { data?: { id: string; attributes?: Record<string, unknown> }[] } | null;
+  return (json?.data ?? [])
+    .filter((r) => r.attributes?.booking_id === bookingId)
+    .map((r) => ({ id: r.id, status: String(r.attributes?.status ?? "?") }));
 }
 
 const guest = { name: "Maria", surname: "Ivanova", mail: "maria.ivanova@example.com", phone: "+359881234567", country: "BG" };
@@ -71,26 +80,35 @@ const nights = (from: number, count: number, price: string) =>
  * look like a timing quirk. Waiting for the revision to exist removes the ambiguity, so a stage that
  * reports no change means the app genuinely ignored one.
  */
-async function stage(label: string, bookingId: string) {
-  let appeared = 0;
-  for (let i = 0; i < 12 && appeared === 0; i++) {
+async function stage(label: string, bookingId: string): Promise<{ id: string; status: string }[]> {
+  let appeared: { id: string; status: string }[] = [];
+  for (let i = 0; i < 12 && appeared.length === 0; i++) {
     await sleep(1500);
     appeared = await pendingRevisions(bookingId);
   }
-  if (appeared === 0) throw new Error(`${label}: Channex never published a revision for this booking`);
-  console.log(`  Channex published ${appeared} revision(s)`);
+  if (appeared.length === 0) throw new Error(`${label}: Channex never published a revision for this booking`);
+  for (const r of appeared) console.log(`  revision ${r.id}  (${r.status})`);
 
   const pull = await revioLinkPull();
-  const pending = await pendingRevisions(bookingId);
+  const left = await pendingRevisions(bookingId);
   console.log(
     `  RevioLink pull → imported ${pull.imported}, updated ${pull.updated}, failed ${pull.failed}` +
-      ` · unacknowledged left: ${pending} ${pending === 0 ? "✓" : "✗"}`,
+      ` · unacknowledged left: ${left.length} ${left.length === 0 ? "✓" : "✗"}`,
   );
   if (pull.failed > 0) throw new Error(`${label}: RevioLink reported a failed channel pull`);
-  if (pending > 0) throw new Error(`${label}: RevioLink did not acknowledge every revision`);
+
+  // The certification requirement is that the revision is ACKNOWLEDGED, and an empty feed proves it.
+  //
+  // Deliberately not asserting that *this* pull is the one that counted the change: production also
+  // runs the scheduled pull every five minutes, so the cron can consume a revision between the feed
+  // check above and the call below. That race made a correct app look broken once already. Whether
+  // the content landed is a question about the resulting reservation, which the runbook verifies
+  // against the database — not about which process happened to win.
+  if (left.length > 0) throw new Error(`${label}: RevioLink did not acknowledge every revision`);
   if (pull.imported + pull.updated === 0) {
-    throw new Error(`${label}: RevioLink acknowledged the revision but recorded no change — the modification was dropped`);
+    console.log("    (applied by the scheduled pull rather than this one — verify the stay in the database)");
   }
+  return appeared;
 }
 
 async function main() {
@@ -113,7 +131,7 @@ async function main() {
   });
   const bookingId = created?.data?.id as string;
   console.log(`  booking id = ${bookingId}`);
-  await stage("create", bookingId);
+  const newRev = await stage("create", bookingId);
 
   // 2 · MODIFY — the guest extends by a night and the rate moves.
   console.log("\n2 · MODIFY  (2 nights @ €120 → 3 nights @ €130)");
@@ -125,7 +143,7 @@ async function main() {
       rooms: [{ room_type_id: roomTypeId, rate_plan_id: ratePlanId, days: nights(14, 3, "130.00"), occupancy: { adults: 2, children: 0, infants: 0 }, guests: [{ name: guest.name, surname: guest.surname }] }],
     },
   });
-  await stage("modify", bookingId);
+  const modRev = await stage("modify", bookingId);
 
   // 3 · CANCEL — the guest cancels; availability must come back.
   console.log("\n3 · CANCEL");
@@ -137,9 +155,21 @@ async function main() {
       rooms: [{ room_type_id: roomTypeId, rate_plan_id: ratePlanId, days: nights(14, 3, "130.00"), occupancy: { adults: 2, children: 0, infants: 0 }, guests: [{ name: guest.name, surname: guest.surname }] }],
     },
   });
-  await stage("cancel", bookingId);
+  const cancelRev = await stage("cancel", bookingId);
 
-  console.log(`\n✓ Lifecycle complete.\n  Booking ID       ${bookingId}\n  OTA code         ${code}\n  Guest            ${guest.name} ${guest.surname}\n  Received + acknowledged by RevioLink at every stage.`);
+  // Printed as a block because these four values are literally the answer to the form's Test 11
+  // fields, and three of them cannot be looked up again once acknowledged.
+  const one = (rs: { id: string }[]) => rs.map((r) => r.id).join(", ");
+  console.log(
+    `\n✓ Lifecycle complete — received and acknowledged by RevioLink at every stage.\n` +
+      `\n  ── paste into the certification form ─────────────────────────────\n` +
+      `  Booking ID                            ${bookingId}\n` +
+      `  Revision ID · NEW                     ${one(newRev)}\n` +
+      `  Revision ID · MODIFIED                ${one(modRev)}\n` +
+      `  Revision ID · CANCELLED               ${one(cancelRev)}\n` +
+      `  ──────────────────────────────────────────────────────────────────\n` +
+      `  OTA code ${code} · guest ${guest.name} ${guest.surname}`,
+  );
 }
 
 main().catch((err) => {
