@@ -14,6 +14,7 @@ import {
   type RestrictionType,
 } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
+import { decidePull, type Stay } from "./pull-merge.js";
 
 /** The tenant-scoped Prisma proxy each app already builds (`@revio/db` `forTenant`). */
 type Db = ReturnType<typeof forTenant>;
@@ -394,20 +395,20 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
     return false;
   }
 
-  /** Everything about a stay that a modification can change — used to tell a real edit from a re-send. */
-  const stayFingerprint = (
-    guestName: string,
-    totalMinor: number,
-    currency: string,
-    status: string,
+  /** Reservation rows → the shape `decidePull` compares. Dates become YYYY-MM-DD so the comparison
+   *  is about the calendar day, not a timestamp. */
+  const asStay = (
+    r: { status: string; guestName: string; totalMinor: number; currency: string },
     lines: { roomTypeId: string; ratePlanId: string; quantity: number; checkIn: Date; checkOut: Date; priceMinor?: number | null }[],
-  ) =>
-    [
-      guestName, totalMinor, currency, status,
-      ...[...lines]
-        .map((l) => `${l.roomTypeId}|${l.ratePlanId}|${l.quantity}|${l.checkIn.toISOString().slice(0, 10)}|${l.checkOut.toISOString().slice(0, 10)}|${l.priceMinor ?? ""}`)
-        .sort(),
-    ].join("~");
+  ): Stay => ({
+    status: r.status, guestName: r.guestName, totalMinor: r.totalMinor, currency: r.currency,
+    lines: lines.map((l) => ({
+      roomTypeId: l.roomTypeId, ratePlanId: l.ratePlanId, quantity: l.quantity,
+      checkIn: l.checkIn.toISOString().slice(0, 10),
+      checkOut: l.checkOut.toISOString().slice(0, 10),
+      priceMinor: l.priceMinor ?? null,
+    })),
+  });
 
   for (const raw of raws) {
     const existing = await prisma.reservation.findFirst({
@@ -452,7 +453,8 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
     // computed from reservation lines, the extra night was never taken off the market. That is an
     // overselling bug, and it is also exactly what Channex Test 11 checks.
     if (existing) {
-      // Cancelled is terminal. A late revision must never resurrect a room the hotel has resold.
+      // Cancelled is terminal (see `decidePull`). A late revision must never resurrect a room the
+      // hotel has resold.
       if (existing.status === "cancelled") {
         unchanged++;
         continue;
@@ -478,9 +480,7 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
         continue;
       }
 
-      const before = stayFingerprint(existing.guestName, existing.totalMinor, existing.currency, existing.status, existing.lines);
-      const after = stayFingerprint(raw.guestName, raw.totalMinor, raw.currency, status, lines);
-      if (before === after) {
+      if (decidePull(asStay(existing, existing.lines), { ...asStay({ ...raw, status }, lines), unmapped }) === "unchanged") {
         unchanged++;
         continue;
       }
