@@ -146,6 +146,36 @@ The page ends with **what the model changes about today's bills**, per client, a
 invoice actually sent. A repricing that can only be discovered from an invoice is not a decision, it
 is an accident — and nothing moves until someone generates invoices on `/billing`.
 
+## Demo tenants in production (`Tenant.isDemo`, 2026-08-06)
+
+Hotel Sofia Group and Black Sea Resort **stay in production permanently**. The alternative is a
+staging copy of a five-app platform sharing one database, one Channex account and one bucket — a
+second environment to keep in sync, which always drifts, so the thing you tested stops resembling the
+thing customers use exactly when it matters. Testing in production means every rehearsal runs against
+the real migrations, the real RLS and the real build.
+
+The cost is two fake hotels inside every number this console reports. **A console built to stop us
+counting things that do not matter cannot itself report revenue that does not exist** — €283.20 of
+imaginary MRR is worse than no MRR figure, because it looks true. So `lib/demo.ts` states one rule:
+
+> **Money and portfolio metrics exclude demo. Operations and health include it.**
+
+- **Excluded:** MRR, billed revenue, unbilled drift, forward bookings, the attention feed, renewals,
+  revenue by product, plan adoption, the client counter.
+- **Included:** sync health, error volumes, queue depth, search. A demo hotel's failing push is a
+  *real* failing push — catching it early is the whole reason they live in production.
+- **Never hidden, always badged.** Their own detail page works in full, flags and all, which is how
+  the flags themselves get tested.
+- **Still invoiced**, deliberately, so the billing flow stays testable end to end. Those invoices
+  simply never reach a total.
+
+⚠️ With no real customers the Overview is honestly **all zeros** — and "look at the console and see
+nothing" is a poor way to check the console works. `/overview?demo=1` includes them behind a loud
+amber banner. The default stays honest; the toggle is opt-in and never sticky.
+
+One click flips the flag either way. A demo tenant that becomes a paying customer keeps its whole
+history instead of starting again on a fresh tenant, and a real client can be borrowed for a test.
+
 ## Boundary
 Reads cross-tenant data through `@revio/core` admin APIs that bypass tenant RLS **only** under an
 operator identity. Never embed hotel-facing screens here; link out instead. Keep operator business data

@@ -65,6 +65,9 @@ async function main() {
       hasChannelManager: true,
       hasReservation: true,
       hasPms: true,
+      // Ours, permanently, even in production — see apps/operator/lib/demo.ts. Works exactly like a
+      // real client; simply never counted as business by the operator console.
+      isDemo: true,
       users: {
         create: [
           { name: "Admin", email: "admin@hotelsofia.demo", role: "owner", passwordHash: pw },
@@ -418,7 +421,7 @@ async function main() {
 
   // --- Second tenant: Black Sea Resort (proves tenant isolation) ----------
   const tenant2 = await prisma.tenant.create({
-    data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true, hasReservation: true, hasPms: true,
+    data: { name: "Black Sea Resort", slug: "black-sea-resort", hasChannelManager: true, hasReservation: true, hasPms: true, isDemo: true,
       users: { create: [{ name: "Resort Owner", email: "owner@blacksea.demo", role: "owner", passwordHash: pw }] } },
   });
   const property2 = await prisma.property.create({

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClientDetail } from "@/lib/data";
+import { setDemo } from "@/lib/actions";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
 import { AccountPanel } from "@/components/clients/AccountPanel";
@@ -39,6 +40,25 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         subtitle={`/${tenant.slug} · client since ${tenant.createdAt.toISOString().slice(0, 10)} · ${c.counts.units} rooms across ${tenant.properties.length} propert${tenant.properties.length === 1 ? "y" : "ies"}`}
         action={<Link href="/clients" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← All clients</Link>}
       />
+
+      {/* Stated before anything else on the page, because every figure below it means something
+          different for a hotel that is ours. */}
+      {tenant.isDemo && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-surface-border bg-surface-sunken px-4 py-2.5">
+          <span className="text-[12.5px] text-ink-600">
+            <span className="mr-2 rounded bg-ink-100 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-ink-500">demo</span>
+            Ours, for testing. Behaves exactly like a real client in all five apps — and is left out of MRR, billed
+            revenue, renewals and the attention feed.
+          </span>
+          <form action={setDemo}>
+            <input type="hidden" name="tenantId" value={tenant.id} />
+            <input type="hidden" name="isDemo" value="false" />
+            <button className="rounded-md border border-surface-border bg-white px-2.5 py-1 text-[11.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">
+              Promote to real client
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* 1. What is wrong. Nothing else on this page matters while something here is red. */}
       {c.attention.length > 0 && (
@@ -194,6 +214,20 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <EntitlementToggle key={k} tenantId={tenant.id} product={k} enabled={c.entitlements[k]} />
             ))}
           </div>
+          {!tenant.isDemo && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-surface-border px-4 py-2.5">
+              <span className="text-[11.5px] text-ink-400">
+                Borrow this client for testing — it keeps working exactly as it does now, but stops counting as business.
+              </span>
+              <form action={setDemo}>
+                <input type="hidden" name="tenantId" value={tenant.id} />
+                <input type="hidden" name="isDemo" value="true" />
+                <button className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted">
+                  Mark as demo
+                </button>
+              </form>
+            </div>
+          )}
         </Card>
 
         <Card>

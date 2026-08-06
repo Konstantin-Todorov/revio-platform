@@ -88,3 +88,21 @@ export async function setStatus(fd: FormData): Promise<void> {
   revalidatePath("/clients");
   revalidatePath("/overview");
 }
+
+/**
+ * Mark a client as ours-for-testing, or promote it to a real one.
+ *
+ * Reversible on purpose, both ways. A demo hotel that becomes a paying customer keeps its entire
+ * history — bookings, folios, notes — instead of starting again on a fresh tenant; and a real client
+ * can be borrowed for a test without inventing one. Nothing about the hotel's own experience changes
+ * either way: the flag only decides whether this console counts them as business (see lib/demo.ts).
+ */
+export async function setDemo(fd: FormData): Promise<void> {
+  const tenantId = str(fd, "tenantId");
+  await prisma.tenant.update({ where: { id: tenantId }, data: { isDemo: str(fd, "isDemo") === "true" } });
+  revalidatePath(`/clients/${tenantId}`);
+  revalidatePath("/clients");
+  revalidatePath("/overview");
+  revalidatePath("/plans");
+  revalidatePath("/billing");
+}

@@ -15,6 +15,7 @@ const STAGE_TONE: Record<Stage, "success" | "info" | "warning" | "danger" | "neu
 
 export default async function ClientsPage() {
   const clients = await getClients();
+  const demoCount = clients.filter((c) => c.isDemo).length;
 
   return (
     <div>
@@ -50,6 +51,11 @@ export default async function ClientsPage() {
                       <Link href={`/clients/${c.id}`} className="font-semibold text-ink-900 hover:text-brand-700 hover:underline">
                         {c.name}
                       </Link>
+                      {/* Never hidden, always marked. A demo tenant that reads as a customer is the
+                          whole hazard of keeping them in production. */}
+                      {c.isDemo && (
+                        <span className="rounded bg-ink-100 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-ink-500">demo</span>
+                      )}
                     </div>
                     <div className="text-[11px] text-ink-400">/{c.slug}</div>
                     {/* The reason, in words. A row that says only "something is wrong" makes you open
@@ -138,9 +144,16 @@ export default async function ClientsPage() {
       </Card>
 
       <p className="mt-3 text-[12px] text-ink-400">
-        Toggling a product flips that hotel's entitlement — it instantly gains or loses access to RevioLink /
+        Toggling a product flips that hotel&rsquo;s entitlement — it instantly gains or loses access to RevioLink /
         RevioCRS / RevioPMS on the same shared data. This is how products are sold separately.
       </p>
+      {demoCount > 0 && (
+        <p className="mt-1.5 text-[12px] text-ink-400">
+          <span className="font-semibold text-ink-500">{demoCount} client{demoCount === 1 ? " is" : "s are"} marked demo</span> —
+          ours, for testing, living in production so every rehearsal runs against the real deployment. They work exactly
+          like a real client in all five apps, and are left out of MRR, billed revenue and the attention feed.
+        </p>
+      )}
     </div>
   );
 }

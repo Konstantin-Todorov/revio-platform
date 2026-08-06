@@ -10,6 +10,7 @@ import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { channelEconomics, SOLD_STATUSES } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
+import { partitionDemo } from "./demo";
 import {
   CONTACT_KINDS, accountAttention, buildTimeline, lastContactAt, observedStage,
   type Stage, type TimelineItem,
@@ -47,11 +48,18 @@ export async function operatorSearch(q: string) {
   return { term, tenants, properties, users };
 }
 
-/** Aggregate numbers across ALL tenants — the operator's bird's-eye view. */
+/**
+ * The raw counters in the Overview footer.
+ *
+ * **Clients** counts real ones only — it sits beside MRR and reads as a business figure. Everything
+ * else counts demo tenants too, because properties, channels and errors are claims about the
+ * platform: a demo hotel's failing sync is a real failing sync, and finding it early is the whole
+ * reason the demo tenants live in production. See `lib/demo.ts`.
+ */
 export async function getOverviewStats() {
   const [clients, properties, products, connectedChannels, reservations, openErrors, suspended] =
     await Promise.all([
-      prisma.tenant.count(),
+      prisma.tenant.count({ where: { isDemo: false } }),
       prisma.property.count(),
       prisma.ratePlanRoomType.count(),
       prisma.channel.count({ where: { status: "connected" } }),
@@ -158,6 +166,7 @@ export async function getClients() {
         slug: t.slug,
         plan: t.plan,
         status: t.status,
+        isDemo: t.isDemo,
         entitlements,
         owner: t.users[0] ? { name: t.users[0].name, email: t.users[0].email } : null,
         properties: t.properties,
@@ -189,8 +198,12 @@ export type OperatorDashboard = Awaited<ReturnType<typeof getOperatorDashboard>>
  * dashboard can show: our clients' on-the-books reservations for the months ahead. Their pipeline is
  * our leading indicator — a portfolio whose next quarter is filling is a portfolio that renews, and
  * we can see it months before a churn model would.
+ *
+ * Every figure on this screen is a claim about the business, so **demo tenants are excluded from all
+ * of it** — including the charts, which is why the demo ids are resolved before anything else. The
+ * exclusion is reported rather than silent; see `lib/demo.ts`.
  */
-export async function getOperatorDashboard() {
+export async function getOperatorDashboard({ includeDemo = false }: { includeDemo?: boolean } = {}) {
   const now = new Date();
   const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
   const monthLabel = (key: string) => {
@@ -205,13 +218,23 @@ export async function getOperatorDashboard() {
   const backFrom = shiftMonth(-11);
   const fwdTo = shiftMonth(6);
 
+  // Resolved first, because three of the four queries below have to exclude them at the database
+  // rather than after the fact — a chart cannot un-count a booking it has already summed.
+  //
+  // `includeDemo` is the deliberate escape hatch: with no real customers yet this screen is entirely
+  // zeros, and "look at the console and see nothing" is a poor way to check the console works. The
+  // default stays honest; the toggle is opt-in, per request, and says so loudly on screen.
+  const demoTenants = await prisma.tenant.findMany({ where: { isDemo: true }, select: { id: true } });
+  const demoIds = includeDemo ? [] : demoTenants.map((t) => t.id);
+  const notDemo = { tenantId: { notIn: demoIds } };
+
   const [clients, invoices, booked, onTheBooks] = await Promise.all([
     getClients(),
-    prisma.invoice.findMany({ where: { period: { in: backKeys } }, select: { period: true, amountMinor: true, status: true } }),
-    prisma.reservation.findMany({ where: { importedAt: { gte: backFrom } }, select: { importedAt: true } }),
+    prisma.invoice.findMany({ where: { period: { in: backKeys }, ...notDemo }, select: { period: true, amountMinor: true, status: true } }),
+    prisma.reservation.findMany({ where: { importedAt: { gte: backFrom }, ...notDemo }, select: { importedAt: true } }),
     // Every client's future room-nights and revenue. This is the forward view.
     prisma.reservationLine.findMany({
-      where: { checkIn: { gte: shiftMonth(0), lt: fwdTo }, reservation: { status: { in: [...SOLD_STATUSES] } } },
+      where: { checkIn: { gte: shiftMonth(0), lt: fwdTo }, reservation: { status: { in: [...SOLD_STATUSES] }, ...notDemo } },
       select: { checkIn: true, checkOut: true, quantity: true, priceMinor: true },
     }),
   ]);
@@ -246,12 +269,18 @@ export async function getOperatorDashboard() {
   );
   const futureByMonth = new Map(forwardTotals.map((f) => [f.key, f]));
 
-  const active = clients.filter((c) => c.status === "active");
+  // Every figure below is a claim about the business, so demo tenants come out first — see lib/demo.ts.
+  // They keep their own pages and their own flags; they just never reach a total.
+  const split = partitionDemo(clients);
+  const real = includeDemo ? clients : split.real;
+  const demo = split.demo;
+  const active = real.filter((c) => c.status === "active");
   const mrrMinor = active.reduce((s, c) => s + monthlyPriceMinor(c.plan, c.entitlements), 0);
+  const demoActive = demo.filter((c) => c.status === "active");
 
   // Per-client rollup for the leaderboard + the attention feed. getClients already did the per-tenant
   // work, so this is arithmetic rather than another N queries.
-  const rows = clients.map((c) => {
+  const rows = real.map((c) => {
     // Physical rooms, never room types — the tier is priced on rooms, and the detail page agrees.
     const drift = tierDrift(c.plan, c.counts.units);
     return {
@@ -274,7 +303,7 @@ export async function getOperatorDashboard() {
   // already earning; this is the revenue that has to be re-won, with a date on it. A renewal is the
   // one deadline in this business that arrives whether or not anyone prepared for it.
   const RENEWAL_HORIZON_DAYS = 120;
-  const renewals = clients
+  const renewals = real
     .filter((c) => c.status === "active" && c.account.renewalDate)
     .map((c) => ({
       id: c.id,
@@ -291,9 +320,18 @@ export async function getOperatorDashboard() {
     money: {
       mrrMinor,
       unbilledDriftMinor: rows.reduce((s, r) => s + r.driftMinor, 0),
-      clients: clients.length,
+      clients: real.length,
       active: active.length,
-      suspended: clients.length - active.length,
+      suspended: real.length - active.length,
+    },
+    demo: {
+      included: includeDemo,
+      count: demo.length,
+      active: demoActive.length,
+      // What they WOULD be worth. Shown separately so the exclusion is visible rather than silent —
+      // a number quietly missing from a dashboard is the thing you never notice is missing.
+      mrrMinor: demoActive.reduce((s, c) => s + monthlyPriceMinor(c.plan, c.entitlements), 0),
+      names: demo.map((c) => ({ id: c.id, name: c.name })),
     },
     back: backKeys.map((k) => ({
       key: k, label: monthLabel(k),
@@ -499,7 +537,7 @@ export async function getPlans() {
   const [tenants, unitCounts, engineLines, invoices] = await Promise.all([
     prisma.tenant.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, plan: true, status: true, hasChannelManager: true, hasReservation: true, hasPms: true },
+      select: { id: true, name: true, plan: true, status: true, isDemo: true, hasChannelManager: true, hasReservation: true, hasPms: true },
     }),
     prisma.unit.groupBy({ by: ["tenantId"], _count: { _all: true } }),
     // The billing basis for the usage fee: what OUR engine produced, not every direct booking.
@@ -527,7 +565,7 @@ export async function getPlans() {
     const invoiced = latestInvoice.get(t.id) ?? null;
     const monthlyMinor = monthlyPriceMinor(t.plan, entitlements);
     return {
-      id: t.id, name: t.name, plan: t.plan, status: t.status, entitlements, rooms,
+      id: t.id, name: t.name, plan: t.plan, status: t.status, isDemo: t.isDemo, entitlements, rooms,
       combination: combinationKeyOf(entitlements),
       breakdown: priceBreakdown(t.plan, entitlements),
       monthlyMinor,
@@ -537,7 +575,10 @@ export async function getPlans() {
       repriceDeltaMinor: invoiced ? monthlyMinor - invoiced.amountMinor : null,
     };
   });
-  const active = priced.filter((p) => p.status === "active");
+  // Adoption and revenue are claims about the business; demo tenants are not business. They keep
+  // their row in the repricing table below, where the point is what any tenant would be charged.
+  const { real, demo } = partitionDemo(priced);
+  const active = real.filter((p) => p.status === "active");
 
   // Adoption: which of the seven shapes people actually buy.
   const adoption = COMBINATIONS.map((c) => {
@@ -603,6 +644,7 @@ export async function getPlans() {
       tenants: engineTenants,
     },
     tierSpread,
+    demo: { count: demo.length, names: demo.map((d) => ({ id: d.id, name: d.name })) },
     repricing: {
       // Only clients we have actually invoiced can have a delta; the rest are new-price by default.
       changed: priced.filter((p) => p.repriceDeltaMinor !== null && p.repriceDeltaMinor !== 0),
@@ -671,16 +713,29 @@ export async function getBilling() {
     const priceMinor = monthlyPriceMinor(t.plan, ent);
     const current = byKey.get(`${t.id}:${period}`) ?? null;
     return {
-      id: t.id, name: t.name, plan: t.plan, status: t.status,
+      id: t.id, name: t.name, plan: t.plan, status: t.status, isDemo: t.isDemo,
       products: billedProducts(ent) || "—",
       priceMinor,
       currentInvoice: current ? { id: current.id, status: current.status, amountMinor: current.amountMinor } : null,
     };
   });
 
-  const mrr = clients.filter((c) => c.status === "active").reduce((s, c) => s + c.priceMinor, 0);
-  const recent = invoices.slice(0, 15).map((i) => ({ id: i.id, tenant: tenantName.get(i.tenantId) ?? "—", period: i.period, amountMinor: i.amountMinor, currency: i.currency, status: i.status }));
-  return { period, clients, mrr, unpaidCount: invoices.filter((i) => i.status !== "paid").length, recent };
+  // Demo tenants ARE invoiced — that is deliberate, so the billing flow stays testable end to end —
+  // but their invoices never reach MRR or the unpaid count. See lib/demo.ts.
+  const { real, demo } = partitionDemo(clients);
+  const demoIds = new Set(demo.map((d) => d.id));
+  const mrr = real.filter((c) => c.status === "active").reduce((s, c) => s + c.priceMinor, 0);
+  const realInvoices = invoices.filter((i) => !demoIds.has(i.tenantId));
+  const recent = invoices.slice(0, 15).map((i) => ({
+    id: i.id, tenant: tenantName.get(i.tenantId) ?? "—", period: i.period,
+    amountMinor: i.amountMinor, currency: i.currency, status: i.status, isDemo: demoIds.has(i.tenantId),
+  }));
+  return {
+    period, clients, mrr,
+    unpaidCount: realInvoices.filter((i) => i.status !== "paid").length,
+    recent,
+    demoCount: demo.length,
+  };
 }
 
 /** Operator staff (us) — the people who can log into this console. */

@@ -21,8 +21,9 @@ const moneyExact = (minor: number) =>
  * with are still here — they are useful — but they are the footer now, because "37 properties" has
  * never once told anyone what to do next.
  */
-export default async function OverviewPage() {
-  const [stats, d] = await Promise.all([getOverviewStats(), getOperatorDashboard()]);
+export default async function OverviewPage({ searchParams }: { searchParams: Promise<{ demo?: string }> }) {
+  const includeDemo = (await searchParams).demo === "1";
+  const [stats, d] = await Promise.all([getOverviewStats(), getOperatorDashboard({ includeDemo })]);
 
   const forwardTotal = d.forward.reduce((s, f) => s + f.revenueMinor, 0);
   const forwardNights = d.forward.reduce((s, f) => s + f.roomNights, 0);
@@ -47,7 +48,39 @@ export default async function OverviewPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Overview" subtitle="What happened, what is coming, and who needs you today" />
+      <PageHeader
+        title="Overview"
+        subtitle={d.demo.included ? "Including demo clients — these are not real figures" : "What happened, what is coming, and who needs you today"}
+      />
+
+      {/* Stated, not silent. A figure quietly missing from a dashboard is the one you never notice
+          is missing — and "why is MRR €283 when I have no customers" is a worse morning than this line. */}
+      {d.demo.count > 0 && (
+        d.demo.included ? (
+          <div className="-mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning-500/40 bg-warning-50 px-4 py-2.5">
+            <span className="text-[12.5px] font-medium text-warning-600">
+              Demo clients are counted in every figure below. Nothing on this screen is real revenue.
+            </span>
+            <Link href="/overview" className="rounded-md border border-warning-500/50 bg-white px-2.5 py-1 text-[11.5px] font-semibold text-warning-600 hover:bg-warning-50">
+              Back to real figures
+            </Link>
+          </div>
+        ) : (
+          <p className="-mt-2 text-[12px] text-ink-400">
+            Excludes{" "}
+            {d.demo.names.map((n, i) => (
+              <span key={n.id}>
+                {i > 0 && ", "}
+                <Link href={`/clients/${n.id}`} className="font-semibold text-ink-500 hover:text-brand-700 hover:underline">{n.name}</Link>
+              </span>
+            ))}{" "}
+            — demo {d.demo.count === 1 ? "client" : "clients"} of ours, worth {money(d.demo.mrrMinor)}/mo if they were real.
+            Everything below is the actual business.{" "}
+            <Link href="/overview?demo=1" className="font-semibold text-brand-600 hover:underline">Show them anyway</Link>{" "}
+            to see the screen with data in it.
+          </p>
+        )
+      )}
 
       {/* 1. The money, in the order it matters: what we earn, what we have earned and not billed. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

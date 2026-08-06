@@ -35,6 +35,11 @@ model Tenant {
   // Commercial profile, set by the operator. plan ≈ room-count tier / package; status gates access.
   plan              String   @default("starter") // starter | growth | scale
   status            String   @default("active") // active | suspended
+  // Ours, for testing — kept alongside real clients in production forever, because a staging copy of
+  // a five-app platform is a second thing to keep in sync and it always drifts. A demo tenant behaves
+  // EXACTLY like a real one in every product; the flag only stops the operator console counting it as
+  // business. See apps/operator/lib/demo.ts for the rule.
+  isDemo            Boolean  @default(false)
   createdAt         DateTime @default(now())
 
   properties Property[]

@@ -14,11 +14,13 @@ const STATUS_TONE: Record<string, Tone> = { draft: "neutral", sent: "warning", p
 const inputCls = "h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-900 outline-none focus:border-brand-600";
 
 export default async function BillingPage() {
-  const { period, clients, mrr, unpaidCount, recent } = await getBilling();
+  const { period, clients, mrr, unpaidCount, recent, demoCount } = await getBilling();
 
   const cards = [
     { icon: TrendingUp, tone: "success", value: money(mrr), label: "MRR", sub: "active clients" },
-    { icon: CreditCard, tone: "info", value: clients.filter((c) => c.status === "active").length, label: "Active clients", sub: "billed monthly" },
+    // Real, active clients — this sits beside MRR and reads as a business count, so it has to be
+    // filtered the same way MRR is. A "2 active clients" next to a "€0 MRR" would be nonsense.
+    { icon: CreditCard, tone: "info", value: clients.filter((c) => c.status === "active" && !c.isDemo).length, label: "Active clients", sub: "billed monthly" },
     { icon: FileText, tone: unpaidCount ? "warning" : "neutral", value: unpaidCount, label: "Unpaid invoices", sub: "draft or sent" },
   ];
   const TONE_BG: Record<string, string> = { success: "bg-success-50 text-success-600", info: "bg-accent-50 text-accent-600", warning: "bg-warning-50 text-warning-600", neutral: "bg-surface-sunken text-ink-500" };
@@ -51,6 +53,13 @@ export default async function BillingPage() {
         })}
       </div>
 
+      {demoCount > 0 && (
+        <p className="mt-2.5 text-[12px] text-ink-400">
+          MRR and the unpaid count exclude {demoCount} demo client{demoCount === 1 ? "" : "s"}. Their invoices are still
+          generated — that is deliberate, so this whole flow stays testable end to end — they just never reach a total.
+        </p>
+      )}
+
       <Card className="mt-4">
         <CardHeader title="Clients — plan & this month" />
         <div className="overflow-x-auto">
@@ -63,7 +72,11 @@ export default async function BillingPage() {
             <tbody>
               {clients.map((c) => (
                 <tr key={c.id} className="border-b border-surface-border last:border-0">
-                  <td className="px-4 py-2.5 font-semibold text-ink-900">{c.name}{c.status !== "active" && <span className="ml-1.5 text-[10.5px] font-semibold uppercase text-warning-600">{c.status}</span>}</td>
+                  <td className="px-4 py-2.5 font-semibold text-ink-900">
+                    {c.name}
+                    {c.isDemo && <span className="ml-1.5 rounded bg-ink-100 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-ink-500">demo</span>}
+                    {c.status !== "active" && <span className="ml-1.5 text-[10.5px] font-semibold uppercase text-warning-600">{c.status}</span>}
+                  </td>
                   <td className="px-4 py-2.5">
                     <form action={setPlan} className="flex items-center gap-1">
                       <input type="hidden" name="tenantId" value={c.id} />

@@ -37,6 +37,21 @@ export default async function PlansPage() {
         action={<Link href="/billing" className="text-[12.5px] font-semibold text-brand-700 hover:underline">Billing →</Link>}
       />
 
+      {/* The price list applies to everyone; the portfolio half below it is a claim about business. */}
+      {p.demo.count > 0 && (
+        <p className="-mt-2 text-[12px] text-ink-400">
+          The price list applies to every client. The portfolio figures below exclude{" "}
+          {p.demo.names.map((n, i) => (
+            <span key={n.id}>
+              {i > 0 && ", "}
+              <Link href={`/clients/${n.id}`} className="font-semibold text-ink-500 hover:text-brand-700 hover:underline">{n.name}</Link>
+            </span>
+          ))}{" "}
+          — demo {p.demo.count === 1 ? "client" : "clients"} of ours. They are still invoiced, deliberately, so the billing
+          flow stays testable.
+        </p>
+      )}
+
       {/* 1. The model, before any number. Each part is priced on a different thing on purpose. */}
       <div className="grid gap-3 lg:grid-cols-4">
         {[

@@ -206,6 +206,22 @@ to buy it**, who buys which, **what each product earns** (a stated *convention*,
 "owns" the discount — but `splitProportionally` guarantees the parts sum to MRR exactly), room-tier
 spread, and **what the model changes about today's bills**. Two invariants are tested exhaustively
 rather than spot-checked: **buying more never costs less**, and attribution always sums to MRR.
+**Applied to production 2026-08-06** — the two August drafts moved €177 → €141.60 (backed up first,
+dry-run inspected, transactional; July left alone because one of them is *paid*, and correcting a paid
+invoice is a credit note, not an `UPDATE`). `generateInvoices` now **refreshes a draft instead of
+skipping it** — an unsent invoice at a stale price is a wrong number waiting to be emailed — while
+sent and paid invoices stay untouched.
+
+**→ ✅ DEMO TENANTS STAY IN PRODUCTION (`Tenant.isDemo`, 2026-08-06).** Hotel Sofia Group and Black Sea
+Resort are **ours, permanently, beside real clients**, so every rehearsal runs against the real
+migrations, the real RLS and the real build rather than a staging copy that drifts. One rule, stated
+in `apps/operator/lib/demo.ts`: **money and portfolio metrics exclude demo; operations and health
+include it.** MRR, billed revenue, forward bookings, the attention feed, renewals and plan adoption
+drop them (MRR is now honestly **€0** — we have no customers yet); sync health and error volumes keep
+them, because a demo hotel's failing push is a real failing push. They are **never hidden, always
+badged, and still invoiced** so the billing flow stays testable. `/overview?demo=1` shows the console
+populated behind an amber banner, because "look at it and see nothing" is a poor way to check it
+works. One click promotes a demo tenant to a real client with its whole history intact.
 
 **→ 🔴 PHASE N (accounts & auth) IS NEXT, and N1 is a live hole.** There is **no rate limiting on any
 login form** — RevioLink, RevioCRS, RevioPMS and the Operator console all accept unlimited password
