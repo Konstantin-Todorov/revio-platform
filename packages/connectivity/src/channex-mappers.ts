@@ -8,27 +8,42 @@ import type { AriUpdate, RawReservation, RawRevision } from "@revio/core";
 
 // --- Channex wire types (subset we use) -----------------------------------
 
-/** One row for POST /api/v1/restrictions (rate + restrictions for a rate plan on a date). */
+/**
+ * One row for POST /api/v1/restrictions (rate and/or restrictions for a rate plan on a date).
+ *
+ * **Every value field is optional, and that is load-bearing.** These used to be mandatory, so
+ * `toRestrictionValue` filled the gaps with `?? false` and every rate change shipped
+ * `stop_sell: false, closed_to_arrival: false, closed_to_departure: false` alongside it. Channex
+ * rejected that during certification — "update should contain only rates" — and it was worse than a
+ * failed test: a channel takes each field as an instruction, so every price edit silently cleared
+ * restrictions somebody had set elsewhere, including in the channel's own extranet.
+ *
+ * `date` OR `date_from`/`date_to` — see `mergeDateRanges`.
+ */
 export interface ChannexRestrictionValue {
   property_id: string;
   rate_plan_id: string;
-  date: string;
-  rate: number; // minor units, matching Channex's integer rate (e.g. 12000 = 120.00). Verified live.
+  date?: string;
+  date_from?: string;
+  date_to?: string;
+  rate?: number; // minor units, matching Channex's integer rate (e.g. 12000 = 120.00). Verified live.
   // Channex properties don't all support the generic `min_stay`; `min_stay_arrival`/`min_stay_through`
   // are the supported forms (sending `min_stay` triggers a warning and the whole row is rejected).
   min_stay_arrival?: number;
   min_stay_through?: number;
   max_stay?: number;
-  closed_to_arrival: boolean;
-  closed_to_departure: boolean;
-  stop_sell: boolean;
+  closed_to_arrival?: boolean;
+  closed_to_departure?: boolean;
+  stop_sell?: boolean;
 }
 
 /** One row for POST /api/v1/availability (room count for a room type on a date). */
 export interface ChannexAvailabilityValue {
   property_id: string;
   room_type_id: string;
-  date: string;
+  date?: string;
+  date_from?: string;
+  date_to?: string;
   availability: number;
 }
 
@@ -96,32 +111,84 @@ export function unsupportedReason(u: AriUpdate): string | null {
   return null;
 }
 
-export function toRestrictionValue(propertyId: string, u: AriUpdate): ChannexRestrictionValue {
+/**
+ * Rate + restrictions for one date, carrying **only the fields the caller actually set**.
+ *
+ * Returns `null` when an update changes nothing on this endpoint (an availability-only edit), so the
+ * caller drops it rather than posting a row that says "and by the way, clear every restriction".
+ */
+export function toRestrictionValue(propertyId: string, u: AriUpdate): ChannexRestrictionValue | null {
   const r = u.restrictions;
   const value: ChannexRestrictionValue = {
     property_id: propertyId,
     rate_plan_id: u.externalRateId,
     date: u.date,
-    rate: u.priceMinor,
-    closed_to_arrival: r.cta ?? false,
-    closed_to_departure: r.ctd ?? false,
-    stop_sell: r.stopSell ?? false,
   };
+  if (u.priceMinor != null) value.rate = u.priceMinor;
   if (r.minLos != null) {
     value.min_stay_arrival = r.minLos;
     value.min_stay_through = r.minLos;
   }
   if (r.maxLos != null) value.max_stay = r.maxLos;
-  return value;
+  if (r.cta != null) value.closed_to_arrival = r.cta;
+  if (r.ctd != null) value.closed_to_departure = r.ctd;
+  if (r.stopSell != null) value.stop_sell = r.stopSell;
+
+  // property_id + rate_plan_id + date are identity, not instruction. Nothing else set = nothing to say.
+  return Object.keys(value).length > 3 ? value : null;
 }
 
-export function toAvailabilityValue(propertyId: string, u: AriUpdate): ChannexAvailabilityValue {
+/** Availability for one date, or `null` when the update is not changing availability. */
+export function toAvailabilityValue(propertyId: string, u: AriUpdate): ChannexAvailabilityValue | null {
+  if (u.bookable == null) return null;
   return {
     property_id: propertyId,
     room_type_id: u.externalRoomId,
     date: u.date,
     availability: u.bookable,
   };
+}
+
+/**
+ * Collapse runs of consecutive dates carrying identical values into Channex's `date_from`/`date_to`
+ * form. Channex asks for this explicitly ("use date_range syntax with merged sequences instead of
+ * single-date objects") and it is the difference between 500 objects and one for a half-year push.
+ *
+ * Only *adjacent* days merge: a gap must stay a gap, or the payload would assert a value on dates the
+ * caller deliberately skipped. Single days keep `date` rather than a one-day range, which is what
+ * Channex's own examples show.
+ */
+export function mergeDateRanges<T extends { date?: string }>(values: T[]): T[] {
+  const groups = new Map<string, { rest: Omit<T, "date">; dates: string[] }>();
+  for (const v of values) {
+    const { date, ...rest } = v;
+    if (!date) continue;
+    // Key on the payload minus the date, with sorted keys so field order never splits a group.
+    const key = JSON.stringify(Object.entries(rest).sort(([a], [b]) => a.localeCompare(b)));
+    const g = groups.get(key);
+    if (g) g.dates.push(date);
+    else groups.set(key, { rest: rest as Omit<T, "date">, dates: [date] });
+  }
+
+  const out: T[] = [];
+  for (const { rest, dates } of groups.values()) {
+    const sorted = [...new Set(dates)].sort();
+    // From 1: the break test compares each day with the one before it, so index 0 has nothing to
+    // compare against. Ending at length closes the final run.
+    let runStart = 0;
+    for (let i = 1; i <= sorted.length; i++) {
+      if (i < sorted.length && isNextDay(sorted[i - 1]!, sorted[i]!)) continue;
+      const from = sorted[runStart]!;
+      const to = sorted[i - 1]!;
+      out.push((from === to ? { ...rest, date: from } : { ...rest, date_from: from, date_to: to }) as T);
+      runStart = i;
+    }
+  }
+  return out;
+}
+
+function isNextDay(prev: string, next: string): boolean {
+  return nextDay(prev) === next;
 }
 
 // --- Booking: Channex -> domain -------------------------------------------

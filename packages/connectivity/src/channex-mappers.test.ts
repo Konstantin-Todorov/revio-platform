@@ -3,6 +3,7 @@ import type { AriUpdate } from "@revio/core";
 import {
   toRestrictionValue,
   toAvailabilityValue,
+  mergeDateRanges,
   toRawReservation,
   toRawRevision,
   unsupportedReason,
@@ -24,9 +25,19 @@ function ari(overrides: Partial<AriUpdate> = {}): AriUpdate {
   };
 }
 
+/**
+ * An update that is NOT changing the rate — the key is absent, not set to undefined.
+ * Under `exactOptionalPropertyTypes` those are different things, and the distinction is the whole
+ * point of this change: absent means "leave it alone".
+ */
+function ariNoRate(restrictions: AriUpdate["restrictions"] = {}): AriUpdate {
+  const { priceMinor: _notChanging, ...rest } = ari({ restrictions });
+  return rest;
+}
+
 describe("ARI -> Channex restrictions", () => {
   it("maps rate (minor units) and restriction flags", () => {
-    const v = toRestrictionValue(PROP, ari({ restrictions: { minLos: 2, maxLos: 7, cta: true, ctd: false, stopSell: true } }));
+    const v = toRestrictionValue(PROP, ari({ restrictions: { minLos: 2, maxLos: 7, cta: true, ctd: false, stopSell: true } }))!;
     expect(v).toEqual({
       property_id: PROP,
       rate_plan_id: "rate-uuid",
@@ -41,13 +52,41 @@ describe("ARI -> Channex restrictions", () => {
     });
   });
 
-  it("omits min/max stay when not set and defaults booleans to false", () => {
-    const v = toRestrictionValue(PROP, ari());
-    expect(v.min_stay_arrival).toBeUndefined();
-    expect(v.min_stay_through).toBeUndefined();
-    expect(v.max_stay).toBeUndefined();
+  // The test that used to live here asserted `stop_sell: false` and `closed_to_arrival: false` on an
+  // update that set neither — it pinned the exact behaviour Channex rejected ("update should contain
+  // only rates"), and worse, the behaviour that silently cleared restrictions set elsewhere. A test
+  // can hold a bug in place as firmly as it holds a feature.
+
+  it("sends ONLY the fields the update actually set", () => {
+    const v = toRestrictionValue(PROP, ari({ restrictions: {} }))!;
+    expect(v).toEqual({ property_id: PROP, rate_plan_id: "rate-uuid", date: "2026-07-01", rate: 12000 });
+    expect("stop_sell" in v).toBe(false);
+    expect("closed_to_arrival" in v).toBe(false);
+    expect("closed_to_departure" in v).toBe(false);
+  });
+
+  it("sends a restriction-only update with no rate attached", () => {
+    // Channex test 6: a stop-sell update must contain stop sell and nothing else.
+    const v = toRestrictionValue(PROP, ariNoRate({ stopSell: true }))!;
+    expect(v).toEqual({ property_id: PROP, rate_plan_id: "rate-uuid", date: "2026-07-01", stop_sell: true });
+  });
+
+  it("keeps an explicit false — turning a restriction OFF is a real instruction", () => {
+    // The distinction the old code destroyed: `undefined` means "not touching it", `false` means
+    // "clear it". Collapsing both to false is what made every rate push destructive.
+    const v = toRestrictionValue(PROP, ariNoRate({ stopSell: false }))!;
     expect(v.stop_sell).toBe(false);
-    expect(v.closed_to_arrival).toBe(false);
+  });
+
+  it("returns null when there is nothing to say on this endpoint", () => {
+    // An availability-only edit. Posting identity with no values would read as "clear everything".
+    expect(toRestrictionValue(PROP, ariNoRate())).toBeNull();
+  });
+
+  it("sends max_stay when set — declared support has to be real support", () => {
+    // 2000/2000 objects were missing this at certification because the caller never set it.
+    const v = toRestrictionValue(PROP, ariNoRate({ maxLos: 4 }))!;
+    expect(v.max_stay).toBe(4);
   });
 });
 
@@ -187,5 +226,73 @@ describe("Channex booking-revision feed -> RawRevision", () => {
     expect(rev.reservation.status).toBe("modified");
     expect(rev.reservation.totalMinor).toBe(39000);
     expect(rev.reservation.lines[0]).toMatchObject({ checkIn: "2026-07-07", checkOut: "2026-07-10" });
+  });
+});
+
+describe("mergeDateRanges", () => {
+  const row = (date: string, extra: Record<string, unknown> = {}) => ({ property_id: PROP, rate_plan_id: "r1", date, rate: 24100, ...extra });
+
+  it("collapses a consecutive run into one date_range object", () => {
+    // Channex: "use date_range syntax with merged sequences instead of single-date objects".
+    // Ten identical days become one object, not ten.
+    const days = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"].map((d) => row(`2026-11-${d}`));
+    expect(mergeDateRanges(days)).toEqual([
+      { property_id: PROP, rate_plan_id: "r1", rate: 24100, date_from: "2026-11-01", date_to: "2026-11-10" },
+    ]);
+  });
+
+  it("keeps a single day as `date`, not a one-day range", () => {
+    expect(mergeDateRanges([row("2026-11-22")])).toEqual([row("2026-11-22")]);
+  });
+
+  it("does NOT merge across a gap — a skipped day must stay skipped", () => {
+    // Merging 1-2 and 4-5 into 1-5 would assert a rate on the 3rd that nobody set.
+    const out = mergeDateRanges([row("2026-11-01"), row("2026-11-02"), row("2026-11-04"), row("2026-11-05")]);
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ date_from: "2026-11-01", date_to: "2026-11-02" });
+    expect(out[1]).toMatchObject({ date_from: "2026-11-04", date_to: "2026-11-05" });
+  });
+
+  it("does not merge adjacent days carrying DIFFERENT values", () => {
+    const out = mergeDateRanges([row("2026-11-01"), row("2026-11-02", { rate: 31266 })]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("merges each rate plan independently", () => {
+    const out = mergeDateRanges([
+      { property_id: PROP, rate_plan_id: "twin-bar", date: "2026-11-01", rate: 24100 },
+      { property_id: PROP, rate_plan_id: "twin-bar", date: "2026-11-02", rate: 24100 },
+      { property_id: PROP, rate_plan_id: "double-bar", date: "2026-11-01", rate: 31266 },
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.find((v) => v.rate_plan_id === "double-bar")).toMatchObject({ date: "2026-11-01" });
+  });
+
+  it("crosses a month boundary — 30 Nov and 1 Dec are consecutive", () => {
+    const out = mergeDateRanges([row("2026-11-30"), row("2026-12-01")]);
+    expect(out).toEqual([{ property_id: PROP, rate_plan_id: "r1", rate: 24100, date_from: "2026-11-30", date_to: "2026-12-01" }]);
+  });
+
+  it("is not confused by field ORDER — the same payload groups together", () => {
+    const out = mergeDateRanges([
+      { property_id: PROP, rate_plan_id: "r1", date: "2026-11-01", rate: 100, stop_sell: true },
+      { stop_sell: true, rate: 100, date: "2026-11-02", rate_plan_id: "r1", property_id: PROP },
+    ]);
+    expect(out).toHaveLength(1);
+  });
+
+  it("de-duplicates a repeated date rather than breaking the run", () => {
+    expect(mergeDateRanges([row("2026-11-01"), row("2026-11-01"), row("2026-11-02")])).toHaveLength(1);
+  });
+
+  it("handles a half-year in one object — the shape Channex wants for test 8", () => {
+    const days: ReturnType<typeof row>[] = [];
+    for (let d = new Date(Date.UTC(2026, 11, 1)); d <= new Date(Date.UTC(2027, 4, 1)); d = new Date(d.getTime() + 86400000)) {
+      days.push(row(d.toISOString().slice(0, 10)));
+    }
+    expect(days.length).toBeGreaterThan(150);
+    expect(mergeDateRanges(days)).toEqual([
+      { property_id: PROP, rate_plan_id: "r1", rate: 24100, date_from: "2026-12-01", date_to: "2027-05-01" },
+    ]);
   });
 });

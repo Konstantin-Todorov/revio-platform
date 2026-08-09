@@ -12,9 +12,19 @@ export interface AriUpdate {
   externalRoomId: string;
   externalRateId: string;
   date: IsoDate;
-  /** Channel-facing bookable count (after stop-sell / allotment). */
-  bookable: number;
-  priceMinor: number;
+  /**
+   * Channel-facing bookable count (after stop-sell / allotment).
+   *
+   * **Optional means "not being changed".** A push must carry only the fields the user actually
+   * edited: sending a rate change with `bookable` attached re-asserts an availability the caller
+   * never touched, and channels treat that as an instruction. Channex rejects it outright during
+   * certification ("update should contain only rates"), and in production it would overwrite values
+   * set elsewhere — including by the hotel in the channel's own extranet.
+   *
+   * A full re-sync legitimately sets every field; a targeted edit sets one.
+   */
+  bookable?: number;
+  priceMinor?: number;
   currency: string;
   restrictions: {
     stopSell?: boolean;

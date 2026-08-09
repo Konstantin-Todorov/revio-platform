@@ -12,12 +12,15 @@
 
 import type { AriUpdate, ChannelAdapter, PushResult, RawReservation, RawRevision } from "@revio/core";
 import {
+  mergeDateRanges,
   toAvailabilityValue,
   toRawReservation,
   toRawRevision,
   toRestrictionValue,
   unsupportedReason,
+  type ChannexAvailabilityValue,
   type ChannexBooking,
+  type ChannexRestrictionValue,
 } from "./channex-mappers.js";
 
 /** Channex staging/sandbox API base. Use a free account at https://staging.channex.io to test. */
@@ -113,19 +116,29 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     return result;
   }
 
-  /** Push only rates + restrictions (one Channex /restrictions call). Returns the Channex task id. */
+  /**
+   * Push only rates + restrictions (one Channex /restrictions call). Returns the Channex task id.
+   *
+   * Updates that touch neither a rate nor a restriction produce no row at all — posting an
+   * identity-only object would read as "clear everything". `ok: true` with no task id means there
+   * was genuinely nothing to send, which is not a failure.
+   */
   async pushRatesAndRestrictions(updates: AriUpdate[]): Promise<{ ok: boolean; taskId?: string; error?: string }> {
-    const res = await this.post("/restrictions", {
-      values: updates.map((u) => toRestrictionValue(this.propertyId, u)),
-    });
+    const values = mergeDateRanges(
+      updates.map((u) => toRestrictionValue(this.propertyId, u)).filter((v): v is ChannexRestrictionValue => v !== null),
+    );
+    if (values.length === 0) return { ok: true };
+    const res = await this.post("/restrictions", { values });
     return res.ok ? { ok: true, ...(res.responseId ? { taskId: res.responseId } : {}) } : { ok: false, error: res.error ?? `HTTP ${res.status}` };
   }
 
   /** Push only availability (one Channex /availability call). Returns the Channex task id. */
   async pushAvailability(updates: AriUpdate[]): Promise<{ ok: boolean; taskId?: string; error?: string }> {
-    const res = await this.post("/availability", {
-      values: updates.map((u) => toAvailabilityValue(this.propertyId, u)),
-    });
+    const values = mergeDateRanges(
+      updates.map((u) => toAvailabilityValue(this.propertyId, u)).filter((v): v is ChannexAvailabilityValue => v !== null),
+    );
+    if (values.length === 0) return { ok: true };
+    const res = await this.post("/availability", { values });
     return res.ok ? { ok: true, ...(res.responseId ? { taskId: res.responseId } : {}) } : { ok: false, error: res.error ?? `HTTP ${res.status}` };
   }
 
