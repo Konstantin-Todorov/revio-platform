@@ -1,5 +1,5 @@
 import "server-only";
-import { syncRealChannels } from "@revio/connectivity";
+import { syncRealChannels, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
 
 /** Record an Audit Log entry. Every hand-made change is permanent and attributable. */
@@ -27,7 +27,7 @@ export async function logAudit(
  * that runs a real adapter (connectivityMode != mock). Mock channels keep the simulated event only;
  * channex-mode channels get an actual ARI push — no manual Re-sync needed after an edit.
  */
-export async function recordPush(propertyId: string, tenantId: string, summary: string) {
+export async function recordPush(propertyId: string, tenantId: string, summary: string, scope?: PushScope) {
   // Channel attribution (spec §5.1): one event per connected mock channel; real channels report
   // their own attributed pushes from syncRealChannels below.
   const mocks = await prisma.channel.findMany({
@@ -46,7 +46,10 @@ export async function recordPush(propertyId: string, tenantId: string, summary: 
   // Immediate cross-product propagation: push the new availability/rates to any real (channex) channel
   // right now — no manual Re-sync in the CM. No-op when every channel is mock. Never break the write.
   try {
-    await syncRealChannels(prisma, propertyId);
+  // A booking / OOO / walk-in changes AVAILABILITY, on the stay's own dates and room types — not
+  // rates, and not the whole horizon. Callers that know the affected dates and rooms pass them;
+  // an omitted scope still means a full push, which is the safe default for anything unclassified.
+    await syncRealChannels(prisma, propertyId, scope);
   } catch {
     /* syncRealChannels already isolates per-channel failures; guard the outer call too. */
   }

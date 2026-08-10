@@ -31,3 +31,13 @@ export {
   type PushScope,
   type PushField,
 } from "./sync.js";
+
+export {
+  CERT_TESTS,
+  verifyTest,
+  rowDays,
+  type WireRow,
+  type TestSpec,
+  type Expectation,
+  type Verdict,
+} from "./cert-expectations.js";

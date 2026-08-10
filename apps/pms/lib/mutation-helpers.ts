@@ -1,5 +1,5 @@
 import "server-only";
-import { syncRealChannels } from "@revio/connectivity";
+import { syncRealChannels, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
 
 /** Record an Audit Log entry. Every hand-made operational change is permanent and attributable. */
@@ -28,7 +28,7 @@ export async function logAudit(
  * Unit going out-of-order writes a RoomInventoryPeriod → the waterfall drops a room → the CM sends it
  * on its next push). This is the visible trace of the one cross-product write.
  */
-export async function recordSync(propertyId: string, tenantId: string, summary: string, detail?: string) {
+export async function recordSync(propertyId: string, tenantId: string, summary: string, detail?: string, scope?: PushScope) {
   // BOUNDARY RULE (spec CM-GUIDE-V2 §1): callers pass the AVAILABILITY EFFECT only — never the
   // operational cause (no unit labels, guest names, maintenance notes). Channel attribution
   // (spec §5.1): one event per connected mock channel; real channels report their own pushes.
@@ -48,7 +48,10 @@ export async function recordSync(propertyId: string, tenantId: string, summary: 
   // Immediate cross-product propagation: a PMS inventory change (unit OOO, walk-in) pushes the new
   // availability to any real (channex) channel now. No-op when every channel is mock; never break the write.
   try {
-    await syncRealChannels(prisma, propertyId);
+  // A booking / OOO / walk-in changes AVAILABILITY, on the stay's own dates and room types — not
+  // rates, and not the whole horizon. Callers that know the affected dates and rooms pass them;
+  // an omitted scope still means a full push, which is the safe default for anything unclassified.
+    await syncRealChannels(prisma, propertyId, scope);
   } catch {
     /* per-channel failures are already isolated inside syncRealChannels. */
   }
