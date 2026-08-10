@@ -33,9 +33,19 @@ export function pullChannel(channelId: string): Promise<PullOutcome> {
   return sharedPullChannel(prisma, channelId);
 }
 
-/** Manual full sync — the on-demand recovery push (365 days through the normal queue, spec §3.5). */
-export function fullSyncChannel(channelId: string) {
-  return sharedSyncChannel(prisma, channelId, { horizonDays: 365 });
+/**
+ * Manual full sync — the on-demand recovery push, through the normal queue (spec §3.5).
+ *
+ * The horizon is the PROPERTY's own `syncHorizonDays`. It was hardcoded to 365, which made the
+ * setting on the Settings screen decorative: a hotel selling 500 days out could set 500, save it,
+ * and still have the last 135 days never leave the building.
+ */
+export async function fullSyncChannel(channelId: string) {
+  const channel = await prisma.channel.findUnique({
+    where: { id: channelId },
+    select: { property: { select: { syncHorizonDays: true } } },
+  });
+  return sharedSyncChannel(prisma, channelId, { horizonDays: channel?.property.syncHorizonDays ?? 365 });
 }
 export const listChannelProducts = (id: string) => sharedListChannelProducts(prisma, id);
 export const pauseChannel = (id: string) => sharedPauseChannel(prisma, id);

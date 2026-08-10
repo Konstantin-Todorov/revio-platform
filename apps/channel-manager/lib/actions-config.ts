@@ -6,11 +6,40 @@ import { getProperty } from "./data";
 import { syncChannel, pullChannel, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
 import { sendEmail, deliveryRecipients } from "@revio/email";
 import { getSession } from "./session";
+import type { PushField, PushScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 
 export type ActionResult = { ok: boolean; error?: string };
 
 const BOOL_TYPES = new Set(["stop_sell", "cta", "ctd"]);
+
+/** A rule changes exactly one restriction, so its push may carry exactly one field. */
+const RULE_TYPE_TO_PUSH: Record<string, PushField> = {
+  min_los: "minStay", max_los: "maxStay", stop_sell: "stopSell", cta: "cta", ctd: "ctd",
+};
+
+const RULE_DAY_MS = 86_400_000;
+
+/** The scope a restriction rule pushes with: its own dates, its own products, its own one field. */
+function ruleScope(rule: {
+  type: string; roomTypeId: string | null; ratePlanId: string | null; dateFrom: Date; dateTo: Date;
+}): PushScope {
+  const dates: string[] = [];
+  for (let t = rule.dateFrom.getTime(); t <= rule.dateTo.getTime(); t += RULE_DAY_MS) {
+    dates.push(new Date(t).toISOString().slice(0, 10));
+  }
+  const field = RULE_TYPE_TO_PUSH[rule.type];
+  return {
+    dates,
+    // A null room type or rate plan means "all of them" — leave the axis unnarrowed rather than
+    // narrowing it to an empty list, which now means "nothing".
+    ...(rule.roomTypeId ? { roomTypeIds: [rule.roomTypeId] } : {}),
+    ...(rule.ratePlanId ? { ratePlanIds: [rule.ratePlanId] } : {}),
+    // advance_purchase has no Channex equivalent and is filtered out downstream; an unmapped type
+    // falls back to a full field set rather than pushing nothing at all.
+    ...(field ? { fields: [field] } : {}),
+  };
+}
 
 // --- Restriction rules -----------------------------------------------------
 
@@ -28,6 +57,7 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
 
   const channelCodes = strList(fd, "channelCodes");
   const roomTypeId = str(fd, "roomTypeId") || null;
+  const ratePlanId = str(fd, "ratePlanId") || null;
   const isBool = BOOL_TYPES.has(type);
   const valueInt = isBool ? null : Math.max(0, int(fd, "value"));
   const valueBool = isBool ? true : null;
@@ -35,7 +65,7 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
   const active = fd.get("active") != null;
 
   const data = {
-    tenantId, propertyId, name, type, roomTypeId, channelCodes,
+    tenantId, propertyId, name, type, roomTypeId, ratePlanId, channelCodes,
     dateFrom: utcDay(dateFrom), dateTo: utcDay(dateTo), valueInt, valueBool, priority, active,
   };
 
@@ -46,7 +76,7 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
     await prisma.restrictionRule.create({ data });
     await logAudit(propertyId, tenantId, { entity: `Restriction · ${name}`, field: "create", newValue: type, source: "rule" });
   }
-  await recordPush(propertyId, tenantId, `Restriction rule "${name}" pushed`);
+  await recordPush(propertyId, tenantId, `Restriction rule "${name}" pushed`, ruleScope(data));
   revalidatePath("/restrictions");
   revalidatePath("/calendar");
   return { ok: true };
@@ -59,7 +89,11 @@ export async function deleteRestrictionRule(fd: FormData): Promise<void> {
   if (!rule) return;
   await prisma.restrictionRule.delete({ where: { id } });
   await logAudit(propertyId, tenantId, { entity: `Restriction · ${rule.name}`, field: "delete", source: "rule" });
+  // Deleting a rule used to push nothing, so the channel kept enforcing a minimum stay the hotel had
+  // just removed. The dates it covered have to be re-sent for the next tier down to take effect.
+  await recordPush(propertyId, tenantId, `Restriction rule "${rule.name}" removed`, ruleScope(rule));
   revalidatePath("/restrictions");
+  revalidatePath("/calendar");
 }
 
 // --- Mapping ---------------------------------------------------------------
@@ -183,8 +217,9 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
   return { ok: true };
 }
 
-/** Manual Sync (spec §3.5): a FULL 365-day recovery push — forces a drifted channel back into
- * agreement with the shared ARI, through the same queue/batching as every other push. */
+/** Manual Sync (spec §3.5): a full recovery push over the property's whole sync horizon — forces a
+ * drifted channel back into agreement with the shared ARI, through the same queue/batching as every
+ * other push. This is the only push that deliberately carries everything. */
 export async function resyncChannel(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
@@ -193,7 +228,7 @@ export async function resyncChannel(fd: FormData): Promise<void> {
   const outcome = await fullSyncChannel(channelId);
   await logAudit(propertyId, tenantId, {
     entity: `Channel · ${ch?.name ?? channelId}`, field: "full_sync",
-    newValue: `${outcome.pushed} pushed · ${outcome.rejected} rejected (${outcome.mode}, 365d)`,
+    newValue: `${outcome.pushed} pushed · ${outcome.rejected} rejected (${outcome.mode}, full horizon)`,
     channelCode: ch?.code,
   });
   revalidatePath("/channels");

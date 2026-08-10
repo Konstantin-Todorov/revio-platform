@@ -6,7 +6,8 @@ import { saveRestrictionRule, type ActionResult } from "@/lib/actions-config";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 type Rule = {
-  id: string; name: string; type: string; roomTypeId: string | null; channelCodes: string[];
+  id: string; name: string; type: string; roomTypeId: string | null; ratePlanId: string | null;
+  channelCodes: string[];
   dateFrom: Date; dateTo: Date; valueInt: number | null; priority: number; active: boolean;
 };
 type Opt = { id: string; name: string };
@@ -20,7 +21,7 @@ const TYPES = [
 
 const iso = (d: Date) => new Date(d).toISOString().slice(0, 10);
 
-export function RestrictionDialog({ rule, roomTypes, channels }: { rule?: Rule; roomTypes: Opt[]; channels: Channel[] }) {
+export function RestrictionDialog({ rule, roomTypes, ratePlans, channels }: { rule?: Rule; roomTypes: Opt[]; ratePlans: Opt[]; channels: Channel[] }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(saveRestrictionRule, null);
   const isEdit = !!rule;
@@ -56,12 +57,23 @@ export function RestrictionDialog({ rule, roomTypes, channels }: { rule?: Rule; 
             <Field label="To"><input name="dateTo" type="date" defaultValue={rule ? iso(rule.dateTo) : today} required className={inputCls} /></Field>
             <Field label="Value" hint="Days/nights"><input name="value" type="number" min={0} defaultValue={rule?.valueInt ?? 2} className={inputCls} /></Field>
           </div>
-          <Field label="Room type">
-            <select name="roomTypeId" defaultValue={rule?.roomTypeId ?? ""} className={inputCls}>
-              <option value="">All rooms</option>
-              {roomTypes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Room type">
+              <select name="roomTypeId" defaultValue={rule?.roomTypeId ?? ""} className={inputCls}>
+                <option value="">All rooms</option>
+                {roomTypes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+              </select>
+            </Field>
+            {/* A rule can bind to ONE rate plan — a minimum stay that applies to the flexible rate
+                but not the breakfast rate is an ordinary thing for a hotel to want, and the only
+                place in the product that can express it. A calendar edit is per room type. */}
+            <Field label="Rate plan" hint="Narrower than the room">
+              <select name="ratePlanId" defaultValue={rule?.ratePlanId ?? ""} className={inputCls}>
+                <option value="">All rate plans</option>
+                {ratePlans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </Field>
+          </div>
           <div>
             <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Channels</span>
             <div className="flex flex-wrap gap-1.5">

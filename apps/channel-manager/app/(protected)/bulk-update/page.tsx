@@ -28,6 +28,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
   const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
   const today = new Date().toISOString().slice(0, 10);
   const rtOpts = roomTypes.map((r) => ({ id: r.id, name: r.name }));
+  const rpOpts = ratePlans.map((p) => ({ id: p.id, name: p.name }));
   const chOpts = channels.map((c) => ({ code: c.code, name: c.name }));
 
   return (
@@ -48,7 +49,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
       )}
 
       <Card className="mt-4">
-        <CardHeader title="Your active restriction rules" action={<RestrictionDialog roomTypes={rtOpts} channels={chOpts} />} />
+        <CardHeader title="Your active restriction rules" action={<RestrictionDialog roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
@@ -76,7 +77,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
                   <td className="px-4 py-2.5"><StatusPill tone={r.active ? "success" : "neutral"}>{r.active ? "Active" : "Inactive"}</StatusPill></td>
                   <td className="px-2 py-2.5">
                     <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <RestrictionDialog rule={r} roomTypes={rtOpts} channels={chOpts} />
+                      <RestrictionDialog rule={r} roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />
                       <DeleteButton action={deleteRestrictionRule} id={r.id} label={r.name} />
                     </div>
                   </td>
