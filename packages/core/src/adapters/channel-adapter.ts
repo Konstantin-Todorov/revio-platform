@@ -45,6 +45,15 @@ export interface PushResult {
   /** Async task/queue ids the channel returned (e.g. Channex task ids) — recorded for auditing
    *  and PMS certification, where each push's task id is submitted as proof. */
   taskIds?: string[];
+  /**
+   * The same ids, each labelled with the endpoint that produced it.
+   *
+   * `taskIds` is order-dependent, and relying on that order is how the wrong id ends up in the wrong
+   * certification form field — a rates payload submitted as the availability one reads to a reviewer
+   * as "expected one Availability update, found 0". The label travels with the id so it cannot be
+   * mixed up downstream.
+   */
+  tasks?: Array<{ kind: "rates" | "availability"; id: string }>;
 }
 
 /** A booking as it comes back from a channel, before it becomes a domain Reservation. */

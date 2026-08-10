@@ -108,10 +108,13 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     const result: PushResult = { ok: restrictions.ok && availability.ok, rejected };
     // Channex returns a task id per call ({data:[{id,type:"task"}]}); keep both — the certification
     // form wants the task id from each ARI push.
-    const taskIds = [restrictions.taskId, availability.taskId].filter((id): id is string => !!id);
-    if (taskIds.length) {
-      result.taskIds = taskIds;
-      result.channelResponseId = taskIds[0]!;
+    const tasks: NonNullable<PushResult["tasks"]> = [];
+    if (restrictions.taskId) tasks.push({ kind: "rates", id: restrictions.taskId });
+    if (availability.taskId) tasks.push({ kind: "availability", id: availability.taskId });
+    if (tasks.length) {
+      result.tasks = tasks;
+      result.taskIds = tasks.map((t) => t.id);
+      result.channelResponseId = tasks[0]!.id;
     }
     return result;
   }

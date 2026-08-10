@@ -297,7 +297,11 @@ export async function syncChannel(
     data: {
       tenantId, propertyId, channelId, kind: "push", status: result.ok ? "success" : "failed",
       summary: `Pushed ${updates.length - result.rejected.length}/${updates.length} updates to ${channel.name} (${channel.connectivityMode})`,
-      detail: result.channelResponseId ?? null,
+      // Both ids, each labelled. Storing only channelResponseId lost the availability task
+      // entirely, and an unlabelled pair is what gets pasted into the wrong form field.
+      detail: result.tasks?.length
+        ? result.tasks.map((t) => `${t.kind} task ${t.id}`).join(" · ")
+        : result.channelResponseId ?? null,
     },
   });
   for (const r of result.rejected.slice(0, 25)) {
