@@ -21,6 +21,27 @@ After each action: **Sync Center** shows the push with its Channex task ids, **e
 
 ---
 
+## Progress — 2026-08-10
+
+**Step 0 done.** Five bulk applies through the UI; the four real products carry 500 clean days each
+(Twin BAR 100, Twin B&B 120, Double BAR 110, Double B&B 130, +25% over 20 Dec – 5 Jan).
+
+**Test 1 driven twice**, and the verifier rejected both — which is the verifier doing its job:
+
+1. **First run: availability 0 on every date, both rooms.** `PropertyDefaults.defStopSell`,
+   `defCta` and `defCtd` were all `true` on this property, left over from earlier testing. They sit
+   at the bottom of the restriction resolution, so the whole property was closed on every channel
+   and every date. Fixed (all three now false, backed up first). **Worth a guard**: a property whose
+   standing default is stop-sell is silently unsellable, and nothing on the screen says so.
+2. **Second run: 499 days, not 500.** Payload covers `2026-08-11 → 2027-12-22` for both rooms and
+   all four rate plans. Prices exist on `2026-08-10`, `08-11`, `2027-12-22` AND `2027-12-23`, so it
+   is not missing data — it is the date-range generation in `syncChannel`, one day short of the
+   property's `syncHorizonDays` of 500. **Open — diagnose before re-running test 1.** The two
+   candidates are the first day (today) being dropped or the last day never being generated; a
+   log of `dates[0]`/`dates.length` on one run settles it.
+
+Task ids from these runs are **not** submittable. Tests 2–10 not yet driven.
+
 ## Step 0 — seed 500 days of varied ARI *(not submitted; test 1 needs data to sync)*
 
 Channex's test 1 says the data must be varied — *"not every room at 1 and $100"*. Availability
