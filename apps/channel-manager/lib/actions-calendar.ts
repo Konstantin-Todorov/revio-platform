@@ -182,14 +182,24 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
     if (over.length > 0) warning = `${v} to sell exceeds the physical count for ${over.map((r) => `${r.name} (${r.totalRooms})`).join(", ")} — saved anyway, double-check the number.`;
   }
 
+  // A rate plan belongs to specific room types. Pricing every selected plan against every selected
+  // room invents products that do not exist — "Twin Room on the Double Room's Best Available Rate" —
+  // and those rows then get pushed to the channel at whatever `existing ?? 0` produced.
+  const links = doRate
+    ? await prisma.ratePlanRoomType.findMany({ where: { ratePlanId: { in: ratePlanIds }, roomTypeId: { in: roomTypeIds } } })
+    : [];
+  const plansForRoom = new Map<string, string[]>();
+  for (const l of links) plansForRoom.set(l.roomTypeId, [...(plansForRoom.get(l.roomTypeId) ?? []), l.ratePlanId]);
+
   const hasCell = Object.keys(cell).length > 0;
   let affected = 0;
   for (const roomTypeId of roomTypeIds) {
+    const roomPlans = plansForRoom.get(roomTypeId) ?? [];
     for (const date of dates) {
       if (hasCell) await upsertCell(tenantId, propertyId, roomTypeId, date, cell, "bulk");
       if (doRate) {
         const { mode, value } = payload.rate!;
-        for (const rpId of ratePlanIds) {
+        for (const rpId of roomPlans) {
           const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
           const base = existing?.priceMinor ?? 0;
           let next = base;
@@ -216,7 +226,7 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
   for (const roomTypeId of roomTypeIds) {
     for (const date of dateKeys) {
       if (hasCell) cells.push({ roomTypeId, date });
-      if (doRate) for (const ratePlanId of ratePlanIds) cells.push({ roomTypeId, ratePlanId, date });
+      if (doRate) for (const ratePlanId of plansForRoom.get(roomTypeId) ?? []) cells.push({ roomTypeId, ratePlanId, date });
     }
   }
 

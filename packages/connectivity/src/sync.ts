@@ -191,6 +191,20 @@ export async function syncChannel(
 
   const roomTypeIds = roomMaps.map((m) => m.roomTypeId);
 
+  /**
+   * Which rate plans each room type actually sells.
+   *
+   * The loop below pairs every mapped room with every mapped rate plan, which for a two-room, two-
+   * plan property is four real products and four that do not exist ("Twin Room on the Double Room's
+   * Best Available Rate"). Those used to be filtered out incidentally, by having no price — until a
+   * bulk edit wrote one, at which point the channel started receiving them. A product is real when
+   * the link says so, so ask the link.
+   */
+  const productLinks = await prisma.ratePlanRoomType.findMany({
+    where: { roomTypeId: { in: roomTypeIds }, ratePlanId: { in: rateMaps.map((m) => m.ratePlanId) } },
+  });
+  const sells = new Set(productLinks.map((l) => `${l.roomTypeId}|${l.ratePlanId}`));
+
   // Cell-level precision, when the caller supplied it. Two sets because a restriction edit names a
   // room and a date but every rate plan of that room.
   const exactCells = scope?.cells
@@ -283,6 +297,7 @@ export async function syncChannel(
       let emitted = 0;
       for (const pm of rateMaps) {
         const rp = pm.ratePlan;
+        if (!sells.has(`${rt.id}|${rp.id}`)) continue;
         if (!inScope(rt.id, rp.id, k)) continue;
         const price = priceFor(rt.id, rp, k);
         if (price == null) continue;
@@ -352,10 +367,11 @@ export async function syncChannel(
       // dropped the availability too — so a booking on such a date left the channel still selling
       // the room. One rate-plan-less row keeps the room count truthful; `toRestrictionValue` returns
       // null for it, so nothing about rates or restrictions is asserted.
-      if (emitted === 0 && wants("availability") && rateMaps[0]) {
+      const fallbackPlan = rateMaps.find((pm) => sells.has(`${rt.id}|${pm.ratePlanId}`));
+      if (emitted === 0 && wants("availability") && fallbackPlan) {
         updates.push({
           externalRoomId: rm.externalRoomId!,
-          externalRateId: rateMaps[0].externalRateId!,
+          externalRateId: fallbackPlan.externalRateId!,
           date: k,
           currency: property.baseCurrency,
           restrictions: {},
