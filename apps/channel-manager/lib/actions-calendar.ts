@@ -120,6 +120,8 @@ interface WriteOutcome {
   dates: string[];
   roomTypeIds: string[];
   ratePlanIds: string[];
+  /** The exact cells written. `ratePlanId` undefined = every plan of that room (a restriction). */
+  cells: { roomTypeId: string; ratePlanId?: string; date: string }[];
   warning?: string;
 }
 
@@ -131,7 +133,7 @@ interface WriteOutcome {
  * three API calls is both wasteful and, per Channex's certification, wrong ("1 call, batched").
  */
 async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayload): Promise<WriteOutcome> {
-  const empty = { changed: [], affected: 0, dates: [], roomTypeIds: [], ratePlanIds: [] };
+  const empty = { changed: [], affected: 0, dates: [], roomTypeIds: [], ratePlanIds: [], cells: [] };
   const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
   if (!dateFrom || !dateTo) return { ...empty, error: "Pick a date range." };
   if (dateTo < dateFrom) return { ...empty, error: "End date is before start date." };
@@ -207,9 +209,20 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
     }
   }
 
+  const dateKeys = dates.map((d) => d.toISOString().slice(0, 10));
+  // The exact cells, so a batched push does not re-assert the cross product of its axes. A rate
+  // change names its rate plans; a restriction is stored per room type and so names none.
+  const cells: WriteOutcome["cells"] = [];
+  for (const roomTypeId of roomTypeIds) {
+    for (const date of dateKeys) {
+      if (hasCell) cells.push({ roomTypeId, date });
+      if (doRate) for (const ratePlanId of ratePlanIds) cells.push({ roomTypeId, ratePlanId, date });
+    }
+  }
+
   return {
-    changed, affected, roomTypeIds,
-    dates: dates.map((d) => d.toISOString().slice(0, 10)),
+    changed, affected, roomTypeIds, cells,
+    dates: dateKeys,
     // Rate plans narrow the scope only when a price changed; a restriction is written per room type.
     ratePlanIds: doRate ? ratePlanIds : [],
     ...(warning ? { warning } : {}),
@@ -247,6 +260,9 @@ function scopeOf(outcomes: WriteOutcome[]): Parameters<typeof recordPush>[3] {
     // change applies to every plan of the room, so leaving the axis open is the truthful scope.
     ...(anyRateChange && plans.size ? { ratePlanIds: [...plans] } : {}),
     ...(fields.size ? { fields: [...fields] } : {}),
+    // The three axes above are independent, so on their own they describe a cross product. The cell
+    // list is what keeps a batch of changes from restating values on dates nobody edited.
+    cells: outcomes.flatMap((o) => o.cells),
   };
 }
 

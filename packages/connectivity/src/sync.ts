@@ -87,6 +87,19 @@ export interface PushScope {
   ratePlanIds?: string[];
   /** Absent = every field. */
   fields?: PushField[];
+  /**
+   * The exact calendar cells this edit touched, when the three axes above are not precise enough.
+   *
+   * `dates`, `roomTypeIds` and `ratePlanIds` are independent, so a push carrying all three sends
+   * their CROSS PRODUCT. That is fine for one change — every combination really was edited — but
+   * wrong the moment several changes travel together: setting the Twin rate on the 21st and the
+   * Double rate on the 25th would also re-assert the Twin on the 25th and the Double on the 21st,
+   * at whatever they happen to be. Values nobody edited, on dates nobody asked about.
+   *
+   * A `ratePlanId` of undefined means "every rate plan of that room on that date", which is what a
+   * restriction edit genuinely does — restrictions are stored per room type, not per rate plan.
+   */
+  cells?: Array<{ roomTypeId: string; ratePlanId?: string; date: string }>;
 }
 
 /** A stay, in the only two terms a push scope cares about: which room type, and which nights. */
@@ -178,6 +191,19 @@ export async function syncChannel(
 
   const roomTypeIds = roomMaps.map((m) => m.roomTypeId);
 
+  // Cell-level precision, when the caller supplied it. Two sets because a restriction edit names a
+  // room and a date but every rate plan of that room.
+  const exactCells = scope?.cells
+    ? new Set(scope.cells.filter((c) => c.ratePlanId).map((c) => `${c.roomTypeId}|${c.ratePlanId}|${c.date}`))
+    : null;
+  const anyPlanCells = scope?.cells
+    ? new Set(scope.cells.filter((c) => !c.ratePlanId).map((c) => `${c.roomTypeId}|${c.date}`))
+    : null;
+  const inScope = (roomTypeId: string, ratePlanId: string, date: string) =>
+    exactCells == null ||
+    exactCells.has(`${roomTypeId}|${ratePlanId}|${date}`) ||
+    anyPlanCells!.has(`${roomTypeId}|${date}`);
+
   const [cells, prices, resLines, periods, holds, propertyDefaults] = await Promise.all([
     prisma.dailyCell.findMany({ where: { roomTypeId: { in: roomTypeIds }, date: { gte: rangeStart, lte: end } } }),
     prisma.ratePrice.findMany({ where: { propertyId, date: { gte: rangeStart, lte: end } } }),
@@ -257,6 +283,7 @@ export async function syncChannel(
       let emitted = 0;
       for (const pm of rateMaps) {
         const rp = pm.ratePlan;
+        if (!inScope(rt.id, rp.id, k)) continue;
         const price = priceFor(rt.id, rp, k);
         if (price == null) continue;
 
