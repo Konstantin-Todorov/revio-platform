@@ -167,7 +167,20 @@ and the running app cannot disagree.
 | --- | --- |
 | Sandbox API base | `https://staging.channex.io/api/v1` |
 | Production API base (after the pass) | `https://secure.channex.io/api/v1` |
-| Channex property (sandbox) | **`a1e9b246-4db1-4ccd-aa8b-08dea7ff89f9`** — "Revio Test Hotel" |
+| Channex property (sandbox) | **`a1e9b246-4db1-4ccd-aa8b-08dea7ff89f9`** — **"Test Property - Revio"**, currency **USD** (renamed + switched 2026-08-06 to match the spec) |
+
+⚠️ **One sandbox item is unresolved: the four rate plans are still EUR.** `PUT /rate_plans/{id}`
+accepts a title change and silently ignores `currency`, so it is fixed at creation. The property is
+USD; the rate plans are not. Two ways out, and it is a judgement call rather than an engineering one:
+
+- **Leave it.** The rejection rendered our values as dollars (`rate is $125.0`) while the property was
+  still EUR, which suggests the grader reads the number and formats it, not the plan's currency.
+- **Recreate the four rate plans in USD.** Correct to the letter of the spec, but they get new UUIDs,
+  so the RevioLink mappings must be redone and `.env.local` updated.
+
+Check whether the Channex dashboard allows the edit the API refuses before recreating anything — the
+UI sometimes permits what the API does not. **Also note `Channel.currency` on RevioLink's cert channel
+is still EUR** and should follow whatever is decided, or the push and the property disagree.
 | API key | **never written down here.** `CHANNEX_API_KEY` in `packages/connectivity/.env.local` (gitignored); the same value is set on Railway as `CHANNEX_SANDBOX_KEY` on the channel-manager service |
 
 ### The certified data model — 2 room types × 2 rate plans
@@ -175,9 +188,9 @@ and the running app cannot disagree.
 | Room type | Rooms | Channex room-type UUID | Rate plan | Channex rate-plan UUID |
 | --- | --- | --- | --- | --- |
 | **Double Room** | 6 | `1e2f3c2b-94ca-4ae3-97db-ab0f7748ad9b` | Best Available Rate | `c650ca88-5762-4e93-baf5-d70e744b4d24` |
-| | | | Breakfast | `1659e89b-a740-4ba7-8530-44000b24059a` |
+| | | | **Bed & Breakfast** | `1659e89b-a740-4ba7-8530-44000b24059a` |
 | **Twin Room** | 8 | `9a029a40-1629-471a-9e14-dd65c55660b9` | Best Available Rate | `f1413ce8-5094-48fe-8722-6e54c709dc93` |
-| | | | Breakfast | `f9501de0-6559-47d5-97a2-4a06cb70fe47` |
+| | | | **Bed & Breakfast** | `f9501de0-6559-47d5-97a2-4a06cb70fe47` |
 
 ### The RevioLink side — what to show on the screenshare
 
