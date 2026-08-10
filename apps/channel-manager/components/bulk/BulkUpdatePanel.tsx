@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
-import { applyBulkUpdateMulti, type BulkPayload, type BulkRateMode, type BulkResult } from "@/lib/actions-calendar";
+import { CheckCircle2, XCircle, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import { applyBulkUpdateMulti, applyBulkUpdateBatch, type BulkPayload, type BulkRateMode, type BulkResult } from "@/lib/actions-calendar";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 type Opt = { id: string; name: string; code: string };
@@ -53,9 +53,22 @@ export function BulkUpdatePanel({
   const [advMax, setAdvMax] = useState("");
   const [avail, setAvail] = useState("");
 
+  /**
+   * Changes queued to go out together.
+   *
+   * A hotel setting a weekend price, a holiday price and a minimum stay is making one decision, and
+   * the channel should hear it once. Applying them one at a time is three API calls saying three
+   * things that were always meant to arrive together — and the certification tests that name three
+   * values on three dates allow exactly one call.
+   */
+  const [queue, setQueue] = useState<{ payload: BulkPayload; lines: string[]; scope: string }[]>([]);
+
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"closed" | "confirm" | "result">("closed");
   const [result, setResult] = useState<BulkResult | null>(null);
+  // Frozen at apply time: the queue is cleared on success, so the result view cannot re-derive
+  // what it just reported on.
+  const [applied, setApplied] = useState<{ lines: string[]; scope: string }[]>([]);
   const [pending, startTransition] = useTransition();
 
   const toggle = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
@@ -95,31 +108,68 @@ export function BulkUpdatePanel({
     return lines;
   }
 
-  const payload = phase !== "closed" ? buildPayload() : null;
-  const summaryLines = payload ? summarize(payload) : [];
-  const rtNames = rtIds.map((id) => roomTypes.find((r) => r.id === id)?.name).filter(Boolean);
   const dowLabel = dows.length ? dows.map((d) => DOW.find(([v]) => v === d)?.[1]).join(", ") : "every day";
+
+  /** null when the form is a valid change, otherwise the reason it is not. */
+  function validate(p: BulkPayload): string | null {
+    if (rtIds.length === 0) return "Select at least one room type.";
+    if (dateTo < dateFrom) return "End date is before start date.";
+    if (summarize(p).length === 0) return "Set at least one field to update.";
+    return null;
+  }
+
+  function scopeLabel(): string {
+    const rooms = rtIds.map((id) => roomTypes.find((r) => r.id === id)?.name).filter(Boolean).join(", ");
+    const range = dateFrom === dateTo ? dateFrom : `${dateFrom} → ${dateTo}`;
+    return `${rooms} · ${range}${dows.length ? ` · ${dowLabel}` : ""}`;
+  }
+
+  /** Park the current form as another change and clear the attribute fields, keeping the scope
+   *  controls where they are — the next change is usually a near neighbour of this one. */
+  function addToQueue() {
+    setInlineError(null);
+    const p = buildPayload();
+    const err = validate(p);
+    if (err) return setInlineError(err);
+    setQueue((q) => [...q, { payload: p, lines: summarize(p), scope: scopeLabel() }]);
+    setRateMode(""); setRateValue("");
+    setMinLos(""); setMaxLos(""); setAdvMin(""); setAdvMax(""); setAvail("");
+    setCta(""); setCtd(""); setStopSell("");
+  }
 
   function openPreview() {
     setInlineError(null);
-    if (rtIds.length === 0) return setInlineError("Select at least one room type.");
-    if (dateTo < dateFrom) return setInlineError("End date is before start date.");
     const p = buildPayload();
-    if (summarize(p).length === 0) return setInlineError("Set at least one field to update.");
+    const err = validate(p);
+    // With changes already queued the form may legitimately be empty — the queue IS the update.
+    if (err && !(queue.length > 0 && err === "Set at least one field to update.")) return setInlineError(err);
     setResult(null);
     setPhase("confirm");
   }
 
-  function apply() {
+  /** Everything that will be applied: the queue, plus the form if it still holds a change. */
+  function pendingChanges(): { payload: BulkPayload; lines: string[]; scope: string }[] {
     const p = buildPayload();
+    const lines = summarize(p);
+    return lines.length > 0 && !validate(p) ? [...queue, { payload: p, lines, scope: scopeLabel() }] : queue;
+  }
+
+  function apply() {
+    const changes = pendingChanges();
+    setApplied(changes.map(({ lines, scope }) => ({ lines, scope })));
     startTransition(async () => {
-      const r = await applyBulkUpdateMulti(p);
+      // One change still goes through the single-apply path: same result, and its audit entry keeps
+      // naming the room types rather than a change count.
+      const r = changes.length === 1
+        ? await applyBulkUpdateMulti(changes[0]!.payload)
+        : await applyBulkUpdateBatch(changes.map((c) => c.payload));
       setResult(r);
       setPhase("result");
-      if (r.ok) onApplied?.(r);
+      if (r.ok) { setQueue([]); onApplied?.(r); }
     });
   }
 
+  const batch = phase !== "closed" ? pendingChanges() : [];
   const cols = compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2";
 
   return (
@@ -200,28 +250,60 @@ export function BulkUpdatePanel({
           </div>
           <p className="text-[11px] text-ink-400">Min/max stay & advance: enter <span className="font-semibold">0</span> to clear an existing value.</p>
           {inlineError && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{inlineError}</p>}
-          <button type="button" onClick={openPreview} className="w-full rounded-md bg-brand-800 px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-            Preview &amp; apply
-          </button>
+
+          {queue.length > 0 && (
+            <div className="rounded-md border border-brand-200 bg-brand-50/60 p-3">
+              <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-brand-700">
+                Queued — {queue.length} change{queue.length === 1 ? "" : "s"}, sent as one update
+              </span>
+              <ul className="space-y-1.5">
+                {queue.map((c, i) => (
+                  <li key={i} className="flex items-start justify-between gap-2 rounded border border-brand-200/70 bg-white px-2.5 py-1.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-[11.5px] font-medium text-ink-500">{c.scope}</div>
+                      <div className="text-[12.5px] text-ink-700">{c.lines.join(" · ")}</div>
+                    </div>
+                    <button type="button" aria-label={`Remove change ${i + 1}`} onClick={() => setQueue((q) => q.filter((_, j) => j !== i))} className="mt-0.5 shrink-0 rounded p-1 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="grid grid-cols-[auto,1fr] gap-2">
+            <button type="button" onClick={addToQueue} title="Set different values for other dates or rooms, and send them all in one update" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3.5 py-2.5 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">
+              <Plus className="h-4 w-4" /> Add another change
+            </button>
+            <button type="button" onClick={openPreview} className="rounded-md bg-brand-800 px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+              Preview &amp; apply{queue.length > 0 ? ` (${queue.length + (summarize(buildPayload()).length > 0 ? 1 : 0)})` : ""}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Confirm → result modal (spec §3.2) */}
       <Modal open={phase !== "closed"} onClose={() => setPhase("closed")} title={phase === "result" ? "Bulk update" : "Review bulk update"}>
-        {phase === "confirm" && payload && (
+        {phase === "confirm" && batch.length > 0 && (
           <div className="space-y-4">
             <div className="rounded-md border border-surface-border bg-surface-muted/60 px-3.5 py-3 text-[12.5px] text-ink-600">
-              <div><span className="font-semibold text-ink-800">Room types:</span> {rtNames.join(", ")}</div>
-              <div className="mt-0.5"><span className="font-semibold text-ink-800">Dates:</span> {dateFrom} → {dateTo} · {dowLabel}</div>
+              {batch.length === 1
+                ? "This will be applied and pushed to your channels."
+                : `${batch.length} changes, applied in order and pushed to your channels as one update.`}
             </div>
-            <div>
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">Changes to apply</span>
-              <ul className="space-y-1.5">
-                {summaryLines.map((l, i) => (
-                  <li key={i} className="flex items-start gap-2 text-[13px] text-ink-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />{l}</li>
-                ))}
-              </ul>
-            </div>
+            {batch.map((c, ci) => (
+              <div key={ci}>
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                  {batch.length > 1 ? `Change ${ci + 1} — ` : "Changes to apply — "}{c.scope}
+                </span>
+                <ul className="space-y-1.5">
+                  {c.lines.map((l, i) => (
+                    <li key={i} className="flex items-start gap-2 text-[13px] text-ink-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />{l}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setPhase("closed")} className="rounded-md border border-surface-border px-4 py-2 text-[13px] font-semibold text-ink-600 hover:bg-surface-muted">Cancel</button>
               <button type="button" onClick={apply} disabled={pending} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60">{pending ? "Applying…" : "Apply"}</button>
@@ -243,7 +325,7 @@ export function BulkUpdatePanel({
             )}
             {result.ok && (
               <ul className="space-y-1.5">
-                {summaryLines.map((l, i) => (
+                {applied.flatMap((c) => c.lines).map((l, i) => (
                   <li key={i} className="flex items-start gap-2 text-[12.5px] text-ink-600"><CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success-500" />{l}</li>
                 ))}
               </ul>

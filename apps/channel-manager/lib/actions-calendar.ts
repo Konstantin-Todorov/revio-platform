@@ -112,12 +112,30 @@ export interface BulkPayload {
 }
 export type BulkResult = { ok: boolean; error?: string; affected?: number; warning?: string };
 
-export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkResult> {
-  const { id: propertyId, tenantId } = await getProperty();
+/** What one change actually wrote — enough to audit it and to build a push scope from it. */
+interface WriteOutcome {
+  error?: string;
+  changed: string[];
+  affected: number;
+  dates: string[];
+  roomTypeIds: string[];
+  ratePlanIds: string[];
+  warning?: string;
+}
+
+/**
+ * Write ONE bulk change and report what it touched — deliberately without pushing.
+ *
+ * The push is separated out because several changes can legitimately belong to one action: setting
+ * three different prices on three different dates is one decision by the user, and sending it as
+ * three API calls is both wasteful and, per Channex's certification, wrong ("1 call, batched").
+ */
+async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayload): Promise<WriteOutcome> {
+  const empty = { changed: [], affected: 0, dates: [], roomTypeIds: [], ratePlanIds: [] };
   const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
-  if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
-  if (dateTo < dateFrom) return { ok: false, error: "End date is before start date." };
-  if (roomTypeIds.length === 0) return { ok: false, error: "Select at least one room type." };
+  if (!dateFrom || !dateTo) return { ...empty, error: "Pick a date range." };
+  if (dateTo < dateFrom) return { ...empty, error: "End date is before start date." };
+  if (roomTypeIds.length === 0) return { ...empty, error: "Select at least one room type." };
 
   // Assemble the DailyCell patch from whichever restriction fields were supplied.
   const cell: Partial<{ inventory: number; minLos: number | null; maxLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean; advancePurchaseMin: number | null; advancePurchaseMax: number | null }> = {};
@@ -136,10 +154,10 @@ export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkRe
   if (doRate) changed.push("rate");
 
   // ≥1 field required (spec §3.1) — an empty apply is not a valid update.
-  if (changed.length === 0) return { ok: false, error: "Set at least one field to update." };
+  if (changed.length === 0) return { ...empty, error: "Set at least one field to update." };
 
   const dates = eachDate(dateFrom, dateTo, daysOfWeek);
-  if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
+  if (dates.length === 0) return { ...empty, error: "No dates match those days of week." };
 
   // Rate targeting: only MANUAL plans are price-edited (derived plans follow their parent).
   let ratePlanIds: string[] = [];
@@ -151,7 +169,7 @@ export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkRe
     });
     ratePlanIds = manualPlans.map((p) => p.id);
     if (requested.length === 0) { const std = await standardPlanId(propertyId); ratePlanIds = std ? [std] : []; }
-    if (ratePlanIds.length === 0) return { ok: false, error: "Select at least one manual rate plan for the price change (derived plans follow their parent)." };
+    if (ratePlanIds.length === 0) return { ...empty, error: "Select at least one manual rate plan for the price change (derived plans follow their parent)." };
   }
 
   // Total-rooms safety net (spec A4): more inventory than physically exists saves, but warns.
@@ -189,24 +207,98 @@ export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkRe
     }
   }
 
+  return {
+    changed, affected, roomTypeIds,
+    dates: dates.map((d) => d.toISOString().slice(0, 10)),
+    // Rate plans narrow the scope only when a price changed; a restriction is written per room type.
+    ratePlanIds: doRate ? ratePlanIds : [],
+    ...(warning ? { warning } : {}),
+  };
+}
+
+/** Which push field each bulk attribute maps to — the mask that keeps a rate push free of
+ *  restrictions it was never asked to change. */
+const BULK_TO_PUSH: Record<string, PushField> = {
+  min_los: "minStay", max_los: "maxStay", cta: "cta", ctd: "ctd",
+  stop_sell: "stopSell", availability: "availability", rate: "rate",
+};
+
+/** The union of what a set of changes touched, as one push scope. */
+function scopeOf(outcomes: WriteOutcome[]): Parameters<typeof recordPush>[3] {
+  const dates = new Set<string>();
+  const rooms = new Set<string>();
+  const plans = new Set<string>();
+  const fields = new Set<PushField>();
+  let anyRateChange = false;
+  for (const o of outcomes) {
+    for (const d of o.dates) dates.add(d);
+    for (const r of o.roomTypeIds) rooms.add(r);
+    for (const p of o.ratePlanIds) plans.add(p);
+    for (const c of o.changed) {
+      const f = BULK_TO_PUSH[c];
+      if (f) fields.add(f);
+      if (c === "rate") anyRateChange = true;
+    }
+  }
+  return {
+    dates: [...dates],
+    roomTypeIds: [...rooms],
+    // Narrowing to specific rate plans is only meaningful when a price moved; a restriction-only
+    // change applies to every plan of the room, so leaving the axis open is the truthful scope.
+    ...(anyRateChange && plans.size ? { ratePlanIds: [...plans] } : {}),
+    ...(fields.size ? { fields: [...fields] } : {}),
+  };
+}
+
+export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkResult> {
+  const { id: propertyId, tenantId } = await getProperty();
+  const out = await writeBulk(propertyId, tenantId, payload);
+  if (out.error) return { ok: false, error: out.error };
+
   // One apply = one audit entry recording every attribute changed (spec §3.1 build note).
-  await logAudit(propertyId, tenantId, { entity: `Bulk update · ${roomTypeIds.length} room types`, field: changed.join(", "), newValue: `${affected} cells`, source: "bulk" });
+  await logAudit(propertyId, tenantId, { entity: `Bulk update · ${out.roomTypeIds.length} room types`, field: out.changed.join(", "), newValue: `${out.affected} cells`, source: "bulk" });
   // One apply = one push carrying exactly the mask the user filled in, over exactly the rooms,
   // rate plans and dates they selected. This is what lets a bulk edit satisfy a certification test
   // that demands "1 API call" with specific values and nothing else in it.
-  const BULK_TO_PUSH: Record<string, PushField> = {
-    min_los: "minStay", max_los: "maxStay", cta: "cta", ctd: "ctd",
-    stop_sell: "stopSell", availability: "availability", rate: "rate",
-  };
-  const fields = [...new Set(changed.map((c) => BULK_TO_PUSH[c]).filter((f): f is PushField => !!f))];
-  await recordPush(propertyId, tenantId, `Bulk update applied (${changed.join(", ")}) — ${affected} cells`, {
-    dates: dates.map((d) => d.toISOString().slice(0, 10)),
-    roomTypeIds,
-    ...(doRate ? { ratePlanIds } : {}),
-    ...(fields.length ? { fields } : {}),
-  });
+  await recordPush(propertyId, tenantId, `Bulk update applied (${out.changed.join(", ")}) — ${out.affected} cells`, scopeOf([out]));
   revalidateCalendar();
   revalidatePath("/rooms-rates");
+  return { ok: true, affected: out.affected, ...(out.warning ? { warning: out.warning } : {}) };
+}
+
+/**
+ * Apply SEVERAL bulk changes as one action — written in order, then pushed **once**.
+ *
+ * A hotel setting a weekend rate, a holiday rate and a minimum stay is making one decision, and a
+ * channel should hear about it once. It is also the only way to satisfy the certification tests
+ * that name three different values on three different dates and allow exactly one API call.
+ *
+ * Changes are applied in order, so a later one deliberately overrides an earlier one on any date
+ * they share — the same as typing them one after another, minus the traffic.
+ */
+export async function applyBulkUpdateBatch(payloads: BulkPayload[]): Promise<BulkResult> {
+  const { id: propertyId, tenantId } = await getProperty();
+  if (payloads.length === 0) return { ok: false, error: "Nothing to apply." };
+
+  const outcomes: WriteOutcome[] = [];
+  for (const [i, payload] of payloads.entries()) {
+    const out = await writeBulk(propertyId, tenantId, payload);
+    // Fail fast and say WHICH change was rejected: silently applying two of three and pushing them
+    // would leave the hotel believing all three landed.
+    if (out.error) return { ok: false, error: `Change ${i + 1}: ${out.error}` };
+    outcomes.push(out);
+  }
+
+  const affected = outcomes.reduce((s, o) => s + o.affected, 0);
+  const changed = [...new Set(outcomes.flatMap((o) => o.changed))];
+  await logAudit(propertyId, tenantId, {
+    entity: `Bulk update · ${payloads.length} changes`, field: changed.join(", "),
+    newValue: `${affected} cells`, source: "bulk",
+  });
+  await recordPush(propertyId, tenantId, `Bulk update applied — ${payloads.length} changes, ${affected} cells`, scopeOf(outcomes));
+  revalidateCalendar();
+  revalidatePath("/rooms-rates");
+  const warning = outcomes.find((o) => o.warning)?.warning;
   return { ok: true, affected, ...(warning ? { warning } : {}) };
 }
 
