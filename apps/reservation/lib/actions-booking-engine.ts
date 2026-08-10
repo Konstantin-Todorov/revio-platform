@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { BOOKING_PRESET_BY_KEY } from "@revio/core";
 import { createConnectAccount, createOnboardingLink, getConnectStatus } from "@revio/payments";
-import { syncRealChannels } from "@revio/connectivity";
+import { syncRealChannels, stayScope } from "@revio/connectivity";
 import { slugifyPropertyName, slugRejectionReason } from "@revio/booking";
 import { prisma } from "./db";
 import { getProperty } from "./data";
@@ -329,6 +329,11 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
   if (scopeError) return { ok: false, error: scopeError };
   const property = await getProperty();
 
+  // The lines are read first: once the status flips, these nights are what returns to sale.
+  const declined = await prisma.reservation.findFirst({
+    where: { id: reservationId, propertyId: property.id, status: "requested" },
+    include: { lines: true },
+  });
   const updated = await prisma.reservation.updateMany({
     where: { id: reservationId, propertyId: property.id, status: "requested" },
     data: { status: "cancelled" },
@@ -340,7 +345,9 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
   });
   // A declined request releases a room that was off sale. Every channel has to hear about that, and
   // hear about it now — a room the hotel just freed is the one most likely to sell tonight.
-  try { await syncRealChannels(prisma, property.id); } catch { /* never fail the decline on a push */ }
+  try {
+    await syncRealChannels(prisma, property.id, stayScope(declined?.lines ?? []));
+  } catch { /* never fail the decline on a push */ }
   revalidatePath("/reservations");
   return { ok: true };
 }

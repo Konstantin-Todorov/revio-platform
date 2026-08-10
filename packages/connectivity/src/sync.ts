@@ -89,6 +89,41 @@ export interface PushScope {
   fields?: PushField[];
 }
 
+/** A stay, in the only two terms a push scope cares about: which room type, and which nights. */
+export interface ScopedStay {
+  roomTypeId: string;
+  checkIn: Date | string;
+  checkOut: Date | string;
+}
+
+/**
+ * The push scope for a booking-shaped change — a reservation confirmed, modified, cancelled, marked
+ * no-show, or a room going out of order.
+ *
+ * Two things here are load-bearing, and both were wrong before:
+ *
+ * - **The dates are the stay's own.** An unscoped push covers `HORIZON_DAYS` from today, so a
+ *   reservation for November pushed by a hotel working in August updated fourteen August days and
+ *   never mentioned November at all. The channel kept selling the room that was just booked.
+ * - **The field is availability, nothing else.** A booking does not change a price or a restriction,
+ *   and re-asserting them overwrites whatever the hotel set in the channel's own extranet.
+ *
+ * Pass every affected stay — on a modification that means the OLD nights as well as the new ones,
+ * because the nights the guest gave up have to go back on sale.
+ */
+export function stayScope(stays: ScopedStay[]): PushScope {
+  const dates = new Set<string>();
+  const roomTypeIds = new Set<string>();
+  for (const s of stays) {
+    const from = new Date(typeof s.checkIn === "string" ? `${s.checkIn}T00:00:00Z` : s.checkIn);
+    const to = new Date(typeof s.checkOut === "string" ? `${s.checkOut}T00:00:00Z` : s.checkOut);
+    roomTypeIds.add(s.roomTypeId);
+    // Check-out day is not a night — the room is available again that afternoon.
+    for (let t = from.getTime(); t < to.getTime(); t += DAY_MS) dates.add(ymd(new Date(t)));
+  }
+  return { dates: [...dates].sort(), roomTypeIds: [...roomTypeIds], fields: ["availability"] };
+}
+
 /**
  * Build the next HORIZON_DAYS of ARI for a channel from its two-stream mappings + the live inventory/
  * rates/restrictions, and push it through the resolved adapter (mock or Channex). Records a SyncEvent
@@ -118,14 +153,17 @@ export async function syncChannel(
     prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: "complete", externalRoomId: { not: null } }, include: { roomType: true } }),
     prisma.channelRatePlanMapping.findMany({ where: { channelId, status: "complete", externalRateId: { not: null } }, include: { ratePlan: true } }),
   ]);
-  const roomMaps = scope?.roomTypeIds?.length ? allRoomMaps.filter((m) => scope.roomTypeIds!.includes(m.roomTypeId)) : allRoomMaps;
-  const rateMaps = scope?.ratePlanIds?.length ? allRateMaps.filter((m) => scope.ratePlanIds!.includes(m.ratePlanId)) : allRateMaps;
+  // Present-but-empty is not the same as absent. Absent means "the caller did not narrow this axis";
+  // empty means "the caller narrowed it to nothing" — a cancellation with no lines, say — and must
+  // push nothing rather than quietly widening back out to every product.
+  const roomMaps = scope?.roomTypeIds ? allRoomMaps.filter((m) => scope.roomTypeIds!.includes(m.roomTypeId)) : allRoomMaps;
+  const rateMaps = scope?.ratePlanIds ? allRateMaps.filter((m) => scope.ratePlanIds!.includes(m.ratePlanId)) : allRateMaps;
 
   const todayIso = ymd(new Date());
   const start = new Date(`${todayIso}T00:00:00Z`);
   // Scoped dates are the edit's own; unscoped is the rolling horizon. Sorted so `end` is the real
   // upper bound for the range queries below.
-  const dates = scope?.dates?.length
+  const dates = scope?.dates
     ? [...new Set(scope.dates)].sort().map((d) => new Date(`${d}T00:00:00Z`))
     : Array.from({ length: horizonDays }, (_, i) => new Date(start.getTime() + i * DAY_MS));
   if (dates.length === 0 || roomMaps.length === 0 || rateMaps.length === 0) {
@@ -216,6 +254,7 @@ export async function syncChannel(
         holds: held, confirmed: sold,
       }).remaining);
 
+      let emitted = 0;
       for (const pm of rateMaps) {
         const rp = pm.ratePlan;
         const price = priceFor(rt.id, rp, k);
@@ -278,6 +317,23 @@ export async function syncChannel(
         if (wants("availability")) update.bookable = stopSell ? 0 : bookable;
         if (wants("rate")) update.priceMinor = price;
         updates.push(update);
+        emitted++;
+      }
+
+      // Availability is a property of the ROOM TYPE, but the loop above is driven by rate plans and
+      // skips any (room, rate, date) with no price. On a date the hotel never priced, that silently
+      // dropped the availability too — so a booking on such a date left the channel still selling
+      // the room. One rate-plan-less row keeps the room count truthful; `toRestrictionValue` returns
+      // null for it, so nothing about rates or restrictions is asserted.
+      if (emitted === 0 && wants("availability") && rateMaps[0]) {
+        updates.push({
+          externalRoomId: rm.externalRoomId!,
+          externalRateId: rateMaps[0].externalRateId!,
+          date: k,
+          currency: property.baseCurrency,
+          restrictions: {},
+          bookable,
+        });
       }
     }
   }
@@ -407,6 +463,8 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
   let imported = 0;
   let updated = 0;
   let unchanged = 0;
+  /** Every stay this pull touched, so the re-push below covers the booked nights and only those. */
+  const touched: ScopedStay[] = [];
 
   /**
    * Would these lines oversell the room type on any night?
@@ -569,6 +627,8 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
           },
         });
       }
+      // Both stays: the nights the guest kept, and the ones they gave up and we must resell.
+      touched.push(...existing.lines, ...lines);
       updated++;
       continue;
     }
@@ -608,6 +668,7 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
         },
       });
     }
+    touched.push(...lines);
     imported++;
   }
 
@@ -637,7 +698,9 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
   });
   await prisma.channel.update({ where: { id: channelId }, data: { lastSyncAt: new Date() } });
 
-  if (imported > 0 || updated > 0) await syncRealChannels(prisma, propertyId);
+  // Re-push the nights this pull actually moved. Unscoped, this covered fourteen days from today and
+  // so said nothing at all about a booking further out than that.
+  if (touched.length > 0) await syncRealChannels(prisma, propertyId, stayScope(touched));
 
   return { ok: true, imported, updated, unchanged, mode: channel.connectivityMode };
 }

@@ -17,7 +17,7 @@ import {
   isAdvancePurchaseClosed, recogniseGuest, resolveChosenExtras, resolveRestriction, type SellableExtra,
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
 } from "@revio/core";
-import { syncRealChannels } from "@revio/connectivity";
+import { syncRealChannels, stayScope } from "@revio/connectivity";
 
 type Db = ReturnType<typeof forTenant>;
 type PropertyRow = { id: string; tenantId: string; name: string; baseCurrency: string; timezone: string };
@@ -567,7 +567,9 @@ export async function publicCreateReservation(
     },
   });
   // The one availability truth changed — push the effect to any real channels immediately.
-  try { await syncRealChannels(db, property.id); } catch { /* channel push must never fail the booking */ }
+  try {
+    await syncRealChannels(db, property.id, stayScope([{ roomTypeId: rt.id, checkIn: p.checkIn, checkOut: p.checkOut }]));
+  } catch { /* channel push must never fail the booking */ }
 
   return {
     reservationId: reservation.id,
@@ -729,7 +731,9 @@ export async function publicCreateHold(
 
   // The waterfall changed, so every channel's availability changed. Pushing here — rather than only
   // on confirmation — is what stops an OTA selling the room a guest is currently paying for.
-  try { await syncRealChannels(db, property.id); } catch { /* a push failure must not block a hold */ }
+  try {
+    await syncRealChannels(db, property.id, stayScope([{ roomTypeId: hold.roomTypeId, checkIn: hold.checkIn, checkOut: hold.checkOut }]));
+  } catch { /* a push failure must not block a hold */ }
 
   return { hold: { id: hold.id, expiresAt: hold.expiresAt, roomTypeId: hold.roomTypeId } };
 }
@@ -753,11 +757,17 @@ export async function publicGetHold(db: Db, propertyId: string, holdId: string):
  */
 export async function publicReleaseHold(db: Db, propertyId: string, holdId: string): Promise<void> {
   if (!holdId) return;
+  // Read the nights before releasing — they are exactly what goes back on sale.
+  const hold = await db.hold.findFirst({
+    where: { id: holdId, propertyId, status: "active" },
+    select: { roomTypeId: true, checkIn: true, checkOut: true },
+  });
   await db.hold.updateMany({
     where: { id: holdId, propertyId, status: "active" },
     data: { status: "released" },
   });
-  try { await syncRealChannels(db, propertyId); } catch { /* nothing a guest can see */ }
+  if (!hold) return;
+  try { await syncRealChannels(db, propertyId, stayScope([hold])); } catch { /* nothing a guest can see */ }
 }
 
 /** Short, human, sayable-over-the-phone. Derived from the id so it needs no extra column or sequence. */

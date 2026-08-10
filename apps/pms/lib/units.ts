@@ -1,5 +1,6 @@
 import "server-only";
 import { prisma } from "./db";
+import { stayScope } from "@revio/connectivity";
 import { recordSync } from "./mutation-helpers";
 import { todayInTz, addDaysYmd, utcDay } from "./format";
 
@@ -21,16 +22,20 @@ export async function takeUnitOoo(tenantId: string, propertyId: string, unit: { 
     });
     // Boundary rule: channels see the availability effect, never the operational cause.
     const rt = await prisma.roomType.findUnique({ where: { id: unit.roomTypeId } });
-    await recordSync(propertyId, tenantId, `Availability reduced — ${rt?.name ?? "1 room"}`, "1 room off sale until back in service");
+    await recordSync(propertyId, tenantId, `Availability reduced — ${rt?.name ?? "1 room"}`, "1 room off sale until back in service",
+      stayScope([{ roomTypeId: unit.roomTypeId, checkIn: today, checkOut: addDaysYmd(to, 1) }]));
   }
 }
 
 /** Return a unit to service: delete its OOO periods (restores the waterfall) and set the new hk status. */
 export async function clearUnitOoo(tenantId: string, propertyId: string, unit: { id: string; label: string }, newStatus: string) {
+  // Read the dates BEFORE deleting: they are what goes back on sale, and the push has to name them.
+  const periods = await prisma.roomInventoryPeriod.findMany({ where: { unitId: unit.id } });
   const removed = await prisma.roomInventoryPeriod.deleteMany({ where: { unitId: unit.id } });
   await prisma.unit.update({ where: { id: unit.id }, data: { hkStatus: newStatus } });
   if (removed.count > 0) {
     const u = await prisma.unit.findUnique({ where: { id: unit.id }, include: { roomType: true } });
-    await recordSync(propertyId, tenantId, `Availability restored — ${u?.roomType.name ?? "1 room"}`, "1 room returned to sale");
+    await recordSync(propertyId, tenantId, `Availability restored — ${u?.roomType.name ?? "1 room"}`, "1 room returned to sale",
+      stayScope(periods.map((p) => ({ roomTypeId: p.roomTypeId, checkIn: p.dateFrom, checkOut: addDaysYmd(p.dateTo.toISOString().slice(0, 10), 1) }))));
   }
 }

@@ -51,14 +51,24 @@ async function ensureRoomType(title: string, rooms: number, existing: { id: stri
   return j.data.id as string;
 }
 
-async function ensureRatePlan(title: string, roomTypeId: string, existing: { id: string; title: string; roomTypeId: string }[]): Promise<string> {
+/**
+ * A rate plan's currency is FIXED AT CREATION — `PUT /rate_plans/{id}` accepts the field and
+ * silently ignores it, and the Channex UI renders the same select disabled. Hardcoding "EUR" here
+ * is what left four EUR rate plans hanging under a USD property, and the only way out was to delete
+ * and recreate all four (new UUIDs, remap everything). So take the currency from the property.
+ */
+async function ensureRatePlan(
+  title: string, roomTypeId: string, currency: string, rateMinor: number,
+  existing: { id: string; title: string; roomTypeId: string }[],
+): Promise<string> {
   const hit = existing.find((r) => r.title === title && r.roomTypeId === roomTypeId);
   if (hit) return hit.id;
   const j = await api("POST", "/rate_plans", {
     rate_plan: {
       title, property_id: propertyId, room_type_id: roomTypeId,
-      currency: "EUR", sell_mode: "per_room", rate_mode: "manual",
-      options: [{ occupancy: 2, is_primary: true, rate: 0 }],
+      currency, sell_mode: "per_room", rate_mode: "manual",
+      ...(title.includes("Breakfast") ? { meal_type: "breakfast" } : {}),
+      options: [{ occupancy: 2, is_primary: true, rate: rateMinor }],
     },
   });
   return j.data.id as string;
@@ -87,12 +97,17 @@ async function main() {
   const doubleId = await ensureRoomType("Double Room", 6, roomTypes);
   const twinId = await ensureRoomType("Twin Room", 8, roomTypes);
 
+  // Certification prescribes the property in USD and a $100 / $120 baseline, and the plan currency
+  // has to be right the first time (see ensureRatePlan). "Bed & Breakfast" is the spec's own wording.
+  const prop = await api("GET", `/properties/${propertyId}`);
+  const currency: string = prop.data.attributes.currency ?? "USD";
+
   const doublePlans = await listRatePlansForRoom(doubleId);
-  const doubleBar = await ensureRatePlan("Best Available Rate", doubleId, doublePlans);
-  const doubleBreakfast = await ensureRatePlan("Breakfast", doubleId, doublePlans);
+  const doubleBar = await ensureRatePlan("Best Available Rate", doubleId, currency, 10000, doublePlans);
+  const doubleBreakfast = await ensureRatePlan("Bed & Breakfast", doubleId, currency, 12000, doublePlans);
   const twinPlans = await listRatePlansForRoom(twinId);
-  const twinBar = await ensureRatePlan("Best Available Rate", twinId, twinPlans);
-  const twinBreakfast = await ensureRatePlan("Breakfast", twinId, twinPlans);
+  const twinBar = await ensureRatePlan("Best Available Rate", twinId, currency, 10000, twinPlans);
+  const twinBreakfast = await ensureRatePlan("Bed & Breakfast", twinId, currency, 12000, twinPlans);
 
   console.log("\n✓ Certification property ready — 2 room types, 4 rate plans.\n");
   console.log("Update packages/connectivity/.env.local:\n");

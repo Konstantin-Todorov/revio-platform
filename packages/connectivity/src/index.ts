@@ -26,10 +26,12 @@ export {
   disconnectChannel,
   reconnectChannel,
   pullChannel,
+  stayScope,
   type SyncOutcome,
   type PullOutcome,
   type PushScope,
   type PushField,
+  type ScopedStay,
 } from "./sync.js";
 
 export {

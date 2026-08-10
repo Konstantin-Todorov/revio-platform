@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
+import { stayScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
+
+/** An inventory period's `dateTo` is the last CLOSED day; `stayScope` wants a check-out date. */
+function addDay(ymd: string): string {
+  return new Date(new Date(`${ymd}T00:00:00Z`).getTime() + 86_400_000).toISOString().slice(0, 10);
+}
 
 function revalidateInventory() {
   revalidatePath("/inventory");
@@ -35,7 +41,9 @@ export async function addInventoryPeriod(fd: FormData): Promise<void> {
     field: label,
     newValue: `${dateFrom} → ${dateTo} · ${rooms} ${roomType.unitKind === "bed" ? "beds" : "rooms"}`,
   });
-  await recordPush(propertyId, tenantId, `${label} period added — ${roomType.name} availability reduced`);
+  await recordPush(propertyId, tenantId, `${label} period added — ${roomType.name} availability reduced`,
+    // dateTo is inclusive; stayScope treats the end as a check-out, so add the extra day.
+    stayScope([{ roomTypeId, checkIn: dateFrom, checkOut: addDay(dateTo) }]));
   revalidateInventory();
 }
 
@@ -55,6 +63,7 @@ export async function deleteInventoryPeriod(fd: FormData): Promise<void> {
     field: period.kind === "closure" ? "Closure removed" : "Out of order removed",
     oldValue: `${period.dateFrom.toISOString().slice(0, 10)} → ${period.dateTo.toISOString().slice(0, 10)}`,
   });
-  await recordPush(propertyId, tenantId, `${period.kind === "closure" ? "Closure" : "Out of order"} period removed — ${period.roomType.name} availability restored`);
+  await recordPush(propertyId, tenantId, `${period.kind === "closure" ? "Closure" : "Out of order"} period removed — ${period.roomType.name} availability restored`,
+    stayScope([{ roomTypeId: period.roomTypeId, checkIn: period.dateFrom, checkOut: addDay(period.dateTo.toISOString().slice(0, 10)) }]));
   revalidateInventory();
 }

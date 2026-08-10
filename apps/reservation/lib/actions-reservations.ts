@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import { getProperty, remainingByNight, stayViolation, todayInTz, PAYMENT_GUARANTEES } from "./data";
 import { releaseExpiredHolds } from "./holds";
 import { getSession } from "./session";
+import { stayScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -194,7 +195,10 @@ export async function confirmReservation(fd: FormData): Promise<void> {
     field: "created",
     newValue: `${hold!.roomType.name} · ${hold!.checkIn.toISOString().slice(0, 10)} → ${hold!.checkOut.toISOString().slice(0, 10)} · ${hold!.quantity}× · ${ratePlan!.name}`,
   });
-  await recordPush(property.id, property.tenantId, "Availability reduced — new reservation confirmed");
+  await recordPush(
+    property.id, property.tenantId, "Availability reduced — new reservation confirmed",
+    stayScope([{ roomTypeId: hold!.roomTypeId, checkIn: hold!.checkIn, checkOut: hold!.checkOut }]),
+  );
   revalidateReservations();
   redirect(`/reservations/${reservation.id}`);
 }
@@ -253,7 +257,14 @@ export async function modifyReservation(fd: FormData): Promise<void> {
     oldValue: before,
     newValue: `${roomType!.name} · ${checkIn} → ${checkOut} · ${quantity}×`,
   });
-  await recordPush(property.id, property.tenantId, "Availability updated — reservation modified");
+  // Both stays: the nights the guest now holds, and the ones they released and we can resell.
+  await recordPush(
+    property.id, property.tenantId, "Availability updated — reservation modified",
+    stayScope([
+      { roomTypeId: line!.roomTypeId, checkIn: line!.checkIn, checkOut: line!.checkOut },
+      { roomTypeId, checkIn, checkOut },
+    ]),
+  );
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
   redirect(`/reservations/${id}`);
@@ -265,6 +276,7 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   const id = str(fd, "id");
   const reservation = await prisma.reservation.findFirst({
     where: { id, propertyId: property.id, status: { in: ["confirmed", "modified", "overbooked", "hold"] } },
+    include: { lines: true },
   });
   if (!reservation) redirect(`/reservations/${id}`);
 
@@ -275,7 +287,10 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
     oldValue: reservation!.status,
     newValue: "cancelled",
   });
-  await recordPush(property.id, property.tenantId, "Availability restored — reservation cancelled");
+  await recordPush(
+    property.id, property.tenantId, "Availability restored — reservation cancelled",
+    stayScope(reservation!.lines),
+  );
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
   redirect(`/reservations/${id}`);

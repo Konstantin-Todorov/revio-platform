@@ -227,11 +227,21 @@ export function verifyTest(
   // The rule that failed us four times: nothing beyond what the test names. Every offending field is
   // listed, not just the first — Channex's own rejection named all three at once, and a reviewer
   // fixing this wants the full set rather than one more round trip per field.
+  //
+  // Reported once per (product, offending fields) with a row count, not once per row: a 500-day push
+  // makes the same mistake 500 times, and 500 identical lines bury the nine other problems.
+  const offences = new Map<string, { id: string | undefined; fields: string[]; rows: number }>();
   for (const row of rows) {
     const carried = spec.forbidden.filter((f) => row[f] !== undefined);
-    if (carried.length > 0) {
-      problems.push(`row for ${idOf(row)} carries ${carried.map((f) => `"${f}"`).join(", ")} — this test must contain none of them`);
-    }
+    if (carried.length === 0) continue;
+    const key = `${idOf(row)}|${carried.join(",")}`;
+    const hit = offences.get(key);
+    if (hit) hit.rows++;
+    else offences.set(key, { id: idOf(row), fields: carried, rows: 1 });
+  }
+  for (const o of offences.values()) {
+    const where = o.rows === 1 ? "1 row carries" : `${o.rows} rows carry`;
+    problems.push(`${where} ${o.fields.map((f) => `"${f}"`).join(", ")} for ${o.id} — this test must contain none of them`);
   }
 
   // Channex asks for merged ranges; single-date rows in a consecutive run are a warning, not a fail.

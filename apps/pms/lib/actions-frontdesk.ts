@@ -7,6 +7,7 @@ import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { availableUnitsFor } from "./data";
 import { ensureFolio, reservationBalance } from "./folio";
+import { stayScope } from "@revio/connectivity";
 import { logAudit, recordSync, str, int } from "./mutation-helpers";
 import { todayInTz, addDaysYmd, utcDay } from "./format";
 
@@ -230,7 +231,8 @@ export async function walkIn(fd: FormData): Promise<void> {
   });
   await ensureFolio(session.tenantId, session.activePropertyId, reservation.id);
   await logAudit(session.activePropertyId, session.tenantId, { entity: "walk_in", field: unit.label, newValue: `${firstName} ${lastName} · ${nights}n`, userId: session.userId });
-  await recordSync(session.activePropertyId, session.tenantId, `Availability reduced — ${roomType!.name}`, "1 room off sale (new confirmed stay)");
+  await recordSync(session.activePropertyId, session.tenantId, `Availability reduced — ${roomType!.name}`, "1 room off sale (new confirmed stay)",
+    stayScope([{ roomTypeId, checkIn: line.checkIn, checkOut: line.checkOut }]));
   refresh();
   redirect("/dashboard");
 }
