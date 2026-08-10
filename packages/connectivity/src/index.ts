@@ -28,4 +28,6 @@ export {
   pullChannel,
   type SyncOutcome,
   type PullOutcome,
+  type PushScope,
+  type PushField,
 } from "./sync.js";

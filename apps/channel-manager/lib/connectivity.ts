@@ -11,20 +11,22 @@ import {
   reconnectChannel as sharedReconnectChannel,
   type SyncOutcome,
   type PullOutcome,
+  type PushScope,
+  type PushField,
 } from "@revio/connectivity";
 
 // The connectivity orchestration now lives in @revio/connectivity so CRS + PMS can trigger it too
 // (a cross-product inventory change pushes to Channex immediately). These thin wrappers bind the CM's
 // request-scoped RLS proxy, keeping every existing CM call site (`syncChannel(id)` etc.) unchanged.
 
-export type { SyncOutcome, PullOutcome };
+export type { SyncOutcome, PullOutcome, PushScope, PushField };
 
 export function syncChannel(channelId: string): Promise<SyncOutcome> {
   return sharedSyncChannel(prisma, channelId);
 }
 
-export function syncRealChannels(propertyId: string): Promise<void> {
-  return sharedSyncRealChannels(prisma, propertyId);
+export function syncRealChannels(propertyId: string, scope?: PushScope): Promise<void> {
+  return sharedSyncRealChannels(prisma, propertyId, scope);
 }
 
 export function pullChannel(channelId: string): Promise<PullOutcome> {

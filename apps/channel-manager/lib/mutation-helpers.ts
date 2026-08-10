@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { syncRealChannels } from "./connectivity";
+import type { PushScope } from "@revio/connectivity";
 
 /** Record an Audit Log entry. Every hand-made change is permanent and attributable. */
 export async function logAudit(
@@ -29,7 +30,12 @@ export async function logAudit(
  * populate. Real (channex) channels are excluded here — syncRealChannels writes their own
  * attributed events with actual push results. Then auto-push through every real adapter.
  */
-export async function recordPush(propertyId: string, tenantId: string, summary: string) {
+/**
+ * @param scope what the edit actually changed. Omit ONLY for a deliberate full sync — otherwise the
+ * push restates the entire 14-day horizon for every mapped product, which Channex rejects as a
+ * full-sync-instead-of-delta and which no single-value certification test can be satisfied by.
+ */
+export async function recordPush(propertyId: string, tenantId: string, summary: string, scope?: PushScope) {
   const mocks = await prisma.channel.findMany({
     where: { propertyId, status: "connected", connectivityMode: "mock" },
     select: { id: true, name: true },
@@ -43,7 +49,7 @@ export async function recordPush(propertyId: string, tenantId: string, summary: 
       data: mocks.map((c) => ({ tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary, detail: `Pushed to ${c.name} (mock)` })),
     });
   }
-  await syncRealChannels(propertyId);
+  await syncRealChannels(propertyId, scope);
 }
 
 /** Record a pull (a booking arriving from a channel). */

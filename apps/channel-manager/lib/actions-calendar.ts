@@ -5,6 +5,7 @@ import { prisma } from "./db";
 import { computeWaterfall, deriveRate, isOverbooking, ROOM_OCCUPYING_STATUSES, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, eachDate, utcDay } from "./mutation-helpers";
+import type { PushField } from "./connectivity";
 
 export type ActionResult = { ok: boolean; error?: string; affected?: number; warning?: string };
 
@@ -68,7 +69,18 @@ export async function saveCell(input: { roomTypeId: string; date: string; field:
   } else {
     return;
   }
-  await recordPush(propertyId, tenantId, `${rt.name} ${input.field} updated for ${input.date}`);
+  // Exactly what this edit touched — one date, one room type, one field. Anything wider would
+  // restate values the user never opened (see PushScope).
+  const FIELD_TO_PUSH: Record<string, PushField> = {
+    price: "rate", inventory: "availability", minLos: "minStay",
+    cta: "cta", ctd: "ctd", stopSell: "stopSell",
+  };
+  const touched = FIELD_TO_PUSH[input.field];
+  await recordPush(propertyId, tenantId, `${rt.name} ${input.field} updated for ${input.date}`, {
+    dates: [input.date],
+    roomTypeIds: [input.roomTypeId],
+    ...(touched ? { fields: [touched] } : {}),
+  });
   revalidateCalendar();
 }
 
@@ -179,7 +191,20 @@ export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkRe
 
   // One apply = one audit entry recording every attribute changed (spec §3.1 build note).
   await logAudit(propertyId, tenantId, { entity: `Bulk update · ${roomTypeIds.length} room types`, field: changed.join(", "), newValue: `${affected} cells`, source: "bulk" });
-  await recordPush(propertyId, tenantId, `Bulk update applied (${changed.join(", ")}) — ${affected} cells`);
+  // One apply = one push carrying exactly the mask the user filled in, over exactly the rooms,
+  // rate plans and dates they selected. This is what lets a bulk edit satisfy a certification test
+  // that demands "1 API call" with specific values and nothing else in it.
+  const BULK_TO_PUSH: Record<string, PushField> = {
+    min_los: "minStay", max_los: "maxStay", cta: "cta", ctd: "ctd",
+    stop_sell: "stopSell", availability: "availability", rate: "rate",
+  };
+  const fields = [...new Set(changed.map((c) => BULK_TO_PUSH[c]).filter((f): f is PushField => !!f))];
+  await recordPush(propertyId, tenantId, `Bulk update applied (${changed.join(", ")}) — ${affected} cells`, {
+    dates: dates.map((d) => d.toISOString().slice(0, 10)),
+    roomTypeIds,
+    ...(doRate ? { ratePlanIds } : {}),
+    ...(fields.length ? { fields } : {}),
+  });
   revalidateCalendar();
   revalidatePath("/rooms-rates");
   return { ok: true, affected, ...(warning ? { warning } : {}) };

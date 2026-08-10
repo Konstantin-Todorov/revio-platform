@@ -62,12 +62,43 @@ export interface SyncOutcome {
   error?: string;
 }
 
+/** The ARI fields an edit can touch. Anything not named is not sent. */
+export type PushField = "rate" | "availability" | "minStay" | "maxStay" | "cta" | "ctd" | "stopSell";
+
+const ALL_PUSH_FIELDS: readonly PushField[] = ["rate", "availability", "minStay", "maxStay", "cta", "ctd", "stopSell"];
+
+/**
+ * What a single user action actually changed.
+ *
+ * Without this, every edit re-pushed the whole 14-day horizon for every mapped room type and rate
+ * plan — 56 rate-days for a one-cell price change, recorded in our own runbook as "56/56". Channex
+ * rejects that twice over: their update-logic rule is "only send changes to availability and prices",
+ * and their anti-pattern list names full-sync-instead-of-delta explicitly. A test that asks for one
+ * date at one rate cannot be satisfied by a push that also restates thirteen other days.
+ *
+ * Omitting the scope entirely still means "everything", which is what an explicit Full Sync wants.
+ */
+export interface PushScope {
+  /** YYYY-MM-DD. Absent = the whole horizon. */
+  dates?: string[];
+  /** Absent = every mapped room type. */
+  roomTypeIds?: string[];
+  /** Absent = every mapped rate plan. */
+  ratePlanIds?: string[];
+  /** Absent = every field. */
+  fields?: PushField[];
+}
+
 /**
  * Build the next HORIZON_DAYS of ARI for a channel from its two-stream mappings + the live inventory/
  * rates/restrictions, and push it through the resolved adapter (mock or Channex). Records a SyncEvent
  * and an ErrorItem per rejected update.
  */
-export async function syncChannel(prisma: Db, channelId: string, opts?: { horizonDays?: number }): Promise<SyncOutcome> {
+export async function syncChannel(
+  prisma: Db,
+  channelId: string,
+  opts?: { horizonDays?: number; scope?: PushScope },
+): Promise<SyncOutcome> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId }, include: { bookingSource: true } });
   if (!channel) return { ok: false, pushed: 0, rejected: 0, mode: "mock", error: "Unknown channel." };
   // A paused/disconnected channel must NOT receive normal ARI — Resume/Reconnect restore it
@@ -79,29 +110,46 @@ export async function syncChannel(prisma: Db, channelId: string, opts?: { horizo
   const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId } });
   const { tenantId, propertyId } = channel;
 
-  // Complete mappings only (a product is sendable when its room type AND rate plan are mapped).
-  const [roomMaps, rateMaps] = await Promise.all([
+  // Complete mappings only (a product is sendable when its room type AND rate plan are mapped),
+  // narrowed to what the edit actually touched.
+  const scope = opts?.scope;
+  const wants = (f: PushField) => (scope?.fields ?? ALL_PUSH_FIELDS).includes(f);
+  const [allRoomMaps, allRateMaps] = await Promise.all([
     prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: "complete", externalRoomId: { not: null } }, include: { roomType: true } }),
     prisma.channelRatePlanMapping.findMany({ where: { channelId, status: "complete", externalRateId: { not: null } }, include: { ratePlan: true } }),
   ]);
+  const roomMaps = scope?.roomTypeIds?.length ? allRoomMaps.filter((m) => scope.roomTypeIds!.includes(m.roomTypeId)) : allRoomMaps;
+  const rateMaps = scope?.ratePlanIds?.length ? allRateMaps.filter((m) => scope.ratePlanIds!.includes(m.ratePlanId)) : allRateMaps;
 
-  const start = new Date(`${ymd(new Date())}T00:00:00Z`);
-  const end = new Date(start.getTime() + (horizonDays - 1) * DAY_MS);
-  const dates = Array.from({ length: horizonDays }, (_, i) => new Date(start.getTime() + i * DAY_MS));
-  const todayStr = ymd(start);
+  const todayIso = ymd(new Date());
+  const start = new Date(`${todayIso}T00:00:00Z`);
+  // Scoped dates are the edit's own; unscoped is the rolling horizon. Sorted so `end` is the real
+  // upper bound for the range queries below.
+  const dates = scope?.dates?.length
+    ? [...new Set(scope.dates)].sort().map((d) => new Date(`${d}T00:00:00Z`))
+    : Array.from({ length: horizonDays }, (_, i) => new Date(start.getTime() + i * DAY_MS));
+  if (dates.length === 0 || roomMaps.length === 0 || rateMaps.length === 0) {
+    return { ok: true, pushed: 0, rejected: 0, mode: channel.connectivityMode };
+  }
+  const end = dates[dates.length - 1]!;
+  // The window the supporting queries must cover. A scoped edit can sit far in the future (the
+  // certification dates are November 2026) or, in principle, behind today — `gte: start` would have
+  // silently dropped those rows and pushed a price with no cell behind it.
+  const rangeStart = new Date(Math.min(start.getTime(), dates[0]!.getTime()));
+  const todayStr = todayIso;
 
   const roomTypeIds = roomMaps.map((m) => m.roomTypeId);
 
   const [cells, prices, resLines, periods, holds, propertyDefaults] = await Promise.all([
-    prisma.dailyCell.findMany({ where: { roomTypeId: { in: roomTypeIds }, date: { gte: start, lte: end } } }),
-    prisma.ratePrice.findMany({ where: { propertyId, date: { gte: start, lte: end } } }),
+    prisma.dailyCell.findMany({ where: { roomTypeId: { in: roomTypeIds }, date: { gte: rangeStart, lte: end } } }),
+    prisma.ratePrice.findMany({ where: { propertyId, date: { gte: rangeStart, lte: end } } }),
     prisma.reservationLine.findMany({
       where: { roomTypeId: { in: roomTypeIds }, reservation: { propertyId, status: { in: [...ROOM_OCCUPYING_STATUSES] } } },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
     }),
-    prisma.roomInventoryPeriod.findMany({ where: { roomTypeId: { in: roomTypeIds }, dateFrom: { lte: end }, dateTo: { gte: start } } }),
+    prisma.roomInventoryPeriod.findMany({ where: { roomTypeId: { in: roomTypeIds }, dateFrom: { lte: end }, dateTo: { gte: rangeStart } } }),
     prisma.hold.findMany({
-      where: { roomTypeId: { in: roomTypeIds }, status: "active", expiresAt: { gt: new Date() }, checkIn: { lte: end }, checkOut: { gt: start } },
+      where: { roomTypeId: { in: roomTypeIds }, status: "active", expiresAt: { gt: new Date() }, checkIn: { lte: end }, checkOut: { gt: rangeStart } },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
     }),
     prisma.propertyDefaults.findUnique({ where: { propertyId } }),
@@ -109,7 +157,7 @@ export async function syncChannel(prisma: Db, channelId: string, opts?: { horizo
   // Standing restriction rules overlapping the window — they sit between a date-scoped cell edit
   // and the rate-plan/property defaults in the two-tier resolution (see @revio/core resolve.ts).
   const rules = await prisma.restrictionRule.findMany({
-    where: { propertyId, active: true, dateFrom: { lte: end }, dateTo: { gte: start } },
+    where: { propertyId, active: true, dateFrom: { lte: end }, dateTo: { gte: rangeStart } },
   });
   const srcCategory = channel.bookingSource?.category ?? null;
   const ruleHits = (type: string, rtId: string, rpId: string, k: string): RestrictionRuleHit[] =>
@@ -203,25 +251,33 @@ export async function syncChannel(prisma: Db, channelId: string, opts?: { horizo
           : null;
         const apClosed = isAdvancePurchaseClosed(todayStr, k, { min: apMin, max: apMax });
         const stopSell = flagOf("stop_sell", cell?.stopSell, rp.defStopSell, propertyDefaults?.defStopSell) || apClosed;
-        const restrictions: AriUpdate["restrictions"] = { stopSell };
-        if (can("cta")) restrictions.cta = flagOf("cta", cell?.cta, rp.defCta, propertyDefaults?.defCta);
-        if (can("ctd")) restrictions.ctd = flagOf("ctd", cell?.ctd, rp.defCtd, propertyDefaults?.defCtd);
-        const minLos = can("min_los") ? numOf("min_los", cell?.minLos, rp.defMinLos, propertyDefaults?.defMinLos) : null;
-        const maxLos = can("max_los") ? numOf("max_los", cell?.maxLos, rp.defMaxLos, propertyDefaults?.defMaxLos) : null;
+
+        // Only the fields this edit touched. `wants` defaults to everything, so an unscoped push (a
+        // Full Sync) is unchanged; a scoped one carries exactly what the user changed and nothing
+        // that merely happens to be true on that date.
+        const restrictions: AriUpdate["restrictions"] = {};
+        if (wants("stopSell")) restrictions.stopSell = stopSell;
+        if (wants("cta") && can("cta")) restrictions.cta = flagOf("cta", cell?.cta, rp.defCta, propertyDefaults?.defCta);
+        if (wants("ctd") && can("ctd")) restrictions.ctd = flagOf("ctd", cell?.ctd, rp.defCtd, propertyDefaults?.defCtd);
+        const minLos = wants("minStay") && can("min_los") ? numOf("min_los", cell?.minLos, rp.defMinLos, propertyDefaults?.defMinLos) : null;
+        const maxLos = wants("maxStay") && can("max_los") ? numOf("max_los", cell?.maxLos, rp.defMaxLos, propertyDefaults?.defMaxLos) : null;
         if (minLos != null) restrictions.minLos = minLos;
         if (maxLos != null) restrictions.maxLos = maxLos;
         if (apMin != null) restrictions.advancePurchaseMin = apMin;
         if (apMax != null) restrictions.advancePurchaseMax = apMax;
 
-        updates.push({
+        const update: AriUpdate = {
           externalRoomId: rm.externalRoomId!,
           externalRateId: pm.externalRateId!,
           date: k,
-          bookable: stopSell ? 0 : bookable,
-          priceMinor: price,
           currency: property.baseCurrency,
           restrictions,
-        });
+        };
+        // A stop-sell still forces bookable to 0 — but only when this push is carrying availability
+        // at all. Attaching it to a rate-only edit is what Channex rejected.
+        if (wants("availability")) update.bookable = stopSell ? 0 : bookable;
+        if (wants("rate")) update.priceMinor = price;
+        updates.push(update);
       }
     }
   }
@@ -266,7 +322,7 @@ export async function syncChannel(prisma: Db, channelId: string, opts?: { horizo
  * Called after ARI-affecting edits — in ANY product — so channex-mode channels receive the change
  * without a manual Re-sync. A no-op when every channel is mock (the default), so demo flows are safe.
  */
-export async function syncRealChannels(prisma: Db, propertyId: string): Promise<void> {
+export async function syncRealChannels(prisma: Db, propertyId: string, scope?: PushScope): Promise<void> {
   // CM-connection lifecycle (CRS spec §3.8): a paused/disconnected channel-manager connection
   // stops ALL distribution for the property, reversibly — mappings stay dormant.
   const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { cmStatus: true } });
@@ -277,7 +333,7 @@ export async function syncRealChannels(prisma: Db, propertyId: string): Promise<
   });
   for (const c of real) {
     try {
-      await syncChannel(prisma, c.id);
+      await syncChannel(prisma, c.id, scope ? { scope } : {});
     } catch {
       // syncChannel records its own SyncEvent/ErrorItems; never block the caller's write on a push failure.
     }
