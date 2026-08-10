@@ -455,7 +455,13 @@ export async function getRoomsAndRates() {
     prisma.roomType.findMany({ where: { propertyId: property.id }, orderBy: { sortOrder: "asc" } }),
     prisma.ratePlan.findMany({
       where: { propertyId: property.id },
-      include: { cancellationPolicy: true, mealPlan: true, parent: true, _count: { select: { roomTypeLinks: true } } },
+      // The linked rooms come along because a rate plan's NAME is not unique — "Best Available Rate"
+      // usually exists once per room type, and a picker showing it twice is unusable.
+      include: {
+        cancellationPolicy: true, mealPlan: true, parent: true,
+        roomTypeLinks: { include: { roomType: { select: { name: true } } } },
+        _count: { select: { roomTypeLinks: true } },
+      },
       orderBy: { sortOrder: "asc" },
     }),
   ]);

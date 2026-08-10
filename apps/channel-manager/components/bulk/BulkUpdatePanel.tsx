@@ -6,7 +6,7 @@ import { applyBulkUpdateMulti, applyBulkUpdateBatch, type BulkPayload, type Bulk
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 type Opt = { id: string; name: string; code: string };
-type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null };
+type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null; roomLabel?: string };
 
 const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
 const RATE_MODES: [BulkRateMode, string][] = [
@@ -93,7 +93,7 @@ export function BulkUpdatePanel({
     const lines: string[] = [];
     if (p.rate) {
       const label = RATE_MODES.find(([m]) => m === p.rate!.mode)?.[1] ?? p.rate.mode;
-      const names = planIds.map((id) => manualPlans.find((m) => m.id === id)?.name).filter(Boolean).join(", ") || "standard plan";
+      const names = planIds.map((id) => { const m = manualPlans.find((x) => x.id === id); return m ? (m.roomLabel ? `${m.roomLabel} · ${m.name}` : m.name) : null; }).filter(Boolean).join(", ") || "standard plan";
       lines.push(`Price — ${label}: ${p.rate.value} · on ${names}`);
     }
     const showNum = (v: number | null | undefined, unit = "") => (v && v > 0 ? `${v}${unit}` : "cleared");
@@ -210,7 +210,9 @@ export function BulkUpdatePanel({
               {manualPlans.map((rp) => (
                 <label key={rp.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
                   <input type="checkbox" checked={planIds.includes(rp.id)} onChange={() => setPlanIds((a) => toggle(a, rp.id))} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
-                  {rp.name}
+                  <span className="min-w-0 truncate">
+                    {rp.roomLabel && <span className="text-ink-400">{rp.roomLabel} · </span>}{rp.name}
+                  </span>
                 </label>
               ))}
               {derivedPlans.map((rp) => (

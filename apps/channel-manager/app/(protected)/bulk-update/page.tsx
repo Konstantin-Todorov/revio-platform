@@ -28,7 +28,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
   const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
   const today = new Date().toISOString().slice(0, 10);
   const rtOpts = roomTypes.map((r) => ({ id: r.id, name: r.name }));
-  const rpOpts = ratePlans.map((p) => ({ id: p.id, name: p.name }));
+  const rpOpts = ratePlans.map((p) => ({ id: p.id, name: p.roomTypeLinks.length ? `${p.roomTypeLinks.map((l) => l.roomType.name).join(", ")} · ${p.name}` : p.name }));
   const chOpts = channels.map((c) => ({ code: c.code, name: c.name }));
 
   return (
@@ -42,7 +42,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
       ) : (
       <BulkUpdatePanel
         roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))}
-        ratePlans={ratePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
+        ratePlans={ratePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null, roomLabel: p.roomTypeLinks.map((l) => l.roomType.name).join(", ") }))}
         today={today}
         {...(preselect ? { preselectRoomTypeIds: preselect } : {})}
       />
