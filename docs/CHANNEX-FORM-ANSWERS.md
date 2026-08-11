@@ -19,10 +19,32 @@ checkable against `packages/connectivity/src/channex-mappers.ts`.
 
 | Q | Question | Answer |
 | --- | --- | --- |
-| — | Email Address *(required)* | *(your email)* |
+| — | Email Address *(required)* | `konstantin.todoroff@gmail.com` |
 | **Q1** | Product name | **RevioLink** |
-| **Q2** | Contact Person Name | *(your name)* |
-| **Q3** | Contact Person Email | *(your email)* |
+| **Q2** | Contact Person Name | **Konstantin Plamenov Todorov** |
+| **Q3** | Contact Person Email | `konstantin.todoroff@gmail.com` |
+
+### The legal entity behind it
+
+Channex's form asks only for a product name and a contact, but the contract, the invoices and the
+production API keys are issued to a company — so keep these to hand for the agreement that follows
+certification, and reuse them verbatim so nothing has to be corrected later.
+
+| | Cyrillic (as registered) | Latin (for the English form) |
+| --- | --- | --- |
+| Company | УЕБЪР БГ ЕООД | **WEBER BG EOOD** *(EOOD = single-member limited liability company)* |
+| EIK / company number | 205090014 | `205090014` |
+| VAT number | BG205090014 | `BG205090014` |
+| Registered address | БЪЛГАРИЯ, гр. Русе (7000), Преслав 6 | **6 Preslav St, Ruse 7000, Bulgaria** |
+| Manager / director | КОНСТАНТИН ПЛАМЕНОВ ТОДОРОВ | **Konstantin Plamenov Todorov** |
+
+Two things to decide before signing anything:
+
+- **The contact email is a personal Gmail.** It is fine for the certification thread, but the
+  billing and API-key notifications should go somewhere that survives one person — `billing@` or
+  `ops@` on the company's own domain. Channex sends unacknowledged-booking warnings to this address.
+- **Whose name is on the account.** The keys issued here are the ones every hotel's distribution
+  will run through, so the account should belong to WEBER BG EOOD rather than to an individual.
 
 ## Page 2 — Information about PMS functionality
 
