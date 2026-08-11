@@ -33,10 +33,15 @@ export default function LoginPage() {
 
           <LoginForm />
 
-          <div className="mt-6 rounded-md border border-dashed border-surface-border bg-white px-3 py-2.5 text-[11.5px] text-ink-500">
-            <span className="font-semibold text-ink-700">Demo logins</span> (password <code className="rounded bg-surface-sunken px-1">revio1234</code>):<br />
-            Hotel Sofia → <code className="rounded bg-surface-sunken px-1">admin@hotelsofia.demo</code> · Black Sea Resort → <code className="rounded bg-surface-sunken px-1">owner@blacksea.demo</code>
-          </div>
+          {/* Opt-in, and off unless SHOW_DEMO_LOGINS=1 is set — a paying hotel must never be shown
+              someone else's credentials on the sign-in page. Server-side env (never NEXT_PUBLIC), so
+              the credentials are not in the client bundle either. */}
+          {process.env.SHOW_DEMO_LOGINS === "1" && (
+            <div className="mt-6 rounded-md border border-dashed border-surface-border bg-white px-3 py-2.5 text-[11.5px] text-ink-500">
+              <span className="font-semibold text-ink-700">Demo logins</span> (password <code className="rounded bg-surface-sunken px-1">revio1234</code>):<br />
+              Hotel Sofia → <code className="rounded bg-surface-sunken px-1">admin@hotelsofia.demo</code> · Black Sea Resort → <code className="rounded bg-surface-sunken px-1">owner@blacksea.demo</code>
+            </div>
+          )}
         </div>
       </div>
     </div>

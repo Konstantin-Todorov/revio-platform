@@ -31,9 +31,15 @@ export default function LoginPage() {
 
           <LoginForm />
 
-          <div className="mt-6 rounded-md border border-dashed border-surface-border bg-white px-3 py-2.5 text-[11.5px] text-ink-500">
-            <span className="font-semibold text-ink-700">Demo login:</span> <code className="rounded bg-surface-sunken px-1">operator@revio.app</code> · password <code className="rounded bg-surface-sunken px-1">revio1234</code>
-          </div>
+          {/* Opt-in, and off unless SHOW_DEMO_LOGINS=1 is set. This console sees every tenant on the
+              platform, so printing a working password on its own front door hands over all of them —
+              the more so while login has no rate limiting. Server-side env (never NEXT_PUBLIC), so
+              the credentials are not in the client bundle either. */}
+          {process.env.SHOW_DEMO_LOGINS === "1" && (
+            <div className="mt-6 rounded-md border border-dashed border-surface-border bg-white px-3 py-2.5 text-[11.5px] text-ink-500">
+              <span className="font-semibold text-ink-700">Demo login:</span> <code className="rounded bg-surface-sunken px-1">operator@revio.app</code> · password <code className="rounded bg-surface-sunken px-1">revio1234</code>
+            </div>
+          )}
         </div>
       </div>
     </div>
