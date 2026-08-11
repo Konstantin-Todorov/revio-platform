@@ -395,7 +395,10 @@ export async function syncChannel(
   await prisma.syncEvent.create({
     data: {
       tenantId, propertyId, channelId, kind: "push", status: result.ok ? "success" : "failed",
-      summary: `Pushed ${updates.length - result.rejected.length}/${updates.length} updates to ${channel.name} (${channel.connectivityMode})`,
+      // The window is part of the record. "2000 updates" says nothing about WHICH nights were
+      // refreshed, and a push that quietly covers one day fewer than the property's horizon reads
+      // exactly like a push that covers all of them.
+      summary: `Pushed ${updates.length - result.rejected.length}/${updates.length} updates to ${channel.name} (${channel.connectivityMode}) · ${dateKeys[0]} → ${dateKeys[dateKeys.length - 1]} (${dateKeys.length} days)`,
       // Both ids, each labelled. Storing only channelResponseId lost the availability task
       // entirely, and an unlabelled pair is what gets pasted into the wrong form field.
       detail: result.tasks?.length
