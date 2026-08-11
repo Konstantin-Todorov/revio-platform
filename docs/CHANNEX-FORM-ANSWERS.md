@@ -1,5 +1,21 @@
 # Channex certification form — every question, answered
 
+> ## ✅ SUBMITTED 2026-08-11
+>
+> Every answer below is what went in. All ten ARI tests had passed
+> `channex:cert-verify` first — *All 10 checked tests match the spec.*
+>
+> **Two things this file should be read for next time.**
+>
+> Google Forms' saved draft preserves **text answers only**. Radios and checkboxes came back
+> blank on resume, including the eight restriction ticks. If the form is ever reopened, re-check
+> every non-text answer before trusting the draft.
+>
+> And a **verification pass caught a truncated answer**: test 10 had silently become the single
+> character `e`, because a synthetic keystroke sequence got cut off. It looked filled in when
+> passed. Reading every field back — rather than trusting that typing worked — is what caught it,
+> and is the reason to do a full Back-walk before submitting anything long.
+
 **49 questions across 34 pages.** Extracted from the form's own structure, so this is the real list
 and its real order, not a reconstruction.
 

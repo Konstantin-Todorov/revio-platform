@@ -21,6 +21,8 @@ After each action: **Sync Center** shows the push with its Channex task ids, **e
 
 ---
 
+**Form resubmitted 2026-08-11** with every id below. Awaiting Channex's review.
+
 ## Results — ten of ten pass the verifier
 
 Every id below has passed `channex:cert-verify`: exact rates, exact dates, no field the test did not
