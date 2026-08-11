@@ -21,56 +21,48 @@ After each action: **Sync Center** shows the push with its Channex task ids, **e
 
 ---
 
-## Results — all ten driven, five verified clean
+## Results — nine of nine pass the verifier
 
-| Test | Verdict | Task id | Push, as the Sync Center recorded it |
-| --- | --- | --- | --- |
-| **1** Full sync · availability | ✅ | `1f05a5d5-0722-4a36-b064-33f44ad456fd` | 2000/2000 · 2026-08-11 → 2027-12-23 (500 days) |
-| **1** Full sync · rates | ✅ | `cfc73e27-4216-4ec5-ac18-44e2a530f79c` | *(same push)* |
-| **2** Single date, single rate | ✅ | `38de012a-cb86-4a22-827b-dbac3a13d62e` | 1/1 · 2026-11-22 (1 day) |
-| **3** Single date, multiple rates | ✅ | `5b970e08-4fc6-40a3-86ad-eb8c5e72e2fa` | 3/3 · 2026-11-21 → 11-29 (3 days) |
-| **4** Multiple dates, multiple rates | ✅ | `180ec0b0-2949-48e6-97a1-8c7c4f1e3ff6` | 37/37 · 2026-11-01 → 11-20 (20 days) |
-| **5** Min stay | ❌ | `472f8470-e449-488e-838c-3bd99e1f6c01` | 6/6 · 2026-11-15 → 11-25 (3 days) |
-| **6** Stop sell | ❌ | `60db406f-228f-41fd-b86e-8c09299bc3f9` | 6/6 · 2026-11-14 → 11-20 (3 days) |
-| **7** Multiple restrictions | ❌ | `6605e3ea-d897-4784-b3e7-d29cb0f5e42e` | 70/70 · 2026-11-01 → 11-20 (20 days) |
-| **8** Half-year | ✅ | `60372036-e22d-4bc9-b01c-1bdd2a1d95a8` | 304/304 · 2026-12-01 → 2027-05-01 (152 days) |
-| **9** Availability from a booking | — | *not driven* | needs the CRS bookings |
-| **10** Multiple date availability | ❌ | `7ed8ba1f-9094-44c2-8af0-9b59795a7772` | 45/45 · 2026-11-10 → 11-24 (15 days) |
+Every id below has passed `channex:cert-verify`: exact rates, exact dates, no field the test did not
+ask for, and the call counts the spec demands. **Only test 9 is left** (it needs bookings).
 
-**Every value the passing tests name is exact**, and the counts show the delta work paying off: test
-2 sends **one** update where the old code sent 56, and test 3 puts three prices on three dates into a
-**single** call with no cross product. Q16 wants both test-1 ids in one field, **availability first**.
+| Test | Task id | Push, as the Sync Center recorded it |
+| --- | --- | --- |
+| **1** Full sync · availability | `1f05a5d5-0722-4a36-b064-33f44ad456fd` | 2000/2000 · 2026-08-11 → 2027-12-23 (500 days) |
+| **1** Full sync · rates | `cfc73e27-4216-4ec5-ac18-44e2a530f79c` | *(same push)* |
+| **2** Single date, single rate | `38de012a-cb86-4a22-827b-dbac3a13d62e` | 1/1 · 2026-11-22 |
+| **3** Single date, multiple rates | `5b970e08-4fc6-40a3-86ad-eb8c5e72e2fa` | 3/3 · 2026-11-21 → 11-29 |
+| **4** Multiple dates, multiple rates | `180ec0b0-2949-48e6-97a1-8c7c4f1e3ff6` | 37/37 · 2026-11-01 → 11-20 |
+| **5** Min stay | `d12d4363-4933-4704-8fa5-bc23271c255b` | 3/3 · 2026-11-15 → 11-25 |
+| **6** Stop sell | `8bbc2f69-e476-4a85-ab29-5dc61a726a23` | 3/3 · 2026-11-14 → 11-20 |
+| **7** Multiple restrictions | `9daa255e-5feb-4c1b-8f04-0796f61e95fc` | 42/42 · 2026-11-01 → 11-20 |
+| **8** Half-year | `60372036-e22d-4bc9-b01c-1bdd2a1d95a8` | 304/304 · 2026-12-01 → 2027-05-01 |
+| **9** Availability from a booking | *still to drive* | see below |
+| **10** Multiple date availability | `e43ed088-16f7-49c2-a0d2-2baa08031f85` | 30/30 · 2026-11-10 → 11-24 |
 
-### Why 5, 6 and 7 fail — one root cause
+Q16 takes both test-1 ids in one field, **availability first**.
 
-Date-scoped restrictions are keyed on **room type + date**, not rate plan (`DailyCell`). Every value
-the tests name is correct; the payload simply also carries the room's *other* rate plan:
+The update counts are the point. Test 2 sends **one** update where the old code sent 56. Test 5 sends
+**three** — one per named rate plan, no sibling spill. Test 10 sends 30 where the same edit sent 45
+before the fallback was taught to respect its scope.
 
-- test 5 — `double-bar` also gets the 15 Nov row meant for `double-bnb`, and vice versa on the 25th
-- test 6 — same shape on the stop-sell dates
-- test 7 — and here it produces a genuinely **wrong value**: the spec wants `double-bar` min-stay 2
-  over 10–16 Nov *and* `double-bnb` min-stay 10 over 1–20 Nov. Those overlap for seven days, and one
-  room-level cell cannot hold both. Whichever change is applied second wins.
+### Two things had to change to get 5, 6, 7 and 10 green
 
-Test 7 is the proof that this is not cosmetic. **The fix is a nullable `ratePlanId` on `DailyCell`**
-(null = "every plan of this room", so it migrates cleanly and existing rows keep their meaning).
-Until then tests 5–7 cannot be made exactly right from any sequence of UI actions.
+**Restrictions can name a rate plan.** `DailyCell.ratePlanId` (nullable; NULL still means the whole
+room). Test 7 is the case that proves it: Double Best Available Rate at min-stay 2 over 10–16 Nov
+*and* Double Bed & Breakfast at min-stay 10 over 1–20 Nov, overlapping for seven days that one
+room-level cell could not hold. Narrow the rate-plan selection in Bulk and the restriction lands on
+those plans alone.
 
-### Why 10 fails — test sequencing, not a defect
+**The availability fallback respects the scope.** It exists so an unpriced date still reports its
+room count; it was firing for rooms and dates the scope had *excluded*, restating the other room's
+unchanged availability. Test 10 caught it.
 
-Two of its three complaints are the system being right: test 6 stop-sold Twin on 14 Nov, so when
-test 10 sets Twin to 3 rooms over 10–16 Nov, the 14th correctly pushes **0** — a stop-sell forces
-zero, which is the whole point of the flag. Channex's tests each assume a clean slate. **Run 10
-before 6**, or clear the stop-sells first. The extra-dates complaint on the same task still needs a
-look; it is the only one not yet explained.
+### Order matters when driving these
 
-## The 499-day question — resolved
-
-Test 1 now covers the full 500. The push records its own window, and the two runs that read 499
-were taken while the rolling horizon sat one day outside the range the prices had been seeded over;
-with the window printed on every sync event a recurrence is visible immediately instead of needing
-to be reconstructed from payloads. Keep an eye on it when the seeded range and the horizon are ever
-re-cut — it is the kind of off-by-one that hides behind a healthy-looking "2000/2000".
+Run **10 before 6**. Test 6 stop-sells three dates and a stop-sell correctly forces availability to
+zero, so a test-10 run afterwards reports 0 where it should report 3. Channex's tests each assume a
+clean slate; ours share one property. If 6 has already run, re-open those dates first.
 
 ## Earlier findings — 2026-08-10
 
