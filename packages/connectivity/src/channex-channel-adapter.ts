@@ -135,11 +135,22 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     return res.ok ? { ok: true, ...(res.responseId ? { taskId: res.responseId } : {}) } : { ok: false, error: res.error ?? `HTTP ${res.status}` };
   }
 
-  /** Push only availability (one Channex /availability call). Returns the Channex task id. */
+  /**
+   * Push only availability (one Channex /availability call). Returns the Channex task id.
+   *
+   * Deduped by (room type, date) first. An `AriUpdate` is per RATE PLAN, because rates and
+   * restrictions are, but availability is a property of the ROOM — so a room with two rate plans
+   * produced the same availability row twice, and one with six produced it six times. Channex takes
+   * the last and is unharmed, but the payload then asserts a fact repeatedly instead of once, which
+   * is noise on the wire and reads as a bug to anyone inspecting it.
+   */
   async pushAvailability(updates: AriUpdate[]): Promise<{ ok: boolean; taskId?: string; error?: string }> {
-    const values = mergeDateRanges(
-      updates.map((u) => toAvailabilityValue(this.propertyId, u)).filter((v): v is ChannexAvailabilityValue => v !== null),
-    );
+    const byRoomDate = new Map<string, ChannexAvailabilityValue>();
+    for (const u of updates) {
+      const v = toAvailabilityValue(this.propertyId, u);
+      if (v) byRoomDate.set(`${v.room_type_id}|${v.date}`, v);
+    }
+    const values = mergeDateRanges([...byRoomDate.values()]);
     if (values.length === 0) return { ok: true };
     const res = await this.post("/availability", { values });
     return res.ok ? { ok: true, ...(res.responseId ? { taskId: res.responseId } : {}) } : { ok: false, error: res.error ?? `HTTP ${res.status}` };

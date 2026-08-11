@@ -99,6 +99,39 @@ describe("ARI -> Channex availability", () => {
       availability: 3,
     });
   });
+
+  /**
+   * `pushAvailability` dedupes by (room type, date) before sending. An AriUpdate is per rate plan,
+   * because rates and restrictions are — but availability belongs to the ROOM, so a room with two
+   * plans used to state the same count twice, and one with six stated it six times.
+   *
+   * Channex takes the last and is unharmed, so this was never a wrong value on the wire. It was a
+   * payload that repeated a fact instead of asserting it once, which is what a reviewer reading the
+   * property's Messages log actually sees.
+   */
+  it("collapses one row per rate plan down to one row per room and date", () => {
+    const plans = ["bar", "bnb", "corp"].map((p) => ari({ externalRateId: p, bookable: 3 }));
+    const deduped = new Map(
+      plans.map((u) => toAvailabilityValue(PROP, u)!).map((v) => [`${v.room_type_id}|${v.date}`, v]),
+    );
+    expect([...deduped.values()]).toEqual([
+      { property_id: PROP, room_type_id: "room-uuid", date: "2026-07-01", availability: 3 },
+    ]);
+  });
+
+  it("keeps rooms and dates apart while deduping", () => {
+    const rows = [
+      ari({ externalRoomId: "twin", date: "2027-06-10", bookable: 7 }),
+      ari({ externalRoomId: "twin", externalRateId: "bnb", date: "2027-06-10", bookable: 7 }),
+      ari({ externalRoomId: "twin", date: "2027-06-17", bookable: 6 }),
+      ari({ externalRoomId: "dbl", date: "2027-06-10", bookable: 4 }),
+    ];
+    const deduped = new Map(
+      rows.map((u) => toAvailabilityValue(PROP, u)!).map((v) => [`${v.room_type_id}|${v.date}`, v]),
+    );
+    // The exact shape of the modify push Channex asks to see: the released night and the new one.
+    expect([...deduped.keys()]).toEqual(["twin|2027-06-10", "twin|2027-06-17", "dbl|2027-06-10"]);
+  });
 });
 
 describe("unsupported restrictions", () => {
