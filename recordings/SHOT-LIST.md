@@ -75,19 +75,58 @@ Reservation → **Cancel reservation** → Channex Inventory → 17 Jun returns 
 
 Worked out by doing it. These are the mechanics, not theory.
 
-## Capture
+## Capture — and the trap that ruined the first attempt
 
 ```bash
 cd recordings
-screencapture -v -V <seconds> raw.mov     # must run in FOREGROUND of its shell
+sleep 12 && screencapture -v -V <seconds> raw.mov    # DELAY, then record
 ```
 
-**It has to stay attached.** `screencapture -v ... &` with redirected output produces no file at
-all — silently. Run it as a backgrounded *task* (so the shell stays its parent) and drive the
-browser from separate calls while it records. `-V <seconds>` gives it a fixed duration, so plan the
-segment length up front; it cannot be stopped early and cleanly.
+**`screencapture` films whatever is frontmost, and starting it from a shell brings the terminal to
+the front.** The first full take was 3m20s of the chat window instead of the browser. The browser
+screenshots used to check progress come from the extension at the DOM level and look perfect
+regardless — so the verification and the camera were pointed at different things. That is how a
+completely wrong video gets produced without anything appearing to fail.
+
+**Two rules:**
+
+1. **Always `sleep` before recording** so the focus theft happens before the camera rolls, and click
+   the Chrome window during the delay.
+2. **Verify by extracting a frame from the actual file**, never by trusting a browser screenshot:
+   ```bash
+   "$FF" -y -ss 6 -i raw.mov -frames:v 1 check.png
+   ```
+   Look at `check.png` before doing anything else with the take.
+
+It also has to stay attached: `screencapture -v ... &` with redirected output silently produces no
+file. Run it as a backgrounded *task* so the shell remains its parent. `-V <seconds>` is a fixed
+duration — it cannot be stopped early, so plan the length up front and add margin. (First take died
+at 75s mid-booking.)
+
+`open_application` from the computer-use server does **not** bring Chrome forward — that server runs
+in background-app mode, so it launches without stealing focus. There is no programmatic way to front
+Chrome from here; the `sleep` + human click is the mechanism.
 
 Screen Recording permission is already granted on this machine.
+
+## Chrome setup for a take
+
+**Record a dedicated window, not the everyday one.** The restored session's tab bar showed personal
+tabs — WordPress, invoicing, Google Docs — which would have gone to Channex in the video.
+
+```bash
+open -na "Google Chrome" --args --new-window "<first URL of the take>"
+```
+
+Then crop the tab strip and bookmarks bar out in the render anyway, keeping the address bar (the
+visible `staging.channex.io` URL is useful evidence).
+
+**CDP/puppeteer is not an option.** Chrome 151 refuses `--remote-debugging-port` on the default
+profile; the port never opens. Driving it headlessly would need a separate `--user-data-dir`, which
+means a profile without the Channex and Revio logins.
+
+**Window size changes between sessions** (1485x812 and 1538x784 both seen), which invalidates saved
+click coordinates. Take a screenshot at the start of every take and re-derive them.
 
 ## Compress
 
