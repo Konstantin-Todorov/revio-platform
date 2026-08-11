@@ -250,8 +250,15 @@ export async function syncChannel(
       )
       .map((r) => ({ priority: r.priority, value: (r.valueBool ?? r.valueInt ?? true) as number | boolean }));
 
+  // Two cell maps, because a cell now speaks either for one rate plan or for the whole room. The
+  // plan-specific one wins where it exists; the room-wide one still covers every other plan, which
+  // is what every cell written before rate plans entered this table means.
   const cellKey = (rt: string, k: string) => `${rt}:${k}`;
-  const cellMap = new Map(cells.map((c) => [cellKey(c.roomTypeId, ymd(c.date)), c]));
+  const planCellKey = (rt: string, rp: string, k: string) => `${rt}:${rp}:${k}`;
+  const cellMap = new Map(cells.filter((c) => c.ratePlanId == null).map((c) => [cellKey(c.roomTypeId, ymd(c.date)), c]));
+  const planCellMap = new Map(
+    cells.filter((c) => c.ratePlanId != null).map((c) => [planCellKey(c.roomTypeId, c.ratePlanId!, ymd(c.date)), c]),
+  );
   const priceMap = new Map(prices.map((p) => [`${p.roomTypeId}:${p.ratePlanId}:${ymd(p.date)}`, p.priceMinor]));
 
   function priceFor(roomTypeId: string, rp: (typeof rateMaps)[number]["ratePlan"], k: string): number | null {
@@ -284,13 +291,13 @@ export async function syncChannel(
     );
     for (const d of dates) {
       const k = ymd(d);
-      const cell = cellMap.get(cellKey(rt.id, k));
+      const roomCell = cellMap.get(cellKey(rt.id, k));
       const sold = resLines.filter((l) => l.roomTypeId === rt.id && l.checkIn <= d && d < l.checkOut).reduce((s, l) => s + l.quantity, 0);
       const held = holds.filter((h) => h.roomTypeId === rt.id && h.checkIn <= d && d < h.checkOut).reduce((s, h) => s + h.quantity, 0);
       const { outOfOrder, closed } = periodByDate.get(k)!;
       const bookable = Math.max(0, computeWaterfall({
         physical: rt.totalRooms, outOfOrder, closed,
-        manualSellLimit: cell?.inventory ?? null,
+        manualSellLimit: roomCell?.inventory ?? null,
         holds: held, confirmed: sold,
       }).remaining);
 
@@ -299,6 +306,7 @@ export async function syncChannel(
         const rp = pm.ratePlan;
         if (!sells.has(`${rt.id}|${rp.id}`)) continue;
         if (!inScope(rt.id, rp.id, k)) continue;
+        const cell = planCellMap.get(planCellKey(rt.id, rp.id, k)) ?? roomCell;
         const price = priceFor(rt.id, rp, k);
         if (price == null) continue;
 
@@ -528,7 +536,9 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
       for (let t = line.checkIn.getTime(); t < line.checkOut.getTime(); t += DAY_MS) {
         const d = new Date(t);
         const [cell, soldAgg, heldAgg, dayPeriods] = await Promise.all([
-          prisma.dailyCell.findUnique({ where: { roomTypeId_date: { roomTypeId: line.roomTypeId, date: d } } }),
+          // The room-wide sell limit. Availability is never rate-plan-scoped, so the cell that
+          // governs it is always the one with no rate plan.
+          prisma.dailyCell.findFirst({ where: { roomTypeId: line.roomTypeId, date: d, ratePlanId: null } }),
           prisma.reservationLine.aggregate({
             _sum: { quantity: true },
             where: {

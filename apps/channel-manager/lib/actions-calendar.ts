@@ -25,16 +25,29 @@ async function standardPlanId(propertyId: string): Promise<string | null> {
   return std?.id ?? null;
 }
 
+/**
+ * Write one date-scoped cell.
+ *
+ * `ratePlanId` null means the room's every plan — a calendar edit, or a bulk edit that did not
+ * narrow the rate plans. A non-null one writes a cell that wins over the room-wide value for that
+ * plan alone, which is the only way to say "minimum stay 2 on the flexible rate, 10 on bed &
+ * breakfast, over dates that overlap".
+ *
+ * findFirst + update/create rather than upsert: the unique key now contains a nullable column, and
+ * Prisma cannot express `ratePlanId IS NULL` in a compound unique `where`.
+ */
 async function upsertCell(
   tenantId: string, propertyId: string, roomTypeId: string, date: Date,
   data: Partial<{ inventory: number; minLos: number | null; maxLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean; advancePurchaseMin: number | null; advancePurchaseMax: number | null }>,
   source: "calendar" | "bulk" = "calendar", // two-tier provenance: which surface wrote this (spec §1.4)
+  ratePlanId: string | null = null,
 ) {
-  await prisma.dailyCell.upsert({
-    where: { roomTypeId_date: { roomTypeId, date } },
-    update: { ...data, source },
-    create: { tenantId, propertyId, roomTypeId, date, ...data, source },
-  });
+  const existing = await prisma.dailyCell.findFirst({ where: { roomTypeId, date, ratePlanId } });
+  if (existing) {
+    await prisma.dailyCell.update({ where: { id: existing.id }, data: { ...data, source } });
+  } else {
+    await prisma.dailyCell.create({ data: { tenantId, propertyId, roomTypeId, ratePlanId, date, ...data, source } });
+  }
 }
 
 // --- Single-cell inline edit ----------------------------------------------
@@ -154,6 +167,8 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
 
   const doRate = !!payload.rate && Number.isFinite(payload.rate.value);
   if (doRate) changed.push("rate");
+  // Availability is a property of the room, never of one rate plan, so it always writes room-wide.
+  const hasRestrictionFields = Object.keys(cell).some((k) => k !== "inventory");
 
   // ≥1 field required (spec §3.1) — an empty apply is not a valid update.
   if (changed.length === 0) return { ...empty, error: "Set at least one field to update." };
@@ -185,18 +200,47 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
   // A rate plan belongs to specific room types. Pricing every selected plan against every selected
   // room invents products that do not exist — "Twin Room on the Double Room's Best Available Rate" —
   // and those rows then get pushed to the channel at whatever `existing ?? 0` produced.
-  const links = doRate
-    ? await prisma.ratePlanRoomType.findMany({ where: { ratePlanId: { in: ratePlanIds }, roomTypeId: { in: roomTypeIds } } })
-    : [];
+  const links = await prisma.ratePlanRoomType.findMany({ where: { ratePlanId: { in: ratePlanIds }, roomTypeId: { in: roomTypeIds } } });
   const plansForRoom = new Map<string, string[]>();
   for (const l of links) plansForRoom.set(l.roomTypeId, [...(plansForRoom.get(l.roomTypeId) ?? []), l.ratePlanId]);
 
+  /**
+   * Which rate plans a RESTRICTION change should be written against, per room.
+   *
+   * Null means the room-wide cell — what a hotel means by "close the 14th" and what every edit
+   * meant before cells could name a plan. A list means the user narrowed the selection to a strict
+   * subset, which is a deliberate "this rate only" and the only way to hold two different minimum
+   * stays over overlapping dates.
+   *
+   * The all-plans case deliberately stays room-wide: it keeps one row per date instead of one per
+   * plan, and it keeps covering derived plans, which never appear in the picker.
+   */
+  const allPlanLinks = hasRestrictionFields
+    ? await prisma.ratePlanRoomType.findMany({ where: { roomTypeId: { in: roomTypeIds } } })
+    : [];
+  const everyPlanOfRoom = new Map<string, Set<string>>();
+  for (const l of allPlanLinks) {
+    everyPlanOfRoom.set(l.roomTypeId, (everyPlanOfRoom.get(l.roomTypeId) ?? new Set()).add(l.ratePlanId));
+  }
+  const restrictionPlansFor = (roomTypeId: string): (string | null)[] => {
+    const all = everyPlanOfRoom.get(roomTypeId);
+    const chosen = (payload.ratePlanIds ?? []).filter((id) => all?.has(id));
+    if (!all || chosen.length === 0 || chosen.length === all.size) return [null];
+    return chosen;
+  };
+
   const hasCell = Object.keys(cell).length > 0;
+  const { inventory, ...restrictionCell } = cell;
   let affected = 0;
   for (const roomTypeId of roomTypeIds) {
     const roomPlans = plansForRoom.get(roomTypeId) ?? [];
+    const targets = restrictionPlansFor(roomTypeId);
     for (const date of dates) {
-      if (hasCell) await upsertCell(tenantId, propertyId, roomTypeId, date, cell, "bulk");
+      // Rooms-to-sell belongs to the room; restrictions go to whichever plans were named.
+      if (inventory !== undefined) await upsertCell(tenantId, propertyId, roomTypeId, date, { inventory }, "bulk", null);
+      if (hasRestrictionFields) {
+        for (const planId of targets) await upsertCell(tenantId, propertyId, roomTypeId, date, restrictionCell, "bulk", planId);
+      }
       if (doRate) {
         const { mode, value } = payload.rate!;
         for (const rpId of roomPlans) {
@@ -225,7 +269,12 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
   const cells: WriteOutcome["cells"] = [];
   for (const roomTypeId of roomTypeIds) {
     for (const date of dateKeys) {
-      if (hasCell) cells.push({ roomTypeId, date });
+      if (inventory !== undefined) cells.push({ roomTypeId, date });
+      if (hasRestrictionFields) {
+        for (const planId of restrictionPlansFor(roomTypeId)) {
+          cells.push(planId ? { roomTypeId, ratePlanId: planId, date } : { roomTypeId, date });
+        }
+      }
       if (doRate) for (const ratePlanId of plansForRoom.get(roomTypeId) ?? []) cells.push({ roomTypeId, ratePlanId, date });
     }
   }

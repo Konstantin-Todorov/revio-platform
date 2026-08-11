@@ -128,22 +128,22 @@ model Invoice {
 // The commercial relationship with one client: who owns it, where it is in its life, when it renews.
 // One row per tenant, created lazily the first time an operator writes anything to it.
 model ClientAccount {
-  id       String @id @default(cuid())
-  tenantId String @unique
+  id                 String    @id @default(cuid())
+  tenantId           String    @unique
   /// STATED stage — what we believe. Deliberately not derived: the console derives an *observed*
   /// stage from behaviour and shows the two side by side, because the disagreement ("you have them
   /// down as live; they have not taken a booking in six weeks") is the useful signal. A single
   /// auto-computed field would silently overwrite the human judgement instead of arguing with it.
-  stage            String    @default("onboarding") // prospect | onboarding | live | at_risk | churned
+  stage              String    @default("onboarding") // prospect | onboarding | live | at_risk | churned
   /// Which of our staff owns this relationship. SetNull, so removing an operator never orphans a client.
-  ownerOperatorId  String?
+  ownerOperatorId    String?
   /// Contract renewal / anniversary. Date-only: a renewal is a calendar day, not an instant.
-  renewalDate      DateTime? @db.Date
+  renewalDate        DateTime? @db.Date
   contractTermMonths Int?
   /// The one line you want in front of you before dialling.
-  summary          String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  summary            String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   ownerOperator OperatorUser? @relation(fields: [ownerOperatorId], references: [id], onDelete: SetNull)
@@ -338,14 +338,14 @@ model EmailTemplate {
 }
 
 model RoomType {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   tenantId    String
   propertyId  String
   name        String
   code        String
   // room | bed | apartment. Hotels/apartments sell whole units; hostels sell beds, so a "bed"
   // unitKind means totalRooms counts beds and availability is controlled per bed.
-  unitKind    String  @default("room")
+  unitKind    String   @default("room")
   // Physical room/bed count — a CAP & safety-net only. Rooms-to-sell is managed per date
   // (DailyCell.inventory); exceeding totalRooms warns but does not block.
   totalRooms  Int
@@ -358,8 +358,8 @@ model RoomType {
   // Keys from ROOM_AMENITIES. A fixed vocabulary, because this is what Channex takes as a room
   // type's `facilities` list — fill it in once here and the OTAs get it later without re-entry.
   amenities   String[] @default([])
-  active      Boolean @default(true)
-  sortOrder   Int     @default(0)
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
 
   property         Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   ratePlanLinks    RatePlanRoomType[]
@@ -396,8 +396,8 @@ model RoomTypePhoto {
   fullKey  String
   thumbKey String
 
-  width  Int
-  height Int
+  width    Int
+  height   Int
   // Bytes of the full variant, so a hotel's storage footprint is answerable without listing a bucket.
   byteSize Int
 
@@ -479,6 +479,7 @@ model RatePlan {
   // Designed-in now; the widget build is deferred.
   directChannelEnabled Boolean @default(true)
 
+  dailyCells           DailyCell[]
   property             Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   parent               RatePlan?                @relation("Derivation", fields: [parentRatePlanId], references: [id])
   children             RatePlan[]               @relation("Derivation")
@@ -623,6 +624,14 @@ model DailyCell {
   tenantId           String
   propertyId         String
   roomTypeId         String
+  /// Which rate plan this cell speaks for. **NULL means every plan of the room**, which is what a
+  /// calendar edit or an unnarrowed bulk edit writes, and what every row written before this column
+  /// existed means. A plan-specific cell wins over the room-wide one for that plan; the room-wide
+  /// one still covers the plans that have no cell of their own.
+  ///
+  /// Without this, "minimum stay 2 on the flexible rate but 10 on bed & breakfast, over overlapping
+  /// dates" was unrepresentable — the second edit simply overwrote the first.
+  ratePlanId         String?
   date               DateTime @db.Date
   // Date-level "rooms to sell" allotment. Null ⇒ default to the room type's totalRooms.
   // Bookable = inventory − rooms sold (sold is derived from confirmed reservations, never stored here).
@@ -638,11 +647,16 @@ model DailyCell {
   updatedAt          DateTime @default(now()) @updatedAt
   source             String   @default("calendar") // calendar | bulk | seed | api
 
-  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  property Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType RoomType  @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  ratePlan RatePlan? @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
 
-  @@unique([roomTypeId, date])
+  // Postgres treats NULLs as distinct, so this alone would allow many room-wide cells for one date.
+  // The migration adds a partial unique index over (roomTypeId, date) WHERE ratePlanId IS NULL to
+  // close that, which Prisma cannot express.
+  @@unique([roomTypeId, ratePlanId, date])
   @@index([propertyId, date])
+  @@index([ratePlanId])
 }
 
 // Binary brand assets (today: the guest-email logo). Separate from Property so the row stays cheap
@@ -819,27 +833,27 @@ model Hold {
 
 // Contact + booking history ONLY — hard scope line, not a CRM (no preferences/consent/loyalty).
 model Guest {
-  id              String   @id @default(cuid())
-  tenantId        String
-  propertyId      String
-  firstName       String
-  lastName        String
-  email           String?
-  phone           String?
-  company         String?
-  specialRequests String? // free text
-  createdAt       DateTime @default(now())
+  id                String   @id @default(cuid())
+  tenantId          String
+  propertyId        String
+  firstName         String
+  lastName          String
+  email             String?
+  phone             String?
+  company           String?
+  specialRequests   String? // free text
+  createdAt         DateTime @default(now())
   // Guest identity/merge (PMS-REFINEMENT-R1 §3.5, "foundational — build first"): when two records are the
   // same person (direct / OTA / walk-in duplicates), the loser is soft-merged INTO the winner. At merge the
   // app re-parents reservations + notes to the winner, then sets mergedIntoId on the loser so it drops out
   // of lists/metrics but its id stays resolvable (nothing is deleted). Stable identity underwrites every
   // guest metric across all products.
-  mergedIntoId    String?
+  mergedIntoId      String?
   // The guest asked not to be recognised across stays (K6). Set from the CRS guest profile when
   // someone exercises it. Suppresses every "welcome back" and every carried-over preference, while
   // leaving the booking history itself intact — a hotel still has to keep records it is legally
   // required to keep, and "don't greet me by name" is a different request from "erase me".
-  recognitionOptOut Boolean @default(false)
+  recognitionOptOut Boolean  @default(false)
 
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   reservations Reservation[]
@@ -1244,26 +1258,26 @@ model DepositType {
 }
 
 model PosItem {
-  id         String   @id @default(cuid())
-  tenantId   String
-  propertyId String
-  name       String
+  id             String   @id @default(cuid())
+  tenantId       String
+  propertyId     String
+  name           String
   // Which outlet sells it (spec §3.7) — minibar is one outlet among several. The posting service
   // tags the folio line with this outlet. `category` is the item-vs-extra split (kept).
-  outlet     String   @default("minibar") // minibar | spa | bar | restaurant
-  category   String   @default("minibar") // minibar (product/item) | extra (service)
-  priceMinor Int
+  outlet         String   @default("minibar") // minibar | spa | bar | restaurant
+  category       String   @default("minibar") // minibar (product/item) | extra (service)
+  priceMinor     Int
   // Sold to a GUEST on the booking page, not just posted by staff at the desk. Off by default: a
   // hotel's internal catalogue contains things no guest should be able to add to their own booking,
   // so appearing publicly is an explicit decision per item rather than a side effect of existing.
-  directSellable Boolean @default(false)
+  directSellable Boolean  @default(false)
   // Only meaningful when directSellable — how the guest is quoted, and how it later accrues.
-  basis      String   @default("per_stay") // per_stay | per_night
+  basis          String   @default("per_stay") // per_stay | per_night
   // One line under the name on the booking page. Nothing a guest reads should need a hover.
-  description String?
-  active     Boolean  @default(true)
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
+  description    String?
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 

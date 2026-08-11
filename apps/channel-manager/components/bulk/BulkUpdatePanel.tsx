@@ -205,7 +205,7 @@ export function BulkUpdatePanel({
             </div>
           </div>
           <div>
-            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Rate plans <span className="font-normal text-ink-400">(for the price change — manual only)</span></span>
+            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Rate plans <span className="font-normal text-ink-400">(price changes are manual plans only)</span></span>
             <div className="grid grid-cols-2 gap-1.5">
               {manualPlans.map((rp) => (
                 <label key={rp.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
@@ -221,7 +221,10 @@ export function BulkUpdatePanel({
                 </span>
               ))}
             </div>
-            <span className="mt-1 block text-[11px] text-ink-400">Restrictions apply per room type regardless of rate plan.</span>
+            <span className="mt-1 block text-[11px] text-ink-400">
+              Select <span className="font-semibold">some</span> plans and restrictions apply to those alone. Leave them
+              all selected and they apply to the whole room — including derived plans, which are never listed here.
+            </span>
           </div>
         </div>
 

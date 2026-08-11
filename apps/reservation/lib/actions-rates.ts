@@ -7,6 +7,23 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 
+
+/**
+ * Write one room-wide date cell (`ratePlanId` null — every plan of the room).
+ *
+ * The CRS edits inventory and restrictions per room type, which is what null means, so its writes
+ * are unchanged by rate-plan-scoped cells existing. findFirst + update/create rather than upsert
+ * because the unique key now contains a nullable column, which Prisma cannot match on.
+ */
+async function upsertRoomCell(
+  tenantId: string, propertyId: string, roomTypeId: string, date: Date,
+  data: Record<string, unknown>, source = "bulk",
+) {
+  const existing = await prisma.dailyCell.findFirst({ where: { roomTypeId, date, ratePlanId: null } });
+  if (existing) await prisma.dailyCell.update({ where: { id: existing.id }, data: { ...data, source } });
+  else await prisma.dailyCell.create({ data: { tenantId, propertyId, roomTypeId, ratePlanId: null, date, ...data, source } });
+}
+
 export type ActionResult = { ok: boolean; error?: string };
 
 const BOOL_TYPES = new Set(["stop_sell", "cta", "ctd"]);
@@ -291,11 +308,7 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
           : updateType === "availability_set" ? { inventory: Math.max(0, Math.trunc(value)) }
           : null;
         if (!data) return { ok: false, error: "Unknown update type." };
-        await prisma.dailyCell.upsert({
-          where: { roomTypeId_date: { roomTypeId, date } },
-          update: { ...data, source: "bulk" },
-          create: { tenantId, propertyId, roomTypeId, date, ...data, source: "bulk" },
-        });
+        await upsertRoomCell(tenantId, propertyId, roomTypeId, date, data);
       }
       affected++;
     }
@@ -384,11 +397,7 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   for (const roomTypeId of roomTypeIds) {
     for (const date of dates) {
       if (hasCell) {
-        await prisma.dailyCell.upsert({
-          where: { roomTypeId_date: { roomTypeId, date } },
-          update: { ...cell, source: "bulk" },
-          create: { tenantId, propertyId, roomTypeId, date, ...cell, source: "bulk" },
-        });
+        await upsertRoomCell(tenantId, propertyId, roomTypeId, date, cell);
       }
       if (doRate) {
         const { mode, value } = payload.rate!;
