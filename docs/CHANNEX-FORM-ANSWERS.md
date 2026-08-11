@@ -72,17 +72,25 @@ Q7 is "No", this is moot for the ARI integration, but the middle option is the a
 
 ## Page 3 — Setup Testing Property
 
-Property is configured as `Test Property - Revio`, currency **USD**.
+Property is `Test Property - Revio`, currency **USD**. Twin Room 8 rooms, Double Room 6 rooms, each
+with **Best Available Rate** ($100) and **Bed & Breakfast** ($120), all four plans **USD**.
+
+> ⚠ **The four rate-plan ids below are NEW as of 2026-08-10.** A Channex rate plan's currency is
+> fixed at creation — `PUT /rate_plans/{id}` accepts the field and ignores it, and the dashboard
+> renders the same select disabled — so four plans left in EUR under a USD property could only be
+> corrected by deleting and recreating them. **Any earlier note listing `f1413ce8…`, `f9501de0…`,
+> `c650ca88…` or `1659e89b…` is stale: those ids no longer resolve.** The room type and property
+> ids are unchanged. Verified against `relationships.room_type`, not creation order.
 
 | Q | Question | Answer |
 | --- | --- | --- |
 | **Q9** | Property ID at Channex | `a1e9b246-4db1-4ccd-aa8b-08dea7ff89f9` |
 | **Q10** | Twin Room ID | `9a029a40-1629-471a-9e14-dd65c55660b9` |
-| **Q11** | Twin Room Best Available Rate ID | `f1413ce8-5094-48fe-8722-6e54c709dc93` |
-| **Q12** | Twin Room Bed & Breakfast Rate ID | `f9501de0-6559-47d5-97a2-4a06cb70fe47` |
+| **Q11** | Twin Room Best Available Rate ID | `ef3afc26-5f6f-4f76-b074-b9f5b4d7b13f` |
+| **Q12** | Twin Room Bed & Breakfast Rate ID | `d3b84ca7-39ac-4d0d-8da9-8f0a5fa75b81` |
 | **Q13** | Double Room ID | `1e2f3c2b-94ca-4ae3-97db-ab0f7748ad9b` |
-| **Q14** | Double Room Best Available Rate ID | `c650ca88-5762-4e93-baf5-d70e744b4d24` |
-| **Q15** | Double Room Bed & Breakfast Rate ID | `1659e89b-a740-4ba7-8530-44000b24059a` |
+| **Q14** | Double Room Best Available Rate ID | `f415d8f1-2f1e-47e2-84a2-6135de71795b` |
+| **Q15** | Double Room Bed & Breakfast Rate ID | `4df2cbcd-df01-4502-8e10-34be81656d24` |
 
 ## Pages 4–32 — The test cases
 
