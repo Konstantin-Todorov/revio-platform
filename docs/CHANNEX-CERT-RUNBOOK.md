@@ -21,22 +21,48 @@ After each action: **Sync Center** shows the push with its Channex task ids, **e
 
 ---
 
-## Results so far — verified task ids
+## Results — all ten driven, five verified clean
 
-Every id below has passed `channex:cert-verify`. **Tests 4–10 still to drive.**
+| Test | Verdict | Task id | Push, as the Sync Center recorded it |
+| --- | --- | --- | --- |
+| **1** Full sync · availability | ✅ | `1f05a5d5-0722-4a36-b064-33f44ad456fd` | 2000/2000 · 2026-08-11 → 2027-12-23 (500 days) |
+| **1** Full sync · rates | ✅ | `cfc73e27-4216-4ec5-ac18-44e2a530f79c` | *(same push)* |
+| **2** Single date, single rate | ✅ | `38de012a-cb86-4a22-827b-dbac3a13d62e` | 1/1 · 2026-11-22 (1 day) |
+| **3** Single date, multiple rates | ✅ | `5b970e08-4fc6-40a3-86ad-eb8c5e72e2fa` | 3/3 · 2026-11-21 → 11-29 (3 days) |
+| **4** Multiple dates, multiple rates | ✅ | `180ec0b0-2949-48e6-97a1-8c7c4f1e3ff6` | 37/37 · 2026-11-01 → 11-20 (20 days) |
+| **5** Min stay | ❌ | `472f8470-e449-488e-838c-3bd99e1f6c01` | 6/6 · 2026-11-15 → 11-25 (3 days) |
+| **6** Stop sell | ❌ | `60db406f-228f-41fd-b86e-8c09299bc3f9` | 6/6 · 2026-11-14 → 11-20 (3 days) |
+| **7** Multiple restrictions | ❌ | `6605e3ea-d897-4784-b3e7-d29cb0f5e42e` | 70/70 · 2026-11-01 → 11-20 (20 days) |
+| **8** Half-year | ✅ | `60372036-e22d-4bc9-b01c-1bdd2a1d95a8` | 304/304 · 2026-12-01 → 2027-05-01 (152 days) |
+| **9** Availability from a booking | — | *not driven* | needs the CRS bookings |
+| **10** Multiple date availability | ❌ | `7ed8ba1f-9094-44c2-8af0-9b59795a7772` | 45/45 · 2026-11-10 → 11-24 (15 days) |
 
-| Test | Task id | Push, as the Sync Center recorded it |
-| --- | --- | --- |
-| **1** Full sync · availability | `1f05a5d5-0722-4a36-b064-33f44ad456fd` | 2000/2000 · 2026-08-11 → 2027-12-23 (500 days) |
-| **1** Full sync · rates | `cfc73e27-4216-4ec5-ac18-44e2a530f79c` | *(same push)* |
-| **2** Single date, single rate | `38de012a-cb86-4a22-827b-dbac3a13d62e` | 1/1 · 2026-11-22 → 2026-11-22 (1 day) |
-| **3** Single date, multiple rates | `5b970e08-4fc6-40a3-86ad-eb8c5e72e2fa` | 3/3 · 2026-11-21 → 2026-11-29 (3 days) |
+**Every value the passing tests name is exact**, and the counts show the delta work paying off: test
+2 sends **one** update where the old code sent 56, and test 3 puts three prices on three dates into a
+**single** call with no cross product. Q16 wants both test-1 ids in one field, **availability first**.
 
-Those counts are the delta work paying off: test 2 sends **one** update where the old code sent 56,
-and test 3 puts three different prices on three different dates into a **single** API call with no
-cross product — the requirement six of these tests turn on.
+### Why 5, 6 and 7 fail — one root cause
 
-Q16 wants both test-1 ids in one field, **availability first**.
+Date-scoped restrictions are keyed on **room type + date**, not rate plan (`DailyCell`). Every value
+the tests name is correct; the payload simply also carries the room's *other* rate plan:
+
+- test 5 — `double-bar` also gets the 15 Nov row meant for `double-bnb`, and vice versa on the 25th
+- test 6 — same shape on the stop-sell dates
+- test 7 — and here it produces a genuinely **wrong value**: the spec wants `double-bar` min-stay 2
+  over 10–16 Nov *and* `double-bnb` min-stay 10 over 1–20 Nov. Those overlap for seven days, and one
+  room-level cell cannot hold both. Whichever change is applied second wins.
+
+Test 7 is the proof that this is not cosmetic. **The fix is a nullable `ratePlanId` on `DailyCell`**
+(null = "every plan of this room", so it migrates cleanly and existing rows keep their meaning).
+Until then tests 5–7 cannot be made exactly right from any sequence of UI actions.
+
+### Why 10 fails — test sequencing, not a defect
+
+Two of its three complaints are the system being right: test 6 stop-sold Twin on 14 Nov, so when
+test 10 sets Twin to 3 rooms over 10–16 Nov, the 14th correctly pushes **0** — a stop-sell forces
+zero, which is the whole point of the flag. Channex's tests each assume a clean slate. **Run 10
+before 6**, or clear the stop-sells first. The extra-dates complaint on the same task still needs a
+look; it is the only one not yet explained.
 
 ## The 499-day question — resolved
 
