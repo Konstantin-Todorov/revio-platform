@@ -87,7 +87,7 @@ export default async function ReservationsPage({
     <div className="space-y-4">
       <PageHeader
         title="Reservations"
-        subtitle={`${property.name} · the system of record — every booking from every source`}
+        subtitle={`${property.name} · every booking, from every source`}
         action={
           <Link href="/reservations/new" className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
             <CalendarPlus className="h-3.5 w-3.5" /> New reservation

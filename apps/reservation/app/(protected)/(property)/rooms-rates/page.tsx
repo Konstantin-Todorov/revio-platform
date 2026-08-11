@@ -56,7 +56,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
     <div className="space-y-5">
       <PageHeader
         title="Rooms & Rates"
-        subtitle={`${property.name} · what you sell — the same room types and rate plans RevioLink uses`}
+        subtitle={`${property.name} · what you sell — shared with RevioLink, so you set it up once`}
       />
 
       {blocked && (
@@ -161,7 +161,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
       </Card>
 
       <Card>
-        <CardHeader title="Rate Plans" subtitle="Per-plan defaults (min-stay, advance purchase) are the rate-plan tier of the precedence model" action={<RatePlanDialog parents={parents} />} />
+        <CardHeader title="Rate Plans" subtitle="Each plan's own defaults — minimum stay and advance purchase — used when a date has no rule of its own" action={<RatePlanDialog parents={parents} />} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
@@ -205,14 +205,14 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
 
       {/* Editable Rate Plan Linkage (CRS-REFINEMENT-R2 §6). */}
       <Card>
-        <CardHeader title="Rate Plan Linkage" subtitle="Derived-pricing chains — change a parent or offset, or switch a plan between manual and derived" />
+        <CardHeader title="Rate Plan Linkage" subtitle="Plans priced from another plan — change the parent or the offset, or switch a plan back to its own prices" />
         <RatePlanLinkageBoard plans={linkPlans} />
       </Card>
 
       <Card>
         <CardHeader
           title="Out-of-order & closure periods"
-          subtitle="Commercial closures are a CRS decision; with a PMS, out-of-order originates there and the CRS reads it"
+          subtitle="Close rooms for sale here. Rooms taken out of order come from RevioPMS."
           action={<PeriodDialog roomTypes={roomTypes.filter((r) => r.active).map((r) => ({ id: r.id, name: r.name, totalRooms: r.totalRooms }))} todayIso={todayIso} />}
         />
         {periods.length === 0 ? (

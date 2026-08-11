@@ -49,7 +49,7 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
     <div className="space-y-5">
       <PageHeader
         title="Availability Search"
-        subtitle={`${property.name} · a guest-stay-shaped question: when, how many, which room`}
+        subtitle={`${property.name} · see what's free, then hold it while you take the guest's details`}
         action={<Link href="/reservations" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← Reservations</Link>}
       />
 
@@ -187,7 +187,7 @@ async function HoldForm({ holdId, guests, sourceId, error }: { holdId: string; g
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Create Reservation" subtitle={`${property.name} · step 2 of 2 — the rooms are already locked`} />
+      <PageHeader title="Create Reservation" subtitle={`${property.name} · step 2 of 2 — the room is held while you take their details`} />
 
       <div className="flex flex-wrap items-center gap-3 rounded-md border border-brand-600/25 bg-brand-50/70 px-4 py-3 text-[13px]">
         <Clock className="h-4 w-4 text-brand-700" />

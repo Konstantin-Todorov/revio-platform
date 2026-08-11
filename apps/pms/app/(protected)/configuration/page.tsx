@@ -27,7 +27,7 @@ export default async function ConfigurationPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Configuration" subtitle={`${property.name} · the property-level setup the money modules need`} />
+      <PageHeader title="Configuration" subtitle={`${property.name} · taxes, invoicing, housekeeping and outlets`} />
 
       {/* Taxes, invoicing & compliance — one save */}
       <form action={saveConfiguration} className="space-y-4">

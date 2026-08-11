@@ -58,7 +58,7 @@ export default async function ReportsPage({
     <div className="space-y-4">
       <PageHeader
         title="Analytics"
-        subtitle={`${isGroup ? scope.label : property.name} · calculated from reservations + inventory — never stored separately`}
+        subtitle={`${isGroup ? scope.label : property.name} · occupancy, rate and revenue for the period you choose`}
         action={
           <a href={`/api/reports/export?${qs}`} className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
             <Download className="h-3.5 w-3.5" /> Export CSV

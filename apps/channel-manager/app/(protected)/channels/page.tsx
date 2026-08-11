@@ -159,7 +159,7 @@ export default async function ChannelsPage() {
 
       {dormant.length > 0 && (
         <Card className="mt-4">
-          <CardHeader title="Disconnected channels" subtitle="Mapping preserved dormant — reconnecting never forces a re-map; imported reservations stay valid" />
+          <CardHeader title="Disconnected channels" subtitle="Reconnecting keeps the mapping you already did, and bookings already imported stay valid" />
           <ul className="divide-y divide-surface-border">
             {dormant.map((ch) => (
               <li key={ch.id} className="flex items-center gap-3 px-4 py-3">

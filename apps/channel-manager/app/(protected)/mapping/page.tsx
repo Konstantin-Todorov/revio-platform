@@ -18,7 +18,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
   if (!channel) {
     return (
       <div>
-        <PageHeader title="Mapping" subtitle="Link your room types and rate plans to each channel's own IDs — self-service" />
+        <PageHeader title="Mapping" subtitle="Link your room types and rate plans to each channel's own listings" />
         <EmptyState
           icon={<Link2 className="h-7 w-7" />}
           title="No channels connected yet"
@@ -42,7 +42,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
 
   return (
     <div>
-      <PageHeader title="Mapping" subtitle="Two streams: room types control inventory & open/close; rate plans control rates & restrictions" />
+      <PageHeader title="Mapping" subtitle="Room types carry how many rooms are free. Rate plans carry prices and restrictions. Both need linking." />
       {(products.rooms.length > 0 || products.rates.length > 0) && (
         <p className="-mt-3 mb-3 text-[11.5px] text-ink-400">
           {products.rooms.length + products.rates.length} products pulled from {channel.name} — pick them from the dropdown when mapping.

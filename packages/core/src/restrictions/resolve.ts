@@ -93,6 +93,11 @@ export function resolveRestriction(
   return { value: false, source: "none" };
 }
 
-/** The precedence line to display wherever a user edits ARI (spec §1.4). */
+/**
+ * Which setting wins, said in the hotel's words — shown wherever prices or restrictions are edited.
+ *
+ * The rule itself is spec §1.4. The wording is deliberately not: a receptionist wondering why their
+ * Tuesday price did not stick needs the answer, not our vocabulary for it. See `docs/COPY.md`.
+ */
 export const PRECEDENCE_LINE =
-  "date-scoped edit (calendar or bulk — most recent wins) → restriction rule → rate-plan default → property default";
+  "a date you edit directly (on the calendar or in bulk — the most recent edit wins) beats a restriction rule, which beats a rate plan's own default, which beats the property default";

@@ -1,6 +1,7 @@
 /** @revio/core — the shared inventory source of truth. Imported by every app. */
 
 export * from "./domain/types.js";
+export * from "./domain/connectivity.js";
 export * from "./inventory/availability.js";
 export * from "./inventory/waterfall.js";
 export * from "./metrics/formulas.js";

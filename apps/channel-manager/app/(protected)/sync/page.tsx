@@ -28,7 +28,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ t
 
   return (
     <div>
-      <PageHeader title="Sync Center" subtitle="The channel I/O log — outbound ARI pushes, inbound bookings, and the permanent audit trail" />
+      <PageHeader title="Sync Center" subtitle="Everything sent to your channels, every booking received, and a permanent record of who changed what" />
 
       {/* Errors up top (CM-UPDATES-V1): the problem summary before the feed. */}
       <div className="mb-3 grid grid-cols-3 gap-2">

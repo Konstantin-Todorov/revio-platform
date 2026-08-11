@@ -97,7 +97,7 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ i
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Preferences derived from operational history */}
         <Card>
-          <CardHeader title="Preferences" subtitle="Derived from assignment & consumption history" />
+          <CardHeader title="Preferences" subtitle="From the rooms they've had and what they've bought" />
           {!stats.enoughHistory ? (
             /* n≥2 guard (§3.3): one stay is not a preference — a wrong "usual" is worse than none. */
             <p className="px-4 py-3 text-[12.5px] text-ink-400">Not enough history yet — preferences appear after a 2nd stay (a single stay isn’t a reliable “usual”).</p>

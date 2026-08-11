@@ -14,7 +14,7 @@ export default async function GuestsPage({ searchParams }: { searchParams: Promi
     <div className="space-y-4">
       <PageHeader
         title="Guests"
-        subtitle={`${property.name} · contact details + booking history — deliberately not a CRM`}
+        subtitle={`${property.name} · contact details and booking history`}
       />
 
       <Card className="p-3">

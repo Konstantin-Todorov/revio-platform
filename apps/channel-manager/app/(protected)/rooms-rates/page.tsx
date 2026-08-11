@@ -73,7 +73,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
     <div>
       <PageHeader
         title="Rooms & Rates"
-        subtitle="What you sell — room types, rate plans and their derived-pricing links"
+        subtitle="What you sell — your room types, your rate plans, and how their prices are linked"
         action={<CollapseAll containerId="rr-sections" />}
       />
 

@@ -4,6 +4,90 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 
 ---
 
+## 🔵 PHASE P — PRODUCTION POLISH (current, founder decisions 2026-08-11)
+
+The software works. It does not yet **read** like something a hotel pays for. Three tasks, in order,
+plus one security item that outranks all of them.
+
+**N0 — first.** `SHOW_DEMO_LOGINS` shipped 2026-08-11: all four staff sign-in pages had printed working
+credentials unconditionally, the operator console among them. **Login rate limiting (N1) is still open**
+and is the remaining half of that hole.
+
+### P1 — Production copy pass
+
+**Voice: plain and instructional.** "Price the dates you want to sell." Says what to do; no personality,
+no explanation of our internals, no reference to what is coming later. Chosen partly because it carries
+no idiom and so survives translation when i18n arrives.
+
+**Scope: the four staff apps.** `apps/booking` (RevioDirect) is deliberately excluded — it is guest-facing
+and wears the *hotel's* brand, so it keeps a warmer voice. Same reason it gets no Revio identity.
+
+Three bands of work, in order of harm:
+1. Copy that tells a paying client the product is unfinished — "production sends an invite link",
+   "Sync is in-process for the demo (no external queue yet)", mode labels reading "Mock (demo)".
+2. ~106 `PageHeader`/`CardHeader` subtitles (CM 22 · CRS 39 · PMS 36 · Operator 9). **Triage, never a
+   blanket rewrite** — copy that helps a hotelier decide ("The first photo of each room is its cover",
+   "treat it as permanent once you share it") is doing its job and stays. Copy that explains *our
+   architecture* goes: "a guest-stay-shaped question", "the catch-all tier", "roles are saved group×level
+   combinations", "deliberately not a CRM".
+3. The convention, written down once, so new screens do not reintroduce the voice.
+
+**Kept on purpose:** demo tenants stay badged in the Operator console (`Tenant.isDemo` working as
+designed), and the honest "no Stripe key configured" state — rewording that is fine, claiming a live
+connection is not.
+
+### P2 — Onboarding
+
+**Shape: deepen the existing checklist into a guided flow.** `packages/core/src/onboarding/setup.ts`
+already defines setup per product and `@revio/ui/setup-checklist` already renders it on three dashboards.
+Build on both. **Hotel self-serve, operator can assist** — the Operator attention feed already flags
+stalled onboarding, so the assist half is mostly wiring.
+
+Informed by uxpeak, *"The UX Psychology Behind Apps People Can't Stop Using"*:
+
+| Principle | Applied here |
+| --- | --- |
+| **Goal gradient** — never start at zero | The operator has already created the tenant, owner, property and base rate plan. Count it. `0 of 4` becomes `1 of 5 done`, and it is **honest** — that work really happened. |
+| **…and the cross-product case** | A hotel that already runs RevioLink opens RevioCRS at **2 of 5**, because its room types and rates exist. This is the goal-gradient effect and the zero-migration promise turning out to be the same sentence — and the one screen Mews and Cloudbeds structurally cannot show. |
+| **Smart defaults** — 70–90% never change them | Provisioning arrives filled in: check-out time, VAT, currency, one BAR plan. |
+| **IKEA / endowment** | Setup must *produce something they can see* — their booking page in their colour — not only collect configuration. |
+| **Reciprocity** | Give value before asking. Applies hardest to the sales motion, below. |
+
+⚠️ **Two principles are deliberately applied narrowly.**
+- **Smart defaults never touch money.** A pre-filled check-out time is a kindness; a pre-filled *rate*,
+  availability count or restriction is a default that silently costs the hotel revenue — and by the same
+  70–90% statistic, most will never correct it. Convenience fields only; money fields stay deliberate.
+- **Loss aversion uses real losses only.** "Your rooms are not on sale yet", "changes not pushed", "sync
+  failing" are true and motivating. Manufactured countdowns and dismiss buttons reading "I'll risk it"
+  are dark patterns; in software a hotel runs its business on, that gets found out and costs the account.
+
+**Anchoring / reciprocity → the sales motion, not the product.** `channelEconomics` already computes what
+a hotel pays in commission, and the Operator console already quotes RevioDirect from it. A public "what
+your OTAs cost you" calculator is reciprocity *and* sets the anchor before a price is ever named. The
+number to never show in isolation is **2% against ~15%**.
+
+### P3 — In-app AI assistant
+
+A chat surface that answers questions **and carries out requests**. One constraint governs the design:
+
+> **It acts as the logged-in user, never above them** — their session, their role checks, their
+> tenant-scoped connection. It must never call `forSystem()` or any RLS-bypassing path.
+
+RLS has been a database guarantee since 2026-08-05. An assistant with its own elevated access would hand
+that back, behind a text box accepting arbitrary input — including free text written by guests and OTAs.
+**If a user cannot do something in the UI, they must not be able to do it by asking.**
+
+- **Tools are the existing server actions and `@revio/core` functions**, never new queries — so the
+  assistant inherits every guard already written (overbooking checks, deletion guards, checkout balance
+  gate, min-stay validation).
+- **Writes go through preview → confirm**, reusing the shared bulk-engine modal (G1). Not ceremony:
+  inventory writes auto-push to Channex within seconds, so a mis-parsed "close December" is a real
+  stop-sell on Booking.com before anyone notices. Reads answer directly.
+- Entitlement-aware; every action lands in the audit log marked assistant-initiated; record content is
+  treated as data, never as instructions.
+
+---
+
 ## 🗺️ REMAINING PLATFORM WORK (roadmap, 2026-07-05)
 
 All four products (RevioLink · RevioCRS · RevioPMS · Operator) are **built and live**, on one shared DB.

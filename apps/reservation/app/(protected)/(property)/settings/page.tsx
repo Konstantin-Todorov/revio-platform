@@ -46,7 +46,7 @@ export default async function SettingsPage() {
       {/* Standing policy defaults (spec §3.9) — the property-default tier of the two-tier
           precedence model, moved here from the dissolved Rates & Restrictions screen. */}
       <Card>
-        <CardHeader title="Standing policy defaults — the catch-all tier" subtitle={`Precedence: ${PRECEDENCE_LINE}`} />
+        <CardHeader title="Standing policy defaults" subtitle={`Used when nothing more specific applies — ${PRECEDENCE_LINE}`} />
         <form action={savePropertyDefaults} className="grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-4">
           <div><label className={labelCls}>Min stay (nights)</label><input type="number" name="defMinLos" min={0} defaultValue={defaults?.defMinLos ?? ""} placeholder="—" className={inputCls} /></div>
           <div><label className={labelCls}>Max stay (nights)</label><input type="number" name="defMaxLos" min={0} defaultValue={defaults?.defMaxLos ?? ""} placeholder="—" className={inputCls} /></div>
@@ -98,7 +98,7 @@ export default async function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Users & Permissions — roles are saved group×level combinations" subtitle="Roles are DEFINED here; user assignment happens in RevioLink → User Management (one account across every Revio product)" />
+        <CardHeader title="Users & Permissions" subtitle="Define roles here. Assign people to them in RevioLink → User Management — one login per person across every Revio product." />
         <div className="overflow-x-auto">
           <table className="w-full text-[12.5px]">
             <thead>

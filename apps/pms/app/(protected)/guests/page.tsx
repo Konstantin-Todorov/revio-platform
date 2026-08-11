@@ -12,7 +12,7 @@ export default async function GuestsPage() {
     <div>
       <PageHeader
         title="Guests"
-        subtitle={`${property.name} · operational profiles built from folios, POS consumption and room history`}
+        subtitle={`${property.name} · profiles built from each guest's bills, purchases and room history`}
       />
 
       <Card>

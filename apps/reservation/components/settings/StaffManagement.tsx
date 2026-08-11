@@ -91,8 +91,7 @@ function InviteDialog() {
       <Modal open={open} onClose={() => setOpen(false)} title="Add a team member">
         <p className="mb-3 text-[12.5px] text-ink-500">
           Creates the <strong>one shared Revio identity</strong> — the same login works across every product this
-          hotel owns. (Demo: password <code className="rounded bg-surface-sunken px-1">revio1234</code>; production
-          emails an invite link.)
+          hotel owns. They sign in with the password <code className="rounded bg-surface-sunken px-1">revio1234</code>.
         </p>
         <form action={formAction} className="space-y-3.5">
           <div className="grid grid-cols-2 gap-3">
@@ -199,7 +198,7 @@ export function StaffManagement({ users, canManage, currentUserId }: { users: St
                           action={resetUserPassword}
                           fields={{ id: u.id }}
                           title="Reset password (shared login)"
-                          confirm={`Reset ${u.name}'s password? Demo resets to the shared demo password; production emails a reset link.`}
+                          confirm={`Reset ${u.name}'s password back to revio1234?`}
                         >
                           <KeyRound className="h-3.5 w-3.5" />
                         </ActionButton>

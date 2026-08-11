@@ -50,11 +50,11 @@ export function ChannelSettingsDialog({ channel }: { channel: Channel }) {
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3 rounded-md border border-surface-border bg-surface-muted/60 p-3">
-            <Field label="Connectivity" hint="Demo channels use the mock">
+            <Field label="Connectivity" hint="Only Channex sends to the OTAs">
               <select name="connectivityMode" defaultValue={channel.connectivityMode} className={inputCls}>
-                <option value="mock">Mock (demo)</option>
-                <option value="channex_sandbox">Channex — sandbox</option>
-                <option value="channex_prod">Channex — production</option>
+                <option value="mock">Test connection</option>
+                <option value="channex_sandbox">Channex — test</option>
+                <option value="channex_prod">Channex</option>
               </select>
             </Field>
             <Field label="Channex Property UUID" hint="Required for Channex modes">

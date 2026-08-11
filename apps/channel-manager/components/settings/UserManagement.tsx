@@ -45,7 +45,7 @@ export function InviteUserDialog({ canManage }: { canManage: boolean }) {
         <UserPlus className="h-4 w-4" /> Invite user
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title="Invite a team member">
-        <p className="mb-3 text-[12.5px] text-ink-500">They’ll get access to this hotel scoped to their role. (Demo: password <code className="rounded bg-surface-sunken px-1">revio1234</code>; production sends an invite link.)</p>
+        <p className="mb-3 text-[12.5px] text-ink-500">They’ll get access to this hotel, scoped to their role, and sign in with the password <code className="rounded bg-surface-sunken px-1">revio1234</code>.</p>
         <form action={formAction} className="space-y-3.5">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Name"><input name="name" required className={inputCls} placeholder="Lena Koch" /></Field>

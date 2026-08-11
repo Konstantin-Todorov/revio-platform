@@ -57,7 +57,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
       {/* Preference layer (spec §3.4) — the edge of "not a CRM": a light, derived layer only. */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Preferences — derived from booking history" subtitle="Computed by the CRS from this guest's reservations" />
+          <CardHeader title="Preferences" subtitle="Worked out from this guest's past bookings" />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
             <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Preferred room type</dt><dd className="mt-0.5 font-semibold text-ink-900">{derived.preferredRoomType ?? "—"}</dd></div>
             <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Average stay</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLosNights.toFixed(1)} nights` : "—"}</dd></div>
@@ -76,7 +76,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
         </Card>
 
         <Card>
-          <CardHeader title="From the property's PMS / POS" subtitle="Recorded by RevioPMS during the guest’s stay — shown here, not editable" />
+          <CardHeader title="During their stay" subtitle="Recorded by RevioPMS — shown here, edited there" />
           {fromPms.hasPmsData ? (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
               <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Ancillary spend (lifetime)</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.ancillarySpendMinor, property.baseCurrency)}</dd></div>
@@ -131,7 +131,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
       <Card>
         <CardHeader
           title={`Notes (${notes.length})`}
-          subtitle="Free-text staff notes — saved on the shared guest record, visible wherever this guest appears (CRS today, RevioPMS once the property runs it)"
+          subtitle="Staff notes — visible wherever this guest appears, in every Revio product you run"
         />
         <GuestNotes guestId={guest.id} notes={noteRows} />
       </Card>

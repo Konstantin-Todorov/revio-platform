@@ -146,7 +146,7 @@ export async function getConnectivityLabel(): Promise<string> {
   if (live === channels.length) return `Live · ${live} channel${live === 1 ? "" : "s"}`;
   if (live > 0) return `${live} live · ${channels.length - live} in test`;
   if (sandbox > 0) return "Test connection (sandbox)";
-  return "Demo mode · simulated channels";
+  return "Test connection · nothing is sent to the OTAs";
 }
 
 /** First-run facts for the setup checklist — see `reviolinkSetup` in @revio/core. */

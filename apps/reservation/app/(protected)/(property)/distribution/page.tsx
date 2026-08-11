@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createCmConnector } from "@revio/core";
+import { connectivityModeLabel, createCmConnector } from "@revio/core";
 import { Cable, CheckCircle2, Link2, Radio } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getProperty } from "@/lib/data";
@@ -28,11 +28,11 @@ export default async function DistributionPage() {
     <div className="space-y-5">
       <PageHeader
         title="Distribution"
-        subtitle={`${property.name} · the CRS never talks to an OTA — everything flows through ONE connected channel manager`}
+        subtitle={`${property.name} · your channel manager handles every OTA connection`}
       />
 
       <Card>
-        <CardHeader title="Connected Channel Manager" subtitle="Exactly one per property — RevioLink (internal) or a third-party through the identical connector" action={<CmConnectionActions status={cmStatus} />} />
+        <CardHeader title="Connected Channel Manager" subtitle="One per property — RevioLink, or a third-party channel manager" action={<CmConnectionActions status={cmStatus} />} />
         <div className="flex flex-wrap items-start gap-4 px-4 py-4">
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-700"><Cable className="h-6 w-6" /></div>
           <div className="min-w-0 flex-1">
@@ -96,7 +96,7 @@ export default async function DistributionPage() {
                 <tr key={ch.id} className="border-b border-surface-border/60 last:border-0">
                   <td className="px-4 py-2.5 font-semibold text-ink-900"><Radio className="mr-1.5 inline h-3.5 w-3.5 text-ink-400" />{ch.name}</td>
                   <td className="px-4 py-2.5"><StatusPill tone={CH_TONE[ch.status] ?? "neutral"}>{ch.status.replace("_", " ")}</StatusPill></td>
-                  <td className="px-4 py-2.5 text-ink-600">{ch.connectivityMode === "mock" ? "demo (mock)" : ch.connectivityMode.replace("_", " ")}</td>
+                  <td className="px-4 py-2.5 text-ink-600">{connectivityModeLabel(ch.connectivityMode)}</td>
                   <td className="px-4 py-2.5 text-ink-500">{relativeTime(ch.lastSyncAt)}</td>
                 </tr>
               ))}

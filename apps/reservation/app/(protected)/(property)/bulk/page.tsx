@@ -33,7 +33,7 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
       />
 
       <Card>
-        <CardHeader title="Bulk update" subtitle="One run = one audit entry + one push to the connected channel manager" />
+        <CardHeader title="Bulk update" subtitle="One run, one entry in the audit log, sent once to your channel manager" />
         {roomTypes.length === 0 ? (
           <p className="px-4 py-8 text-center text-[13px] text-ink-400">
             A bulk update changes rates and restrictions across your room types — so you need at least one first.{" "}
@@ -52,7 +52,7 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
       <Card>
         <CardHeader
           title="Your active restriction rules"
-          subtitle="Date-scoped, source-targetable standing rules — e.g. closed to Travel Agents over a trade fair"
+          subtitle="Standing rules for a date range, optionally aimed at one booking source — for example, closed to travel agents during a trade fair"
           action={<RestrictionDialog roomTypes={roomTypes} channels={channels} />}
         />
         {rules.length === 0 ? (
@@ -93,7 +93,7 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
       </Card>
 
       <p className="text-[12px] text-ink-400">
-        Precedence (two-tier): {PRECEDENCE_LINE}.
+        Which setting wins: {PRECEDENCE_LINE}.
       </p>
     </div>
   );

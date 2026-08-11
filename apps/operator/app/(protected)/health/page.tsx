@@ -91,8 +91,7 @@ export default async function HealthPage() {
       </Card>
 
       <p className="mt-4 text-[11.5px] text-ink-400">
-        Sync is in-process for the demo (no external queue yet). Queue depth / retry backlog (Redis + BullMQ)
-        lands with the scheduler infrastructure — see the platform roadmap.
+        Sync runs inside the application, so queue depth and retry backlog are not measured.
       </p>
     </div>
   );

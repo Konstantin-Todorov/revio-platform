@@ -1,11 +1,10 @@
 import Link from "next/link";
 import { BedDouble, Wine, Moon, Radio, Users, Building2 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
+import { connectivityModeLabel } from "@revio/core";
 import { getPmsSettings } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
-
-const MODE_LABEL: Record<string, string> = { mock: "Demo (mock)", channex_sandbox: "Channex sandbox", channex_prod: "Channex" };
 
 export default async function SettingsPage() {
   const { property, channels, counts } = await getPmsSettings();
@@ -67,7 +66,7 @@ export default async function SettingsPage() {
                 <div className="flex items-center gap-2.5">
                   <Radio className="h-4 w-4 text-ink-400" />
                   <span className="text-[13px] font-semibold text-ink-900">{c.name}</span>
-                  <span className="text-[11px] text-ink-400">{MODE_LABEL[c.connectivityMode] ?? c.connectivityMode}</span>
+                  <span className="text-[11px] text-ink-400">{connectivityModeLabel(c.connectivityMode)}</span>
                 </div>
                 <StatusPill tone={(c.status === "connected" ? "success" : "neutral") as Tone}>{c.status}</StatusPill>
               </li>

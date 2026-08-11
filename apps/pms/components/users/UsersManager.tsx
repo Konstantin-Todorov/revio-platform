@@ -60,7 +60,7 @@ export function UsersManager({ users, meId, canManage }: { users: StaffUser[]; m
             </button>
           </form>
           {result?.error && <p className="mt-2 text-[12px] font-medium text-danger-600">{result.error}</p>}
-          {result?.ok && <p className="mt-2 text-[12px] font-medium text-success-600">Invited — they can sign in with the shared demo password.</p>}
+          {result?.ok && <p className="mt-2 text-[12px] font-medium text-success-600">Invited — they sign in with the password revio1234.</p>}
           <p className="mt-2 text-[11px] text-ink-400">One identity per person across every Revio product — this invites or re-roles the shared account, it never creates a PMS-only login.</p>
         </div>
       )}

@@ -32,7 +32,7 @@ export default async function SettingsPage() {
             <div className="mt-0.5"><StatusPill tone={isAdmin ? "success" : "neutral"}>{ROLE_LABEL[session!.role]}</StatusPill></div>
           </div>
         </div>
-        <p className="mt-3 text-[11.5px] text-ink-400">Passwords are self-managed via login (demo password <code className="rounded bg-surface-sunken px-1">revio1234</code>). Production adds invite links + reset.</p>
+        <p className="mt-3 text-[11.5px] text-ink-400">New operator accounts start with the password <code className="rounded bg-surface-sunken px-1">revio1234</code>.</p>
       </Card>
 
       {/* Operator staff */}
