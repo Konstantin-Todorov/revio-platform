@@ -77,3 +77,35 @@ describe("cell-level push scope", () => {
     expect(inScope("twin", "twin-bar", "2026-11-21")).toBe(false);
   });
 });
+
+/**
+ * The availability fallback exists so a date the hotel never priced still reports its room count —
+ * otherwise a booking on such a date would leave the channel selling a room that is gone.
+ *
+ * It has to respect the scope, and once did not. A two-room availability edit (Twin over one week,
+ * Double over the next) then produced four assertions instead of two: each room's real change, plus
+ * each room's *unchanged* count restated across the other room's dates. Values nobody edited, on
+ * dates nobody touched — which is exactly what Channex's "only send changes" rule forbids, and what
+ * certification test 10 caught.
+ */
+describe("availability fallback", () => {
+  /** Mirrors the emit decision in syncChannel for one (room, date). */
+  const wouldEmitFallback = (opts: { inScopeHere: boolean; priced: boolean; wantsAvailability: boolean }) =>
+    !opts.priced && opts.inScopeHere && opts.wantsAvailability;
+
+  it("fires for an in-scope date the hotel never priced", () => {
+    expect(wouldEmitFallback({ inScopeHere: true, priced: false, wantsAvailability: true })).toBe(true);
+  });
+
+  it("stays silent for a date the scope excluded", () => {
+    expect(wouldEmitFallback({ inScopeHere: false, priced: false, wantsAvailability: true })).toBe(false);
+  });
+
+  it("stays silent when the rate loop already emitted the row", () => {
+    expect(wouldEmitFallback({ inScopeHere: true, priced: true, wantsAvailability: true })).toBe(false);
+  });
+
+  it("stays silent on a push that is not carrying availability at all", () => {
+    expect(wouldEmitFallback({ inScopeHere: true, priced: false, wantsAvailability: false })).toBe(false);
+  });
+});

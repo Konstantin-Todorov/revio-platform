@@ -302,10 +302,14 @@ export async function syncChannel(
       }).remaining);
 
       let emitted = 0;
+      // Did the scope admit this (room, date) at all? Distinct from `emitted`, which also requires a
+      // price — and the difference is what the fallback below must key on.
+      let inScopeHere = false;
       for (const pm of rateMaps) {
         const rp = pm.ratePlan;
         if (!sells.has(`${rt.id}|${rp.id}`)) continue;
         if (!inScope(rt.id, rp.id, k)) continue;
+        inScopeHere = true;
         const cell = planCellMap.get(planCellKey(rt.id, rp.id, k)) ?? roomCell;
         const price = priceFor(rt.id, rp, k);
         if (price == null) continue;
@@ -375,8 +379,12 @@ export async function syncChannel(
       // dropped the availability too — so a booking on such a date left the channel still selling
       // the room. One rate-plan-less row keeps the room count truthful; `toRestrictionValue` returns
       // null for it, so nothing about rates or restrictions is asserted.
+      // `inScopeHere` is the guard that was missing: without it this fallback fired for every room
+      // and date the scope had EXCLUDED, quietly re-asserting the other room's unchanged count. A
+      // two-room availability edit then told the channel about both rooms across both date ranges —
+      // four assertions where two were meant, half of them about dates nobody touched.
       const fallbackPlan = rateMaps.find((pm) => sells.has(`${rt.id}|${pm.ratePlanId}`));
-      if (emitted === 0 && wants("availability") && fallbackPlan) {
+      if (emitted === 0 && inScopeHere && wants("availability") && fallbackPlan) {
         updates.push({
           externalRoomId: rm.externalRoomId!,
           externalRateId: fallbackPlan.externalRateId!,
