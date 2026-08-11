@@ -37,7 +37,7 @@ ask for, and the call counts the spec demands. **Only test 9 is left** (it needs
 | **6** Stop sell | `8bbc2f69-e476-4a85-ab29-5dc61a726a23` | 3/3 · 2026-11-14 → 11-20 |
 | **7** Multiple restrictions | `9daa255e-5feb-4c1b-8f04-0796f61e95fc` | 42/42 · 2026-11-01 → 11-20 |
 | **8** Half-year | `60372036-e22d-4bc9-b01c-1bdd2a1d95a8` | 304/304 · 2026-12-01 → 2027-05-01 |
-| **9** Availability from a booking | *still to drive* | see below |
+| **9** Availability from a booking | ❌ *see below* | 2/2 · 2026-11-21 (1 day) |
 | **10** Multiple date availability | `e43ed088-16f7-49c2-a0d2-2baa08031f85` | 30/30 · 2026-11-10 → 11-24 |
 
 Q16 takes both test-1 ids in one field, **availability first**.
@@ -57,6 +57,38 @@ those plans alone.
 **The availability fallback respects the scope.** It exists so an unpriced date still reports its
 room count; it was firing for rooms and dates the scope had *excluded*, restating the other room's
 unchanged availability. Test 10 caught it.
+
+### Test 9 — driven, not yet clean
+
+Two bookings are needed and the push shape is already right: the Twin booking produced
+`2/2 updates · 2026-11-21 → 2026-11-21 (1 day)`, availability only — exactly what `stayScope`
+was built for, and the thing the old unscoped push could never have produced for a November date.
+
+Both halves still need a clean re-run, for reasons worth knowing:
+
+**Twin came back as 6, not 7.** A stray **hold** was still consuming a room. The first
+"Hold & continue" click did not navigate, so it was clicked twice; the first hold was never
+converted and never released, and a live hold takes a room off sale exactly as a booking does. That
+is the system being right. Before re-running, release or expire any open hold on the Twin for
+21 Nov — the Reservations list shows holds with their TTL countdown.
+
+**Double could not be booked at all.** RevioCRS refused the one-night stay: *"Minimum stay is 2
+nights for 2026-11-25"* — which is **test 5's own min-stay 2 on Double Best Available Rate**, being
+enforced internally. The restriction we push to Channex governs our own booking screen too, which is
+the correct behaviour and a neat demonstration of one source of truth. To take the booking:
+
+1. Bulk Update → 2026-11-25 → Double Room → **Double · Best Available Rate only** → Min stay **0**
+   (clears it). Apply. *This task id is not submitted.*
+2. RevioCRS → Availability Search → 25 → 26 Nov → Double → Hold & continue → confirm. **This push is
+   the test-9 id** (Double 25 Nov → 0; the room is already limited to 1 by an earlier prep edit).
+3. Restore the min stay: same bulk edit with Min stay **2**. *Not submitted.*
+
+Test 9 accepts one or two ids, so submit the Twin push and the Double push together.
+
+**Also found:** the cert property had no `BookingSource` rows, so the reservation form's required
+Booking source select was empty and the form could not be submitted — with nothing on screen saying
+why. Four sources were seeded. A property with no booking sources cannot take a reservation at all,
+which is worth a guard of its own.
 
 ### Order matters when driving these
 
