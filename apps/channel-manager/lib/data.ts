@@ -263,7 +263,9 @@ export async function getCalendarBoard(q: CalendarQuery) {
     standard
       ? prisma.ratePrice.findMany({ where: { roomTypeId: { in: rtIds }, ratePlanId: standard.id, date: { gte: start, lte: end } } })
       : Promise.resolve([]),
-    prisma.dailyCell.findMany({ where: { roomTypeId: { in: rtIds }, date: { gte: start, lte: end } } }),
+    // ROOM-LEVEL read — the calendar has one row per room, so `cellMap` is keyed on room + date.
+    // Plan-scoped cells must not enter it; they belong to the rate-plan rows, not these.
+    prisma.dailyCell.findMany({ where: { roomTypeId: { in: rtIds }, date: { gte: start, lte: end }, ratePlanId: null } }),
     prisma.reservationLine.findMany({
       where: {
         roomTypeId: { in: rtIds },

@@ -97,27 +97,30 @@ with **Best Available Rate** ($100) and **Bed & Breakfast** ($120), all four pla
 > **"Certification results with full response copy&paste will be ignored!"** — paste only the `id`
 > value, one per line. Nothing else.
 
+**All ten verified 2026-08-11** — `channex:cert-verify` reports *All 10 checked tests match the spec.*
+Paste exactly these, nothing else in the field:
+
 | Q | Page | Answer |
 | --- | --- | --- |
-| **Q16** | Test 1 · Full Sync — results | **two IDs, one per line** ⚠️ see below |
+| **Q16** | Test 1 · Full Sync — results | `1f05a5d5-0722-4a36-b064-33f44ad456fd`<br>`cfc73e27-4216-4ec5-ac18-44e2a530f79c` ⚠️ two lines, availability first — see below |
 | **Q17** | Test 2 · applicable? | **Yes** |
-| **Q18** | Test 2 · results | *(1 ID)* |
+| **Q18** | Test 2 · results | `38de012a-cb86-4a22-827b-dbac3a13d62e` |
 | **Q20** | Test 3 · applicable? | **Yes** |
-| **Q21** | Test 3 · results | *(1 ID)* |
+| **Q21** | Test 3 · results | `5b970e08-4fc6-40a3-86ad-eb8c5e72e2fa` |
 | **Q23** | Test 4 · applicable? | **Yes** |
-| **Q24** | Test 4 · results | *(1 ID)* |
+| **Q24** | Test 4 · results | `180ec0b0-2949-48e6-97a1-8c7c4f1e3ff6` |
 | **Q26** | Test 5 · applicable? | **Yes** |
-| **Q27** | Test 5 · results | *(1 ID)* |
+| **Q27** | Test 5 · results | `d12d4363-4933-4704-8fa5-bc23271c255b` |
 | **Q29** | Test 6 · applicable? | **Yes** |
-| **Q30** | Test 6 · results | *(1 ID)* |
+| **Q30** | Test 6 · results | `8bbc2f69-e476-4a85-ab29-5dc61a726a23` |
 | **Q32** | Test 7 · applicable? | **Yes** |
-| **Q33** | Test 7 · results | *(1 ID)* |
+| **Q33** | Test 7 · results | `9daa255e-5feb-4c1b-8f04-0796f61e95fc` |
 | **Q35** | Test 8 · applicable? | **Yes** |
-| **Q36** | Test 8 · results | *(1 ID)* |
+| **Q36** | Test 8 · results | `60372036-e22d-4bc9-b01c-1bdd2a1d95a8` |
 | **Q38** | Test 9 · applicable? | **Yes** |
-| **Q39** | Test 9 · result | *(1–2 IDs)* |
+| **Q39** | Test 9 · result | `c17080a7-f093-4632-8384-869c19f3c5ee`<br>`84d227ce-48b7-49a7-806c-d09d38bffbd9` *(Twin 21 Nov → 7, Double 25 Nov → 0)* |
 | **Q41** | Test 10 · applicable? | **Yes** |
-| **Q42** | Test 10 · results | *(1–2 IDs)* |
+| **Q42** | Test 10 · results | `e43ed088-16f7-49c2-a0d2-2baa08031f85` |
 
 *Not reached (the "No" branch): Q19, Q22, Q25, Q28, Q31, Q34, Q37, Q40, Q43.*
 
@@ -128,8 +131,8 @@ One field, two IDs, one per line. The order is **not** labelled by the form, so 
 the requirement:
 
 ```
-<availability task id>     ← 1 × 500 days Availability (All Rooms)
-<rates task id>            ← 1 × 500 days Rates & Restrictions (All Rates)
+1f05a5d5-0722-4a36-b064-33f44ad456fd     ← 1 × 500 days Availability (All Rooms)
+cfc73e27-4216-4ec5-ac18-44e2a530f79c     ← 1 × 500 days Rates & Restrictions (All Rates)
 ```
 
 This is where the last submission most likely went wrong: *"expected exactly one Availability update,

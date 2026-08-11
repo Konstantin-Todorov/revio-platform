@@ -21,10 +21,10 @@ After each action: **Sync Center** shows the push with its Channex task ids, **e
 
 ---
 
-## Results — nine of nine pass the verifier
+## Results — ten of ten pass the verifier
 
 Every id below has passed `channex:cert-verify`: exact rates, exact dates, no field the test did not
-ask for, and the call counts the spec demands. **Only test 9 is left** (it needs bookings).
+ask for, and the call counts the spec demands. **`All 10 checked tests match the spec.`**
 
 | Test | Task id | Push, as the Sync Center recorded it |
 | --- | --- | --- |
@@ -37,7 +37,8 @@ ask for, and the call counts the spec demands. **Only test 9 is left** (it needs
 | **6** Stop sell | `8bbc2f69-e476-4a85-ab29-5dc61a726a23` | 3/3 · 2026-11-14 → 11-20 |
 | **7** Multiple restrictions | `9daa255e-5feb-4c1b-8f04-0796f61e95fc` | 42/42 · 2026-11-01 → 11-20 |
 | **8** Half-year | `60372036-e22d-4bc9-b01c-1bdd2a1d95a8` | 304/304 · 2026-12-01 → 2027-05-01 |
-| **9** Availability from a booking | ❌ *see below* | 2/2 · 2026-11-21 (1 day) |
+| **9** Availability from a booking · Twin | `c17080a7-f093-4632-8384-869c19f3c5ee` | 2/2 · 2026-11-21 (1 day) |
+| **9** Availability from a booking · Double | `84d227ce-48b7-49a7-806c-d09d38bffbd9` | 2/2 · 2026-11-25 (1 day) |
 | **10** Multiple date availability | `e43ed088-16f7-49c2-a0d2-2baa08031f85` | 30/30 · 2026-11-10 → 11-24 |
 
 Q16 takes both test-1 ids in one field, **availability first**.
@@ -58,37 +59,52 @@ those plans alone.
 room count; it was firing for rooms and dates the scope had *excluded*, restating the other room's
 unchanged availability. Test 10 caught it.
 
-### Test 9 — driven, not yet clean
+### Test 9 — how it was finally driven
 
-Two bookings are needed and the push shape is already right: the Twin booking produced
-`2/2 updates · 2026-11-21 → 2026-11-21 (1 day)`, availability only — exactly what `stayScope`
-was built for, and the thing the old unscoped push could never have produced for a November date.
+Two bookings, two ids, and the push shape was right from the first attempt:
+`2/2 updates · 2026-11-21 → 2026-11-21 (1 day)`, availability only — exactly what `stayScope` was
+built for, and the thing the old unscoped push could never have produced for a November date.
 
-Both halves still need a clean re-run, for reasons worth knowing:
+The first run failed the verifier twice, and **both reasons were the system being correct**:
 
-**Twin came back as 6, not 7.** A stray **hold** was still consuming a room. The first
-"Hold & continue" click did not navigate, so it was clicked twice; the first hold was never
-converted and never released, and a live hold takes a room off sale exactly as a booking does. That
-is the system being right. Before re-running, release or expire any open hold on the Twin for
-21 Nov — the Reservations list shows holds with their TTL countdown.
+**Twin came back as 6, not 7.** A stray **hold** was still consuming a room. A "Hold & continue"
+click that did not appear to navigate got clicked twice; the first hold was never converted and
+never released, and a live hold takes a room off sale exactly as a booking does. The fix was to
+cancel the dirty reservation, let the orphan hold expire, and rebook: `8 left across every night` on
+the search screen is the signal that the room is clean. Cancel pushed 8, the new booking pushed 7,
+and only the second id is submitted.
 
 **Double could not be booked at all.** RevioCRS refused the one-night stay: *"Minimum stay is 2
 nights for 2026-11-25"* — which is **test 5's own min-stay 2 on Double Best Available Rate**, being
-enforced internally. The restriction we push to Channex governs our own booking screen too, which is
-the correct behaviour and a neat demonstration of one source of truth. To take the booking:
+enforced against us. The restriction we push to Channex governs our own booking screen too. That is
+one source of truth demonstrating itself, and it is the nicest thing that happened during the drive.
+The sequence:
 
-1. Bulk Update → 2026-11-25 → Double Room → **Double · Best Available Rate only** → Min stay **0**
-   (clears it). Apply. *This task id is not submitted.*
-2. RevioCRS → Availability Search → 25 → 26 Nov → Double → Hold & continue → confirm. **This push is
-   the test-9 id** (Double 25 Nov → 0; the room is already limited to 1 by an earlier prep edit).
-3. Restore the min stay: same bulk edit with Min stay **2**. *Not submitted.*
+1. Bulk Update → 2026-11-25 → Double Room → Min stay **0**, queued **twice**: once with all plans
+   selected (clears the room-wide cell) and once with **Double · Best Available Rate only** (clears
+   the plan cell). Both are needed — see below. *This task id is not submitted.*
+2. RevioCRS → Availability Search → 25 → 26 Nov → Double → Hold & continue → confirm. Double reads
+   `1 left`, the booking takes it to **0**. **This push is the test-9 Double id.**
+3. Restore: the same two queued changes with Min stay **2**. *Not submitted.* Verified afterwards —
+   both cells back at `minLos=2`, inventory 1, no active holds.
 
-Test 9 accepts one or two ids, so submit the Twin push and the Double push together.
+Test 9 accepts one or two ids, so the Twin push and the Double push are submitted together.
 
-**Also found:** the cert property had no `BookingSource` rows, so the reservation form's required
-Booking source select was empty and the form could not be submitted — with nothing on screen saying
-why. Four sources were seeded. A property with no booking sources cannot take a reservation at all,
-which is worth a guard of its own.
+**Two more defects fell out of this run.**
+
+The cert property had **no `BookingSource` rows**, so the reservation form's required Booking source
+select was empty and the form could not be submitted — with nothing on screen saying why. Four
+sources were seeded. A property with no booking sources cannot take a reservation at all, which
+deserves a guard rather than a dead button.
+
+And `DailyCell.ratePlanId` had **broken five room-level readers** that were written when
+(room, date) was still unique. Each builds a `Map` on that key, so a plan-scoped cell and the room's
+own cell now collide and whichever Postgres returned last wins — silently, differently between
+runs. It reached `stayViolation` (the point-of-sale gate), the CRS availability grid and inventory
+calendar, the RevioLink calendar, and the CM's overbooking check, where a plan cell's
+`inventory: null` would have erased a manual sell limit and hidden an oversell. All five now filter
+`ratePlanId: null` explicitly, and `packages/connectivity/src/room-level-cells.test.ts` pins the
+collapse itself — the mistake is the shape, not any one query.
 
 ### Order matters when driving these
 

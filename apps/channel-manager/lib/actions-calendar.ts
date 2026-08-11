@@ -427,7 +427,9 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
         checkOut: { gt: checkInDate },
       },
     }),
-    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: checkInDate, lt: checkOutDate } } }),
+    // ROOM-LEVEL: the manual sell limit lives on the room-wide cell. A plan cell carries
+    // `inventory: null`, so letting one win this map would drop the limit and hide an overbooking.
+    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: checkInDate, lt: checkOutDate }, ratePlanId: null } }),
     prisma.roomInventoryPeriod.findMany({ where: { roomTypeId, dateFrom: { lt: checkOutDate }, dateTo: { gte: checkInDate } } }),
     prisma.hold.findMany({
       where: { roomTypeId, status: "active", expiresAt: { gt: new Date() }, checkIn: { lt: checkOutDate }, checkOut: { gt: checkInDate } },

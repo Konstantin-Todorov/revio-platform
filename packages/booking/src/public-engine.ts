@@ -126,7 +126,9 @@ async function loadStayContext(
       include: { roomTypeLinks: true, cancellationPolicy: true, mealPlan: true },
       orderBy: { sortOrder: "asc" },
     }),
-    db.dailyCell.findMany({ where: { propertyId: property.id, date: { gte: start, lt: end } } }),
+    // ROOM-LEVEL read (`cellOf` keys on room + date): room-wide cells only. A plan-scoped cell would
+    // otherwise be picked up by `.find()` at random and decide a guest-facing price or restriction.
+    db.dailyCell.findMany({ where: { propertyId: property.id, date: { gte: start, lt: end }, ratePlanId: null } }),
     db.ratePrice.findMany({ where: { propertyId: property.id, date: { gte: start, lt: end } } }),
     db.roomInventoryPeriod.findMany({ where: { propertyId: property.id, dateFrom: { lt: end }, dateTo: { gte: start } } }),
     db.hold.findMany({

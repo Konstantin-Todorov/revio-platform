@@ -148,8 +148,11 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
     prisma.roomInventoryPeriod.findMany({
       where: { roomTypeId: { in: rtIds }, dateFrom: { lt: end }, dateTo: { gte: start } },
     }),
+    // ROOM-LEVEL read: `ratePlanId: null` only. A cell that names a rate plan speaks for that plan
+    // alone, and this grid has one row per room — without the filter, two cells share a (room, date)
+    // key and whichever the database returned last silently wins.
     prisma.dailyCell.findMany({
-      where: { roomTypeId: { in: rtIds }, date: { gte: start, lt: end } },
+      where: { roomTypeId: { in: rtIds }, date: { gte: start, lt: end }, ratePlanId: null },
     }),
     prisma.hold.findMany({
       where: {
@@ -313,7 +316,10 @@ export async function remainingByNight(
 
   const [rt, cells, periods, holds, lines] = await Promise.all([
     prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId } }),
-    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: start, lt: end }, inventory: { not: null } } }),
+    // Availability is only ever written on the room-wide cell, so `ratePlanId: null` is what
+    // `inventory: { not: null }` was relying on by accident. Say it, so a future plan-scoped
+    // inventory field cannot quietly start feeding the waterfall twice.
+    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: start, lt: end }, ratePlanId: null, inventory: { not: null } } }),
     prisma.roomInventoryPeriod.findMany({ where: { roomTypeId, dateFrom: { lt: end }, dateTo: { gte: start } } }),
     prisma.hold.findMany({
       where: {
@@ -663,7 +669,10 @@ export async function stayViolation(
   const [standard, defaults, cells, rules] = await Promise.all([
     prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.propertyDefaults.findUnique({ where: { propertyId } }),
-    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: start, lt: end } } }),
+    // ROOM-LEVEL: this gate is asked "can this ROOM be sold for these nights", with no rate plan in
+    // hand, so it may only read room-wide cells. A plan-scoped restriction is deliberately NOT
+    // enforced here — enforcing it would close the whole room on the strength of one plan's rule.
+    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: start, lt: end }, ratePlanId: null } }),
     prisma.restrictionRule.findMany({
       where: { propertyId, active: true, dateFrom: { lt: end }, dateTo: { gte: start } },
     }),
