@@ -21,7 +21,32 @@ After each action: **Sync Center** shows the push with its Channex task ids, **e
 
 ---
 
-## Progress — 2026-08-10
+## Results so far — verified task ids
+
+Every id below has passed `channex:cert-verify`. **Tests 4–10 still to drive.**
+
+| Test | Task id | Push, as the Sync Center recorded it |
+| --- | --- | --- |
+| **1** Full sync · availability | `1f05a5d5-0722-4a36-b064-33f44ad456fd` | 2000/2000 · 2026-08-11 → 2027-12-23 (500 days) |
+| **1** Full sync · rates | `cfc73e27-4216-4ec5-ac18-44e2a530f79c` | *(same push)* |
+| **2** Single date, single rate | `38de012a-cb86-4a22-827b-dbac3a13d62e` | 1/1 · 2026-11-22 → 2026-11-22 (1 day) |
+| **3** Single date, multiple rates | `5b970e08-4fc6-40a3-86ad-eb8c5e72e2fa` | 3/3 · 2026-11-21 → 2026-11-29 (3 days) |
+
+Those counts are the delta work paying off: test 2 sends **one** update where the old code sent 56,
+and test 3 puts three different prices on three different dates into a **single** API call with no
+cross product — the requirement six of these tests turn on.
+
+Q16 wants both test-1 ids in one field, **availability first**.
+
+## The 499-day question — resolved
+
+Test 1 now covers the full 500. The push records its own window, and the two runs that read 499
+were taken while the rolling horizon sat one day outside the range the prices had been seeded over;
+with the window printed on every sync event a recurrence is visible immediately instead of needing
+to be reconstructed from payloads. Keep an eye on it when the seeded range and the horizon are ever
+re-cut — it is the kind of off-by-one that hides behind a healthy-looking "2000/2000".
+
+## Earlier findings — 2026-08-10
 
 **Step 0 done.** Five bulk applies through the UI; the four real products carry 500 clean days each
 (Twin BAR 100, Twin B&B 120, Double BAR 110, Double B&B 130, +25% over 20 Dec – 5 Jan).
