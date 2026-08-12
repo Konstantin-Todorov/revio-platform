@@ -223,6 +223,28 @@ badged, and still invoiced** so the billing flow stays testable. `/overview?demo
 populated behind an amber banner, because "look at it and see nothing" is a poor way to check it
 works. One click promotes a demo tenant to a real client with its whole history intact.
 
+**→ ✅ GUIDED FIRST-RUN SETUP (phase P2) — SHIPPED 2026-08-12, all three staff products.** `welcomeFlow`
+in `packages/core/src/onboarding/welcome.ts` (pure, 66 tests) decides which full-screen setup steps a
+hotel sees, and it branches on **what the shared core already holds**, not just on room count. A step
+is dropped only when it is satisfied *and* a product the hotel actually runs shares it — so RevioCRS
+added after RevioLink opens on one screen naming what carried over (property · room types · prices ·
+branding · staff logins, each with its source) and asks only tax; **six screens become three, a third
+product gets two plus its own**. Satisfied-but-unshared is still asked, pre-filled: the value may be a
+provisioning default nobody has read. Screens live at `apps/*/app/(setup)/welcome/[step]/`, outside
+`(protected)` so first-run inherits no nav to wander into; field groups are shared from
+`@revio/ui/welcome-fields` (the questions are platform facts) while each app owns its own writes. It
+closed three real holes: **`invoiceIssuerName`/`invoiceVatId`/`invoiceAddress` were asked on no screen
+in any product** (a hotel could issue a tax document with no VAT number on it), `reservationEmailPrimary`
+is now asked of a RevioLink-only hotel (unset, a channel booking lands nowhere a human looks — and it is
+*not* asked once a CRS or PMS exists to catch it), and we asked check-**out** but never check-**in**.
+RevioPMS gets a units step that generates a floor at a time and skips labels that already exist.
+**`SETUP_KEY` now owns the `setupCompleted` value** — it was written as `"cm"` by the checklists and
+`"RevioLink"` by the flow, so finishing setup did not stop the checklist asking again. Money and legal
+fields are asked at **every** size; staff is the only size-gated step. Deliberately excluded: the
+RevioDirect slug (permanent once issued; the brand step already reaches the booking page via
+`bookingBrandColor` null-inherits-email) and a cancellation-policy screen (the model is a label with no
+terms). See task #182 for room photos + cancellation terms.
+
 **→ 🔴 PHASE N (accounts & auth) IS NEXT, and N1 is a live hole.** There is **no rate limiting on any
 login form** — RevioLink, RevioCRS, RevioPMS and the Operator console all accept unlimited password
 attempts, and the operator console is one password away from every hotel's data. `auth.ts` also falls
