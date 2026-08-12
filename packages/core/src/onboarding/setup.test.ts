@@ -54,7 +54,7 @@ describe("nobody starts at zero", () => {
   });
 });
 
-describe("cross-product credit", () => {
+describe("shared steps", () => {
   it("a hotel already on RevioLink opens RevioCRS well past the start", () => {
     const solo = reviocrsSetup({ ...BRAND_NEW });
     const expanding = reviocrsSetup({ ...ON_REVIOLINK, alsoRuns: ["RevioLink"] });
@@ -62,41 +62,48 @@ describe("cross-product credit", () => {
     expect(expanding.done).toBe(3); // property + room types + rates
   });
 
-  it("names the product that already did the work", () => {
+  it("names the products the data is shared with", () => {
     const p = reviocrsSetup({ ...ON_REVIOLINK, alsoRuns: ["RevioLink"] });
     const rooms = p.steps.find((s) => s.key === "room-types")!;
     expect(rooms.done).toBe(true);
-    expect(rooms.inheritedFrom).toBe("RevioLink");
+    expect(rooms.sharedWith).toEqual(["RevioLink"]);
   });
 
-  it("lists what they did not have to do", () => {
+  it("lists what they did not have to enter twice", () => {
     const p = reviocrsSetup({ ...ON_REVIOLINK, alsoRuns: ["RevioLink"] });
-    expect(p.inherited.map((s) => s.key).sort()).toEqual(["rates", "room-types"]);
+    expect(p.shared.map((s) => s.key).sort()).toEqual(["rates", "room-types"]);
   });
 
-  it("RevioPMS inherits room types too", () => {
+  it("RevioPMS shares room types too", () => {
     const p = reviopmsSetup({ ...ON_REVIOLINK, alsoRuns: ["RevioLink"] });
-    expect(p.steps.find((s) => s.key === "room-types")?.inheritedFrom).toBe("RevioLink");
+    expect(p.steps.find((s) => s.key === "room-types")?.sharedWith).toEqual(["RevioLink"]);
   });
 
-  it("credits nothing to a product the hotel does not run", () => {
-    // A CRS-only hotel created its own room types. Telling it they came from RevioLink would be a
-    // lie about software it has never seen.
-    const p = reviocrsSetup({ ...ON_REVIOLINK });
-    expect(p.steps.find((s) => s.key === "room-types")?.inheritedFrom).toBeUndefined();
-    expect(p.inherited).toHaveLength(0);
-  });
-
-  it("credits nothing for a step that is not actually done", () => {
-    const p = reviocrsSetup({ ...BRAND_NEW, alsoRuns: ["RevioLink"] });
-    expect(p.steps.find((s) => s.key === "room-types")?.inheritedFrom).toBeUndefined();
-  });
-
-  it("never marks a product's OWN exclusive step as inherited", () => {
-    // Connecting a channel is RevioLink's alone; no other product can have done it.
+  it("makes NO authorship claim — it lists every sibling, not a guessed author", () => {
+    // We do not record which product created a room type. Naming one would contradict itself: each
+    // product would credit a different sibling for the same row.
     const p = reviolinkSetup({ ...ON_REVIOLINK, alsoRuns: ["RevioCRS", "RevioPMS"] });
-    expect(p.steps.find((s) => s.key === "channels")?.inheritedFrom).toBeUndefined();
-    expect(p.steps.find((s) => s.key === "mapping")?.inheritedFrom).toBeUndefined();
+    expect(p.steps.find((s) => s.key === "room-types")?.sharedWith).toEqual(["RevioCRS", "RevioPMS"]);
+  });
+
+  it("says nothing about a product the hotel does not run", () => {
+    // A CRS-only hotel created its own room types. Mentioning RevioLink would be talking about
+    // software it has never seen.
+    const p = reviocrsSetup({ ...ON_REVIOLINK });
+    expect(p.steps.find((s) => s.key === "room-types")?.sharedWith).toBeUndefined();
+    expect(p.shared).toHaveLength(0);
+  });
+
+  it("says nothing for a step that is not actually done", () => {
+    const p = reviocrsSetup({ ...BRAND_NEW, alsoRuns: ["RevioLink"] });
+    expect(p.steps.find((s) => s.key === "room-types")?.sharedWith).toBeUndefined();
+  });
+
+  it("never marks a product's OWN exclusive step as shared", () => {
+    // Connecting a channel is RevioLink's alone; no other product touches it.
+    const p = reviolinkSetup({ ...ON_REVIOLINK, alsoRuns: ["RevioCRS", "RevioPMS"] });
+    expect(p.steps.find((s) => s.key === "channels")?.sharedWith).toBeUndefined();
+    expect(p.steps.find((s) => s.key === "mapping")?.sharedWith).toBeUndefined();
   });
 });
 
@@ -135,9 +142,9 @@ describe("shape", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it("omits inheritedFrom entirely rather than setting it undefined", () => {
-    // A present-but-undefined key would make `inherited` count steps nobody inherited.
+  it("omits sharedWith entirely rather than setting it undefined", () => {
+    // A present-but-undefined key would make `shared` count steps that share nothing.
     const rooms = reviocrsSetup(ON_REVIOLINK).steps.find((s) => s.key === "room-types")!;
-    expect("inheritedFrom" in rooms).toBe(false);
+    expect("sharedWith" in rooms).toBe(false);
   });
 });

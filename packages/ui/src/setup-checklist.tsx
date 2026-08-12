@@ -17,8 +17,8 @@ export interface ChecklistStep {
   href: string;
   cta: string;
   done: boolean;
-  /** Another Revio product this hotel runs had already done this — see `@revio/core/onboarding`. */
-  inheritedFrom?: string;
+  /** Other Revio products this step's data is shared with — see `@revio/core/onboarding`. */
+  sharedWith?: string[];
   /** Done for them at provisioning rather than by them. */
   providedForYou?: boolean;
 }
@@ -91,18 +91,19 @@ export function SetupChecklist({ productName, promise, steps, done, total, actio
                   {s.title}
                 </div>
                 {!s.done && <div className="mt-0.5 text-[12px] leading-snug text-ink-500">{s.body}</div>}
-                {/* The single best moment to show what one shared core buys: these are not copies,
-                    they are the same records the other product has been using. */}
-                {s.inheritedFrom && (
+                {/* The single best moment to show what one shared core buys. Says SHARED WITH, never
+                    "set up in": we do not record which product created a record, and a guess here
+                    would contradict itself on a hotel that runs all three. */}
+                {s.sharedWith && s.sharedWith.length > 0 && (
                   <div className="mt-0.5 text-[12px] leading-snug text-success-600">
-                    Already set up in {s.inheritedFrom} — nothing to move across.
+                    Shared with {listProducts(s.sharedWith)} — you never enter this twice.
                   </div>
                 )}
               </div>
 
               {s.done ? (
                 <span className="shrink-0 text-[12px] font-semibold text-success-600">
-                  {s.inheritedFrom ? "Already done" : s.providedForYou ? "Set up for you" : "Done"}
+                  {s.sharedWith ? "Already there" : s.providedForYou ? "Set up for you" : "Done"}
                 </span>
               ) : (
                 <a
@@ -130,4 +131,10 @@ function CheckMark() {
       <path d="M3 8.5l3.5 3.5L13 5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
+}
+
+/** "RevioLink" · "RevioLink and RevioPMS" — an Oxford-comma-free list for two or three products. */
+function listProducts(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }

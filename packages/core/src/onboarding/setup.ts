@@ -19,11 +19,15 @@
  * were previously getting wrong — `0 of 4` described a hotel that was demonstrably further along
  * than that.
  *
- * **A step another product already satisfied says so.** When a hotel that runs RevioLink opens
- * RevioCRS, its room types and rates are already there — not copied, the same records. Ticking them
- * silently wastes the single best moment to show what one shared core buys: `inheritedFrom` lets the
- * screen say *"already set up in RevioLink"*, which is the zero-migration promise arriving as a
- * fact rather than a claim on a pricing page.
+ * **A shared step says that it is shared.** When a hotel that runs RevioLink opens RevioCRS, its
+ * room types and rates are already there — not copied, the same records. Ticking them silently
+ * wastes the single best moment to show what one shared core buys.
+ *
+ * ⚠️ It says *shared with*, never *set up in*. We do not record which product created a room type,
+ * so naming an author is a guess — and with all three products owned it is a guess that contradicts
+ * itself, since each product would credit a different sibling for the same row. What IS provable
+ * from the data model is that the record is one record, common to every product they run, and that
+ * they will never type it twice. That is also the claim worth making.
  */
 
 /** The products a hotel can run, by the name it sees on screen. */
@@ -39,12 +43,13 @@ export interface SetupStep {
   cta: string;
   done: boolean;
   /**
-   * Which other Revio product already satisfied this step, when one did.
+   * The other Revio products this step's data is shared with, when the hotel runs any.
    *
-   * Only set when the hotel actually runs that product — a CRS-only hotel created its own room
-   * types, and telling it they came from RevioLink would be a lie about software it has never seen.
+   * Only set when the hotel actually runs them — a CRS-only hotel created its own room types, and
+   * mentioning RevioLink would be talking about software it has never seen. Never an authorship
+   * claim: see the note at the top of this file.
    */
-  inheritedFrom?: ProductName;
+  sharedWith?: ProductName[];
   /**
    * True for work that was done for them rather than by them — the provisioning the operator did.
    * Rendered differently from a step they completed, because claiming their credit is patronising.
@@ -60,8 +65,8 @@ export interface SetupProgress {
   complete: boolean;
   /** The first unfinished step: what the hotel should do right now. */
   next: SetupStep | null;
-  /** Steps they did not have to do because another product had already done them. */
-  inherited: SetupStep[];
+  /** Steps already satisfied by data shared with another product they run. */
+  shared: SetupStep[];
 }
 
 function progress(steps: SetupStep[]): SetupProgress {
@@ -72,7 +77,7 @@ function progress(steps: SetupStep[]): SetupProgress {
     total: steps.length,
     complete: done === steps.length,
     next: steps.find((s) => !s.done) ?? null,
-    inherited: steps.filter((s) => s.inheritedFrom !== undefined),
+    shared: steps.filter((s) => s.sharedWith !== undefined),
   };
 }
 
@@ -106,10 +111,17 @@ export interface SetupFacts {
   alsoRuns?: ProductName[];
 }
 
-/** Did another product the hotel runs already do this? Returns the crediting product, or undefined. */
-function creditTo(f: SetupFacts, satisfied: boolean, candidates: ProductName[]): ProductName | undefined {
+/**
+ * Which of the hotel's other products share this step's data — or undefined when none do.
+ *
+ * Returns every match rather than the first, because "shared with RevioLink and RevioPMS" is true
+ * while "set up in RevioLink" is unknowable. Undefined (not an empty array) when there is nothing to
+ * say, so the key is omitted entirely.
+ */
+function sharedWith(f: SetupFacts, satisfied: boolean, candidates: ProductName[]): ProductName[] | undefined {
   if (!satisfied) return undefined;
-  return (f.alsoRuns ?? []).find((p) => candidates.includes(p));
+  const matches = (f.alsoRuns ?? []).filter((p) => candidates.includes(p));
+  return matches.length > 0 ? matches : undefined;
 }
 
 /**
@@ -143,7 +155,7 @@ export function reviolinkSetup(f: SetupFacts): SetupProgress {
       href: "/rooms-rates",
       cta: "Add room types",
       done: roomsDone,
-      ...maybe("inheritedFrom", creditTo(f, roomsDone, ["RevioCRS", "RevioPMS"])),
+      ...maybe("sharedWith", sharedWith(f, roomsDone, ["RevioCRS", "RevioPMS"])),
     },
     {
       key: "rates",
@@ -152,7 +164,7 @@ export function reviolinkSetup(f: SetupFacts): SetupProgress {
       href: "/bulk-update",
       cta: "Set rates",
       done: ratesDone,
-      ...maybe("inheritedFrom", creditTo(f, ratesDone, ["RevioCRS"])),
+      ...maybe("sharedWith", sharedWith(f, ratesDone, ["RevioCRS"])),
     },
     {
       key: "channels",
@@ -187,7 +199,7 @@ export function reviocrsSetup(f: SetupFacts): SetupProgress {
       href: "/rooms-rates",
       cta: "Add room types",
       done: roomsDone,
-      ...maybe("inheritedFrom", creditTo(f, roomsDone, ["RevioLink", "RevioPMS"])),
+      ...maybe("sharedWith", sharedWith(f, roomsDone, ["RevioLink", "RevioPMS"])),
     },
     {
       key: "rates",
@@ -196,7 +208,7 @@ export function reviocrsSetup(f: SetupFacts): SetupProgress {
       href: "/bulk",
       cta: "Set rates",
       done: ratesDone,
-      ...maybe("inheritedFrom", creditTo(f, ratesDone, ["RevioLink"])),
+      ...maybe("sharedWith", sharedWith(f, ratesDone, ["RevioLink"])),
     },
     {
       key: "taxes",
@@ -205,7 +217,7 @@ export function reviocrsSetup(f: SetupFacts): SetupProgress {
       href: "/settings",
       cta: "Open settings",
       done: f.hasTaxes,
-      ...maybe("inheritedFrom", creditTo(f, f.hasTaxes, ["RevioPMS"])),
+      ...maybe("sharedWith", sharedWith(f, f.hasTaxes, ["RevioPMS"])),
     },
     {
       key: "first-reservation",
@@ -231,7 +243,7 @@ export function reviopmsSetup(f: SetupFacts): SetupProgress {
       href: "/rooms",
       cta: "See rooms",
       done: roomsDone,
-      ...maybe("inheritedFrom", creditTo(f, roomsDone, ["RevioLink", "RevioCRS"])),
+      ...maybe("sharedWith", sharedWith(f, roomsDone, ["RevioLink", "RevioCRS"])),
     },
     {
       key: "units",
@@ -248,7 +260,7 @@ export function reviopmsSetup(f: SetupFacts): SetupProgress {
       href: "/configuration",
       cta: "Open configuration",
       done: f.hasTaxes,
-      ...maybe("inheritedFrom", creditTo(f, f.hasTaxes, ["RevioCRS"])),
+      ...maybe("sharedWith", sharedWith(f, f.hasTaxes, ["RevioCRS"])),
     },
     {
       key: "staff",
@@ -264,9 +276,8 @@ export function reviopmsSetup(f: SetupFacts): SetupProgress {
 /**
  * Spread an optional property only when it has a value.
  *
- * `exactOptionalPropertyTypes` is on, so `{ inheritedFrom: undefined }` is not the same as omitting
- * the key — and a present-but-undefined `inheritedFrom` would make `inherited` count steps nobody
- * inherited.
+ * `exactOptionalPropertyTypes` is on, so `{ sharedWith: undefined }` is not the same as omitting the
+ * key — and a present-but-undefined `sharedWith` would make `shared` count steps that share nothing.
  */
 function maybe<K extends string, V>(key: K, value: V | undefined): Record<K, V> | Record<string, never> {
   return value === undefined ? {} : ({ [key]: value } as Record<K, V>);

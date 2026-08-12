@@ -123,12 +123,12 @@ export function SetupProgressCard({
                         {s.title}
                       </span>
                       {/* Worth seeing before a call: the expansion sale largely made itself. */}
-                      {s.inheritedFrom && (
+                      {s.sharedWith && s.sharedWith.length > 0 && (
                         <span className="ml-1.5 text-[11px] text-success-600">
-                          already done in {s.inheritedFrom}
+                          shared with {s.sharedWith.join(", ")}
                         </span>
                       )}
-                      {s.providedForYou && !s.inheritedFrom && (
+                      {s.providedForYou && !s.sharedWith && (
                         <span className="ml-1.5 text-[11px] text-ink-400">set up at onboarding</span>
                       )}
                     </span>
