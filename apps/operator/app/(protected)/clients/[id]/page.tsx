@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClientDetail } from "@/lib/data";
+import { SetupProgressCard } from "@/components/clients/SetupProgressCard";
 import { setDemo } from "@/lib/actions";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
@@ -82,6 +83,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           </ul>
         </Card>
       )}
+
+      {/* 1b. How far they have actually got. Sits directly under what is wrong, because "stalled on
+          step 2 after three weeks" IS what is wrong for a young client — and because the answer to
+          most early attention flags is the same phone call. */}
+      <SetupProgressCard setup={c.setup} ageDays={c.ageDays} stalled={c.setupStalled} />
 
       {/* 2. Who they are and when this renews. The relationship comes before the arithmetic, because
           the arithmetic is useless if nobody knows who to phone about it. */}

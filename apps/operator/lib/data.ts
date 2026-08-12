@@ -6,6 +6,7 @@ import {
   entitlementsFor, monthlyPriceMinor, priceBreakdown, tierForRooms, type Entitlements, type ProductKey,
 } from "./pricing";
 import { clientAttention, sortBySeverity, worstSeverity } from "./attention";
+import { clientSetup, daysSince, setupStalled } from "./onboarding";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { channelEconomics, SOLD_STATUSES } from "@revio/core";
@@ -386,7 +387,8 @@ export async function getClientDetail(id: string) {
 
   const [roomTypes, units, channels, channelsConnected, reservations, openErrors, lastSync,
          lastReservation, reservationsLast30d, invoices, recentFailures, lines,
-         firstReservation, operators] = await Promise.all([
+         firstReservation, operators,
+         ratePlans, prices, taxes, catalogItems, unmappedRt, unmappedRp] = await Promise.all([
     prisma.roomType.count({ where: { tenantId: id } }),
     prisma.unit.count({ where: { tenantId: id } }),
     prisma.channel.findMany({ where: { tenantId: id }, select: { id: true, name: true, code: true, status: true, commissionPct: true, lastSyncAt: true, errorCount: true } }),
@@ -415,6 +417,13 @@ export async function getClientDetail(id: string) {
     // Timeline milestones.
     prisma.reservation.findFirst({ where: { tenantId: id }, orderBy: { importedAt: "asc" }, select: { importedAt: true } }),
     prisma.operatorUser.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // The remaining facts the shared onboarding checklist reads (the rest are already above).
+    prisma.ratePlan.count({ where: { tenantId: id } }),
+    prisma.ratePrice.count({ where: { tenantId: id } }),
+    prisma.taxFee.count({ where: { tenantId: id, active: true } }),
+    prisma.posItem.count({ where: { tenantId: id } }),
+    prisma.channelRoomTypeMapping.count({ where: { channel: { tenantId: id }, status: { not: "complete" } } }),
+    prisma.channelRatePlanMapping.count({ where: { channel: { tenantId: id }, status: { not: "complete" } } }),
   ]);
 
   // Aggregate by source the same way the CRS does, then hand it to the shared function.
@@ -502,8 +511,27 @@ export async function getClientDetail(id: string) {
     bookingEngineProperties, channelsConnected,
   });
 
+  /**
+   * How far this client has actually got, per product.
+   *
+   * Fed to the same `@revio/core` functions that draw the hotel's own checklist, so the console can
+   * never show a step the customer cannot see. `staff` counts users beyond the single Owner the
+   * operator created, which is what `reviopmsSetup` means by "add your team".
+   */
+  const setup = clientSetup(
+    {
+      roomTypes, ratePlans, hasRates: prices > 0,
+      channels: channels.filter((c) => c.status !== "disconnected").length,
+      mappingComplete: unmappedRt + unmappedRp === 0,
+      units, staff: tenant.users.length, hasTaxes: taxes > 0, catalogItems, reservations,
+    },
+    entitlements,
+  );
+  const ageDays = daysSince(tenant.createdAt);
+
   return {
     tenant, entitlements, attention, opportunities,
+    setup, ageDays, setupStalled: setupStalled(setup, ageDays),
     pipelineMinor: pipelineMinor(opportunities),
     drift: tierDrift(tenant.plan, units),
     billing: { monthlyMinor: monthly, products: billedProducts(entitlements), invoices },
