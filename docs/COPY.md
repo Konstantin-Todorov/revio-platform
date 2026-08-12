@@ -63,6 +63,25 @@ dev-speak — they are the mechanism that keeps fake hotels out of MRR (see `app
 Those stay. So does the honest "no Stripe key is configured" state: rewording it is fine, claiming a
 live connection is not.
 
+## The check
+
+```bash
+pnpm copy:lint
+```
+
+`scripts/copy-lint.mjs` scans user-visible strings in the four staff apps (plus the shared email
+templates and `@revio/ui`) and fails on the half of this document a machine can judge: environment
+variable names, package paths, `mock`, `waterfall`, spec `§` references, `TODO`, "coming soon".
+
+It cannot judge **rule 4** — whether a subtitle helps someone decide something. That stays a human
+call, which is why the lint is deliberately narrow: a list broad enough to flag real hotel vocabulary
+("rate plan", "folio") is a list somebody switches off.
+
+⚠️ The first version of this script reported **"clean" having scanned zero files** — the repo path
+contains a space, `URL.pathname` percent-encoded it, every `readdir` failed, and the failures were
+swallowed. It now prints the file count and treats an empty scan as a hard error. A check that cannot
+fail is worse than no check, because it is believed. Before trusting a clean run, confirm the count.
+
 ## Vocabulary
 
 | Concept | Say | Not |

@@ -26,7 +26,7 @@ export default async function Page() {
           <Card>
             <CardHeader
               title="Reservation delivery & notifications"
-              subtitle="Where channel bookings are emailed when no PMS/CRS takes delivery, plus the arrival summaries"
+              subtitle="Where channel bookings are emailed, plus the daily arrival summaries"
             />
             <div className="p-5">
               <DeliverySettingsForm property={property} emailMode={process.env.RESEND_API_KEY ? "resend" : "mock"} />

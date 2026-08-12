@@ -78,7 +78,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
             action={<span className={`tnum text-[13px] font-bold ${folio.totals.balance === 0 ? "text-success-600" : "text-danger-600"}`}>{money(folio.totals.balance, currency)}</span>}
           />
           {folio.lines.length === 0 ? (
-            <div className="px-4 py-4 text-center text-[12.5px] text-ink-400">No lines yet — move charges here from the guest folio.</div>
+            <div className="px-4 py-4 text-center text-[12.5px] text-ink-400">Nothing on this folio yet — move charges across from the main one.</div>
           ) : (
             <ul className="divide-y divide-surface-border">
               {folio.lines.map((l) => {

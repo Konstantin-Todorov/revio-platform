@@ -217,7 +217,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
         />
         {periods.length === 0 ? (
           <div className="flex items-center gap-2 px-4 py-5 text-[13px] text-ink-500">
-            <CalendarOff className="h-4 w-4" /> No periods — add one when rooms go under maintenance or a wing closes seasonally.
+            <CalendarOff className="h-4 w-4" /> Nothing closed — add a closure when rooms go under maintenance or a wing shuts for the season.
           </div>
         ) : (
           <div className="overflow-x-auto">

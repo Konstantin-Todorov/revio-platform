@@ -597,7 +597,7 @@ async function AvailabilityReport() {
         </table>
       </div>
       <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-        <StatusPill tone="danger">overbooked</StatusPill> <StatusPill tone="warning">low</StatusPill> — full waterfall detail on the Inventory Calendar.
+        <StatusPill tone="danger">overbooked</StatusPill> <StatusPill tone="warning">low</StatusPill> — day-by-day availability is on the Inventory Calendar.
       </p>
     </Card>
   );

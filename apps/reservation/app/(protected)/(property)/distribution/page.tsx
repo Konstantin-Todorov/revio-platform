@@ -66,24 +66,30 @@ export default async function DistributionPage() {
         </div>
       </Card>
 
-      {/* CRS ↔ CM mapping (spec §3.8) — a DISTINCT layer from CM ↔ OTA mapping, never blurred. */}
+      {/* CRS ↔ CM mapping (spec §3.8) — a DISTINCT layer from CM ↔ OTA mapping, never blurred.
+          The distinction is ours to maintain, not theirs to learn: the screen says where each job is
+          done and stops. It used to explain the layering and the third-party case, which is a feature
+          this hotel does not have. */}
       <Card>
-        <CardHeader title="CRS ↔ Channel-manager mapping" subtitle="Which CRS products the connected CM distributes" />
+        <CardHeader
+          title="What reaches your channels"
+          subtitle="The room types and rate plans your channel manager sends out"
+        />
         <div className="flex items-start gap-3 px-4 py-4">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-success-50 text-success-600"><Link2 className="h-4.5 w-4.5" /></span>
           <div className="text-[13px] text-ink-600">
-            <span className="font-semibold text-success-600">Automatic.</span> The CM is RevioLink — both products edit the{" "}
-            <span className="font-semibold text-ink-800">same room types and rate plans</span>, so there is nothing to map
-            (one record, two windows). With a third-party CM you would explicitly map CRS room types ↔ the CM's rooms here.
+            <span className="font-semibold text-success-600">Nothing to set up.</span> RevioLink sells the{" "}
+            <span className="font-semibold text-ink-800">same room types and rate plans</span> you edit here, so
+            they are already in step.
             <div className="mt-1.5 text-[12px] text-ink-400">
-              Channel-manager ↔ OTA mapping is a different layer and stays inside RevioLink → Mapping — never in the CRS.
+              Matching them to each channel&rsquo;s own listings is done in RevioLink → Mapping.
             </div>
           </div>
         </div>
       </Card>
 
       <Card>
-        <CardHeader title={`Channels distributed by the connected CM (${channels.length})`} />
+        <CardHeader title={`Channels your rooms are sold on (${channels.length})`} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>

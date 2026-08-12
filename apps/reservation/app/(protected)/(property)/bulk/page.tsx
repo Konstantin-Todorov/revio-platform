@@ -56,7 +56,7 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
           action={<RestrictionDialog roomTypes={roomTypes} channels={channels} />}
         />
         {rules.length === 0 ? (
-          <div className="px-4 py-5 text-[13px] text-ink-500">No rules yet — rules override rate-plan and property defaults for their date range.</div>
+          <div className="px-4 py-5 text-[13px] text-ink-500">No rules yet — add one to apply a restriction across a range of dates.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">

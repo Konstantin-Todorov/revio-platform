@@ -64,7 +64,7 @@ export default async function Page() {
                   <td className="px-4 py-3">
                     {r.channexChannels > 0
                       ? <StatusPill tone="info">{r.channexChannels} on Channex</StatusPill>
-                      : <StatusPill tone="neutral">all mock</StatusPill>}
+                      : <StatusPill tone="neutral">all on test</StatusPill>}
                   </td>
                 </tr>
               ))}

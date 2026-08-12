@@ -280,7 +280,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </Card>
 
         <Card>
-          <CardHeader title="Invoices — payments are mocked, no money moved" />
+          {/* The fact is load-bearing and stays: no money moves anywhere in this console. Only the
+              word changed — "mocked" is our vocabulary, and it reads as "pretend" to anyone else. */}
+          <CardHeader title="Invoices — issued and tracked here, but no payment is ever taken" />
           {c.billing.invoices.length === 0 ? (
             <p className="px-4 py-5 text-[13px] text-ink-500">No invoices generated yet.</p>
           ) : (

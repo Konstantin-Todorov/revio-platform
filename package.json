@@ -13,6 +13,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
+    "copy:lint": "node scripts/copy-lint.mjs",
     "db:seed": "pnpm --filter @revio/channel-manager db:seed"
   },
   "devDependencies": {

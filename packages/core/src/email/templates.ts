@@ -160,7 +160,9 @@ With warm regards,
   {
     key: "reservation_delivery",
     label: "New booking (to the hotel)",
-    description: "Internal — a channel booking emailed to the hotel when they run no CRS or PMS.",
+    // Second person: the hotel reading this list IS the hotel. It used to describe them in the
+    // third person and name the products they do not have.
+    description: "Sent to you the moment a booking arrives from one of your channels.",
     audience: "staff",
     canDisable: true,
     variables: { propertyName: "Hotel Sofia", channelName: "Booking.com", bookings: "• Elena Petrova — Deluxe Double · 14 Aug → 17 Aug" },
@@ -172,7 +174,7 @@ With warm regards,
   {
     key: "arrival_digest",
     label: "Daily arrivals (to the hotel)",
-    description: "Internal — today's/tomorrow's arrivals list at the hotel's chosen time.",
+    description: "Your arrivals list, sent at the time you choose.",
     audience: "staff",
     canDisable: true,
     variables: { propertyName: "Hotel Sofia", label: "Today's arrivals", day: "2026-08-14", arrivals: "• Elena Petrova — Deluxe Double · 3n · Booking.com" },

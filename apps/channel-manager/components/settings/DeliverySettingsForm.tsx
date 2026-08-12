@@ -70,8 +70,12 @@ export function DeliverySettingsForm({ property, emailMode }: Props) {
       {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* The state, not the remedy. A hotel cannot act on the name of our environment variable —
+            but it must know when its guest mail is not actually leaving, so this never softens. */}
         <span className="text-[11.5px] text-ink-400">
-          Email provider: {emailMode === "resend" ? "Resend (live)" : "mock — set RESEND_API_KEY to send real mail"}
+          {emailMode === "resend"
+            ? "Email sending is connected."
+            : "Email sending is not connected yet — messages are recorded but not delivered."}
         </span>
         <div className="flex gap-2">
           <button
