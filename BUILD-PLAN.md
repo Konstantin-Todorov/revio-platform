@@ -38,6 +38,38 @@ connection is not.
 
 ### P2 — Onboarding
 
+**Two founder decisions, 2026-08-12.**
+
+**1 · Operator-led accounts + a public sandbox. No time-limited trial.** A hotel gets a real account
+because we made one; anyone else can open a seeded sandbox from the login page and click everything.
+The reasoning is specific to this product rather than general caution: **a half-configured channel
+manager pushes wrong availability to Booking.com.** Every other trial product fails by doing nothing;
+ours fails by doing something wrong, at the hotel's expense. An OTA connection cannot be self-served
+anyway, an empty PMS demonstrates nothing, and Channex bills per property. Mews, Cloudbeds and
+SiteMinder all gate on a demo call; the exception is Little Hotelier — small properties, simpler
+product — which is exactly why decision 2 matters. See task P4.
+
+**2 · One flow that adapts to the property's size.** Room count is asked early (it is already needed
+for the pricing tier — `tierForRooms`) and branches:
+
+| | Small — ≤30 rooms, owner does everything | Larger — a revenue or ops manager exists |
+| --- | --- | --- |
+| Steps | 3: rooms → one price → go live | 5: + taxes, + team |
+| Taxes | jurisdiction default, editable later | asked, because someone owns it |
+| Team | skipped — the owner *is* the team | invite staff before going live |
+| Defaults | aggressive | offered, not assumed |
+
+The point is that a 12-room guesthouse is never asked about deposit types, and a 120-room hotel is
+never left to discover taxes after its first invoice.
+
+**The shape.** A full-screen first-run flow — no sidebar, one decision per screen, a progress rail —
+then the existing checklist card as the hub anyone who skipped a step returns to. Full-screen because
+a sidebar during setup is an invitation to wander off.
+
+**"Go live" is its own step, deliberately last and explicit.** Everything before it is reversible and
+reaches nobody. That single switch is what separates a hotel exploring the product from a hotel whose
+rooms are on sale — and it is the reason a sandbox is a better trial than a countdown.
+
 **Shape: deepen the existing checklist into a guided flow.** `packages/core/src/onboarding/setup.ts`
 already defines setup per product and `@revio/ui/setup-checklist` already renders it on three dashboards.
 Build on both. **Hotel self-serve, operator can assist** — the Operator attention feed already flags
