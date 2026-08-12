@@ -1,8 +1,10 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { forSystem } from "@revio/db";
-import { hashPassword } from "./auth";
+import { forSystem, issueToken } from "@revio/db";
+import { inviteEmail } from "@revio/core";
+import { sendEmail } from "@revio/email";
 import { getOperatorSession } from "./session";
 
 const prisma = forSystem();
@@ -24,8 +26,22 @@ export async function inviteOperator(fd: FormData): Promise<void> {
 
   const exists = await prisma.operatorUser.findUnique({ where: { email } });
   if (exists) return;
-  const passwordHash = await hashPassword("revio1234");
-  await prisma.operatorUser.create({ data: { name, email, role, passwordHash } });
+  // No password — our own staff get the same invitation flow as a hotel's. An admin console whose
+  // accounts are created with a password someone else typed is the account most worth stealing.
+  const created = await prisma.operatorUser.create({ data: { name, email, role } });
+
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const token = await issueToken({ purpose: "invite", email, operatorUserId: created.id });
+  const mail = inviteEmail({
+    name,
+    context: "the Revio operator console",
+    ...(session.name ? { invitedBy: session.name } : {}),
+    url: `${proto}://${host}/accept-invite/${token}`,
+  });
+  await sendEmail({ to: [email], subject: mail.subject, text: mail.text });
+
   revalidatePath("/settings");
 }
 

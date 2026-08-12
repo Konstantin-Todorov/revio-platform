@@ -1,8 +1,12 @@
 "use server";
 
+import { headers } from "next/headers";
+import { issueToken } from "@revio/db";
+import { inviteEmail } from "@revio/core";
+import { sendEmail } from "@revio/email";
+
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
-import { hashPassword } from "./auth";
 import { getSession } from "./session";
 import { str } from "./mutation-helpers";
 
@@ -28,9 +32,9 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
   if (!ROLES.includes(role as (typeof ROLES)[number])) return { ok: false, error: "Pick a valid role." };
   if (await prisma.user.findUnique({ where: { email } })) return { ok: false, error: "A user with that email already exists." };
 
-  // Demo: new staff get the shared demo password. Production: email an invite link to set their own.
-  const passwordHash = await hashPassword("revio1234");
-  await prisma.user.create({ data: { tenantId: s.tenantId, name, email, role, passwordHash } });
+  // No password. The account is unusable until the invitee sets one from the emailed link.
+  const user = await prisma.user.create({ data: { tenantId: s.tenantId, name, email, role } });
+  await sendInvite({ email, name, userId: user.id, hotel: s.tenantName, ...(s.userName ? { invitedBy: s.userName } : {}) });
   revalidatePath("/settings");
   return { ok: true };
 }
@@ -78,4 +82,32 @@ export async function addProperty(_prev: ActionResult | null, fd: FormData): Pro
   revalidatePath("/settings");
   revalidatePath("/", "layout"); // refresh the workspace switcher
   return { ok: true };
+}
+
+/**
+ * Send an invitation instead of assigning a password.
+ *
+ * The account is created with NO password and cannot be signed into until the invitee sets one, so
+ * nobody — not the owner who invited them, not us — ever knows another person's password. That was
+ * not true until N2: every account on the platform shared one hardcoded value.
+ */
+async function sendInvite(args: {
+  email: string;
+  name: string;
+  userId: string;
+  invitedBy?: string;
+  /** The hotel they are joining — what makes the email recognisable to someone new to Revio. */
+  hotel: string;
+}): Promise<void> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const token = await issueToken({ purpose: "invite", email: args.email, userId: args.userId });
+  const mail = inviteEmail({
+    name: args.name,
+    context: args.hotel,
+    ...(args.invitedBy ? { invitedBy: args.invitedBy } : {}),
+    url: `${proto}://${host}/accept-invite/${token}`,
+  });
+  await sendEmail({ to: [args.email], subject: mail.subject, text: mail.text });
 }

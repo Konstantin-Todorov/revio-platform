@@ -9,4 +9,22 @@ export {
   type LoginScope,
   type GateResult,
 } from "./login-gate.js";
+export {
+  requestPasswordReset,
+  inviteStaff,
+  completePasswordSet,
+  type AuthScope,
+  type SendableEmail,
+  type SetPasswordResult,
+} from "./auth-flows.js";
+export {
+  issueToken,
+  resolveToken,
+  consumeToken,
+  revokeTokensFor,
+  pruneAuthTokens,
+  hashToken,
+  type ResolvedToken,
+  type TokenResolution,
+} from "./auth-tokens.js";
 export * from "@prisma/client";

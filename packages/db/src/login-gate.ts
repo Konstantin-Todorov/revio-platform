@@ -21,8 +21,23 @@ import {
   type LoginGatePolicy,
 } from "@revio/core";
 
-/** Which sign-in form an attempt was made against. */
-export type LoginScope = "cm" | "crs" | "pms" | "operator";
+/**
+ * Which form an attempt was made against.
+ *
+ * The `reset-*` scopes share this table because they need the identical thing: a per-address counter
+ * that survives a deploy. What they throttle is different — not password guessing, but using our
+ * mail server to flood someone's inbox, which is both an abuse of us and a way to bury a real
+ * security alert under noise.
+ */
+export type LoginScope =
+  | "cm"
+  | "crs"
+  | "pms"
+  | "operator"
+  | "reset-cm"
+  | "reset-crs"
+  | "reset-pms"
+  | "reset-operator";
 
 export interface GateResult {
   allowed: boolean;

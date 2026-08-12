@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { forSystem } from "@revio/db";
-import { hashPassword } from "./auth";
+import { forSystem, issueToken } from "@revio/db";
+import { inviteEmail } from "@revio/core";
+import { sendEmail } from "@revio/email";
+import { primaryProduct } from "./product-origins";
 
 // Operator provisions clients across all tenants → bypass RLS (app.bypass=on).
 const prisma = forSystem();
@@ -44,14 +46,13 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
   let slug = slugify(name);
   if (await prisma.tenant.findUnique({ where: { slug } })) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
 
-  // Demo: give the Owner the shared demo password so the new hotel can log in immediately.
-  // Production: send an invite link and let the Owner set their own password (passwordHash stays null).
-  const passwordHash = await hashPassword("revio1234");
-
+  // The Owner is created with NO password and receives an invitation. This is the first account a
+  // new client ever gets, so it is the one that most needs to be theirs alone — nobody at Revio ever
+  // knows a customer's password, which was not true while every account shared one hardcoded value.
   const tenant = await prisma.tenant.create({
     data: {
       name, slug, plan, status: "active", ...entitlements,
-      users: { create: [{ name: ownerName, email: ownerEmail, role: "owner", passwordHash }] },
+      users: { create: [{ name: ownerName, email: ownerEmail, role: "owner" }] },
       properties: { create: [{ name: propertyName, baseCurrency: "EUR", timezone: "Europe/Sofia" }] },
     },
     include: { properties: true },
@@ -62,6 +63,22 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
   await prisma.ratePlan.create({
     data: { tenantId: tenant.id, propertyId: property.id, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 },
   });
+
+  // The invitation lands on the product they bought, not on this console — which they can never
+  // sign into. If the mail fails we do NOT unwind the tenant: the client exists and is correct, and
+  // an operator can re-send from the client page. Losing a whole onboarding to a mail hiccup would
+  // be the worse failure.
+  const owner = await prisma.user.findUnique({ where: { email: ownerEmail } });
+  if (owner) {
+    const product = primaryProduct(entitlements);
+    const token = await issueToken({ purpose: "invite", email: ownerEmail, userId: owner.id });
+    const mail = inviteEmail({
+      name: ownerName,
+      context: name,
+      url: `${product.origin}/accept-invite/${token}`,
+    });
+    await sendEmail({ to: [ownerEmail], subject: mail.subject, text: mail.text });
+  }
 
   revalidatePath("/clients");
   revalidatePath("/overview");

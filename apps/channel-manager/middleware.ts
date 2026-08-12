@@ -5,10 +5,17 @@ const SESSION_COOKIE = "revio_session";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  // Public auth surfaces. A password reset is, by definition, requested by someone who cannot
+  // sign in — so these must be reachable without a session or the whole flow is a dead link.
+  const isPublic =
+    pathname === "/login" ||
+    pathname === "/forgot-password" ||
+    pathname.startsWith("/reset-password/") ||
+    pathname.startsWith("/accept-invite/");
   const isLogin = pathname === "/login";
   const hasSession = req.cookies.has(SESSION_COOKIE);
 
-  if (!hasSession && !isLogin) {
+  if (!hasSession && !isPublic) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

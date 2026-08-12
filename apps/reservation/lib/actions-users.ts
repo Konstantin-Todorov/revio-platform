@@ -1,5 +1,10 @@
 "use server";
 
+import { headers } from "next/headers";
+import { issueToken } from "@revio/db";
+import { inviteEmail } from "@revio/core";
+import { sendEmail } from "@revio/email";
+
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@revio/db";
 import { prisma } from "./db";
@@ -41,10 +46,10 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
   if (!name || !email) return { ok: false, error: "Name and email are required." };
   if (!isRole(role)) return { ok: false, error: "Pick a valid role." };
 
-  // Demo: new staff get the shared demo password. Production: email an invite link to set their own.
-  const passwordHash = await hashPassword("revio1234");
+  // No password. The account is unusable until the invitee sets one from the emailed link.
   try {
-    await prisma.user.create({ data: { tenantId: s.tenantId, name, email, phone, role, passwordHash } });
+    const user = await prisma.user.create({ data: { tenantId: s.tenantId, name, email, phone, role } });
+    await sendInvite({ email, name, userId: user.id, hotel: s.tenantName, ...(s.userName ? { invitedBy: s.userName } : {}) });
   } catch (e) {
     // email is globally unique on the shared identity — RLS hides other tenants' rows, so a cross-tenant
     // collision only shows up here.
@@ -126,6 +131,38 @@ export async function resetUserPassword(fd: FormData): Promise<void> {
   const id = str(fd, "id");
   const u = await prisma.user.findUnique({ where: { id } });
   if (!u || u.tenantId !== s.tenantId) return;
-  await prisma.user.update({ where: { id }, data: { passwordHash: await hashPassword("revio1234") } });
+  // A "reset" that sets a password an owner knows is not a reset — it is a way for one person to
+  // enter another's account. This clears the password and sends the invite flow instead, so the
+  // staff member chooses their own and nobody else ever holds it.
+  await prisma.user.update({ where: { id }, data: { passwordHash: null } });
+  await sendInvite({ email: u.email, name: u.name ?? u.email, userId: u.id, hotel: s.tenantName });
   revalidatePath("/settings");
+}
+
+/**
+ * Send an invitation instead of assigning a password.
+ *
+ * The account is created with NO password and cannot be signed into until the invitee sets one, so
+ * nobody — not the owner who invited them, not us — ever knows another person's password. That was
+ * not true until N2: every account on the platform shared one hardcoded value.
+ */
+async function sendInvite(args: {
+  email: string;
+  name: string;
+  userId: string;
+  invitedBy?: string;
+  /** The hotel they are joining — what makes the email recognisable to someone new to Revio. */
+  hotel: string;
+}): Promise<void> {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const token = await issueToken({ purpose: "invite", email: args.email, userId: args.userId });
+  const mail = inviteEmail({
+    name: args.name,
+    context: args.hotel,
+    ...(args.invitedBy ? { invitedBy: args.invitedBy } : {}),
+    url: `${proto}://${host}/accept-invite/${token}`,
+  });
+  await sendEmail({ to: [args.email], subject: mail.subject, text: mail.text });
 }

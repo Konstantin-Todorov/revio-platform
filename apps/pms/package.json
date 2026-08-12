@@ -15,6 +15,7 @@
     "@revio/connectivity": "workspace:*",
     "@revio/core": "workspace:*",
     "@revio/db": "workspace:*",
+    "@revio/email": "workspace:*",
     "@revio/payments": "workspace:*",
     "@revio/ui": "workspace:*",
     "bcryptjs": "^2.4.3",

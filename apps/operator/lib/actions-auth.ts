@@ -22,8 +22,11 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
   const gate = await checkLoginAllowed("operator", email, OPERATOR_LOGIN_GATE);
   if (!gate.allowed) return { error: gate.message };
 
+  // `!op.passwordHash` is an invited account nobody has claimed yet. It gets the same answer as a
+  // wrong password — saying "this account exists but has no password" would confirm the address and
+  // point an attacker at the one account with no password to guess.
   const op = await prisma.operatorUser.findUnique({ where: { email } });
-  if (!op || !(await verifyPassword(password, op.passwordHash))) {
+  if (!op || !op.passwordHash || !(await verifyPassword(password, op.passwordHash))) {
     await recordLoginFailure("operator", email, OPERATOR_LOGIN_GATE);
     return { error: "Invalid email or password." };
   }

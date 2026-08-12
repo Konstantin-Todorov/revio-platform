@@ -76,7 +76,8 @@ model OperatorUser {
   name         String
   email        String   @unique
   role         String   @default("super_admin") // super_admin | support
-  passwordHash String
+  /// Null until the invitation is accepted — an operator account that nobody has claimed cannot sign in.
+  passwordHash String?
   createdAt    DateTime @default(now())
 
   ownedAccounts ClientAccount[]
@@ -1439,4 +1440,31 @@ model LoginAttempt {
 
   @@unique([scope, identifier])
   @@index([updatedAt])
+}
+
+/// Single-use links: staff invitations and password resets (N2).
+///
+/// Like LoginAttempt, deliberately NOT tenant-scoped and carrying NO RLS policy — both flows run
+/// before any session exists, and a reset is requested by someone who by definition cannot sign in.
+///
+/// `tokenHash` is a SHA-256 of the token that went out in the email; the token itself is never
+/// stored. A dump of this table therefore yields no working links. `userId` and `operatorUserId` are
+/// both nullable and exactly one is set: hotel staff and our own staff live in different tables but
+/// need the identical flow.
+model AuthToken {
+  id             String    @id @default(cuid())
+  /// invite | reset
+  purpose        String
+  /// SHA-256 hex of the emailed token. Unique so a collision is a database error, not a login.
+  tokenHash      String    @unique
+  userId         String?
+  operatorUserId String?
+  /// Kept alongside the id so an expired token can still be described without joining.
+  email          String
+  expiresAt      DateTime
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([email, purpose])
+  @@index([expiresAt])
 }
