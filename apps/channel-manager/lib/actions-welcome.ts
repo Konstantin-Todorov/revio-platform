@@ -178,6 +178,45 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
   return advance("prices");
 }
 
+/**
+ * The personalisation step — one answer, two guest-facing surfaces.
+ *
+ * `emailBrandColor` is the root of the branding chain: `bookingBrandColor` is nullable and NULL means
+ * "inherit the email colour". So a hotel that sets a colour here has also branded its own booking
+ * page without being asked twice, and a hotel that later wants the page to differ can override just
+ * that one field. Writing both columns here would break that inheritance permanently.
+ */
+export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const session = await getSession();
+  if (!session) return { error: "Your session expired — sign in again." };
+
+  const colour = str(fd, "emailBrandColor").trim();
+  if (colour && !/^#[0-9a-fA-F]{6}$/.test(colour)) {
+    return { error: "Use a colour like #0E7C86." };
+  }
+
+  const logo = str(fd, "emailLogoUrl").trim();
+  if (logo && !/^https:\/\//.test(logo)) {
+    // http:// logos are blocked by mail clients and browsers alike; failing here is kinder than a
+    // broken image on every confirmation a guest receives.
+    return { error: "The logo link needs to start with https://" };
+  }
+
+  await prisma.property.update({
+    where: { id: session.activePropertyId },
+    data: {
+      emailSenderName: str(fd, "emailSenderName").trim() || null,
+      emailBrandColor: colour || null,
+      emailLogoUrl: logo || null,
+      // bookingBrandColor / bookingLogoUrl are left NULL on purpose — that is what makes the booking
+      // page follow this colour instead of freezing a copy of it.
+    },
+  });
+
+  revalidatePath("/settings/emails");
+  return advance("brand");
+}
+
 /** Leave a step for later. It stays on the dashboard checklist, which is the point of allowing it. */
 export async function skipWelcomeStep(fd: FormData): Promise<void> {
   await advance(str(fd, "from"));

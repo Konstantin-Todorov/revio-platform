@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { WelcomeContinue } from "@revio/ui/welcome-shell";
 import {
   addWelcomeRoomType,
+  saveWelcomeBrand,
   saveWelcomeProperty,
   setWelcomePrice,
   type WelcomeResult,
@@ -132,6 +133,98 @@ export function PriceForm({ currency, roomTypeCount }: { currency: string; roomT
       <div className="pt-1">
         <WelcomeContinue label="Set this price" pending={pending} />
       </div>
+    </form>
+  );
+}
+
+/**
+ * The personalisation step. The only screen in first-run that gives something back.
+ *
+ * A live preview rather than a form: the point of asking is that they see the result, which is also
+ * why this is the step most likely to be finished rather than skipped.
+ */
+export function BrandForm({
+  propertyName,
+  senderName,
+  brandColor,
+  logoUrl,
+}: {
+  propertyName: string;
+  senderName: string | null;
+  brandColor: string | null;
+  logoUrl: string | null;
+}) {
+  const [state, action, pending] = useActionState<WelcomeResult | null, FormData>(saveWelcomeBrand, null);
+  const [colour, setColour] = useState(brandColor ?? "#0E7C86");
+  const [name, setName] = useState(senderName ?? propertyName);
+
+  return (
+    <form action={action} className="space-y-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block">
+          <span className={label}>Sender name</span>
+          <input
+            name="emailSenderName"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={input}
+            placeholder={propertyName}
+          />
+          <span className="mt-1 block text-[12px] text-ink-400">Who guest emails appear to come from.</span>
+        </label>
+
+        <label className="block">
+          <span className={label}>Your colour</span>
+          <span className="flex items-center gap-2">
+            <input
+              type="color"
+              value={colour}
+              onChange={(e) => setColour(e.target.value)}
+              className="h-10 w-14 cursor-pointer rounded-md border border-surface-border bg-white p-1"
+              aria-label="Brand colour"
+            />
+            <input
+              name="emailBrandColor"
+              value={colour}
+              onChange={(e) => setColour(e.target.value)}
+              className={input}
+            />
+          </span>
+        </label>
+      </div>
+
+      <label className="block">
+        <span className={label}>Logo link (optional)</span>
+        <input name="emailLogoUrl" defaultValue={logoUrl ?? ""} className={input} placeholder="https://…" />
+        <span className="mt-1 block text-[12px] text-ink-400">
+          You can upload one later in Settings — a link is quicker if you already have it online.
+        </span>
+      </label>
+
+      {/* What they are actually buying with this screen. */}
+      <div className="overflow-hidden rounded-lg border border-surface-border bg-white">
+        <div className="border-b border-surface-border px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wider text-ink-400">
+          Preview
+        </div>
+        <div className="p-5">
+          <div className="text-[13px] font-bold" style={{ color: colour }}>
+            {name || propertyName}
+          </div>
+          <p className="mt-2 text-[13px] text-ink-700">Dear Elena, your booking is confirmed.</p>
+          <span
+            className="mt-3 inline-block rounded-md px-3.5 py-2 text-[12.5px] font-semibold text-white"
+            style={{ backgroundColor: colour }}
+          >
+            View your booking
+          </span>
+          <p className="mt-4 text-[11.5px] text-ink-400">
+            The same colour is used on your own booking page unless you change it there.
+          </p>
+        </div>
+      </div>
+
+      {state?.error && <p className={err}>{state.error}</p>}
+      <WelcomeContinue label="Use this" pending={pending} />
     </form>
   );
 }

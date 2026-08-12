@@ -4,7 +4,7 @@ import { welcomeFlow, skippedForSize, totalRooms as sumRooms, isSmallProperty } 
 import { WelcomeShell, WelcomeContinue } from "@revio/ui/welcome-shell";
 import { prisma } from "@/lib/db";
 import { getProperty } from "@/lib/data";
-import { PriceForm, PropertyForm, RoomTypeForm } from "@/components/welcome/WelcomeForms";
+import { BrandForm, PriceForm, PropertyForm, RoomTypeForm } from "@/components/welcome/WelcomeForms";
 import { finishWelcome, finishWelcomeRooms, removeWelcomeRoomType, skipWelcomeStep } from "@/lib/actions-welcome";
 
 export const dynamic = "force-dynamic";
@@ -99,6 +99,15 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
       )}
 
       {step === "prices" && <PriceForm currency={property.baseCurrency} roomTypeCount={roomTypes.length} />}
+
+      {step === "brand" && (
+        <BrandForm
+          propertyName={property.name}
+          senderName={property.emailSenderName}
+          brandColor={property.emailBrandColor}
+          logoUrl={property.emailLogoUrl}
+        />
+      )}
 
       {step === "team" && (
         <div className="space-y-4">

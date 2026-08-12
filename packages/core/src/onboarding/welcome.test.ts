@@ -35,18 +35,24 @@ describe("the size branch", () => {
     expect(welcomeFlow(product, SMALL).length).toBeLessThan(welcomeFlow(product, LARGE).length);
   });
 
-  it("never asks a 12-room guesthouse about taxes or staff", () => {
+  it("never asks a 12-room guesthouse about staff — the owner IS the staff", () => {
     for (const product of PRODUCTS) {
-      const keys = welcomeFlow(product, SMALL).map((s) => s.key);
-      expect(keys).not.toContain("taxes");
-      expect(keys).not.toContain("team");
+      expect(welcomeFlow(product, SMALL).map((s) => s.key)).not.toContain("team");
     }
   });
 
-  it("does ask a 120-room hotel, because somebody there owns the answer", () => {
-    const keys = welcomeFlow("RevioCRS", LARGE).map((s) => s.key);
-    expect(keys).toContain("taxes");
-    expect(keys).toContain("team");
+  it("does ask a 120-room hotel about staff, because somebody there owns the answer", () => {
+    expect(welcomeFlow("RevioCRS", LARGE).map((s) => s.key)).toContain("team");
+  });
+
+  it("ALWAYS asks about tax on a product that invoices, however small the property", () => {
+    // Tax is a money field. A default nobody corrects is money quietly decided by us — and unlike a
+    // nightly rate, a wrong VAT is discovered on a document a guest has already been handed.
+    for (const product of ["RevioCRS", "RevioPMS"] as ProductName[]) {
+      for (const rooms of [1, SMALL, SMALL_PROPERTY_MAX_ROOMS, LARGE]) {
+        expect(welcomeFlow(product, rooms).map((s) => s.key)).toContain("taxes");
+      }
+    }
   });
 });
 
@@ -115,7 +121,13 @@ describe("per-product shape", () => {
 describe("skippedForSize", () => {
   it("names what was decided for a small property, so the last screen can say so", () => {
     // Nothing is skipped silently — a default nobody can see is not a default, it is a surprise.
-    expect(skippedForSize("RevioCRS", SMALL).sort()).toEqual(["taxes", "team"]);
+    expect(skippedForSize("RevioCRS", SMALL)).toEqual(["team"]);
+  });
+
+  it("never reports tax as skipped, because it never is", () => {
+    for (const product of ["RevioCRS", "RevioPMS"] as ProductName[]) {
+      expect(skippedForSize(product, SMALL)).not.toContain("taxes");
+    }
   });
 
   it("is empty for a large property, which was asked everything", () => {
@@ -125,6 +137,37 @@ describe("skippedForSize", () => {
   it("reports only steps that product has at all", () => {
     // RevioLink has no taxes step, so it can never be reported as skipped.
     expect(skippedForSize("RevioLink", SMALL)).not.toContain("taxes");
+  });
+});
+
+describe("the personalisation step", () => {
+  it("is offered by the guest-facing products", () => {
+    for (const product of ["RevioLink", "RevioCRS"] as ProductName[]) {
+      expect(welcomeFlow(product, SMALL).map((s) => s.key)).toContain("brand");
+    }
+  });
+
+  it("is absent from the PMS, which shows a guest nothing", () => {
+    for (const rooms of [SMALL, LARGE]) {
+      expect(welcomeFlow("RevioPMS", rooms).map((s) => s.key)).not.toContain("brand");
+    }
+  });
+
+  it("is skippable — a logo is not a reason to block a hotel from trading", () => {
+    const brand = welcomeFlow("RevioCRS", SMALL).find((s) => s.key === "brand")!;
+    expect(brand.skippable).toBe(true);
+  });
+
+  it("is offered at every size — looking right is not a large-hotel concern", () => {
+    for (const rooms of [1, SMALL, LARGE, 500]) {
+      expect(welcomeFlow("RevioCRS", rooms).map((s) => s.key)).toContain("brand");
+    }
+  });
+
+  it("says it covers both surfaces, because one answer feeds both", () => {
+    const brand = welcomeFlow("RevioLink", SMALL).find((s) => s.key === "brand")!;
+    expect(brand.lead).toContain("email");
+    expect(brand.lead).toContain("booking page");
   });
 });
 
@@ -138,7 +181,8 @@ describe("stepIndex", () => {
   });
 
   it("returns -1 for a step this size was not asked", () => {
-    expect(stepIndex(welcomeFlow("RevioCRS", SMALL), "taxes")).toBe(-1);
+    // "team" is the only size-gated step left; taxes are now asked at every size.
+    expect(stepIndex(welcomeFlow("RevioCRS", SMALL), "team")).toBe(-1);
   });
 });
 

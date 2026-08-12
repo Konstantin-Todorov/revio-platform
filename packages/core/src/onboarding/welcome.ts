@@ -14,9 +14,13 @@
  * is under-configured.
  *
  * So the flow branches on room count, which we already need for the pricing tier and can therefore
- * ask without adding a question. Small properties skip the steps whose defaults are safe and
- * reversible (taxes, staff); larger ones are asked, because at that size somebody owns the answer and
- * discovering it after the first invoice is worse than a screen.
+ * ask without adding a question. Small properties skip the step whose default is genuinely safe —
+ * staff, because at that size the owner IS the staff. Larger ones are asked.
+ *
+ * ⚠️ **Taxes are asked at every size, on every product that issues an invoice.** They were briefly
+ * treated as a convenience default for small properties, and that was wrong by this project's own
+ * rule: a default nobody corrects on a *money* field is money quietly decided by us. A guesthouse
+ * still owes VAT, and a wrong rate is discovered on a document a guest has already been given.
  *
  * **Nothing is skipped silently.** A skipped step still appears on the checklist afterwards, and the
  * final screen states which defaults were accepted on their behalf. The difference between a good
@@ -36,6 +40,7 @@ export type WelcomeStepKey =
   | "property"
   | "rooms"
   | "prices"
+  | "brand"
   | "taxes"
   | "team"
   | "golive";
@@ -97,8 +102,23 @@ const TAXES: StepDef = {
   key: "taxes",
   title: "Taxes and fees",
   lead: "VAT and city tax, so every quote and invoice totals correctly.",
+  // Skippable — a hotel may not know its city-tax rate on day one — but never silently defaulted.
   skippable: true,
-  askOnlyWhenLarge: true,
+};
+
+/**
+ * The one screen that gives something back rather than asking for something.
+ *
+ * A logo and a colour are the only settings in first-run whose result the hotel can *see*, and they
+ * feed two guest-facing surfaces from one answer: every email, and — because `bookingBrandColor`
+ * inherits from `emailBrandColor` when null — their own booking page. Buried in Settings, this is
+ * the single most-missed configuration on the platform, and its absence is visible to guests.
+ */
+const BRAND: StepDef = {
+  key: "brand",
+  title: "How you look to guests",
+  lead: "Your logo and colour. Used on every email you send, and on your own booking page.",
+  skippable: true,
 };
 
 const TEAM: StepDef = {
@@ -125,9 +145,19 @@ export function welcomeFlow(product: ProductName, rooms: number): WelcomeStep[] 
 
   const defs: StepDef[] =
     product === "RevioPMS"
-      ? // The PMS sells nothing, so it never asks for a price. It needs the physical rooms instead.
+      ? // The PMS sells nothing and shows a guest nothing: no price, no branding. It needs the
+        // physical rooms and the tax setup its invoices depend on.
         [PROPERTY, ROOMS, TAXES, TEAM, GOLIVE(product)]
-      : [PROPERTY, ROOMS, PRICES, ...(product === "RevioCRS" ? [TAXES] : []), TEAM, GOLIVE(product)];
+      : [
+          PROPERTY,
+          ROOMS,
+          PRICES,
+          BRAND,
+          // Only the products that issue an invoice ask about tax. A channel manager never does.
+          ...(product === "RevioCRS" ? [TAXES] : []),
+          TEAM,
+          GOLIVE(product),
+        ];
 
   return defs
     .filter((d) => !(small && d.askOnlyWhenLarge))
