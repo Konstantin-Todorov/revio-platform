@@ -3,9 +3,11 @@ import {
   Coins, CalendarPlus, Upload, Wrench, RotateCw, ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
 import { getDashboard, getReservationSummary } from "@/lib/data";
 import { getSetup } from "@/lib/setup";
+import { prisma } from "@/lib/db";
 import { PauseChannelButton, ResumeChannelButton, DisconnectChannelButton, FullSyncButton } from "@/components/channels/ChannelActions";
 import { ReservationSummaryCard } from "@/components/dashboard/ReservationSummaryCard";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -17,6 +19,18 @@ const CHANNEL_INITIALS: Record<string, string> = { booking: "B", expedia: "E", t
 
 export default async function DashboardPage() {
   const { property, stats, channels, realErrorsByChannel, reservations, syncEvents, errorItems } = await getDashboard();
+
+  /**
+   * A hotel that has never configured anything goes into the guided flow instead of a dashboard of
+   * zeros. Two conditions, and the second matters more than the first: they must not have finished
+   * setup AND have no room types at all. Redirecting on `setupCompleted` alone would trap an
+   * established hotel that simply never clicked the last screen — including both demo tenants — in a
+   * welcome flow they do not need. "Has no rooms" is the honest test for "has not started".
+   */
+  const roomTypeCount = await prisma.roomType.count({ where: { propertyId: property.id } });
+  if (!property.setupCompleted.includes("RevioLink") && roomTypeCount === 0) {
+    redirect("/welcome/property");
+  }
   const [resSummary, setup] = await Promise.all([getReservationSummary(), getSetup()]);
 
   // Pending age (spec §5.3): ten items two seconds old is healthy; two hours old means stuck.

@@ -12,7 +12,8 @@
     "./use-scroll-lock": "./src/use-scroll-lock.tsx",
     "./setup-checklist": "./src/setup-checklist.tsx",
     "./status-page": "./src/status-page.tsx",
-    "./skeleton": "./src/skeleton.tsx"
+    "./skeleton": "./src/skeleton.tsx",
+    "./welcome-shell": "./src/welcome-shell.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
