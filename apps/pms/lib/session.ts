@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { forSystem } from "@revio/db";
+import { checkSessionValidity } from "@revio/core";
 import { readSessionToken, verifySessionToken } from "./auth";
 
 // Identity resolution runs before a tenant context exists, so it bypasses RLS (app.bypass=on).
@@ -33,7 +34,13 @@ export async function getSession(): Promise<Session | null> {
   if (!payload || payload.kind !== "hotel") return null;
 
   const user = await prisma.user.findUnique({ where: { id: payload.sub }, include: { tenant: true } });
-  if (!user || !user.active || user.tenant.status !== "active") return null;
+  if (!user || user.tenant.status !== "active") return null;
+  // Deactivation AND revocation, asked as one question so the four apps cannot drift apart on it.
+  // A password change moves `sessionsValidFrom`, which is what makes resetting a *stolen* password
+  // actually lock the thief out instead of leaving their token alive for the rest of its life.
+  if (!checkSessionValidity({ issuedAt: payload.issuedAt, sessionsValidFrom: user.sessionsValidFrom, active: user.active }).ok) {
+    return null;
+  }
   const tenant = user.tenant;
 
   const properties = await prisma.property.findMany({ where: { tenantId: tenant.id }, orderBy: { name: "asc" } });

@@ -14,7 +14,8 @@
     "./status-page": "./src/status-page.tsx",
     "./skeleton": "./src/skeleton.tsx",
     "./welcome-shell": "./src/welcome-shell.tsx",
-    "./welcome-fields": "./src/welcome-fields.tsx"
+    "./welcome-fields": "./src/welcome-fields.tsx",
+    "./sign-out-everywhere": "./src/sign-out-everywhere.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import { OPERATOR_LOGIN_GATE } from "@revio/core";
 import { checkLoginAllowed, forSystem, recordLoginFailure, recordLoginSuccess } from "@revio/db";
+import { sessionTtlSeconds } from "@revio/core";
+import { getOperatorSession } from "./session";
 import { verifyPassword, signSession, setSessionCookie, clearSessionCookie } from "./auth";
 
 // Operator login resolves staff before any tenant context → bypass RLS (app.bypass=on).
@@ -32,11 +34,36 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
   }
   await recordLoginSuccess("operator", email);
 
-  await setSessionCookie(await signSession({ kind: "operator", sub: op.id }));
+  // "Remember me" is a real choice, not a longer default. A shared reception terminal and a
+  // manager's own laptop want opposite answers, and the cookie's maxAge must match the token's
+  // expiry or the browser keeps a credential the server has already stopped honouring.
+  const ttl = sessionTtlSeconds(fd.get("remember") != null);
+  await setSessionCookie(await signSession({ kind: "operator", sub: op.id }, ttl), ttl);
   redirect("/overview");
 }
 
 export async function logout(): Promise<void> {
   await clearSessionCookie();
   redirect("/login");
+}
+
+/**
+ * Sign out of every device, including this one.
+ *
+ * Moves the account's revocation line to now, which kills every token minted before this instant —
+ * the laptop left on a train, the browser on a hotel lobby machine, a session somebody else is
+ * holding. It is the only control here that reaches a device we cannot see.
+ *
+ * The current session goes too, deliberately: an "everywhere" that quietly spares the device you are
+ * sitting at is not everywhere, and the person can sign back in in seconds.
+ */
+export async function signOutEverywhere(): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) redirect("/login");
+  await prisma.operatorUser.update({
+    where: { id: session.userId },
+    data: { sessionsValidFrom: new Date() },
+  });
+  await clearSessionCookie();
+  redirect("/login?signedout=all");
 }

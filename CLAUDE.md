@@ -245,14 +245,28 @@ RevioDirect slug (permanent once issued; the brand step already reaches the book
 `bookingBrandColor` null-inherits-email) and a cancellation-policy screen (the model is a label with no
 terms). See task #182 for room photos + cancellation terms.
 
-**→ 🔴 PHASE N (accounts & auth) IS NEXT, and N1 is a live hole.** There is **no rate limiting on any
-login form** — RevioLink, RevioCRS, RevioPMS and the Operator console all accept unlimited password
-attempts, and the operator console is one password away from every hotel's data. `auth.ts` also falls
-back to a hardcoded dev secret when `AUTH_SECRET` is unset (fail-open; all four staff services do have
-it set — `apps/booking` correctly has none, it has no auth). Sessions are stateless 7-day JWTs, so
-**deactivating staff does not sign them out** and nothing can be revoked. Tasks N1–N5 cover
-brute-force protection, password reset + invite flow, revocable sessions + remember-me, TOTP 2FA
-(operator first), and password policy + auth audit + key rotation. Marketing/positioning copy for the future product websites is drafted
+**→ 🟡 PHASE N (accounts & auth) — N1 · N2 · N3 SHIPPED; N4 · N5 remain.** N1 closed the brute-force
+hole (per-scope login gate, fail-**closed** `AUTH_SECRET` in production) and N2 shipped password reset
++ set-by-invite, so nobody at Revio ever knows a customer's password.
+
+**N3 (2026-08-12) — revocable sessions.** ⚠️ This entry previously claimed *"deactivating staff does
+not sign them out"*. **That was wrong**: all three hotel apps already revalidated `user.active` and
+`tenant.status` on every request. Reading the code found two *different* holes, both now closed:
+**`OperatorUser` had no `active` column at all** — the console that reads every hotel's data could not
+revoke a leaver except by deleting a row the `ClientAccount` relation forbids — and **a password
+change did not end existing sessions**, which made N2's reset theatre in the case it exists for: reset
+a *stolen* password and the thief's token lived out its seven days. Both fixed by
+`checkSessionValidity` in `@revio/core` (pure, 13 tests) comparing the JWT's own `iat` against a new
+per-account `sessionsValidFrom` — revocation with no session table, no per-request write, and no rows
+to expire, because the account row is already read to check `active`. Moved by a password change and
+by **Sign out everywhere** (RevioLink → Settings → Your sign-in); recorded on the *shared identity*,
+so it ends sessions in every product the hotel runs. **"Remember me" is now a choice** (12h default,
+14d remembered) rather than 7 days for everyone including the shared front-desk terminal. Proven at
+runtime, not inferred: the same token returned 200, then 307 after revocation, then 200 again on a
+fresh one — and the same three steps for an operator account via the new `active` flag.
+
+**N4 · N5 remain:** TOTP 2FA (operator console first) and password policy + auth audit trail + key
+rotation. Marketing/positioning copy for the future product websites is drafted
 in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. See `BUILD-PLAN.md` for
 the phased order, `ARCHITECTURE.md` for rationale,
 `ACCESS-MODEL.md` for the access model, `DEPLOY.md` for the deploy runbook, and **`docs/RESTORE.md`** for

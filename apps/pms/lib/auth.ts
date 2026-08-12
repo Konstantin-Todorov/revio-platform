@@ -2,9 +2,17 @@ import "server-only";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
+import { SESSION_TTL_SECONDS } from "@revio/core";
 
 export const SESSION_COOKIE = "revio_pms_session";
-const TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+/**
+ * Default session length when nobody asked to be remembered.
+ *
+ * It used to be a flat seven days for everyone, including the shared terminal at reception where
+ * guests are standing. The two values now live in `@revio/core` so the login screen can state the
+ * one it is about to apply.
+ */
+const DEFAULT_TTL_SECONDS = SESSION_TTL_SECONDS.short;
 
 /**
  * The signing key for session cookies — fail-closed.
@@ -45,31 +53,49 @@ export function verifyPassword(plain: string, hash: string): Promise<boolean> {
 
 export type SessionPayload = { kind: "hotel" | "operator"; sub: string };
 
-export async function signSession(payload: SessionPayload): Promise<string> {
+/** A verified token: who it is for, and WHEN it was minted — the second half is what makes a
+ *  session revocable without a session table. See `checkSessionValidity` in `@revio/core`. */
+export type VerifiedSession = SessionPayload & { issuedAt: number | undefined };
+
+export async function signSession(
+  payload: SessionPayload,
+  ttlSeconds: number = DEFAULT_TTL_SECONDS,
+): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(Math.floor(Date.now() / 1000) + TTL_SECONDS)
+    .setExpirationTime(Math.floor(Date.now() / 1000) + ttlSeconds)
     .sign(secret());
 }
 
-export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
+export async function verifySessionToken(token: string): Promise<VerifiedSession | null> {
   try {
     const { payload } = await jwtVerify(token, secret());
     if (payload.kind !== "hotel" && payload.kind !== "operator") return null;
-    return { kind: payload.kind as SessionPayload["kind"], sub: String(payload.sub) };
+    return {
+      kind: payload.kind as SessionPayload["kind"],
+      sub: String(payload.sub),
+      // Carried through rather than discarded: the session check compares it against the account's
+      // revocation cutoff. A token without one is rejected there, never quietly accepted.
+      issuedAt: typeof payload.iat === "number" ? payload.iat : undefined,
+    };
   } catch {
     return null;
   }
 }
 
-export async function setSessionCookie(token: string): Promise<void> {
+export async function setSessionCookie(
+  token: string,
+  ttlSeconds: number = DEFAULT_TTL_SECONDS,
+): Promise<void> {
+  // maxAge must match the token's own expiry, or the cookie outlives the credential and the person
+  // gets a silent bounce to /login instead of a session that simply ended.
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: TTL_SECONDS,
+    maxAge: ttlSeconds,
   });
 }
 export async function clearSessionCookie(): Promise<void> {

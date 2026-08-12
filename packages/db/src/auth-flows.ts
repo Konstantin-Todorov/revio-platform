@@ -156,16 +156,26 @@ export async function completePasswordSet(args: {
   const passwordHash = await bcrypt.hash(args.password, 10);
   let name: string | undefined;
 
+  /**
+   * Changing the password ends every session that existed before it.
+   *
+   * Without this the flow is theatre in the case it exists for: someone whose password was stolen
+   * resets it, feels safe, and the thief's seven-day token keeps working. The person doing the reset
+   * is not signed in on this device (they got here from an emailed link), so nothing they are using
+   * is interrupted — and `checkSessionValidity` treats the same second as still valid anyway.
+   */
+  const sessionsValidFrom = new Date();
+
   if (resolved.token.operatorUserId) {
     const op = await prisma.operatorUser.update({
       where: { id: resolved.token.operatorUserId },
-      data: { passwordHash },
+      data: { passwordHash, sessionsValidFrom },
     });
     name = op.name ?? undefined;
   } else if (resolved.token.userId) {
     const user = await prisma.user.update({
       where: { id: resolved.token.userId },
-      data: { passwordHash },
+      data: { passwordHash, sessionsValidFrom },
     });
     name = user.name ?? undefined;
   } else {

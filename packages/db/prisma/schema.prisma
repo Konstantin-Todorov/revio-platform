@@ -53,17 +53,21 @@ model Tenant {
 }
 
 model User {
-  id           String  @id @default(cuid())
-  tenantId     String
-  name         String
-  email        String  @unique
+  id                String    @id @default(cuid())
+  tenantId          String
+  name              String
+  email             String    @unique
   // Shared account role for the whole platform (CM/CRS taxonomy) PLUS the PMS operational roles
   // (manager | reception | housekeeper | hk_supervisor | maintenance | outlet_pos). One identity,
   // one role — the PMS User Management (§3.9) is a scoped view onto this shared identity.
-  role         String // owner | admin | revenue_manager | distribution_manager | read_only | manager | reception | housekeeper | hk_supervisor | maintenance | outlet_pos
-  passwordHash String? // null until the invited Owner sets their password
-  phone        String? // shared contact number; editable from any product's user-management surface
-  active       Boolean @default(true) // deactivated staff keep their identity but can't sign in
+  role              String // owner | admin | revenue_manager | distribution_manager | read_only | manager | reception | housekeeper | hk_supervisor | maintenance | outlet_pos
+  passwordHash      String? // null until the invited Owner sets their password
+  phone             String? // shared contact number; editable from any product's user-management surface
+  active            Boolean   @default(true) // deactivated staff keep their identity but can't sign in
+  // Sessions issued before this instant are dead (see checkSessionValidity in @revio/core). Set by a
+  // password change and by "sign out everywhere" — never routinely, because moving it signs the
+  // person out of the device in their hand too. Null = never revoked.
+  sessionsValidFrom DateTime?
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -72,13 +76,19 @@ model User {
 
 // Operator staff (us). Cross-tenant by design — NOT tied to any tenant.
 model OperatorUser {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  role         String   @default("super_admin") // super_admin | support
+  id                String    @id @default(cuid())
+  name              String
+  email             String    @unique
+  role              String    @default("super_admin") // super_admin | support
   /// Null until the invitation is accepted — an operator account that nobody has claimed cannot sign in.
-  passwordHash String?
-  createdAt    DateTime @default(now())
+  passwordHash      String?
+  /// Deactivated operator staff keep their identity (they own ClientAccount rows) but cannot sign in.
+  /// This column did not exist until 2026-08-12: the console that can read every hotel's data had no
+  /// way to revoke a leaver short of deleting the row, which the ownedAccounts relation forbids.
+  active            Boolean   @default(true)
+  /// Sessions issued before this instant are dead — see User.sessionsValidFrom.
+  sessionsValidFrom DateTime?
+  createdAt         DateTime  @default(now())
 
   ownedAccounts ClientAccount[]
 }

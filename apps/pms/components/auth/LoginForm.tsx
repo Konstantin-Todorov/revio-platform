@@ -21,6 +21,13 @@ export function LoginForm({ justSet = false }: { justSet?: boolean }) {
         <input name="password" type="password" required autoComplete="current-password" className={inputCls} placeholder="••••••••" />
       </label>
 
+      {/* Unticked by default on purpose: the front desk is a shared machine with guests standing at
+          it, and a box that remembers by default is how a terminal ends up permanently signed in. */}
+      <label className="flex items-center gap-2 pt-0.5">
+        <input type="checkbox" name="remember" className="h-4 w-4 rounded border-surface-border" />
+        <span className="text-[12.5px] text-ink-600">Keep me signed in on this device</span>
+      </label>
+
       {justSet && !state?.error && (
         <p className="rounded-md bg-success-50 px-3 py-2 text-[12.5px] font-medium text-success-600">
           Password saved. Sign in with it now.

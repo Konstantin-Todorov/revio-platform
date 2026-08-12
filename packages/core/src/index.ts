@@ -4,6 +4,7 @@ export * from "./domain/types.js";
 export * from "./domain/connectivity.js";
 export * from "./auth/login-gate.js";
 export * from "./auth/tokens.js";
+export * from "./auth/session-validity.js";
 export * from "./email/auth-emails.js";
 export * from "./inventory/availability.js";
 export * from "./inventory/waterfall.js";

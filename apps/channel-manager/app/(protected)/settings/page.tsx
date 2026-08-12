@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Building2, Users } from "lucide-react";
 import { getSettings } from "@/lib/data";
 import { getSession } from "@/lib/session";
+import { SignOutEverywhere } from "@revio/ui/sign-out-everywhere";
+import { signOutEverywhere } from "@/lib/actions-auth";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { PropertySettingsForm } from "@/components/settings/PropertySettingsForm";
 import { DeliverySettingsForm } from "@/components/settings/DeliverySettingsForm";
@@ -12,6 +14,13 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const [{ property, users, properties, totalRooms }, session] = await Promise.all([getSettings(), getSession()]);
   const canManage = session?.role === "owner" || session?.role === "admin";
+  // Revocation is recorded on the shared identity, so it reaches every product this hotel runs. The
+  // control names them rather than saying "everything", which nobody can check.
+  const productNames = [
+    ...(session?.entitlements.channelManager ? ["RevioLink"] : []),
+    ...(session?.entitlements.reservation ? ["RevioCRS"] : []),
+    ...(session?.entitlements.pms ? ["RevioPMS"] : []),
+  ];
 
   return (
     <div>
@@ -21,6 +30,13 @@ export default async function Page() {
           <Card>
             <CardHeader title="Property" subtitle={`${totalRooms} physical rooms across the active room types`} />
             <div className="p-5"><PropertySettingsForm property={property} /></div>
+          </Card>
+
+          <Card>
+            <CardHeader title="Your sign-in" subtitle="Sessions on this and any other device" />
+            <div className="p-5">
+              <SignOutEverywhere action={signOutEverywhere} productNames={productNames} />
+            </div>
           </Card>
 
           <Card>

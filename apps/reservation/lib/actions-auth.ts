@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { checkLoginAllowed, forSystem, recordLoginFailure, recordLoginSuccess } from "@revio/db";
+import { sessionTtlSeconds } from "@revio/core";
+import { getSession } from "./session";
 import { verifyPassword, signSession, setSessionCookie, clearSessionCookie } from "./auth";
 
 // Login resolves a user by email before any tenant context exists → bypass RLS (app.bypass=on).
@@ -29,11 +31,36 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
   if (user.tenant.status !== "active") return { error: "This account is suspended — contact Revio." };
   if (!user.tenant.hasReservation) return { error: "RevioCRS isn’t enabled for this hotel." };
 
-  await setSessionCookie(await signSession({ kind: "hotel", sub: user.id }));
+  // "Remember me" is a real choice, not a longer default. A shared reception terminal and a
+  // manager's own laptop want opposite answers, and the cookie's maxAge must match the token's
+  // expiry or the browser keeps a credential the server has already stopped honouring.
+  const ttl = sessionTtlSeconds(fd.get("remember") != null);
+  await setSessionCookie(await signSession({ kind: "hotel", sub: user.id }, ttl), ttl);
   redirect("/dashboard");
 }
 
 export async function logout(): Promise<void> {
   await clearSessionCookie();
   redirect("/login");
+}
+
+/**
+ * Sign out of every device, including this one.
+ *
+ * Moves the account's revocation line to now, which kills every token minted before this instant —
+ * the laptop left on a train, the browser on a hotel lobby machine, a session somebody else is
+ * holding. It is the only control here that reaches a device we cannot see.
+ *
+ * The current session goes too, deliberately: an "everywhere" that quietly spares the device you are
+ * sitting at is not everywhere, and the person can sign back in in seconds.
+ */
+export async function signOutEverywhere(): Promise<void> {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  await prisma.user.update({
+    where: { id: session.userId },
+    data: { sessionsValidFrom: new Date() },
+  });
+  await clearSessionCookie();
+  redirect("/login?signedout=all");
 }
