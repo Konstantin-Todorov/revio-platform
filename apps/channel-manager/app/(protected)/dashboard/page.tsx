@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { hasFinishedSetup } from "@revio/core";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
 import { getDashboard, getReservationSummary } from "@/lib/data";
 import { getSetup } from "@/lib/setup";
@@ -28,7 +29,7 @@ export default async function DashboardPage() {
    * welcome flow they do not need. "Has no rooms" is the honest test for "has not started".
    */
   const roomTypeCount = await prisma.roomType.count({ where: { propertyId: property.id } });
-  if (!property.setupCompleted.includes("RevioLink") && roomTypeCount === 0) {
+  if (!hasFinishedSetup(property.setupCompleted, "RevioLink") && roomTypeCount === 0) {
     redirect("/welcome/property");
   }
   const [resSummary, setup] = await Promise.all([getReservationSummary(), getSetup()]);

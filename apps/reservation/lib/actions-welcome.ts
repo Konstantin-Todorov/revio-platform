@@ -10,40 +10,24 @@ import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
 
 /**
- * The first-run flow's writes.
+ * RevioCRS's first-run writes.
  *
- * Deliberately thin: each screen collects the least it can and hands off. The heavy operations —
- * bulk pricing, channel connection, mapping — already exist and are reached from the normal screens
- * once setup ends. Reimplementing them here would create a second way to do the same thing, and the
- * second way is always the one that stops being maintained.
+ * Deliberately thin — each screen collects the least it can and hands off to the normal screens once
+ * setup ends. The one thing this app asks that RevioLink does not is tax and invoicing, because the
+ * CRS is where a booking becomes a document somebody has to be able to file.
  */
 
 export type WelcomeResult = { error?: string };
 
-const PRODUCT = "RevioLink";
+const PRODUCT = "RevioCRS";
 
-/**
- * Where the hotel goes after finishing a screen.
- *
- * The flow is re-derived from the database on every hop rather than held in a session, because the
- * answers change the flow: adding room types decides the property's size, which decides whether the
- * staff screen is asked at all. A remembered step list would be a stale one.
- */
 async function advance(from: string): Promise<never> {
   const facts = await getWelcomeFactsForProperty();
   const next = nextStep(welcomeFlow(PRODUCT, facts), from);
   redirect(next ? `/welcome/${next.key}` : "/dashboard");
 }
 
-/**
- * Step 1 — who and where they are.
- *
- * Grouped on purpose. The address and contact email are not cosmetic — they print on every
- * confirmation a guest receives — and currency and timezone are the two that quietly ruin things
- * later: a hotel priced in the wrong currency discovers it on an OTA, and a wrong timezone moves
- * every arrival date by a day. Prefilled because we can usually guess, confirmed because we cannot
- * always.
- */
+/** Step 1 — who and where they are. The address and contact email print on guest confirmations. */
 export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
@@ -74,12 +58,7 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
   return advance("property");
 }
 
-/**
- * Step 2 — the room types, and with them the property's size.
- *
- * `totalRooms` is the number the size branch and the pricing tier both read, so this screen decides
- * how many more screens there are. That is stated on it rather than left to surprise them.
- */
+/** Step 2 — the room types, and with them the property's size. */
 export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
@@ -93,8 +72,7 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
   if (!Number.isFinite(rooms) || rooms < 1) return { error: "How many of these rooms do you have?" };
   if (!Number.isFinite(guests) || guests < 1) return { error: "How many guests fit in one?" };
 
-  // A code is what OTAs key on. Derived rather than asked: nobody buying a channel manager wants to
-  // invent one, and it is editable later in Rooms & Rates.
+  // Derived rather than asked — a code is an OTA concern, and it stays editable in Rooms & Rates.
   const base = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 3) || "RM";
   const taken = await prisma.roomType.findMany({ where: { propertyId: property.id }, select: { code: true } });
   const codes = new Set(taken.map((t) => t.code));
@@ -114,7 +92,6 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
     },
   });
 
-  // Same rule as the Rooms & Rates screen: a new room type becomes sellable under every rate plan.
   const plans = await prisma.ratePlan.findMany({ where: { propertyId: property.id }, select: { id: true } });
   if (plans.length) {
     await prisma.ratePlanRoomType.createMany({
@@ -128,29 +105,22 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
 
 export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
   const property = await getProperty();
-  const id = str(fd, "id");
-  const rt = await prisma.roomType.findUnique({ where: { id } });
-  // Scoped check as well as RLS: a stray id from another property must not delete anything.
+  const rt = await prisma.roomType.findUnique({ where: { id: str(fd, "id") } });
   if (!rt || rt.propertyId !== property.id) return;
-  await prisma.roomType.delete({ where: { id } });
+  await prisma.roomType.delete({ where: { id: rt.id } });
   revalidatePath("/welcome/rooms");
 }
 
 export async function finishWelcomeRooms(): Promise<void> {
   const property = await getProperty();
   const count = await prisma.roomType.count({ where: { propertyId: property.id } });
-  if (count === 0) return; // the screen already blocks this; belt and braces
+  if (count === 0) return;
   await advance("rooms");
 }
 
 /**
- * Step 3 — one price, applied across the whole priced horizon.
- *
- * A single number rather than a calendar, because a hotel with no prices at all cannot sell anything,
- * and "price every date" is not a first-day task. They vary it afterwards on the calendar or in bulk.
- *
- * This is the one money field in the flow, and it is **empty by default** — never prefilled. A
- * suggested rate that 70–90% of people never change is revenue quietly decided by us.
+ * Step 3 — one price across the priced horizon. Empty by default: this is the hotel's revenue, and a
+ * prefilled rate is the one default that costs them money.
  */
 export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
   const session = await getSession();
@@ -168,8 +138,6 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
   const roomTypes = await prisma.roomType.findMany({ where: { propertyId: property.id }, select: { id: true } });
   if (!plan || roomTypes.length === 0) return { error: "Add a room type first." };
 
-  // 180 days is a season, not the full 500-day horizon: enough to be sellable today, small enough
-  // that a number typed in thirty seconds is not committed two years out.
   const DAYS = 180;
   const today = new Date();
   const rows: { tenantId: string; propertyId: string; ratePlanId: string; roomTypeId: string; date: Date; priceMinor: number }[] = [];
@@ -193,28 +161,98 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
 }
 
 /**
+ * Tax and invoicing — the step that was missing entirely.
+ *
+ * A hotel could previously finish setup, take a booking and issue a tax document carrying no VAT
+ * number, because `invoiceIssuerName` / `invoiceVatId` / `invoiceAddress` were asked on no screen in
+ * any product. The VAT rates are shown with jurisdiction defaults rather than assumed silently: they
+ * are money fields, and money is never decided by us on their behalf.
+ */
+export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const session = await getSession();
+  if (!session) return { error: "Your session expired — sign in again." };
+  const property = await getProperty();
+
+  const standard = Number.parseInt(str(fd, "vatStandardPct"), 10);
+  const reduced = Number.parseInt(str(fd, "vatReducedPct"), 10);
+  if (!Number.isFinite(standard) || standard < 0 || standard > 100) return { error: "VAT must be between 0 and 100." };
+  if (!Number.isFinite(reduced) || reduced < 0 || reduced > 100) return { error: "VAT must be between 0 and 100." };
+
+  const cityTaxRaw = str(fd, "cityTax").trim().replace(",", ".");
+  let cityTaxMinor: number | null = null;
+  if (cityTaxRaw) {
+    const major = Number.parseFloat(cityTaxRaw);
+    if (!Number.isFinite(major) || major < 0) return { error: "City tax must be a number, or left empty." };
+    cityTaxMinor = Math.round(major * 100);
+  }
+
+  await prisma.propertyDefaults.upsert({
+    where: { propertyId: property.id },
+    create: {
+      tenantId: session.tenantId,
+      propertyId: property.id,
+      vatStandardPct: standard,
+      vatReducedPct: reduced,
+      invoiceIssuerName: str(fd, "invoiceIssuerName").trim() || null,
+      invoiceVatId: str(fd, "invoiceVatId").trim() || null,
+      invoiceAddress: str(fd, "invoiceAddress").trim() || null,
+    },
+    update: {
+      vatStandardPct: standard,
+      vatReducedPct: reduced,
+      invoiceIssuerName: str(fd, "invoiceIssuerName").trim() || null,
+      invoiceVatId: str(fd, "invoiceVatId").trim() || null,
+      invoiceAddress: str(fd, "invoiceAddress").trim() || null,
+    },
+  });
+
+  // City tax is a TaxFee row, not a column: a property may charge several, and the folio already
+  // knows how to apply them. Updated in place rather than added again on a second pass.
+  const existing = await prisma.taxFee.findFirst({
+    where: { propertyId: property.id, basis: "per_person", type: "fixed", active: true },
+  });
+  if (cityTaxMinor != null && cityTaxMinor > 0) {
+    if (existing) {
+      await prisma.taxFee.update({ where: { id: existing.id }, data: { amountMinor: cityTaxMinor } });
+    } else {
+      await prisma.taxFee.create({
+        data: {
+          tenantId: session.tenantId,
+          propertyId: property.id,
+          name: "City tax",
+          type: "fixed",
+          amountMinor: cityTaxMinor,
+          basis: "per_person",
+          inclusion: "excluded",
+        },
+      });
+    }
+  } else if (existing) {
+    // They cleared it. Deactivate rather than delete: a fee that has already been charged on a folio
+    // must keep existing for that folio to still explain itself.
+    await prisma.taxFee.update({ where: { id: existing.id }, data: { active: false } });
+  }
+
+  revalidatePath("/settings");
+  return advance("taxes");
+}
+
+/**
  * The personalisation step — one answer, two guest-facing surfaces.
  *
- * `emailBrandColor` is the root of the branding chain: `bookingBrandColor` is nullable and NULL means
- * "inherit the email colour". So a hotel that sets a colour here has also branded its own booking
- * page without being asked twice, and a hotel that later wants the page to differ can override just
- * that one field. Writing both columns here would break that inheritance permanently.
+ * `bookingBrandColor` is nullable and NULL means "inherit the email colour", so writing only the
+ * email columns brands the hotel's own booking page as well. Writing both would freeze a copy and
+ * break that inheritance permanently.
  */
 export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
 
   const colour = str(fd, "emailBrandColor").trim();
-  if (colour && !/^#[0-9a-fA-F]{6}$/.test(colour)) {
-    return { error: "Use a colour like #0E7C86." };
-  }
+  if (colour && !/^#[0-9a-fA-F]{6}$/.test(colour)) return { error: "Use a colour like #0E7C86." };
 
   const logo = str(fd, "emailLogoUrl").trim();
-  if (logo && !/^https:\/\//.test(logo)) {
-    // http:// logos are blocked by mail clients and browsers alike; failing here is kinder than a
-    // broken image on every confirmation a guest receives.
-    return { error: "The logo link needs to start with https://" };
-  }
+  if (logo && !/^https:\/\//.test(logo)) return { error: "The logo link needs to start with https://" };
 
   await prisma.property.update({
     where: { id: session.activePropertyId },
@@ -222,45 +260,11 @@ export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData
       emailSenderName: str(fd, "emailSenderName").trim() || null,
       emailBrandColor: colour || null,
       emailLogoUrl: logo || null,
-      // bookingBrandColor / bookingLogoUrl are left NULL on purpose — that is what makes the booking
-      // page follow this colour instead of freezing a copy of it.
-    },
-  });
-
-  revalidatePath("/settings/emails");
-  return advance("brand");
-}
-
-/**
- * Where a channel booking goes when nothing else catches it.
- *
- * Only asked of a hotel running RevioLink alone. Without an address the reservation exists in
- * RevioLink and nowhere a human will look — the difference between a missing setting and a missed
- * guest. Two addresses because reception and the owner are rarely the same inbox.
- */
-export async function saveWelcomeDelivery(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
-  const session = await getSession();
-  if (!session) return { error: "Your session expired — sign in again." };
-
-  const primary = str(fd, "reservationEmailPrimary").trim();
-  const secondary = str(fd, "reservationEmailSecondary").trim();
-  if (!primary) return { error: "Enter the address your bookings should go to." };
-  if (!primary.includes("@")) return { error: "That email doesn't look right." };
-  if (secondary && !secondary.includes("@")) return { error: "The second email doesn't look right." };
-
-  await prisma.property.update({
-    where: { id: session.activePropertyId },
-    data: {
-      reservationEmailPrimary: primary,
-      reservationEmailSecondary: secondary || null,
-      // Tomorrow's arrivals, not today's: a list that arrives the evening before is something
-      // reception can act on. One that arrives at 07:00 on the day is a list of surprises.
-      notifyTomorrowArrivals: fd.get("notifyTomorrowArrivals") != null,
     },
   });
 
   revalidatePath("/settings");
-  return advance("delivery");
+  return advance("brand");
 }
 
 /** Leave a step for later. It stays on the dashboard checklist, which is the point of allowing it. */
@@ -268,18 +272,10 @@ export async function skipWelcomeStep(fd: FormData): Promise<void> {
   await advance(str(fd, "from"));
 }
 
-/**
- * The last screen. Records that first-run is over so the flow never reappears.
- *
- * `setupCompleted` is a list rather than a boolean because a hotel runs up to three products and
- * finishes their setups at different times. The value comes from `SETUP_KEY` rather than being
- * written here as a literal: this action once wrote "RevioLink" while every checklist read "cm",
- * which meant finishing the guided flow did not stop the checklist asking again.
- */
+/** The last screen. Records that first-run is over so the flow never reappears. */
 export async function finishWelcome(): Promise<void> {
   const property = await getProperty();
   if (!hasFinishedSetup(property.setupCompleted, PRODUCT)) {
-    // Guarded in the WHERE clause, not in JS: two submissions racing would otherwise both push.
     await prisma.property.updateMany({
       where: { id: property.id, NOT: { setupCompleted: { has: SETUP_KEY[PRODUCT] } } },
       data: { setupCompleted: { push: SETUP_KEY[PRODUCT] } },

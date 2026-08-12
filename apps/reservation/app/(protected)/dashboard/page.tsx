@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, Layers, TrendingUp } from "lucide-react";
+import { hasFinishedSetup } from "@revio/core";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
-import { getInventoryBoard, getScope } from "@/lib/data";
+import { prisma } from "@/lib/db";
+import { getInventoryBoard, getProperty, getScope } from "@/lib/data";
 import { getSetup } from "@/lib/setup";
 import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolveRange, comparisonRange, type CompareBasis, type RangePreset } from "@/lib/metrics";
 import { DashboardView, type KpiCard } from "@/components/dashboard/DashboardView";
@@ -32,6 +35,19 @@ export default async function DashboardPage({
   searchParams: Promise<{ range?: string; from?: string; to?: string; basis?: string }>;
 }) {
   const sp = await searchParams;
+
+  /**
+   * A hotel that has never configured anything goes into the guided flow instead of a dashboard of
+   * zeros. Two conditions, and the second matters more: they must not have finished setup AND have
+   * no room types at all. Redirecting on `setupCompleted` alone would trap an established hotel that
+   * simply never clicked the last screen — including both demo tenants — in a flow they do not need.
+   */
+  const property = await getProperty();
+  if (!hasFinishedSetup(property.setupCompleted, "RevioCRS")) {
+    const roomTypeCount = await prisma.roomType.count({ where: { propertyId: property.id } });
+    if (roomTypeCount === 0) redirect("/welcome/property");
+  }
+
   await Promise.all([ensurePickupSnapshot(), releaseExpiredHolds()]);
 
   const [ops, scope, setup] = await Promise.all([getOperations(), getScope(), getSetup()]);

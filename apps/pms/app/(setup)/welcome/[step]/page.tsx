@@ -3,35 +3,47 @@ import Link from "next/link";
 import { inheritedSteps, previousStep, skippedForSize, welcomeFlow } from "@revio/core";
 import { SharedSummary, WelcomeContinue, WelcomeShell } from "@revio/ui/welcome-shell";
 import { prisma } from "@/lib/db";
-import { getProperty } from "@/lib/data";
+import { activeProperty } from "@/lib/data";
 import { getWelcomeFactsForProperty } from "@/lib/welcome";
-import { BrandForm, DeliveryForm, PriceForm, PropertyForm, RoomTypeForm } from "@/components/welcome/WelcomeForms";
+import { PropertyForm, RoomTypeForm, TaxForm, UnitsForm } from "@/components/welcome/WelcomeForms";
 import {
   finishWelcome,
   finishWelcomeRooms,
+  finishWelcomeUnits,
   removeWelcomeRoomType,
+  removeWelcomeUnit,
   skipWelcomeStep,
 } from "@/lib/actions-welcome";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Set up RevioLink" };
+export const metadata = { title: "Set up RevioPMS" };
 
-const PRODUCT = "RevioLink";
+const PRODUCT = "RevioPMS";
 
 export default async function WelcomeStepPage({ params }: { params: Promise<{ step: string }> }) {
   const { step } = await params;
-  const property = await getProperty();
+  const { property } = await activeProperty();
   const facts = await getWelcomeFactsForProperty();
   const steps = welcomeFlow(PRODUCT, facts);
 
-  const roomTypes = await prisma.roomType.findMany({
-    where: { propertyId: property.id },
-    orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, code: true, totalRooms: true, maxGuests: true },
-  });
+  const [roomTypes, units, defaults, cityTax] = await Promise.all([
+    prisma.roomType.findMany({
+      where: { propertyId: property.id },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, totalRooms: true, maxGuests: true },
+    }),
+    prisma.unit.findMany({
+      where: { propertyId: property.id, active: true },
+      orderBy: [{ floor: "asc" }, { label: "asc" }],
+      select: { id: true, label: true, floor: true, roomType: { select: { name: true } } },
+    }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
+    prisma.taxFee.findFirst({
+      where: { propertyId: property.id, basis: "per_person", type: "fixed", active: true },
+    }),
+  ]);
 
-  // A URL naming a step this property never sees (or a typo) goes to the start rather than 404ing —
-  // someone mid-setup should never hit a dead end.
+  // A URL naming a step this property never sees (or a typo) goes to the start rather than 404ing.
   if (!steps.some((s) => s.key === step)) redirect(`/welcome/${steps[0]!.key}`);
   const current = steps.find((s) => s.key === step)!;
   const back = previousStep(steps, step);
@@ -109,8 +121,46 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
 
           {roomTypes.length > 0 && (
             <form action={finishWelcomeRooms} className="pt-1">
+              <WelcomeContinue label="Continue" />
+            </form>
+          )}
+        </div>
+      )}
+
+      {step === "units" && (
+        <div className="space-y-5">
+          {units.length > 0 && (
+            <ul className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-white">
+              {units.map((u) => (
+                <li key={u.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="w-16 shrink-0 text-[13.5px] font-bold text-ink-900">{u.label}</span>
+                  <span className="flex-1 text-[12.5px] text-ink-500">
+                    {u.roomType.name}
+                    {u.floor ? ` · floor ${u.floor}` : ""}
+                  </span>
+                  <form action={removeWelcomeUnit}>
+                    <input type="hidden" name="id" value={u.id} />
+                    <button type="submit" className="text-[12.5px] font-semibold text-ink-400 hover:text-danger-600">
+                      Remove
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {roomTypes.length > 0 ? (
+            <UnitsForm roomTypes={roomTypes.map((rt) => ({ id: rt.id, name: rt.name }))} />
+          ) : (
+            <p className="rounded-md border border-surface-border bg-surface-muted px-4 py-3 text-[13px] text-ink-600">
+              Add a room type first — every room belongs to one.
+            </p>
+          )}
+
+          {units.length > 0 && (
+            <form action={finishWelcomeUnits} className="pt-1">
               <p className="mb-3 text-[12.5px] text-ink-500">
-                {facts.rooms} room{facts.rooms === 1 ? "" : "s"} in total.
+                {units.length} room{units.length === 1 ? "" : "s"} ready for housekeeping.
               </p>
               <WelcomeContinue label="Continue" />
             </form>
@@ -118,40 +168,41 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
         </div>
       )}
 
-      {step === "prices" && <PriceForm currency={property.baseCurrency} roomTypeCount={roomTypes.length} />}
-
-      {step === "brand" && (
-        <BrandForm
-          propertyName={property.name}
-          senderName={property.emailSenderName}
-          brandColor={property.emailBrandColor}
-          logoUrl={property.emailLogoUrl}
+      {step === "taxes" && (
+        <TaxForm
+          values={{
+            vatStandardPct: defaults?.vatStandardPct ?? 20,
+            vatReducedPct: defaults?.vatReducedPct ?? 9,
+            cityTax: cityTax?.amountMinor ? (cityTax.amountMinor / 100).toFixed(2) : "",
+            currency: property.baseCurrency,
+            invoiceIssuerName: defaults?.invoiceIssuerName ?? null,
+            invoiceVatId: defaults?.invoiceVatId ?? null,
+            invoiceAddress: defaults?.invoiceAddress ?? property.address,
+          }}
         />
       )}
-
-      {step === "delivery" && <DeliveryForm suggested={property.contactEmail} />}
 
       {step === "team" && (
         <div className="space-y-4">
           <p className="text-[14px] text-ink-700">
-            Everyone who works with distribution gets their own login, and sets their own password from
-            an invitation. Nobody ever shares one.
+            Reception, housekeeping and maintenance each see only the screens they need. Everyone gets
+            their own login and sets their own password from an invitation.
           </p>
           <Link
             href="/users"
             className="inline-flex h-11 items-center rounded-md bg-brand-800 px-5 text-[14.5px] font-semibold text-white transition-colors hover:bg-brand-700"
           >
-            Invite your team
+            Add your team
           </Link>
         </div>
       )}
 
       {step === "golive" && (
-        <GoLive
-          rooms={facts.rooms}
+        <Ready
+          units={units.length}
           skipped={skippedForSize(PRODUCT, facts)}
+          rooms={facts.rooms}
           property={property}
-          propertyId={property.id}
         />
       )}
     </WelcomeShell>
@@ -159,30 +210,25 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
 }
 
 /**
- * The last screen. It states what was decided on their behalf before it offers the switch, because a
+ * The last screen. It states what was decided on their behalf before it lets them out, because a
  * default nobody can see is not a default — it is a surprise waiting for the first invoice.
  */
-async function GoLive({
+function Ready({
+  units,
   rooms,
   skipped,
   property,
-  propertyId,
 }: {
+  units: number;
   rooms: number;
   skipped: string[];
-  property: { baseCurrency: string; timezone: string; checkInTime: string; checkOutTime: string };
-  propertyId: string;
+  property: { timezone: string; checkInTime: string; checkOutTime: string };
 }) {
-  const channels = await prisma.channel.count({
-    where: { propertyId, status: { not: "disconnected" } },
-  });
-
   return (
     <div className="space-y-6">
       <dl className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-white text-[13.5px]">
         {[
-          ["Rooms", `${rooms} across your room types`],
-          ["Currency", property.baseCurrency],
+          ["Rooms", `${units} physical room${units === 1 ? "" : "s"}`],
           ["Time zone", property.timezone],
           ["Check-in / out", `${property.checkInTime} — ${property.checkOutTime}`],
         ].map(([k, v]) => (
@@ -201,33 +247,13 @@ async function GoLive({
         </p>
       )}
 
-      {channels === 0 ? (
-        <div className="space-y-3">
-          <p className="text-[14px] text-ink-700">
-            Nothing has left Revio yet. Connect your first channel to start sending availability and
-            prices to it.
-          </p>
-          <Link
-            href="/channels"
-            className="inline-flex h-11 items-center rounded-md bg-success-600 px-5 text-[14.5px] font-semibold text-white transition-colors hover:bg-success-700"
-          >
-            Connect a channel
-          </Link>
-          <form action={finishWelcome}>
-            <button type="submit" className="text-[13px] font-semibold text-ink-500 underline-offset-2 hover:underline">
-              Finish setup without connecting yet
-            </button>
-          </form>
-        </div>
-      ) : (
-        <form action={finishWelcome} className="space-y-3">
-          <p className="text-[14px] text-ink-700">
-            {channels} channel{channels === 1 ? "" : "s"} connected. Your rooms and prices go out on the
-            next sync.
-          </p>
-          <WelcomeContinue label="Finish setup" tone="go" />
-        </form>
-      )}
+      <p className="text-[14px] text-ink-700">
+        Reception can check a guest in, and every room is on the housekeeping board.
+      </p>
+
+      <form action={finishWelcome}>
+        <WelcomeContinue label="Finish setup" tone="go" />
+      </form>
     </div>
   );
 }

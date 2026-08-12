@@ -13,7 +13,8 @@
     "./setup-checklist": "./src/setup-checklist.tsx",
     "./status-page": "./src/status-page.tsx",
     "./skeleton": "./src/skeleton.tsx",
-    "./welcome-shell": "./src/welcome-shell.tsx"
+    "./welcome-shell": "./src/welcome-shell.tsx",
+    "./welcome-fields": "./src/welcome-fields.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

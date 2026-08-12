@@ -27,4 +27,5 @@ export {
   type ResolvedToken,
   type TokenResolution,
 } from "./auth-tokens.js";
+export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
 export * from "@prisma/client";

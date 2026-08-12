@@ -5,28 +5,29 @@ import { WelcomeContinue } from "@revio/ui/welcome-shell";
 import {
   BrandFields,
   PropertyFields,
+  TaxFields,
   WelcomeError,
   welcomeInput,
   welcomeLabel,
   type PropertyFieldValues,
+  type TaxFieldValues,
 } from "@revio/ui/welcome-fields";
 import {
   addWelcomeRoomType,
   saveWelcomeBrand,
-  saveWelcomeDelivery,
   saveWelcomeProperty,
+  saveWelcomeTaxes,
   setWelcomePrice,
   type WelcomeResult,
 } from "@/lib/actions-welcome";
 
 /**
- * RevioLink's first-run forms.
+ * RevioCRS's first-run forms.
  *
- * Each is a thin wrapper: the fields come from `@revio/ui/welcome-fields` (the questions are platform
- * facts, identical in all three products) and the action is this app's own (the write is not).
+ * Thin wrappers: the fields come from `@revio/ui/welcome-fields` (the questions are platform facts,
+ * identical in all three products) and the action is this app's own (the write is not).
  */
 
-/** Step 1 — mostly prefilled; they are confirming and completing, not filling in a blank form. */
 export function PropertyForm({ values }: { values: PropertyFieldValues }) {
   const [state, action, pending] = useActionState<WelcomeResult | null, FormData>(saveWelcomeProperty, null);
 
@@ -39,7 +40,6 @@ export function PropertyForm({ values }: { values: PropertyFieldValues }) {
   );
 }
 
-/** Step 2 — add room types one at a time; the list above is the running total. */
 export function RoomTypeForm() {
   const [state, action, pending] = useActionState<WelcomeResult | null, FormData>(addWelcomeRoomType, null);
 
@@ -71,12 +71,7 @@ export function RoomTypeForm() {
   );
 }
 
-/**
- * Step 3 — one price. Empty by default, deliberately.
- *
- * A prefilled rate is the one default that costs the hotel money: most people never change a
- * default, and this one is their revenue.
- */
+/** The one money field in the flow — empty by default, never prefilled. */
 export function PriceForm({ currency, roomTypeCount }: { currency: string; roomTypeCount: number }) {
   const [state, action, pending] = useActionState<WelcomeResult | null, FormData>(setWelcomePrice, null);
 
@@ -88,7 +83,7 @@ export function PriceForm({ currency, roomTypeCount }: { currency: string; roomT
       </label>
       <p className="text-[12.5px] text-ink-500">
         Applied to {roomTypeCount === 1 ? "your room type" : `all ${roomTypeCount} room types`} for the next
-        180 nights. You can change any date afterwards on the calendar.
+        180 nights. Availability search can quote a stay as soon as this exists.
       </p>
       <WelcomeError message={state?.error} />
       <div className="pt-1">
@@ -98,7 +93,19 @@ export function PriceForm({ currency, roomTypeCount }: { currency: string; roomT
   );
 }
 
-/** The personalisation step — the only screen in first-run that gives something back. */
+/** Everything that makes an invoice correct — VAT, city tax, and who issues the document. */
+export function TaxForm({ values }: { values: TaxFieldValues }) {
+  const [state, action, pending] = useActionState<WelcomeResult | null, FormData>(saveWelcomeTaxes, null);
+
+  return (
+    <form action={action} className="space-y-6">
+      <TaxFields values={values} />
+      <WelcomeError message={state?.error} />
+      <WelcomeContinue label="Save and continue" pending={pending} />
+    </form>
+  );
+}
+
 export function BrandForm(props: {
   propertyName: string;
   senderName: string | null;
@@ -112,57 +119,6 @@ export function BrandForm(props: {
       <BrandFields {...props} />
       <WelcomeError message={state?.error} />
       <WelcomeContinue label="Use this" pending={pending} />
-    </form>
-  );
-}
-
-/**
- * Where channel bookings land — RevioLink's own question, and only when it runs alone.
- *
- * The contact email is offered as the default because it is usually the right answer and they have
- * just typed it two screens ago; it is still a real field they can change, not a silent assumption.
- */
-export function DeliveryForm({ suggested }: { suggested: string | null }) {
-  const [state, action, pending] = useActionState<WelcomeResult | null, FormData>(saveWelcomeDelivery, null);
-
-  return (
-    <form action={action} className="space-y-4">
-      <label className="block">
-        <span className={welcomeLabel}>Send bookings to</span>
-        <input
-          name="reservationEmailPrimary"
-          type="email"
-          required
-          defaultValue={suggested ?? ""}
-          placeholder="reception@yourhotel.com"
-          className={welcomeInput}
-        />
-      </label>
-
-      <label className="block">
-        <span className={welcomeLabel}>And also to (optional)</span>
-        <input
-          name="reservationEmailSecondary"
-          type="email"
-          placeholder="owner@yourhotel.com"
-          className={welcomeInput}
-        />
-      </label>
-
-      <label className="flex items-start gap-2.5 rounded-md border border-surface-border bg-white px-4 py-3">
-        <input type="checkbox" name="notifyTomorrowArrivals" defaultChecked className="mt-0.5 h-4 w-4" />
-        <span className="text-[13px] leading-relaxed text-ink-700">
-          Email tomorrow&rsquo;s arrivals each evening
-          <span className="mt-0.5 block text-[12px] text-ink-400">
-            A list the evening before is something reception can act on.
-          </span>
-        </span>
-      </label>
-
-      <WelcomeError message={state?.error} />
-      <div className="pt-1">
-        <WelcomeContinue label="Save and continue" pending={pending} />
-      </div>
     </form>
   );
 }

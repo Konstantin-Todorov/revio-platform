@@ -33,6 +33,31 @@
 /** The products a hotel can run, by the name it sees on screen. */
 export type ProductName = "RevioLink" | "RevioCRS" | "RevioPMS";
 
+/**
+ * The value each product writes into `Property.setupCompleted`.
+ *
+ * It lives here because it was previously written in two vocabularies: the dashboard checklists
+ * pushed `"cm"`, and the welcome flow pushed `"RevioLink"`. One column, two names for one fact, so
+ * finishing the guided setup did not stop the checklist from asking again. A hotel's own record of
+ * "I have done this" is not a place for two opinions.
+ */
+export const SETUP_KEY: Record<ProductName, string> = {
+  RevioLink: "cm",
+  RevioCRS: "crs",
+  RevioPMS: "pms",
+};
+
+/**
+ * Has this property finished first-run setup for this product?
+ *
+ * Accepts the product name as well as the key, because the short-lived earlier build wrote
+ * `"RevioLink"` into production rows. Standardising the constant must never cost a hotel that
+ * already finished the flow a second trip through it.
+ */
+export function hasFinishedSetup(setupCompleted: string[], product: ProductName): boolean {
+  return setupCompleted.includes(SETUP_KEY[product]) || setupCompleted.includes(product);
+}
+
 export interface SetupStep {
   key: string;
   /** Imperative, in the hotel's language — "Add your room types", not "roomTypes > 0". */

@@ -27,6 +27,14 @@ export interface WelcomeShellProps {
   title: string;
   /** One sentence under it. */
   lead: string;
+  /**
+   * The previous screen. Absent only on the first.
+   *
+   * Setup is a sequence somebody is typing into, which means somebody will mistype. Without a way
+   * back, a wrong room count is fixable only by abandoning setup and hunting for the screen that
+   * owns it — so this is not a convenience, it is the difference between a form and a trap.
+   */
+  backHref?: string;
   /** Where "I'll do this later" goes. Absent ⇒ no skip offered, which is the case for Go live. */
   skipHref?: string;
   /** The step's own form, including its submit button. */
@@ -41,6 +49,7 @@ export function WelcomeShell({
   currentKey,
   title,
   lead,
+  backHref,
   skipHref,
   children,
   footnote,
@@ -80,6 +89,17 @@ export function WelcomeShell({
       </div>
 
       <main className="mx-auto max-w-2xl px-6 py-10 sm:py-14">
+        {/* Above the heading rather than beside the submit button: it is a way back, not a choice
+            competing with the way forward. */}
+        {backHref && (
+          <a
+            href={backHref}
+            className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-500 transition-colors hover:text-ink-800"
+          >
+            <span aria-hidden="true">&larr;</span> Back
+          </a>
+        )}
+
         <h1 className="text-[26px] font-bold leading-tight tracking-tight text-ink-900 sm:text-[30px]">
           {title}
         </h1>
@@ -104,6 +124,41 @@ export function WelcomeShell({
         )}
       </main>
     </div>
+  );
+}
+
+/**
+ * What carried over from the products the hotel already runs — the opening screen of a second or
+ * third onboarding, and the whole argument for this platform on one page.
+ *
+ * It lists what was inherited **by name and by source** rather than claiming it generically, because
+ * a hotel that has just paid for another product is entitled to check. The wording is "shared with",
+ * never "copied from": these are the same rows, which is precisely why they cannot drift apart.
+ */
+export function SharedSummary({
+  items,
+}: {
+  items: { key: string; title: string; sharedWith: string[] }[];
+}) {
+  return (
+    <ul className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-white">
+      {items.map((item) => (
+        <li key={item.key} className="flex items-start gap-3 px-4 py-3">
+          <span
+            aria-hidden="true"
+            className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success-500 text-[10px] font-bold leading-none text-white"
+          >
+            ✓
+          </span>
+          <span className="flex-1">
+            <span className="block text-[13.5px] font-semibold text-ink-900">{item.title}</span>
+            <span className="block text-[12.5px] text-ink-500">
+              Already set up — shared with {item.sharedWith.join(" and ")}.
+            </span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

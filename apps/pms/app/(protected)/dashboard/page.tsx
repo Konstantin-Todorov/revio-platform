@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { BedDouble, Wrench, CircleCheck, LogIn, LogOut, Users, ArrowRightLeft, UserPlus, DoorOpen, Receipt, AlertTriangle, Star, Clock, TriangleAlert } from "lucide-react";
+import { redirect } from "next/navigation";
+import { hasFinishedSetup } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
-import { getFrontDeskOverview, type StayRow } from "@/lib/data";
+import { prisma } from "@/lib/db";
+import { activeProperty, getFrontDeskOverview, type StayRow } from "@/lib/data";
 import { getSetup } from "@/lib/setup";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
@@ -62,6 +65,18 @@ function KpiCard({ icon: Icon, label, value, tint }: { icon: typeof BedDouble; l
 }
 
 export default async function DashboardPage() {
+  /**
+   * A hotel that has never configured anything goes into the guided flow instead of a front desk of
+   * zeros. The honest test for "has not started" is having no physical rooms: without units nothing
+   * on this screen can do anything, and an established hotel that simply never clicked the last
+   * setup screen is not dragged back through it.
+   */
+  const { property: activeProp } = await activeProperty();
+  if (!hasFinishedSetup(activeProp.setupCompleted, "RevioPMS")) {
+    const unitCount = await prisma.unit.count({ where: { propertyId: activeProp.id } });
+    if (unitCount === 0) redirect("/welcome/property");
+  }
+
   const [{ property, today, totalUnits, arrivals, inHouse, departures, departedToday, conflicts, kpis, exceptions }, setup] =
     await Promise.all([getFrontDeskOverview(), getSetup()]);
 

@@ -5,7 +5,7 @@ import { SharedSummary, WelcomeContinue, WelcomeShell } from "@revio/ui/welcome-
 import { prisma } from "@/lib/db";
 import { getProperty } from "@/lib/data";
 import { getWelcomeFactsForProperty } from "@/lib/welcome";
-import { BrandForm, DeliveryForm, PriceForm, PropertyForm, RoomTypeForm } from "@/components/welcome/WelcomeForms";
+import { BrandForm, PriceForm, PropertyForm, RoomTypeForm, TaxForm } from "@/components/welcome/WelcomeForms";
 import {
   finishWelcome,
   finishWelcomeRooms,
@@ -14,9 +14,9 @@ import {
 } from "@/lib/actions-welcome";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Set up RevioLink" };
+export const metadata = { title: "Set up RevioCRS" };
 
-const PRODUCT = "RevioLink";
+const PRODUCT = "RevioCRS";
 
 export default async function WelcomeStepPage({ params }: { params: Promise<{ step: string }> }) {
   const { step } = await params;
@@ -24,14 +24,19 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
   const facts = await getWelcomeFactsForProperty();
   const steps = welcomeFlow(PRODUCT, facts);
 
-  const roomTypes = await prisma.roomType.findMany({
-    where: { propertyId: property.id },
-    orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, code: true, totalRooms: true, maxGuests: true },
-  });
+  const [roomTypes, defaults, cityTax] = await Promise.all([
+    prisma.roomType.findMany({
+      where: { propertyId: property.id },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, totalRooms: true, maxGuests: true },
+    }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
+    prisma.taxFee.findFirst({
+      where: { propertyId: property.id, basis: "per_person", type: "fixed", active: true },
+    }),
+  ]);
 
-  // A URL naming a step this property never sees (or a typo) goes to the start rather than 404ing —
-  // someone mid-setup should never hit a dead end.
+  // A URL naming a step this property never sees (or a typo) goes to the start rather than 404ing.
   if (!steps.some((s) => s.key === step)) redirect(`/welcome/${steps[0]!.key}`);
   const current = steps.find((s) => s.key === step)!;
   const back = previousStep(steps, step);
@@ -120,6 +125,22 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
 
       {step === "prices" && <PriceForm currency={property.baseCurrency} roomTypeCount={roomTypes.length} />}
 
+      {step === "taxes" && (
+        <TaxForm
+          values={{
+            vatStandardPct: defaults?.vatStandardPct ?? 20,
+            vatReducedPct: defaults?.vatReducedPct ?? 9,
+            cityTax: cityTax?.amountMinor ? (cityTax.amountMinor / 100).toFixed(2) : "",
+            currency: property.baseCurrency,
+            invoiceIssuerName: defaults?.invoiceIssuerName ?? null,
+            invoiceVatId: defaults?.invoiceVatId ?? null,
+            // Falls back to the postal address they typed two screens ago — usually right, and still
+            // a real editable field rather than a silent assumption.
+            invoiceAddress: defaults?.invoiceAddress ?? property.address,
+          }}
+        />
+      )}
+
       {step === "brand" && (
         <BrandForm
           propertyName={property.name}
@@ -129,16 +150,14 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
         />
       )}
 
-      {step === "delivery" && <DeliveryForm suggested={property.contactEmail} />}
-
       {step === "team" && (
         <div className="space-y-4">
           <p className="text-[14px] text-ink-700">
-            Everyone who works with distribution gets their own login, and sets their own password from
-            an invitation. Nobody ever shares one.
+            Everyone gets their own login and sets their own password from an invitation. Nobody ever
+            shares one — and the same login works in every Revio product your hotel uses.
           </p>
           <Link
-            href="/users"
+            href="/settings/users"
             className="inline-flex h-11 items-center rounded-md bg-brand-800 px-5 text-[14.5px] font-semibold text-white transition-colors hover:bg-brand-700"
           >
             Invite your team
@@ -147,36 +166,25 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
       )}
 
       {step === "golive" && (
-        <GoLive
-          rooms={facts.rooms}
-          skipped={skippedForSize(PRODUCT, facts)}
-          property={property}
-          propertyId={property.id}
-        />
+        <Ready rooms={facts.rooms} skipped={skippedForSize(PRODUCT, facts)} property={property} />
       )}
     </WelcomeShell>
   );
 }
 
 /**
- * The last screen. It states what was decided on their behalf before it offers the switch, because a
+ * The last screen. It states what was decided on their behalf before it lets them out, because a
  * default nobody can see is not a default — it is a surprise waiting for the first invoice.
  */
-async function GoLive({
+function Ready({
   rooms,
   skipped,
   property,
-  propertyId,
 }: {
   rooms: number;
   skipped: string[];
   property: { baseCurrency: string; timezone: string; checkInTime: string; checkOutTime: string };
-  propertyId: string;
 }) {
-  const channels = await prisma.channel.count({
-    where: { propertyId, status: { not: "disconnected" } },
-  });
-
   return (
     <div className="space-y-6">
       <dl className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-white text-[13.5px]">
@@ -201,33 +209,13 @@ async function GoLive({
         </p>
       )}
 
-      {channels === 0 ? (
-        <div className="space-y-3">
-          <p className="text-[14px] text-ink-700">
-            Nothing has left Revio yet. Connect your first channel to start sending availability and
-            prices to it.
-          </p>
-          <Link
-            href="/channels"
-            className="inline-flex h-11 items-center rounded-md bg-success-600 px-5 text-[14.5px] font-semibold text-white transition-colors hover:bg-success-700"
-          >
-            Connect a channel
-          </Link>
-          <form action={finishWelcome}>
-            <button type="submit" className="text-[13px] font-semibold text-ink-500 underline-offset-2 hover:underline">
-              Finish setup without connecting yet
-            </button>
-          </form>
-        </div>
-      ) : (
-        <form action={finishWelcome} className="space-y-3">
-          <p className="text-[14px] text-ink-700">
-            {channels} channel{channels === 1 ? "" : "s"} connected. Your rooms and prices go out on the
-            next sync.
-          </p>
-          <WelcomeContinue label="Finish setup" tone="go" />
-        </form>
-      )}
+      <p className="text-[14px] text-ink-700">
+        You can take a booking now: search availability, hold the room, confirm.
+      </p>
+
+      <form action={finishWelcome}>
+        <WelcomeContinue label="Finish setup" tone="go" />
+      </form>
     </div>
   );
 }
