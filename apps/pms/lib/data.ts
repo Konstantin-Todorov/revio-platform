@@ -1,5 +1,5 @@
 import "server-only";
-import type { SetupFacts } from "@revio/core";
+import type { ProductName, SetupFacts } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { todayInTz, ymd, utcDay } from "./format";
@@ -544,5 +544,22 @@ export async function getSetupFacts(): Promise<SetupFacts> {
   return {
     roomTypes, ratePlans: 0, hasRates: true, channels: 0, mappingComplete: true,
     units, staff, hasTaxes: taxes > 0, catalogItems, reservations: 0,
+    alsoRuns: alsoRuns(session.entitlements),
   };
+}
+
+/**
+ * Which OTHER Revio products this hotel runs.
+ *
+ * Lets a shared step say where it was already done ("Already set up in RevioLink") instead of just
+ * going quietly green. The entitlement is the right signal: a hotel that owns the product has seen
+ * that screen, whether or not it has finished with it.
+ */
+function alsoRuns(e: { channelManager: boolean; reservation: boolean; pms: boolean }): ProductName[] {
+  const all: [boolean, ProductName][] = [
+    [e.channelManager, "RevioLink"],
+    [e.reservation, "RevioCRS"],
+    [e.pms, "RevioPMS"],
+  ];
+  return all.filter(([owned, name]) => owned && name !== "RevioPMS").map(([, name]) => name);
 }

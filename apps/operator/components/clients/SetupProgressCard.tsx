@@ -116,10 +116,21 @@ export function SetupProgressCard({
                     >
                       {s.done ? "✓" : ""}
                     </span>
-                    <span
-                      className={`text-[12.5px] ${s.done ? "text-ink-400 line-through decoration-ink-300" : "text-ink-800"}`}
-                    >
-                      {s.title}
+                    <span className="min-w-0">
+                      <span
+                        className={`text-[12.5px] ${s.done ? "text-ink-400 line-through decoration-ink-300" : "text-ink-800"}`}
+                      >
+                        {s.title}
+                      </span>
+                      {/* Worth seeing before a call: the expansion sale largely made itself. */}
+                      {s.inheritedFrom && (
+                        <span className="ml-1.5 text-[11px] text-success-600">
+                          already done in {s.inheritedFrom}
+                        </span>
+                      )}
+                      {s.providedForYou && !s.inheritedFrom && (
+                        <span className="ml-1.5 text-[11px] text-ink-400">set up at onboarding</span>
+                      )}
                     </span>
                   </li>
                 ))}

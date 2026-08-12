@@ -8,8 +8,26 @@
  *
  * The step LISTS live here rather than in the apps because "set up" is a platform-level fact: room
  * types created in RevioLink are the same records RevioCRS and RevioPMS need. One definition keeps
- * the three products from disagreeing about whether a hotel is ready.
+ * the three products from disagreeing about whether a hotel is ready — and lets the Operator console
+ * show a client exactly what that client sees, rather than a second opinion.
+ *
+ * ## Two things this file does on purpose
+ *
+ * **Nobody starts at zero.** The first step is already ticked, because it is already true: the
+ * operator created the tenant, the owner, the property and a base rate plan before the hotel ever
+ * signed in. Counting work that really happened is not a motivational trick, it is arithmetic we
+ * were previously getting wrong — `0 of 4` described a hotel that was demonstrably further along
+ * than that.
+ *
+ * **A step another product already satisfied says so.** When a hotel that runs RevioLink opens
+ * RevioCRS, its room types and rates are already there — not copied, the same records. Ticking them
+ * silently wastes the single best moment to show what one shared core buys: `inheritedFrom` lets the
+ * screen say *"already set up in RevioLink"*, which is the zero-migration promise arriving as a
+ * fact rather than a claim on a pricing page.
  */
+
+/** The products a hotel can run, by the name it sees on screen. */
+export type ProductName = "RevioLink" | "RevioCRS" | "RevioPMS";
 
 export interface SetupStep {
   key: string;
@@ -20,6 +38,18 @@ export interface SetupStep {
   href: string;
   cta: string;
   done: boolean;
+  /**
+   * Which other Revio product already satisfied this step, when one did.
+   *
+   * Only set when the hotel actually runs that product — a CRS-only hotel created its own room
+   * types, and telling it they came from RevioLink would be a lie about software it has never seen.
+   */
+  inheritedFrom?: ProductName;
+  /**
+   * True for work that was done for them rather than by them — the provisioning the operator did.
+   * Rendered differently from a step they completed, because claiming their credit is patronising.
+   */
+  providedForYou?: boolean;
 }
 
 export interface SetupProgress {
@@ -30,11 +60,20 @@ export interface SetupProgress {
   complete: boolean;
   /** The first unfinished step: what the hotel should do right now. */
   next: SetupStep | null;
+  /** Steps they did not have to do because another product had already done them. */
+  inherited: SetupStep[];
 }
 
 function progress(steps: SetupStep[]): SetupProgress {
   const done = steps.filter((s) => s.done).length;
-  return { steps, done, total: steps.length, complete: done === steps.length, next: steps.find((s) => !s.done) ?? null };
+  return {
+    steps,
+    done,
+    total: steps.length,
+    complete: done === steps.length,
+    next: steps.find((s) => !s.done) ?? null,
+    inherited: steps.filter((s) => s.inheritedFrom !== undefined),
+  };
 }
 
 /** Facts every product reads from the shared core records. */
@@ -59,18 +98,52 @@ export interface SetupFacts {
   catalogItems: number;
   /** Any reservation at all has been taken. */
   reservations: number;
+  /**
+   * The OTHER Revio products this hotel runs. Lets a shared step name where it was already done.
+   * Omit (or leave empty) and shared steps simply read as done, which is correct for a hotel that
+   * only ever bought one product.
+   */
+  alsoRuns?: ProductName[];
+}
+
+/** Did another product the hotel runs already do this? Returns the crediting product, or undefined. */
+function creditTo(f: SetupFacts, satisfied: boolean, candidates: ProductName[]): ProductName | undefined {
+  if (!satisfied) return undefined;
+  return (f.alsoRuns ?? []).find((p) => candidates.includes(p));
+}
+
+/**
+ * The step that is already true before a hotel signs in for the first time.
+ *
+ * Shared by all three products verbatim, because it is one fact about the account rather than three.
+ */
+function propertyStep(href: string): SetupStep {
+  return {
+    key: "property",
+    title: "Your property is set up",
+    body: "Created with your account, along with a starting rate plan.",
+    href,
+    cta: "Review",
+    done: true,
+    providedForYou: true,
+  };
 }
 
 /** RevioLink: the hotel is ready when its inventory reaches the OTAs. */
 export function reviolinkSetup(f: SetupFacts): SetupProgress {
+  const roomsDone = f.roomTypes > 0;
+  const ratesDone = f.hasRates;
+
   return progress([
+    propertyStep("/settings"),
     {
       key: "room-types",
       title: "Add your room types",
       body: "The rooms you sell — Double, Suite, and how many of each you have.",
       href: "/rooms-rates",
       cta: "Add room types",
-      done: f.roomTypes > 0,
+      done: roomsDone,
+      ...maybe("inheritedFrom", creditTo(f, roomsDone, ["RevioCRS", "RevioPMS"])),
     },
     {
       key: "rates",
@@ -78,7 +151,8 @@ export function reviolinkSetup(f: SetupFacts): SetupProgress {
       body: "Price the dates you want to sell. Bulk Rates fills a whole season in one go.",
       href: "/bulk-update",
       cta: "Set rates",
-      done: f.hasRates,
+      done: ratesDone,
+      ...maybe("inheritedFrom", creditTo(f, ratesDone, ["RevioCRS"])),
     },
     {
       key: "channels",
@@ -101,14 +175,19 @@ export function reviolinkSetup(f: SetupFacts): SetupProgress {
 
 /** RevioCRS: the hotel is ready when it can take and invoice a booking. */
 export function reviocrsSetup(f: SetupFacts): SetupProgress {
+  const roomsDone = f.roomTypes > 0;
+  const ratesDone = f.hasRates;
+
   return progress([
+    propertyStep("/settings"),
     {
       key: "room-types",
       title: "Add your room types",
       body: "The rooms you sell and how many of each — the basis of every availability check.",
       href: "/rooms-rates",
       cta: "Add room types",
-      done: f.roomTypes > 0,
+      done: roomsDone,
+      ...maybe("inheritedFrom", creditTo(f, roomsDone, ["RevioLink", "RevioPMS"])),
     },
     {
       key: "rates",
@@ -116,7 +195,8 @@ export function reviocrsSetup(f: SetupFacts): SetupProgress {
       body: "Price your dates so the availability search can quote a stay.",
       href: "/bulk",
       cta: "Set rates",
-      done: f.hasRates,
+      done: ratesDone,
+      ...maybe("inheritedFrom", creditTo(f, ratesDone, ["RevioLink"])),
     },
     {
       key: "taxes",
@@ -125,6 +205,7 @@ export function reviocrsSetup(f: SetupFacts): SetupProgress {
       href: "/settings",
       cta: "Open settings",
       done: f.hasTaxes,
+      ...maybe("inheritedFrom", creditTo(f, f.hasTaxes, ["RevioPMS"])),
     },
     {
       key: "first-reservation",
@@ -139,14 +220,18 @@ export function reviocrsSetup(f: SetupFacts): SetupProgress {
 
 /** RevioPMS: the hotel is ready when reception can check a guest into a real room. */
 export function reviopmsSetup(f: SetupFacts): SetupProgress {
+  const roomsDone = f.roomTypes > 0;
+
   return progress([
+    propertyStep("/configuration"),
     {
       key: "room-types",
       title: "Add your room types",
       body: "Defined once for the whole platform, in RevioLink or RevioCRS under Rooms & Rates.",
       href: "/rooms",
       cta: "See rooms",
-      done: f.roomTypes > 0,
+      done: roomsDone,
+      ...maybe("inheritedFrom", creditTo(f, roomsDone, ["RevioLink", "RevioCRS"])),
     },
     {
       key: "units",
@@ -163,6 +248,7 @@ export function reviopmsSetup(f: SetupFacts): SetupProgress {
       href: "/configuration",
       cta: "Open configuration",
       done: f.hasTaxes,
+      ...maybe("inheritedFrom", creditTo(f, f.hasTaxes, ["RevioCRS"])),
     },
     {
       key: "staff",
@@ -173,4 +259,15 @@ export function reviopmsSetup(f: SetupFacts): SetupProgress {
       done: f.staff > 1,
     },
   ]);
+}
+
+/**
+ * Spread an optional property only when it has a value.
+ *
+ * `exactOptionalPropertyTypes` is on, so `{ inheritedFrom: undefined }` is not the same as omitting
+ * the key — and a present-but-undefined `inheritedFrom` would make `inherited` count steps nobody
+ * inherited.
+ */
+function maybe<K extends string, V>(key: K, value: V | undefined): Record<K, V> | Record<string, never> {
+  return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
 }

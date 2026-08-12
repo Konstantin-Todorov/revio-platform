@@ -17,6 +17,10 @@ export interface ChecklistStep {
   href: string;
   cta: string;
   done: boolean;
+  /** Another Revio product this hotel runs had already done this — see `@revio/core/onboarding`. */
+  inheritedFrom?: string;
+  /** Done for them at provisioning rather than by them. */
+  providedForYou?: boolean;
 }
 
 export interface SetupChecklistProps {
@@ -87,10 +91,19 @@ export function SetupChecklist({ productName, promise, steps, done, total, actio
                   {s.title}
                 </div>
                 {!s.done && <div className="mt-0.5 text-[12px] leading-snug text-ink-500">{s.body}</div>}
+                {/* The single best moment to show what one shared core buys: these are not copies,
+                    they are the same records the other product has been using. */}
+                {s.inheritedFrom && (
+                  <div className="mt-0.5 text-[12px] leading-snug text-success-600">
+                    Already set up in {s.inheritedFrom} — nothing to move across.
+                  </div>
+                )}
               </div>
 
               {s.done ? (
-                <span className="text-[12px] font-semibold text-success-600">Done</span>
+                <span className="shrink-0 text-[12px] font-semibold text-success-600">
+                  {s.inheritedFrom ? "Already done" : s.providedForYou ? "Set up for you" : "Done"}
+                </span>
               ) : (
                 <a
                   href={s.href}

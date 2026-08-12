@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { deriveRate, isAdvancePurchaseClosed, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts } from "@revio/core";
+import { deriveRate, isAdvancePurchaseClosed, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -167,6 +167,11 @@ export async function getSetupFacts(): Promise<SetupFacts> {
     roomTypes, ratePlans, hasRates: prices > 0, channels,
     mappingComplete: unmappedRt + unmappedRp === 0,
     units: 0, staff: 0, hasTaxes: taxes > 0, catalogItems: 0, reservations,
+    alsoRuns: alsoRuns({
+      channelManager: property.tenant.hasChannelManager,
+      reservation: property.tenant.hasReservation,
+      pms: property.tenant.hasPms,
+    }),
   };
 }
 
@@ -616,4 +621,20 @@ export async function getUnmappedBookingAlerts(channelId: string) {
     const anchor = rate ? `map-rate-${rate.id}` : room ? `map-room-${room.id}` : null;
     return { id: e.id, message: e.message, anchor };
   });
+}
+
+/**
+ * Which OTHER Revio products this hotel runs.
+ *
+ * Lets a shared step say where it was already done ("Already set up in RevioLink") instead of just
+ * going quietly green. The entitlement is the right signal: a hotel that owns the product has seen
+ * that screen, whether or not it has finished with it.
+ */
+function alsoRuns(e: { channelManager: boolean; reservation: boolean; pms: boolean }): ProductName[] {
+  const all: [boolean, ProductName][] = [
+    [e.channelManager, "RevioLink"],
+    [e.reservation, "RevioCRS"],
+    [e.pms, "RevioPMS"],
+  ];
+  return all.filter(([owned, name]) => owned && name !== "RevioLink").map(([, name]) => name);
 }

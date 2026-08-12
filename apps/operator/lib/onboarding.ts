@@ -2,6 +2,7 @@ import {
   reviolinkSetup,
   reviocrsSetup,
   reviopmsSetup,
+  type ProductName,
   type SetupFacts,
   type SetupProgress,
 } from "@revio/core";
@@ -63,10 +64,23 @@ export interface ClientSetup {
  * which is the failure the attention feed was built to avoid.
  */
 export function clientSetup(facts: SetupFacts, entitlements: Entitlements): ClientSetup {
+  // Each product is asked the question from its own point of view: "which OTHER products does this
+  // hotel run?" — the same input the hotel's own dashboard supplies, so the console sees the same
+  // "already set up in RevioLink" the customer does.
+  const owned: [boolean, ProductName][] = [
+    [entitlements.channelManager, "RevioLink"],
+    [entitlements.reservation, "RevioCRS"],
+    [entitlements.pms, "RevioPMS"],
+  ];
+  const factsFor = (self: ProductName): SetupFacts => ({
+    ...facts,
+    alsoRuns: owned.filter(([has, name]) => has && name !== self).map(([, name]) => name),
+  });
+
   const products: ProductSetup[] = [];
-  if (entitlements.channelManager) products.push({ key: "cm", name: "RevioLink", progress: reviolinkSetup(facts) });
-  if (entitlements.reservation) products.push({ key: "crs", name: "RevioCRS", progress: reviocrsSetup(facts) });
-  if (entitlements.pms) products.push({ key: "pms", name: "RevioPMS", progress: reviopmsSetup(facts) });
+  if (entitlements.channelManager) products.push({ key: "cm", name: "RevioLink", progress: reviolinkSetup(factsFor("RevioLink")) });
+  if (entitlements.reservation) products.push({ key: "crs", name: "RevioCRS", progress: reviocrsSetup(factsFor("RevioCRS")) });
+  if (entitlements.pms) products.push({ key: "pms", name: "RevioPMS", progress: reviopmsSetup(factsFor("RevioPMS")) });
 
   const done = products.reduce((n, p) => n + p.progress.done, 0);
   const total = products.reduce((n, p) => n + p.progress.total, 0);
