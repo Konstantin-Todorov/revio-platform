@@ -1416,3 +1416,27 @@ model AuditEntry {
 
   @@index([propertyId, createdAt])
 }
+
+/// Failed sign-in attempts, per app and per email typed.
+///
+/// Deliberately NOT tenant-scoped and deliberately carries NO RLS policy: a login attempt happens
+/// before any tenant context exists — there is no session, no `app.tenant_id`, and often no account.
+/// Attempts are keyed on the email AS TYPED whether or not it matches a user, because locking only
+/// real accounts would turn the lockout message into an account-existence oracle.
+///
+/// The decision logic lives in `@revio/core` (`auth/login-gate.ts`); this table is only its memory.
+model LoginAttempt {
+  id              String    @id @default(cuid())
+  /// Which app the attempt was against: cm | crs | pms | operator.
+  scope           String
+  /// Lowercased email as typed. Not a foreign key — it may match no user at all.
+  identifier      String
+  failures        Int       @default(0)
+  lockouts        Int       @default(0)
+  windowStartedAt DateTime
+  lockedUntil     DateTime?
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([scope, identifier])
+  @@index([updatedAt])
+}

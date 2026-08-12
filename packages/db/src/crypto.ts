@@ -2,12 +2,26 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 /**
  * AES-256-GCM for secrets at rest (connectivity API keys). The data key is derived from
- * CONNECTIVITY_SECRET (falls back to AUTH_SECRET so one well-kept secret suffices; dev fallback last).
+ * CONNECTIVITY_SECRET (falls back to AUTH_SECRET so one well-kept secret suffices).
  * Ciphertext format: base64(iv).base64(tag).base64(data) — one string column, self-contained.
+ *
+ * Fail-closed in production, for the same reason the session signing key is: the previous fallback
+ * meant a service with neither variable set would happily encrypt every hotel's OTA credentials under
+ * a key committed to this repository, and report success while doing it. "Encrypted at rest" with a
+ * public key is not encryption, it is base64 with extra steps — and nothing would have alerted us.
  */
 function dataKey(): Buffer {
-  const secret =
-    process.env.CONNECTIVITY_SECRET || process.env.AUTH_SECRET || "dev-insecure-secret-change-in-prod";
+  const secret = process.env.CONNECTIVITY_SECRET || process.env.AUTH_SECRET;
+
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "Neither CONNECTIVITY_SECRET nor AUTH_SECRET is set. Refusing to encrypt credentials with a known key.",
+      );
+    }
+    return createHash("sha256").update("dev-insecure-secret-change-in-prod").digest();
+  }
+
   return createHash("sha256").update(secret).digest();
 }
 

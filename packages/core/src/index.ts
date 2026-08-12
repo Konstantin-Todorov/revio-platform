@@ -2,6 +2,7 @@
 
 export * from "./domain/types.js";
 export * from "./domain/connectivity.js";
+export * from "./auth/login-gate.js";
 export * from "./inventory/availability.js";
 export * from "./inventory/waterfall.js";
 export * from "./metrics/formulas.js";

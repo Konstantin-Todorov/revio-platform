@@ -6,8 +6,34 @@ import { SignJWT, jwtVerify } from "jose";
 export const SESSION_COOKIE = "revio_session";
 const TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
+/**
+ * The signing key for session cookies — fail-closed.
+ *
+ * This used to fall back to a hardcoded literal when AUTH_SECRET was unset, which meant a service
+ * that lost its env var did not break: it kept serving, signing sessions with a value published in
+ * this repository. Anyone could then mint a valid session cookie for any user. A login system whose
+ * failure mode is "silently accept forged sessions" is worse than one that refuses to start.
+ *
+ * So: in production, missing or weak means throw. In development the fallback stays, because a local
+ * checkout that will not boot until you invent a secret is a checkout nobody runs.
+ */
+const MIN_SECRET_LENGTH = 32;
+
 function secret() {
-  return new TextEncoder().encode(process.env.AUTH_SECRET || "dev-insecure-secret-change-in-prod");
+  const value = process.env.AUTH_SECRET;
+
+  if (!value || value.length < MIN_SECRET_LENGTH) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        !value
+          ? "AUTH_SECRET is not set. Refusing to sign sessions with a known key — set it on this service."
+          : `AUTH_SECRET is shorter than ${MIN_SECRET_LENGTH} characters. Use a long random value.`,
+      );
+    }
+    return new TextEncoder().encode("dev-insecure-secret-change-in-prod");
+  }
+
+  return new TextEncoder().encode(value);
 }
 
 export function hashPassword(plain: string): Promise<string> {
