@@ -86,8 +86,19 @@ export type TokenResolution =
  * Used to render the "choose a password" page: the visitor should be told the link is dead *before*
  * typing a password into a form that will reject it.
  *
- * An unrecognised token gets the same wording as an expired one. Distinguishing "no such token" from
- * "expired token" would let someone probe which of their guesses had ever been real.
+ * **An unrecognised token and an expired one are worded differently, and that is deliberate.** It
+ * looks like the enumeration mistake this file is otherwise careful about, and it is not the same
+ * shape of problem. Email enumeration is dangerous because the attacker *chooses* the input: they
+ * type an address and learn whether it exists. Here the input is 256 bits of CSPRNG — to see the
+ * "expired" wording at all you must already hold a token that was genuinely issued, which tells you
+ * only what you knew when you received the email.
+ *
+ * What is gained by keeping them distinct is real: someone clicking a fortnight-old invitation is
+ * told it aged out and to ask for another, rather than being left to wonder whether they mistyped a
+ * URL. Collapsing the two would trade a true improvement in the common case for no security at all.
+ *
+ * A token whose PURPOSE does not match is treated as unrecognised — an invite link pasted into the
+ * reset route is not evidence of anything, and saying so would confirm the token exists.
  */
 export async function resolveToken(token: string, purpose: TokenPurpose): Promise<TokenResolution> {
   const row = await forSystem().authToken.findUnique({ where: { tokenHash: hashToken(token) } });
