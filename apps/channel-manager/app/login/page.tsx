@@ -3,7 +3,14 @@ import { LoginForm } from "@/components/auth/LoginForm";
 
 export const metadata = { title: "Sign in · RevioLink" };
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ passwordSet?: string }>;
+}) {
+  // Read here rather than with useSearchParams in the form: this page is a server component,
+  // and the hook forces a Suspense boundary at prerender for a single boolean.
+  const justSet = (await searchParams).passwordSet === "1";
   return (
     <div className="flex min-h-screen items-stretch bg-surface-muted">
       {/* Brand panel */}
@@ -31,7 +38,7 @@ export default function LoginPage() {
           <h2 className="text-[20px] font-bold tracking-tight text-ink-900">Sign in to RevioLink</h2>
           <p className="mb-6 mt-1 text-[13px] text-ink-500">Welcome back — manage your distribution.</p>
 
-          <LoginForm />
+          <LoginForm justSet={justSet} />
 
           {/* Opt-in, and off unless SHOW_DEMO_LOGINS=1 is set — a paying hotel must never be shown
               someone else's credentials on the sign-in page. Server-side env (never NEXT_PUBLIC), so

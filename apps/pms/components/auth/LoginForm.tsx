@@ -2,15 +2,13 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { useSearchParams } from "next/navigation";
 import { login, type LoginResult } from "@/lib/actions-auth";
 
 const inputCls =
   "h-10 w-full rounded-md border border-surface-border bg-white px-3 text-[14px] text-ink-900 outline-none transition-colors placeholder:text-ink-400 focus:border-accent-600";
 
-export function LoginForm() {
+export function LoginForm({ justSet = false }: { justSet?: boolean }) {
   const [state, formAction, pending] = useActionState<LoginResult | null, FormData>(login, null);
-  const justSet = useSearchParams().get("passwordSet") === "1";
 
   return (
     <form action={formAction} className="space-y-3.5">
