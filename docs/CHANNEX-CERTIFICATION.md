@@ -166,7 +166,7 @@ and the running app cannot disagree.
 | | |
 | --- | --- |
 | Sandbox API base | `https://staging.channex.io/api/v1` |
-| Production API base (after the pass) | `https://secure.channex.io/api/v1` |
+| Production API base (after the pass) | `https://app.channex.io/api/v1` — **corrected 2026-08-15 by Channex**; it read `secure.channex.io` before, which was a guess never exercised against a real host |
 | Channex property (sandbox) | **`a1e9b246-4db1-4ccd-aa8b-08dea7ff89f9`** — **"Test Property - Revio"**, currency **USD** (renamed + switched 2026-08-06 to match the spec) |
 
 ⚠️ **One sandbox item is unresolved: the four rate plans are still EUR.** `PUT /rate_plans/{id}`

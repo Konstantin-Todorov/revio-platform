@@ -1478,3 +1478,32 @@ model AuthToken {
   @@index([email, purpose])
   @@index([expiresAt])
 }
+
+/// A mutual-exclusion lease for a background job (CX1).
+///
+/// Channex asked us directly: "why do you do multiple feed calls at the same time?" Their booking
+/// timeline showed the same revision delivered TWICE within one second, from two different IP
+/// addresses. Our scheduler runs in-process (`instrumentation.ts`), so every server instance — a
+/// second Railway replica, a developer's machine pointed at the same sandbox, a certification script
+/// running while the deployed app ticks — polled the same feed on its own timer.
+///
+/// The scheduler's comment argued this was safe because the jobs are idempotent. That reasoning was
+/// about OUR data and it held; it simply answered the wrong question. Idempotent on our side does
+/// nothing about a partner's rate limit, their logs, or their opinion of us during certification.
+///
+/// Deliberately NOT tenant-scoped and carrying NO RLS policy, for the same reason as `LoginAttempt`:
+/// a lease is infrastructure, held by a process across every tenant, before any session exists.
+model JobLease {
+  /// The job's stable name, e.g. "channex-pull". One row per job, ever.
+  name       String   @id
+  /// Who holds it — instance id + pid. Only ever read by a human working out which box is looping.
+  holder     String
+  /// A lease is a promise to finish or die by this time; after it, anyone may take over. This is
+  /// what makes a crashed instance recoverable without anybody clearing a flag by hand.
+  expiresAt  DateTime
+  acquiredAt DateTime @default(now())
+  /// Bumped on every successful run — the cheapest possible "is the poller alive" signal.
+  lastRunAt  DateTime?
+
+  @@index([expiresAt])
+}

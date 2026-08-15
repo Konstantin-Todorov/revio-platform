@@ -11,7 +11,7 @@
  *   POST /api/jobs/pull   with `Authorization: Bearer $CRON_SECRET`
  */
 import { NextResponse, type NextRequest } from "next/server";
-import { forSystem } from "@revio/db";
+import { JOB, acquireJobLease, forSystem, releaseJobLease } from "@revio/db";
 import { pullChannel } from "@revio/connectivity";
 import { sendEmail, deliveryRecipients } from "@revio/email";
 
@@ -21,6 +21,26 @@ export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  /*
+   * CX1 — exactly one runner for this job, across every process.
+   *
+   * The scheduler lives in `instrumentation.ts`, i.e. INSIDE the web server, so there is one timer
+   * per server process. A second Railway replica, a developer pointed at the same sandbox, or a
+   * certification script running while the deployed app ticks is each another runner. Channex saw
+   * the consequence and asked about it directly: the same booking revision delivered twice within
+   * one second, from two different IP addresses.
+   *
+   * This job the Channex booking-revisions feed — the exact job Channex saw duplicated.
+   *
+   * Losing the lease is the NORMAL outcome on every replica but one, so it reports ok+skipped
+   * rather than an error. If the body throws, the lease is deliberately NOT released — a run that
+   * failed should wait out the short TTL rather than be retried instantly by the next tick.
+   */
+  const lease = await acquireJobLease(JOB.channexPull, 10 * 60_000);
+  if (!lease.acquired) {
+    return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
   }
 
   const db = forSystem();
@@ -77,5 +97,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  await releaseJobLease(JOB.channexPull);
   return NextResponse.json({ ok: true, channels: channels.length, imported, updated, failed });
 }

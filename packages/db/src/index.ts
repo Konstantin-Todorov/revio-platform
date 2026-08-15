@@ -29,6 +29,13 @@ export {
 } from "./auth-tokens.js";
 export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
 export {
+  acquireJobLease,
+  releaseJobLease,
+  withJobLease,
+  JOB,
+  type LeaseResult,
+} from "./job-lease.js";
+export {
   claimHold,
   nightsBetween,
   type ClaimHoldInput,

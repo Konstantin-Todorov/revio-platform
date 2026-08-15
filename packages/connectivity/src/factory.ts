@@ -17,8 +17,19 @@ export interface AdapterSelection {
   channex?: { apiKey: string; propertyId: string; baseUrl?: string };
 }
 
-/** Production base comes from Channex at certification; override via channex.baseUrl until then. */
-const CHANNEX_PRODUCTION_URL = "https://secure.channex.io/api/v1";
+/**
+ * Production base URL.
+ *
+ * ⚠️ CHANGED 2026-08-15 on Channex's own instruction: *"You should change to use app.channex.io
+ * instead of staging.channex.io"*. This constant previously read `secure.channex.io`, which was a
+ * guess made before certification and had never been exercised — the sandbox was the only base URL
+ * this platform had ever actually talked to. A wrong host here fails at the worst possible moment:
+ * the first real hotel's first real push.
+ *
+ * Still overridable per-channel via `channex.baseUrl`, which is how the sandbox and any future
+ * region-specific host are selected without a deploy.
+ */
+const CHANNEX_PRODUCTION_URL = "https://app.channex.io/api/v1";
 
 export function createChannelAdapter(selection: AdapterSelection): ChannelAdapter {
   if (selection.mode === "mock") {

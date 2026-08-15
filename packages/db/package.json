@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit",
     "cert-property": "tsx scripts/cert-property.ts",
     "rls-verify": "tsx scripts/rls-verify.ts",
-    "claim-verify": "tsx scripts/claim-verify.ts"
+    "claim-verify": "tsx scripts/claim-verify.ts",
+    "lease-verify": "tsx scripts/lease-verify.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
