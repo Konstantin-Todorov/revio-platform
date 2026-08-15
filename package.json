@@ -2,7 +2,7 @@
   "name": "revio-platform",
   "private": true,
   "version": "0.1.0",
-  "description": "Revio — composable hotel software platform (Channel Manager, Reservation/CRS, PMS) on one shared inventory core.",
+  "description": "Revio \u2014 composable hotel software platform (Channel Manager, Reservation/CRS, PMS) on one shared inventory core.",
   "packageManager": "pnpm@9.12.0",
   "engines": {
     "node": ">=20"
@@ -11,12 +11,20 @@
     "dev": "pnpm --filter @revio/channel-manager dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint",
+    "lint": "node scripts/lint.mjs",
     "test": "pnpm -r test",
     "copy:lint": "node scripts/copy-lint.mjs",
-    "db:seed": "pnpm --filter @revio/channel-manager db:seed"
+    "db:seed": "pnpm --filter @revio/channel-manager db:seed",
+    "verify": "pnpm typecheck && pnpm lint && pnpm copy:lint && pnpm authz:lint && pnpm test",
+    "authz:lint": "node scripts/authz-lint.mjs"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "@eslint/js": "^9.39.5",
+    "@next/eslint-plugin-next": "^15",
+    "eslint": "^9",
+    "eslint-plugin-react-hooks": "^5",
+    "globals": "^17.11.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8"
   }
 }

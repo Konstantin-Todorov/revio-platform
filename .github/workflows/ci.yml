@@ -1,0 +1,72 @@
+name: CI
+
+# X3. Before this file existed there was NO CI at all — the only thing that ran on a push was
+# Railway's build, which deploys first and tells you second. A typecheck error reached production
+# and was found by whoever opened the page.
+#
+# Runs on every push and every PR. Nothing here needs a database or a secret, which is deliberate:
+# a pipeline that cannot run on a fork, or that fails for want of a credential, gets ignored within
+# a month. The checks that DO need a database (`rls-verify`, `claim-verify`, `engine-race`) are
+# release gates run by hand against a real one — see DEPLOY.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A second push supersedes the first — no point finishing a run for a commit nobody will deploy.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Prisma's generated client is a build input for typecheck and for every app build. Without
+      # this step the first three checks fail on missing types rather than on anything real.
+      - name: Generate Prisma client
+        run: pnpm --filter @revio/db db:generate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # Fails on any error, and on more than the budgeted warnings. It also fails if it lints ZERO
+      # files, which is what the previous `pnpm -r lint` did silently, forever.
+      - name: Lint
+        run: pnpm lint
+
+      # Copy conventions across all five apps. Has its own zero-file guard, for the same reason.
+      - name: Copy lint
+        run: pnpm copy:lint
+
+      # Every server action in RevioLink and RevioCRS is gated, or is exempt WITH A REASON. This is
+      # the check that stops X2 quietly coming back the next time somebody adds an action.
+      - name: Authorization coverage
+        run: pnpm authz:lint
+
+      - name: Test
+        run: pnpm test
+
+      # LAST, because it is the slowest and because it catches a class the others cannot: `pnpm
+      # typecheck` and `pnpm test` both pass on code that fails `next build`. That has bitten this
+      # repo before, which is why it is a required step and not a nightly job.
+      - name: Build
+        run: pnpm build

@@ -29,6 +29,7 @@ export async function setConnectivityKey(_prev: ActionResult | null, fd: FormDat
     create: { tenantId, mode, cipher },
   });
   revalidatePath("/connectivity");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -40,4 +41,5 @@ export async function removeConnectivityKey(fd: FormData): Promise<void> {
   if (!tenantId || !MODES.has(mode)) return;
   await prisma.connectivityCredential.deleteMany({ where: { tenantId, mode } });
   revalidatePath("/connectivity");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

@@ -18,7 +18,8 @@
     "db:reset": "prisma migrate reset --force",
     "typecheck": "tsc --noEmit",
     "cert-property": "tsx scripts/cert-property.ts",
-    "rls-verify": "tsx scripts/rls-verify.ts"
+    "rls-verify": "tsx scripts/rls-verify.ts",
+    "claim-verify": "tsx scripts/claim-verify.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

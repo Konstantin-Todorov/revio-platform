@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BED_SETUPS, ROOM_AMENITY_BY_KEY } from "@revio/core";
+import { BED_SETUPS, ROOM_AMENITY_BY_KEY, type Capability } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 
 /**
@@ -33,11 +34,30 @@ function revalidateRates() {
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
   revalidatePath("/reservations/new");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+  /*
+   * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
+   * above.
+   *
+   * Reported as "other pages are blocked and do not work, sometimes you have to reload". The cause
+   * is Next's client-side Router Cache: a page you have already visited is served from memory on the
+   * next navigation, and `revalidatePath("/calendar")` only clears the entry it names. So a change
+   * made on one screen left every OTHER screen showing the value from before it — and screens no
+   * action mentioned at all (RevioLink's /bulk-update and /users, RevioCRS's /reports, RevioPMS's
+   * /settings and /walkin) were never cleared by anything.
+   *
+   * The named paths above stay, because they document what this mutation actually touches. This one
+   * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
+   * an action that forgot to list it.
+   */
+  revalidatePath("/", "layout");
 }
 
 // --- Rate plans (same shared tables the CM manages — one write path per app, same engines) ----
 
 export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageRates");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
 
@@ -104,6 +124,7 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
 }
 
 export async function deleteRatePlan(fd: FormData): Promise<void> {
+  await requireCapability("manageRates");
   const property = await getProperty();
   const id = str(fd, "id");
   if (!id) return;
@@ -131,6 +152,8 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
 // --- Restriction rules (level 2) — with CRS booking-source scope --------------
 
 export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageRates");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const rowId = str(fd, "id");
   const name = str(fd, "name");
@@ -168,6 +191,7 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
 }
 
 export async function deleteRestrictionRule(fd: FormData): Promise<void> {
+  await requireCapability("manageRates");
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
   const rule = await prisma.restrictionRule.findUnique({ where: { id } });
@@ -181,6 +205,7 @@ export async function deleteRestrictionRule(fd: FormData): Promise<void> {
 // --- Property defaults (level 4 — the global fallback) -------------------------
 
 export async function savePropertyDefaults(fd: FormData): Promise<void> {
+  await requireCapability("manageRates");
   const { id: propertyId, tenantId } = await getProperty();
   const optInt = (key: string): number | null => {
     const v = str(fd, key);
@@ -221,6 +246,7 @@ export async function savePropertyDefaults(fd: FormData): Promise<void> {
 // --- Calendar rate edit (standard plan) ---------------------------------------
 
 export async function saveCalendarRate(args: { roomTypeId: string; date: string; value: string }): Promise<void> {
+  await requireCapability("manageRates");
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) return;
@@ -247,6 +273,7 @@ export async function saveCalendarRate(args: { roomTypeId: string; date: string;
   });
   await recordPush(propertyId, tenantId, `Rate updated for ${roomType.name} (${args.date})`);
   revalidatePath("/inventory");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 
@@ -257,6 +284,8 @@ export async function saveCalendarRate(args: { roomTypeId: string; date: string;
  * Calendar and bulk are PEERS: both write the same date-scoped records, last write wins (spec §1.4);
  * every write is stamped source="bulk". One run = one audit entry + one push. */
 export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageRates");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
   const dateFrom = str(fd, "dateFrom");
@@ -321,6 +350,7 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
   await recordPush(propertyId, tenantId, "Availability & rates updated in bulk");
   revalidateRates();
   revalidatePath("/bulk");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -348,7 +378,37 @@ export interface CrsBulkPayload {
 }
 export type CrsBulkResult = { ok: boolean; error?: string; affected?: number; warning?: string };
 
+/**
+ * What a CRS bulk payload is allowed to touch (X2).
+ *
+ * The mirror of `capabilitiesRequiredFor` in RevioLink's calendar actions — same reasoning, same
+ * rule: a payload needs EVERY capability its fields imply, and an empty mask still needs one, so the
+ * endpoint is not a probe for a role that may write nothing.
+ */
+function crsCapabilitiesRequiredFor(payload: CrsBulkPayload): Capability[] {
+  const caps = new Set<Capability>();
+  if (payload.availability !== undefined) caps.add("manageInventory");
+  if (
+    payload.rate !== undefined ||
+    payload.minLos !== undefined ||
+    payload.maxLos !== undefined ||
+    payload.cta !== undefined ||
+    payload.ctd !== undefined ||
+    payload.stopSell !== undefined ||
+    payload.advanceMin !== undefined ||
+    payload.advanceMax !== undefined
+  ) {
+    caps.add("manageRates");
+  }
+  if (caps.size === 0) caps.add("manageRates");
+  return [...caps];
+}
+
 export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<CrsBulkResult> {
+  for (const cap of crsCapabilitiesRequiredFor(payload)) {
+    const g = await guard(cap);
+    if (!g.ok) return { ok: false, error: g.error };
+  }
   const { id: propertyId, tenantId } = await getProperty();
   const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
   if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
@@ -425,6 +485,7 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   await recordPush(propertyId, tenantId, `Availability & rates updated in bulk (${changed.join(", ")})`);
   revalidateRates();
   revalidatePath("/bulk");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true, affected, ...(warning ? { warning } : {}) };
 }
 
@@ -446,6 +507,8 @@ export interface LinkagePayload {
 }
 
 export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<ActionResult> {
+  const _g = await guard("manageRates");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const plan = await prisma.ratePlan.findFirst({ where: { id: payload.ratePlanId, propertyId } });
   if (!plan) return { ok: false, error: "Rate plan not found." };
@@ -459,6 +522,7 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
     await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" is now a manual rate`);
     revalidateRates();
     revalidatePath("/rooms-rates");
+    revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
     return { ok: true };
   }
 
@@ -500,6 +564,7 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" now derives from "${parent.name}" — children recalculated`);
   revalidateRates();
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -509,6 +574,8 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
 // product cannot be sold standalone at all.
 
 export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageInventory");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const { id: propertyId, tenantId } = await getProperty();
 
   const name = str(fd, "name");
@@ -569,11 +636,13 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   }
 
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   revalidateRates();
   return { ok: true };
 }
 
 export async function deleteRoomType(fd: FormData): Promise<void> {
+  await requireCapability("manageInventory");
   const property = await getProperty();
   const id = str(fd, "id");
   if (!id) return;
@@ -599,5 +668,6 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
     await recordPush(property.id, property.tenantId, `Room type "${rt.name}" removed`);
   }
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   revalidateRates();
 }

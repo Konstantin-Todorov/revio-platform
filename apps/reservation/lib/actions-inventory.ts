@@ -5,6 +5,7 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { stayScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
+import { requireCapability } from "./authz";
 
 /** An inventory period's `dateTo` is the last CLOSED day; `stayScope` wants a check-out date. */
 function addDay(ymd: string): string {
@@ -15,9 +16,27 @@ function revalidateInventory() {
   revalidatePath("/inventory");
   revalidatePath("/setup");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+  /*
+   * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
+   * above.
+   *
+   * Reported as "other pages are blocked and do not work, sometimes you have to reload". The cause
+   * is Next's client-side Router Cache: a page you have already visited is served from memory on the
+   * next navigation, and `revalidatePath("/calendar")` only clears the entry it names. So a change
+   * made on one screen left every OTHER screen showing the value from before it — and screens no
+   * action mentioned at all (RevioLink's /bulk-update and /users, RevioCRS's /reports, RevioPMS's
+   * /settings and /walkin) were never cleared by anything.
+   *
+   * The named paths above stay, because they document what this mutation actually touches. This one
+   * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
+   * an action that forgot to list it.
+   */
+  revalidatePath("/", "layout");
 }
 
 export async function addInventoryPeriod(fd: FormData): Promise<void> {
+  await requireCapability("manageInventory");
   const { id: propertyId, tenantId } = await getProperty();
 
   const roomTypeId = str(fd, "roomTypeId");
@@ -48,6 +67,7 @@ export async function addInventoryPeriod(fd: FormData): Promise<void> {
 }
 
 export async function deleteInventoryPeriod(fd: FormData): Promise<void> {
+  await requireCapability("manageInventory");
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
 

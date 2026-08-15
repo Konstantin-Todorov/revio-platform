@@ -13,13 +13,14 @@ import { forSystem } from "./rls.js";
 import {
   DEFAULT_LOGIN_GATE,
   afterFailure,
-  afterSuccess,
   checkGate,
   describeRetryAfter,
   freshState,
   type AttemptState,
   type LoginGatePolicy,
 } from "@revio/core";
+// `afterSuccess` is deliberately not imported: `recordLoginSuccess` deletes the row outright, which
+// is the same outcome (the next read gets `freshState`) and leaves nothing behind to prune.
 
 /**
  * Which form an attempt was made against.

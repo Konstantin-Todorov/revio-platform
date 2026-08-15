@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { str } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -22,6 +23,8 @@ async function requireManager() {
 }
 
 export async function inviteUser(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageStaff");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const s = await requireManager();
   if (!s) return { ok: false, error: "Only an Owner or Admin can manage users." };
 
@@ -36,10 +39,12 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
   const user = await prisma.user.create({ data: { tenantId: s.tenantId, name, email, role } });
   await sendInvite({ email, name, userId: user.id, hotel: s.tenantName, ...(s.userName ? { invitedBy: s.userName } : {}) });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 export async function updateUserRole(fd: FormData): Promise<void> {
+  await requireCapability("manageStaff");
   const s = await requireManager();
   if (!s) return;
   const id = str(fd, "id");
@@ -55,9 +60,11 @@ export async function updateUserRole(fd: FormData): Promise<void> {
   }
   await prisma.user.update({ where: { id }, data: { role } });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function removeUser(fd: FormData): Promise<void> {
+  await requireCapability("manageStaff");
   const s = await requireManager();
   if (!s) return;
   const id = str(fd, "id");
@@ -69,9 +76,12 @@ export async function removeUser(fd: FormData): Promise<void> {
   }
   await prisma.user.delete({ where: { id } });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function addProperty(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const s = await requireManager();
   if (!s) return { ok: false, error: "Only an Owner or Admin can add a property." };
   const name = str(fd, "name");

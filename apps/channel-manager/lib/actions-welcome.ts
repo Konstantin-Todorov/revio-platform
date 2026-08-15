@@ -8,6 +8,7 @@ import { getSession } from "./session";
 import { getProperty } from "./data";
 import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 /**
  * The first-run flow's writes.
@@ -45,6 +46,8 @@ async function advance(from: string): Promise<never> {
  * always.
  */
 export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
 
@@ -81,6 +84,8 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
  * how many more screens there are. That is stated on it rather than left to surprise them.
  */
 export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
@@ -123,10 +128,12 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
   }
 
   revalidatePath("/welcome/rooms");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return {};
 }
 
 export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const id = str(fd, "id");
   const rt = await prisma.roomType.findUnique({ where: { id } });
@@ -134,9 +141,11 @@ export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
   if (!rt || rt.propertyId !== property.id) return;
   await prisma.roomType.delete({ where: { id } });
   revalidatePath("/welcome/rooms");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function finishWelcomeRooms(): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const count = await prisma.roomType.count({ where: { propertyId: property.id } });
   if (count === 0) return; // the screen already blocks this; belt and braces
@@ -153,6 +162,8 @@ export async function finishWelcomeRooms(): Promise<void> {
  * suggested rate that 70–90% of people never change is revenue quietly decided by us.
  */
 export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
@@ -189,6 +200,7 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
   await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
 
   revalidatePath("/calendar");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("prices");
 }
 
@@ -201,6 +213,8 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
  * that one field. Writing both columns here would break that inheritance permanently.
  */
 export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
 
@@ -228,6 +242,7 @@ export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData
   });
 
   revalidatePath("/settings/emails");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("brand");
 }
 
@@ -239,6 +254,8 @@ export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData
  * guest. Two addresses because reception and the owner are rarely the same inbox.
  */
 export async function saveWelcomeDelivery(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
 
@@ -260,11 +277,13 @@ export async function saveWelcomeDelivery(_prev: WelcomeResult | null, fd: FormD
   });
 
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("delivery");
 }
 
 /** Leave a step for later. It stays on the dashboard checklist, which is the point of allowing it. */
 export async function skipWelcomeStep(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   await advance(str(fd, "from"));
 }
 
@@ -277,6 +296,7 @@ export async function skipWelcomeStep(fd: FormData): Promise<void> {
  * which meant finishing the guided flow did not stop the checklist asking again.
  */
 export async function finishWelcome(): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   if (!hasFinishedSetup(property.setupCompleted, PRODUCT)) {
     // Guarded in the WHERE clause, not in JS: two submissions racing would otherwise both push.

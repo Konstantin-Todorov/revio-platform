@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { syncChannel, pullChannel, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
+import { pullChannel, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
 import { sendEmail, deliveryRecipients } from "@revio/email";
 import { getSession } from "./session";
 import type { PushField, PushScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -44,6 +45,8 @@ function ruleScope(rule: {
 // --- Restriction rules -----------------------------------------------------
 
 export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageRates");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const rowId = str(fd, "id");
   const name = str(fd, "name");
@@ -79,10 +82,12 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
   await recordPush(propertyId, tenantId, `Restriction rule "${name}" pushed`, ruleScope(data));
   revalidatePath("/restrictions");
   revalidatePath("/calendar");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 export async function deleteRestrictionRule(fd: FormData): Promise<void> {
+  await requireCapability("manageRates");
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
   const rule = await prisma.restrictionRule.findUnique({ where: { id } });
@@ -94,11 +99,13 @@ export async function deleteRestrictionRule(fd: FormData): Promise<void> {
   await recordPush(propertyId, tenantId, `Restriction rule "${rule.name}" removed`, ruleScope(rule));
   revalidatePath("/restrictions");
   revalidatePath("/calendar");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 // --- Mapping ---------------------------------------------------------------
 
 export async function fixMappings(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
@@ -122,10 +129,13 @@ export async function fixMappings(fd: FormData): Promise<void> {
   revalidatePath("/mapping");
   revalidatePath("/channels");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Manually set one stream mapping's external id (kind: "room" → room type, "rate" → rate plan). */
 export async function updateStreamMapping(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageDistribution");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const kind = str(fd, "kind");
   const id = str(fd, "id");
@@ -148,12 +158,15 @@ export async function updateStreamMapping(_prev: ActionResult | null, fd: FormDa
   revalidatePath("/mapping");
   revalidatePath("/channels");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 // --- Channel settings & add channel ---------------------------------------
 
 export async function saveChannelSettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageDistribution");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
   const id = str(fd, "id");
@@ -172,6 +185,7 @@ export async function saveChannelSettings(_prev: ActionResult | null, fd: FormDa
   await logAudit(propertyId, tenantId, { entity: `Channel · ${ch.name}`, field: "settings", newValue: `${markupPct}% markup` });
   await recordPush(propertyId, tenantId, `Channel settings updated for ${ch.name}`);
   revalidatePath("/channels");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -181,6 +195,8 @@ const KNOWN_OTAS: Record<string, string> = {
 };
 
 export async function addChannel(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageDistribution");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
   const code = str(fd, "code");
@@ -214,6 +230,7 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
   await recordPush(propertyId, tenantId, `Connected ${name} and pushed all products`);
   revalidatePath("/channels");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -221,6 +238,7 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
  * drifted channel back into agreement with the shared ARI, through the same queue/batching as every
  * other push. This is the only push that deliberately carries everything. */
 export async function resyncChannel(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
   if (!channelId) return;
@@ -235,16 +253,35 @@ export async function resyncChannel(fd: FormData): Promise<void> {
   revalidatePath("/sync");
   revalidatePath("/errors");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 function revalidateChannels() {
   revalidatePath("/channels");
   revalidatePath("/sync");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+  /*
+   * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
+   * above.
+   *
+   * Reported as "other pages are blocked and do not work, sometimes you have to reload". The cause
+   * is Next's client-side Router Cache: a page you have already visited is served from memory on the
+   * next navigation, and `revalidatePath("/calendar")` only clears the entry it names. So a change
+   * made on one screen left every OTHER screen showing the value from before it — and screens no
+   * action mentioned at all (RevioLink's /bulk-update and /users, RevioCRS's /reports, RevioPMS's
+   * /settings and /walkin) were never cleared by anything.
+   *
+   * The named paths above stay, because they document what this mutation actually touches. This one
+   * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
+   * an action that forgot to list it.
+   */
+  revalidatePath("/", "layout");
 }
 
 /** Pause (spec §3.5): reversible stop-sell overlay on one channel; the core ARI is untouched. */
 export async function pauseChannelAction(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
   if (!channelId) return;
@@ -259,6 +296,7 @@ export async function pauseChannelAction(fd: FormData): Promise<void> {
 }
 
 export async function resumeChannelAction(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
   if (!channelId) return;
@@ -274,6 +312,7 @@ export async function resumeChannelAction(fd: FormData): Promise<void> {
 
 /** Disconnect (spec §3.5): close out + stop syncing; mapping kept dormant; reservations untouched. */
 export async function disconnectChannelAction(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
   if (!channelId) return;
@@ -288,6 +327,7 @@ export async function disconnectChannelAction(fd: FormData): Promise<void> {
 }
 
 export async function reconnectChannelAction(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
   if (!channelId) return;
@@ -303,6 +343,7 @@ export async function reconnectChannelAction(fd: FormData): Promise<void> {
 
 /** Pull bookings from the channel now (new → imported, cancelled → restored, unmapped → Error Center). */
 export async function pullChannelBookings(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
   if (!channelId) return;
@@ -347,11 +388,14 @@ export async function pullChannelBookings(fd: FormData): Promise<void> {
   revalidatePath("/reservations");
   revalidatePath("/calendar");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 // --- Property settings -----------------------------------------------------
 
 export async function savePropertySettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
   const name = str(fd, "name");
@@ -396,6 +440,7 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
   revalidatePath("/dashboard");
   revalidatePath("/calendar");
   revalidatePath("/channels");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -403,6 +448,7 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
 /** Resolve/ignore an error item (spec §3.8: a capability warning offers one-click ignore; a real
  * error is resolved once its cause is fixed). Audited. */
 export async function resolveErrorItem(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
   if (!id) return;
@@ -416,6 +462,7 @@ export async function resolveErrorItem(fd: FormData): Promise<void> {
   });
   revalidatePath("/sync");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 
@@ -423,6 +470,8 @@ export async function resolveErrorItem(fd: FormData): Promise<void> {
 
 /** Save the delivery emails + arrival-summary notification settings. */
 export async function saveDeliverySettings(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const primary = str(fd, "reservationEmailPrimary").toLowerCase() || null;
   const secondary = str(fd, "reservationEmailSecondary").toLowerCase() || null;
@@ -454,11 +503,13 @@ export async function saveDeliverySettings(_prev: ActionResult | null, fd: FormD
     newValue: `primary ${primary ?? "—"} · today ${fd.get("notifyTodayArrivals") === "on" ? todayTime : "off"} · tomorrow ${fd.get("notifyTomorrowArrivals") === "on" ? tomorrowTime : "off"}`,
   });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 /** Send a test email to the configured primary (or the platform test recipient). */
 export async function sendTestEmail(): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const to = property.reservationEmailPrimary ?? process.env.EMAIL_TEST_RECIPIENT;
   if (!to) return;
@@ -472,4 +523,5 @@ export async function sendTestEmail(): Promise<void> {
     newValue: res.ok ? `sent to ${to} (${res.mode})` : `failed: ${res.error}`,
   });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

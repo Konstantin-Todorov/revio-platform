@@ -12,8 +12,36 @@ The **persistence layer**: Prisma schema, client, and the demo seed. It imports 
   calendar whose **current week reproduces the reference screenshot**, reservations, sync/error/audit rows.
 - `src/client.ts` — the shared `PrismaClient` singleton.
 
+- `src/inventory-claim.ts` — `claimHold()`, the **only** correct way to take inventory. See below.
+
 Rules: apps query through this package (or thin repos here), not with raw SQL scattered in app code.
 Inventory/rate/restriction *math* belongs in `@revio/core`; this package stores and retrieves.
+
+## Taking inventory is a claim, never a check followed by a write
+
+`claimHold()` exists because every path that took a room used to do this:
+
+```ts
+const remaining = await remainingByNight(...)   // says 1 room left
+if (remaining < qty) return "sold out"
+await prisma.hold.create(...)                   // ← another request did the same thing here
+```
+
+Two guests clicking the last room in the same second both read `remaining = 1`, both passed, and both
+got a hold — the exact double-booking this platform exists to prevent. **Never write that shape
+again.** Compute the waterfall for the message, then call `claimHold()` for the room.
+
+It works by splitting the waterfall by how fast each input can change. The **sellable base per night**
+(physical − out-of-order − closed, or the manual override) is staff-set and slow, so the caller passes
+it in from `computeWaterfall`. **Holds and occupying reservations** are the contended half, and are
+recounted in SQL inside a `pg_advisory_xact_lock` on the room type — the one place a lock is both
+necessary and cheap. The alternative approaches are all ruled out for stated reasons in the file
+header; read it before changing this.
+
+Two verification scripts, and **both matter**: `pnpm --filter @revio/db claim-verify` races the
+primitive (and first asserts the *old* shape still oversells, so a pass means something), and
+`pnpm --filter @revio/booking engine-race` races the real booking-engine path — an atomic claim
+called with the wrong sellable base oversells just as happily as no claim at all.
 
 ## Two things that must never end up in a column
 

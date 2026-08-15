@@ -8,6 +8,7 @@ import { getSession } from "./session";
 import { getProperty } from "./data";
 import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 /**
  * RevioCRS's first-run writes.
@@ -29,6 +30,8 @@ async function advance(from: string): Promise<never> {
 
 /** Step 1 — who and where they are. The address and contact email print on guest confirmations. */
 export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
 
@@ -60,6 +63,8 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
 
 /** Step 2 — the room types, and with them the property's size. */
 export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
@@ -100,18 +105,22 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
   }
 
   revalidatePath("/welcome/rooms");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return {};
 }
 
 export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const rt = await prisma.roomType.findUnique({ where: { id: str(fd, "id") } });
   if (!rt || rt.propertyId !== property.id) return;
   await prisma.roomType.delete({ where: { id: rt.id } });
   revalidatePath("/welcome/rooms");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function finishWelcomeRooms(): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const count = await prisma.roomType.count({ where: { propertyId: property.id } });
   if (count === 0) return;
@@ -123,6 +132,8 @@ export async function finishWelcomeRooms(): Promise<void> {
  * prefilled rate is the one default that costs them money.
  */
 export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
@@ -157,6 +168,7 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
   await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
 
   revalidatePath("/calendar");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("prices");
 }
 
@@ -169,6 +181,8 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
  * are money fields, and money is never decided by us on their behalf.
  */
 export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
@@ -234,6 +248,7 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
   }
 
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("taxes");
 }
 
@@ -245,6 +260,8 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
  * break that inheritance permanently.
  */
 export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { error: _g.error };
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
 
@@ -264,16 +281,19 @@ export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData
   });
 
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("brand");
 }
 
 /** Leave a step for later. It stays on the dashboard checklist, which is the point of allowing it. */
 export async function skipWelcomeStep(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   await advance(str(fd, "from"));
 }
 
 /** The last screen. Records that first-run is over so the flow never reappears. */
 export async function finishWelcome(): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   if (!hasFinishedSetup(property.setupCompleted, PRODUCT)) {
     await prisma.property.updateMany({

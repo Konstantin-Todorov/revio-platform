@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, isOverbooking, ROOM_OCCUPYING_STATUSES, type DerivedRateConfig } from "@revio/core";
+import { computeWaterfall, deriveRate, isOverbooking, ROOM_OCCUPYING_STATUSES, type Capability, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, eachDate, utcDay } from "./mutation-helpers";
 import type { PushField } from "./connectivity";
+import { guard, requireCapability } from "./authz";
 
 export type ActionResult = { ok: boolean; error?: string; affected?: number; warning?: string };
 
@@ -15,6 +16,23 @@ function revalidateCalendar() {
   revalidatePath("/reservations");
   revalidatePath("/sync");
   revalidatePath("/audit");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+  /*
+   * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
+   * above.
+   *
+   * Reported as "other pages are blocked and do not work, sometimes you have to reload". The cause
+   * is Next's client-side Router Cache: a page you have already visited is served from memory on the
+   * next navigation, and `revalidatePath("/calendar")` only clears the entry it names. So a change
+   * made on one screen left every OTHER screen showing the value from before it — and screens no
+   * action mentioned at all (RevioLink's /bulk-update and /users, RevioCRS's /reports, RevioPMS's
+   * /settings and /walkin) were never cleared by anything.
+   *
+   * The named paths above stay, because they document what this mutation actually touches. This one
+   * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
+   * an action that forgot to list it.
+   */
+  revalidatePath("/", "layout");
 }
 
 /** The base manual rate plan id (prefer "BAR", else first manual). Null on a hotel without one. */
@@ -52,7 +70,28 @@ async function upsertCell(
 
 // --- Single-cell inline edit ----------------------------------------------
 
+/**
+ * Which capability a calendar field belongs to (X2).
+ *
+ * Gating the whole calendar behind one permission would collapse the distinction the roles exist
+ * for: `revenue_manager` sets prices and stay rules, `distribution_manager` decides how many rooms
+ * are on sale. Both edit this grid, and they must not be able to edit each other's column.
+ *
+ * Anything not listed is refused by `?? "manageRates"` rather than allowed — a field added later is
+ * locked to the stricter side until somebody makes a decision about it.
+ */
+const FIELD_CAPABILITY: Record<string, Capability> = {
+  price: "manageRates",
+  minLos: "manageRates",
+  maxLos: "manageRates",
+  cta: "manageRates",
+  ctd: "manageRates",
+  stopSell: "manageRates",
+  inventory: "manageInventory",
+};
+
 export async function saveCell(input: { roomTypeId: string; date: string; field: string; value: string }): Promise<void> {
+  await requireCapability(FIELD_CAPABILITY[input.field] ?? "manageRates");
   const { id: propertyId, tenantId } = await getProperty();
   const date = utcDay(input.date);
   const rt = await prisma.roomType.findUnique({ where: { id: input.roomTypeId } });
@@ -229,7 +268,6 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
     return chosen;
   };
 
-  const hasCell = Object.keys(cell).length > 0;
   const { inventory, ...restrictionCell } = cell;
   let affected = 0;
   for (const roomTypeId of roomTypeIds) {
@@ -325,7 +363,41 @@ function scopeOf(outcomes: WriteOutcome[]): Parameters<typeof recordPush>[3] {
   };
 }
 
+/**
+ * What a bulk payload is allowed to touch (X2).
+ *
+ * A bulk edit can carry prices, stay rules and availability in one submission, so a single
+ * capability cannot describe it. Every field present is checked, and the caller needs ALL of them —
+ * a `distribution_manager` who includes a rate in a bulk mask is refused the whole apply rather than
+ * silently having that one field dropped. Partially applying a bulk change is worse than refusing
+ * it: the hotel would believe all of it landed.
+ */
+function capabilitiesRequiredFor(payload: BulkPayload): Capability[] {
+  const caps = new Set<Capability>();
+  if (payload.availability !== undefined) caps.add("manageInventory");
+  if (
+    payload.rate !== undefined ||
+    payload.minLos !== undefined ||
+    payload.maxLos !== undefined ||
+    payload.cta !== undefined ||
+    payload.ctd !== undefined ||
+    payload.stopSell !== undefined ||
+    payload.advanceMin !== undefined ||
+    payload.advanceMax !== undefined
+  ) {
+    caps.add("manageRates");
+  }
+  // An empty mask writes nothing, but it must still not be a way for a role with no write
+  // capability at all to probe the endpoint.
+  if (caps.size === 0) caps.add("manageRates");
+  return [...caps];
+}
+
 export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkResult> {
+  for (const cap of capabilitiesRequiredFor(payload)) {
+    const g = await guard(cap);
+    if (!g.ok) return { ok: false, error: g.error };
+  }
   const { id: propertyId, tenantId } = await getProperty();
   const out = await writeBulk(propertyId, tenantId, payload);
   if (out.error) return { ok: false, error: out.error };
@@ -338,6 +410,7 @@ export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkRe
   await recordPush(propertyId, tenantId, `Bulk update applied (${out.changed.join(", ")}) — ${out.affected} cells`, scopeOf([out]));
   revalidateCalendar();
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true, affected: out.affected, ...(out.warning ? { warning: out.warning } : {}) };
 }
 
@@ -352,6 +425,11 @@ export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkRe
  * they share — the same as typing them one after another, minus the traffic.
  */
 export async function applyBulkUpdateBatch(payloads: BulkPayload[]): Promise<BulkResult> {
+  // Checked across EVERY payload before any of them is written — the batch is one decision.
+  for (const cap of new Set(payloads.flatMap(capabilitiesRequiredFor))) {
+    const g = await guard(cap);
+    if (!g.ok) return { ok: false, error: g.error };
+  }
   const { id: propertyId, tenantId } = await getProperty();
   if (payloads.length === 0) return { ok: false, error: "Nothing to apply." };
 
@@ -373,6 +451,7 @@ export async function applyBulkUpdateBatch(payloads: BulkPayload[]): Promise<Bul
   await recordPush(propertyId, tenantId, `Bulk update applied — ${payloads.length} changes, ${affected} cells`, scopeOf(outcomes));
   revalidateCalendar();
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   const warning = outcomes.find((o) => o.warning)?.warning;
   return { ok: true, affected, ...(warning ? { warning } : {}) };
 }
@@ -380,6 +459,8 @@ export async function applyBulkUpdateBatch(payloads: BulkPayload[]): Promise<Bul
 // --- Live loop: simulate a booking ----------------------------------------
 
 export async function simulateBooking(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageReservations");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
   const channelId = str(fd, "channelId");
@@ -480,6 +561,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
       },
     });
     revalidatePath("/errors");
+    revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   }
 
   void reservation;
@@ -488,6 +570,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
 }
 
 export async function cancelReservation(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
   const res = await prisma.reservation.findUnique({ where: { id }, include: { lines: true, channel: true } });

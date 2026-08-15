@@ -85,7 +85,10 @@ export type GateDecision = { allowed: true } | { allowed: false; retryAfterMs: n
  * Called BEFORE the password is checked, so a locked identifier never reaches bcrypt — which also
  * means a lockout sheds the CPU load an attacker was trying to impose.
  */
-export function checkGate(state: AttemptState, now: number, policy: LoginGatePolicy): GateDecision {
+// `_policy` is unused today — a lockout is already an absolute timestamp written by `afterFailure`,
+// so nothing here needs the policy. Kept in the signature so the three gate functions take the same
+// arguments, which is what makes them readable side by side at the call site.
+export function checkGate(state: AttemptState, now: number, _policy: LoginGatePolicy): GateDecision {
   if (state.lockedUntil !== null && state.lockedUntil > now) {
     return { allowed: false, retryAfterMs: state.lockedUntil - now };
   }

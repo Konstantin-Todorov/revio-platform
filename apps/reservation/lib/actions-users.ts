@@ -8,9 +8,9 @@ import { sendEmail } from "@revio/email";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@revio/db";
 import { prisma } from "./db";
-import { hashPassword } from "./auth";
 import { getSession } from "./session";
 import { str } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 /**
  * CRS Staff — user management on the ONE shared identity (CRS-REFINEMENT-R2 §8.2). Every operation
@@ -36,6 +36,8 @@ async function requireManager() {
 
 /** Add a user to the shared identity, scoped to this tenant + role. */
 export async function inviteUser(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageStaff");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const s = await requireManager();
   if (!s) return { ok: false, error: "Only an Owner or Admin can manage staff." };
 
@@ -59,11 +61,14 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
     throw e;
   }
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 /** Edit a user's profile on the shared identity: name, email (the login contact), phone. */
 export async function updateUser(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageStaff");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const s = await requireManager();
   if (!s) return { ok: false, error: "Only an Owner or Admin can manage staff." };
 
@@ -84,11 +89,13 @@ export async function updateUser(_prev: ActionResult | null, fd: FormData): Prom
     throw e;
   }
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 /** Inline role change. Guards the last remaining owner from being demoted. */
 export async function updateUserRole(fd: FormData): Promise<void> {
+  await requireCapability("manageStaff");
   const s = await requireManager();
   if (!s) return;
   const id = str(fd, "id");
@@ -103,11 +110,13 @@ export async function updateUserRole(fd: FormData): Promise<void> {
   }
   await prisma.user.update({ where: { id }, data: { role } });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Deactivate / reactivate — preferred over hard-delete. A deactivated user keeps their identity and
  * history but can't sign in. Can't deactivate yourself or the last active owner. */
 export async function setUserActive(fd: FormData): Promise<void> {
+  await requireCapability("manageStaff");
   const s = await requireManager();
   if (!s) return;
   const id = str(fd, "id");
@@ -121,11 +130,13 @@ export async function setUserActive(fd: FormData): Promise<void> {
   }
   await prisma.user.update({ where: { id }, data: { active } });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Reset a user's password on the SHARED credential. Demo: resets to the shared demo password.
  * Production: this is where an emailed reset link would be triggered (preferred over a plaintext temp). */
 export async function resetUserPassword(fd: FormData): Promise<void> {
+  await requireCapability("manageStaff");
   const s = await requireManager();
   if (!s) return;
   const id = str(fd, "id");
@@ -137,6 +148,7 @@ export async function resetUserPassword(fd: FormData): Promise<void> {
   await prisma.user.update({ where: { id }, data: { passwordHash: null } });
   await sendInvite({ email: u.email, name: u.name ?? u.email, userId: u.id, hotel: s.tenantName });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**

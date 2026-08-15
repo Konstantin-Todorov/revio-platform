@@ -6,11 +6,12 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { getSession } from "./session";
 import { logAudit, str } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 /** Save this property's guest-email branding (sender name, reply-to, logo, colour, footer). */
 export async function saveEmailBranding(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const { id: propertyId, tenantId } = await getProperty();
-  const session = await getSession();
   await prisma.property.update({
     where: { id: propertyId },
     data: {
@@ -27,10 +28,12 @@ export async function saveEmailBranding(fd: FormData): Promise<void> {
     entity: "Email settings", field: "branding", newValue: "updated",
   });
   revalidatePath("/settings/emails");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Save one email template's wording + on/off switch. Upserts, so the row only exists once customised. */
 export async function saveEmailTemplate(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const { id: propertyId, tenantId } = await getProperty();
   const session = await getSession();
   const key = str(fd, "key");
@@ -55,12 +58,13 @@ export async function saveEmailTemplate(fd: FormData): Promise<void> {
     newValue: enabled ? "saved" : "saved (switched off)",
   });
   revalidatePath("/settings/emails");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Revert one email to the platform default wording (deletes the customisation row). */
 export async function resetEmailTemplate(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const { id: propertyId, tenantId } = await getProperty();
-  const session = await getSession();
   const key = str(fd, "key");
   const locale = str(fd, "locale") || "en";
   await prisma.emailTemplate.deleteMany({ where: { propertyId, key, locale } });
@@ -69,6 +73,7 @@ export async function resetEmailTemplate(fd: FormData): Promise<void> {
     newValue: "reset to default",
   });
   revalidatePath("/settings/emails");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 // --- Logo upload -------------------------------------------------------------
@@ -94,6 +99,8 @@ export type UploadResult = { ok: boolean; error?: string };
  * later served back as an image.
  */
 export async function uploadEmailLogo(_prev: UploadResult | null, fd: FormData): Promise<UploadResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const file = fd.get("logo");
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose an image first." };
@@ -122,16 +129,19 @@ export async function uploadEmailLogo(_prev: UploadResult | null, fd: FormData):
     entity: "Email settings", field: "logo", newValue: `uploaded (${Math.round(bytes.length / 1024)} KB)`,
   });
   revalidatePath("/settings/emails");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 /** Remove the uploaded logo — emails fall back to the hotel's name as a wordmark. */
 export async function removeEmailLogo(): Promise<void> {
+  await requireCapability("manageSettings");
   const { id: propertyId, tenantId } = await getProperty();
   await prisma.brandAsset.deleteMany({ where: { propertyId, kind: "email_logo" } });
   await prisma.property.update({ where: { id: propertyId }, data: { emailLogoVersion: { increment: 1 } } });
   await logAudit(propertyId, tenantId, { entity: "Email settings", field: "logo", newValue: "removed" });
   revalidatePath("/settings/emails");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**
@@ -143,6 +153,7 @@ export async function removeEmailLogo(): Promise<void> {
  * in English.
  */
 export async function setDefaultLanguage(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const { id: propertyId, tenantId } = await getProperty();
   const locale = str(fd, "locale");
   // An unknown locale would silently send nothing recognisable, so a bad value is simply ignored.
@@ -153,4 +164,5 @@ export async function setDefaultLanguage(fd: FormData): Promise<void> {
     entity: "Email settings", field: "default language", newValue: locale,
   });
   revalidatePath("/settings/emails");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

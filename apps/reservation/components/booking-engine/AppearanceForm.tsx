@@ -38,7 +38,8 @@ export function AppearanceForm({
   const [preset, setPreset] = useState(saved.preset);
   const [color, setColor] = useState(saved.color ?? "");
   const [font, setFont] = useState(saved.font ?? "");
-  const [logoUrl, setLogoUrl] = useState(saved.logoUrl ?? "");
+  // Read-only here: the logo is chosen by LogoPicker, which writes through its own hidden input.
+  const [logoUrl] = useState(saved.logoUrl ?? "");
   const [headline, setHeadline] = useState(saved.headline ?? "");
   const [subheadline, setSubheadline] = useState(saved.subheadline ?? "");
   const [showTrust, setShowTrust] = useState(saved.showTrust);

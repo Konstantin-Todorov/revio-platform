@@ -43,6 +43,7 @@ export async function inviteOperator(fd: FormData): Promise<void> {
   await sendEmail({ to: [email], subject: mail.subject, text: mail.text });
 
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Change an operator's role — never leave the console without a super_admin. */
@@ -59,6 +60,7 @@ export async function updateOperatorRole(fd: FormData): Promise<void> {
   }
   await prisma.operatorUser.update({ where: { id }, data: { role } });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Remove an operator — can't remove yourself or the last super admin. */
@@ -75,4 +77,5 @@ export async function removeOperator(fd: FormData): Promise<void> {
   }
   await prisma.operatorUser.delete({ where: { id } });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

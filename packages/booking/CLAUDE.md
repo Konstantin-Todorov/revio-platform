@@ -26,6 +26,12 @@ booked*, not *what is paid*, and a tab left open overnight books today's price.
 holding the last room would otherwise be told there is no availability — at the exact moment they
 press Confirm. This is the single least obvious thing in the package.
 
+**A room is claimed, never checked-then-taken.** `remainingFor(...) < 1` produces the honest message;
+`claimHold()` from `@revio/db` is what actually protects the room. Both `publicCreateHold` and
+`publicCreateReservation` go through it — the latter takes a claim of its own when the caller has no
+live hold, so a reservation can never exist without one. `pnpm --filter @revio/booking engine-race`
+races the real path and asserts it never oversells.
+
 **Hold exhaustion is the real threat, not scraping.** A hold takes a room off sale for its TTL, so an
 unthrottled create-hold endpoint is a denial-of-*revenue* attack that looks exactly like a sold-out
 weekend. `HOLD_PER_PROPERTY` is the limit that matters — a per-IP cap alone does not survive a

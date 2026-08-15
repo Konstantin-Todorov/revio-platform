@@ -53,6 +53,7 @@ export async function generateInvoices(): Promise<void> {
   }
   revalidatePath("/billing");
   revalidatePath("/plans");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**
@@ -66,4 +67,5 @@ export async function setInvoiceStatus(fd: FormData): Promise<void> {
   if (!["draft", "sent", "paid"].includes(status)) return;
   await prisma.invoice.update({ where: { id }, data: { status, paidAt: status === "paid" ? new Date() : null } });
   revalidatePath("/billing");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

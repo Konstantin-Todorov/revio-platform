@@ -9,6 +9,7 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { getSession } from "./session";
 import { logAudit, str } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 /**
  * Refuse to write while the user is in portfolio scope.
@@ -52,6 +53,8 @@ export async function saveBookingEngineLook(
   _prev: LookResult | null,
   fd: FormData,
 ): Promise<LookResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const scopeProblem = await assertSingleProperty();
   if (scopeProblem) return { ok: false, error: scopeProblem };
 
@@ -81,6 +84,7 @@ export async function saveBookingEngineLook(
     entity: "Booking engine", field: "appearance", newValue: preset,
   });
   revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -98,6 +102,8 @@ export interface LinkResult {
 }
 
 export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormData): Promise<LinkResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const scopeProblem = await assertSingleProperty();
   if (scopeProblem) return { ok: false, error: scopeProblem };
 
@@ -124,6 +130,7 @@ export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormDa
       entity: "Booking engine", field: "accepting bookings", newValue: enabled ? "on" : "off",
     });
     revalidatePath("/booking-engine");
+    revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
     return { ok: true, slug: publicSlug };
   }
 
@@ -150,6 +157,7 @@ export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormDa
     entity: "Booking engine", field: "link", newValue: `${slug} · ${enabled ? "live" : "off"}`,
   });
   revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true, slug };
 }
 
@@ -181,6 +189,8 @@ const LOGO_TYPES: Record<string, number[]> = {
 const MAX_LOGO_BYTES = 300 * 1024;
 
 export async function uploadBookingLogo(_prev: LookResult | null, fd: FormData): Promise<LookResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const scopeError = await assertSingleProperty();
   if (scopeError) return { ok: false, error: scopeError };
   const { id: propertyId, tenantId } = await getProperty();
@@ -209,17 +219,20 @@ export async function uploadBookingLogo(_prev: LookResult | null, fd: FormData):
     entity: "Booking engine", field: "logo", newValue: `uploaded (${Math.round(bytes.length / 1024)} KB)`,
   });
   revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 /** Drop the booking page's own logo — it goes back to inheriting the email one. */
 export async function removeBookingLogo(): Promise<void> {
+  await requireCapability("manageSettings");
   if (await assertSingleProperty()) return;
   const { id: propertyId, tenantId } = await getProperty();
   await prisma.brandAsset.deleteMany({ where: { propertyId, kind: "booking_logo" } });
   await prisma.property.update({ where: { id: propertyId }, data: { bookingLogoUrl: null } });
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "logo", newValue: "removed" });
   revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -236,6 +249,8 @@ export async function removeBookingLogo(): Promise<void> {
 
 /** Start (or resume) onboarding. Returns a one-time Stripe URL for the browser to follow. */
 export async function startStripeOnboarding(): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const scopeError = await assertSingleProperty();
   if (scopeError) return { ok: false, error: scopeError };
   const property = await getProperty();
@@ -286,6 +301,7 @@ export async function startStripeOnboarding(): Promise<{ ok: boolean; url?: stri
  * screen calls this on load, so a hotel that finished onboarding sees the truth immediately.
  */
 export async function refreshStripeStatus(): Promise<void> {
+  await requireCapability("manageSettings");
   if (await assertSingleProperty()) return;
   const property = await getProperty();
   if (!property.stripeAccountId) return;
@@ -296,6 +312,7 @@ export async function refreshStripeStatus(): Promise<void> {
     data: { stripeChargesEnabled: status.chargesEnabled, stripeCheckedAt: new Date() },
   });
   revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**
@@ -306,6 +323,8 @@ export async function refreshStripeStatus(): Promise<void> {
  * place. Declining is the case that frees a room, and that one re-pushes.
  */
 export async function acceptBookingRequest(reservationId: string): Promise<{ ok: boolean; error?: string }> {
+  const _g = await guard("manageReservations");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const scopeError = await assertSingleProperty();
   if (scopeError) return { ok: false, error: scopeError };
   const property = await getProperty();
@@ -320,11 +339,14 @@ export async function acceptBookingRequest(reservationId: string): Promise<{ ok:
     entity: "Reservation", field: "status", newValue: "confirmed (request accepted)",
   });
   revalidatePath("/reservations");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
 /** Decline a request — the room goes back on sale, everywhere, immediately. */
 export async function declineBookingRequest(reservationId: string): Promise<{ ok: boolean; error?: string }> {
+  const _g = await guard("manageReservations");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const scopeError = await assertSingleProperty();
   if (scopeError) return { ok: false, error: scopeError };
   const property = await getProperty();
@@ -349,6 +371,7 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
     await syncRealChannels(prisma, property.id, stayScope(declined?.lines ?? []));
   } catch { /* never fail the decline on a push */ }
   revalidatePath("/reservations");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -365,6 +388,8 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
 const EXTRA_BASES = new Set(["per_stay", "per_night"]);
 
 export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): Promise<LookResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const scopeError = await assertSingleProperty();
   if (scopeError) return { ok: false, error: scopeError };
   const { id: propertyId, tenantId } = await getProperty();
@@ -402,6 +427,7 @@ export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): 
 
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: name });
   revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -413,6 +439,7 @@ export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): 
  * break a bill somebody is going to be handed at checkout.
  */
 export async function retireBookingExtra(id: string): Promise<void> {
+  await requireCapability("manageSettings");
   if (await assertSingleProperty()) return;
   const { id: propertyId, tenantId } = await getProperty();
   await prisma.posItem.updateMany({
@@ -421,4 +448,5 @@ export async function retireBookingExtra(id: string): Promise<void> {
   });
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: "retired" });
   revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

@@ -11,7 +11,7 @@
  * Engine (category "direct"); bypasses RevioLink/Channex on the way in; only rate plans flagged
  * `directChannelEnabled` are exposed (selection, not mapping).
  */
-import type { forTenant } from "@revio/db";
+import { claimHold, type forTenant } from "@revio/db";
 import {
   computeStayCharges, computeWaterfall, deriveRate, expandInventoryPeriods, extrasTotalMinor,
   isAdvancePurchaseClosed, recogniseGuest, resolveChosenExtras, resolveRestriction, type SellableExtra,
@@ -185,27 +185,42 @@ async function loadStayContext(
       )
       .map((r) => ({ priority: r.priority, value: (r.valueBool ?? r.valueInt ?? true) as number | boolean }));
 
-  const remainingFor = (rtId: string, totalRooms: number): number => {
-    let min = Number.MAX_SAFE_INTEGER;
+  /** The full waterfall per night for one room type — the shared basis for the two helpers below. */
+  const waterfallFor = (rtId: string, totalRooms: number) => {
     const rtPeriods = expandInventoryPeriods(
       periods.filter((p) => p.roomTypeId === rtId).map((p) => ({ kind: p.kind, dateFrom: ymd(p.dateFrom), dateTo: ymd(p.dateTo), rooms: p.rooms })),
       nights,
     );
-    for (const k of nights) {
+    return nights.map((k) => {
       const d = utcDay(k);
       const cell = cellOf(rtId, k);
       const sold = resLines.filter((l) => l.roomTypeId === rtId && l.checkIn <= d && d < l.checkOut).reduce((s, l) => s + l.quantity, 0);
       const held = holds.filter((h) => h.roomTypeId === rtId && h.checkIn <= d && d < h.checkOut).reduce((s, h) => s + h.quantity, 0);
       const { outOfOrder, closed } = rtPeriods.get(k)!;
-      const rem = computeWaterfall({
-        physical: totalRooms, outOfOrder, closed,
-        manualSellLimit: cell?.inventory ?? null,
-        holds: held, confirmed: sold,
-      }).remaining;
-      min = Math.min(min, rem);
-    }
-    return Math.max(0, min === Number.MAX_SAFE_INTEGER ? 0 : min);
+      return {
+        date: k,
+        ...computeWaterfall({
+          physical: totalRooms, outOfOrder, closed,
+          manualSellLimit: cell?.inventory ?? null,
+          holds: held, confirmed: sold,
+        }),
+      };
+    });
   };
+
+  const remainingFor = (rtId: string, totalRooms: number): number => {
+    const rem = waterfallFor(rtId, totalRooms).map((n) => n.remaining);
+    return Math.max(0, rem.length === 0 ? 0 : Math.min(...rem));
+  };
+
+  /**
+   * The sellable base per night — physical minus out-of-order minus closed, or the hotel's manual
+   * override. This is what `claimHold` needs (X1): the slow-moving, staff-set half of the waterfall.
+   * The contended half — holds and occupying reservations — is deliberately NOT passed, because the
+   * claim re-counts it inside a lock at the moment of writing.
+   */
+  const sellableByNightFor = (rtId: string, totalRooms: number): Record<string, number> =>
+    Object.fromEntries(waterfallFor(rtId, totalRooms).map((n) => [n.date, n.available]));
 
   /** Two-tier restriction gate for one (room type, plan) over the stay. Null = bookable. */
   const stayBlocked = (rtId: string, rp: (typeof plans)[number]): string | null => {
@@ -241,7 +256,7 @@ async function loadStayContext(
     return null;
   };
 
-  return { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked, fees, defaults };
+  return { nights, roomTypes, plans, priceFor, remainingFor, sellableByNightFor, stayBlocked, fees, defaults };
 }
 
 /** GET /api/public/availability — the widget's search. */
@@ -386,7 +401,7 @@ export async function publicCreateReservation(
   if (!p.guest?.firstName?.trim() || !p.guest?.lastName?.trim() || !/.+@.+\..+/.test(p.guest?.email ?? "")) {
     return { error: "Guest first name, last name and a valid email are required." };
   }
-  const { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, priceFor, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, p, p.holdId ? { excludeHoldId: p.holdId } : {});
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
@@ -396,6 +411,39 @@ export async function publicCreateReservation(
   const blocked = stayBlocked(rt.id, rp);
   if (blocked) return { error: `Not bookable: ${blocked}.` };
   if (remainingFor(rt.id, rt.totalRooms) < 1) return { error: "No availability left for those dates." };
+
+  /*
+   * X1 — make sure a claim on the room actually exists before writing the reservation.
+   *
+   * The hold IS the claim, and normally the guest has one from the moment they picked the room. Two
+   * cases do not:
+   *
+   *   • an API caller that books without holding first (the seam allows it, `holdId` is optional);
+   *   • a guest whose hold quietly expired while they were typing their details.
+   *
+   * Both used to fall through to `remainingFor(...) < 1` and then create the reservation — the same
+   * read-then-write gap that let two guests take the same room. So when there is no live hold, take
+   * one atomically right here. It costs one statement and is converted immediately below.
+   *
+   * If this fails, the room genuinely went while they were filling in the form. Saying so plainly is
+   * the only honest outcome; confirming a booking we cannot honour is not.
+   */
+  const liveHold = p.holdId ? await publicGetHold(db, property.id, p.holdId) : null;
+  let claimedHoldId: string | null = liveHold?.id ?? null;
+  if (!claimedHoldId) {
+    const claim = await claimHold({
+      tenantId: property.tenantId,
+      propertyId: property.id,
+      roomTypeId: rt.id,
+      quantity: 1,
+      checkIn: p.checkIn,
+      checkOut: p.checkOut,
+      expiresAt: new Date(Date.now() + HOLD_MINUTES * 60_000),
+      sellableByNight: sellableByNightFor(rt.id, rt.totalRooms),
+    });
+    if (!claim.ok) return { error: "No availability left for those dates." };
+    claimedHoldId = claim.holdId;
+  }
 
   let accommodationMinor = 0;
   for (const k of nights) {
@@ -542,12 +590,14 @@ export async function publicCreateReservation(
 
   // The hold becomes the reservation. Marked converted rather than released, so the inventory it was
   // protecting is handed straight to the booking with no window in between.
-  if (p.holdId) {
-    await db.hold.updateMany({
-      where: { id: p.holdId, propertyId: property.id, status: "active" },
-      data: { status: "converted", reservationId: reservation.id },
-    });
-  }
+  //
+  // `claimedHoldId` rather than `p.holdId`: it is the guest's own hold when they had a live one, and
+  // otherwise the one claimed a few lines above. Either way there is always exactly one, so a
+  // reservation can never exist without the claim that reserved the room for it.
+  await db.hold.updateMany({
+    where: { id: claimedHoldId, propertyId: property.id, status: "active" },
+    data: { status: "converted", reservationId: reservation.id },
+  });
 
   await db.auditEntry.create({
     data: {
@@ -713,31 +763,40 @@ export async function publicCreateHold(
   const bad = validStay(q);
   if (bad) return { error: bad };
 
-  const { roomTypes, remainingFor } = await loadStayContext(db, property, q);
+  const { roomTypes, remainingFor, sellableByNightFor } = await loadStayContext(db, property, q);
   const rt = roomTypes.find((r) => r.id === q.roomTypeId);
   if (!rt) return { error: "That room is no longer available." };
   if (remainingFor(rt.id, rt.totalRooms) < 1) return { error: "That room has just been taken." };
 
-  const hold = await db.hold.create({
-    data: {
-      tenantId: property.tenantId,
-      propertyId: property.id,
-      roomTypeId: rt.id,
-      quantity: 1,
-      checkIn: utcDay(q.checkIn),
-      checkOut: utcDay(q.checkOut),
-      status: "active",
-      expiresAt: new Date(Date.now() + HOLD_MINUTES * 60_000),
-    },
+  /*
+   * X1 — the claim is atomic.
+   *
+   * The `remainingFor` check above still runs, because it produces the honest message when the room
+   * went in the last few seconds. But it cannot be the protection: two guests tapping the same last
+   * room in the same second both passed it and both got a hold, and the waterfall then reported -1.
+   * `claimHold` re-counts holds and occupying reservations under a per-room-type lock and inserts
+   * only if the answer still holds, so exactly one of them wins.
+   */
+  const expiresAt = new Date(Date.now() + HOLD_MINUTES * 60_000);
+  const claim = await claimHold({
+    tenantId: property.tenantId,
+    propertyId: property.id,
+    roomTypeId: rt.id,
+    quantity: 1,
+    checkIn: q.checkIn,
+    checkOut: q.checkOut,
+    expiresAt,
+    sellableByNight: sellableByNightFor(rt.id, rt.totalRooms),
   });
+  if (!claim.ok) return { error: "That room has just been taken." };
 
   // The waterfall changed, so every channel's availability changed. Pushing here — rather than only
   // on confirmation — is what stops an OTA selling the room a guest is currently paying for.
   try {
-    await syncRealChannels(db, property.id, stayScope([{ roomTypeId: hold.roomTypeId, checkIn: hold.checkIn, checkOut: hold.checkOut }]));
+    await syncRealChannels(db, property.id, stayScope([{ roomTypeId: rt.id, checkIn: utcDay(q.checkIn), checkOut: utcDay(q.checkOut) }]));
   } catch { /* a push failure must not block a hold */ }
 
-  return { hold: { id: hold.id, expiresAt: hold.expiresAt, roomTypeId: hold.roomTypeId } };
+  return { hold: { id: claim.holdId, expiresAt, roomTypeId: rt.id } };
 }
 
 /** The live hold behind a form, or null when it expired / was released / never existed. */

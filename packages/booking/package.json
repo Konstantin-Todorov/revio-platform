@@ -10,7 +10,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "engine-race": "tsx scripts/engine-race.ts"
   },
   "dependencies": {
     "@revio/connectivity": "workspace:*",
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "tsx": "^4.19.0"
   }
 }

@@ -7,7 +7,9 @@ import { getProperty, remainingByNight, stayViolation, todayInTz, PAYMENT_GUARAN
 import { releaseExpiredHolds } from "./holds";
 import { getSession } from "./session";
 import { stayScope } from "@revio/connectivity";
+import { claimHold } from "@revio/db";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
+import { requireCapability } from "./authz";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -16,6 +18,23 @@ function revalidateReservations() {
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
   revalidatePath("/guests");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+  /*
+   * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
+   * above.
+   *
+   * Reported as "other pages are blocked and do not work, sometimes you have to reload". The cause
+   * is Next's client-side Router Cache: a page you have already visited is served from memory on the
+   * next navigation, and `revalidatePath("/calendar")` only clears the entry it names. So a change
+   * made on one screen left every OTHER screen showing the value from before it — and screens no
+   * action mentioned at all (RevioLink's /bulk-update and /users, RevioCRS's /reports, RevioPMS's
+   * /settings and /walkin) were never cleared by anything.
+   *
+   * The named paths above stay, because they document what this mutation actually touches. This one
+   * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
+   * an action that forgot to list it.
+   */
+  revalidatePath("/", "layout");
 }
 
 function tag(reservationId: string, guestName: string) {
@@ -29,6 +48,7 @@ function tag(reservationId: string, guestName: string) {
  * the rooms.
  */
 export async function placeHold(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   await releaseExpiredHolds();
 
@@ -65,19 +85,41 @@ export async function placeHold(fd: FormData): Promise<void> {
   const ttlMinutes = defaults?.holdTtlMinutes ?? 30;
   const session = await getSession();
 
-  const hold = await prisma.hold.create({
-    data: {
-      tenantId: property.tenantId,
-      propertyId: property.id,
-      roomTypeId,
-      quantity,
-      checkIn: utcDay(checkIn),
-      checkOut: utcDay(checkOut),
-      status: "active",
-      expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
-      createdById: session?.userId ?? null,
-    },
+  /*
+   * X1 — the claim is atomic, not a check followed by a write.
+   *
+   * The `short` test above is still worth doing: it produces the good error message, naming the
+   * night that ran out. But it cannot be what protects the inventory, because between it and the
+   * insert another agent (or a guest on the booking page) can take the last room. `claimHold`
+   * re-counts holds and occupying reservations inside a lock and inserts only if the answer still
+   * holds, so two agents on the phone with different guests cannot both take room 12.
+   *
+   * The sellable base per night comes from the waterfall we already computed — staff-set values
+   * (physical rooms, out-of-order, closures, manual overrides) that no concurrent booker changes.
+   */
+  const claim = await claimHold({
+    tenantId: property.tenantId,
+    propertyId: property.id,
+    roomTypeId,
+    quantity,
+    checkIn,
+    checkOut,
+    expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
+    createdById: session?.userId ?? null,
+    sellableByNight: Object.fromEntries(nights.map((n) => [n.date, n.available])),
   });
+  if (!claim.ok) {
+    redirect(
+      `${back}&error=${encodeURIComponent(
+        `${roomType!.name} was taken while you were choosing — search again to see what is left.`,
+      )}`,
+    );
+  }
+  // `redirect()` throws, so anything past the guard above has a won claim — but TypeScript only
+  // knows that if the guard narrows, and a bare `claim.holdId` here would be a compile error the day
+  // someone changes `redirect` to a return. The explicit check keeps the invariant readable.
+  if (!claim.ok) return;
+  const holdId = claim.holdId;
 
   await logAudit(property.id, property.tenantId, {
     entity: `Hold · ${roomType!.name}`,
@@ -85,11 +127,12 @@ export async function placeHold(fd: FormData): Promise<void> {
     newValue: `${checkIn} → ${checkOut} · ${quantity}× · expires in ${ttlMinutes}m`,
   });
   revalidateReservations();
-  redirect(`/reservations/new?hold=${hold.id}&guests=${guests}${sourceId ? `&src=${sourceId}` : ""}`);
+  redirect(`/reservations/new?hold=${holdId}&guests=${guests}${sourceId ? `&src=${sourceId}` : ""}`);
 }
 
 /** Abandon step 2 deliberately — frees the inventory immediately instead of waiting for expiry. */
 export async function releaseHold(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const id = str(fd, "id");
   const hold = await prisma.hold.findFirst({ where: { id, propertyId: property.id, status: "active" } });
@@ -105,6 +148,7 @@ export async function releaseHold(fd: FormData): Promise<void> {
  * there is no re-validation race: rooms were already off sale from the moment of selection.
  */
 export async function confirmReservation(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const session = await getSession();
   await releaseExpiredHolds();
@@ -209,6 +253,7 @@ export async function confirmReservation(fd: FormData): Promise<void> {
  * validation fails the original reservation is untouched.
  */
 export async function modifyReservation(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   await releaseExpiredHolds();
 
@@ -267,11 +312,13 @@ export async function modifyReservation(fd: FormData): Promise<void> {
   );
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/reservations/${id}`);
 }
 
 /** Cancellation restores inventory immediately (sold is derived, so nothing to mutate) + re-push. */
 export async function cancelCrsReservation(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const id = str(fd, "id");
   const reservation = await prisma.reservation.findFirst({
@@ -293,12 +340,14 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   );
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/reservations/${id}`);
 }
 
 /** No-show is only reachable AFTER the check-in date has passed (spec rule). Still counts as
  *  sold in the metrics by default — the room was held. */
 export async function markNoShow(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const id = str(fd, "id");
   const reservation = await prisma.reservation.findFirst({
@@ -322,11 +371,13 @@ export async function markNoShow(fd: FormData): Promise<void> {
   });
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/reservations/${id}`);
 }
 
 /** Guest contact edits (Guests screen — contact + requests only, not a CRM). */
 export async function updateGuest(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const id = str(fd, "id");
   const guest = await prisma.guest.findFirst({ where: { id, propertyId: property.id } });
@@ -345,6 +396,7 @@ export async function updateGuest(fd: FormData): Promise<void> {
   });
   revalidatePath(`/guests/${id}`);
   revalidatePath("/guests");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${id}`);
 }
 
@@ -359,6 +411,7 @@ export async function updateGuest(fd: FormData): Promise<void> {
  * a hotel keeps the records it is required to keep.
  */
 export async function setGuestRecognitionOptOut(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const session = await getSession();
   if (!session) redirect("/logout");
@@ -381,6 +434,7 @@ export async function setGuestRecognitionOptOut(fd: FormData): Promise<void> {
     },
   });
   revalidatePath(`/guests/${guestId}`);
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${guestId}`);
 }
 
@@ -389,6 +443,7 @@ export async function setGuestRecognitionOptOut(fd: FormData): Promise<void> {
 /** Add a note to a guest. Author identity is taken from the session (never client-supplied), and
  * the note is tenant-stamped so RLS + the shared-core visibility rule both hold. */
 export async function addGuestNote(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const session = await getSession();
   if (!session) redirect("/logout");
@@ -402,12 +457,14 @@ export async function addGuestNote(fd: FormData): Promise<void> {
     });
   }
   revalidatePath(`/guests/${guestId}`);
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${guestId}#notes`);
 }
 
 /** Edit an existing note's body. Scoped to the guest under this property; author/byline is preserved
  * (updatedAt marks the revision). */
 export async function editGuestNote(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const noteId = str(fd, "noteId");
   const guestId = str(fd, "guestId");
@@ -419,11 +476,13 @@ export async function editGuestNote(fd: FormData): Promise<void> {
     await prisma.guestNote.update({ where: { id: noteId }, data: { body } });
   }
   revalidatePath(`/guests/${guestId}`);
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${guestId}#notes`);
 }
 
 /** Remove a note. Same guest/property scope guard as edit. */
 export async function deleteGuestNote(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
   const property = await getProperty();
   const noteId = str(fd, "noteId");
   const guestId = str(fd, "guestId");
@@ -432,5 +491,6 @@ export async function deleteGuestNote(fd: FormData): Promise<void> {
   const note = await prisma.guestNote.findFirst({ where: { id: noteId, guestId } });
   if (note) await prisma.guestNote.delete({ where: { id: noteId } });
   revalidatePath(`/guests/${guestId}`);
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${guestId}#notes`);
 }

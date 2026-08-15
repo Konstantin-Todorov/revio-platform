@@ -4,6 +4,7 @@ import { Topbar } from "@/components/shell/Topbar";
 import { ShellProvider } from "@/components/shell/ShellContext";
 import { getOperatorSession } from "@/lib/session";
 import { getNotifications } from "@/lib/data";
+import { FieldGuard } from "@revio/ui/field-guard";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getOperatorSession();
@@ -17,6 +18,10 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Topbar name={session.name} role={session.role} notifItems={notifItems} />
           <main className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
+            {/* Y1: instant, in-place feedback on a numeric field typed into wrongly. A number
+                input HIDES invalid text (its value reads as ""), so without this a bad field looks
+                merely empty — nothing objects, and the form saves a value nobody chose. */}
+            <FieldGuard />
             <div className="mx-auto max-w-[1400px]">{children}</div>
           </main>
         </div>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Wine, ChevronRight, Settings2, DoorOpen } from "lucide-react";
+import { ChevronRight, Settings2, DoorOpen } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { listFolios } from "@/lib/folio";
 import { money } from "@/lib/format";

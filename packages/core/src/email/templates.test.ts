@@ -42,7 +42,12 @@ describe("email typeface setting", () => {
   });
 
   it.each(THEMES)("'sans' leaves no serif anywhere in the %s theme", (theme) => {
-    expect(render("sans", theme).match(SERIF)).toBeNull();
+    const html = render("sans", theme);
+    expect(html.match(SERIF)).toBeNull();
+    // Both directions. `SANS` was declared here and never asserted on, so this test proved the serif
+    // font was absent without ever proving the sans one arrived — an email with no font-family at all
+    // would have passed it.
+    expect(html.match(SANS)!.length).toBeGreaterThan(0);
   });
 
   it.each(THEMES)("'serif' reaches the body, not just the masthead, in the %s theme", (theme) => {

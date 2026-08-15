@@ -28,6 +28,7 @@ function refresh() {
   revalidatePath("/maintenance");
   revalidatePath("/housekeeping");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 const PRIORITIES = ["low", "normal", "high"];

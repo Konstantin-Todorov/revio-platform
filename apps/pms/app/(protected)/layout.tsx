@@ -8,6 +8,7 @@ import { getSession, getSwitchableProperties } from "@/lib/session";
 import { activeProperty, getNotifications } from "@/lib/data";
 import { todayInTz, ymd } from "@/lib/format";
 import { roleAllowsPath, roleHome } from "@/lib/roles";
+import { FieldGuard } from "@revio/ui/field-guard";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -44,6 +45,10 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             {/* Keyed by the property in view — switching hotels re-renders the server components but
                 leaves CLIENT components mounted, holding the previous hotel's form values. A form
                 pre-filled from hotel A and submitted under hotel B writes A's values onto B. */}
+            {/* Y1: instant, in-place feedback on a numeric field typed into wrongly. A number
+                input HIDES invalid text (its value reads as ""), so without this a bad field looks
+                merely empty — nothing objects, and the form saves a value nobody chose. */}
+            <FieldGuard />
             <div key={session.activePropertyId} className="mx-auto max-w-[1400px]">{children}</div>
           </main>
         </div>

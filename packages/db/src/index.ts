@@ -28,4 +28,11 @@ export {
   type TokenResolution,
 } from "./auth-tokens.js";
 export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
+export {
+  claimHold,
+  nightsBetween,
+  type ClaimHoldInput,
+  type ClaimResult,
+  type SellableByNight,
+} from "./inventory-claim.js";
 export * from "@prisma/client";

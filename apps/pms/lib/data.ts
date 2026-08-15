@@ -100,7 +100,11 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
   }
   const unsettled = openFolios.filter((f) => {
     let c = 0, p = 0;
-    for (const l of f.lines) { if (l.voided) continue; l.kind === "payment" ? (p += l.amountMinor) : (c += l.amountMinor); }
+    for (const l of f.lines) {
+      if (l.voided) continue;
+      if (l.kind === "payment") p += l.amountMinor;
+      else c += l.amountMinor;
+    }
     return c - p !== 0;
   }).length;
 

@@ -85,7 +85,8 @@ export function BookingForm({
   const toggleExtra = (id: string) =>
     setChosen((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       // Publishes to the shared store the summary card reads — see lib/extras-store.
       setExtrasTotal(extrasTotalMinor(extras.filter((e) => next.has(e.id)), nights));
       return next;

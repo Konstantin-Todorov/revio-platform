@@ -1,4 +1,5 @@
 import "server-only";
+import { decimalOr, intOr, minorUnitsOr } from "@revio/core";
 import { syncRealChannels, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
 
@@ -65,9 +66,30 @@ export async function recordPull(propertyId: string, tenantId: string, summary: 
 export function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
 }
+/**
+ * An integer from a form field, or the fallback (Y1).
+ *
+ * ⚠️ This used to be `Number.isFinite(Number(fd.get(key))) ? … : fallback`, which looked careful and
+ * was not: **`Number("")` is 0 and `Number(null)` is 0**. A user typing letters into an
+ * `<input type="number">` makes the browser submit `""` — so "rooms to sell" silently became 0 and
+ * closed the property out on every channel, VAT silently became 0%, and the `fallback` that 21 call
+ * sites were passing could only ever fire for a non-numeric string a number input cannot produce.
+ *
+ * `intOr` in `@revio/core` returns the fallback for absent, blank AND unparseable, which is what
+ * every call site already assumed. A real `0` is still a real `0`.
+ */
 export function int(fd: FormData, key: string, fallback = 0): number {
-  const n = Number(fd.get(key));
-  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+  return intOr(fd.get(key), fallback);
+}
+
+/** A decimal (rates, percentages). Same non-value handling as `int`. */
+export function decimal(fd: FormData, key: string, fallback = 0): number {
+  return decimalOr(fd.get(key), fallback);
+}
+
+/** Money: a major-unit field ("129.50") to integer minor units, converted from the string. */
+export function money(fd: FormData, key: string, fallback = 0): number {
+  return minorUnitsOr(fd.get(key), fallback);
 }
 export function strList(fd: FormData, key: string): string[] {
   return fd.getAll(key).map((v) => String(v)).filter(Boolean);

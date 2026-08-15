@@ -63,6 +63,24 @@ Those belong to Reservation/CRS and PMS. Do not add them here.
 - **Restriction priority:** manual edit / Bulk Update > Restriction Rule > Rate Plan default.
 - All of the above already live as pure functions in `@revio/core` — call them, don't reimplement.
 
+## Writes are gated by capability, and the check lives in the action (X2)
+
+The role on a session used to decide what the **sidebar** rendered and nothing else. A server action
+is a POST endpoint, and Next runs it **before** re-rendering — so a layout redirect fires after the
+write has committed. Hiding a button protects nobody.
+
+Every action here calls `requireCapability(cap)` (void actions — it redirects, which throws) or
+`guard(cap)` (actions returning a result — so the form can show the reason) as its **first
+statement**, before reading FormData and before touching the database. The policy is
+`roleCan` in `@revio/core/auth/capabilities` — pure, tested, and shared with the other app, because
+the roles are one identity across the platform.
+
+`revenue_manager` may not touch channels; `distribution_manager` may not touch prices. That split is
+why both roles exist, so calendar and bulk edits are gated **per field**, not per screen.
+
+`pnpm authz:lint` fails if any action is neither gated nor on its exemption list **with a written
+reason**. Adding an action without deciding which it is breaks CI.
+
 ## Demo
 Runs entirely on seeded data via `MockChannelAdapter`. Seed mirrors the reference screenshot
 (Hotel Sofia: Deluxe Double, Superior Twin, …; Booking.com/Expedia/Trip.com/Agoda).

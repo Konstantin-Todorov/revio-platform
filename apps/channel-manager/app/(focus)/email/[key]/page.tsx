@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { EMAIL_LOCALES, EMAIL_TEMPLATE_BY_KEY, defaultsFor, sampleDetails } from "@revio/core";
 import { getProperty } from "@/lib/data";
 import { brandOf } from "@revio/email";

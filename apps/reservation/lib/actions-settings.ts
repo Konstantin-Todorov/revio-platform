@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { logAudit, str, int } from "./mutation-helpers";
+import { logAudit, str } from "./mutation-helpers";
 import { PERMISSION_GROUPS } from "./permissions";
+import { requireCapability } from "./authz";
 
 
 
@@ -12,6 +13,7 @@ const LEVELS = new Set(["none", "view", "edit"]);
 
 /** Roles = saved combinations of group × access level — new roles are configuration, not code. */
 export async function savePermissionRole(fd: FormData): Promise<void> {
+  await requireCapability("manageStaff");
   const property = await getProperty();
   const tenantId = property.tenantId;
   const rowId = str(fd, "id");
@@ -44,9 +46,11 @@ export async function savePermissionRole(fd: FormData): Promise<void> {
     await logAudit(property.id, tenantId, { entity: `Permission role · ${name}`, field: "created" });
   }
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function deletePermissionRole(fd: FormData): Promise<void> {
+  await requireCapability("manageStaff");
   const property = await getProperty();
   const id = str(fd, "id");
   const role = await prisma.permissionRole.findFirst({ where: { id, tenantId: property.tenantId } });
@@ -54,10 +58,12 @@ export async function deletePermissionRole(fd: FormData): Promise<void> {
   await prisma.permissionRole.delete({ where: { id } });
   await logAudit(property.id, property.tenantId, { entity: `Permission role · ${role.name}`, field: "deleted" });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Taxes & Fees — type (percent|fixed), basis, inclusion (feeds Room Revenue display rules). */
 export async function saveTaxFee(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const rowId = str(fd, "id");
   const name = str(fd, "name");
@@ -87,9 +93,11 @@ export async function saveTaxFee(fd: FormData): Promise<void> {
     newValue: `${type === "percent" ? `${data.pct}%` : `€${((data.amountMinor ?? 0) / 100).toFixed(2)}`} ${data.basis.replace("_", " ")} · ${data.inclusion}`,
   });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function deleteTaxFee(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const id = str(fd, "id");
   const tax = await prisma.taxFee.findFirst({ where: { id, propertyId: property.id } });
@@ -97,6 +105,7 @@ export async function deleteTaxFee(fd: FormData): Promise<void> {
   await prisma.taxFee.delete({ where: { id } });
   await logAudit(property.id, property.tenantId, { entity: `Tax/Fee · ${tax.name}`, field: "deleted" });
   revalidatePath("/settings");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 
@@ -106,6 +115,7 @@ export async function deleteTaxFee(fd: FormData): Promise<void> {
  * Pausing stops distribution reversibly; disconnecting keeps the CRS↔CM mapping DORMANT so a
  * later reconnect never forces a re-map. Reservations already imported are never touched. */
 export async function setCmConnection(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
   const property = await getProperty();
   const action = str(fd, "cmAction");
   const next =
@@ -134,4 +144,5 @@ export async function setCmConnection(fd: FormData): Promise<void> {
     },
   });
   revalidatePath("/distribution");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

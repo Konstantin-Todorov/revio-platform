@@ -40,6 +40,7 @@ function refresh(reservationId: string) {
   revalidatePath(`/folio/${reservationId}`);
   revalidatePath("/folios");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 async function openFolioId(session: { tenantId: string; activePropertyId: string }, reservationId: string): Promise<string | null> {

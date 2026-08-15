@@ -5,6 +5,7 @@ import { Topbar } from "@/components/shell/Topbar";
 import { ShellProvider } from "@/components/shell/ShellContext";
 import { getSession, getSwitchableProperties } from "@/lib/session";
 import { getNotifications } from "@/lib/data";
+import { FieldGuard } from "@revio/ui/field-guard";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -49,6 +50,10 @@ export default async function ProtectedLayout({ children }: { children: React.Re
               is different data, not the same screen with new props.
             */}
             <div key={`${session.scope}:${session.activePropertyId}`} className="mx-auto max-w-[1400px]">
+              {/* Y1: instant, in-place feedback on a numeric field typed into wrongly. A number
+                  input HIDES invalid text (its value reads as ""), so without this a bad field looks
+                  merely empty — nothing objects, and the form saves a value nobody chose. */}
+              <FieldGuard />
               {children}
             </div>
           </main>

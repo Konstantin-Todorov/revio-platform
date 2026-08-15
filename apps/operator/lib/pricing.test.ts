@@ -1,18 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  BUNDLE_DISCOUNT_PCT,
-  COMBINATIONS,
-  MODULE_MINOR,
-  PLAN_BASE_MINOR,
-  ROOM_TIERS,
-  attributeRevenue,
-  combinationKeyOf,
-  directBookingFeeMinor,
-  entitlementsFor,
-  monthlyPriceMinor,
-  priceBreakdown,
-  splitProportionally,
-} from "./pricing.js";
+import { BUNDLE_DISCOUNT_PCT, COMBINATIONS, PLAN_BASE_MINOR, ROOM_TIERS, attributeRevenue, combinationKeyOf, directBookingFeeMinor, entitlementsFor, monthlyPriceMinor, priceBreakdown, splitProportionally,  } from "./pricing.js";
 
 const ALL = entitlementsFor(["channelManager", "reservation", "pms"]);
 const CM = entitlementsFor(["channelManager"]);

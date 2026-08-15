@@ -28,6 +28,7 @@ function revalidate(tenantId: string) {
   revalidatePath(`/clients/${tenantId}`);
   revalidatePath("/clients");
   revalidatePath("/overview");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**

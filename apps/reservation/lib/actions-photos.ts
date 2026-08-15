@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { logAudit, str } from "./mutation-helpers";
 import { ImageRejected, MAX_UPLOAD_BYTES, processRoomPhoto } from "./images";
+import { guard, requireCapability } from "./authz";
 
 /**
  * Room photographs.
@@ -44,6 +45,8 @@ async function ownedRoomType(roomTypeId: string) {
 }
 
 export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData): Promise<PhotoResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
   const owned = await ownedRoomType(str(fd, "roomTypeId"));
   if (!owned) return { ok: false, error: "That room type no longer exists." };
   const { property, roomType } = owned;
@@ -118,10 +121,12 @@ export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData):
     newValue: `${uploaded} added`,
   });
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true, uploaded };
 }
 
 export async function deleteRoomPhoto(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const id = str(fd, "id");
   const photo = await prisma.roomTypePhoto.findFirst({
@@ -141,6 +146,7 @@ export async function deleteRoomPhoto(fd: FormData): Promise<void> {
     entity: "Room type photos", field: "delete", newValue: "removed",
   });
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**
@@ -149,6 +155,7 @@ export async function deleteRoomPhoto(fd: FormData): Promise<void> {
  * two competing controls.
  */
 export async function reorderRoomPhotos(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const owned = await ownedRoomType(str(fd, "roomTypeId"));
   if (!owned) return;
   const { property, roomType } = owned;
@@ -171,10 +178,12 @@ export async function reorderRoomPhotos(fd: FormData): Promise<void> {
   }
 
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Alt text — what a screen reader announces, and what shows if the image fails to load. */
 export async function saveRoomPhotoAlt(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
   const property = await getProperty();
   const id = str(fd, "id");
   const photo = await prisma.roomTypePhoto.findFirst({ where: { id, propertyId: property.id }, select: { id: true } });
@@ -185,4 +194,5 @@ export async function saveRoomPhotoAlt(fd: FormData): Promise<void> {
     data: { alt: str(fd, "alt").trim().slice(0, 160) },
   });
   revalidatePath("/rooms-rates");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

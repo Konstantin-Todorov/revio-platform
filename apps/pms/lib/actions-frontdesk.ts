@@ -30,6 +30,7 @@ function refresh() {
   revalidatePath("/dashboard");
   revalidatePath("/housekeeping");
   revalidatePath("/rooms");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 const SERVICEABLE = ["clean", "inspected"];

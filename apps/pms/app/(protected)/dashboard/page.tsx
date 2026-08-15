@@ -77,7 +77,7 @@ export default async function DashboardPage() {
     if (unitCount === 0) redirect("/welcome/property");
   }
 
-  const [{ property, today, totalUnits, arrivals, inHouse, departures, departedToday, conflicts, kpis, exceptions }, setup] =
+  const [{ property, today, arrivals, inHouse, departures, departedToday, conflicts, kpis, exceptions }, setup] =
     await Promise.all([getFrontDeskOverview(), getSetup()]);
 
   const stayovers = inHouse.filter((s) => !s.dueOutToday && !s.overdueState); // rows shown in the in-house roster

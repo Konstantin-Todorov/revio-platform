@@ -16,6 +16,7 @@ function refresh() {
   revalidatePath("/configuration");
   revalidatePath("/housekeeping");
   revalidatePath("/dashboard");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Save the tax / invoicing / compliance / housekeeping-gate config (spec §3.10). Upserts the
@@ -68,6 +69,7 @@ export async function saveDepositType(fd: FormData): Promise<void> {
   }
   await logAudit(s.activePropertyId, s.tenantId, { entity: "deposit_type", field: name, newValue: `${data.behaviour}/${data.vatTiming}`, userId: s.userId });
   revalidatePath("/configuration");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function deleteDepositType(fd: FormData): Promise<void> {
@@ -79,4 +81,5 @@ export async function deleteDepositType(fd: FormData): Promise<void> {
   await prisma.depositType.delete({ where: { id } });
   await logAudit(s.activePropertyId, s.tenantId, { entity: "deposit_type", field: t.name, newValue: "deleted", userId: s.userId });
   revalidatePath("/configuration");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
