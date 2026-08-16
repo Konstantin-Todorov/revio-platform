@@ -1,7 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import { forSystem } from "@revio/db";
-import { BOOKING_COPY_DEFAULTS, resolveBrandLogo } from "@revio/core";
+import { BOOKING_COPY_DEFAULTS, heroFocalY, heroScrim, resolveBrandLogo } from "@revio/core";
+import { getObjectStore } from "@revio/storage";
 
 /**
  * Resolving a public slug → the hotel it belongs to.
@@ -16,6 +17,17 @@ import { BOOKING_COPY_DEFAULTS, resolveBrandLogo } from "@revio/core";
  */
 
 const prisma = forSystem();
+
+export interface HeroBackground {
+  url: string;
+  /** `object-position` Y, 0–100 — which band of the photo survives the crop. */
+  focalY: number;
+  /** Opacity of the black scrim over it. MEASURED from the image, then raised by the hotel's choice. */
+  alpha: number;
+  /** For `width`/`height` on the image, so the band does not reflow as the photo arrives. */
+  width: number | null;
+  height: number | null;
+}
 
 export interface PublicProperty {
   id: string;
@@ -42,6 +54,15 @@ export interface PublicProperty {
   headline: string;
   subheadline: string;
   showTrust: boolean;
+  /**
+   * The hotel's own photograph behind the headline, ready to render.
+   *
+   * Resolved here rather than in the page for the same reason the logo is: the screens read a
+   * resolved value, never the raw columns. `alpha` in particular must never be recomputed at a call
+   * site — it is a contrast guarantee, and a second place to derive it is a second place to get it
+   * wrong. Null means no background, which is a designed state: the preset's own hero still runs.
+   */
+  hero: HeroBackground | null;
   /**
    * Can this hotel actually take a card guarantee right now?
    *
@@ -79,6 +100,8 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
       stripeChargesEnabled: true,
       bookingPreset: true, bookingBrandColor: true, bookingFont: true, bookingLogoUrl: true,
       bookingHeadline: true, bookingSubheadline: true, bookingShowTrust: true,
+      bookingHeroKey: true, bookingHeroWidth: true, bookingHeroHeight: true,
+      bookingHeroLuminance: true, bookingHeroFocalY: true, bookingHeroOverlay: true,
       tenant: { select: { status: true, hasReservation: true } },
     },
   });
@@ -118,6 +141,15 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
     headline: property.bookingHeadline?.trim() || BOOKING_COPY_DEFAULTS.headline,
     subheadline: property.bookingSubheadline?.trim() || BOOKING_COPY_DEFAULTS.subheadline,
     showTrust: property.bookingShowTrust,
+    hero: property.bookingHeroKey
+      ? {
+          url: (await getObjectStore()).publicUrl(property.bookingHeroKey),
+          focalY: heroFocalY(property.bookingHeroFocalY),
+          alpha: heroScrim(property.bookingHeroLuminance, property.bookingHeroOverlay).alpha,
+          width: property.bookingHeroWidth,
+          height: property.bookingHeroHeight,
+        }
+      : null,
     paymentReady: property.stripeChargesEnabled,
   };
 });

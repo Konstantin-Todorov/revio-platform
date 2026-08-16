@@ -326,6 +326,19 @@ synced copy") with the commercial half read-only from the CRS and the operationa
 `€192 room + €3 city tax = €195` — **the exact number the guest was quoted**, which is the all-in pricing
 promise closing the loop. The card guarantee shows as *Card on file* (Stripe test-mode, token only).
 **PHASE K IS COMPLETE (2026-08-05)** — K5 · K6 · K8 · K10 shipped; K7 was pulled forward during K2b.
+**BG1 — the hero background photograph — SHIPPED 2026-08-16.** A hotel uploads its own photo behind
+the headline (RevioCRS → Booking Engine → Background image); it replaces the preset's hero band
+rather than layering on it, because a preset hero is a *substitute* for imagery and running both puts
+the hotel's brand colour over the hotel's own photograph. **The overlay is measured, not chosen**:
+`heroScrim` in `@revio/core` walks a black scrim up until white text composited over *that* picture
+reaches 4.5:1, and the hotel's three choices (*Show the photo · Balanced · Words first*) add to that
+floor and can never go under it — the screen states the number rather than silently overriding them.
+Two things were learned by measuring the real page rather than trusting the tests: the reading must
+be the brightest **region** (a 90th percentile shipped, and a bright corner moved under the headline
+by the focal control produced a real **4.14:1**), and a maximum is also the only reading that bounds
+every *crop* — cropping removes regions and never adds brighter ones, which is what makes one stored
+number safe across any focal point and any viewport. Bytes in object storage under the property's own
+`hero/` prefix, never Postgres; a portrait or sub-1200px upload is refused before it is sent.
 **K8** gives RevioCRS a **Cost of distribution** view that keeps commission *paid* (a fact, each
 channel's own rate × the revenue it brought) visually and structurally apart from commission *avoided*
 (a counterfactual, and `null` rather than a guess when there is no OTA revenue to derive a rate from) —

@@ -1,7 +1,8 @@
 import { ExternalLink, Power } from "lucide-react";
 import { slugifyPropertyName } from "@revio/booking";
-import { brandLogoPath } from "@revio/core";
+import { BOOKING_COPY_DEFAULTS, brandLogoPath, heroScrim } from "@revio/core";
 import { connectMode } from "@revio/payments";
+import { getObjectStore } from "@revio/storage";
 import { getProperty } from "@/lib/data";
 import { prisma } from "@/lib/db";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -10,7 +11,8 @@ import { LinkForm } from "@/components/booking-engine/LinkForm";
 import { LogoPicker } from "@/components/booking-engine/LogoPicker";
 import { PaymentsCard } from "@/components/booking-engine/PaymentsCard";
 import { ExtrasEditor, type EditableExtra } from "@/components/booking-engine/ExtrasEditor";
-import { saveBookingEngineLook } from "@/lib/actions-booking-engine";
+import { HeroPicker } from "@/components/booking-engine/HeroPicker";
+import { saveBookingEngineLook, saveBookingHeroSettings } from "@/lib/actions-booking-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +73,18 @@ export default async function BookingEnginePage() {
     select: { id: true, name: true, description: true, priceMinor: true, basis: true, directSellable: true },
   });
   const extras: EditableExtra[] = extraRows;
+
+  /*
+   * The hero background's URL.
+   *
+   * The THUMB, not the full 2400px image — the editor is judging a crop and a shading level, and
+   * pulling a page-sized photograph into a settings screen to do that is bytes a hotel pays for on
+   * every visit. `publicUrl` resolves relative for the local driver, which is why this app serves
+   * `/api/media/…` itself rather than pointing at the booking service (see apps/booking/CLAUDE.md).
+   */
+  const heroUrl = property.bookingHeroThumbKey
+    ? (await getObjectStore()).publicUrl(property.bookingHeroThumbKey)
+    : null;
 
   const configured = process.env.BOOKING_ENGINE_ORIGIN?.trim().replace(/\/+$/, "");
   const origin = configured || (process.env.NODE_ENV === "development" ? "http://localhost:3004" : null);
@@ -170,6 +184,26 @@ export default async function BookingEnginePage() {
 
       <Card>
         <CardHeader
+          title="Background image"
+          subtitle="A photo of your hotel behind the headline on your page. Optional — without one, the page uses the colour and shape from the base you pick below."
+        />
+        <div className="px-5 py-4">
+          <HeroPicker
+            saveSettings={saveBookingHeroSettings}
+            propertyName={property.name}
+            headline={property.bookingHeadline?.trim() || BOOKING_COPY_DEFAULTS.headline}
+            saved={{
+              url: heroUrl,
+              focalY: property.bookingHeroFocalY,
+              overlay: property.bookingHeroOverlay,
+              luminance: property.bookingHeroLuminance,
+            }}
+          />
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
           title="Appearance"
           subtitle="Pick a base, then change only what you want. Anything left blank follows your email branding — editing here never changes your emails."
         />
@@ -185,6 +219,17 @@ export default async function BookingEnginePage() {
             font: property.emailFont === "sans" ? "sans" : "serif",
             logoUrl: emailLogo,
           }}
+          hero={
+            heroUrl
+              ? {
+                  url: heroUrl,
+                  focalY: property.bookingHeroFocalY,
+                  // The same function the guest's page calls, so this preview cannot promise a
+                  // shading the real page will not apply.
+                  alpha: heroScrim(property.bookingHeroLuminance, property.bookingHeroOverlay).alpha,
+                }
+              : null
+          }
           saved={{
             preset: property.bookingPreset,
             color: property.bookingBrandColor,

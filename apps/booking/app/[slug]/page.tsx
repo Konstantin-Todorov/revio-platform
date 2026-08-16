@@ -25,8 +25,21 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
   const property = await getPublicProperty(slug);
   if (!property) notFound();
 
-  const hero = bookingPreset(property.preset).tokens.hero;
+  const photo = property.hero;
+  /*
+   * A background photograph REPLACES the preset's hero treatment rather than layering on it.
+   *
+   * The preset's job is the neutrals and the shape of the whole page, and it keeps that job below
+   * the fold. But its hero band is a *substitute* for imagery — a wash or a slab of the hotel's
+   * colour, there precisely because most hotels have no photo here. Running both would put the
+   * hotel's brand colour over their own photograph, which is the one combination neither choice was
+   * designed for.
+   */
+  const hero = photo ? "image" : bookingPreset(property.preset).tokens.hero;
   const solid = hero === "solid";
+  /** White text over the photo. `--brand-ink` is the ink for the brand FILL and is a different job. */
+  const onPhoto = hero === "image";
+  const reversed = solid || onPhoto;
 
   return (
     <>
@@ -51,7 +64,51 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
           {/* The preset decides how the hero reads. `solid` reverses the headline out of a full
               band of the hotel's colour; `wash` fades a tint of it into the page; `plain` leaves
               the search bar to carry the page alone. */}
-          {hero !== "plain" && (
+          {photo && (
+            <div aria-hidden className="absolute inset-0 overflow-hidden">
+              {/*
+                Deliberately an <img> and not a CSS background: this is the largest element on the
+                page and therefore the LCP, and only a real element can carry `fetchPriority` and
+                intrinsic dimensions. `width`/`height` reserve the band's aspect so the headline does
+                not jump when the photo lands.
+
+                No `alt` text and `aria-hidden`, because it says nothing a guest needs — the hotel's
+                name is already in the header, the heading and the page title. Describing a decorative
+                photograph to a screen reader is noise between them and the search bar.
+              */}
+              {/* eslint-disable-next-line @next/next/no-img-element -- a hotel-uploaded photo of unknown origin, already resized and re-encoded by us */}
+              <img
+                src={photo.url}
+                alt=""
+                width={photo.width ?? undefined}
+                height={photo.height ?? undefined}
+                fetchPriority="high"
+                decoding="async"
+                className="h-full w-full object-cover"
+                style={{ objectPosition: `50% ${photo.focalY}%` }}
+              />
+              {/*
+                The measured scrim. Its opacity is whatever it takes for white text to reach 4.5:1 on
+                THIS photograph, plus however much darker the hotel asked for — never less.
+              */}
+              <div className="absolute inset-0 bg-black" style={{ opacity: photo.alpha }} />
+              {/*
+                A second, purely additive shade: a little more at the very top and bottom, so the
+                band has weight under the sticky header and does not end on a hard horizontal edge.
+                It only ever ADDS black, which is why it cannot undermine the measurement above —
+                any gradient that lightened part of the image would have to be inside the maths.
+              */}
+              <div
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(to bottom, rgba(0,0,0,0.22) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.28) 100%)",
+                }}
+              />
+            </div>
+          )}
+
+          {!photo && hero !== "plain" && (
             <div
               aria-hidden
               className="absolute inset-0"
@@ -66,17 +123,37 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
             />
           )}
 
-          <div className="relative mx-auto w-full max-w-[72rem] px-5 pb-14 pt-14 sm:px-8 sm:pb-20 sm:pt-24">
+          {/* A photograph needs room to be one. In the preset heroes this padding is the whole band;
+              with an image, too little height turns a hotel's view of the sea into a letterbox strip. */}
+          <div
+            className={`relative mx-auto w-full max-w-[72rem] px-5 pb-14 pt-14 sm:px-8 sm:pb-20 sm:pt-24 ${
+              photo ? "flex min-h-[30rem] flex-col justify-center sm:min-h-[34rem]" : ""
+            }`}
+          >
             <div className="mx-auto max-w-[46rem] text-center">
               <p
                 className="eyebrow rise"
-                style={{ animationDelay: "40ms", ...(solid ? { color: "hsl(var(--brand-ink) / 0.75)" } : {}) }}
+                style={{
+                  animationDelay: "40ms",
+                  ...(onPhoto
+                    ? { color: "rgba(255,255,255,0.8)" }
+                    : solid
+                      ? { color: "hsl(var(--brand-ink) / 0.75)" }
+                      : {}),
+                }}
               >
                 Official booking · {property.name}
               </p>
               <h1
                 className="display rise mt-4 text-[2.4rem] sm:text-[3.75rem]"
-                style={{ animationDelay: "100ms", ...(solid ? { color: "hsl(var(--brand-ink))" } : {}) }}
+                style={{
+                  animationDelay: "100ms",
+                  ...(onPhoto
+                    ? { color: "#ffffff", textShadow: "0 1px 24px rgba(0,0,0,0.35)" }
+                    : solid
+                      ? { color: "hsl(var(--brand-ink))" }
+                      : {}),
+                }}
               >
                 {property.headline}
               </h1>
@@ -84,15 +161,20 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
                 className="rise mx-auto mt-5 max-w-[46ch] text-[15.5px] leading-relaxed sm:text-[17px]"
                 style={{
                   animationDelay: "160ms",
-                  color: solid ? "hsl(var(--brand-ink) / 0.85)" : "hsl(var(--ink-soft))",
+                  color: onPhoto
+                    ? "rgba(255,255,255,0.92)"
+                    : solid
+                      ? "hsl(var(--brand-ink) / 0.85)"
+                      : "hsl(var(--ink-soft))",
+                  ...(onPhoto ? { textShadow: "0 1px 16px rgba(0,0,0,0.35)" } : {}),
                 }}
               >
                 {property.subheadline}
               </p>
             </div>
 
-            <div className="rise mx-auto mt-10 max-w-[58rem] sm:mt-12" style={{ animationDelay: "220ms" }}>
-              <SearchBar slug={property.slug} onDark={solid} />
+            <div className="rise mx-auto mt-10 w-full max-w-[58rem] sm:mt-12" style={{ animationDelay: "220ms" }}>
+              <SearchBar slug={property.slug} onDark={reversed} />
             </div>
           </div>
         </section>

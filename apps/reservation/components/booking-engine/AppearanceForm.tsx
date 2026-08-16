@@ -19,12 +19,18 @@ import type { LookResult } from "@/lib/actions-booking-engine";
  */
 
 export function AppearanceForm({
-  action, propertyName, inherited, saved,
+  action, propertyName, inherited, hero, saved,
 }: {
   action: (prev: LookResult | null, fd: FormData) => Promise<LookResult>;
   propertyName: string;
   /** What the email branding would give them, shown as the placeholder for each blank field. */
   inherited: { color: string; font: string; logoUrl: string | null };
+  /**
+   * The saved background photo, already scrimmed — edited in its own card above, shown here so this
+   * preview is of the actual page. Not editable from this form: a background is one setting appearing
+   * on one screen, and putting a second copy of the controls here is how two screens start disagreeing.
+   */
+  hero: { url: string; focalY: number; alpha: number } | null;
   saved: {
     preset: string;
     color: string | null;
@@ -200,6 +206,7 @@ export function AppearanceForm({
           showTrust={showTrust}
           propertyName={propertyName}
           logoUrl={effective.logoUrl}
+          hero={hero}
         />
         <p className="mt-2 text-[11px] leading-snug text-ink-400">
           Updates as you type. Nothing is live until you save.

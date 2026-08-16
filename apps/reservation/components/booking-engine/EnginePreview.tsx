@@ -15,7 +15,7 @@ import { BOOKING_PRESETS, BOOKING_COPY_DEFAULTS } from "@revio/core";
  */
 
 export function EnginePreview({
-  preset, color, font, headline, subheadline, showTrust, propertyName, logoUrl,
+  preset, color, font, headline, subheadline, showTrust, propertyName, logoUrl, hero,
 }: {
   preset: string;
   color: string;
@@ -25,11 +25,18 @@ export function EnginePreview({
   showTrust: boolean;
   propertyName: string;
   logoUrl: string | null;
+  /** The saved background photo, already scrimmed. Null when the hotel has not set one. */
+  hero: { url: string; focalY: number; alpha: number } | null;
 }) {
   const p = (BOOKING_PRESETS.find((x) => x.key === preset) ?? BOOKING_PRESETS[0]!).tokens;
   const brand = color.trim() || "#1E3A8A";
   const ink = readableInk(brand);
-  const solid = p.hero === "solid";
+  /*
+   * A background photo OVERRIDES the preset's hero treatment, and this preview has to show that or
+   * it is lying about the page. The preset still owns every neutral and every shape below the hero —
+   * the photo replaces one band, not the design.
+   */
+  const solid = !hero && p.hero === "solid";
   const display = font === "serif" ? "Georgia, 'Times New Roman', serif" : "inherit";
 
   return (
@@ -54,37 +61,52 @@ export function EnginePreview({
 
       {/* Hero */}
       <div
-        className="px-4 py-5 text-center"
+        className="relative px-4 py-5 text-center"
         style={
-          solid
-            ? { backgroundColor: brand }
-            : p.hero === "wash"
-              ? { background: `linear-gradient(${brand}1F, ${hsl(p.ground)} 70%)` }
-              : {}
+          hero
+            ? {}
+            : solid
+              ? { backgroundColor: brand }
+              : p.hero === "wash"
+                ? { background: `linear-gradient(${brand}1F, ${hsl(p.ground)} 70%)` }
+                : {}
         }
       >
+        {hero && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a hotel-uploaded photo of unknown origin */}
+            <img
+              src={hero.url}
+              alt=""
+              aria-hidden
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{ objectPosition: `50% ${hero.focalY}%` }}
+            />
+            <div className="absolute inset-0 bg-black" style={{ opacity: hero.alpha }} aria-hidden />
+          </>
+        )}
         <div
-          className="text-[7px] font-bold uppercase tracking-[0.14em]"
-          style={{ color: solid ? `${ink}B3` : hsl(p.inkFaint) }}
+          className="relative text-[7px] font-bold uppercase tracking-[0.14em]"
+          style={{ color: hero ? "rgba(255,255,255,0.75)" : solid ? `${ink}B3` : hsl(p.inkFaint) }}
         >
           Official booking
         </div>
         <div
-          className="mt-1.5 text-[15px] font-extrabold leading-tight"
-          style={{ color: solid ? ink : hsl(p.ink), fontFamily: display, letterSpacing: font === "serif" ? "-0.01em" : "-0.035em", fontWeight: font === "serif" ? 400 : 800 }}
+          className="relative mt-1.5 text-[15px] font-extrabold leading-tight"
+          style={{ color: hero ? "#ffffff" : solid ? ink : hsl(p.ink), fontFamily: display, letterSpacing: font === "serif" ? "-0.01em" : "-0.035em", fontWeight: font === "serif" ? 400 : 800 }}
         >
           {headline.trim() || BOOKING_COPY_DEFAULTS.headline}
         </div>
         <div
-          className="mx-auto mt-1.5 max-w-[26ch] text-[7.5px] leading-relaxed"
-          style={{ color: solid ? `${ink}D9` : hsl(p.inkSoft) }}
+          className="relative mx-auto mt-1.5 max-w-[26ch] text-[7.5px] leading-relaxed"
+          style={{ color: hero ? "rgba(255,255,255,0.88)" : solid ? `${ink}D9` : hsl(p.inkSoft) }}
         >
           {(subheadline.trim() || BOOKING_COPY_DEFAULTS.subheadline).slice(0, 110)}…
         </div>
 
         {/* Search bar */}
         <div
-          className="mx-auto mt-3 flex max-w-[240px] items-stretch gap-1 p-1 shadow-sm"
+          className="relative mx-auto mt-3 flex max-w-[240px] items-stretch gap-1 p-1 shadow-sm"
           style={{ backgroundColor: hsl(p.surface), borderRadius: p.radius, border: `1px solid ${hsl(p.line)}` }}
         >
           {["Check in", "Check out", "Guests"].map((l) => (

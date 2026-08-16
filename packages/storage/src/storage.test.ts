@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LocalObjectStore } from "./local.js";
-import { isValidObjectKey, photoToken, roomPhotoKey } from "./keys.js";
+import { heroImageKey, isValidObjectKey, photoToken, roomPhotoKey } from "./keys.js";
 
 /**
  * Object keys are the security boundary of this package: the serving route takes one from a URL,
@@ -43,9 +43,26 @@ describe("roomPhotoKey", () => {
   });
 });
 
+describe("heroImageKey", () => {
+  it("keeps the hero out of the rooms prefix", () => {
+    // Not cosmetic: a room type's photos are deletable by prefix, and the hotel's own front-door
+    // picture must not be inside the range that sweep would take.
+    expect(heroImageKey({ ...parts, variant: "full" })).toBe("t/tenA/p/propB/hero/abc123-full.webp");
+    expect(heroImageKey({ ...parts, variant: "full" })).not.toContain("/rooms/");
+  });
+
+  it("refuses to build a key from an id containing path characters", () => {
+    for (const bad of ["../evil", "a/b", "a b", "", "a\0b", "..%2f"]) {
+      expect(() => heroImageKey({ ...parts, propertyId: bad, variant: "full" }), bad).toThrow();
+      expect(() => heroImageKey({ ...parts, token: bad, variant: "full" }), bad).toThrow();
+    }
+  });
+});
+
 describe("isValidObjectKey", () => {
   it("accepts the keys we actually produce", () => {
     expect(isValidObjectKey(roomPhotoKey({ ...parts, variant: "full" }))).toBe(true);
+    expect(isValidObjectKey(heroImageKey({ ...parts, variant: "full" }))).toBe(true);
   });
 
   it("rejects traversal, absolute paths and empty segments", () => {

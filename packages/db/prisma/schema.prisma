@@ -266,6 +266,19 @@ model Property {
   bookingHeadline           String? // hero headline; null = platform default
   bookingSubheadline        String?
   bookingShowTrust          Boolean   @default(true) // the "why book direct" row
+  // The hero background photograph (BG1). KEYS only — the bytes are in object storage via
+  // @revio/storage, same rule as RoomTypePhoto and for the same arithmetic. Null throughout means
+  // no photo, which is a designed state rather than a missing one: the preset's own hero still runs.
+  bookingHeroKey            String? // object key, the 2400px page image
+  bookingHeroThumbKey       String? // object key, the small one the CRS editor previews
+  bookingHeroWidth          Int?
+  bookingHeroHeight         Int?
+  // How bright the photo's brighter regions actually are, 0–1000 (see HERO_LUMINANCE_SCALE).
+  // MEASURED at upload, because the darkening layer that keeps the headline readable is derived
+  // from it rather than guessed — a night shot needs none and a white facade needs half.
+  bookingHeroLuminance      Int?
+  bookingHeroFocalY         Int       @default(50) // 0–100; which band survives the crop
+  bookingHeroOverlay        String    @default("balanced") // minimal | balanced | strong — never below the measured floor
   // Stripe Connect (spec §2.5③). The hotel's OWN Stripe account — the guest's card is authorised
   // against it and funds go straight to them, so we never hold client money and never need a
   // payment-institution licence. `chargesEnabled` mirrors Stripe's own flag rather than being our

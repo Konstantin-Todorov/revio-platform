@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { BOOKING_PRESET_BY_KEY } from "@revio/core";
+import { BOOKING_PRESET_BY_KEY, HERO_OVERLAY_LEVELS, heroFocalY } from "@revio/core";
+import { getObjectStore, heroImageKey, photoToken } from "@revio/storage";
 import { createConnectAccount, createOnboardingLink, getConnectStatus } from "@revio/payments";
 import { syncRealChannels, stayScope } from "@revio/connectivity";
 import { slugifyPropertyName, slugRejectionReason } from "@revio/booking";
@@ -9,6 +10,7 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { getSession } from "./session";
 import { logAudit, str } from "./mutation-helpers";
+import { ImageRejected, MAX_UPLOAD_BYTES, processHeroImage } from "./images";
 import { guard, requireCapability } from "./authz";
 
 /**
@@ -233,6 +235,156 @@ export async function removeBookingLogo(): Promise<void> {
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "logo", newValue: "removed" });
   revalidatePath("/booking-engine");
   revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+}
+
+/* ---------------------------------------------------------------------------------------------
+ * The hero background photograph (BG1).
+ *
+ * The logo above lives in Postgres because it is ~20 KB and singular. This one does NOT: a hero is
+ * the largest image in the product, and the arithmetic in packages/storage/CLAUDE.md is the reason —
+ * a megabyte per property in the row store bloats every backup and routes a guest's first paint
+ * through the Next server. Bytes go to the bucket; only keys and one measurement come back here.
+ *
+ * That measurement is the interesting part. The overlay that keeps the headline readable is DERIVED
+ * from how bright the picture actually is, so a night shot keeps its darkness and a white facade
+ * gets shaded — instead of a fixed 40% scrim that is wrong for both. See `@revio/core`'s hero.ts.
+ * ------------------------------------------------------------------------------------------- */
+
+/**
+ * The crop and the shading — settings ABOUT the image, not the image.
+ *
+ * Its own action rather than two more fields on `saveBookingEngineLook`, and that is not tidiness.
+ * That action writes the whole appearance block, so a form posting only these two would send blanks
+ * for the rest and silently wipe the hotel's headline, supporting line and trust row. A server
+ * action is only as safe as the narrowest form that posts to it.
+ *
+ * Nudging a crop must not require re-uploading a 6 MB photograph, which is why this is split from
+ * the upload as well.
+ */
+export async function saveBookingHeroSettings(
+  _prev: LookResult | null,
+  fd: FormData,
+): Promise<LookResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
+  const scopeProblem = await assertSingleProperty();
+  if (scopeProblem) return { ok: false, error: scopeProblem };
+  const { id: propertyId, tenantId } = await getProperty();
+
+  // An unknown overlay key keeps the stored one rather than resetting to the default: the only way
+  // to produce one is a tampered post, and quietly restyling a hotel's page is a poor answer to that.
+  const overlay = str(fd, "bookingHeroOverlay").trim();
+  const focalRaw = Number.parseInt(str(fd, "bookingHeroFocalY"), 10);
+
+  await prisma.property.update({
+    where: { id: propertyId },
+    data: {
+      ...(HERO_OVERLAY_LEVELS.some((l) => l.key === overlay) ? { bookingHeroOverlay: overlay } : {}),
+      ...(Number.isFinite(focalRaw) ? { bookingHeroFocalY: heroFocalY(focalRaw) } : {}),
+    },
+  });
+
+  await logAudit(propertyId, tenantId, {
+    entity: "Booking engine", field: "background", newValue: `${overlay || "unchanged"} · focal ${focalRaw}`,
+  });
+  revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+  return { ok: true };
+}
+
+export async function uploadBookingHero(_prev: LookResult | null, fd: FormData): Promise<LookResult> {
+  const _g = await guard("manageSettings");
+  if (!_g.ok) return { ok: false, error: _g.error };
+  const scopeError = await assertSingleProperty();
+  if (scopeError) return { ok: false, error: scopeError };
+  const { id: propertyId, tenantId, bookingHeroKey, bookingHeroThumbKey } = await getProperty();
+
+  const file = fd.get("hero");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose an image first." };
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const mb = (file.size / 1024 / 1024).toFixed(1);
+    return { ok: false, error: `That image is ${mb} MB — the limit is 25 MB.` };
+  }
+
+  let processed;
+  try {
+    processed = await processHeroImage(file);
+  } catch (err) {
+    if (err instanceof ImageRejected) return { ok: false, error: err.message };
+    throw err;
+  }
+
+  const token = photoToken();
+  const parts = { tenantId, propertyId, token };
+  const fullKey = heroImageKey({ ...parts, variant: "full" });
+  const thumbKey = heroImageKey({ ...parts, variant: "thumb" });
+
+  const store = await getObjectStore();
+  // Objects first, row second — the same order as room photos and for the same reason. This way a
+  // half-failure leaves unreferenced bytes in a bucket (invisible) rather than a row promising an
+  // image nobody can produce (a broken hero on the hotel's own front page).
+  await store.put(fullKey, processed.full, { contentType: "image/webp" });
+  await store.put(thumbKey, processed.thumb, { contentType: "image/webp" });
+
+  await prisma.property.update({
+    where: { id: propertyId },
+    data: {
+      bookingHeroKey: fullKey,
+      bookingHeroThumbKey: thumbKey,
+      bookingHeroWidth: processed.width,
+      bookingHeroHeight: processed.height,
+      bookingHeroLuminance: processed.luminance,
+    },
+  });
+
+  // Only once the row points at the new image. Deleting first would make a failed update leave the
+  // page pointing at bytes that are already gone — the failure mode R4 found in production.
+  await dropHeroObjects(bookingHeroKey, bookingHeroThumbKey);
+
+  await logAudit(propertyId, tenantId, {
+    entity: "Booking engine",
+    field: "background image",
+    newValue: `uploaded (${Math.round(processed.full.byteLength / 1024)} KB)`,
+  });
+  revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+  return { ok: true };
+}
+
+/** Take the background off — the page goes back to the preset's own hero, which is a designed state. */
+export async function removeBookingHero(): Promise<void> {
+  await requireCapability("manageSettings");
+  if (await assertSingleProperty()) return;
+  const { id: propertyId, tenantId, bookingHeroKey, bookingHeroThumbKey } = await getProperty();
+
+  await prisma.property.update({
+    where: { id: propertyId },
+    data: {
+      bookingHeroKey: null,
+      bookingHeroThumbKey: null,
+      bookingHeroWidth: null,
+      bookingHeroHeight: null,
+      bookingHeroLuminance: null,
+      // Focal point and overlay are deliberately LEFT ALONE. A hotel that removes one photo to try
+      // another has not changed their mind about how dark they want the page.
+    },
+  });
+  await dropHeroObjects(bookingHeroKey, bookingHeroThumbKey);
+
+  await logAudit(propertyId, tenantId, {
+    entity: "Booking engine", field: "background image", newValue: "removed",
+  });
+  revalidatePath("/booking-engine");
+  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
+}
+
+/** Best-effort bucket cleanup. Orphaned bytes cost pennies; a failed delete must never surface as an
+ *  error on a save that already succeeded. */
+async function dropHeroObjects(...keys: (string | null | undefined)[]): Promise<void> {
+  const present = keys.filter((k): k is string => !!k);
+  if (present.length === 0) return;
+  const store = await getObjectStore();
+  await Promise.allSettled(present.map((k) => store.delete(k)));
 }
 
 /* ---------------------------------------------------------------------------------------------

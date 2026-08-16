@@ -61,4 +61,8 @@ bug, caught by `storage.test.ts`.
 
 Layout is `t/<tenant>/p/<property>/rooms/<roomType>/<token>-<variant>.webp` — tenant first, so a
 bucket listing groups the way a support question is asked and a per-tenant lifecycle rule is one
-prefix.
+prefix. The booking page's hero photograph sits at `t/<tenant>/p/<property>/hero/<token>-<variant>.webp`
+— **beside `rooms/`, deliberately not inside it**, because it belongs to the hotel rather than to
+anything sellable, and a future delete-by-prefix sweep of a room type's photos must not be able to
+take the hotel's front door with it. It still carries a random token even though a property has at
+most one: replacing bytes under a stable key leaves every CDN and browser serving the old image.

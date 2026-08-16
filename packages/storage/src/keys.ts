@@ -32,6 +32,32 @@ export function roomPhotoKey({ tenantId, propertyId, roomTypeId, token, variant 
   return `t/${tenantId}/p/${propertyId}/rooms/${roomTypeId}/${token}-${variant}.webp`;
 }
 
+export interface HeroKeyParts {
+  tenantId: string;
+  propertyId: string;
+  /** Random, unique per uploaded image — NOT the original filename. */
+  token: string;
+  variant: ImageVariant;
+}
+
+/**
+ * The booking page's hero background photograph.
+ *
+ * Under the property rather than under a room type, because that is what it belongs to — it is the
+ * hotel's own front door, not a picture of anything sellable. Keeping it out of the `rooms/` prefix
+ * also means a future "delete this room type's photos" sweep by prefix cannot take the hero with it.
+ *
+ * A property has at most ONE hero, but the key still carries a random token: replacing an image
+ * under a stable key would leave the old bytes cached by every CDN and browser that had already seen
+ * it, and a hotel that changes its hero expects to see the change.
+ */
+export function heroImageKey({ tenantId, propertyId, token, variant }: HeroKeyParts): string {
+  for (const [name, part] of Object.entries({ tenantId, propertyId, token })) {
+    if (!SAFE.test(part)) throw new Error(`Unsafe object key part: ${name}`);
+  }
+  return `t/${tenantId}/p/${propertyId}/hero/${token}-${variant}.webp`;
+}
+
 /**
  * Is this a key we could have produced?
  *

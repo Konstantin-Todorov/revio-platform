@@ -56,6 +56,15 @@
 > time and editing the booking page never restyles their confirmation emails. Presets are shared via
 > `BOOKING_PRESETS` in `@revio/core` so the preview and the real page cannot drift.
 >
+> **Background image (BG1, 2026-08-16)** is its own card on this screen, above Appearance: upload a
+> photo, choose what stays in frame, choose how dark to shade it. The shading is **measured from the
+> photo** and the hotel's choice can only go darker than readable — the screen says the number
+> ("your photo needs at least 54% shading…"), because a control that silently overrides you is worse
+> than one that explains itself. It has its OWN action (`saveBookingHeroSettings`) rather than two
+> more fields on `saveBookingEngineLook`: that action writes the whole appearance block, so a form
+> posting only these two would send blanks for the rest and wipe the hotel's headline. **A server
+> action is only as safe as the narrowest form that posts to it.**
+>
 > **Room photos live in Rooms & Rates, not here** (`/rooms-rates` → a room type → Room photos): a
 > photograph belongs to the ROOM, and the same image will feed the OTA push and the confirmation email
 > later — moving it then would be a migration. Uploads go through `@revio/storage` (bytes in object

@@ -84,6 +84,42 @@ comfortably for a navy fails at 2.6:1 for a gold. Two consequences worth knowing
 exists because a real WCAG failure shipped here once; "it looked fine on the demo hotel" is not
 evidence when the page wears an arbitrary colour on every visit.
 
+## The hero background photograph (BG1)
+
+A hotel can put its own photo behind the headline, uploaded in **RevioCRS → Booking Engine →
+Background image**. It **replaces** the preset's hero band rather than layering on it: a preset's
+`wash`/`solid` hero is a *substitute* for imagery, and running both would put the hotel's brand
+colour over the hotel's own photograph. Everything below the hero still follows the preset.
+
+**The darkening layer is measured from the picture, not chosen.** `heroScrim` in
+`packages/core/src/booking/hero.ts` walks a black overlay up one percent at a time until white text
+composited over the image reaches 4.5:1 — the same "measure, don't clamp" rule as the brand colour
+above, for the same reason: a night shot needs no scrim and a white facade needs half of one, and a
+fixed 40% is wrong for both. The hotel picks *Show the photo · Balanced · Words first*, and those
+**add to the measured floor and can never go under it**. Contrast is ours to guarantee; atmosphere is
+theirs to choose.
+
+Two things about the measurement are load-bearing, and one of them was learned the hard way:
+
+- **It is the brightest REGION, not an average or a percentile.** The first version took the 90th
+  percentile so one blown-out corner would not darken a whole page. Measured in a browser, with the
+  focal point moved, that corner landed under the headline and the text came out at **4.14:1** — from
+  a scrim the maths had certified. The unit tests could not catch it: they verify the scrim *given* a
+  luminance, not whether the luminance describes what is on screen.
+- **That is also what makes one stored number safe.** The guest sees a *crop*, chosen by the hotel's
+  focal point and their own viewport. Cropping removes regions and never adds brighter ones, so the
+  brightest region of the whole frame bounds every crop of it. A percentile has no such property.
+
+`bookingHeroFocalY` (0–100) is the vertical `object-position`: a hero is a wide band, and the default
+centre crop takes the roof off a building shot and the horizon off a sea view. Vertical only — that
+is the axis a full-bleed band actually crops on any screen wider than it is tall.
+
+Bytes go to object storage (`heroImageKey`), never Postgres — a hero is the largest image in the
+product. It is under the property's own `hero/` prefix rather than inside `rooms/`, so a future
+"delete this room type's photos" sweep by prefix cannot take the hotel's front door with it. Uploads
+are re-encoded to 2400px WebP, and the uploader refuses a portrait or sub-1200px image *before* the
+upload rather than silently letterboxing it.
+
 ## Design direction
 
 **Calm precision.** This page asks a stranger for their name and their card, so clarity outranks
