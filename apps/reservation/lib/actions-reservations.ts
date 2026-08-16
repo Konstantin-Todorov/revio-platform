@@ -18,7 +18,6 @@ function revalidateReservations() {
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
   revalidatePath("/guests");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   /*
    * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
    * above.
@@ -34,7 +33,6 @@ function revalidateReservations() {
    * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
    * an action that forgot to list it.
    */
-  revalidatePath("/", "layout");
 }
 
 function tag(reservationId: string, guestName: string) {
@@ -312,7 +310,6 @@ export async function modifyReservation(fd: FormData): Promise<void> {
   );
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/reservations/${id}`);
 }
 
@@ -340,7 +337,6 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   );
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/reservations/${id}`);
 }
 
@@ -371,7 +367,6 @@ export async function markNoShow(fd: FormData): Promise<void> {
   });
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/reservations/${id}`);
 }
 
@@ -396,7 +391,6 @@ export async function updateGuest(fd: FormData): Promise<void> {
   });
   revalidatePath(`/guests/${id}`);
   revalidatePath("/guests");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${id}`);
 }
 
@@ -434,7 +428,6 @@ export async function setGuestRecognitionOptOut(fd: FormData): Promise<void> {
     },
   });
   revalidatePath(`/guests/${guestId}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${guestId}`);
 }
 
@@ -457,7 +450,6 @@ export async function addGuestNote(fd: FormData): Promise<void> {
     });
   }
   revalidatePath(`/guests/${guestId}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${guestId}#notes`);
 }
 
@@ -476,7 +468,6 @@ export async function editGuestNote(fd: FormData): Promise<void> {
     await prisma.guestNote.update({ where: { id: noteId }, data: { body } });
   }
   revalidatePath(`/guests/${guestId}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${guestId}#notes`);
 }
 
@@ -491,6 +482,5 @@ export async function deleteGuestNote(fd: FormData): Promise<void> {
   const note = await prisma.guestNote.findFirst({ where: { id: noteId, guestId } });
   if (note) await prisma.guestNote.delete({ where: { id: noteId } });
   revalidatePath(`/guests/${guestId}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${guestId}#notes`);
 }

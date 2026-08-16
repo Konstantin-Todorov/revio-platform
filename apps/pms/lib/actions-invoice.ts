@@ -30,6 +30,5 @@ export async function issueInvoice(fd: FormData): Promise<void> {
   });
   if (!id) redirect(`/folio/${reservationId}?error=invoice`);
   revalidatePath(`/folio/${reservationId}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/invoice/${id}`);
 }

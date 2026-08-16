@@ -49,7 +49,6 @@ export async function postPosItem(fd: FormData): Promise<void> {
   revalidatePath(`/minibar/${reservationId}`);
   revalidatePath(`/folio/${reservationId}`);
   revalidatePath("/folios");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 // --- Catalog management ----------------------------------------------------
@@ -69,7 +68,6 @@ export async function createPosItem(fd: FormData): Promise<void> {
   await logAudit(session.activePropertyId, session.tenantId, { entity: "pos_item", field: "create", newValue: `${name} ${priceMinor}`, userId: session.userId });
   revalidatePath("/minibar/catalog");
   revalidatePath("/minibar");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function updatePosItem(fd: FormData): Promise<void> {
@@ -91,7 +89,6 @@ export async function updatePosItem(fd: FormData): Promise<void> {
   await logAudit(session.activePropertyId, session.tenantId, { entity: "pos_item", field: "edit", newValue: str(fd, "name"), userId: session.userId });
   revalidatePath("/minibar/catalog");
   revalidatePath("/minibar");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function deletePosItem(fd: FormData): Promise<void> {
@@ -103,5 +100,4 @@ export async function deletePosItem(fd: FormData): Promise<void> {
   await logAudit(session.activePropertyId, session.tenantId, { entity: "pos_item", field: "delete", oldValue: item.name, userId: session.userId });
   revalidatePath("/minibar/catalog");
   revalidatePath("/minibar");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

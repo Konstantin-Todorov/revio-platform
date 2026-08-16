@@ -86,7 +86,6 @@ export async function saveBookingEngineLook(
     entity: "Booking engine", field: "appearance", newValue: preset,
   });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -132,7 +131,6 @@ export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormDa
       entity: "Booking engine", field: "accepting bookings", newValue: enabled ? "on" : "off",
     });
     revalidatePath("/booking-engine");
-    revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
     return { ok: true, slug: publicSlug };
   }
 
@@ -159,7 +157,6 @@ export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormDa
     entity: "Booking engine", field: "link", newValue: `${slug} · ${enabled ? "live" : "off"}`,
   });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true, slug };
 }
 
@@ -221,7 +218,6 @@ export async function uploadBookingLogo(_prev: LookResult | null, fd: FormData):
     entity: "Booking engine", field: "logo", newValue: `uploaded (${Math.round(bytes.length / 1024)} KB)`,
   });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -234,7 +230,6 @@ export async function removeBookingLogo(): Promise<void> {
   await prisma.property.update({ where: { id: propertyId }, data: { bookingLogoUrl: null } });
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "logo", newValue: "removed" });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -288,7 +283,6 @@ export async function saveBookingHeroSettings(
     entity: "Booking engine", field: "background", newValue: `${overlay || "unchanged"} · focal ${focalRaw}`,
   });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -347,7 +341,6 @@ export async function uploadBookingHero(_prev: LookResult | null, fd: FormData):
     newValue: `uploaded (${Math.round(processed.full.byteLength / 1024)} KB)`,
   });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -375,7 +368,6 @@ export async function removeBookingHero(): Promise<void> {
     entity: "Booking engine", field: "background image", newValue: "removed",
   });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Best-effort bucket cleanup. Orphaned bytes cost pennies; a failed delete must never surface as an
@@ -464,7 +456,6 @@ export async function refreshStripeStatus(): Promise<void> {
     data: { stripeChargesEnabled: status.chargesEnabled, stripeCheckedAt: new Date() },
   });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**
@@ -491,7 +482,6 @@ export async function acceptBookingRequest(reservationId: string): Promise<{ ok:
     entity: "Reservation", field: "status", newValue: "confirmed (request accepted)",
   });
   revalidatePath("/reservations");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -523,7 +513,6 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
     await syncRealChannels(prisma, property.id, stayScope(declined?.lines ?? []));
   } catch { /* never fail the decline on a push */ }
   revalidatePath("/reservations");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -579,7 +568,6 @@ export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): 
 
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: name });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -600,5 +588,4 @@ export async function retireBookingExtra(id: string): Promise<void> {
   });
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: "retired" });
   revalidatePath("/booking-engine");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

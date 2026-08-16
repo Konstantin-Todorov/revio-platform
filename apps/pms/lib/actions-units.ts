@@ -30,7 +30,6 @@ function refresh() {
   revalidatePath("/rooms");
   revalidatePath("/housekeeping");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Add one physical unit under a room type. */
@@ -154,7 +153,6 @@ export async function deleteUnit(fd: FormData): Promise<void> {
   const held = await prisma.roomAssignment.count({ where: { unitId, status: "active", checkedOutAt: null } });
   if (held > 0) {
     revalidatePath("/rooms");
-    revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
     redirect(`/rooms?blocked=${encodeURIComponent(unit.label)}`);
   }
 
@@ -245,7 +243,6 @@ export async function startCleaning(fd: FormData): Promise<void> {
   const blocker = inProgress.find((u) => !connecting.has(u.id));
   if (blocker) {
     revalidatePath("/housekeeping");
-    revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
     redirect(`/housekeeping?blocked=${encodeURIComponent(blocker.label)}`);
   }
 
@@ -299,5 +296,4 @@ export async function reportRoomIssue(fd: FormData): Promise<void> {
   await logAudit(unit.propertyId, session.tenantId, { entity: "maintenance_reported", field: unit.label, newValue: title, userId: session.userId });
   revalidatePath("/housekeeping");
   revalidatePath("/maintenance");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

@@ -82,7 +82,6 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
   await recordPush(propertyId, tenantId, `Restriction rule "${name}" pushed`, ruleScope(data));
   revalidatePath("/restrictions");
   revalidatePath("/calendar");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -99,7 +98,6 @@ export async function deleteRestrictionRule(fd: FormData): Promise<void> {
   await recordPush(propertyId, tenantId, `Restriction rule "${rule.name}" removed`, ruleScope(rule));
   revalidatePath("/restrictions");
   revalidatePath("/calendar");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 // --- Mapping ---------------------------------------------------------------
@@ -129,7 +127,6 @@ export async function fixMappings(fd: FormData): Promise<void> {
   revalidatePath("/mapping");
   revalidatePath("/channels");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Manually set one stream mapping's external id (kind: "room" → room type, "rate" → rate plan). */
@@ -158,7 +155,6 @@ export async function updateStreamMapping(_prev: ActionResult | null, fd: FormDa
   revalidatePath("/mapping");
   revalidatePath("/channels");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -185,7 +181,6 @@ export async function saveChannelSettings(_prev: ActionResult | null, fd: FormDa
   await logAudit(propertyId, tenantId, { entity: `Channel · ${ch.name}`, field: "settings", newValue: `${markupPct}% markup` });
   await recordPush(propertyId, tenantId, `Channel settings updated for ${ch.name}`);
   revalidatePath("/channels");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -230,7 +225,6 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
   await recordPush(propertyId, tenantId, `Connected ${name} and pushed all products`);
   revalidatePath("/channels");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -253,14 +247,12 @@ export async function resyncChannel(fd: FormData): Promise<void> {
   revalidatePath("/sync");
   revalidatePath("/errors");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 function revalidateChannels() {
   revalidatePath("/channels");
   revalidatePath("/sync");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   /*
    * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
    * above.
@@ -276,7 +268,6 @@ function revalidateChannels() {
    * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
    * an action that forgot to list it.
    */
-  revalidatePath("/", "layout");
 }
 
 /** Pause (spec §3.5): reversible stop-sell overlay on one channel; the core ARI is untouched. */
@@ -388,7 +379,6 @@ export async function pullChannelBookings(fd: FormData): Promise<void> {
   revalidatePath("/reservations");
   revalidatePath("/calendar");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 // --- Property settings -----------------------------------------------------
@@ -440,7 +430,6 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
   revalidatePath("/dashboard");
   revalidatePath("/calendar");
   revalidatePath("/channels");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -462,7 +451,6 @@ export async function resolveErrorItem(fd: FormData): Promise<void> {
   });
   revalidatePath("/sync");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 
@@ -503,7 +491,6 @@ export async function saveDeliverySettings(_prev: ActionResult | null, fd: FormD
     newValue: `primary ${primary ?? "—"} · today ${fd.get("notifyTodayArrivals") === "on" ? todayTime : "off"} · tomorrow ${fd.get("notifyTomorrowArrivals") === "on" ? tomorrowTime : "off"}`,
   });
   revalidatePath("/settings");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -523,5 +510,4 @@ export async function sendTestEmail(): Promise<void> {
     newValue: res.ok ? `sent to ${to} (${res.mode})` : `failed: ${res.error}`,
   });
   revalidatePath("/settings");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

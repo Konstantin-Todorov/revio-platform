@@ -34,7 +34,6 @@ function revalidateRates() {
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
   revalidatePath("/reservations/new");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   /*
    * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
    * above.
@@ -50,7 +49,6 @@ function revalidateRates() {
    * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
    * an action that forgot to list it.
    */
-  revalidatePath("/", "layout");
 }
 
 // --- Rate plans (same shared tables the CM manages — one write path per app, same engines) ----
@@ -273,7 +271,6 @@ export async function saveCalendarRate(args: { roomTypeId: string; date: string;
   });
   await recordPush(propertyId, tenantId, `Rate updated for ${roomType.name} (${args.date})`);
   revalidatePath("/inventory");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 
@@ -350,7 +347,6 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
   await recordPush(propertyId, tenantId, "Availability & rates updated in bulk");
   revalidateRates();
   revalidatePath("/bulk");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -485,7 +481,6 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   await recordPush(propertyId, tenantId, `Availability & rates updated in bulk (${changed.join(", ")})`);
   revalidateRates();
   revalidatePath("/bulk");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true, affected, ...(warning ? { warning } : {}) };
 }
 
@@ -522,7 +517,6 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
     await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" is now a manual rate`);
     revalidateRates();
     revalidatePath("/rooms-rates");
-    revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
     return { ok: true };
   }
 
@@ -564,7 +558,6 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" now derives from "${parent.name}" — children recalculated`);
   revalidateRates();
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -636,7 +629,6 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   }
 
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   revalidateRates();
   return { ok: true };
 }
@@ -668,6 +660,5 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
     await recordPush(property.id, property.tenantId, `Room type "${rt.name}" removed`);
   }
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   revalidateRates();
 }

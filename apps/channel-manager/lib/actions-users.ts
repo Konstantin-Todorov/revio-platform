@@ -39,7 +39,6 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
   const user = await prisma.user.create({ data: { tenantId: s.tenantId, name, email, role } });
   await sendInvite({ email, name, userId: user.id, hotel: s.tenantName, ...(s.userName ? { invitedBy: s.userName } : {}) });
   revalidatePath("/settings");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -60,7 +59,6 @@ export async function updateUserRole(fd: FormData): Promise<void> {
   }
   await prisma.user.update({ where: { id }, data: { role } });
   revalidatePath("/settings");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function removeUser(fd: FormData): Promise<void> {
@@ -76,7 +74,6 @@ export async function removeUser(fd: FormData): Promise<void> {
   }
   await prisma.user.delete({ where: { id } });
   revalidatePath("/settings");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function addProperty(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
@@ -90,7 +87,6 @@ export async function addProperty(_prev: ActionResult | null, fd: FormData): Pro
     data: { tenantId: s.tenantId, name, baseCurrency: str(fd, "baseCurrency") || "EUR", timezone: str(fd, "timezone") || "Europe/Sofia" },
   });
   revalidatePath("/settings");
-  revalidatePath("/", "layout"); // refresh the workspace switcher
   return { ok: true };
 }
 

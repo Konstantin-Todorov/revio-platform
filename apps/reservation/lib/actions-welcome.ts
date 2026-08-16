@@ -57,7 +57,6 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
     },
   });
 
-  revalidatePath("/", "layout");
   return advance("property");
 }
 
@@ -105,7 +104,6 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
   }
 
   revalidatePath("/welcome/rooms");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return {};
 }
 
@@ -116,7 +114,6 @@ export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
   if (!rt || rt.propertyId !== property.id) return;
   await prisma.roomType.delete({ where: { id: rt.id } });
   revalidatePath("/welcome/rooms");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function finishWelcomeRooms(): Promise<void> {
@@ -168,7 +165,6 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
   await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
 
   revalidatePath("/calendar");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("prices");
 }
 
@@ -248,7 +244,6 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
   }
 
   revalidatePath("/settings");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("taxes");
 }
 
@@ -281,7 +276,6 @@ export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData
   });
 
   revalidatePath("/settings");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("brand");
 }
 
@@ -301,6 +295,5 @@ export async function finishWelcome(): Promise<void> {
       data: { setupCompleted: { push: SETUP_KEY[PRODUCT] } },
     });
   }
-  revalidatePath("/", "layout");
   redirect("/dashboard?welcome=done");
 }

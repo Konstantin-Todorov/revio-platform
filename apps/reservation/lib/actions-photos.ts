@@ -121,7 +121,6 @@ export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData):
     newValue: `${uploaded} added`,
   });
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true, uploaded };
 }
 
@@ -146,7 +145,6 @@ export async function deleteRoomPhoto(fd: FormData): Promise<void> {
     entity: "Room type photos", field: "delete", newValue: "removed",
   });
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**
@@ -178,7 +176,6 @@ export async function reorderRoomPhotos(fd: FormData): Promise<void> {
   }
 
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Alt text — what a screen reader announces, and what shows if the image fails to load. */
@@ -194,5 +191,4 @@ export async function saveRoomPhotoAlt(fd: FormData): Promise<void> {
     data: { alt: str(fd, "alt").trim().slice(0, 160) },
   });
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

@@ -28,7 +28,6 @@ export async function saveEmailBranding(fd: FormData): Promise<void> {
     entity: "Email settings", field: "branding", newValue: "updated",
   });
   revalidatePath("/settings/emails");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Save one email template's wording + on/off switch. Upserts, so the row only exists once customised. */
@@ -58,7 +57,6 @@ export async function saveEmailTemplate(fd: FormData): Promise<void> {
     newValue: enabled ? "saved" : "saved (switched off)",
   });
   revalidatePath("/settings/emails");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Revert one email to the platform default wording (deletes the customisation row). */
@@ -73,7 +71,6 @@ export async function resetEmailTemplate(fd: FormData): Promise<void> {
     newValue: "reset to default",
   });
   revalidatePath("/settings/emails");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 // --- Logo upload -------------------------------------------------------------
@@ -129,7 +126,6 @@ export async function uploadEmailLogo(_prev: UploadResult | null, fd: FormData):
     entity: "Email settings", field: "logo", newValue: `uploaded (${Math.round(bytes.length / 1024)} KB)`,
   });
   revalidatePath("/settings/emails");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -141,7 +137,6 @@ export async function removeEmailLogo(): Promise<void> {
   await prisma.property.update({ where: { id: propertyId }, data: { emailLogoVersion: { increment: 1 } } });
   await logAudit(propertyId, tenantId, { entity: "Email settings", field: "logo", newValue: "removed" });
   revalidatePath("/settings/emails");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**
@@ -164,5 +159,4 @@ export async function setDefaultLanguage(fd: FormData): Promise<void> {
     entity: "Email settings", field: "default language", newValue: locale,
   });
   revalidatePath("/settings/emails");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }

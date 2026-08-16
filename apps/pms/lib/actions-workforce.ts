@@ -24,7 +24,6 @@ function refresh() {
   revalidatePath("/housekeeping");
   revalidatePath("/maintenance");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Open a shift for the current user (self clock-in). No-op if already clocked in. */

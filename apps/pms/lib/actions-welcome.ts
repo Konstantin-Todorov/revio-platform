@@ -50,7 +50,6 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
     },
   });
 
-  revalidatePath("/", "layout");
   return advance("property");
 }
 
@@ -86,7 +85,6 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
   });
 
   revalidatePath("/welcome/rooms");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return {};
 }
 
@@ -96,7 +94,6 @@ export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
   if (!rt || rt.propertyId !== property.id) return;
   await prisma.roomType.delete({ where: { id: rt.id } });
   revalidatePath("/welcome/rooms");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function finishWelcomeRooms(): Promise<void> {
@@ -149,7 +146,6 @@ export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData)
   await prisma.unit.createMany({ data: rows });
 
   revalidatePath("/welcome/units");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return {};
 }
 
@@ -159,7 +155,6 @@ export async function removeWelcomeUnit(fd: FormData): Promise<void> {
   if (!unit || unit.propertyId !== property.id) return;
   await prisma.unit.delete({ where: { id: unit.id } });
   revalidatePath("/welcome/units");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 export async function finishWelcomeUnits(): Promise<void> {
@@ -235,7 +230,6 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
   }
 
   revalidatePath("/configuration");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return advance("taxes");
 }
 
@@ -253,6 +247,5 @@ export async function finishWelcome(): Promise<void> {
       data: { setupCompleted: { push: SETUP_KEY[PRODUCT] } },
     });
   }
-  revalidatePath("/", "layout");
   redirect("/dashboard?welcome=done");
 }

@@ -16,7 +16,6 @@ function revalidateCalendar() {
   revalidatePath("/reservations");
   revalidatePath("/sync");
   revalidatePath("/audit");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   /*
    * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
    * above.
@@ -32,7 +31,6 @@ function revalidateCalendar() {
    * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
    * an action that forgot to list it.
    */
-  revalidatePath("/", "layout");
 }
 
 /** The base manual rate plan id (prefer "BAR", else first manual). Null on a hotel without one. */
@@ -410,7 +408,6 @@ export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkRe
   await recordPush(propertyId, tenantId, `Bulk update applied (${out.changed.join(", ")}) — ${out.affected} cells`, scopeOf([out]));
   revalidateCalendar();
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true, affected: out.affected, ...(out.warning ? { warning: out.warning } : {}) };
 }
 
@@ -451,7 +448,6 @@ export async function applyBulkUpdateBatch(payloads: BulkPayload[]): Promise<Bul
   await recordPush(propertyId, tenantId, `Bulk update applied — ${payloads.length} changes, ${affected} cells`, scopeOf(outcomes));
   revalidateCalendar();
   revalidatePath("/rooms-rates");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   const warning = outcomes.find((o) => o.warning)?.warning;
   return { ok: true, affected, ...(warning ? { warning } : {}) };
 }
@@ -561,7 +557,6 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
       },
     });
     revalidatePath("/errors");
-    revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   }
 
   void reservation;

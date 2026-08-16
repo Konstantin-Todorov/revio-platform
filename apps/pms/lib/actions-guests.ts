@@ -51,6 +51,5 @@ export async function mergeGuests(fd: FormData): Promise<void> {
 
   revalidatePath("/guests");
   revalidatePath(`/guests/${winnerId}`);
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   redirect(`/guests/${winnerId}`);
 }

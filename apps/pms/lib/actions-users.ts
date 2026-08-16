@@ -35,7 +35,6 @@ export async function inviteStaff(_prev: ActionResult | null, fd: FormData): Pro
   const user = await prisma.user.create({ data: { tenantId: s.tenantId, name, email, role, active: true } });
   await sendInvite({ email, name, userId: user.id, hotel: s.tenantName, ...(s.userName ? { invitedBy: s.userName } : {}) });
   revalidatePath("/users");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   return { ok: true };
 }
 
@@ -54,7 +53,6 @@ export async function setStaffRole(fd: FormData): Promise<void> {
   }
   await prisma.user.update({ where: { id }, data: { role } });
   revalidatePath("/users");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /** Deactivate / reactivate a person — keeps their shared identity but blocks sign-in everywhere. */
@@ -71,7 +69,6 @@ export async function setStaffActive(fd: FormData): Promise<void> {
   }
   await prisma.user.update({ where: { id }, data: { active } });
   revalidatePath("/users");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
 }
 
 /**

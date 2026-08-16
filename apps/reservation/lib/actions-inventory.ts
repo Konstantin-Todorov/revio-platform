@@ -16,7 +16,6 @@ function revalidateInventory() {
   revalidatePath("/inventory");
   revalidatePath("/setup");
   revalidatePath("/dashboard");
-  revalidatePath("/", "layout"); // Y2: clear every route's client cache, not only the ones named above
   /*
    * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
    * above.
@@ -32,7 +31,6 @@ function revalidateInventory() {
    * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
    * an action that forgot to list it.
    */
-  revalidatePath("/", "layout");
 }
 
 export async function addInventoryPeriod(fd: FormData): Promise<void> {
