@@ -378,3 +378,24 @@
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition-duration: 1ms !important; }
 }
+
+@layer utilities {
+  /*
+   * Anchor the visually-hidden form controls so they can never drift.
+   *
+   * Tailwind's `.sr-only` is `position: absolute` with `top/left: auto`, so a hidden radio/checkbox
+   * (our toggle chips: amenities, the hero shading options, etc.) resolves to its deep static-flow
+   * position. When its containing block is a scroll container or the root, that deep position does
+   * two bad things: it inflates documentElement.scrollHeight past the viewport (window scrolls into
+   * empty space, the fixed-height app shell slides up = "dead space / page looks broken"), and on a
+   * real click the browser scrolls the deep input into view — dragging an overflow:hidden dialog up
+   * and leaving it half-empty. Pinning top/left to 0 keeps the 1px control at the top of its
+   * containing block instead of deep in the flow, which removes both without any visible change
+   * (it stays clipped and off-screen). Verified live: focusing the deepest chip no longer moves the
+   * dialog, and html.scrollHeight stays equal to the viewport.
+   */
+  .sr-only {
+    top: 0;
+    left: 0;
+  }
+}
