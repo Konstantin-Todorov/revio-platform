@@ -35,7 +35,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <Sidebar footer={session.tenantName} />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} scope={session.scope} canGroup={canGroup} role={session.role} userName={session.userName} notifItems={notifItems} />
-          <main className="flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
+          {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
+              absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
+              it they escape to <html>, sit at their deep static-flow position, and inflate
+              documentElement.scrollHeight past the viewport — the window then scrolls into that empty
+              region and drags the fixed-height shell up ("dead space / the page looks broken"). */}
+          <main className="relative flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
             {/*
               Keyed by the property in view.
 
