@@ -103,11 +103,11 @@ appeared — never speculatively.
 ## Deployment
 
 - **Repo:** https://github.com/Konstantin-Todorov/revio-platform (branch `main`).
-- **Live — RevioLink (CM):** https://channel-manager-production-59bb.up.railway.app
-- **Live — Operator Console:** https://operator-production-5eed.up.railway.app
-- **Live — RevioCRS:** https://reservation-production-f8c5.up.railway.app
-- **Live — RevioPMS:** https://pms-production-a64b.up.railway.app
-- **Live — RevioDirect:** https://booking-production-8e50.up.railway.app/&lt;slug&gt; — e.g.
+- **Live — RevioLink (CM):** https://cm.reviosoft.app
+- **Live — Operator Console:** https://operator.reviosoft.app
+- **Live — RevioCRS:** https://crs.reviosoft.app
+- **Live — RevioPMS:** https://pms.reviosoft.app
+- **Live — RevioDirect:** https://booking.reviosoft.app/&lt;slug&gt; — e.g.
   `/hotel-sofia`. **All five apps are deployed.** The object-storage bucket is live and shared with
   `reservation` (which writes photos; this one reads them), so room photographs survive a container
   restart. Still on the Railway subdomain: `book.revio.app` is a DNS change, not a build change, and
@@ -154,7 +154,7 @@ tenant isolation is a database guarantee rather than an application convention; 
 is built + live-verified against the sandbox** (`@revio/connectivity`,
 not yet wired into the app). **RevioPMS V1 is COMPLETE — all 5 phases built, tested, live** (founder-confirmed
 spec `docs/PMS-REFERENCE.md`): `apps/pms` (port 3003, cookie `revio_pms_session`, `hasPms` gate) at
-https://pms-production-a64b.up.railway.app — the physical **Unit** model + housekeeping board (Phase 1),
+https://pms.reviosoft.app — the physical **Unit** model + housekeeping board (Phase 1),
 Front Desk check-in/out/room-move/walk-in (Phase 2), Folio & Billing with labels-only payments + a
 check-out balance gate (Phase 3), Minibar/POS catalog + tap-to-post (Phase 4), Maintenance + manual
 Close Day night-audit (Phase 5). The one cross-product write: a Unit going out-of-order (from housekeeping
@@ -316,7 +316,7 @@ first-four-of-the-list alternative prints "Air conditioning · Heating · WiFi �
 hotel). Icon names live in core (pure data) and resolve to components in `@revio/ui/amenity-icon`, typed
 so a missing icon is a build error.
 **K9 DEPLOYED + the cross-system run PROVEN on production (2026-08-03).** RevioDirect is live at
-`booking-production-8e50.up.railway.app/<slug>`, and the structural claim is now demonstrated rather than
+`booking.reviosoft.app/<slug>`, and the structural claim is now demonstrated rather than
 argued. One booking made as a guest on the live site — `RV-07NR0F`, Deluxe Double, 4→6 Aug, €195 all-in —
 appeared with **no integration step**: in **RevioCRS** Reservations tagged `source = Booking Engine`; as a
 **RevioPMS** guest profile carrying the guest's own free-text request through untouched; on the **PMS

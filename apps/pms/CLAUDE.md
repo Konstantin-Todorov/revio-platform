@@ -2,7 +2,7 @@
 
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. **V1 COMPLETE — all 5 phases built,
 > tested, live (2026-07-05).** **Canonical spec: `docs/PMS-REFERENCE.md`** (founder-confirmed V1 scope).
-> **LIVE: https://pms-production-a64b.up.railway.app** (port 3003, cookie `revio_pms_session`, `hasPms`
+> **LIVE: https://pms.reviosoft.app** (port 3003, cookie `revio_pms_session`, `hasPms`
 > gate). **Phases 1-5 DONE — RevioPMS V1 COMPLETE, live** (Units & Housekeeping · Front Desk check-in/out/move/walk-in ·
 > Folio & Billing with labels-only payments + a check-out balance gate · Minibar/POS catalog + tap-to-post
 > to the folio · Maintenance task board + manual Close Day night-audit). Next: Channex production cert

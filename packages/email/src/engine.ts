@@ -144,14 +144,24 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
   if (row && !row.enabled) return { ok: true, skipped: true };
 
   const fallback = defaultsFor(def, locale);
+  const brand = brandOf(property);
   const rendered = renderEmail({
     subject: row?.subject ?? fallback.subject,
     body: row?.body ?? fallback.body,
-    brand: brandOf(property),
+    brand,
     vars: args.vars,
     ...(args.details?.length ? { details: args.details } : {}),
   });
 
-  const res = await sendEmail({ to: args.to, subject: rendered.subject, text: rendered.text });
+  // The guest reads the hotel's name in From and replies to the hotel — not to Revio. The mail is
+  // still sent from (and DKIM-signed by) our verified address; only the display name and Reply-To
+  // are the hotel's. See `resolveFrom` in transport.ts for why we can't send "as" their own domain.
+  const res = await sendEmail({
+    to: args.to,
+    subject: rendered.subject,
+    text: rendered.text,
+    fromName: brand.senderName ?? null,
+    replyTo: brand.replyTo ?? null,
+  });
   return res.ok ? { ok: true } : { ok: false, ...(res.error ? { error: res.error } : {}) };
 }

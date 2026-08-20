@@ -201,8 +201,8 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
 ## 📍 WHERE WE ARE (2026-06-26) — read this first if resuming
 
 **Live & working** (GitHub auto-deploys `main`):
-- **RevioLink (CM)** → https://channel-manager-production-59bb.up.railway.app — behind login.
-- **Operator Console** → https://operator-production-5eed.up.railway.app — behind login.
+- **RevioLink (CM)** → https://cm.reviosoft.app — behind login.
+- **Operator Console** → https://operator.reviosoft.app — behind login.
 - **Repo** https://github.com/Konstantin-Todorov/revio-platform · **Railway** project `revio-platform`
   (services `channel-manager`, `operator`, `Postgres`; per-service build/start config — NO root railway.json).
 - **Auth done** (email+password, JWT cookie). Demo logins (pw `revio1234`): RevioLink
@@ -384,7 +384,7 @@ not yet wired into the app or deployed).
     DDR 12→11→12). Screens: Front Desk (HK status cards + today's arrivals/departures/in-house from the
     shared reservation record), Housekeeping board (floor-grouped, mobile/PWA status control), Rooms
     setup (add / bulk-generate / delete Units). Units seeded for both demo hotels; `hasPms` on. Prod
-    build green. **Deployed live 2026-07-04: https://pms-production-a64b.up.railway.app** (4th Railway
+    build green. **Deployed live 2026-07-04: https://pms.reviosoft.app** (4th Railway
     service `pms`; auto-deploys on push; migration applied on prod; `hasPms` + units backfilled).
   - ✅ **Phase 2 done (2026-07-04) — Front Desk.** `RoomAssignment` (line ↔ unit + checkedInAt/Out) —
     reservation sold-status unchanged, stay state derived. check-in (unit assignment + override),
@@ -481,7 +481,7 @@ tests DB `revio_test`. Full detail in `CLAUDE.md`, `ACCESS-MODEL.md`, `DEPLOY.md
 - Tests: core 18/18 (vitest) + `@revio/db` integration 3/3 against `revio_test`.
 
 ## ✅ Phase 6a — Railway deploy (done)
-- RevioLink live at https://channel-manager-production-59bb.up.railway.app on Railway (`revio-platform`
+- RevioLink live at https://cm.reviosoft.app on Railway (`revio-platform`
   project, one Postgres). Prisma Migrate runs on deploy. **GitHub auto-deploy on push to `main`** —
   proven end to end. Repo: https://github.com/Konstantin-Todorov/revio-platform.
 

@@ -182,7 +182,7 @@ operator identity. Never embed hotel-facing screens here; link out instead. Keep
 (contracts, tokens, billing) in the admin schema, isolated from tenant data.
 
 ## Status (2026-07-05) — all screens built + live
-`https://operator-production-5eed.up.railway.app`. Built: **Overview** (cross-tenant stats + per-client
+`https://operator.reviosoft.app`. Built: **Overview** (cross-tenant stats + per-client
 health), **Clients** (onboard = tenant+owner+property+entitlements; toggle CM/CRS/PMS; suspend/activate),
 **Connectivity** (per-tenant encrypted Channex keys, last-4 hint only), **Platform Health**
 (`getPlatformHealth` — 24h sync success %, failed syncs, open errors by severity, per-client health,

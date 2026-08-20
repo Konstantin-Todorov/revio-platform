@@ -6,11 +6,11 @@ sharing that database.
 ## Current state (live)
 
 - **Repo:** https://github.com/Konstantin-Todorov/revio-platform (`main`)
-- **RevioLink (Channel Manager):** https://channel-manager-production-59bb.up.railway.app
-- **Operator Console:** https://operator-production-5eed.up.railway.app
-- **RevioCRS (Reservation):** https://reservation-production-f8c5.up.railway.app
-- **RevioPMS (Operations):** https://pms-production-a64b.up.railway.app
-- **RevioDirect (booking engine):** https://booking-production-8e50.up.railway.app/&lt;slug&gt; — live,
+- **RevioLink (Channel Manager):** https://cm.reviosoft.app
+- **Operator Console:** https://operator.reviosoft.app
+- **RevioCRS (Reservation):** https://crs.reviosoft.app
+- **RevioPMS (Operations):** https://pms.reviosoft.app
+- **RevioDirect (booking engine):** https://booking.reviosoft.app/&lt;slug&gt; — live,
   e.g. `/hotel-sofia`. The object-storage bucket it needed is provisioned and shared with
   `reservation`, so room photos survive a deploy. **Still on the Railway subdomain**, and that is the
   one thing left: this is the only app a *guest* visits, so it should not sit on a `*.up.railway.app`

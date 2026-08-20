@@ -15,10 +15,38 @@ export interface EmailResult {
   error?: string;
 }
 
-export async function sendEmail({ to, subject, text }: { to: string[]; subject: string; text: string }): Promise<EmailResult> {
+/**
+ * The From header. A hotel sends as ITS OWN name, from OUR verified address — we can DKIM-sign
+ * `reviosoft.app` but never the hotel's own domain, so `"Hotel Sofia <notifications@reviosoft.app>"`
+ * (with the hotel's real address in Reply-To) is the deliverable, honest form; sending literally
+ * "from" the hotel's domain would fail SPF/DKIM and land in spam. `EMAIL_FROM` stays the platform
+ * default and supplies the address; with no hotel name it is used whole, so a password-reset or an
+ * operator invite still reads "Revio".
+ */
+function resolveFrom(fromName?: string | null): string {
+  const base = process.env.EMAIL_FROM ?? "Revio <onboarding@resend.dev>";
+  const name = fromName?.trim();
+  if (!name) return base;
+  // Reuse the <address> from EMAIL_FROM; if it is a bare address, that is the address.
+  const address = base.match(/<([^>]+)>/)?.[1] ?? base.trim();
+  // A hotel controls its own display name, so strip anything that could break the header or smuggle
+  // a second address into it (angle brackets, quotes, CR/LF). Header injection, not paranoia.
+  const safeName = name.replace(/[<>"\r\n]/g, "").trim() || "Revio";
+  return `${safeName} <${address}>`;
+}
+
+export async function sendEmail({ to, subject, text, fromName, replyTo }: {
+  to: string[];
+  subject: string;
+  text: string;
+  /** The hotel's own sender name — becomes the From display name over our verified address. */
+  fromName?: string | null;
+  /** The hotel's own address — replies reach them, though the mail is DKIM-signed by us. */
+  replyTo?: string | null;
+}): Promise<EmailResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
-    console.log(`[email:mock] to=${to.join(",")} subject="${subject}"\n${text}`);
+    console.log(`[email:mock] from="${resolveFrom(fromName)}" replyTo=${replyTo ?? "-"} to=${to.join(",")} subject="${subject}"\n${text}`);
     return { ok: true, mode: "mock" };
   }
   try {
@@ -26,10 +54,11 @@ export async function sendEmail({ to, subject, text }: { to: string[]; subject: 
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM ?? "Revio <onboarding@resend.dev>",
+        from: resolveFrom(fromName),
         to,
         subject,
         text,
+        ...(replyTo?.trim() ? { reply_to: replyTo.trim() } : {}),
       }),
     });
     if (!res.ok) return { ok: false, mode: "resend", error: `Resend ${res.status}: ${(await res.text()).slice(0, 200)}` };

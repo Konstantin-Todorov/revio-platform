@@ -103,10 +103,10 @@ appeared — never speculatively.
 ## Deployment
 
 - **Repo:** https://github.com/Konstantin-Todorov/revio-platform (branch `main`).
-- **Live — RevioLink (CM):** https://channel-manager-production-59bb.up.railway.app
-- **Live — Operator Console:** https://operator-production-5eed.up.railway.app
-- **Live — RevioCRS:** https://reservation-production-f8c5.up.railway.app
-- **Live — RevioPMS:** https://pms-production-a64b.up.railway.app
+- **Live — RevioLink (CM):** https://cm.reviosoft.app
+- **Live — Operator Console:** https://operator.reviosoft.app
+- **Live — RevioCRS:** https://crs.reviosoft.app
+- **Live — RevioPMS:** https://pms.reviosoft.app
 - **NOT deployed — RevioDirect:** local only (`localhost:3004`) until phase K9. It needs its own
   service, a `book.revio.app` domain and an object-storage bucket (`DEPLOY.md` → Object storage);
   until then room photos are served from local disk, which does not survive a container restart.
@@ -149,7 +149,7 @@ Both apps now have a **responsive (mobile) shell**; **RLS** is built + verified 
 `DEPLOY.md`); and the **Channex adapter is built + live-verified against the sandbox** (`@revio/connectivity`,
 not yet wired into the app). **RevioPMS V1 is COMPLETE — all 5 phases built, tested, live** (founder-confirmed
 spec `docs/PMS-REFERENCE.md`): `apps/pms` (port 3003, cookie `revio_pms_session`, `hasPms` gate) at
-https://pms-production-a64b.up.railway.app — the physical **Unit** model + housekeeping board (Phase 1),
+https://pms.reviosoft.app — the physical **Unit** model + housekeeping board (Phase 1),
 Front Desk check-in/out/room-move/walk-in (Phase 2), Folio & Billing with labels-only payments + a
 check-out balance gate (Phase 3), Minibar/POS catalog + tap-to-post (Phase 4), Maintenance + manual
 Close Day night-audit (Phase 5). The one cross-product write: a Unit going out-of-order (from housekeeping

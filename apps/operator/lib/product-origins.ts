@@ -10,9 +10,9 @@ import "server-only";
  * variable rather than a deploy. Same pattern as the CRS's `BOOKING_ENGINE_ORIGIN`.
  */
 const DEFAULTS = {
-  cm: "https://channel-manager-production-59bb.up.railway.app",
-  crs: "https://reservation-production-f8c5.up.railway.app",
-  pms: "https://pms-production-a64b.up.railway.app",
+  cm: "https://cm.reviosoft.app",
+  crs: "https://crs.reviosoft.app",
+  pms: "https://pms.reviosoft.app",
 } as const;
 
 export interface Entitlements {
