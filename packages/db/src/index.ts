@@ -1,5 +1,12 @@
 export { prisma } from "./client.js";
-export { forTenant, forSystem } from "./rls.js";
+export {
+  forTenant,
+  forSystem,
+  withTenantTransaction,
+  withSystemTransaction,
+  type TenantTx,
+  type TxOptions,
+} from "./rls.js";
 export { encryptSecret, decryptSecret, keyHint } from "./crypto.js";
 export {
   checkLoginAllowed,

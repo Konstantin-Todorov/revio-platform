@@ -14,7 +14,7 @@
  */
 import { Prisma } from "@prisma/client";
 import { prisma } from "../src/client.js";
-import { forSystem, forTenant } from "../src/rls.js";
+import { forSystem, forTenant, withTenantTransaction } from "../src/rls.js";
 
 type Check = { name: string; ok: boolean; detail: string };
 const checks: Check[] = [];
@@ -96,6 +96,7 @@ async function main() {
   //    account — the WITH CHECK half is what makes that impossible.
   console.log("\n— writing across the perimeter —");
   const propB = await sys.property.findFirstOrThrow({ where: { tenantId: B.id }, select: { id: true } });
+  const propA = await sys.property.findFirstOrThrow({ where: { tenantId: A.id }, select: { id: true } });
   let rejected = false;
   let detail = "no error raised — the row was written";
   try {
@@ -122,6 +123,53 @@ async function main() {
     "every table in the database has RLS enabled",
     uncovered.length === 0,
     uncovered.length ? uncovered.map((u) => u.relname).join(", ") : "none missing",
+  );
+
+  // 5. `withTenantTransaction` hands its callback a PLAIN Prisma tx client — not one of the extended
+  //    clients — so its isolation rests entirely on the GUC being set as the transaction's first
+  //    statement. That is exactly the kind of claim that is easy to state and easy to get wrong, and
+  //    getting it wrong would hand a hotel request an unscoped connection. So prove it, three ways.
+  const txSeesOwnOnly = await withTenantTransaction(A.id, async (tx) => {
+    const mine = await tx.auditEntry.count();
+    const theirs = await tx.auditEntry.count({ where: { tenantId: B.id } });
+    return { mine, theirs };
+  });
+  record(
+    "withTenantTransaction: the callback's client is scoped to its tenant",
+    txSeesOwnOnly.theirs === 0,
+    `${txSeesOwnOnly.theirs} of tenant B's rows visible inside A's transaction`,
+  );
+
+  let txCrossTenantRejected = false;
+  let txDetail = "no error raised — the row was written";
+  try {
+    await withTenantTransaction(A.id, async (tx) => {
+      await tx.auditEntry.create({
+        data: { tenantId: B.id, propertyId: propB.id, entity: "rls-verify-tx", source: "rls-verify" },
+      });
+    });
+  } catch (e) {
+    txCrossTenantRejected = /row-level security/i.test(String(e));
+    txDetail = txCrossTenantRejected
+      ? "rejected by row-level security policy"
+      : `rejected, but not by RLS: ${String(e).slice(0, 120)}`;
+  }
+  record("withTenantTransaction: a cross-tenant INSERT is still refused", txCrossTenantRejected, txDetail);
+
+  // The whole point of the helper: a throw must undo the writes that already succeeded. Without this,
+  // callers get the same partial commit they had before, only harder to see.
+  const before = await sys.auditEntry.count({ where: { entity: "rls-verify-rollback" } });
+  await withTenantTransaction(A.id, async (tx) => {
+    await tx.auditEntry.create({
+      data: { tenantId: A.id, propertyId: propA.id, entity: "rls-verify-rollback", source: "rls-verify" },
+    });
+    throw new Error("deliberate rollback");
+  }).catch(() => undefined);
+  const after = await sys.auditEntry.count({ where: { entity: "rls-verify-rollback" } });
+  record(
+    "withTenantTransaction: a throw rolls back writes that already succeeded",
+    after === before,
+    after === before ? "nothing committed" : `${after - before} row(s) survived the rollback`,
   );
 
   const failed = checks.filter((c) => !c.ok);
