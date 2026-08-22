@@ -4,14 +4,50 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 
 ---
 
+## ✅ STATUS RECONCILIATION (2026-08-23)
+
+**This file is historical and append-heavy. For current status, `CLAUDE.md`'s Status section is the
+source of truth** — it was reconciled against the code and git history on 2026-08-23 and found
+accurate; this file had drifted. Corrections (the Phase K table lower down is also fixed inline):
+
+- **Phase K (RevioDirect) is COMPLETE** — K1–K10 + K7 shipped and live at `booking.reviosoft.app`.
+  Verified in code: `packages/payments/src/connect.ts` + CRS `PaymentsCard` Stripe-Connect onboarding
+  and the request-to-book fallback = **K5**; `packages/core/src/guests/recognition.ts` = **K6**;
+  `packages/core/src/metrics/channel-economics.ts` + CRS Cost-of-distribution = **K8**; the live
+  `booking` service + object-store bucket = **K9**; `ExtrasPicker`/`ExtrasEditor` + `saveBookingExtra`
+  = **K10**. Only the `book.revio.app` vanity-DNS rename remains.
+- **RLS is ENFORCED in production since 2026-08-05** — all five services run as the restricted
+  `revio_app` role (`DEPLOY.md` §RLS). The roadmap's "RLS Phase 2 (prod enforcement) — LAST" is DONE.
+- **Email is live** — `@revio/email` sends through **Resend** (per-hotel branded HTML templates,
+  per-type on/off, editable content). The roadmap's "needs a provider" / "build our own sending
+  system" items are DONE.
+- **N1 login rate-limiting is DONE** (`packages/core/src/auth/login-gate.ts`); the Phase P note that
+  it "is still open" is stale. N2 · N3 also shipped. **N4 (TOTP 2FA) · N5 (password policy + auth
+  audit + key rotation) remain.**
+- **P2 guided first-run onboarding SHIPPED 2026-08-12** (`packages/core/src/onboarding/welcome.ts`,
+  the `(setup)/welcome` routes). The P2 section below is the spec it was built to, not open work.
+- **Marketing site:** the plan below says "build 4 sites"; the decision changed to **ONE unified site**,
+  now live at `reviosoft.app` (separate `revio-websites` repo). Treat the 4-site bullet as superseded.
+
+**Still genuinely open** (unchanged): **P3 in-app AI assistant** (not started); Channex production
+certification (form + live screenshare); scheduler/cron + worker for background jobs; scheduled
+auto-pull; **PMS automated nightly Close Day (J10 — manual today, blocked on the founder's §11)**; real
+**Stripe billing** in Operator (mocked today); an operator audit-log screen; drop the unused
+`ProductMapping` table; per-product cosmetic polish; **N4 · N5**; and `book.revio.app` DNS. **P1
+production copy pass** — commits since 2026-08-11 did copy work, but full completion was not verified
+in this reconciliation; treat as in-progress rather than confirmed done.
+
+---
+
 ## 🔵 PHASE P — PRODUCTION POLISH (current, founder decisions 2026-08-11)
 
 The software works. It does not yet **read** like something a hotel pays for. Three tasks, in order,
 plus one security item that outranks all of them.
 
 **N0 — first.** `SHOW_DEMO_LOGINS` shipped 2026-08-11: all four staff sign-in pages had printed working
-credentials unconditionally, the operator console among them. **Login rate limiting (N1) is still open**
-and is the remaining half of that hole.
+credentials unconditionally, the operator console among them. **N1 login rate limiting is now DONE**
+(`packages/core/src/auth/login-gate.ts`) — the other half of that hole is closed. (N2 · N3 also
+shipped; N4 · N5 remain — see the reconciliation note at the top and `CLAUDE.md`.)
 
 ### P1 — Production copy pass
 
@@ -137,21 +173,22 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
   retry, scheduled Channex pull; PMS automated night-audit. Today they're lazy/in-process + CRON_SECRET
   routes. Externalize with Railway cron or a worker (+ optional **Redis + BullMQ** for the sync queue →
   also powers queue-depth on Operator → Platform Health).
-- **Email / notifications** — CRS reservation-delivery + arrival emails; operator alerts. Needs a provider.
+- ✅ **Email — provider live (Resend).** `@revio/email` sends real branded HTML through Resend on the
+  verified `reviosoft.app` domain; CRS reservation-delivery is wired on pull. **Still open:** scheduled
+  *arrival* digests + operator alert emails (need the scheduler/worker below).
 
 **Data / security**
-- **RLS Phase 2 (prod enforcement) — LAST.** Switch prod to the restricted `revio_app` role so every
-  `tenant_isolation` + `operator_only` policy (CM · CRS · PMS · Invoice · ConnectivityCredential) actually
-  enforces. One pass covers all four products. Runbook in `DEPLOY.md`. (On prod today the role is superuser
-  → policies are inert but correct.)
+- ✅ **RLS Phase 2 (prod enforcement) — DONE 2026-08-05.** All five services now connect as the
+  restricted `revio_app` role (`rolsuper=f`, `rolbypassrls=f`, no DDL), so every `tenant_isolation` +
+  `operator_only` policy (CM · CRS · PMS · Invoice · ConnectivityCredential) actually enforces — tenant
+  isolation is a database guarantee, not a convention. Gate: `pnpm --filter @revio/db rls-verify`
+  (`DEPLOY.md` §RLS).
 - Drop the unused `ProductMapping` table (superseded by two-stream mapping).
 - ~~Add `@types/node` to `packages/db`~~ — done 2026-07-26; `pnpm -r typecheck` is clean.
 
 **Deploy / ops**
-- **reservation-service auto-deploy** — the Railway service now shows repo `Konstantin-Todorov/revio-platform`
-  + branch `main` connected with "Auto deploys when pushed to GitHub" **enabled** and Wait-for-CI off
-  (founder screenshot 2026-07-22). Being re-verified with a live push; if it still doesn't fire, the
-  fallback is a manual deploy (`railway up --service reservation`, or the Railway MCP `deploy` tool).
+- ✅ **reservation-service auto-deploy — CONFIRMED.** All five services auto-deploy on push to `main`
+  (re-verified 2026-08-22: a single push built and deployed every service). No manual step needed.
 
 **Per-product polish / V2**
 - CM: channel logos (cosmetic); Settings reservation-delivery emails (needs email infra).
@@ -183,18 +220,21 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
   a phone wrapped, and **numeric bounds** (commission/FX markup accepted negatives).
   Still open for a later round: a broader responsive pass beyond the phone-critical screens, and
   server-side validation messages (today several actions fail closed silently).
-- **Email engine** — per-hotel branded templates (logo, sender name, phone, reply-to), per-email-type
-  on/off toggles, and editable content, so each hotel controls what its guests receive. Research how
-  competing engines do it; build on our own sending system.
+- ✅ **Email engine — DONE.** `@revio/email` + `@revio/core/email`: per-hotel branded HTML templates
+  (logo, sender name, reply-to, colour, four themes, font), per-email-type on/off toggles and editable
+  content (`EmailTemplate` rows, `listPropertyTemplates`), sent through our own transport over Resend.
+  Guest mail now goes out as branded **HTML** (fixed 2026-08-22 — the renderer's HTML was being dropped).
 
 **Websites (new — see `docs/POSITIONING.md`)**
-- Build **4 marketing sites**: one general (routes to each product) + three product sites (Link / CRS /
-  PMS), each with a small cross-sell section for the other two. Content is drafted in `docs/POSITIONING.md`.
+- ~~Build **4 marketing sites**: one general + three product sites (Link / CRS / PMS).~~ **Decision
+  changed → ONE unified marketing site**, now **live at `reviosoft.app`** (separate `revio-websites`
+  repo, its own Railway service). Content drafted in `docs/POSITIONING.md`. Per-product deep-dive pages
+  live within the one site rather than as separate domains.
 
 **Future products**
-- ~~Direct **Booking Engine** (consumer-facing) — parked as a future product.~~ **Un-parked and in
-  build since 2026-07-27 — see Phase K at the bottom of this file.** K1–K4 shipped (a guest can book
-  end to end, locally); K5–K9 open.
+- ~~Direct **Booking Engine** (consumer-facing) — parked as a future product.~~ **Built and live —
+  Phase K COMPLETE (K1–K10), at `booking.reviosoft.app`.** See the Phase K table at the bottom of this
+  file. Only the `book.revio.app` vanity DNS rename remains.
 
 ---
 
@@ -497,7 +537,7 @@ tests DB `revio_test`. Full detail in `CLAUDE.md`, `ACCESS-MODEL.md`, `DEPLOY.md
 
 ---
 
-## 🟡 Phase K — RevioDirect, the booking engine (K1–K4 done, 2026-07-27→30)
+## ✅ Phase K — RevioDirect, the booking engine — COMPLETE (K1–K10 + K7, 2026-07-27 → 2026-08-05)
 
 Spec: `docs/specs/BOOKING-ENGINE-DESIGN.md` §6, governed by the founder's `BOOKING-ENGINE-ADDENDUM.md`.
 App: `apps/booking` (port 3004) — read `apps/booking/CLAUDE.md` first; it is the only unauthenticated,
@@ -511,10 +551,11 @@ internet-facing, inventory-touching surface we have, and its rules are different
 | K3 | ✅ | Room content model — `RoomTypePhoto` + `@revio/storage` + `sharp` re-encode; CRS upload screen; Step 2 cards with honest scarcity. |
 | K4 | ✅ | Step 3 — hold-on-open (15 min, id in the URL, own hold excluded on confirm), guest details, **card guarantee**, confirmation page + branded email. |
 | K7 | ✅ | *Shipped early, out of order* — the CRS **Booking Engine** screen (slug, on/off, preset → colour/headings/logo/hero, live preview) was needed to demo K2b at all. |
-| K5 | ⬜ | **Stripe Connect onboarding** in CRS Distribution + request-to-book fallback when unconnected. |
-| K6 | ⬜ | Returning-guest recognition (email → shared guest record, opt-out respected, GDPR-clean). |
-| K8 | ⬜ | Direct-vs-OTA analytics incl. commission saved. |
-| K9 | ⬜ | Deploy — own Railway service, `book.revio.app`, object-storage bucket. |
+| K5 | ✅ | **Stripe Connect onboarding** in CRS → Booking Engine (`PaymentsCard`, `startStripeOnboarding`, `property.stripeAccountId`, `@revio/payments/connect`) + request-to-book fallback when unconnected (`RequestQueue`, `acceptBookingRequest`). Test-mode. |
+| K6 | ✅ | Returning-guest recognition — server-side after submit (never a live lookup), `Guest.recognitionOptOut` respected, GDPR-clean (`packages/core/src/guests/recognition.ts`). Verified live: "Welcome back — this is your 2nd stay". |
+| K8 | ✅ | Direct-vs-OTA **Cost of distribution** in CRS — commission paid vs. avoided kept apart, `null` not a guess (`packages/core/src/metrics/channel-economics.ts`). |
+| K9 | ✅ | Deployed — `booking` Railway service, **live at `booking.reviosoft.app`**, shared object-storage bucket. Only the `book.revio.app` vanity DNS rename is still pending. |
+| K10 | ✅ | Extras the booking page sells (`ExtrasPicker` / CRS `ExtrasEditor` / `saveBookingExtra`) — the PMS's own `PosItem` catalogue, re-derived server-side. |
 
 **Two deviations from the spec worth knowing.** K4 planned the guarantee "via Stripe Connect"; it
 shipped on the **platform's own test-mode SetupIntent** through `@revio/payments` instead, because
@@ -523,9 +564,11 @@ smuggled into the guest checkout. And the design doc's sequencing note was right
 sleeper**: photos meant object storage, an upload pipeline, an image processor and a hotel-facing
 editor, none of which existed.
 
-**Not built, deliberately:** real card collection (needs Stripe Elements + a live-mode decision),
-extras/upsell (the step-3 slot exists and is empty), and Operator visibility into the booking engine.
+**Not built, deliberately:** real card *collection* (needs Stripe Elements + a live-mode decision) —
+the card *guarantee* via SetupIntent does ship; and Operator visibility into the booking engine.
+*(Extras/upsell are now built — K10 — so the step-3 slot is no longer empty.)*
 
-**Blocked on the founder before a real hotel can go live:** each hotel's Stripe Connect account, a
-sending domain (#127), and — in Bulgaria — the fiscalization gate from F3 (which the guarantee model
-defers to the hotel's point of sale, since no money moves at booking).
+**Blocked on the founder before a real hotel can go live:** each hotel's own Stripe Connect account,
+and — in Bulgaria — the fiscalization gate from F3 (which the guarantee model defers to the hotel's
+point of sale, since no money moves at booking). *(The sending domain is no longer blocking — real
+email is live via Resend on `reviosoft.app`.)*

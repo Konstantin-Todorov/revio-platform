@@ -8,7 +8,7 @@ Updated as work lands. **Status:** ✅ built · 🟡 partial · 🟦 planned (in
 | Requirement | Status | Where / note |
 | --- | --- | --- |
 | Multi-tenant, one shared inventory core | ✅ | `@revio/core`, `tenantId` on every row |
-| Row-Level Security (DB-enforced isolation) | 🟡 | Columns in place; RLS policy migration pending |
+| Row-Level Security (DB-enforced isolation) | ✅ | Enforced in prod since 2026-08-05 — all services run as restricted `revio_app`; `rls-verify` gate (`DEPLOY.md`) |
 | Products sold separately via entitlements | ✅ | `Tenant.hasChannelManager/Reservation/Pms` |
 | EN + BG localisation | 🟦 | Strings will route through an i18n layer; copy is EN now |
 | **Hotels & apartments same logic; hostels sell beds** | ⛔→✅ | **`RoomType.unitKind` (room \| bed \| apartment)** — this change |

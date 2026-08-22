@@ -27,6 +27,9 @@ _intake/
 # railway
 .railway/
 
+# serena (local LSP index / tool state — not part of the build)
+.serena/
+
 # Locally stored uploads (dev object store). Production uses a bucket — never commit media.
 .storage/
 

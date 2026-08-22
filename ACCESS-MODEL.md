@@ -75,10 +75,10 @@ Session = {
    written to the **Audit Log**.
 4. **Row-Level Security (DB)** — Postgres policies on every tenant-owned table key off a per-request
    `app.tenant_id`; the database physically refuses cross-tenant rows even if app code has a bug.
-   **Built and verified locally.** ⚠️ **On production the policies are inert**, because RLS does not
-   apply to a superuser and prod still connects as one. Switching to the restricted `revio_app` role
-   is RLS Phase 2 (`DEPLOY.md`, task R3) — until then layers 1–3 are the real enforcement and layer 4
-   is correct but not yet load-bearing. Don't count it twice.
+   ✅ **ENFORCED in production since 2026-08-05** — all five services connect as the restricted
+   `revio_app` role (`rolsuper=f`, `rolbypassrls=f`, no DDL), so the policies are load-bearing, not
+   inert. Tenant isolation is now a database guarantee on top of layers 1–3. Gate:
+   `pnpm --filter @revio/db rls-verify` (`DEPLOY.md` §RLS).
 
 ## How products are sold separately
 
