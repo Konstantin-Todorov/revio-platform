@@ -392,8 +392,14 @@ ${details.map((d, i) => `<tr>
           ? `font-family:${displayFont};font-size:19px;color:#20262F`
           : `font-family:${displayFont};font-size:25px;letter-spacing:.02em;color:#1A2230`;
 
+  // A hotel's logo can be blocked (Gmail "display images", corporate clients). Style the <img> so its
+  // alt text falls back to the property name in the theme's own colour instead of a broken-image icon:
+  // font props are ignored once the image loads, and become the alt styling when it doesn't. Modern's
+  // masthead sits on a colour banner (white text); the others sit on the light card (dark text).
+  const mastheadFallbackColor =
+    theme === "modern" ? "#FFFFFF" : theme === "boutique" ? "#2A2520" : theme === "minimal" ? "#20262F" : "#1A2230";
   const masthead = args.brand.logoUrl
-    ? `<img src="${escapeHtml(args.brand.logoUrl)}" alt="${escapeHtml(args.brand.propertyName)}" style="max-height:56px;max-width:220px;display:block${T.mastheadAlign === "center" ? ";margin:0 auto" : ""}">`
+    ? `<img src="${escapeHtml(args.brand.logoUrl)}" alt="${escapeHtml(args.brand.propertyName)}" style="max-height:56px;max-width:220px;display:block${T.mastheadAlign === "center" ? ";margin:0 auto" : ""};color:${mastheadFallbackColor};font-family:${displayFont};font-size:20px;font-weight:700">`
     : `<div style="${nameStyle};text-align:${T.mastheadAlign}">${escapeHtml(args.brand.propertyName)}</div>`;
 
   // Modern puts the masthead in a solid colour banner; the others sit on the card.
