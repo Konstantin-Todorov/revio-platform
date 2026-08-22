@@ -766,6 +766,12 @@ model Reservation {
   guaranteeLast4     String?
   notes              String?
   cancelledAt        DateTime?
+  // The stay ended. A PMS-owned OPERATIONAL fact, deliberately not a `status` value: `status` is the
+  // CRS's commercial record, read by the availability waterfall, the CM's ARI pushes and every
+  // revenue metric, and a departed guest's stay is still sold and still earns. Keeping departure in
+  // its own column means the question "has this stay ended?" has one authoritative answer without
+  // touching any of that. Set only by check-out; cleared only by a manager reopening the stay.
+  departedAt         DateTime?
   createdById        String? // staff user who entered a manual booking
 
   property      Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -1188,6 +1194,20 @@ model Folio {
   label         String    @default("Guest")
   isPrimary     Boolean   @default(true)
   status        String    @default("open") // open | closed
+  // How a CLOSED folio ended, so "closed" is never ambiguous about money (null while open):
+  //   settled         — balance reached zero the ordinary way.
+  //   outstanding     — closed carrying a balance. A tracked receivable, NOT limbo: the debt is still
+  //                     owed and still visible, and it is what the receivables view lists.
+  //   paid_offsystem  — the money arrived another way (bank transfer, cash, external POS). Revenue
+  //                     COLLECTED.
+  //   written_off     — the balance was forgiven. Revenue LOST.
+  // The last two both close the folio at zero and must never be reported as the same thing: an owner
+  // reading "€513 written off" is reading a loss, not a payment.
+  outcome       String?
+  // Who resolved a closed-outstanding folio, and why — recorded with the outcome, never inferred.
+  outcomeNote   String?
+  outcomeAt     DateTime?
+  outcomeById   String?
   currency      String
   openedAt      DateTime  @default(now())
   closedAt      DateTime?

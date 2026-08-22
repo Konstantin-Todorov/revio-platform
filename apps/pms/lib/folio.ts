@@ -258,7 +258,11 @@ export async function getReservationDetail(reservationId: string) {
 export async function listFolios() {
   const { property } = await activeProperty();
   const assignments = await prisma.roomAssignment.findMany({
-    where: { propertyId: property.id, status: "active", checkedOutAt: null },
+    // `departedAt: null` is load-bearing, not defensive. This list is titled "live bills for in-house
+    // guests", but it was derived purely from assignment rows — so a departed stay that still had an
+    // active assignment (which is exactly what the check-in bug created) showed up here with its
+    // closed folio's balance, in the one list a receptionist trusts to mean "still in the house".
+    where: { propertyId: property.id, status: "active", checkedOutAt: null, reservation: { departedAt: null } },
     include: { reservation: { include: { guest: true, folios: { include: { lines: true } } } }, unit: { select: { label: true } } },
     orderBy: { checkedInAt: "desc" },
   });
@@ -300,6 +304,64 @@ export type HistoryRow = {
  * editing surface (§4.6 lock-on-settlement). Search matches guest name, reservation number, or invoice
  * number.
  */
+export interface ReceivableRow {
+  folioId: string;
+  reservationId: string;
+  guestName: string;
+  label: string;
+  balance: number;
+  currency: string;
+  closedAt: Date | null;
+  /** Days since the folio closed — aged debt reads as an age, not a date to subtract in your head. */
+  ageDays: number;
+}
+
+/**
+ * Money owed by guests who have already left: folios closed carrying a balance (§1.5).
+ *
+ * This view is what makes "closed — outstanding" a managed state instead of limbo. Before it, a
+ * check-out with an override produced a closed folio with a red balance that appeared in the OPEN
+ * list, so the debt was simultaneously invisible as a receivable and misleading as a live bill.
+ * Aged debt is a set to work through, not something to rediscover one folio at a time.
+ */
+export async function listReceivables(): Promise<{
+  property: Awaited<ReturnType<typeof activeProperty>>["property"];
+  rows: ReceivableRow[];
+  totalMinor: number;
+}> {
+  const { property } = await activeProperty();
+  const folios = await prisma.folio.findMany({
+    where: { propertyId: property.id, status: "closed", outcome: "outstanding" },
+    include: {
+      lines: { select: { kind: true, amountMinor: true, voided: true } },
+      reservation: { select: { id: true, guestName: true, guest: { select: { firstName: true, lastName: true } } } },
+    },
+    orderBy: { closedAt: "asc" }, // oldest debt first — that is the one that needs chasing
+  });
+
+  const now = Date.now();
+  const rows: ReceivableRow[] = [];
+  for (const f of folios) {
+    const balance = folioBalance(f.lines).balance;
+    // A folio marked outstanding whose balance has since reached zero (a payment was posted against
+    // it after the fact) is no longer a receivable. Show what is true now rather than what was true
+    // at close.
+    if (balance === 0) continue;
+    const r = f.reservation;
+    rows.push({
+      folioId: f.id,
+      reservationId: r.id,
+      guestName: r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName,
+      label: f.label,
+      balance,
+      currency: f.currency,
+      closedAt: f.closedAt,
+      ageDays: f.closedAt ? Math.floor((now - f.closedAt.getTime()) / 86_400_000) : 0,
+    });
+  }
+  return { property, rows, totalMinor: rows.reduce((s, r) => s + r.balance, 0) };
+}
+
 export async function listFolioHistory(q?: string): Promise<{ property: Awaited<ReturnType<typeof activeProperty>>["property"]; rows: HistoryRow[] }> {
   const { property } = await activeProperty();
   // A departed stay = a reservation with at least one checked-out assignment here.

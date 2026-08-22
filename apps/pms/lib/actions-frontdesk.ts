@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { withTenantTransaction } from "@revio/db";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
@@ -51,6 +52,14 @@ export async function checkIn(fd: FormData): Promise<void> {
   });
   if (!res) redirect("/dashboard");
 
+  // A stay that has departed may not be checked in again. This is the guard whose absence produced
+  // the state-machine bug: a reservation was checked out cleanly at 14:18, then checked in again at
+  // 22:00, which created fresh `active` assignments on a stay whose folios were already closed. From
+  // then on it read as in-house — overstaying by a night more every night, and drawing recurring
+  // stay-extras onto a closed folio. A returning guest is a new reservation; a mistaken check-out is
+  // undone by a manager with `reopenStay`, which is the sanctioned way back.
+  if (res!.departedAt) redirect(`/reservation/${reservationId}?error=departed`);
+
   const slots = fd.getAll("slot").map(String).filter(Boolean);
   if (slots.length === 0) redirect(`/checkin/${reservationId}?error=pick`);
 
@@ -99,9 +108,16 @@ export async function checkIn(fd: FormData): Promise<void> {
 }
 
 /**
- * Check a reservation out: stamp checkedOutAt on its active assignments, set each vacated unit Dirty,
- * and close the folio. GATE: a non-zero folio balance blocks check-out (redirect to the folio to settle)
- * unless `override` is set — then the outstanding balance + reason are logged.
+ * Check a reservation out: mark the stay departed, stamp checkedOutAt on its active assignments, set
+ * each vacated unit Dirty, and close every folio with a defined outcome. GATE: a non-zero balance
+ * blocks check-out (redirect to the folio to settle) unless `override` is set — then the folio closes
+ * as `outstanding` (a tracked receivable, §1.4) and the balance + reason are logged.
+ *
+ * ALL OF IT, OR NONE OF IT. This used to be a run of sequential awaits, and the gap between "folio
+ * closed" and "assignments stamped" is exactly where production got a reservation whose folios were
+ * all closed while it stayed in-house — the night audit then accrued charges against a guest who had
+ * left, for 41 nights. There is no longer a path that closes the folio while the stay is still in the
+ * house, because there is no longer a moment between the two.
  */
 export async function checkOut(fd: FormData): Promise<void> {
   const session = await ctx("frontDesk");
@@ -109,30 +125,90 @@ export async function checkOut(fd: FormData): Promise<void> {
   const override = fd.get("override") != null;
   const reason = str(fd, "reason");
 
-  const folioId = await ensureFolio(session.tenantId, session.activePropertyId, reservationId);
-  if (folioId) {
-    // Gate on the COMBINED balance across every folio of the stay (primary + split/company).
-    const balance = await reservationBalance(reservationId);
-    if (balance !== 0 && !override) redirect(`/folio/${reservationId}?error=balance`);
-    if (balance !== 0 && override) {
-      await logAudit(session.activePropertyId, session.tenantId, { entity: "checkout_override", field: `balance ${balance}`, newValue: reason || "no reason given", userId: session.userId });
-    }
-  }
+  // Outside the transaction on purpose: ensureFolio is itself a long write (it seeds accommodation,
+  // taxes and fees), and holding row locks across it would keep the transaction open far longer than
+  // the check-out needs. By the time we commit, the folio exists and its balance is re-read below.
+  await ensureFolio(session.tenantId, session.activePropertyId, reservationId);
+  const balance = await reservationBalance(reservationId);
+  if (balance !== 0 && !override) redirect(`/folio/${reservationId}?error=balance`);
 
-  const assignments = await prisma.roomAssignment.findMany({
-    where: { reservationId, propertyId: session.activePropertyId, status: "active", checkedOutAt: null },
-    include: { unit: { select: { label: true } }, reservation: { select: { guestName: true } } },
-  });
-  const now = new Date();
-  for (const a of assignments) {
-    await prisma.roomAssignment.update({ where: { id: a.id }, data: { checkedOutAt: now } });
-    await prisma.unit.update({ where: { id: a.unitId }, data: { hkStatus: "dirty" } });
-    await logAudit(session.activePropertyId, session.tenantId, {
-      entity: "check_out", field: a.unit.label, oldValue: a.reservation.guestName, newValue: "departed · room now dirty", userId: session.userId,
+  const audits: { entity: string; field: string; oldValue?: string; newValue: string }[] = [];
+
+  await withTenantTransaction(session.tenantId, async (tx) => {
+    const now = new Date();
+    const assignments = await tx.roomAssignment.findMany({
+      where: { reservationId, propertyId: session.activePropertyId, status: "active", checkedOutAt: null },
+      include: { unit: { select: { label: true } }, reservation: { select: { guestName: true } } },
     });
+
+    for (const a of assignments) {
+      await tx.roomAssignment.update({ where: { id: a.id }, data: { checkedOutAt: now } });
+      await tx.unit.update({ where: { id: a.unitId }, data: { hkStatus: "dirty" } });
+      audits.push({ entity: "check_out", field: a.unit.label, oldValue: a.reservation.guestName, newValue: "departed · room now dirty" });
+    }
+
+    // The fact that ends the stay. Without it, "in-house" was an aggregate over assignment rows that
+    // a second check-in could silently re-create.
+    await tx.reservation.update({ where: { id: reservationId }, data: { departedAt: now } });
+
+    // A closed folio always says how it ended. `outstanding` is a managed state, not limbo: the money
+    // is still owed, and the receivables view is where it is chased.
+    await tx.folio.updateMany({
+      where: { reservationId, status: "open" },
+      data: { status: "closed", closedAt: now, outcome: balance === 0 ? "settled" : "outstanding" },
+    });
+
+    if (balance !== 0) {
+      audits.push({ entity: "checkout_override", field: `balance ${balance}`, newValue: reason || "no reason given" });
+    }
+  });
+
+  // Audit rows are written after the commit, deliberately: an audit trail describes what happened, and
+  // a rolled-back check-out did not happen. Writing them inside would either vanish with the rollback
+  // (pointless) or, if the audit write itself failed, roll back a good check-out (worse).
+  for (const a of audits) {
+    await logAudit(session.activePropertyId, session.tenantId, { ...a, userId: session.userId });
   }
-  await prisma.folio.updateMany({ where: { reservationId, status: "open" }, data: { status: "closed", closedAt: now } });
   refresh();
+}
+
+/**
+ * Undo a check-out, so a stay that ended by mistake has a way back.
+ *
+ * This exists because of the rule the round established: no record may sit in a state with no
+ * available action. Check-in now refuses a departed stay (it is what let a checked-out reservation be
+ * resurrected as in-house), and a refusal with no inverse is just a different deadlock. Manager-only,
+ * logged, and it reopens the folio it closed so charges can be corrected.
+ *
+ * It does NOT resurrect the old assignments: the rooms were released and may since have been given to
+ * someone else. The stay comes back needing a fresh check-in, which is the honest description of the
+ * situation.
+ */
+export async function reopenStay(fd: FormData): Promise<void> {
+  const session = await ctx("manage");
+  const reservationId = str(fd, "reservationId");
+  const reason = str(fd, "reason");
+
+  await withTenantTransaction(session.tenantId, async (tx) => {
+    const res = await tx.reservation.findFirst({
+      where: { id: reservationId, propertyId: session.activePropertyId },
+      select: { id: true, departedAt: true },
+    });
+    if (!res) throw new Error("reopenStay: no such reservation in this property");
+
+    await tx.reservation.update({ where: { id: reservationId }, data: { departedAt: null } });
+    await tx.folio.updateMany({
+      where: { reservationId, status: "closed" },
+      data: { status: "open", closedAt: null, outcome: null },
+    });
+  });
+
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "stay_reopened", field: `#${reservationId.slice(-6)}`,
+    oldValue: "departed", newValue: reason || "no reason given", userId: session.userId,
+  });
+  refresh();
+  redirect(`/reservation/${reservationId}`);
 }
 
 /** Move an in-house stay to a different unit: end the current assignment, open a new one, vacated unit → Dirty. */

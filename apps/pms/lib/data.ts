@@ -1,5 +1,6 @@
 import "server-only";
 import type { ProductName, SetupFacts } from "@revio/core";
+import { deriveStayState } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { todayInTz, ymd, utcDay } from "./format";
@@ -18,11 +19,6 @@ function hhmmToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
   return (h ?? 0) * 60 + (m ?? 0);
 }
-/** Whole days between two YYYY-MM-DD strings (a − b). */
-function daysBetweenYmd(a: string, b: string): number {
-  return Math.round((Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86_400_000);
-}
-
 // Statuses that actually occupy a room tonight (front-desk view). Distinct from the metrics
 // SOLD_STATUSES (which also counts no_show/overbooked) — an in-house guest is confirmed/modified.
 // Check-in/out do NOT change this status (a checked-in guest is still a sold booking); the operational
@@ -245,7 +241,9 @@ export interface AssignmentConflict { unitLabel: string; guests: string[] }
  * Assignment-aware front-desk overview (Phase 2 + D2): housekeeping counts + today's arrivals (to check
  * in, with room-ready status), in-house guests (with their assigned room + hk state), explicit departures
  * (due out today), and who departed today. Stay state is derived from RoomAssignment (checkedInAt /
- * checkedOutAt) — the reservation's sold status never changes. Flags double-assignment conflicts.
+ * checkedOutAt) AND `Reservation.departedAt`, which is authoritative when the two disagree — the
+ * reservation's *sold* status still never changes, because that belongs to the CRS. Flags
+ * double-assignment conflicts.
  */
 export async function getFrontDeskOverview() {
   const { property } = await activeProperty();
@@ -277,7 +275,13 @@ export async function getFrontDeskOverview() {
     const ciY = ymd(ci), coY = ymd(co);
     const roomLabel = r.lines.length === 1 ? r.lines[0]!.roomType.name : `${r.lines.reduce((n, l) => n + l.quantity, 0)} rooms`;
 
-    const active = r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
+    // A departed stay is not in the house, whatever its assignment rows say. Being in-house was
+    // derived purely from those rows, so any stray active assignment — the check-in bug made one —
+    // put a guest who had left back among the occupants, where they overstayed a night more every
+    // night and drew nightly charges. `departedAt` is the single fact that settles it.
+    const active = r.departedAt
+      ? []
+      : r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
     const assignedUnits = active.map((a) => ({ assignmentId: a.id, unitId: a.unitId, unitLabel: a.unit.label, hkStatus: a.unit.hkStatus as HkStatus }));
 
     const row: StayRow = {
@@ -334,17 +338,23 @@ export async function getFrontDeskOverview() {
 
   // Overdue checkouts (§1.6): overstayed (past departure date, still in-house) is a data-integrity
   // problem; past_time (due out today, clock past checkout) is a gentle nudge. Measured against the
-  // property checkout time (a Configuration setting, §1.10).
+  // property checkout time (a Configuration setting, §1.10). The rule itself lives in `@revio/core`
+  // (`deriveStayState`, 17 tests) because three files used to answer it separately and only agreed
+  // by luck — which is how a departed guest went on overstaying for 41 nights.
   const nowMin = minutesOfDayInTz(property.timezone);
   const checkoutMin = hhmmToMinutes(property.checkOutTime);
   for (const row of inHouse) {
-    if (row.checkOut < today) {
-      row.overdueState = "overstayed";
-      row.overdueByMinutes = daysBetweenYmd(today, row.checkOut) * 1440;
-    } else if (row.dueOutToday && nowMin > checkoutMin) {
-      row.overdueState = "past_time";
-      row.overdueByMinutes = nowMin - checkoutMin;
-    }
+    const state = deriveStayState({
+      departedAt: null, // rows reaching here are in-house by construction; departed stays never enter
+      assignments: [{ status: "active", checkedOutAt: null }],
+      checkOutDate: row.checkOut,
+      today,
+      nowMinutes: nowMin,
+      checkOutMinutes: checkoutMin,
+    });
+    row.overdueState = state.overdueState;
+    row.overdueByMinutes =
+      state.overdueState === "overstayed" ? state.overstayedNights * 1440 : state.pastTimeMinutes;
   }
 
   // Balance-due on due-outs (§1.8d) — the folio already knows; surface it before they walk.

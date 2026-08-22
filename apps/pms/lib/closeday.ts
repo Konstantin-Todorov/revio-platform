@@ -35,7 +35,11 @@ export async function getCloseDayView() {
     const ci = ymd(r.lines.map((l) => l.checkIn).sort((a, b) => a.getTime() - b.getTime())[0]!);
     const co = ymd(r.lines.map((l) => l.checkOut).sort((a, b) => b.getTime() - a.getTime())[0]!);
     const everCheckedIn = r.assignments.length > 0; // any assignment (active/moved/departed) = they arrived
-    const active = r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
+    // A departed stay is never "due out and still in" — that readiness warning exists to catch a guest
+    // the desk forgot to check out, and a checked-out guest is precisely not that.
+    const active = r.departedAt
+      ? []
+      : r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
 
     if (!everCheckedIn && ci <= businessDate) {
       noShowCandidates.push({ reservationId: r.id, guestName, detail: `${r.lines[0]!.roomType.name} · arrival ${ci}` });
@@ -62,8 +66,16 @@ export async function getCloseDayView() {
   const bizNext = new Date(bizStart.getTime() + 86_400_000);
   const [totalRooms, occAssignments, arrivalsToday, departuresToday, extras] = await Promise.all([
     prisma.unit.count({ where: { propertyId: property.id, active: true } }),
+    // THE ACCRUAL CLOCK (§1.3-A). Everything below — occupancy, tonight's room revenue, and which
+    // stays draw recurring per-night extras — is derived from this one query, so `departedAt: null`
+    // is what actually stops the charges when a guest leaves. Without it a departed stay with a stray
+    // active assignment kept accruing a room night and a breakfast every night: production has a
+    // reservation whose room dates were 06→09 July carrying breakfast lines dated 17→22 July.
     prisma.roomAssignment.findMany({
-      where: { propertyId: property.id, status: "active", checkedOutAt: null, checkedInAt: { not: null } },
+      where: {
+        propertyId: property.id, status: "active", checkedOutAt: null, checkedInAt: { not: null },
+        reservation: { departedAt: null },
+      },
       include: { reservation: { include: { lines: true } } },
     }),
     prisma.roomAssignment.count({ where: { propertyId: property.id, checkedInAt: { gte: bizStart, lt: bizNext } } }),
