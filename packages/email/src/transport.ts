@@ -35,10 +35,19 @@ function resolveFrom(fromName?: string | null): string {
   return `${safeName} <${address}>`;
 }
 
-export async function sendEmail({ to, subject, text, fromName, replyTo }: {
+export async function sendEmail({ to, subject, text, html, fromName, replyTo }: {
   to: string[];
   subject: string;
   text: string;
+  /**
+   * The branded HTML alternative. When present it is sent as the HTML part alongside `text`, which
+   * stays as the plain-text fallback — a multipart message, best for both deliverability and
+   * accessibility. Omitting it (auth codes, staff notes) sends a correct text-only email as before.
+   * Guest-facing templated mail passes `renderEmail(...).html`; without this the entire branded
+   * design (logo, theme, colour, detail panel) was computed and then dropped, so every confirmation
+   * reached the guest as plain text.
+   */
+  html?: string | null;
   /** The hotel's own sender name — becomes the From display name over our verified address. */
   fromName?: string | null;
   /** The hotel's own address — replies reach them, though the mail is DKIM-signed by us. */
@@ -46,7 +55,7 @@ export async function sendEmail({ to, subject, text, fromName, replyTo }: {
 }): Promise<EmailResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
-    console.log(`[email:mock] from="${resolveFrom(fromName)}" replyTo=${replyTo ?? "-"} to=${to.join(",")} subject="${subject}"\n${text}`);
+    console.log(`[email:mock] from="${resolveFrom(fromName)}" replyTo=${replyTo ?? "-"} to=${to.join(",")} subject="${subject}" html=${html?.trim() ? "yes" : "no"}\n${text}`);
     return { ok: true, mode: "mock" };
   }
   try {
@@ -58,6 +67,7 @@ export async function sendEmail({ to, subject, text, fromName, replyTo }: {
         to,
         subject,
         text,
+        ...(html?.trim() ? { html } : {}),
         ...(replyTo?.trim() ? { reply_to: replyTo.trim() } : {}),
       }),
     });

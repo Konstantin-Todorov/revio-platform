@@ -49,13 +49,11 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     defaultSubject: "Your booking at {{propertyName}} is confirmed — {{reference}}",
     defaultBody: `Dear {{guestName}},
 
-Thank you for choosing {{propertyName}}. Your reservation is confirmed, and we are already looking
-forward to welcoming you.
+Thank you for choosing {{propertyName}}. Your reservation is confirmed, and we are already looking forward to welcoming you.
 
 {{details}}
 
-Should you wish to arrange anything before you arrive — an early check-in, a transfer, a special
-occasion — simply reply to this message and we will take care of it.
+Should you wish to arrange anything before you arrive — an early check-in, a transfer, a special occasion — simply reply to this message and we will take care of it.
 
 With warm regards,
 {{propertyName}}`,
@@ -93,8 +91,7 @@ We are writing to confirm that your reservation has been cancelled.
 
 {{details}}
 
-If this was not what you intended, please contact us as soon as you can and we will do our best to
-restore it. We hope to welcome you another time.
+If this was not what you intended, please contact us as soon as you can and we will do our best to restore it. We hope to welcome you another time.
 
 With warm regards,
 {{propertyName}}`,
@@ -113,8 +110,7 @@ We are looking forward to welcoming you very soon. Check-in opens at {{checkInTi
 
 {{details}}
 
-If you would like to arrange an early arrival, a transfer from the airport, or anything to mark a
-special occasion, simply reply and we will be delighted to help.
+If you would like to arrange an early arrival, a transfer from the airport, or anything to mark a special occasion, simply reply and we will be delighted to help.
 
 Until soon,
 {{propertyName}}`,
@@ -131,8 +127,7 @@ Until soon,
 
 Thank you for staying with us. We hope you enjoyed your time at {{propertyName}}.
 
-If you have a moment, we would genuinely appreciate your feedback — and if you book with us directly
-next time, we will always do our best to look after you.
+If you have a moment, we would genuinely appreciate your feedback — and if you book with us directly next time, we will always do our best to look after you.
 
 Safe travels,
 {{propertyName}}`,
@@ -151,8 +146,7 @@ Thank you for staying with us. Please find a summary of your account below.
 
 {{details}}
 
-If you have any question at all about these charges, reply to this message and we will look into it
-personally.
+If you have any question at all about these charges, reply to this message and we will look into it personally.
 
 With warm regards,
 {{propertyName}}`,
@@ -478,13 +472,11 @@ export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string
       subject: "Потвърждение на резервацията Ви в {{propertyName}} — {{reference}}",
       body: `Уважаеми {{guestName}},
 
-Благодарим Ви, че избрахте {{propertyName}}. Вашата резервация е потвърдена и вече очакваме с
-нетърпение да Ви посрещнем.
+Благодарим Ви, че избрахте {{propertyName}}. Вашата резервация е потвърдена и вече очакваме с нетърпение да Ви посрещнем.
 
 {{details}}
 
-Ако желаете да уредите нещо преди пристигането си — ранно настаняване, трансфер или специален
-повод — просто отговорете на това съобщение и ще се погрижим.
+Ако желаете да уредите нещо преди пристигането си — ранно настаняване, трансфер или специален повод — просто отговорете на това съобщение и ще се погрижим.
 
 С уважение,
 {{propertyName}}`,
@@ -510,8 +502,7 @@ export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string
 
 {{details}}
 
-Ако това не е било Вашето намерение, моля свържете се с нас възможно най-скоро и ще направим
-всичко възможно да я възстановим. Надяваме се да Ви посрещнем друг път.
+Ако това не е било Вашето намерение, моля свържете се с нас възможно най-скоро и ще направим всичко възможно да я възстановим. Надяваме се да Ви посрещнем друг път.
 
 С уважение,
 {{propertyName}}`,
@@ -524,8 +515,7 @@ export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string
 
 {{details}}
 
-Ако желаете да уредите ранно пристигане, трансфер от летището или нещо специално за повода, просто
-отговорете и с радост ще помогнем.
+Ако желаете да уредите ранно пристигане, трансфер от летището или нещо специално за повода, просто отговорете и с радост ще помогнем.
 
 До скоро,
 {{propertyName}}`,
@@ -536,8 +526,7 @@ export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string
 
 Благодарим Ви, че отседнахте при нас. Надяваме се да сте прекарали приятно време в {{propertyName}}.
 
-Ако разполагате с момент, ще се радваме на Вашето мнение — а ако резервирате директно при нас
-следващия път, винаги ще се постараем да се погрижим за Вас.
+Ако разполагате с момент, ще се радваме на Вашето мнение — а ако резервирате директно при нас следващия път, винаги ще се постараем да се погрижим за Вас.
 
 Приятен път,
 {{propertyName}}`,

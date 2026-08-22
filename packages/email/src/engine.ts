@@ -160,6 +160,7 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
     to: args.to,
     subject: rendered.subject,
     text: rendered.text,
+    html: rendered.html,
     fromName: brand.senderName ?? null,
     replyTo: brand.replyTo ?? null,
   });
