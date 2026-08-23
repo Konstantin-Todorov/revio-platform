@@ -185,13 +185,24 @@ export async function checkOut(fd: FormData): Promise<void> {
  * there returns there rather than throwing you to the dashboard. Same principle as the folio modal
  * — act where you are.
  */
-export async function moveFromCalendar(fd: FormData): Promise<void> {
+/**
+ * Form entry point for the dedicated move screen. Always redirects, so it returns void the way a
+ * `<form action>` requires — the calendar's variant is below and returns its outcome instead.
+ */
+export async function roomMoveForm(fd: FormData): Promise<void> {
+  await ctx("frontDesk");
+  await roomMove(fd);
+}
+
+export async function moveFromCalendar(fd: FormData): Promise<MoveOutcome> {
   // Gated here as well as in `roomMove`. This is its own POST endpoint, and a guarantee you have to
   // follow a delegation to find is one the next reader will not check for.
   await ctx("frontDesk");
-  const from = str(fd, "from");
-  fd.set("returnTo", from && from.startsWith("/calendar") ? from : "/calendar");
-  await roomMove(fd);
+  // `stay` is what makes this different from the form: no redirect, so the grid is never torn down
+  // and rebuilt. A move made on the calendar should look like the bar moving, not like the page
+  // reloading — the scroll position, the date window and the open floors all survive.
+  fd.set("stay", "1");
+  return roomMove(fd);
 }
 
 /**
@@ -236,6 +247,9 @@ export async function reopenStay(fd: FormData): Promise<void> {
 /** Move an in-house stay to a different unit: end the current assignment, open a new one, vacated unit → Dirty. */
 const MOVE_REASONS = ["request", "upgrade", "maintenance", "noise"];
 
+/** What a caller that stays put gets back instead of a redirect. */
+export type MoveOutcome = { moved: true; crossType: boolean; reservationId: string } | void;
+
 /**
  * Move a stay to a different room (§2.5) — the rebuild.
  *
@@ -257,7 +271,7 @@ const MOVE_REASONS = ["request", "upgrade", "maintenance", "noise"];
  * The price difference is assessed here and stated; what to DO about it is a manager's choice on the
  * folio (comp, charge, refund, waive), never something this decides on their behalf.
  */
-export async function roomMove(fd: FormData): Promise<void> {
+export async function roomMove(fd: FormData): Promise<MoveOutcome> {
   const session = await ctx("frontDesk");
   const assignmentId = str(fd, "assignmentId");
   const newUnitId = str(fd, "unitId");
@@ -328,8 +342,14 @@ export async function roomMove(fd: FormData): Promise<void> {
   }
   refresh();
   revalidatePath("/calendar");
-  // A cross-type move always lands on the folio, wherever it was started from: there is a price
-  // decision waiting, and dropping the user back on the calendar would leave it unmade and unseen.
+
+  // A caller that wants to stay where it is passes `stay`, and gets the outcome back instead of a
+  // redirect. The calendar uses it: §2.6's rule is that the user does not leave the grid, and a
+  // cross-type move is a PROMPT there rather than a trip to another screen.
+  if (str(fd, "stay") === "1") {
+    return { moved: true, crossType, reservationId: a!.reservationId };
+  }
+
   if (crossType) redirect(`/folio/${a!.reservationId}?moved=1`);
   const returnTo = str(fd, "returnTo");
   redirect(returnTo && returnTo.startsWith("/calendar") ? returnTo : "/dashboard");

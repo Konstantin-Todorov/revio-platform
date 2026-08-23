@@ -4,6 +4,7 @@ import { Card, PageHeader } from "@/components/ui/primitives";
 import { getTapeChart, type BarStatus } from "@/lib/tape-chart";
 import { TapeGrid } from "@/components/calendar/TapeGrid";
 import { moveFromCalendar } from "@/lib/actions-frontdesk";
+import { fetchMoveAssessment } from "@/lib/actions-folio";
 import { addDaysYmd } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -108,6 +109,7 @@ export default async function CalendarPage({
             labelCol={LABEL_COL}
             returnTo={`/calendar?from=${from}&days=${span}`}
             moveAction={moveFromCalendar}
+            assessAction={fetchMoveAssessment}
           />
         </Card>
       )}

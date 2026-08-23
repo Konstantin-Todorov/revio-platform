@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowLeft, ArrowRightLeft, AlertTriangle } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getAssignmentForMove, availableUnitsByRoomType, type AvailableUnit } from "@/lib/data";
-import { roomMove } from "@/lib/actions-frontdesk";
+import { roomMoveForm } from "@/lib/actions-frontdesk";
 import { HK_LABEL } from "@/lib/hk-meta";
 import { ymd } from "@/lib/format";
 
@@ -63,7 +63,7 @@ export default async function MovePage({ params, searchParams }: { params: Promi
         {free.length === 0 ? (
           <p className="text-[13px] text-ink-500">No free, serviceable room available for these dates — in any room type.</p>
         ) : (
-          <form action={roomMove} className="space-y-4">
+          <form action={roomMoveForm} className="space-y-4">
             <input type="hidden" name="assignmentId" value={a.id} />
             <label className="block">
               <span className="mb-1 block text-[12px] font-semibold text-ink-600">Move to</span>

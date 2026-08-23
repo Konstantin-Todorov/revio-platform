@@ -346,6 +346,18 @@ export async function resolveFolio(fd: FormData): Promise<void> {
   refresh(reservationId);
 }
 
+/**
+ * Read the pending reconciliation for a stay, for the calendar's prompt (§2.5/§2.6).
+ *
+ * A read, exposed as an action only because the calendar is a client component and needs it after a
+ * drop rather than at render time. Gated like every other action: it reports what a guest is being
+ * charged, which is not public information.
+ */
+export async function fetchMoveAssessment(reservationId: string) {
+  await ctx("frontDesk");
+  return assessMoveForReservation(reservationId);
+}
+
 /** The ways a cross-type move's price difference can be settled (§2.5). Which are OFFERED depends
  *  on direction and is decided in `@revio/core`; this is only what may arrive. */
 const MOVE_RESOLUTIONS = ["comp", "charge", "refund", "waive", "custom"] as const;
