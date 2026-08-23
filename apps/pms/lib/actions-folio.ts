@@ -7,9 +7,10 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { ensureFolio, createSplitFolio, folioBalance } from "./folio";
+import { assessMoveForReservation } from "./move-reconciliation";
 import { postFolioLine } from "./posting";
 import { chargeCard, refundCard } from "@revio/payments";
-import { logAudit, str } from "./mutation-helpers";
+import { logAudit, str, int } from "./mutation-helpers";
 
 /**
  * Session + capability gate for every action in this file.
@@ -340,6 +341,82 @@ export async function resolveFolio(fd: FormData): Promise<void> {
   await logAudit(session.activePropertyId, session.tenantId, {
     entity: "folio_resolution", field: folio!.label,
     oldValue: folio!.outcome ?? "closed", newValue: `${resolution}${note ? ` · ${note}` : ""}`,
+    userId: session.userId,
+  });
+  refresh(reservationId);
+}
+
+/** The ways a cross-type move's price difference can be settled (§2.5). Which are OFFERED depends
+ *  on direction and is decided in `@revio/core`; this is only what may arrive. */
+const MOVE_RESOLUTIONS = ["comp", "charge", "refund", "waive", "custom"] as const;
+
+/**
+ * Settle the price difference created by moving a guest into a different room type (§2.5).
+ *
+ * The move itself already happened and is not in question — the guest is in the room. What is open
+ * is money, and the spec insists a human classifies it rather than the system posting a difference
+ * nobody chose:
+ *
+ *   comp   — an upgrade given away. Nothing is posted; it is recorded as a comp so it can be counted.
+ *   charge — an upgrade sold. The difference is posted to the folio.
+ *   refund — a downgrade with money going back to the guest.
+ *   waive  — a downgrade where nothing goes back. The owed amount is simply removed.
+ *   custom — any of the above at an amount the manager sets.
+ *
+ * **`comp` and `waive` both post nothing, and are deliberately different words.** One is a gift the
+ * hotel chose to give; the other is a debt the hotel chose not to collect. Recording them as the
+ * same event would lose the distinction an owner most wants out of this screen.
+ *
+ * Manager-only: it changes what a guest pays.
+ */
+export async function resolveMoveDifference(fd: FormData): Promise<void> {
+  const session = await ctx("manage");
+  const reservationId = str(fd, "reservationId");
+  const resolution = str(fd, "resolution");
+  const note = str(fd, "note");
+
+  if (!MOVE_RESOLUTIONS.includes(resolution as (typeof MOVE_RESOLUTIONS)[number])) {
+    redirect(`/folio/${reservationId}`);
+  }
+
+  const assessment = await assessMoveForReservation(reservationId);
+  if (!assessment || assessment.kind !== "rate_affecting") redirect(`/folio/${reservationId}`);
+
+  // A custom amount overrides the computed one; everything else uses what was assessed. Read as an
+  // absolute value — the direction is already known, and a manager typing "-30" meaning a refund
+  // must not accidentally invert it.
+  const customMinor = Math.abs(int(fd, "amountMinor", 0));
+  const magnitude = resolution === "custom" ? customMinor : Math.abs(assessment!.differenceMinor);
+
+  const posts = resolution === "charge" || (resolution === "custom" && assessment!.direction === "upgrade");
+  const refunds = resolution === "refund" || (resolution === "custom" && assessment!.direction === "downgrade");
+
+  if ((posts || refunds) && magnitude > 0) {
+    const folioId = await ensureFolio(session.tenantId, session.activePropertyId, reservationId);
+    if (folioId) {
+      await postFolioLine({
+        tenantId: session.tenantId,
+        propertyId: session.activePropertyId,
+        folioId,
+        // A refund is money going back, which on a folio is a payment in the guest's favour; an
+        // upgrade charge is an ordinary extra. Both go through the one posting service, so both
+        // carry the outlet and tax tagging every other line has.
+        kind: refunds ? "payment" : "extra",
+        outlet: refunds ? undefined : "extra",
+        description: refunds
+          ? `Room downgrade refund · ${assessment!.bookedRoomTypeName} → ${assessment!.accommodatedRoomTypeName}`
+          : `Room upgrade · ${assessment!.bookedRoomTypeName} → ${assessment!.accommodatedRoomTypeName} (room ${assessment!.unitLabel})`,
+        amountMinor: magnitude,
+        ...(refunds ? { method: "refund" } : {}),
+      });
+    }
+  }
+
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "move_difference",
+    field: `${assessment!.bookedRoomTypeName} → ${assessment!.accommodatedRoomTypeName}`,
+    oldValue: `${assessment!.direction} ${assessment!.differenceMinor}`,
+    newValue: `${resolution}${magnitude ? ` · ${magnitude}` : ""}${note ? ` · ${note}` : ""}`,
     userId: session.userId,
   });
   refresh(reservationId);

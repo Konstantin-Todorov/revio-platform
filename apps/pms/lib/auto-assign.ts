@@ -49,7 +49,7 @@ export async function autoAssignForProperty(
   const horizonEnd = new Date(Date.parse(`${today}T00:00:00Z`) + HORIZON_DAYS * 86_400_000);
 
   const [defs, units, reservations] = await Promise.all([
-    db.propertyDefaults.findUnique({ where: { propertyId }, select: { inspectionGate: true } }),
+    db.propertyDefaults.findUnique({ where: { propertyId }, select: { inspectionGate: true, autoAssignEnabled: true } }),
     db.unit.findMany({
       where: { propertyId, active: true },
       select: { id: true, label: true, floor: true, hkStatus: true, roomTypeId: true },
@@ -71,7 +71,14 @@ export async function autoAssignForProperty(
   ]);
 
   if (units.length === 0) return { assigned: 0, reassigned: 0, unplaceable: 0, details: [] };
-  const sellable = new Set(sellableStatuses(defs?.inspectionGate ?? false));
+
+  // OPT-IN per property (§2.4 guardrail, and the Configuration screen already promises it).
+  // A hotel that assigns rooms by hand on a whiteboard must not find the software has quietly
+  // decided for them overnight — and the flag existed on the settings screen before this job did,
+  // so ignoring it would have made that screen lie.
+  if (!defs?.autoAssignEnabled) return { assigned: 0, reassigned: 0, unplaceable: 0, details: [] };
+
+  const sellable = new Set(sellableStatuses(defs.inspectionGate ?? false));
 
   // Every live assignment in the horizon, so occupancy can be answered without a query per candidate.
   const occupied = await db.roomAssignment.findMany({

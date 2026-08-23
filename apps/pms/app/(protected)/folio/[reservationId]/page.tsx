@@ -4,10 +4,11 @@ import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 }
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat, FileText, Trash2 } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
+import { assessMoveForReservation } from "@/lib/move-reconciliation";
 import { listInvoicesForReservation, DOC_LABEL } from "@/lib/invoice";
 import { gatewayMode } from "@revio/payments";
 import { OUTLET_LABEL } from "@/lib/posting";
-import { postCharge, postPayment, voidFolioLine, createFolio, removeFolio, resolveFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
+import { postCharge, postPayment, voidFolioLine, createFolio, removeFolio, resolveFolio, resolveMoveDifference, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
 import { issueInvoice } from "@/lib/actions-invoice";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
@@ -74,6 +75,15 @@ const RESOLUTIONS = [
   },
 ];
 
+/** What each move resolution means, in the words a manager would use (§2.5). */
+const MOVE_OPTION: Record<string, { label: string; detail: string; cta: string }> = {
+  comp: { label: "Complimentary", detail: "Given away. Nothing is posted, and it is recorded as a comp so it can be counted.", cta: "Comp it" },
+  charge: { label: "Charge the difference", detail: "Post the extra to the folio — the guest pays for the better room.", cta: "Charge" },
+  refund: { label: "Refund the difference", detail: "Money goes back to the guest for the lesser room.", cta: "Refund" },
+  waive: { label: "Waive it", detail: "Nothing goes back. The owed amount is removed, and the decision is logged.", cta: "Waive" },
+  custom: { label: "Set an amount", detail: "Any of the above at a figure you choose.", cta: "Apply" },
+};
+
 const ERRORS: Record<string, string> = {
   charge: "Enter a description and a positive amount.",
   payment: "Choose a method and a positive amount.",
@@ -110,6 +120,8 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   if (!data) redirect("/folios");
   const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras, isManager } = data!;
   const invoices = await listInvoicesForReservation(reservationId);
+  // Only present while a cross-type move is unreconciled (§2.5).
+  const move = await assessMoveForReservation(reservationId);
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const rooms = r.assignments.map((a) => a.unit.label).join(", ");
@@ -138,6 +150,70 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
         <div className="mb-4 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {ERRORS[error] ?? "Something went wrong — try again."}
         </div>
+      )}
+
+      {/* The price question a cross-type move opens (§2.5). The move already happened — the guest is
+          in the room — so this is not a confirmation, it is the decision that follows: give it away,
+          sell it, or set an amount. Nothing is posted until somebody chooses, because a difference
+          posted automatically is one nobody agreed to. */}
+      {move && move.kind === "rate_affecting" && (
+        <Card className="mb-4 p-4">
+          <h3 className="text-[13px] font-bold text-ink-900">
+            {move.direction === "upgrade" ? "Upgraded" : move.direction === "downgrade" ? "Downgraded" : "Moved"} to a different room type
+          </h3>
+          <p className="mt-1 text-[12.5px] text-ink-600">
+            Booked <span className="font-semibold">{move.bookedRoomTypeName}</span>, staying in{" "}
+            <span className="font-semibold">{move.accommodatedRoomTypeName}</span> (room {move.unitLabel}).{" "}
+            {move.nights.length > 0 ? (
+              <>
+                Priced over {move.nights.length} night{move.nights.length === 1 ? "" : "s"}
+                {move.nights[0] !== undefined && <> from {move.nights[0]}</>} — nights already slept are not re-priced.
+              </>
+            ) : (
+              <>No nights left to re-price.</>
+            )}
+          </p>
+
+          <div className="mt-2.5 flex items-baseline gap-2">
+            <span className="text-[12px] text-ink-500">Difference</span>
+            <span className={`tnum text-[16px] font-bold ${move.direction === "upgrade" ? "text-ink-900" : "text-success-600"}`}>
+              {move.differenceMinor >= 0 ? "+" : "−"}{money(Math.abs(move.differenceMinor), move.currency)}
+            </span>
+          </div>
+
+          {!isManager && (
+            <p className="mt-2 text-[12px] text-ink-500">A manager decides what happens to this amount.</p>
+          )}
+
+          <div className="mt-3 space-y-2">
+            {move.options.map((opt) => (
+              <form key={opt} action={resolveMoveDifference} className="flex flex-wrap items-center gap-2 rounded-md border border-surface-border px-3 py-2.5">
+                <input type="hidden" name="reservationId" value={reservationId} />
+                <input type="hidden" name="resolution" value={opt} />
+                <div className="min-w-[180px] flex-1">
+                  <div className="text-[12.5px] font-semibold text-ink-900">{MOVE_OPTION[opt].label}</div>
+                  <div className="text-[11.5px] text-ink-500">{MOVE_OPTION[opt].detail}</div>
+                </div>
+                {opt === "custom" && (
+                  <input name="amountMinor" type="number" min="0" placeholder="Amount in cents" disabled={!isManager}
+                    className={`${inputCls} w-36 disabled:cursor-not-allowed disabled:bg-surface-muted`} />
+                )}
+                <input name="note" type="text" placeholder="Reason (optional)" disabled={!isManager}
+                  className={`${inputCls} w-44 disabled:cursor-not-allowed disabled:bg-surface-muted`} />
+                <button type="submit" disabled={!isManager}
+                  title={isManager ? undefined : "Manager approval required"}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-ink-300 disabled:hover:bg-transparent">
+                  {MOVE_OPTION[opt].cta}
+                </button>
+              </form>
+            ))}
+          </div>
+
+          <p className="mt-3 text-[11px] text-ink-400">
+            The booking itself is unchanged and nothing was sent to any channel — the guest still bought{" "}
+            {move.bookedRoomTypeName}.
+          </p>
+        </Card>
       )}
 
       {/* Landed here from a cross-type move (§2.5). The room changed; what was SOLD did not, and the

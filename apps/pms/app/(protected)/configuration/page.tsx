@@ -80,6 +80,55 @@ export default async function ConfigurationPage() {
             </div>
           </Card>
 
+          {/* §3.4 — the two timings that decide when an unclosed day starts nagging and when the
+              system ends it. Per-property because the business-day boundary already varies: a
+              property that audits at 03:00 and one that audits at midnight cannot share a deadline. */}
+          <Card>
+            <CardHeader title="End of day" subtitle="When an unclosed day is chased, and when it closes itself" />
+            <div className="space-y-2.5 p-4">
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <div>
+                  <label className={labelCls}>Remind after (minutes past midnight)</label>
+                  <input
+                    name="closeDeadlineMinutes"
+                    type="number"
+                    min="0"
+                    max="1439"
+                    defaultValue={d?.closeDeadlineMinutes ?? 30}
+                    className={`${inputCls} w-full`}
+                  />
+                  <p className="mt-1 text-[11px] text-ink-400">30 = 00:30 the following day.</p>
+                </div>
+                <div>
+                  <label className={labelCls}>Then close automatically after (hours)</label>
+                  <input
+                    name="closeReminderWindowHours"
+                    type="number"
+                    min="1"
+                    max="72"
+                    defaultValue={d?.closeReminderWindowHours ?? 22}
+                    className={`${inputCls} w-full`}
+                  />
+                  <p className="mt-1 text-[11px] text-ink-400">22 hours after the reminder, so ≈22:30 the next day.</p>
+                </div>
+              </div>
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-surface-border p-3">
+                <input
+                  type="checkbox"
+                  name="autoCloseEnabled"
+                  defaultChecked={d?.autoCloseEnabled ?? true}
+                  className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600"
+                />
+                <span className="text-[12.5px] text-ink-700">
+                  <span className="font-semibold text-ink-900">Close the day automatically if nobody does.</span>{" "}
+                  An automatic close is a real close — it marks no-shows, accrues the night&rsquo;s extras and rolls the
+                  date — and is recorded as having had no person in it. Switch it off and unclosed days will accumulate
+                  until somebody closes each one.
+                </span>
+              </label>
+            </div>
+          </Card>
+
           <Card>
             <CardHeader title="Compliance pack" subtitle="Fiscalization and e-invoicing rules for your country" />
             <div className="space-y-2.5 p-4">

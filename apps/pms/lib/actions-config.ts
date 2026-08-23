@@ -36,6 +36,13 @@ export async function saveConfiguration(fd: FormData): Promise<void> {
     jurisdiction: ["generic", "bg", "eu"].includes(str(fd, "jurisdiction")) ? str(fd, "jurisdiction") : "generic",
     fiscalizationEnabled: fd.get("fiscalizationEnabled") != null,
     eInvoicingEnabled: fd.get("eInvoicingEnabled") != null,
+    // Close Day escalation (§3.4). Per-property because the business-day boundary already varies —
+    // some properties audit at 03:00, some at midnight — so one fixed time fits nobody.
+    // Clamped rather than trusted: a deadline outside the day, or a zero-hour window, would make
+    // the reminder stage vanish and turn every overdue day into an immediate unattended close.
+    closeDeadlineMinutes: Math.max(0, Math.min(1439, int(fd, "closeDeadlineMinutes", 30))),
+    closeReminderWindowHours: Math.max(1, Math.min(72, int(fd, "closeReminderWindowHours", 22))),
+    autoCloseEnabled: fd.get("autoCloseEnabled") != null,
   };
   await prisma.propertyDefaults.upsert({
     where: { propertyId },
