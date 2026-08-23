@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import Link from "next/link";
 import { Pin } from "lucide-react";
-import type { TapeRow, TapeDay, BarStatus } from "@/lib/tape-chart";
+import type { TapeRow, TapeDay, BarStatus, TapeBar } from "@/lib/tape-chart";
+import { StayModal } from "./StayModal";
+import { money } from "@/lib/format";
 
 /**
  * The draggable half of the calendar (§2.5).
@@ -67,6 +68,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
     setDraggingState(d);
   };
   const [over, setOver] = useState<string | null>(null);
+  const [openBar, setOpenBar] = useState<TapeBar | null>(null);
   const [pending, startTransition] = useTransition();
 
   const span = dates.length;
@@ -163,9 +165,13 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                       const startIdx = dates.indexOf(bar.from);
                       if (startIdx < 0) return null;
                       return (
-                        <Link
+                        <button
+                          type="button"
                           key={`${bar.reservationId}-${bar.from}`}
-                          href={`/reservation/${bar.reservationId}`}
+                          // Opens the stay over the calendar rather than navigating away (§2.6).
+                          // A button, not a link: the destination is a dialog, and telling a screen
+                          // reader it is about to follow a link would be a lie.
+                          onClick={() => setOpenBar(bar)}
                           draggable={bar.movable}
                           onDragStart={(e) => {
                             if (!bar.movable) return;
@@ -187,7 +193,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                         >
                           {bar.pinned && <Pin className="h-2.5 w-2.5 shrink-0 opacity-80" />}
                           <span className="truncate">{bar.guestName}</span>
-                        </Link>
+                        </button>
                       );
                     })}
                   </div>
@@ -207,6 +213,8 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
           ))}
         </div>
       </div>
+
+      {openBar && <StayModal bar={openBar} onClose={() => setOpenBar(null)} money={money} />}
 
       {dragging && (
         <p className="border-t border-surface-border px-3 py-2 text-[11.5px] text-ink-500">

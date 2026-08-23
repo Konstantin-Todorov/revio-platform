@@ -41,6 +41,17 @@ export interface TapeBar {
   pinned: boolean;
   /** False once the guest has departed — history is drawn, not dragged. */
   movable: boolean;
+  /** Has the guest actually arrived? Allocation and arrival are different things (§2.3). */
+  arrived: boolean;
+  /** Full stay dates, unclipped — the bar may be cut off by the window, the facts are not. */
+  stayFrom: string;
+  stayTo: string;
+  /** What the guest BOUGHT (CRS). Differs from the room's own type after a cross-type move (§2.7). */
+  bookedRoomTypeName: string;
+  /** Where they are actually being accommodated (PMS) — the assigned room's type. */
+  accommodatedRoomTypeName: string;
+  unitLabel: string;
+  currency: string;
   /** True when the bar is cut off by the window rather than actually starting/ending here. */
   continuesLeft: boolean;
   continuesRight: boolean;
@@ -95,10 +106,11 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
         reservation: { status: { notIn: ["cancelled"] } },
       },
       include: {
-        unit: { select: { id: true } },
+        unit: { select: { id: true, label: true, roomType: { select: { name: true } } } },
+        line: { select: { roomType: { select: { name: true } } } },
         reservation: {
           select: {
-            id: true, guestName: true, departedAt: true,
+            id: true, guestName: true, departedAt: true, currency: true,
             guest: { select: { firstName: true, lastName: true } },
             folios: { select: { lines: { select: { kind: true, amountMinor: true, voided: true } } } },
           },
@@ -144,6 +156,13 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
         // relocate somebody who has gone home, and the action would rightly refuse — better not to
         // offer the gesture than to offer one that fails.
         movable: r.departedAt == null && a.checkedOutAt == null,
+        arrived: a.checkedInAt != null,
+        stayFrom,
+        stayTo: ymd(a.checkOut),
+        bookedRoomTypeName: a.line.roomType.name,
+        accommodatedRoomTypeName: a.unit.roomType.name,
+        unitLabel: a.unit.label,
+        currency: r.currency ?? "EUR",
         continuesLeft: stayFrom < from,
         continuesRight: lastNight > dates[dates.length - 1]!,
         balanceMinor: balance,
