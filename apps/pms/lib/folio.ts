@@ -273,11 +273,21 @@ export async function getReservationDetail(reservationId: string) {
 export async function listFolios() {
   const { property } = await activeProperty();
   const assignments = await prisma.roomAssignment.findMany({
-    // `departedAt: null` is load-bearing, not defensive. This list is titled "live bills for in-house
-    // guests", but it was derived purely from assignment rows — so a departed stay that still had an
-    // active assignment (which is exactly what the check-in bug created) showed up here with its
-    // closed folio's balance, in the one list a receptionist trusts to mean "still in the house".
-    where: { propertyId: property.id, status: "active", checkedOutAt: null, reservation: { departedAt: null } },
+    // Both filters are load-bearing, not defensive. This list is titled "live bills for in-house
+    // guests" but was derived purely from assignment rows, so anything holding a stale assignment
+    // appeared in the one list a receptionist trusts to mean "still in the house":
+    //   departedAt — a departed stay that had been checked in a second time (the round-2 bug), shown
+    //     here with its already-closed folio's balance;
+    //   status — a CANCELLED reservation, found live at €393. The CRS now refuses to cancel an
+    //     in-house stay, but an OTA can cancel a booking for a guest who has already arrived, and
+    //     that is a fact arriving from outside rather than an action we can refuse. When it happens
+    //     the row must not read as a live bill.
+    where: {
+      propertyId: property.id,
+      status: "active",
+      checkedOutAt: null,
+      reservation: { departedAt: null, status: { notIn: ["cancelled"] } },
+    },
     include: { reservation: { include: { guest: true, folios: { include: { lines: true } } } }, unit: { select: { label: true } } },
     orderBy: { checkedInAt: "desc" },
   });

@@ -324,7 +324,46 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   });
   if (!reservation) redirect(`/reservations/${id}`);
 
+  // A stay the guest is standing in cannot be cancelled.
+  //
+  // Cancelling restores availability (below), and the PMS keeps its own physical record of who is in
+  // which room. Cancelling an in-house stay therefore put the room back on sale with somebody still
+  // in it — the double-booking this platform exists to prevent, arrived at from the inside. It also
+  // left the bill open on a reservation that officially never happened: production carries exactly
+  // that row, a cancelled booking sitting in the front desk's live-bills list at €393.
+  //
+  // The right answer is not to tidy up after the cancellation but to refuse it. A guest who has
+  // arrived and is leaving early is a CHECK-OUT, on the PMS front desk, where the folio is settled
+  // and the room is released and marked for cleaning. That path already exists and does all of it.
+  const inHouse = await prisma.roomAssignment.findFirst({
+    where: { reservationId: id, status: "active", checkedOutAt: null, checkedInAt: { not: null } },
+    select: { id: true },
+  });
+  if (inHouse) {
+    redirect(
+      `/reservations/${id}?error=${encodeURIComponent(
+        "This guest has already checked in. Check them out in RevioPMS to end the stay — cancelling would put an occupied room back on sale.",
+      )}`,
+    );
+  }
+
   await prisma.reservation.update({ where: { id }, data: { status: "cancelled", cancelledAt: new Date() } });
+
+  // A cancelled booking that never arrived has a folio only because one is opened eagerly. An empty
+  // one is noise on every "unsettled" count and every close-day readiness check, so it closes with
+  // the stay. A folio carrying real lines (a cancellation fee) is left alone — that is money to
+  // settle, and closing it would hide it.
+  const folios = await prisma.folio.findMany({
+    where: { reservationId: id, status: "open" },
+    include: { lines: { select: { id: true, voided: true } } },
+  });
+  for (const f of folios) {
+    if (f.lines.some((l) => !l.voided)) continue;
+    await prisma.folio.update({
+      where: { id: f.id },
+      data: { status: "closed", closedAt: new Date(), outcome: "settled" },
+    });
+  }
   await logAudit(property.id, property.tenantId, {
     entity: tag(id, reservation!.guestName),
     field: "cancelled",

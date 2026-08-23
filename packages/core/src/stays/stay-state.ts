@@ -109,3 +109,28 @@ export function canCheckIn(input: { departedAt: Date | null }): { allowed: boole
   }
   return { allowed: true };
 }
+
+/**
+ * May this reservation be cancelled?
+ *
+ * Not while the guest is in the house. Cancelling restores availability, and the PMS holds a
+ * separate physical record of who is in which room — so cancelling an occupied stay put the room
+ * back on sale with somebody in it, which is the double-booking the platform exists to prevent,
+ * reached from the inside. Production carried exactly that: a cancelled reservation sitting in the
+ * front desk's live-bills list at €393, still holding room 110.
+ *
+ * A guest who has arrived and is leaving early is a **check-out**, not a cancellation. That path
+ * settles the folio, releases the room and marks it for cleaning; cancellation does none of it.
+ *
+ * This governs what WE initiate. A cancellation arriving from an OTA is a fact about the outside
+ * world and cannot be refused — it has to be accepted and made visible instead.
+ */
+export function canCancel(input: {
+  assignments: StayAssignment[];
+  departedAt: Date | null;
+}): { allowed: boolean; reason?: string } {
+  if (input.departedAt) return { allowed: false, reason: "departed" };
+  const occupied = input.assignments.some((a) => a.status === "active" && a.checkedOutAt == null);
+  if (occupied) return { allowed: false, reason: "in_house" };
+  return { allowed: true };
+}

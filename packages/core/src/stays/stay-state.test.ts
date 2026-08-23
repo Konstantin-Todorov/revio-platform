@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveStayState, canCheckIn, type StayAssignment } from "./stay-state.js";
+import { deriveStayState, canCheckIn, canCancel, type StayAssignment } from "./stay-state.js";
 
 const live: StayAssignment = { status: "active", checkedOutAt: null };
 const checkedOut: StayAssignment = { status: "active", checkedOutAt: new Date("2026-07-21T14:18:00Z") };
@@ -116,6 +116,40 @@ describe("canCheckIn", () => {
     // The refusal is only safe because a manager can reopen the stay; a block with no inverse would
     // be the same deadlock in the other direction.
     expect(canCheckIn({ departedAt: new Date("2026-07-21T14:18:00Z") })).toEqual({
+      allowed: false,
+      reason: "departed",
+    });
+  });
+});
+
+describe("canCancel", () => {
+  it("allows cancelling a booking nobody has arrived for", () => {
+    expect(canCancel({ assignments: [], departedAt: null })).toEqual({ allowed: true });
+  });
+
+  it("allows cancelling when the only assignment is already checked out", () => {
+    expect(canCancel({ assignments: [checkedOut], departedAt: null })).toEqual({ allowed: true });
+  });
+
+  it("refuses to cancel a stay the guest is standing in", () => {
+    // Cancelling restores availability. Doing that while a room is physically occupied puts it back
+    // on sale with someone in it — the double-booking this platform exists to prevent, reached from
+    // the inside. Production carried exactly this row.
+    expect(canCancel({ assignments: [live], departedAt: null })).toEqual({
+      allowed: false,
+      reason: "in_house",
+    });
+  });
+
+  it("refuses on a room move too — the moved row is stale, the live one is not", () => {
+    expect(canCancel({ assignments: [moved, live], departedAt: null })).toEqual({
+      allowed: false,
+      reason: "in_house",
+    });
+  });
+
+  it("refuses a departed stay, which is cancelled by nothing — it already happened", () => {
+    expect(canCancel({ assignments: [checkedOut], departedAt: new Date("2026-07-21T14:18:00Z") })).toEqual({
       allowed: false,
       reason: "departed",
     });
