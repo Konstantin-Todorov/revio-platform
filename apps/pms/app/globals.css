@@ -67,3 +67,67 @@
     left: 0;
   }
 }
+
+/*
+ * PRINTING A DOCUMENT, not a screenshot of the app.
+ *
+ * An invoice is a legal record: a guest is emailed it, an accountant files it, and in Bulgaria it
+ * has to survive an audit. Until now Ctrl-P captured the whole product — sidebar, topbar, search
+ * box — around a document that then broke across pages wherever it happened to land. Nobody sends
+ * that to a guest.
+ *
+ * The mechanism is one marker rather than a print-only duplicate of the page. `[data-print-doc]`
+ * says "this element IS the document"; everything else is hidden, and the document is promoted to
+ * the top of the page. A second copy of the invoice, print-only, would be a second thing to keep
+ * correct — and the copy nobody looks at on screen is the one that goes wrong.
+ */
+@media print {
+  /* Hide every branch that does not contain the document, walking down from the body. The
+     :has() form keeps the ancestors of the document visible without naming the shell's structure,
+     so the layout can be rearranged later without silently breaking printing. */
+  body *:not(:has([data-print-doc])):not([data-print-doc]):not([data-print-doc] *) {
+    display: none !important;
+  }
+
+  body,
+  body *:has([data-print-doc]) {
+    display: block !important;
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  [data-print-doc] {
+    display: block !important;
+    /* On screen the document is a card. On paper the page IS the card, so the border and shadow
+       become ink for no reason. */
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  /* A tax document must not split a line item across two sheets, and a total stranded alone on
+     page two is how a guest ends up querying a bill that is correct. */
+  [data-print-doc] tr,
+  [data-print-doc] li,
+  [data-print-doc] [data-print-keep] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Controls are not part of the document, even inside it. */
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+}

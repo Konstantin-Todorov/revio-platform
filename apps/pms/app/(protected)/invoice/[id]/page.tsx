@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { DownloadDocument } from "@/components/invoice/DownloadDocument";
 import { getTaxInvoice, DOC_LABEL } from "@/lib/invoice";
 import { TAX_LABEL } from "@/lib/posting";
 import { money } from "@/lib/format";
@@ -26,14 +27,16 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-3 flex items-center justify-between">
-        <Link href={`/folio/${inv.reservationId}`} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-ink-700">
+        <Link href={`/folio/${inv.reservationId}`} data-print-hide className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-ink-700">
           <ArrowLeft className="h-4 w-4" /> Folio
         </Link>
-        <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-400"><Printer className="h-3.5 w-3.5" /> Ctrl/Cmd-P to print</span>
+        <DownloadDocument />
       </div>
 
-      {/* The tax document */}
-      <div className="rounded-lg border border-surface-border bg-white p-6 shadow-card">
+      {/* The tax document. `data-print-doc` marks it AS the document: printing hides everything
+          else on the page and promotes this to the sheet, so Ctrl-P and the button below both
+          produce the invoice rather than a picture of the app around it. */}
+      <div data-print-doc className="rounded-lg border border-surface-border bg-white p-6 shadow-card">
         <div className="flex items-start justify-between border-b border-surface-border pb-4">
           <div>
             <div className="text-[18px] font-bold text-ink-900">{inv.issuerName}</div>

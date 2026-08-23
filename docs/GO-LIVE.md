@@ -106,7 +106,22 @@ Resend is live and authenticated for transactional mail (SPF + DKIM + alignment 
 - **DMARC is `p=none`** — move to `p=quarantine` *after* the above, not before.
 - Verify a real contact-form submission lands in `office@` (never confirmed).
 
-### 14. Per-hotel sending domains
+### 14. Server-rendered PDFs, when a document needs SENDING
+
+Invoices, proformas and credit notes print cleanly today: a print stylesheet strips the app shell
+and the browser's own "Save as PDF" produces a proper one-page document. That covers a person
+downloading or printing one, at no runtime cost.
+
+It does **not** cover attaching a document to an email, or archiving a byte-identical copy — both
+need the PDF generated on the server. That means headless Chromium in the container (a large binary
+and a memory-hungry process) or a layout library like `@react-pdf/renderer` (lighter, but the
+document gets built twice and the two can drift).
+
+Deliberately deferred: the platform has already been taken down once by a compute limit, and this is
+the kind of dependency that makes that likelier. Do it when invoices need to be emailed — which is
+also roughly when fiscalization (item 5) forces the question anyway.
+
+### 15. Per-hotel sending domains
 Guest email currently goes out as Revio. A hotel's confirmation should carry the hotel's brand and
 domain, not its vendor's.
 
@@ -114,21 +129,21 @@ domain, not its vendor's.
 
 ## 🟡 Operational readiness
 
-### 15. Onboarding a real property end to end, once, on purpose
+### 16. Onboarding a real property end to end, once, on purpose
 Provision a tenant, run the welcome flow as the owner, add rooms, connect a channel, take a booking,
 check in, post a charge, check out, close the day. Every screen, once, as a customer would. The
 demo tenants exist in production precisely so this can be rehearsed against real migrations and real
 RLS.
 
-### 16. `book.revio.app` DNS
+### 17. `book.revio.app` DNS
 RevioDirect is live on `booking.reviosoft.app`. It is the only page a *guest* sees, so it should not
 sit on a vendor-shaped URL. DNS change plus `BOOKING_ENGINE_ORIGIN` on the `reservation` service.
 
-### 17. Operator billing is mocked
+### 18. Operator billing is mocked
 Invoices generate and the pricing model is real and tested, but **no payment is taken**. Decide how
 hotels actually pay before the first invoice is due.
 
-### 18. Support and incident basics
+### 19. Support and incident basics
 Who a hotel calls at 23:00 when check-in fails; where errors surface; how a bad deploy is rolled
 back (`docs/RESTORE.md` + Railway redeploy of the previous image).
 
