@@ -4,6 +4,19 @@ Order of work toward the Channel Manager demo. Each phase ends in something runn
 
 ---
 
+## ▶️ IN BUILD — RevioPMS Refinement Round 2 (2026-08-23)
+
+**Tracker: [`docs/PMS-ROUND2-STATUS.md`](docs/PMS-ROUND2-STATUS.md) — read that, not this, for
+current state.** §1 (the checkout/folio/overstay state machine) is **fixed and live**; its UI is not
+built yet. §3 (Close Day auto-close) and §2 (reservations calendar + move rebuild) are open.
+
+One finding worth carrying: the round exposed that the RLS layer could not do multi-step
+transactions at all, so **any all-or-nothing write must go through `withTenantTransaction`** —
+sequential awaits are separate transactions and commit partially. That applies to §2's drag-to-move
+and §3's auto-close before either is written.
+
+---
+
 ## ✅ STATUS RECONCILIATION (2026-08-23)
 
 **This file is historical and append-heavy. For current status, `CLAUDE.md`'s Status section is the

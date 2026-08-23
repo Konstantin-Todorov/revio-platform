@@ -388,3 +388,16 @@ view + On-hold + **OOO↔revenue loop**; **Configuration expansion** (E7 already
 target); **Staff & Access Management** rename + workforce roster + clock-in + user security. **Two pending
 founder items:** PMS **§11 Close Day** section ("will add later today") and the re-sent corrected RevioLink
 doc. Task phases **G (RevioLink R1)** + **H (RevioCRS R2)** + **J (RevioPMS R1)** — **all shipped**, J10 excepted.
+
+**→ ▶️ IN BUILD — REVIOPMS REFINEMENT ROUND 2 (founder spec 2026-08-23). Tracker:
+[`docs/PMS-ROUND2-STATUS.md`](docs/PMS-ROUND2-STATUS.md) — read it before touching PMS state.**
+§1 (checkout / folio / overstay state machine) is **fixed and live**; its UI is not built. §3 (Close
+Day auto-close) and §2 (reservations calendar + drag-to-move) are open.
+
+Two things from it that constrain everything after: **(1)** the RLS layer could not do multi-step
+transactions at all — every op through `forTenant()` is its own transaction, so sequential awaits
+commit partially. `withTenantTransaction` in `@revio/db` fixes that, and **every all-or-nothing write
+must use it** (§2's move and §3's auto-close included). **(2)** A stay's ending is
+`Reservation.departedAt`, deliberately NOT a `status` value — `status` is the CRS's commercial record,
+read by the waterfall, the CM's ARI pushes and `SOLD_STATUSES`, and a departed guest's stay is still
+sold and still earns. `departedAt` is authoritative over any assignment row.
