@@ -5,7 +5,6 @@ export * from "./domain/connectivity.js";
 export * from "./auth/login-gate.js";
 export * from "./auth/tokens.js";
 export * from "./auth/session-validity.js";
-export * from "./auth/totp.js";
 export * from "./auth/capabilities.js";
 export * from "./forms/parse.js";
 export * from "./email/auth-emails.js";
