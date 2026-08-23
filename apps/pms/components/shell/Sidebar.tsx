@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon,
-} from "lucide-react";
+  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon, CalendarRange,} from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 import { roleAllowsPath } from "@/lib/roles";
@@ -17,6 +16,9 @@ type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 const SECTIONS: { title?: string; items: Item[] }[] = [
   { title: "Front office", items: [
     { href: "/dashboard", label: "Front Desk", icon: LayoutDashboard },
+    // Between Front Desk and Guests on purpose: Front Desk is today as a list, the calendar is the
+    // coming weeks as a grid. Same question, two time horizons.
+    { href: "/calendar", label: "Calendar", icon: CalendarRange },
     { href: "/guests", label: "Guests", icon: Users },
     { href: "/folios", label: "Folios & Billing", icon: Receipt },
     { href: "/minibar", label: "Extras & Charges", icon: Wine },

@@ -1,0 +1,12 @@
+-- A manually chosen room is frozen; an auto-assigned one stays fluid until arrival (round-2 §2.3).
+--
+-- Every reservation is auto-assigned on receipt so the calendar can always draw it and there is no
+-- "unassigned" pile. Those placements are provisional and get re-optimised as the house changes,
+-- with a decisive pass in the last hours before arrival when the picture is most accurate. A room a
+-- person picked must be exempt from all of that: being moved the night before because a score
+-- improved is worse than any efficiency it buys.
+--
+-- Defaults false, which is correct for every existing row: they were all created by an explicit
+-- check-in or room move, but the optimiser does not exist yet, so nothing has been auto-placed and
+-- nothing needs protecting from it retroactively. The drag-to-move handler sets it going forward.
+ALTER TABLE "RoomAssignment" ADD COLUMN "pinned" BOOLEAN NOT NULL DEFAULT false;

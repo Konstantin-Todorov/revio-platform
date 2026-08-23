@@ -1186,6 +1186,14 @@ model RoomAssignment {
   status            String    @default("active") // active | moved | cancelled
   checkedInAt       DateTime?
   checkedOutAt      DateTime?
+  // A HUMAN chose this room, so the optimiser never touches it again (§2.3).
+  //
+  // Auto-assignments stay fluid until arrival — the house keeps changing under them, and the
+  // 0-12h pass re-places them on the best information anyone will ever have. A manual assignment
+  // is frozen the moment it is made, permanently, including during that pass. Somebody decided
+  // this guest goes in this room; being moved the night before because a score improved is worse
+  // than any efficiency it could buy, and the calendar shows which is which so nobody is surprised.
+  pinned            Boolean   @default(false)
   note              String?
   createdAt         DateTime  @default(now())
 
