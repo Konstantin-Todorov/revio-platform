@@ -303,7 +303,14 @@ export async function roomMove(fd: FormData): Promise<void> {
       data: {
         tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId: a!.reservationId,
         reservationLineId: a!.reservationLineId, unitId: newUnitId, checkIn: a!.checkIn, checkOut: a!.checkOut,
-        status: "active", checkedInAt: a!.checkedInAt ?? new Date(),
+        status: "active",
+        // Carried across UNCHANGED. It used to be `?? new Date()`, which was harmless while rooms
+        // were only ever allocated at check-in — every assignment being moved had already arrived,
+        // so the fallback never fired. Auto-assignment (§2.3) broke that: moving a booking for next
+        // Tuesday silently marked the guest as arrived, put them in tonight's occupancy and the
+        // night audit's revenue, and listed them on the minibar screen as a stay you could charge.
+        // A move changes WHERE somebody is, never WHETHER they have arrived.
+        checkedInAt: a!.checkedInAt,
         pinned: true,
         note: `moved from ${a!.unit.label} (${reason})`,
       },
