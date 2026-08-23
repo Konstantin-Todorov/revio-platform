@@ -30,6 +30,10 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
   const { reservation: r, preferredFloor } = data!;
 
   const alreadyIn = r.assignments.length > 0;
+  // A departed stay must not be offered a check-in button. The ACTION refuses it (that guard is what
+  // fixes the bug), but a page that shows a control which can only fail is its own small dead end —
+  // and this is the exact screen someone reached when they resurrected a checked-out reservation.
+  const departed = r.departedAt != null;
 
   // Expand each line into `quantity` room slots and fetch available units for each line's room type once.
   const byRoomType = new Map<string, AvailableUnit[]>();
@@ -61,7 +65,19 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
       </Link>
       <PageHeader title={`Check in — ${guestName}`} subtitle={`${ymd(r.lines[0]!.checkIn)} → ${ymd(r.lines[r.lines.length - 1]!.checkOut)} · ${r.lines.length} room${r.lines.length === 1 ? "" : "s"}`} />
 
-      {alreadyIn ? (
+      {departed ? (
+        <Card className="p-6 text-center">
+          <p className="text-[14px] font-semibold text-ink-900">This stay has already checked out</p>
+          <p className="mx-auto mt-1 max-w-md text-[12.5px] text-ink-500">
+            It left on {ymd(r.departedAt!)}. A returning guest needs a new reservation. If this one was checked out
+            by mistake, a manager can reopen it — the rooms are not held, so it will need checking in again.
+          </p>
+          <div className="mt-3 flex items-center justify-center gap-2">
+            <Link href="/dashboard" className="rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 hover:bg-surface-muted">Back to Front Desk</Link>
+            <Link href={`/reservation/${r.id}`} className="rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700">Open the reservation</Link>
+          </div>
+        </Card>
+      ) : alreadyIn ? (
         <Card className="p-6 text-center">
           <p className="text-[14px] font-semibold text-ink-900">Already checked in</p>
           <p className="mt-1 text-[12.5px] text-ink-500">This reservation is in house ({r.assignments.map((a) => a.unit.label).join(", ")}).</p>

@@ -3,6 +3,7 @@ import { computeStayCharges, isCityTax } from "@revio/core";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { postFolioLine } from "./posting";
+import { MANAGER_ROLES } from "./roles";
 import { ymd, todayInTz } from "./format";
 import type { HkStatus } from "./hk-meta";
 
@@ -148,7 +149,13 @@ export async function getFolioView(reservationId: string) {
     prisma.depositType.findMany({ where: { propertyId: property.id, active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.stayExtra.findMany({ where: { reservationId, active: true }, orderBy: { createdAt: "asc" } }),
   ]);
-  return { property, reservation, folios, currency, combined, moveTargets, depositTypes, stayExtras };
+  // `isManager` is returned so the folio screen can show the manager-only resolutions to EVERYONE and
+  // merely disable them (§1.4). Hiding them would leave reception looking at a balance they cannot
+  // explain; showing them locked says "this is handled, by someone else" — which is the true state.
+  return {
+    property, reservation, folios, currency, combined, moveTargets, depositTypes, stayExtras,
+    isManager: MANAGER_ROLES.has(session.role),
+  };
 }
 
 /** Combined balance across all a reservation's folios — the true amount owed at check-out. */
@@ -167,7 +174,7 @@ export type StayState = "booked" | "assigned" | "in_house" | "departed" | "cance
  * side effects — the folio is only read, never seeded here (that stays with the folio screen).
  */
 export async function getReservationDetail(reservationId: string) {
-  const { property } = await activeProperty();
+  const { session, property } = await activeProperty();
   const today = todayInTz(property.timezone);
   const r = await prisma.reservation.findFirst({
     where: { id: reservationId, propertyId: property.id },
@@ -195,11 +202,16 @@ export async function getReservationDetail(reservationId: string) {
   const assignedUnits = active.map((a) => ({ assignmentId: a.id, label: a.unit.label, floor: a.unit.floor, hkStatus: a.unit.hkStatus as HkStatus }));
   const checkedIn = active.some((a) => a.checkedInAt != null);
   const departedToday = r.assignments.some((a) => a.checkedOutAt != null && ymd(a.checkedOutAt) === today);
+  // `departedAt` is checked BEFORE occupancy and it is checked without reference to today. Both
+  // matter, and both were wrong here: a stay that departed yesterday fell through every branch to
+  // "booked" (it had no live assignment and had not departed *today*), and a departed stay carrying
+  // a stray live assignment read "in_house" — which is the header that told a receptionist a guest
+  // who had left was still in the building.
   const stayState: StayState =
     r.status === "cancelled" ? "cancelled"
+      : r.departedAt != null || departedToday ? "departed"
       : checkedIn ? "in_house"
       : active.length > 0 ? "assigned"
-      : departedToday ? "departed"
       : "booked";
 
   const balance = r.folios.length > 0 ? folioBalance(allFolioLines) : null;
@@ -243,6 +255,7 @@ export async function getReservationDetail(reservationId: string) {
     },
     operational: {
       stayState,
+      departedAt: r.departedAt,
       dueOut: co ? ymd(co) === today : false,
       assignedUnits,
       folioId: primaryFolio?.id ?? null,
@@ -250,6 +263,8 @@ export async function getReservationDetail(reservationId: string) {
       balance,
       currency: primaryFolio?.currency ?? r.currency,
     },
+    // Reopening a stay is manager-only, so the screen needs to know whether to offer it.
+    isManager: MANAGER_ROLES.has(session.role),
     events,
   };
 }

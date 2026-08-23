@@ -2,11 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft, Receipt, ArrowRightLeft, LogIn, DoorOpen, Building2, Tag, CreditCard,
-  ShieldCheck, Utensils, CircleDot, PlusCircle, KeyRound, LogOut, Ban, Sparkles,
+  ShieldCheck, Utensils, CircleDot, PlusCircle, KeyRound, LogOut, Ban, Sparkles, RotateCcw,
 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getReservationDetail, type TimelineEvent, type StayState } from "@/lib/folio";
-import { checkOut } from "@/lib/actions-frontdesk";
+import { checkOut, reopenStay } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
 
@@ -54,7 +54,7 @@ export default async function ReservationViewPage({ params }: { params: Promise<
   const { reservationId } = await params;
   const data = await getReservationDetail(reservationId);
   if (!data) notFound();
-  const { guestName, commercial: c, operational: o, events } = data;
+  const { guestName, commercial: c, operational: o, events, isManager } = data;
   const state = STATE_META[o.stayState];
 
   return (
@@ -155,6 +155,30 @@ export default async function ReservationViewPage({ params }: { params: Promise<
                 <input type="hidden" name="reservationId" value={reservationId} />
                 <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted hover:text-danger-600">
                   <LogOut className="h-3.5 w-3.5" /> Check out
+                </button>
+              </form>
+            )}
+            {/* The way back from a mistaken check-out. Check-in refuses a departed stay — which is
+                the guard that fixes the state bug — so without this the refusal would just be a
+                different dead end. Manager-only, and shown disabled to everyone else so reception
+                can see that a route exists and who to ask. */}
+            {o.stayState === "departed" && o.departedAt && (
+              <form action={reopenStay} className="flex items-center gap-2">
+                <input type="hidden" name="reservationId" value={reservationId} />
+                <input
+                  name="reason"
+                  type="text"
+                  placeholder="Why reopen this stay?"
+                  disabled={!isManager}
+                  className="h-9 w-52 rounded-md border border-surface-border bg-white px-2.5 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-600 disabled:cursor-not-allowed disabled:bg-surface-muted"
+                />
+                <button
+                  type="submit"
+                  disabled={!isManager}
+                  title={isManager ? "Reopen this stay — the rooms are not held, so it will need checking in again" : "Manager approval required"}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-ink-300 disabled:hover:bg-transparent"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Reopen stay
                 </button>
               </form>
             )}

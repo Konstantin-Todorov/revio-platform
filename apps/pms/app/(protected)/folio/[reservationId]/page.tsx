@@ -2,17 +2,77 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
-import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat, FileText } from "lucide-react";
+import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat, FileText, Trash2 } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
 import { listInvoicesForReservation, DOC_LABEL } from "@/lib/invoice";
 import { gatewayMode } from "@revio/payments";
 import { OUTLET_LABEL } from "@/lib/posting";
-import { postCharge, postPayment, voidFolioLine, createFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
+import { postCharge, postPayment, voidFolioLine, createFolio, removeFolio, resolveFolio, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
 import { issueInvoice } from "@/lib/actions-invoice";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+
+/** How a closed folio ended, said plainly. `outstanding` is the only one that is still a task. */
+const OUTCOME_LABEL: Record<string, string> = {
+  settled: "Settled",
+  outstanding: "Outstanding",
+  paid_offsystem: "Paid off-system",
+  written_off: "Written off",
+};
+const OUTCOME_TONE: Record<string, "success" | "danger" | "warning" | "neutral"> = {
+  settled: "success",
+  outstanding: "danger",
+  paid_offsystem: "success",
+  written_off: "warning",
+};
+
+/**
+ * The four exits from "closed — outstanding" (§1.4).
+ *
+ * Ordered by how good the outcome is for the hotel: the money arrives, the money arrived elsewhere,
+ * the money is still coming, the money is gone. Write-off is last and is the only one styled as
+ * destructive, because it is the only one that turns a receivable into a loss.
+ */
+const RESOLUTIONS = [
+  {
+    key: "reopen",
+    label: "Reopen and take payment",
+    detail: "Reopens the folio so a payment can be posted normally, then it closes at zero.",
+    cta: "Reopen",
+    needsNote: false,
+    tone: "normal" as const,
+    notePlaceholder: "",
+  },
+  {
+    key: "paid_offsystem",
+    label: "Mark as paid — settled off-system",
+    detail: "The money arrived another way: bank transfer, cash, an external card terminal.",
+    cta: "Mark paid",
+    needsNote: true,
+    tone: "normal" as const,
+    notePlaceholder: "Method and reference",
+  },
+  {
+    key: "receivable",
+    label: "Keep as a receivable",
+    detail: "Still owed and still being chased — billed to a company, invoice sent.",
+    cta: "Keep chasing",
+    needsNote: true,
+    tone: "normal" as const,
+    notePlaceholder: "Who owes it, and by when",
+  },
+  {
+    key: "written_off",
+    label: "Write off",
+    detail: "The balance is forgiven. Recorded as a loss, never as a payment.",
+    cta: "Write off",
+    needsNote: true,
+    tone: "danger" as const,
+    notePlaceholder: "Reason for the write-off",
+  },
+];
 
 const ERRORS: Record<string, string> = {
   charge: "Enter a description and a positive amount.",
@@ -25,6 +85,10 @@ const ERRORS: Record<string, string> = {
   buyer: "Enter who the invoice is billed to.",
   invoice: "Couldn’t issue the invoice — is there a folio to bill?",
   gateway: "The card gateway declined the transaction — try again or use another method.",
+  folioprimary: "The main folio is the stay’s bill — it can’t be removed, only closed.",
+  folioclosed: "A closed folio is part of the financial record — correct it with a credit note.",
+  foliolines: "Move this folio’s charges back to another folio first, then remove it.",
+  departed: "This stay has already checked out. Reopen it to make changes.",
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -44,7 +108,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const { error } = await searchParams;
   const data = await getFolioView(reservationId);
   if (!data) redirect("/folios");
-  const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras } = data!;
+  const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras, isManager } = data!;
   const invoices = await listInvoicesForReservation(reservationId);
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
@@ -52,6 +116,12 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const open = folios.some((f) => f.status === "open");
   const settled = combined.balance === 0;
   const split = folios.length > 1;
+  // Which folio the §1.4 resolutions act on: the closed one still carrying a balance. Falls back to
+  // the primary only so the form always has a target; when nothing is outstanding the panel that
+  // uses it is not rendered at all.
+  const outstandingFolio =
+    folios.find((f) => f.status === "closed" && f.totals.balance !== 0) ?? folios[0]!;
+  const outstandingCount = folios.filter((f) => f.status === "closed" && f.totals.balance !== 0).length;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -75,7 +145,26 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
         <Card key={folio.id} className="mb-4">
           <CardHeader
             title={`${folio.label}${folio.isPrimary ? "" : " folio"}`}
-            action={<span className={`tnum text-[13px] font-bold ${folio.totals.balance === 0 ? "text-success-600" : "text-danger-600"}`}>{money(folio.totals.balance, currency)}</span>}
+            action={
+              <div className="flex items-center gap-2.5">
+                {folio.status === "closed" && folio.outcome && (
+                  <StatusPill tone={OUTCOME_TONE[folio.outcome] ?? "neutral"}>{OUTCOME_LABEL[folio.outcome] ?? folio.outcome}</StatusPill>
+                )}
+                <span className={`tnum text-[13px] font-bold ${folio.totals.balance === 0 ? "text-success-600" : "text-danger-600"}`}>{money(folio.totals.balance, currency)}</span>
+                {/* The inverse `createFolio` never had (§1.6). Only where it is actually safe: a
+                    non-primary, open, empty split. Everywhere else the action refuses anyway, and a
+                    button that always errors is worse than no button. */}
+                {!folio.isPrimary && folio.status === "open" && folio.lines.filter((l) => !l.voided).length === 0 && (
+                  <form action={removeFolio}>
+                    <input type="hidden" name="reservationId" value={reservationId} />
+                    <input type="hidden" name="folioId" value={folio.id} />
+                    <button type="submit" title="Remove this empty split folio" className="inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-[11px] font-semibold text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                      <Trash2 className="h-3.5 w-3.5" /> Remove
+                    </button>
+                  </form>
+                )}
+              </div>
+            }
           />
           {folio.lines.length === 0 ? (
             <div className="px-4 py-4 text-center text-[12.5px] text-ink-400">Nothing on this folio yet — move charges across from the main one.</div>
@@ -384,9 +473,72 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
           </Card>
         </div>
       ) : (
-        <Card className="p-4 text-center text-[13px] text-ink-500">
-          This folio is closed. Final balance {money(combined.balance, currency)}.
-        </Card>
+        settled ? (
+          <Card className="p-4 text-center text-[13px] text-ink-500">
+            This folio is closed and settled. Final balance {money(combined.balance, currency)}.
+          </Card>
+        ) : (
+          /* CLOSED — OUTSTANDING (§1.4). This card is the whole point of the round: the screen used
+             to say "closed · final balance €513" and stop, which is a record in a state with no
+             available action. The money is still owed, so it says so, and it offers the four ways
+             out. Every one is logged with who and why. */
+          <Card className="p-4">
+            <div className="mb-3 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
+              <div className="text-[12.5px] text-danger-700">
+                <span className="font-bold">Closed with {money(combined.balance, currency)} outstanding.</span>{" "}
+                The stay has ended and this money is still owed. It stays on the{" "}
+                <Link href="/folios?tab=receivables" className="font-semibold underline">receivables list</Link> until it is resolved.
+                {outstandingCount > 1 && (
+                  <> These resolutions apply to <span className="font-semibold">{outstandingFolio.label}</span> — {outstandingCount - 1} other folio{outstandingCount === 2 ? "" : "s"} on this stay {outstandingCount === 2 ? "is" : "are"} also outstanding and {outstandingCount === 2 ? "needs" : "need"} resolving separately.</>
+                )}
+              </div>
+            </div>
+
+            {!isManager && (
+              <p className="mb-3 text-[12px] text-ink-500">
+                A manager settles this. You can see what is owed and what the options are, but not choose one.
+              </p>
+            )}
+
+            <div className="space-y-2">
+              {RESOLUTIONS.map((res) => (
+                <form key={res.key} action={resolveFolio} className="flex flex-wrap items-center gap-2 rounded-md border border-surface-border px-3 py-2.5">
+                  <input type="hidden" name="reservationId" value={reservationId} />
+                  {/* The folio that actually owes money, not simply the first one. With a company
+                      split the debt is often NOT on the primary, and resolving the wrong folio would
+                      report the wrong one settled while the real balance stayed outstanding. */}
+                  <input type="hidden" name="folioId" value={outstandingFolio.id} />
+                  <input type="hidden" name="resolution" value={res.key} />
+                  <div className="min-w-[190px] flex-1">
+                    <div className="text-[12.5px] font-semibold text-ink-900">{res.label}</div>
+                    <div className="text-[11.5px] text-ink-500">{res.detail}</div>
+                  </div>
+                  {res.needsNote && (
+                    <input name="note" type="text" placeholder={res.notePlaceholder} disabled={!isManager} className={`${inputCls} w-52 disabled:cursor-not-allowed disabled:bg-surface-muted`} />
+                  )}
+                  <button
+                    type="submit"
+                    disabled={!isManager}
+                    title={isManager ? undefined : "Manager approval required"}
+                    className={`inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-semibold transition-colors ${
+                      res.tone === "danger"
+                        ? "border border-danger-500 text-danger-600 hover:bg-danger-50"
+                        : "border border-surface-border text-ink-700 hover:bg-surface-muted"
+                    } disabled:cursor-not-allowed disabled:border-surface-border disabled:text-ink-300 disabled:hover:bg-transparent`}
+                  >
+                    {res.cta}
+                  </button>
+                </form>
+              ))}
+            </div>
+
+            <p className="mt-3 text-[11px] text-ink-400">
+              Money that arrived off-system and money that was written off both close the folio at zero, and are
+              recorded separately — one is revenue collected, the other is revenue lost.
+            </p>
+          </Card>
+        )
       )}
     </div>
   );
