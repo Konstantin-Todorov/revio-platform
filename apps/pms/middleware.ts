@@ -32,5 +32,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)"],
+  // api/jobs (cron, Bearer-gated) does its own auth — same exclusion the CRS already makes. Without
+  // it the scheduler is redirected to /login and the job silently never runs, which for the
+  // automatic Close Day would mean the pile-up it exists to prevent, quietly restored.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/jobs|.*\\.[a-zA-Z0-9]+$).*)"],
 };

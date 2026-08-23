@@ -52,3 +52,17 @@ export function addDaysYmd(dateYmd: string, days: number): string {
 export function utcDay(dateYmd: string): Date {
   return new Date(dateYmd + "T00:00:00Z");
 }
+
+/**
+ * Minutes since midnight, right now, in the given IANA timezone.
+ *
+ * Lives here beside `todayInTz` because "what time is it at the property" is one question, and it is
+ * now asked by two callers: the overdue-past-checkout check on the front desk, and the Close Day
+ * escalation. It was private to data.ts, which is how the second caller nearly got its own copy.
+ */
+export function minutesOfDayInTz(timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return (h % 24) * 60 + m;
+}

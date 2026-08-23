@@ -219,6 +219,11 @@ model Property {
   status                    String    @default("active")
   // PMS Phase 5: the current open operational date (night audit rolls it forward). Null until first close.
   businessDate              DateTime? @db.Date
+  // Who closed the last business day. An auto-close is a real financial close, but it is a close no
+  // human reviewed — and a run of them says nobody is minding the desk. That is only legible if the
+  // actor is recorded rather than inferred from silence.
+  lastCloseWasAutomatic     Boolean   @default(false)
+  lastClosedAt              DateTime?
   // Which products this property has finished first-run setup for ("cm" | "crs" | "pms"). Written
   // once, the first time a product's checklist comes out complete, so the welcome card never
   // reappears later — e.g. when adding a room type temporarily leaves a mapping unmapped.
@@ -990,6 +995,19 @@ model PropertyDefaults {
   // discloses it to the OTA. The setting NEVER changes the rate exported to the channel manager.
   cityTaxMode              String  @default("payable_on_spot") // payable_on_spot | included
   holdTtlMinutes           Int     @default(30)
+  // Close Day escalation (round-2 §3.4). An unclosed day must never accumulate: miss seven and the
+  // eighth needs closing seven times, which corrupts the daily record. Two stages, both per-property
+  // because the business-day boundary already varies (some properties audit at 03:00, some at
+  // midnight), so one rigid time would fit nobody.
+  //   closeDeadlineMinutes — minutes past midnight of the FOLLOWING day at which a still-open day
+  //     starts nudging the people who can act. Default 00:30.
+  //   closeReminderWindowHours — how long that reminder can be dismissed before the system closes
+  //     the day itself. Default 22h, so the hard stop lands ~22:30 the next day.
+  closeDeadlineMinutes     Int     @default(30)
+  closeReminderWindowHours Int     @default(22)
+  // Switch the automatic close off for a property that would rather carry an open day than have one
+  // closed without a human. Off by default is not an option: a day nobody closes is the failure.
+  autoCloseEnabled         Boolean @default(true)
   // Action Center thresholds (docs/CRS-REFERENCE.md: every threshold a Setting, never hardcoded).
   lowAvailabilityThreshold Int     @default(2)
   // Invoicing config (spec §4.3/§4.6) — the "jurisdiction pack" as data, never hardcoded. VAT rates

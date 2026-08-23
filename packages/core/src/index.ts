@@ -11,6 +11,7 @@ export * from "./email/auth-emails.js";
 export * from "./inventory/availability.js";
 export * from "./inventory/waterfall.js";
 export * from "./stays/stay-state.js";
+export * from "./stays/close-day.js";
 export * from "./metrics/formulas.js";
 export * from "./metrics/channel-economics.js";
 export * from "./guests/recognition.js";

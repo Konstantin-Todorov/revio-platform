@@ -61,9 +61,47 @@ export interface PostChargeInput {
 /** Post ONE line to a folio. Payments + deposit movements carry no outlet; a deposit's tax category
  * comes from its type's VAT timing (spec §4.4) and is passed in by the caller. */
 export async function postFolioLine(input: PostChargeInput) {
+  return postFolioLineWith(prisma, input);
+}
+
+/**
+ * The same posting service, against a caller-supplied connection.
+ *
+ * The automatic Close Day runs from cron with no session, so it cannot use the request-scoped
+ * proxy `postFolioLine` reaches for. Rather than give the unattended path its own copy of the
+ * posting rules — which is how the two drift until the one nobody watches is the wrong one — the
+ * client becomes a parameter and both go through here.
+ */
+export async function postFolioLineWith(db: typeof prisma, input: PostChargeInput) {
+  /*
+   * A CLOSED folio takes no more charges.
+   *
+   * This is the one place every charge goes through (spec §1.7), and it never asked. So anything
+   * that posted — the night audit, a minibar tap, a fee — could land money on a bill that had
+   * already been closed and, as far as the guest and the hotel were concerned, finished. Production
+   * carries four such lines: breakfast accrued onto a folio that closed nine days earlier.
+   *
+   * It throws rather than returning null, because a charge that silently does not happen is its own
+   * kind of wrong: somebody consumed something and nobody billed it. Callers that can legitimately
+   * meet a closed folio (the night audit sweeping many stays) check first and skip; a caller that
+   * hits this is doing something it should not, and should say so loudly.
+   *
+   * The way to bill a departed guest is to reopen the folio — a manager action, logged, with the
+   * four resolutions on the other side of it.
+   */
+  const folio = await db.folio.findUnique({
+    where: { id: input.folioId },
+    select: { status: true },
+  });
+  if (folio && folio.status !== "open") {
+    throw new Error(
+      `postFolioLine: refusing to post "${input.description}" to folio ${input.folioId} — it is ${folio.status}. Reopen it first.`,
+    );
+  }
+
   const isMoney = MONEY_KINDS.has(input.kind);
   const isPayment = input.kind === "payment";
-  return prisma.folioLine.create({
+  return db.folioLine.create({
     data: {
       tenantId: input.tenantId,
       propertyId: input.propertyId,

@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
-import { ymd, todayInTz } from "./format";
+import { closeDayEscalation, type CloseDayEscalation } from "@revio/core";
+import { ymd, todayInTz, minutesOfDayInTz } from "./format";
 import { folioBalance } from "./folio";
 
 const OCCUPYING = ["confirmed", "modified"];
@@ -116,5 +117,33 @@ export async function getCloseDayView() {
     accrualMinor: roomRevenueMinor + extrasMinor,
   };
 
-  return { property, today, businessDate, noShowCandidates, dueOutStillIn, unsettled, report };
+  const escalation = await getCloseEscalation(property.id, property.timezone, businessDate);
+
+  return { property, today, businessDate, noShowCandidates, dueOutStillIn, unsettled, report, escalation };
+}
+
+/**
+ * How overdue this property's close is, and whether the system should act (§3).
+ *
+ * The rule itself is pure and lives in `@revio/core`; this only fetches the property's own timings.
+ * Kept separate from `getCloseDayView` because the auto-close job needs the answer without paying
+ * for the whole night-audit preview.
+ */
+export async function getCloseEscalation(
+  propertyId: string,
+  timezone: string,
+  businessDate: string,
+): Promise<CloseDayEscalation> {
+  const defaults = await prisma.propertyDefaults.findUnique({
+    where: { propertyId },
+    select: { closeDeadlineMinutes: true, closeReminderWindowHours: true, autoCloseEnabled: true },
+  });
+  return closeDayEscalation({
+    businessDate,
+    today: todayInTz(timezone),
+    nowMinutes: minutesOfDayInTz(timezone),
+    closeDeadlineMinutes: defaults?.closeDeadlineMinutes ?? 30,
+    reminderWindowHours: defaults?.closeReminderWindowHours ?? 22,
+    autoCloseEnabled: defaults?.autoCloseEnabled ?? true,
+  });
 }

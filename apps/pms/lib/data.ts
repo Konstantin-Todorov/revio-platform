@@ -3,17 +3,11 @@ import type { ProductName, SetupFacts } from "@revio/core";
 import { deriveStayState } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
-import { todayInTz, ymd, utcDay } from "./format";
+import { todayInTz, ymd, utcDay, minutesOfDayInTz } from "./format";
 import { sellableStatuses, type HkStatus } from "./hk-meta";
 import { folioBalance } from "./folio";
+import { getCloseEscalation } from "./closeday";
 
-/** Minutes-since-midnight, right now, in the given IANA timezone (for overdue-past-checkout-time checks). */
-function minutesOfDayInTz(timezone: string): number {
-  const parts = new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date());
-  const h = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  return (h % 24) * 60 + m;
-}
 /** Parse a "HH:MM" time string to minutes-since-midnight. */
 function hhmmToMinutes(hhmm: string): number {
   const [h, m] = hhmm.split(":").map(Number);
@@ -105,6 +99,22 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
   }).length;
 
   const items: NotifItem[] = [];
+
+  // §3.1 — the Close Day nudge reaches everyone who can act, not only whoever happens to open the
+  // Close Day screen. That was the gap: the one screen that knows the day is overdue is the screen
+  // nobody visits until they remember to close the day.
+  const businessDate = property.businessDate ? ymd(property.businessDate) : today;
+  const escalation = await getCloseEscalation(property.id, property.timezone, businessDate);
+  if (escalation.stage === "reminder") {
+    items.push({ text: `Close Day is due — ${businessDate}`, href: "/closeday", tone: "warning" });
+  } else if (escalation.stage === "auto_close" || escalation.stage === "overdue_no_auto") {
+    items.push({
+      text: `Business date ${escalation.daysBehind} day${escalation.daysBehind === 1 ? "" : "s"} behind`,
+      href: "/closeday",
+      tone: "danger",
+    });
+  }
+
   if (arrivalsDue > 0) items.push({ text: `${arrivalsDue} arrival${arrivalsDue === 1 ? "" : "s"} to check in`, href: "/dashboard", tone: "info" });
   if (dirty > 0) items.push({ text: `${dirty} room${dirty === 1 ? "" : "s"} to clean`, href: "/housekeeping", tone: "warning" });
   if (ooo > 0) items.push({ text: `${ooo} room${ooo === 1 ? "" : "s"} out of order`, href: "/maintenance", tone: "danger" });

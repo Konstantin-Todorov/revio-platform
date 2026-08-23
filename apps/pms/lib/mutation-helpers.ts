@@ -3,13 +3,25 @@ import { decimalOr, intOr, minorUnitsOr } from "@revio/core";
 import { syncRealChannels, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
 
+/*
+ * Several helpers below take an optional `db`.
+ *
+ * They already receive propertyId and tenantId explicitly, so the only thing they needed the
+ * request-scoped proxy for was a connection — and that proxy demands a session. The automatic Close
+ * Day runs from cron, for properties nobody is logged into, so it has none. Passing a client keeps
+ * one implementation for both callers instead of a second, unattended copy that drifts.
+ * Same shape the CRS already uses for `releaseExpiredHolds(client = prisma)`.
+ */
+type Db = typeof prisma;
+
 /** Record an Audit Log entry. Every hand-made operational change is permanent and attributable. */
 export async function logAudit(
   propertyId: string,
   tenantId: string,
   entry: { entity: string; field?: string; oldValue?: string; newValue?: string; source?: string; userId?: string },
+  db: Db = prisma,
 ) {
-  await prisma.auditEntry.create({
+  await db.auditEntry.create({
     data: {
       tenantId, propertyId,
       userId: entry.userId ?? null,
@@ -29,20 +41,20 @@ export async function logAudit(
  * Unit going out-of-order writes a RoomInventoryPeriod → the waterfall drops a room → the CM sends it
  * on its next push). This is the visible trace of the one cross-product write.
  */
-export async function recordSync(propertyId: string, tenantId: string, summary: string, detail?: string, scope?: PushScope) {
+export async function recordSync(propertyId: string, tenantId: string, summary: string, detail?: string, scope?: PushScope, db: Db = prisma) {
   // BOUNDARY RULE (spec CM-GUIDE-V2 §1): callers pass the AVAILABILITY EFFECT only — never the
   // operational cause (no unit labels, guest names, maintenance notes). Channel attribution
   // (spec §5.1): one event per connected mock channel; real channels report their own pushes.
-  const mocks = await prisma.channel.findMany({
+  const mocks = await db.channel.findMany({
     where: { propertyId, status: "connected", connectivityMode: "mock" },
     select: { id: true, name: true },
   });
   if (mocks.length === 0) {
-    await prisma.syncEvent.create({
+    await db.syncEvent.create({
       data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: detail ?? null },
     });
   } else {
-    await prisma.syncEvent.createMany({
+    await db.syncEvent.createMany({
       data: mocks.map((c) => ({ tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary, detail: detail ?? null })),
     });
   }

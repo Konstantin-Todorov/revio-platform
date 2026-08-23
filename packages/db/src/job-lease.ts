@@ -141,4 +141,6 @@ export const JOB = {
   arrivalsDigest: "arrivals-digest",
   holdExpiry: "hold-expiry",
   pickupSnapshot: "pickup-snapshot",
+  /** Round-2 §3: closes a business day nobody closed, so unclosed days cannot accumulate. */
+  autoCloseDay: "auto-close-day",
 } as const;

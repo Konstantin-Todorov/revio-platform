@@ -15,7 +15,7 @@ function pretty(ymd: string): string {
 
 export default async function CloseDayPage({ searchParams }: { searchParams: Promise<{ closed?: string }> }) {
   const { closed } = await searchParams;
-  const { property, today, businessDate, noShowCandidates, dueOutStillIn, unsettled, report } = await getCloseDayView();
+  const { property, today, businessDate, noShowCandidates, dueOutStillIn, unsettled, report, escalation } = await getCloseDayView();
   const behind = businessDate < today;
 
   return (
@@ -25,6 +25,36 @@ export default async function CloseDayPage({ searchParams }: { searchParams: Pro
       {closed != null && (
         <div className="mb-4 flex items-start gap-2 rounded-md bg-success-50 px-3 py-2 text-[12.5px] font-medium text-success-600">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> Day closed — {closed} reservation{closed === "1" ? "" : "s"} marked no-show, business date rolled forward.
+        </div>
+      )}
+
+      {/* §3.1 — the nudge. It escalates on its own rather than sitting at one volume forever, because
+          an unclosed day is not a preference: it stays due, and unclosed days accumulate until the
+          daily record stops meaning anything. */}
+      {escalation.stage !== "current" && (
+        <div
+          className={`mb-4 flex items-start gap-2 rounded-md px-3 py-2.5 text-[12.5px] ${
+            escalation.stage === "reminder"
+              ? "bg-warning-50 text-warning-700"
+              : "bg-danger-50 text-danger-700"
+          }`}
+        >
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <span className="font-bold">
+              {escalation.stage === "reminder" && "Close Day is due."}
+              {escalation.stage === "auto_close" && "This day is being closed automatically."}
+              {escalation.stage === "overdue_no_auto" && "This day is overdue and nothing will close it."}
+            </span>{" "}
+            {escalation.daysBehind === 1
+              ? "The business date is a day behind the calendar."
+              : `The business date is ${escalation.daysBehind} days behind the calendar.`}{" "}
+            {escalation.stage === "reminder" && "Close it below; the reminder returns until you do."}
+            {escalation.stage === "auto_close" &&
+              "The system closes it on its next run — the same close, recorded as having had no one in it. Closing it yourself now is better."}
+            {escalation.stage === "overdue_no_auto" &&
+              "Automatic close is switched off for this property, so only a person can end this day."}
+          </div>
         </div>
       )}
 

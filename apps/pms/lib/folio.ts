@@ -2,7 +2,7 @@ import "server-only";
 import { computeStayCharges, isCityTax } from "@revio/core";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
-import { postFolioLine } from "./posting";
+import { postFolioLineWith } from "./posting";
 import { MANAGER_ROLES } from "./roles";
 import { ymd, todayInTz } from "./format";
 import type { HkStatus } from "./hk-meta";
@@ -49,19 +49,19 @@ export { isCityTax };
  * Idempotent + race-safe via the unique reservationId. Called at check-in / walk-in and lazily on the
  * folio page (for stays checked in before Phase 3).
  */
-export async function ensureFolio(tenantId: string, propertyId: string, reservationId: string): Promise<string | null> {
+export async function ensureFolio(tenantId: string, propertyId: string, reservationId: string, db: typeof prisma = prisma): Promise<string | null> {
   // The PRIMARY (guest) folio; split/company folios (spec §3.6) are added on top and never seeded here.
-  const existing = await prisma.folio.findFirst({ where: { reservationId, isPrimary: true }, select: { id: true } });
+  const existing = await db.folio.findFirst({ where: { reservationId, isPrimary: true }, select: { id: true } });
   if (existing) return existing.id;
 
-  const reservation = await prisma.reservation.findFirst({
+  const reservation = await db.reservation.findFirst({
     where: { id: reservationId, propertyId },
     include: { lines: { include: { roomType: { select: { name: true } } } } },
   });
   if (!reservation) return null;
 
   const currency = reservation.currency || "EUR";
-  const created = await prisma.folio.create({ data: { tenantId, propertyId, reservationId, currency, isPrimary: true, label: "Guest" }, select: { id: true } });
+  const created = await db.folio.create({ data: { tenantId, propertyId, reservationId, currency, isPrimary: true, label: "Guest" }, select: { id: true } });
   const folioId = created.id;
 
   const base = { tenantId, propertyId, folioId };
@@ -85,31 +85,31 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
     rooms += line.quantity;
     guests += line.guestsCount ?? line.quantity;
     // Seed accommodation via the charge-posting service too — no direct FolioLine writes (spec §1.7).
-    await postFolioLine({ ...base, kind: "accommodation", description: `${line.roomType.name} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price });
+    await postFolioLineWith(db, { ...base, kind: "accommodation", description: `${line.roomType.name} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price });
   }
 
   // CITY-TAX SUPPRESSION (spec §3.6): the CRS decides whether city tax is payable on spot or already
   // included in the rate. When it's "included", the PMS must NOT post the Fee line — the guest has
   // already paid it in the rate, and posting it here would double-charge. Both CRS modes are honoured.
-  const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId }, select: { cityTaxMode: true } });
+  const defaults = await db.propertyDefaults.findUnique({ where: { propertyId }, select: { cityTaxMode: true } });
   const cityTaxIncluded = defaults?.cityTaxMode === "included";
 
   // The SAME function the booking engine quotes with (@revio/core). If these two ever computed
   // fees separately they would drift, and a guest quoted 240.00 online would be billed something
   // else on arrival — the one thing the booking flow promises cannot happen.
-  const fees = await prisma.taxFee.findMany({ where: { propertyId, active: true, inclusion: "excluded" } });
+  const fees = await db.taxFee.findMany({ where: { propertyId, active: true, inclusion: "excluded" } });
   const charges = computeStayCharges({
     stay: { accommodationMinor: accomTotal, nights, rooms, guests },
     fees,
     cityTaxIncluded,
   });
   for (const line of charges.lines) {
-    await postFolioLine({ ...base, kind: line.kind, description: line.name, amountMinor: line.amountMinor });
+    await postFolioLineWith(db, { ...base, kind: line.kind, description: line.name, amountMinor: line.amountMinor });
   }
 
   if (reservation.paymentGuarantee === "prepaid_ota") {
-    const charges = (await prisma.folioLine.findMany({ where: { folioId, voided: false, kind: { not: "payment" } }, select: { amountMinor: true } })).reduce((s, l) => s + l.amountMinor, 0);
-    if (charges > 0) await postFolioLine({ ...base, kind: "payment", description: "Prepaid via OTA", amountMinor: charges, method: "prepaid_ota" });
+    const charges = (await db.folioLine.findMany({ where: { folioId, voided: false, kind: { not: "payment" } }, select: { amountMinor: true } })).reduce((s, l) => s + l.amountMinor, 0);
+    if (charges > 0) await postFolioLineWith(db, { ...base, kind: "payment", description: "Prepaid via OTA", amountMinor: charges, method: "prepaid_ota" });
   }
   return folioId;
 }
@@ -450,15 +450,27 @@ export async function listFolioHistory(q?: string): Promise<{ property: Awaited<
  * line carries ref `stayextra:<id>:<date>`, so re-running Close Day never double-charges a night.
  * Returns how many lines were posted.
  */
-export async function accrueStayExtras(tenantId: string, propertyId: string, businessDate: string): Promise<number> {
-  const inHouse = await prisma.roomAssignment.findMany({
-    where: { propertyId, status: "active", checkedOutAt: null, checkedInAt: { not: null } },
+export async function accrueStayExtras(tenantId: string, propertyId: string, businessDate: string, db: typeof prisma = prisma): Promise<number> {
+  /*
+   * THIS is the accrual clock — the write, not the report.
+   *
+   * It used to ask only "is there a live assignment row?", and that is how a guest who checked out
+   * on 9 July was charged breakfast on 22 July: a second check-in had left a live row behind, and
+   * every night audit since had faithfully billed it. Excluding departed and cancelled stays here
+   * is what actually stops the charges; the equivalent filter on the night-audit REPORT only stops
+   * them being counted.
+   */
+  const inHouse = await db.roomAssignment.findMany({
+    where: {
+      propertyId, status: "active", checkedOutAt: null, checkedInAt: { not: null },
+      reservation: { departedAt: null, status: { notIn: ["cancelled", "no_show"] } },
+    },
     select: { reservationId: true },
   });
   const reservationIds = [...new Set(inHouse.map((a) => a.reservationId))];
   if (reservationIds.length === 0) return 0;
 
-  const extras = await prisma.stayExtra.findMany({ where: { propertyId, active: true, reservationId: { in: reservationIds } } });
+  const extras = await db.stayExtra.findMany({ where: { propertyId, active: true, reservationId: { in: reservationIds } } });
   let posted = 0;
   for (const e of extras) {
     /*
@@ -471,10 +483,15 @@ export async function accrueStayExtras(tenantId: string, propertyId: string, bus
      */
     const perStay = e.basis === "per_stay";
     const ref = perStay ? `stayextra:${e.id}:once` : `stayextra:${e.id}:${businessDate}`;
-    if (await prisma.folioLine.findFirst({ where: { ref }, select: { id: true } })) continue; // already accrued
-    const folioId = await ensureFolio(tenantId, propertyId, e.reservationId);
+    if (await db.folioLine.findFirst({ where: { ref }, select: { id: true } })) continue; // already accrued
+    const folioId = await ensureFolio(tenantId, propertyId, e.reservationId, db);
     if (!folioId) continue;
-    await postFolioLine({
+    // A closed folio takes no more charges. `postFolioLine` throws on one, and a night audit sweeping
+    // the whole house must not abort because a single stay's bill is already settled — so check and
+    // skip here, and let the throw stay as the backstop for callers that should never meet one.
+    const folio = await db.folio.findUnique({ where: { id: folioId }, select: { status: true } });
+    if (!folio || folio.status !== "open") continue;
+    await postFolioLineWith(db, {
       tenantId, propertyId, folioId, kind: "extra", outlet: "extra",
       description: perStay ? e.name : `${e.name} · ${businessDate}`, amountMinor: e.priceMinor, ref,
     });
