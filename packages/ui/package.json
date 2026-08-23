@@ -16,7 +16,8 @@
     "./welcome-shell": "./src/welcome-shell.tsx",
     "./welcome-fields": "./src/welcome-fields.tsx",
     "./sign-out-everywhere": "./src/sign-out-everywhere.tsx",
-    "./field-guard": "./src/field-guard.tsx"
+    "./field-guard": "./src/field-guard.tsx",
+    "./login-fields": "./src/login-fields.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

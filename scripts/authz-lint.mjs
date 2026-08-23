@@ -34,7 +34,12 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // out with a crafted POST, because the layout re-guards only after the action has already committed).
 // That was fixed and pinned by lib/roles.test.ts, but the tests pin the POLICY, not the COVERAGE —
 // nothing stopped the next new action from shipping ungated. Now something does.
-const APPS = ["apps/channel-manager", "apps/reservation", "apps/pms"];
+//
+// The Operator console was the last one missing, and it is the one that matters most: it reads every
+// hotel's data and holds their OTA credentials, so an ungated action there is not a leak into one
+// tenant but into all of them. It was noticed only because adding a 2FA action did not move the
+// count.
+const APPS = ["apps/channel-manager", "apps/reservation", "apps/pms", "apps/operator"];
 
 /**
  * Actions that deliberately have no capability gate, and why.
@@ -47,6 +52,7 @@ const EXEMPT = {
   "actions-auth.ts:login": "signing in — there is no session to check yet",
   "actions-auth.ts:logout": "ending your own session is always allowed",
   "actions-auth.ts:signOutEverywhere": "revoking your OWN sessions; a locked-out user must be able to do this",
+  "actions-auth.ts:verifyTwoFactor": "step two of signing in — gated by the pending-2FA token, which is issued only by a correct password",
 
   // Self-service account recovery, reachable while signed out.
   "actions-account.ts:requestReset": "password reset, requested while signed out",
@@ -77,7 +83,17 @@ const EXEMPT = {
 // answer is no — so nothing after it runs. Recognising it is what lets the PMS be scanned at all;
 // leaving it out would report all 40-odd of its correctly-gated actions and teach everyone to ignore
 // the check, which is worse than not running it.
-const GUARD = /\b(requireCapability|guard|requireManager)\s*\(|\bctx\s*\(\s*["']/;
+// `getOperatorSession` is the Operator console's boundary, and a coarser one on purpose. That app is
+// entirely staff-only behind one perimeter with two roles, so "is a signed-in operator" IS the
+// authorisation for most of it, and only staff management narrows further to super_admin. Every one
+// of its data-touching actions calls this and acts on the result — checked one by one when the app
+// was added to this scan, not assumed.
+//
+// ⚠️ Weaker than the others: this matches the CALL, and cannot see whether the result was checked.
+// The same limitation the header already states about capability CHOICE applies here to capability
+// USE. If the console ever grows real capabilities, tighten this to a `requireOperator()` helper
+// that redirects internally, the way RevioPMS's `ctx()` does.
+const GUARD = /\b(requireCapability|guard|requireManager|getOperatorSession)\s*\(|\bctx\s*\(\s*["']/;
 /** How far into a function body a guard may appear. It should be the first statement; this is slack. */
 const HEAD_LINES = 14;
 
