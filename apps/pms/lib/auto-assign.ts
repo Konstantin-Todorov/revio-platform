@@ -218,21 +218,203 @@ function occupiedByFloor(
   return out;
 }
 
+/**
+ * The decisive pre-arrival pass (§2.3).
+ *
+ * Earlier placements are provisional and were made with incomplete information: bookings and
+ * cancellations were still moving, and nobody knew what housekeeping's day would look like. In the
+ * hours before arrival that uncertainty has largely resolved — where every other guest will actually
+ * be, which rooms are clean, what is out of order — so this is the last and best moment to decide
+ * where a guest should go.
+ *
+ * The spec is explicit that this is "assign on the most accurate operational state, not just a
+ * timer". The window is how we know the state is trustworthy; the re-scoring is the point.
+ *
+ * THREE THINGS IT WILL NOT DO:
+ *  - touch a **pinned** assignment (`canReassign`) — a person chose that room;
+ *  - touch a guest who has **arrived** — that is a room move with a key and a suitcase, not an
+ *    optimisation, and it belongs to the front desk;
+ *  - move anyone for a **marginal** gain. A room that scores a fraction better is not worth changing
+ *    the answer somebody may already have written on a card at reception, and churn would make the
+ *    calendar untrustworthy the night before every arrival.
+ */
+
+/** Arrivals within this many hours are close enough that the house's picture is reliable. */
+const REOPTIMISE_WINDOW_HOURS = 12;
+
+/**
+ * How much better a room must score before anybody is moved.
+ *
+ * Set above the anti-fragmentation tie-break (max 9) on purpose: that nudge decides between rooms
+ * that are otherwise equal, and it must never on its own be a reason to relocate a guest. Only a
+ * real operational gain — a ready room instead of a dirty one, a clustered turnover, a staffed
+ * floor — clears this bar.
+ */
+const REOPTIMISE_MIN_GAIN = 40;
+
+export async function reoptimiseImminentArrivals(
+  tenantId: string,
+  propertyId: string,
+  timezone: string,
+): Promise<{ moved: number; considered: number; details: string[] }> {
+  const db = forTenant(tenantId);
+  const today = todayInTz(timezone);
+
+  const defs = await db.propertyDefaults.findUnique({
+    where: { propertyId },
+    select: { inspectionGate: true, autoAssignEnabled: true },
+  });
+  if (!defs?.autoAssignEnabled) return { moved: 0, considered: 0, details: [] };
+  const sellable = new Set(sellableStatuses(defs.inspectionGate ?? false));
+
+  const now = Date.now();
+  const windowEnd = new Date(now + REOPTIMISE_WINDOW_HOURS * 3_600_000);
+
+  const candidatesToReview = await db.roomAssignment.findMany({
+    where: {
+      propertyId,
+      status: "active",
+      checkedOutAt: null,
+      checkedInAt: null, // not arrived — see the second rule above
+      pinned: false, // not chosen by a person — see the first
+      checkIn: { lte: windowEnd },
+      reservation: { departedAt: null, status: { in: ASSIGNABLE } },
+    },
+    include: {
+      unit: { select: { id: true, label: true, floor: true, roomTypeId: true, hkStatus: true } },
+      line: { select: { id: true, roomTypeId: true, checkIn: true, checkOut: true } },
+      reservation: { select: { id: true, guestName: true } },
+    },
+  });
+  if (candidatesToReview.length === 0) return { moved: 0, considered: 0, details: [] };
+
+  const units = await db.unit.findMany({
+    where: { propertyId, active: true },
+    select: { id: true, label: true, floor: true, hkStatus: true, roomTypeId: true },
+    orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+  });
+  const occupied = await db.roomAssignment.findMany({
+    where: { propertyId, status: "active", checkedOutAt: null },
+    select: { id: true, unitId: true, checkIn: true, checkOut: true },
+  });
+
+  let moved = 0;
+  const details: string[] = [];
+
+  for (const a of candidatesToReview) {
+    const line = a.line;
+
+    const scored = rankUnitsForStay(
+      units.map((u) => ({
+        unitId: u.id,
+        label: u.label,
+        floor: u.floor,
+        hkStatus: u.hkStatus,
+        roomTypeId: u.roomTypeId,
+        // The room the guest is already in does not clash with itself.
+        freeWholeStay: !occupied.some(
+          (o) => o.unitId === u.id && o.id !== a.id && o.checkIn < line.checkOut && o.checkOut > line.checkIn,
+        ),
+        freeSomeNights: false,
+        blocked: u.hkStatus === "out_of_order" || !sellable.has(u.hkStatus as HkStatus),
+      })),
+      {
+        bookedRoomTypeId: line.roomTypeId,
+        sameDayArrival: ymd(line.checkIn) === today,
+        preferredFloor: null,
+        turnoversByFloor: turnoversByFloor(occupied, units, today),
+        staffedFloors: await staffedFloorsNow(db, propertyId, units),
+        occupiedByFloor: occupiedByFloor(occupied, units, ymd(line.checkIn)),
+      },
+    );
+
+    const best = scored[0];
+    if (!best || best.unitId === a.unitId) continue;
+    const currentScore = scored.find((s) => s.unitId === a.unitId)?.score ?? -Infinity;
+    if (best.score - currentScore < REOPTIMISE_MIN_GAIN) continue;
+
+    // Same claim-inside-a-transaction discipline as the first placement: the scan is a snapshot, and
+    // a check-in or another sweep may have taken the room since.
+    const done = await withTenantTransaction(tenantId, async (tx) => {
+      const taken = await tx.roomAssignment.count({
+        where: {
+          unitId: best.unitId, status: "active", checkedOutAt: null,
+          checkIn: { lt: line.checkOut }, checkOut: { gt: line.checkIn },
+        },
+      });
+      if (taken > 0) return false;
+      // Re-read the row: if somebody pinned it or checked the guest in while we were scoring, the
+      // two rules above now forbid what we were about to do.
+      const fresh = await tx.roomAssignment.findUnique({
+        where: { id: a.id },
+        select: { pinned: true, checkedInAt: true, status: true, checkedOutAt: true },
+      });
+      if (!fresh || fresh.status !== "active" || fresh.checkedOutAt) return false;
+      if (!canReassign({ pinned: fresh.pinned, checkedInAt: fresh.checkedInAt })) return false;
+
+      await tx.roomAssignment.update({ where: { id: a.id }, data: { status: "moved" } });
+      await tx.roomAssignment.create({
+        data: {
+          tenantId, propertyId, reservationId: a.reservation.id, reservationLineId: line.id,
+          unitId: best.unitId, checkIn: line.checkIn, checkOut: line.checkOut,
+          status: "active", checkedInAt: null, pinned: false,
+          note: `re-optimised before arrival · ${best.reasons[0]}`,
+        },
+      });
+      return true;
+    });
+
+    if (done) {
+      moved++;
+      const idx = occupied.findIndex((o) => o.id === a.id);
+      if (idx >= 0) occupied.splice(idx, 1);
+      occupied.push({ id: "reopt", unitId: best.unitId, checkIn: line.checkIn, checkOut: line.checkOut });
+      details.push(`${a.reservation.guestName}: ${a.unit.label} → ${best.label} (${best.reasons[0]})`);
+    }
+  }
+
+  return { moved, considered: candidatesToReview.length, details };
+}
+
+/** Floors with somebody clocked in right now — the input to levelling housekeeping's load. */
+async function staffedFloorsNow(
+  db: ReturnType<typeof forTenant>,
+  propertyId: string,
+  units: { id: string; floor: string | null }[],
+): Promise<string[]> {
+  const open = await db.staffShift.findMany({
+    where: { propertyId, clockOutAt: null },
+    select: { userId: true },
+  });
+  if (open.length === 0) return [];
+  // Without per-shift zones there is no floor to attribute a shift to, so rather than invent one,
+  // report every floor that has rooms as staffed: the effect is that levelling stops discriminating
+  // between floors, which is the honest answer when nobody has told us who is working where.
+  return [...new Set(units.map((u) => u.floor ?? ""))];
+}
+
 /** Sweep every property. The scheduled entry point; see `app/api/jobs/assign/route.ts`. */
 export async function autoAssignAllProperties(
   db: ReturnType<typeof forTenant>,
-): Promise<{ properties: number; assigned: number; unplaceable: number; details: string[] }> {
+): Promise<{ properties: number; assigned: number; reoptimised: number; unplaceable: number; details: string[] }> {
   const properties = await db.property.findMany({
     select: { id: true, tenantId: true, name: true, timezone: true },
   });
   let assigned = 0;
   let unplaceable = 0;
+  let reoptimised = 0;
   const details: string[] = [];
   for (const p of properties) {
+    // Place first, then re-optimise. A booking that arrives unassigned an hour before check-in
+    // should be placed by the same pass that would have improved it, not left for the next tick.
     const r = await autoAssignForProperty(p.tenantId, p.id, p.timezone);
     assigned += r.assigned;
     unplaceable += r.unplaceable;
     for (const d of r.details) details.push(`${p.name}: ${d}`);
+
+    const o = await reoptimiseImminentArrivals(p.tenantId, p.id, p.timezone);
+    reoptimised += o.moved;
+    for (const d of o.details) details.push(`${p.name}: ${d}`);
   }
-  return { properties: properties.length, assigned, unplaceable, details };
+  return { properties: properties.length, assigned, reoptimised, unplaceable, details };
 }
