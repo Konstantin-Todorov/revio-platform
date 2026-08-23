@@ -153,6 +153,32 @@ before the column existed), which is why Receivables reads empty rather than sho
 
 ---
 
+## The state audit — run this, don't wait to be told
+
+`packages/db/scripts/state-audit.sql` (read-only, safe on production) lists every record currently
+in a contradictory state, with the remedy for each. It exists because the round-2 bug was found by a
+hotelier rather than by us, and the principle it established — **no record may exist in a state with
+no available action** — is a claim about the whole database that nothing was checking.
+
+```
+psql "$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)" \
+  -f packages/db/scripts/state-audit.sql
+```
+
+Zero rows on every line is healthy. Production, 2026-08-23:
+
+| Fault | Rows | Note |
+| --- | --- | --- |
+| closed folio with no recorded outcome | 12 → **0** | fixed by migration `20260823140000_backfill_folio_outcome` |
+| genuinely overstayed | 6 | real operational debt, not corruption — the desk must act, or §3 auto-close will |
+| charge posted after the folio closed | 4 | the round-2 stay's post-departure breakfasts |
+| cancelled reservation still occupying a room | 1 | the €393 room-110 row; cancelling is now refused, this row predates it |
+| stay with folios closed but rooms never released | 1 | the round-2 stay — needs `repair-stuck-stays.sql` |
+| room double-assigned over overlapping nights | 0 | ✓ |
+
+Worth running before every release, and it is the natural home for the next integrity rule anyone
+thinks of.
+
 ## Working agreement
 
 - Edit here, commit, push to `main`; Railway auto-deploys all six services. No staging yet.

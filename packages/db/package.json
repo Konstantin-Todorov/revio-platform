@@ -20,7 +20,8 @@
     "cert-property": "tsx scripts/cert-property.ts",
     "rls-verify": "tsx scripts/rls-verify.ts",
     "claim-verify": "tsx scripts/claim-verify.ts",
-    "lease-verify": "tsx scripts/lease-verify.ts"
+    "lease-verify": "tsx scripts/lease-verify.ts",
+    "state-audit": "psql \"$DATABASE_URL\" -f scripts/state-audit.sql"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
