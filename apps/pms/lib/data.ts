@@ -453,6 +453,72 @@ export interface AvailableUnit {
 }
 
 /** Units of a room type with availability for a stay window (for check-in / room move). */
+/**
+ * Free units across EVERY room type, for the move screen (§2.5).
+ *
+ * `availableUnitsFor` answers "which rooms of the booked type are free", which is the right question
+ * at check-in and the wrong one at 23:00 when the shower in 101 has failed and the only thing free
+ * is a Superior Twin. A cross-type move is a real, common operation — the round exists partly to
+ * rebuild it — so the screen has to be able to offer one.
+ *
+ * Grouped by room type so the difference is impossible to miss: moving within the booked type is
+ * housekeeping's problem, moving outside it changes what the guest is being accommodated in and has
+ * a price consequence a manager must decide about.
+ */
+export async function availableUnitsByRoomType(
+  propertyId: string,
+  checkIn: string,
+  checkOut: string,
+  excludeAssignmentId?: string,
+): Promise<{ roomTypeId: string; roomTypeName: string; units: AvailableUnit[] }[]> {
+  const defs = await prisma.propertyDefaults.findUnique({ where: { propertyId }, select: { inspectionGate: true } });
+  const sellable = new Set(sellableStatuses(defs?.inspectionGate ?? false));
+
+  const roomTypes = await prisma.roomType.findMany({
+    where: { propertyId, active: true },
+    orderBy: { sortOrder: "asc" },
+    select: {
+      id: true, name: true,
+      units: {
+        where: { active: true },
+        orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+        select: { id: true, label: true, floor: true, hkStatus: true },
+      },
+    },
+  });
+
+  const allUnitIds = roomTypes.flatMap((rt) => rt.units.map((u) => u.id));
+  if (allUnitIds.length === 0) return [];
+
+  const overlapping = await prisma.roomAssignment.findMany({
+    where: {
+      unitId: { in: allUnitIds },
+      status: "active",
+      checkedOutAt: null,
+      checkIn: { lt: utcDay(checkOut) },
+      checkOut: { gt: utcDay(checkIn) },
+      ...(excludeAssignmentId ? { id: { not: excludeAssignmentId } } : {}),
+    },
+    select: { unitId: true },
+  });
+  const busy = new Set(overlapping.map((a) => a.unitId));
+
+  return roomTypes
+    .map((rt) => ({
+      roomTypeId: rt.id,
+      roomTypeName: rt.name,
+      units: rt.units.map((u) => {
+        const hk = u.hkStatus as HkStatus;
+        return {
+          id: u.id, label: u.label, floor: u.floor, hkStatus: hk,
+          occupied: busy.has(u.id),
+          available: !busy.has(u.id) && sellable.has(hk),
+        };
+      }),
+    }))
+    .filter((g) => g.units.some((u) => u.available));
+}
+
 export async function availableUnitsFor(roomTypeId: string, checkIn: string, checkOut: string, excludeAssignmentId?: string): Promise<AvailableUnit[]> {
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId }, select: { propertyId: true } });
   const defs = roomType ? await prisma.propertyDefaults.findUnique({ where: { propertyId: roomType.propertyId }, select: { inspectionGate: true } }) : null;

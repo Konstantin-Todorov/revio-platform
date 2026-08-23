@@ -103,9 +103,9 @@ const KIND_TONE: Record<string, Tone> = {
 const DEPOSIT_KINDS = new Set(["deposit_held", "deposit_use", "deposit_refund"]);
 const inputCls = "h-9 rounded-md border border-surface-border bg-white px-2.5 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-600";
 
-export default async function FolioPage({ params, searchParams }: { params: Promise<{ reservationId: string }>; searchParams: Promise<{ error?: string }> }) {
+export default async function FolioPage({ params, searchParams }: { params: Promise<{ reservationId: string }>; searchParams: Promise<{ error?: string; moved?: string }> }) {
   const { reservationId } = await params;
-  const { error } = await searchParams;
+  const { error, moved } = await searchParams;
   const data = await getFolioView(reservationId);
   if (!data) redirect("/folios");
   const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras, isManager } = data!;
@@ -137,6 +137,20 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
       {error && (
         <div className="mb-4 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {ERRORS[error] ?? "Something went wrong — try again."}
+        </div>
+      )}
+
+      {/* Landed here from a cross-type move (§2.5). The room changed; what was SOLD did not, and the
+          difference is a decision rather than an automatic posting. Saying so here — where the money
+          is — is the difference between a considered comp and a silently absorbed one. */}
+      {moved && (
+        <div className="mb-4 flex items-start gap-2 rounded-md bg-brand-50 px-3 py-2.5 text-[12.5px] text-brand-800">
+          <ArrowRightLeft className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <span className="font-bold">Moved to a different room type.</span>{" "}
+            The booking is unchanged — the guest still bought what they bought, and nothing was sent to any channel.
+            If the new room prices differently, post the difference as a charge, or comp it. Either way it is recorded.
+          </div>
         </div>
       )}
 

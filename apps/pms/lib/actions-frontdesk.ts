@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { withTenantTransaction } from "@revio/db";
+import { describeAccommodation } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
@@ -214,6 +215,27 @@ export async function reopenStay(fd: FormData): Promise<void> {
 /** Move an in-house stay to a different unit: end the current assignment, open a new one, vacated unit → Dirty. */
 const MOVE_REASONS = ["request", "upgrade", "maintenance", "noise"];
 
+/**
+ * Move a stay to a different room (§2.5) — the rebuild.
+ *
+ * ATOMIC. Ending the old assignment, opening the new one and dirtying the vacated room used to be
+ * three sequential writes; a failure between them left a guest in two rooms or none. On a screen
+ * whose whole purpose is knowing which room somebody is in, that is the §1 bug wearing a different
+ * hat, and it is why this round insisted every state change here share that discipline.
+ *
+ * The new assignment is **pinned**: a person chose this room, so the optimiser never reconsiders it
+ * (§2.3). That is the whole promise of a manual override — nobody is moved the night before arrival
+ * because a score improved.
+ *
+ * **Across room types, the CRS record does not change** (§2.7). The guest booked a Standard; that
+ * stays true in the CRS. The PMS records that they were accommodated in a Deluxe, in plain content
+ * on the reservation's history, and emits NOTHING to channels — a front-desk upgrade is not a
+ * distribution event. The physical room's occupancy changes, which the waterfall reads, and the
+ * commercial record does not.
+ *
+ * The price difference is assessed here and stated; what to DO about it is a manager's choice on the
+ * folio (comp, charge, refund, waive), never something this decides on their behalf.
+ */
 export async function roomMove(fd: FormData): Promise<void> {
   const session = await ctx("frontDesk");
   const assignmentId = str(fd, "assignmentId");
@@ -222,10 +244,16 @@ export async function roomMove(fd: FormData): Promise<void> {
 
   const a = await prisma.roomAssignment.findFirst({
     where: { id: assignmentId, propertyId: session.activePropertyId, status: "active", checkedOutAt: null },
-    include: { unit: { select: { label: true } } },
+    include: {
+      unit: { select: { label: true, roomTypeId: true, roomType: { select: { name: true } } } },
+      line: { select: { roomTypeId: true, roomType: { select: { name: true } } } },
+    },
   });
   if (!a) redirect("/dashboard");
-  const newUnit = await prisma.unit.findFirst({ where: { id: newUnitId, propertyId: session.activePropertyId } });
+  const newUnit = await prisma.unit.findFirst({
+    where: { id: newUnitId, propertyId: session.activePropertyId },
+    include: { roomType: { select: { name: true } } },
+  });
   if (!newUnit || newUnit.id === a!.unitId) redirect(`/move/${assignmentId}?error=pick`);
 
   const clash = await prisma.roomAssignment.count({
@@ -233,19 +261,45 @@ export async function roomMove(fd: FormData): Promise<void> {
   });
   if (clash > 0) redirect(`/move/${assignmentId}?error=busy`);
 
-  // End the old assignment (status "moved" — NOT a checkout, so it isn't counted as a departure).
-  await prisma.roomAssignment.update({ where: { id: assignmentId }, data: { status: "moved" } });
-  await prisma.roomAssignment.create({
-    data: {
-      tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId: a!.reservationId,
-      reservationLineId: a!.reservationLineId, unitId: newUnitId, checkIn: a!.checkIn, checkOut: a!.checkOut,
-      status: "active", checkedInAt: a!.checkedInAt ?? new Date(), note: `moved from ${a!.unit.label} (${reason})`,
-    },
+  // Booked (CRS) vs accommodated (PMS). Compared against the RESERVATION LINE's type, not the old
+  // room's — after a previous cross-type move the old room is already not what was sold, and
+  // comparing against it would call a move back to the booked type an "upgrade".
+  const crossType = newUnit!.roomTypeId !== a!.line.roomTypeId;
+  const accommodationNote = crossType
+    ? describeAccommodation({
+        bookedRoomTypeName: a!.line.roomType.name,
+        bookedUnitLabel: a!.unit.label,
+        accommodatedRoomTypeName: newUnit!.roomType.name,
+        accommodatedUnitLabel: newUnit!.label,
+      })
+    : null;
+
+  await withTenantTransaction(session.tenantId, async (tx) => {
+    // "moved", not "checked out" — the guest has not departed, and counting this as a departure
+    // would put them in the day's checkout figures and the night audit's movements.
+    await tx.roomAssignment.update({ where: { id: assignmentId }, data: { status: "moved" } });
+    await tx.roomAssignment.create({
+      data: {
+        tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId: a!.reservationId,
+        reservationLineId: a!.reservationLineId, unitId: newUnitId, checkIn: a!.checkIn, checkOut: a!.checkOut,
+        status: "active", checkedInAt: a!.checkedInAt ?? new Date(),
+        pinned: true,
+        note: `moved from ${a!.unit.label} (${reason})`,
+      },
+    });
+    await tx.unit.update({ where: { id: a!.unitId }, data: { hkStatus: "dirty" } });
   });
-  await prisma.unit.update({ where: { id: a!.unitId }, data: { hkStatus: "dirty" } });
-  await logAudit(session.activePropertyId, session.tenantId, { entity: "room_move", field: reason, oldValue: a!.unit.label, newValue: newUnit!.label, userId: session.userId });
+
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "room_move", field: reason, oldValue: a!.unit.label, newValue: newUnit!.label, userId: session.userId,
+  });
+  if (accommodationNote) {
+    await logAudit(session.activePropertyId, session.tenantId, {
+      entity: "accommodated", field: `#${a!.reservationId.slice(-6)}`, newValue: accommodationNote, userId: session.userId,
+    });
+  }
   refresh();
-  redirect("/dashboard");
+  redirect(crossType ? `/folio/${a!.reservationId}?moved=1` : "/dashboard");
 }
 
 /**

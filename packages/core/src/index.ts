@@ -13,6 +13,7 @@ export * from "./inventory/waterfall.js";
 export * from "./stays/stay-state.js";
 export * from "./stays/close-day.js";
 export * from "./stays/assignment.js";
+export * from "./stays/move.js";
 export * from "./metrics/formulas.js";
 export * from "./metrics/channel-economics.js";
 export * from "./guests/recognition.js";
