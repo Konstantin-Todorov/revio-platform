@@ -179,6 +179,11 @@ Zero rows on every line is healthy. Production, 2026-08-23:
 Worth running before every release, and it is the natural home for the next integrity rule anyone
 thinks of.
 
+## Before the first real hotel
+
+`docs/GO-LIVE.md` is the checklist — blockers, strongly-recommended, and what is already done so
+nobody redoes it. Read it before promising a customer a date.
+
 ## Working agreement
 
 - Edit here, commit, push to `main`; Railway auto-deploys all six services. No staging yet.
