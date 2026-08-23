@@ -143,4 +143,6 @@ export const JOB = {
   pickupSnapshot: "pickup-snapshot",
   /** Round-2 §3: closes a business day nobody closed, so unclosed days cannot accumulate. */
   autoCloseDay: "auto-close-day",
+  /** Round-2 §2.3: places every booking in a room so there is no unassigned state. */
+  autoAssign: "auto-assign",
 } as const;

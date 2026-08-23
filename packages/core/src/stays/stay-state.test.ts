@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { deriveStayState, canCheckIn, canCancel, type StayAssignment } from "./stay-state.js";
 
-const live: StayAssignment = { status: "active", checkedOutAt: null };
-const checkedOut: StayAssignment = { status: "active", checkedOutAt: new Date("2026-07-21T14:18:00Z") };
-const moved: StayAssignment = { status: "moved", checkedOutAt: null };
+const arrived = new Date("2026-08-20T14:00:00Z");
+const live: StayAssignment = { status: "active", checkedInAt: arrived, checkedOutAt: null };
+const checkedOut: StayAssignment = { status: "active", checkedInAt: arrived, checkedOutAt: new Date("2026-07-21T14:18:00Z") };
+const moved: StayAssignment = { status: "moved", checkedInAt: arrived, checkedOutAt: null };
+/** Auto-assigned for a future stay: a room is held, nobody has arrived (§2.3). */
+const allocated: StayAssignment = { status: "active", checkedInAt: null, checkedOutAt: null };
 
 /** Noon, with an 11:00 checkout — so "past the checkout time" is true unless a test says otherwise. */
 const base = { today: "2026-08-23", nowMinutes: 12 * 60, checkOutMinutes: 11 * 60 };
@@ -153,5 +156,29 @@ describe("canCancel", () => {
       allowed: false,
       reason: "departed",
     });
+  });
+});
+
+describe("a room allocated is not a guest arrived (auto-assignment, §2.3)", () => {
+  it("an auto-assigned future booking is NOT in the house", () => {
+    // Rooms used to be allocated at check-in, so a live assignment meant somebody was in it. Since
+    // every booking is placed on receipt that is no longer true, and counting it would put a guest
+    // who is still at home into tonight's occupancy and the night audit's revenue.
+    const s = deriveStayState({ ...base, departedAt: null, assignments: [allocated], checkOutDate: "2026-08-30" });
+    expect(s.inHouse).toBe(false);
+  });
+
+  it("an allocated room cannot overstay — nobody is in it", () => {
+    const s = deriveStayState({ ...base, departedAt: null, assignments: [allocated], checkOutDate: "2026-08-01" });
+    expect(s.overdueState).toBeNull();
+  });
+
+  it("becomes in-house the moment the guest checks in", () => {
+    const s = deriveStayState({ ...base, departedAt: null, assignments: [live], checkOutDate: "2026-08-30" });
+    expect(s.inHouse).toBe(true);
+  });
+
+  it("a booking merely holding a room may still be cancelled", () => {
+    expect(canCancel({ assignments: [allocated], departedAt: null })).toEqual({ allowed: true });
   });
 });

@@ -20,6 +20,16 @@
 export interface StayAssignment {
   /** `active` while the assignment stands; `moved` once superseded by a room move. */
   status: string;
+  /**
+   * Set when the guest physically arrived.
+   *
+   * Load-bearing since auto-assignment (§2.3). Rooms used to be allocated AT check-in, so "has a
+   * live assignment" and "is in the building" were the same sentence — and three files said the
+   * first while meaning the second. Now that every booking is placed on receipt, a reservation can
+   * hold a room for next Tuesday, and counting it as in-house puts a guest who is at home in
+   * tonight's occupancy.
+   */
+  checkedInAt: Date | null;
   /** Set when the guest left this room. */
   checkedOutAt: Date | null;
 }
@@ -66,7 +76,12 @@ export function deriveStayState(input: StayStateInput): StayState {
   const { departedAt, assignments, checkOutDate, today, nowMinutes, checkOutMinutes } = input;
 
   const departed = departedAt != null;
-  const liveAssignments = assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
+  // A room ALLOCATED is not a guest ARRIVED. `checkedInAt` is what separates them, and it has to be
+  // checked here rather than at each call site — that is the mistake this module exists to stop
+  // being made once per file.
+  const liveAssignments = assignments.filter(
+    (a) => a.status === "active" && a.checkedOutAt == null && a.checkedInAt != null,
+  );
   const inHouse = !departed && liveAssignments.length > 0;
 
   if (!inHouse) {
@@ -130,7 +145,11 @@ export function canCancel(input: {
   departedAt: Date | null;
 }): { allowed: boolean; reason?: string } {
   if (input.departedAt) return { allowed: false, reason: "departed" };
-  const occupied = input.assignments.some((a) => a.status === "active" && a.checkedOutAt == null);
+  // Only an ARRIVED guest blocks a cancellation. A booking merely holding an auto-assigned room for
+  // next week is exactly the kind that gets cancelled, and refusing that would be absurd.
+  const occupied = input.assignments.some(
+    (a) => a.status === "active" && a.checkedOutAt == null && a.checkedInAt != null,
+  );
   if (occupied) return { allowed: false, reason: "in_house" };
   return { allowed: true };
 }

@@ -286,6 +286,9 @@ export async function listFolios() {
       propertyId: property.id,
       status: "active",
       checkedOutAt: null,
+      // Arrived. A folio opens at check-in, so an auto-assigned future booking has no bill to show
+      // and listing it would put tomorrow's guests in today's work.
+      checkedInAt: { not: null },
       reservation: { departedAt: null, status: { notIn: ["cancelled"] } },
     },
     include: { reservation: { include: { guest: true, folios: { include: { lines: true } } } }, unit: { select: { label: true } } },

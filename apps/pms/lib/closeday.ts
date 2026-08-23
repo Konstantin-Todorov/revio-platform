@@ -38,9 +38,11 @@ export async function getCloseDayView() {
     const everCheckedIn = r.assignments.length > 0; // any assignment (active/moved/departed) = they arrived
     // A departed stay is never "due out and still in" — that readiness warning exists to catch a guest
     // the desk forgot to check out, and a checked-out guest is precisely not that.
+    // Arrived, not merely allocated. "Due out and still in" is about a guest the desk forgot to
+    // check out; a booking holding a room it never occupied is a no-show, handled separately.
     const active = r.departedAt
       ? []
-      : r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
+      : r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null && a.checkedInAt != null);
 
     if (!everCheckedIn && ci <= businessDate) {
       noShowCandidates.push({ reservationId: r.id, guestName, detail: `${r.lines[0]!.roomType.name} · arrival ${ci}` });

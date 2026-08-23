@@ -289,9 +289,12 @@ export async function getFrontDeskOverview() {
     // derived purely from those rows, so any stray active assignment — the check-in bug made one —
     // put a guest who had left back among the occupants, where they overstayed a night more every
     // night and drew nightly charges. `departedAt` is the single fact that settles it.
+    // `checkedInAt != null` is what makes this "in the house" rather than "has a room reserved for
+    // them". Since auto-assignment (§2.3) places every booking on receipt, the two stopped being the
+    // same thing, and without this a guest arriving next Tuesday counts in tonight's occupancy.
     const active = r.departedAt
       ? []
-      : r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
+      : r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null && a.checkedInAt != null);
     const assignedUnits = active.map((a) => ({ assignmentId: a.id, unitId: a.unitId, unitLabel: a.unit.label, hkStatus: a.unit.hkStatus as HkStatus }));
 
     const row: StayRow = {
@@ -356,7 +359,7 @@ export async function getFrontDeskOverview() {
   for (const row of inHouse) {
     const state = deriveStayState({
       departedAt: null, // rows reaching here are in-house by construction; departed stays never enter
-      assignments: [{ status: "active", checkedOutAt: null }],
+      assignments: [{ status: "active", checkedInAt: new Date(), checkedOutAt: null }],
       checkOutDate: row.checkOut,
       today,
       nowMinutes: nowMin,
