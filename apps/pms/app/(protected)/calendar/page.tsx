@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { CalendarRange, ChevronLeft, ChevronRight, Pin } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
-import { getTapeChart, type BarStatus, type TapeRow } from "@/lib/tape-chart";
+import { getTapeChart, type BarStatus } from "@/lib/tape-chart";
+import { TapeGrid } from "@/components/calendar/TapeGrid";
+import { moveFromCalendar } from "@/lib/actions-frontdesk";
 import { addDaysYmd } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-/** Colour carries status, and the legend is always on screen — a colour nobody can decode is decoration. */
+/** The legend, which the page owns because it sits outside the scrollable grid. */
 const BAR_TONE: Record<BarStatus, string> = {
   arrival: "bg-accent-600 text-white",
   in_house: "bg-brand-700 text-white",
@@ -41,16 +43,6 @@ export default async function CalendarPage({
   const span = dates.length;
   const prev = addDaysYmd(from, -span);
   const next = addDaysYmd(from, span);
-
-  // Grouped by floor, because a 120-room property is unreadable as one list and housekeeping,
-  // maintenance and the eye all already think in floors.
-  const byFloor = new Map<string, TapeRow[]>();
-  for (const r of rows) {
-    const key = r.floor ?? "—";
-    byFloor.set(key, [...(byFloor.get(key) ?? []), r]);
-  }
-
-  const gridCols = `${LABEL_COL}px repeat(${span}, ${COL}px)`;
 
   return (
     <div>
@@ -108,91 +100,21 @@ export default async function CalendarPage({
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          {/* Horizontal scroll lives on this one container, so the page itself never scrolls sideways. */}
-          <div className="overflow-x-auto">
-            <div style={{ minWidth: LABEL_COL + span * COL }}>
-              {/* Date header */}
-              <div className="grid border-b border-surface-border bg-surface-muted" style={{ gridTemplateColumns: gridCols }}>
-                <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">Room</div>
-                {tapeDays.map((d) => (
-                  <div key={d.date}
-                    className={`border-l border-surface-border py-1.5 text-center ${d.weekend ? "bg-brand-50" : ""} ${d.today ? "bg-accent-50" : ""}`}>
-                    <div className={`text-[10px] uppercase ${d.today ? "font-bold text-accent-700" : "text-ink-400"}`}>
-                      {new Date(`${d.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}
-                    </div>
-                    <div className={`text-[12px] font-semibold ${d.today ? "text-accent-700" : "text-ink-700"}`}>
-                      {d.date.slice(8)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {[...byFloor.entries()].map(([floor, floorRows]) => (
-                <div key={floor}>
-                  <div className="grid border-b border-surface-border bg-surface-muted/60" style={{ gridTemplateColumns: gridCols }}>
-                    <div className="px-3 py-1 text-[11px] font-bold text-ink-500">
-                      {floor === "—" ? "No floor set" : `Floor ${floor}`}
-                      <span className="ml-1.5 font-normal text-ink-400">{floorRows.length}</span>
-                    </div>
-                  </div>
-
-                  {floorRows.map((row) => (
-                    <div key={row.unitId} className="grid border-b border-surface-border last:border-b-0" style={{ gridTemplateColumns: gridCols }}>
-                      <div className="flex items-center gap-1.5 px-3 py-2">
-                        <span className="text-[13px] font-semibold text-ink-900">{row.label}</span>
-                        <span className="truncate text-[10.5px] text-ink-400">{row.roomTypeName}</span>
-                      </div>
-
-                      {/* The night cells, then the bars laid over them in the same grid track space. */}
-                      <div className="relative col-span-full col-start-2 grid" style={{ gridTemplateColumns: `repeat(${span}, ${COL}px)` }}>
-                        {tapeDays.map((d) => (
-                          <div key={d.date}
-                            className={`h-9 border-l border-surface-border ${d.weekend ? "bg-brand-50/50" : ""} ${d.today ? "bg-accent-50/60" : ""}`} />
-                        ))}
-                        {row.bars.map((bar) => {
-                          const startIdx = dates.indexOf(bar.from);
-                          if (startIdx < 0) return null;
-                          return (
-                            <Link
-                              key={`${bar.reservationId}-${bar.from}`}
-                              href={`/reservation/${bar.reservationId}`}
-                              title={`${bar.guestName} · ${bar.from} → ${bar.to} · ${BAR_LABEL[bar.status]}${bar.pinned ? " · room pinned" : ""}`}
-                              className={`absolute inset-y-1 flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] font-semibold shadow-sm transition-opacity hover:opacity-90 ${BAR_TONE[bar.status]} ${
-                                bar.continuesLeft ? "rounded-l-none" : ""
-                              } ${bar.continuesRight ? "rounded-r-none" : ""}`}
-                              style={{ left: startIdx * COL + 2, width: bar.nights * COL - 4 }}
-                            >
-                              {bar.pinned && <Pin className="h-2.5 w-2.5 shrink-0 opacity-80" />}
-                              <span className="truncate">{bar.guestName}</span>
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))}
-
-              {/* The insight layer: the shape above, the numbers below (§2.1). */}
-              <div className="grid border-t-2 border-surface-border bg-surface-muted" style={{ gridTemplateColumns: gridCols }}>
-                <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">Free · occ.</div>
-                {tapeDays.map((d) => (
-                  <div key={d.date} className={`border-l border-surface-border py-1.5 text-center ${d.weekend ? "bg-brand-50" : ""}`}>
-                    <div className={`text-[12px] font-bold ${d.availableRooms === 0 ? "text-danger-600" : "text-ink-800"}`}>
-                      {d.availableRooms}
-                    </div>
-                    <div className="text-[9.5px] text-ink-400">{d.occupancyPct}%</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <TapeGrid
+            rows={rows}
+            dates={dates}
+            tapeDays={tapeDays}
+            col={COL}
+            labelCol={LABEL_COL}
+            returnTo={`/calendar?from=${from}&days=${span}`}
+            moveAction={moveFromCalendar}
+          />
         </Card>
       )}
 
       <p className="mt-3 text-[11px] text-ink-400">
-        Showing {span} nights from {from}. Rates are not shown here — they live in RevioCRS; this grid is about rooms and people.
-        Today is {today}.
+        Showing {span} nights from {from}. Drag a stay onto another room to move it. Rates are not shown here —
+        they live in RevioCRS; this grid is about rooms and people. Today is {today}.
       </p>
     </div>
   );

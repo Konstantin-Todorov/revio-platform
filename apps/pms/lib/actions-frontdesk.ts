@@ -174,6 +174,27 @@ export async function checkOut(fd: FormData): Promise<void> {
 }
 
 /**
+ * Move a stay by dragging its bar on the calendar (§2.5).
+ *
+ * A thin wrapper over the same `roomMove` the form uses — deliberately thin. A drag that took its
+ * own path to the database would be a second implementation of the most state-heavy operation in
+ * the product, and the one people reach for most casually. It gets the same transaction, the same
+ * clash check, the same pinning and the same CRS boundary.
+ *
+ * What differs is only where you end up: the calendar is a place you work from, so a move made
+ * there returns there rather than throwing you to the dashboard. Same principle as the folio modal
+ * — act where you are.
+ */
+export async function moveFromCalendar(fd: FormData): Promise<void> {
+  // Gated here as well as in `roomMove`. This is its own POST endpoint, and a guarantee you have to
+  // follow a delegation to find is one the next reader will not check for.
+  await ctx("frontDesk");
+  const from = str(fd, "from");
+  fd.set("returnTo", from && from.startsWith("/calendar") ? from : "/calendar");
+  await roomMove(fd);
+}
+
+/**
  * Undo a check-out, so a stay that ended by mistake has a way back.
  *
  * This exists because of the rule the round established: no record may sit in a state with no
@@ -299,7 +320,12 @@ export async function roomMove(fd: FormData): Promise<void> {
     });
   }
   refresh();
-  redirect(crossType ? `/folio/${a!.reservationId}?moved=1` : "/dashboard");
+  revalidatePath("/calendar");
+  // A cross-type move always lands on the folio, wherever it was started from: there is a price
+  // decision waiting, and dropping the user back on the calendar would leave it unmade and unseen.
+  if (crossType) redirect(`/folio/${a!.reservationId}?moved=1`);
+  const returnTo = str(fd, "returnTo");
+  redirect(returnTo && returnTo.startsWith("/calendar") ? returnTo : "/dashboard");
 }
 
 /**

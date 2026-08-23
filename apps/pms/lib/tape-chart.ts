@@ -28,6 +28,8 @@ export type BarStatus =
 
 export interface TapeBar {
   reservationId: string;
+  /** The assignment this bar draws — what a drag actually moves. */
+  assignmentId: string;
   guestName: string;
   /** Inclusive first night shown, `YYYY-MM-DD`, clipped to the visible window. */
   from: string;
@@ -37,6 +39,8 @@ export interface TapeBar {
   status: BarStatus;
   /** A human picked this room, so the optimiser will not move it (§2.3). */
   pinned: boolean;
+  /** False once the guest has departed — history is drawn, not dragged. */
+  movable: boolean;
   /** True when the bar is cut off by the window rather than actually starting/ending here. */
   continuesLeft: boolean;
   continuesRight: boolean;
@@ -129,12 +133,17 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
       ...(barsByUnit.get(a.unitId) ?? []),
       {
         reservationId: r.id,
+        assignmentId: a.id,
         guestName: r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName,
         from: clippedFrom,
         to: clippedTo,
         nights: dateDiff(clippedFrom, clippedTo) + 1,
         status: barStatus(a, r.departedAt, today, stayFrom, lastNight),
         pinned: a.pinned,
+        // A departed or checked-out stay is history. Dragging it would ask the move action to
+        // relocate somebody who has gone home, and the action would rightly refuse — better not to
+        // offer the gesture than to offer one that fails.
+        movable: r.departedAt == null && a.checkedOutAt == null,
         continuesLeft: stayFrom < from,
         continuesRight: lastNight > dates[dates.length - 1]!,
         balanceMinor: balance,
