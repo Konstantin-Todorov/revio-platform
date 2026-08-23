@@ -51,7 +51,9 @@ All five commits are on `main`, CI green, deployed to all six Railway services.
 | `2ed0920` | **§1.4** `resolveFolio` · **§1.6** `removeFolio` · authz coverage extended to RevioPMS + the ten setup writes gated |
 | `7729cb1` | **§1 UI** — resolution panel, receivables tab, remove-split button, departed check-in screen, Reopen stay; plus two more instances of the original fault (`stayState`, resolution folio targeting) |
 
-**§1 IS COMPLETE.** Verified in the browser against a real database, whole lifecycle: check in →
+**§1 AND §3 ARE COMPLETE; §2 IS PARTIALLY BUILT** (see below).
+
+**§1 details.** Verified in the browser against a real database, whole lifecycle: check in →
 override check-out → closed-outstanding → leaves Open, appears in Receivables → mark paid
 off-system → clears, with `outcome`, note, actor, timestamp and an audit row at every step. Then
 verified again on production after deploy: all six services healthy, login works, the new tab and
@@ -88,20 +90,22 @@ boundary §2.7 is careful to protect.
 
 ## Open — in build order
 
-### §3 — Close Day auto-close
+### §2 remainder
 
-Reuses §1's corrected close transaction, so it lands after §1. Two-stage escalation: reminder at the
-close deadline (default 00:30 next day), auto-close after the reminder window (default 22h). An
-auto-close is a **real financial close** running the same transaction, marked
-`Closed automatically by system`, and it does not block on readiness items — it carries them forward
-onto the record. Both timings property-configurable.
+Built and verified locally (commits `ffc20e3`, `98073e3`): the tape chart, the
+housekeeping-aware assignment engine, the atomic + pinned move rebuild, cross-type moves with the
+booked-vs-accommodated model. **Still open:**
 
-### §2 — Reservations calendar + move rebuild
-
-The big one. Tape chart (physical rooms × dates), drag-to-move, click-to-manage modal,
-housekeeping-aware auto-assignment with the 0–12h best-information pass, and the booked-vs-accommodated
-model (§2.7 — an operational upgrade updates physical occupancy but **never** rewrites the CRS room
-type and **never** pushes to channels).
+- [ ] **Auto-assignment writer (§2.3).** The scoring engine exists and is tested; nothing calls it
+      yet. Until it does, a reservation with no assignment does not appear on the calendar at all —
+      the grid draws assignments, and "no unassigned state" is the premise that makes that safe.
+      Needs: assign on receipt, re-optimise while unpinned, and the 0–12h best-information pass.
+- [ ] **Drag-to-move (§2.5).** The move works and is atomic; dragging a bar is the interaction that
+      is missing. It must go through the same action — a drag that half-commits is how §1 comes back
+      through a new surface.
+- [ ] **Click-to-manage modal (§2.6).** Bars currently link to the reservation page; the spec wants
+      the reservation view as a modal so the user never leaves the calendar.
+- [ ] Drag-edge-to-extend is explicitly a fast-follow, NOT this round.
 
 ---
 
