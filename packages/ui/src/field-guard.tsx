@@ -94,6 +94,9 @@ function labelOf(input: HTMLInputElement): string {
 }
 
 /** Wording aimed at what to do next, not at the constraint that was violated. */
+/** Accepts "12", "12.5", "12,50", " 8 " — and nothing else. Blank is handled by the caller. */
+const DECIMAL_RE = /^-?\d+([.,]\d+)?$/;
+
 function messageFor(input: HTMLInputElement): string | null {
   const v = input.validity;
   const Name = labelOf(input);
@@ -101,6 +104,28 @@ function messageFor(input: HTMLInputElement): string | null {
   // `badInput` is the one that matters: letters typed into a number field. The browser hides the
   // text, so without this the user has no idea why nothing is happening.
   if (v.badInput) return `${Name} must be a number — remove any letters or symbols.`;
+
+  /*
+   * MONEY FIELDS ARE `type="text"`, and that is deliberate — a number spinner on a price is wrong
+   * (scroll-wheel edits, locale decimal separators, stepper arrows nobody wants). The cost is that
+   * the browser validates nothing: `badInput` above can never fire, because a text input happily
+   * holds "abc".
+   *
+   * So the check has to be ours. Reported from the minibar catalogue: typing letters into a price
+   * produced no complaint, and the value silently became 0 — which the create path turned into an
+   * error redirect and the EDIT path turned into "keep the old price", so a hotelier could change a
+   * price, be told nothing, and find it unchanged.
+   *
+   * Empty is not an error here, the same as everywhere else in this file: blank means unset.
+   */
+  const declaresNumber = input.inputMode === "decimal" || input.inputMode === "numeric";
+  if (declaresNumber && input.type !== "number") {
+    const raw = input.value.trim();
+    if (raw !== "" && !DECIMAL_RE.test(raw)) {
+      return `${Name} must be a number — for example 12.50.`;
+    }
+  }
+
   if (v.rangeUnderflow) return `${Name} must be at least ${input.min}.`;
   if (v.rangeOverflow) return `${Name} must be no more than ${input.max}.`;
   if (v.stepMismatch) return `${Name} is not a step this field accepts.`;
@@ -144,8 +169,18 @@ function check(input: HTMLInputElement): boolean {
   return true;
 }
 
+/**
+ * Anything that claims to hold a number, however it is typed.
+ *
+ * `inputMode="decimal"` was missing, and that is every money field in the platform — prices,
+ * amounts, deposits. They are `type="text"` on purpose, which meant the guard could not see the
+ * fields where a wrong value costs the most.
+ */
 function isNumeric(el: EventTarget | null): el is HTMLInputElement {
-  return el instanceof HTMLInputElement && (el.type === "number" || el.inputMode === "numeric");
+  return (
+    el instanceof HTMLInputElement &&
+    (el.type === "number" || el.inputMode === "numeric" || el.inputMode === "decimal")
+  );
 }
 
 export function FieldGuard() {

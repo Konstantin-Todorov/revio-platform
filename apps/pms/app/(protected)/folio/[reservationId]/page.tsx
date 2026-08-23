@@ -482,6 +482,25 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 <span className="ml-1.5 text-[11px] text-ink-400">money held that may be returned — outside the balance until applied</span>
               </span>
             </div>
+            {/* No deposit types yet — so there is nothing to take a deposit AS. The form used to
+                render anyway: an empty dropdown, a live "Take deposit" button, and a grey footnote
+                explaining why it could not work. That reads as half-built rather than as
+                not-set-up-yet, and the button was a trap. Say what is missing and where to fix it. */}
+            {depositTypes.length === 0 ? (
+              <div className="rounded-md border border-dashed border-surface-border px-3 py-4 text-center">
+                <p className="text-[12.5px] font-semibold text-ink-700">No deposit types set up</p>
+                <p className="mx-auto mt-1 max-w-sm text-[11.5px] text-ink-500">
+                  A deposit type decides whether the money is <em>held</em> as a liability or applied to the bill
+                  straight away — so one has to exist before a deposit can be taken.
+                </p>
+                <Link
+                  href="/configuration"
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-1.5 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
+                >
+                  Set them up in Configuration
+                </Link>
+              </div>
+            ) : (
             <div className="flex flex-wrap items-end gap-4">
               <form action={captureDeposit} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="reservationId" value={reservationId} />
@@ -525,7 +544,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 </div>
               )}
             </div>
-            {depositTypes.length === 0 && <p className="mt-2 text-[11px] text-ink-400">No deposit types configured for this property yet.</p>}
+            )}
           </Card>
 
           {/* Check out */}

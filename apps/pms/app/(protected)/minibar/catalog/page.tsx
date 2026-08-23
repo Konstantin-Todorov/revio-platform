@@ -20,6 +20,11 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
       </Link>
       <PageHeader title="Catalog" subtitle={`${property.name} · items you can tap-to-post to a folio`} />
 
+      {error === "price" && (
+        <div className="mb-4 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
+          That price isn&rsquo;t a number. Enter an amount like 12.50.
+        </div>
+      )}
       {error === "fields" && (
         <div className="mb-4 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> Enter a name and a positive price.

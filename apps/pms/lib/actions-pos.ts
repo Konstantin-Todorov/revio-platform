@@ -24,9 +24,23 @@ async function ctx(cap: Capability) {
   return session;
 }
 
+/**
+ * A money field, in three states rather than two.
+ *
+ * `null` means BLANK — leave whatever was there alone. `NaN` means the person typed something that
+ * is not a number, which is a different thing entirely and must not be treated as "no change": a
+ * hotelier who types a price and is told nothing will believe it saved.
+ */
+function moneyMinorOrBad(fd: FormData, key: string): number | null {
+  const raw = String(fd.get(key) ?? "").replace(",", ".").trim();
+  if (raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.round(n * 100) : Number.NaN;
+}
+
 function moneyMinor(fd: FormData, key: string): number {
-  const n = Number(String(fd.get(key) ?? "").replace(",", ".").trim());
-  return Number.isFinite(n) ? Math.round(n * 100) : 0;
+  const v = moneyMinorOrBad(fd, key);
+  return v == null || Number.isNaN(v) ? 0 : v;
 }
 
 /** Tap-to-post a catalog item to a stay's folio (kind = the item's category). */
@@ -61,6 +75,7 @@ export async function createPosItem(fd: FormData): Promise<void> {
   const category = str(fd, "category") === "extra" ? "extra" : "minibar";
   const outlet = OUTLETS.includes(str(fd, "outlet")) ? str(fd, "outlet") : "minibar";
   const priceMinor = moneyMinor(fd, "price");
+  if (Number.isNaN(moneyMinorOrBad(fd, "price"))) redirect("/minibar/catalog?error=price");
   if (!name || priceMinor <= 0) redirect("/minibar/catalog?error=fields");
 
   const count = await prisma.posItem.count({ where: { propertyId: session.activePropertyId } });
@@ -75,14 +90,20 @@ export async function updatePosItem(fd: FormData): Promise<void> {
   const id = str(fd, "id");
   const item = await prisma.posItem.findFirst({ where: { id, propertyId: session.activePropertyId } });
   if (!item) return;
-  const priceMinor = moneyMinor(fd, "price");
+  // A price that will not parse is REFUSED, not ignored. It used to fall through to "keep the old
+  // one", so typing letters into the field changed the name, said nothing, and left the price as it
+  // was — the hotelier walks away believing they repriced an item they did not.
+  const priceMinor = moneyMinorOrBad(fd, "price");
+  if (priceMinor != null && (Number.isNaN(priceMinor) || priceMinor <= 0)) {
+    redirect("/minibar/catalog?error=price");
+  }
   await prisma.posItem.update({
     where: { id },
     data: {
       name: str(fd, "name") || item.name,
       outlet: OUTLETS.includes(str(fd, "outlet")) ? str(fd, "outlet") : item.outlet,
       category: str(fd, "category") === "extra" ? "extra" : "minibar",
-      priceMinor: priceMinor > 0 ? priceMinor : item.priceMinor,
+      priceMinor: priceMinor ?? item.priceMinor,
       active: fd.get("active") != null,
     },
   });
