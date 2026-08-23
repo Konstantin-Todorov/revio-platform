@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { SETUP_KEY, hasFinishedSetup, nextStep, welcomeFlow } from "@revio/core";
 import { prisma } from "./db";
+import { getSession } from "./session";
+import { MANAGER_ROLES } from "./roles";
 import { activeProperty } from "./data";
 import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
@@ -20,6 +22,24 @@ export type WelcomeResult = { error?: string };
 
 const PRODUCT = "RevioPMS";
 
+/**
+ * First-run writes are manager-only.
+ *
+ * These actions were reachable by anyone with a session. The setup screens live outside
+ * `(protected)` and are only ever *shown* to an owner, but a server action is a POST endpoint and
+ * Next runs it before it re-renders anything — so showing the screen to nobody else protected
+ * nothing. A housekeeper could rename the property, change the VAT rate that prints on every
+ * invoice, or generate rooms, with one crafted request. That is the same hole as the folio one
+ * found earlier, in the one flow where the property's identity and tax settings are decided.
+ */
+const NOT_A_MANAGER: WelcomeResult = { error: "Only an Owner, Admin or Manager can complete setup." };
+
+async function requireManager() {
+  const s = await getSession();
+  if (!s || !MANAGER_ROLES.has(s.role)) return null;
+  return s;
+}
+
 async function advance(from: string): Promise<never> {
   const facts = await getWelcomeFactsForProperty();
   const next = nextStep(welcomeFlow(PRODUCT, facts), from);
@@ -28,6 +48,7 @@ async function advance(from: string): Promise<never> {
 
 /** Step 1 — who and where they are. Address and contact details print on every document. */
 export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  if (!(await requireManager())) return NOT_A_MANAGER;
   const { property } = await activeProperty();
 
   const name = str(fd, "name").trim();
@@ -55,6 +76,7 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
 
 /** Step 2 — room types, when nothing else on the platform has created them yet. */
 export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  if (!(await requireManager())) return NOT_A_MANAGER;
   const { session, property } = await activeProperty();
 
   const name = str(fd, "name").trim();
@@ -89,6 +111,7 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
 }
 
 export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
+  if (!(await requireManager())) return;
   const { property } = await activeProperty();
   const rt = await prisma.roomType.findUnique({ where: { id: str(fd, "id") } });
   if (!rt || rt.propertyId !== property.id) return;
@@ -97,6 +120,7 @@ export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
 }
 
 export async function finishWelcomeRooms(): Promise<void> {
+  if (!(await requireManager())) return;
   const { property } = await activeProperty();
   const count = await prisma.roomType.count({ where: { propertyId: property.id } });
   if (count === 0) return;
@@ -111,6 +135,7 @@ export async function finishWelcomeRooms(): Promise<void> {
  * are skipped rather than duplicated, which makes running it twice safe.
  */
 export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  if (!(await requireManager())) return NOT_A_MANAGER;
   const { session, property } = await activeProperty();
 
   const roomTypeId = str(fd, "roomTypeId");
@@ -150,6 +175,7 @@ export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData)
 }
 
 export async function removeWelcomeUnit(fd: FormData): Promise<void> {
+  if (!(await requireManager())) return;
   const { property } = await activeProperty();
   const unit = await prisma.unit.findUnique({ where: { id: str(fd, "id") } });
   if (!unit || unit.propertyId !== property.id) return;
@@ -158,6 +184,7 @@ export async function removeWelcomeUnit(fd: FormData): Promise<void> {
 }
 
 export async function finishWelcomeUnits(): Promise<void> {
+  if (!(await requireManager())) return;
   const { property } = await activeProperty();
   const count = await prisma.unit.count({ where: { propertyId: property.id } });
   if (count === 0) return;
@@ -171,6 +198,7 @@ export async function finishWelcomeUnits(): Promise<void> {
  * `invoiceIssuerName` / `invoiceVatId` / `invoiceAddress` were asked on no screen in any product.
  */
 export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
+  if (!(await requireManager())) return NOT_A_MANAGER;
   const { session, property } = await activeProperty();
 
   const standard = Number.parseInt(str(fd, "vatStandardPct"), 10);
@@ -235,11 +263,13 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
 
 /** Leave a step for later. It stays on the dashboard checklist, which is the point of allowing it. */
 export async function skipWelcomeStep(fd: FormData): Promise<void> {
+  if (!(await requireManager())) return;
   await advance(str(fd, "from"));
 }
 
 /** The last screen. Records that first-run is over so the flow never reappears. */
 export async function finishWelcome(): Promise<void> {
+  if (!(await requireManager())) return;
   const { property } = await activeProperty();
   if (!hasFinishedSetup(property.setupCompleted, PRODUCT)) {
     await prisma.property.updateMany({

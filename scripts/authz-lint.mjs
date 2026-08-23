@@ -29,7 +29,12 @@ import { fileURLToPath } from "node:url";
 // zero files, so it is not repeated here.
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-const APPS = ["apps/channel-manager", "apps/reservation"];
+// RevioPMS is in this list for the reason it should never have been out of it: it is the app where
+// the ungated-write hole was actually found (X2 — a housekeeper could post a payment or check a guest
+// out with a crafted POST, because the layout re-guards only after the action has already committed).
+// That was fixed and pinned by lib/roles.test.ts, but the tests pin the POLICY, not the COVERAGE —
+// nothing stopped the next new action from shipping ungated. Now something does.
+const APPS = ["apps/channel-manager", "apps/reservation", "apps/pms"];
 
 /**
  * Actions that deliberately have no capability gate, and why.
@@ -50,9 +55,29 @@ const EXEMPT = {
   // Changing what YOU are looking at. Writes a cookie, not hotel data.
   "actions-session.ts:setActiveProperty": "switches which property you are viewing — a cookie, not a write",
   "actions-session.ts:setGroupScope": "switches to portfolio view — a cookie, not a write",
+
+  // Gated on a ROLE SET rather than a capability. Real checks, spelled differently — the guard is
+  // `MANAGER_ROLES.has(session.role)` / `DELEGATOR_ROLES.has(...)` on the first line, and the action
+  // returns without writing when it fails. Listed rather than pattern-matched because a regex loose
+  // enough to catch `X_ROLES.has(...)` would also catch any incidental `.has()` and quietly stop
+  // being a check at all.
+  "actions-guests.ts:mergeGuests": "manager-only via MANAGER_ROLES.has(s.role) — merging identities is irreversible",
+  "actions-workforce.ts:clockInUser": "delegated clock-in, gated on DELEGATOR_ROLES (manager, supervisor, reception)",
+  "actions-workforce.ts:clockOutUser": "delegated clock-out, gated on DELEGATOR_ROLES",
+
+  // Clocking YOURSELF in and out. A session is the whole authorisation: the action reads the caller's
+  // own userId and can only ever touch that person's shift. A capability here would mean a cleaner
+  // needs permission to record that they started cleaning.
+  "actions-workforce.ts:clockInSelf": "records your OWN shift start; acts only on session.userId",
+  "actions-workforce.ts:clockOutSelf": "records your OWN shift end; acts only on session.userId",
 };
 
-const GUARD = /\b(requireCapability|guard)\s*\(/;
+// `ctx("capability")` is RevioPMS's spelling of the same thing, not a weaker one: it resolves the
+// session, checks `roleHasCapability`, and redirects the caller to their own home screen when the
+// answer is no — so nothing after it runs. Recognising it is what lets the PMS be scanned at all;
+// leaving it out would report all 40-odd of its correctly-gated actions and teach everyone to ignore
+// the check, which is worse than not running it.
+const GUARD = /\b(requireCapability|guard|requireManager)\s*\(|\bctx\s*\(\s*["']/;
 /** How far into a function body a guard may appear. It should be the first statement; this is slack. */
 const HEAD_LINES = 14;
 

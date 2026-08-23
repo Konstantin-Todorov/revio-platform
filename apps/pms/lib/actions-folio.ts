@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { withTenantTransaction } from "@revio/db";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
@@ -229,6 +230,118 @@ export async function createFolio(fd: FormData): Promise<void> {
   const label = str(fd, "label") || "Company";
   await createSplitFolio(session.tenantId, session.activePropertyId, reservationId, label);
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_split", field: label, newValue: "added", userId: session.userId });
+  refresh(reservationId);
+}
+
+/**
+ * Remove a split folio — the inverse `createFolio` never had (§1.6).
+ *
+ * Every create needs a lifecycle-gated inverse, and this one was missing in a way a hotel actually
+ * hit: a stay in production carries two empty "Company" splits that no screen can delete. Adding one
+ * by accident was a click; undoing it was impossible.
+ *
+ * Gated, in order of how much damage removal could do:
+ *   - the PRIMARY folio is never removable — it is the stay's bill, not a split;
+ *   - a CLOSED folio is never removable — closed is a financial record, corrected by credit note;
+ *   - a split that still carries live lines is refused, and the caller is told to move them back
+ *     first. Deleting it would take real charges with it.
+ * An empty, open split removes freely, which is the case that was stuck.
+ */
+export async function removeFolio(fd: FormData): Promise<void> {
+  const session = await ctx("frontDesk");
+  const reservationId = str(fd, "reservationId");
+  const folioId = str(fd, "folioId");
+
+  const folio = await prisma.folio.findFirst({
+    where: { id: folioId, reservationId, propertyId: session.activePropertyId },
+    include: { lines: { select: { id: true, voided: true } } },
+  });
+  if (!folio) redirect(`/folio/${reservationId}`);
+  if (folio!.isPrimary) redirect(`/folio/${reservationId}?error=folioprimary`);
+  if (folio!.status !== "open") redirect(`/folio/${reservationId}?error=folioclosed`);
+
+  // Voided lines don't count as content: they are struck-through history, and keeping an empty split
+  // alive because it once held a line that was cancelled is the same dead end in slower motion. They
+  // are deleted with the folio, and the void itself is already in the audit log.
+  const liveLines = folio!.lines.filter((l) => !l.voided);
+  if (liveLines.length > 0) redirect(`/folio/${reservationId}?error=foliolines`);
+
+  await withTenantTransaction(session.tenantId, async (tx) => {
+    await tx.folioLine.deleteMany({ where: { folioId } });
+    await tx.folio.delete({ where: { id: folioId } });
+  });
+
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "folio_split_removed", field: folio!.label, oldValue: `folio ${folioId.slice(-6)}`, newValue: "removed", userId: session.userId,
+  });
+  refresh(reservationId);
+}
+
+/** The four ways a closed-outstanding folio can be resolved (§1.4). Manager-only, every one logged. */
+const FOLIO_RESOLUTIONS = ["reopen", "paid_offsystem", "receivable", "written_off"] as const;
+
+/**
+ * Resolve a folio that closed carrying a balance (§1.4).
+ *
+ * "Closed with a balance" used to be limbo — the folio said closed and settled and owing at once, and
+ * no action moved it. It is now a managed state with exactly four exits, and this is all of them:
+ *
+ *   reopen         — reopen the folio so a payment can be taken normally; it closes at zero.
+ *   paid_offsystem — the money arrived another way (bank transfer, cash, external POS).
+ *                    Revenue COLLECTED.
+ *   receivable     — leave it outstanding and chase it later ("invoice sent"). Stays on the
+ *                    receivables list, which is the point of that list.
+ *   written_off    — the balance is forgiven. Revenue LOST.
+ *
+ * `paid_offsystem` and `written_off` both end at a closed folio owing nothing, and they must never be
+ * reported as the same thing: one is money that arrived and one is money that did not. They are
+ * recorded as different outcomes rather than as one "settled" flag for exactly that reason — an owner
+ * reading "€513 written off" is reading a loss.
+ *
+ * Manager-only by capability. Reception still SEES these options on the folio, disabled: hiding them
+ * would leave the desk unable to explain to a guest why nothing can be done.
+ */
+export async function resolveFolio(fd: FormData): Promise<void> {
+  const session = await ctx("manage");
+  const reservationId = str(fd, "reservationId");
+  const folioId = str(fd, "folioId");
+  const resolution = str(fd, "resolution");
+  const note = str(fd, "note");
+
+  if (!FOLIO_RESOLUTIONS.includes(resolution as (typeof FOLIO_RESOLUTIONS)[number])) {
+    redirect(`/folio/${reservationId}`);
+  }
+
+  const folio = await prisma.folio.findFirst({
+    where: { id: folioId, reservationId, propertyId: session.activePropertyId },
+    select: { id: true, status: true, outcome: true, label: true },
+  });
+  if (!folio || folio.status !== "closed") redirect(`/folio/${reservationId}`);
+
+  const now = new Date();
+  await withTenantTransaction(session.tenantId, async (tx) => {
+    if (resolution === "reopen") {
+      await tx.folio.update({
+        where: { id: folioId },
+        data: { status: "open", closedAt: null, outcome: null, outcomeNote: null, outcomeAt: null, outcomeById: null },
+      });
+      return;
+    }
+    // `receivable` keeps the folio exactly where it is and only records the decision — the debt is
+    // still owed, so changing the outcome would be a lie. It is a real choice, not a no-op: it says a
+    // human looked at this and decided to chase it.
+    const outcome = resolution === "receivable" ? "outstanding" : resolution;
+    await tx.folio.update({
+      where: { id: folioId },
+      data: { outcome, outcomeNote: note || null, outcomeAt: now, outcomeById: session.userId },
+    });
+  });
+
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "folio_resolution", field: folio!.label,
+    oldValue: folio!.outcome ?? "closed", newValue: `${resolution}${note ? ` · ${note}` : ""}`,
+    userId: session.userId,
+  });
   refresh(reservationId);
 }
 
