@@ -49,6 +49,13 @@ All five commits are on `main`, CI green, deployed to all six Railway services.
 | `c9a69cf` | **§1.3-A/B** atomic check-out · `Reservation.departedAt` · check-in guard · `reopenStay` · accrual stopped · `deriveStayState` in `@revio/core` |
 | `8dc4fe6` | RLS enabled on `AuthToken` · `JobLease` · `LoginAttempt` |
 | `2ed0920` | **§1.4** `resolveFolio` · **§1.6** `removeFolio` · authz coverage extended to RevioPMS + the ten setup writes gated |
+| `7729cb1` | **§1 UI** — resolution panel, receivables tab, remove-split button, departed check-in screen, Reopen stay; plus two more instances of the original fault (`stayState`, resolution folio targeting) |
+
+**§1 IS COMPLETE.** Verified in the browser against a real database, whole lifecycle: check in →
+override check-out → closed-outstanding → leaves Open, appears in Receivables → mark paid
+off-system → clears, with `outcome`, note, actor, timestamp and an audit row at every step. Then
+verified again on production after deploy: all six services healthy, login works, the new tab and
+panel render.
 
 ### §0 — the blocker before the blocker
 
@@ -81,25 +88,6 @@ boundary §2.7 is careful to protect.
 
 ## Open — in build order
 
-### §1 remainder — server side is live, the UI is not
-
-This is the current half-delivered state and should be closed first: the actions exist and work, but
-nothing on screen reaches them.
-
-- [ ] **§1.5 receivables screen.** `listReceivables()` exists in `apps/pms/lib/folio.ts` (closed +
-      `outcome='outstanding'`, oldest first, with `ageDays`, skipping any since paid). Needs a third
-      tab beside Open / History on `/folios`.
-- [ ] **§1.4 resolution UI.** `resolveFolio` takes `reopen | paid_offsystem | receivable |
-      written_off` + a note. Must be **visible to all roles, clickable only by a manager** — show
-      disabled with "manager approval required", never hidden, so reception can explain the
-      situation to a guest.
-- [ ] **§1.6 remove-split button.** `removeFolio` is live; the folio page has no control for it.
-- [ ] **Departed check-in page.** `/checkin/[id]` still renders the check-in form for a departed
-      stay. The action correctly refuses (`?error=departed`), but the page should say so and offer
-      **Reopen stay** (`reopenStay`, manager-only) instead of a button that cannot work.
-- [ ] `?error=departed`, `?error=folioprimary`, `?error=folioclosed`, `?error=foliolines` need
-      messages rendered.
-
 ### §3 — Close Day auto-close
 
 Reuses §1's corrected close transaction, so it lands after §1. Two-stage escalation: reminder at the
@@ -128,7 +116,13 @@ type and **never** pushes to channels).
       psql "$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)" \
         -f packages/db/scripts/repair-stuck-stays.sql
       ```
-- [ ] **Ventsi's post-departure charges** then need resolving through the §1.4 UI once it exists.
+- [ ] **Ventsi's post-departure charges** then need resolving through the §1.4 UI, which now exists:
+      open the folio and choose one of the four resolutions.
+
+**Until the repair runs, production still shows the old symptom for that one record** — verified
+2026-08-23: Ventsi still appears in Folios → Open at €513, because `departedAt` is still null there.
+The code fix is live; the row is what is stale. Its folios also have `outcome = NULL` (they closed
+before the column existed), which is why Receivables reads empty rather than showing the debt.
 
 ---
 
@@ -148,8 +142,14 @@ type and **never** pushes to channels).
   `withTenantTransaction`.
 - **Duplicated surnames in `guestName`** — "Ventsi Mukov Mukov", "Hugh Reyes Reyes". Cosmetic, looks
   like a name-concatenation bug where a guest record and a raw `guestName` are joined. Unexamined.
-- **A cancelled reservation holds an open folio** (a second "Hugh Reyes"). A cancelled stay should
-  not carry an open bill. Unexamined; likely its own small state-machine gap.
+- **A cancelled reservation holds an open folio** (a second "Hugh Reyes"). Confirmed on the live
+  Folios → Open list 2026-08-23: it shows as a live bill at €393 for room 110, on a reservation whose
+  status is `cancelled`. A cancelled stay should not carry an open bill, and it certainly should not
+  appear among in-house guests. Same family as §1 — a state change that leaves a related record
+  behind — and the obvious next fix after the repair.
+- **"Hugh Reyes Reyes" is genuinely overstayed** (room 208, €484, never checked out). Unlike Ventsi
+  this is not the bug: nothing checked it out, so the exception strip flagging it is correct
+  behaviour. It is what §3's auto-close and §1.3-C's force-resolve are for.
 
 ---
 
