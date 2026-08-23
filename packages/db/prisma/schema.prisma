@@ -88,9 +88,42 @@ model OperatorUser {
   active            Boolean   @default(true)
   /// Sessions issued before this instant are dead — see User.sessionsValidFrom.
   sessionsValidFrom DateTime?
+
+  // --- Two-factor authentication (N4) -------------------------------------------------------
+  /// The TOTP shared secret, ENCRYPTED at rest with the same AES-256-GCM helper the OTA
+  /// credentials use. A plaintext secret in this column is a second factor that the database
+  /// hands to anyone who can read it, which is no second factor at all.
+  totpSecret        String?
+  /// Null until a code has actually been verified. Enrolment stores the secret first and only
+  /// switches 2FA ON once the person proves their app generates matching codes — otherwise a
+  /// mistyped setup locks them out of the console with no way back in.
+  totpEnabledAt     DateTime?
+  /// The last 30-second step accepted for this account, so a code cannot be replayed inside its
+  /// own window. TOTP is only single-use if something remembers; without this a code read over a
+  /// shoulder stays valid for the rest of its period.
+  totpLastStep      Int?
+
   createdAt         DateTime  @default(now())
 
   ownedAccounts ClientAccount[]
+  recoveryCodes OperatorRecoveryCode[]
+}
+
+/// A single-use way back in when the phone with the authenticator app is gone.
+///
+/// Hashed, never stored in the clear: a leaked recovery code is a bypass of the second factor, so
+/// it deserves exactly the treatment a password gets. Used codes are kept rather than deleted —
+/// "this code was used, at this time" is the audit answer to "how did they get in without the app".
+model OperatorRecoveryCode {
+  id             String    @id @default(cuid())
+  operatorUserId String
+  codeHash       String
+  usedAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  operatorUser OperatorUser @relation(fields: [operatorUserId], references: [id], onDelete: Cascade)
+
+  @@index([operatorUserId])
 }
 
 // Per-tenant connectivity credential (e.g. a Channex API key), AES-256-GCM encrypted at rest.

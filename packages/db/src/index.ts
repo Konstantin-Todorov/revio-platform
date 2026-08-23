@@ -36,6 +36,16 @@ export {
 } from "./auth-tokens.js";
 export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
 export {
+  beginTotpEnrolment,
+  confirmTotpEnrolment,
+  verifySecondFactor,
+  disableTotp,
+  requiresSecondFactor,
+  type EnrolmentOffer,
+  type ConfirmResult,
+  type SecondFactorResult,
+} from "./operator-2fa.js";
+export {
   acquireJobLease,
   releaseJobLease,
   withJobLease,

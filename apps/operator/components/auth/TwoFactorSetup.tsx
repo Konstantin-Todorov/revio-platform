@@ -1,0 +1,131 @@
+"use client";
+
+import { useActionState, useState, useTransition } from "react";
+import { ShieldCheck, ShieldOff, Copy } from "lucide-react";
+import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor, type TwoFactorState } from "@/lib/actions-2fa";
+
+const inputCls =
+  "h-10 w-full rounded-md border border-surface-border bg-white px-3 text-[14px] text-ink-900 outline-none focus:border-brand-600";
+
+/**
+ * Turning two-factor authentication on and off for your own account (N4).
+ *
+ * Three states, and the middle one is the important one: the secret is stored the moment enrolment
+ * starts but 2FA is not ON until a code has been verified. So a person who scans nothing, or
+ * mistypes, is exactly where they were — able to sign in with a password — rather than locked out
+ * of the console that runs the business.
+ */
+export function TwoFactorSetup({ enabled }: { enabled: boolean }) {
+  const [state, formAction, pending] = useActionState<TwoFactorState | null, FormData>(confirmTwoFactor, null);
+  const [offer, setOffer] = useState<{ secret: string; uri: string; qrDataUrl: string | null } | null>(null);
+  const [starting, startTransition] = useTransition();
+  const [offState, offAction, offPending] = useActionState<{ error?: string } | null, FormData>(turnOffTwoFactor, null);
+
+  const live = state?.step === "enrolling" ? { secret: state.secret, uri: state.uri, qrDataUrl: state.qrDataUrl } : offer;
+
+  if (state?.step === "done") {
+    return (
+      <div className="rounded-md border border-success-500 bg-success-50 p-4">
+        <p className="flex items-center gap-1.5 text-[13px] font-bold text-success-700">
+          <ShieldCheck className="h-4 w-4" /> Two-factor authentication is on
+        </p>
+        <p className="mt-2 text-[12.5px] text-ink-700">
+          Save these recovery codes somewhere other than the phone with your authenticator app. Each one works
+          once, and <span className="font-semibold">this is the only time they are shown</span> — only their
+          hashes are kept.
+        </p>
+        <ul className="mt-2.5 grid grid-cols-2 gap-1.5">
+          {state.recoveryCodes.map((c) => (
+            <li key={c} className="rounded bg-white px-2 py-1 font-mono text-[13px] tracking-wide text-ink-900">{c}</li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard?.writeText(state.recoveryCodes.join("\n"))}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted"
+        >
+          <Copy className="h-3.5 w-3.5" /> Copy all
+        </button>
+      </div>
+    );
+  }
+
+  if (enabled) {
+    return (
+      <div>
+        <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-success-700">
+          <ShieldCheck className="h-4 w-4" /> Two-factor authentication is on for your account
+        </p>
+        <form action={offAction} className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="flex-1">
+            {/* The password is required for the same reason 2FA exists: an unattended laptop must not
+                be enough to remove the protection against an unattended laptop. */}
+            <span className="mb-1 block text-[11.5px] font-semibold text-ink-600">Your password, to turn it off</span>
+            <input name="password" type="password" autoComplete="current-password" className={inputCls} placeholder="••••••••" />
+          </label>
+          <button
+            type="submit"
+            disabled={offPending}
+            className="inline-flex h-10 items-center gap-1.5 rounded-md border border-danger-500 px-3 text-[12.5px] font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-60"
+          >
+            <ShieldOff className="h-3.5 w-3.5" /> Turn off
+          </button>
+        </form>
+        {offState?.error && <p role="alert" className="mt-2 text-[12px] font-medium text-danger-600">{offState.error}</p>}
+      </div>
+    );
+  }
+
+  if (!live) {
+    return (
+      <div>
+        <p className="text-[12.5px] text-ink-600">
+          This console can read every hotel on the platform, so a password on its own is a single point of failure.
+          Two-factor adds a code from your phone.
+        </p>
+        <button
+          type="button"
+          disabled={starting}
+          onClick={() => startTransition(async () => setOffer(await startTwoFactor().then((s) => (s.step === "enrolling" ? { secret: s.secret, uri: s.uri, qrDataUrl: s.qrDataUrl } : null))))}
+          className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+        >
+          <ShieldCheck className="h-3.5 w-3.5" /> {starting ? "Preparing…" : "Set up two-factor"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form action={formAction} className="space-y-3">
+      <input type="hidden" name="secret" value={live.secret} />
+      <input type="hidden" name="uri" value={live.uri} />
+      <p className="text-[12.5px] text-ink-700">
+        Scan this with your authenticator app, then enter the code it shows to confirm it works.
+      </p>
+      <div className="flex flex-wrap items-start gap-4">
+        {live.qrDataUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={live.qrDataUrl} alt="Two-factor QR code" width={160} height={160} className="rounded border border-surface-border bg-white p-1.5" />
+        ) : null}
+        <div className="min-w-[180px]">
+          <div className="text-[11.5px] font-semibold text-ink-600">Or enter this key by hand</div>
+          <code className="mt-1 block break-all rounded bg-surface-sunken px-2 py-1.5 font-mono text-[12px] text-ink-800">{live.secret}</code>
+        </div>
+      </div>
+      <label className="block max-w-[220px]">
+        <span className="mb-1 block text-[11.5px] font-semibold text-ink-600">Code from your app</span>
+        <input name="code" required autoComplete="one-time-code" className={inputCls} placeholder="123456" />
+      </label>
+      {state?.step === "enrolling" && state.error && (
+        <p role="alert" className="text-[12px] font-medium text-danger-600">{state.error}</p>
+      )}
+      <button
+        type="submit"
+        disabled={pending}
+        className="inline-flex h-10 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+      >
+        {pending ? "Checking…" : "Confirm and turn on"}
+      </button>
+    </form>
+  );
+}

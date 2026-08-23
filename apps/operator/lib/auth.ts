@@ -84,6 +84,57 @@ export async function verifySessionToken(token: string): Promise<VerifiedSession
   }
 }
 
+/**
+ * The half-authenticated state between a correct password and a verified second factor (N4).
+ *
+ * This is deliberately NOT a session. `verifySessionToken` only accepts `kind: "hotel" | "operator"`,
+ * so a token minted here is rejected everywhere a session is required — the type system and the
+ * verifier both refuse it, rather than it being a session that screens are trusted to guard.
+ *
+ * Short-lived on purpose: it is issued after a password is proven and before a second factor is,
+ * which is the one window where a stolen password is worth something. Five minutes is long enough
+ * to find a phone and short enough to be useless later.
+ *
+ * It carries the "remember me" choice because that was decided on the first screen and must not be
+ * silently downgraded by the second.
+ */
+const PENDING_2FA_COOKIE = "revio_op_2fa";
+const PENDING_2FA_TTL_SECONDS = 5 * 60;
+
+export async function signPendingTwoFactor(operatorId: string, remember: boolean): Promise<string> {
+  return new SignJWT({ kind: "operator_2fa", sub: operatorId, remember })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + PENDING_2FA_TTL_SECONDS)
+    .sign(secret());
+}
+
+export async function setPendingTwoFactorCookie(token: string): Promise<void> {
+  (await cookies()).set(PENDING_2FA_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: PENDING_2FA_TTL_SECONDS,
+  });
+}
+
+export async function readPendingTwoFactor(): Promise<{ operatorId: string; remember: boolean } | null> {
+  const token = (await cookies()).get(PENDING_2FA_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    if (payload.kind !== "operator_2fa") return null;
+    return { operatorId: String(payload.sub), remember: payload.remember === true };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearPendingTwoFactorCookie(): Promise<void> {
+  (await cookies()).delete(PENDING_2FA_COOKIE);
+}
+
 export async function setSessionCookie(
   token: string,
   ttlSeconds: number = DEFAULT_TTL_SECONDS,

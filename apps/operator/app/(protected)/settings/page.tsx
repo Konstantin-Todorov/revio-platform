@@ -4,6 +4,8 @@ import { getOperatorUsers } from "@/lib/data";
 import { getOperatorSession } from "@/lib/session";
 import { inviteOperator, updateOperatorRole, removeOperator } from "@/lib/actions-settings";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
+import { requiresSecondFactor } from "@revio/db";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ export default async function SettingsPage() {
   if (!session) redirect("/logout");
   const users = await getOperatorUsers();
   const isAdmin = session!.role === "super_admin";
+  const twoFactorOn = await requiresSecondFactor(session!.userId);
 
   return (
     <div>
@@ -33,6 +36,12 @@ export default async function SettingsPage() {
           </div>
         </div>
         <p className="mt-3 text-[11.5px] text-ink-400">New operator accounts start with the password <code className="rounded bg-surface-sunken px-1">revio1234</code>.</p>
+      </Card>
+
+      {/* N4 — the second factor, on the account that can read every hotel on the platform. */}
+      <Card className="mb-4 p-4">
+        <h3 className="mb-3 text-[13px] font-bold text-ink-900">Two-factor authentication</h3>
+        <TwoFactorSetup enabled={twoFactorOn} />
       </Card>
 
       {/* Operator staff */}
