@@ -100,6 +100,14 @@ The Front Desk immediately read **4 in-house** when one guest had arrived. `deri
 requires `checkedInAt`, so the rule lives in one tested place. **Any new query about occupancy must
 ask whether it means "room held" or "guest here" — they are different questions now.**
 
+Three instances found so far, the last one reported by the founder from the minibar screen:
+1. Front Desk counted 4 in-house when one guest had arrived.
+2. Close Day's "due out and still in", and the Open folios list.
+3. `roomMove` carried `checkedInAt: old ?? new Date()` — so **dragging a future booking on the
+   calendar silently checked the guest in**, putting them in occupancy, night-audit revenue and the
+   minibar's chargeable list. Fixed in `bfcb7f2`; a move changes where somebody is, never whether
+   they have arrived.
+
 ### §2 remainder
 
 Built and verified locally (commits `ffc20e3`, `98073e3`): the tape chart, the
@@ -114,11 +122,17 @@ booked-vs-accommodated model. **Still open:**
       half of §2.3 unbuilt.
       ⚠️ **It also needs a scheduler.** Nothing calls the route on a timer, so bookings are placed
       only when someone runs it. Same dependency as §3's auto-close — see `GO-LIVE.md` item 12.
-- [ ] **Drag-to-move (§2.5).** The move works and is atomic; dragging a bar is the interaction that
-      is missing. It must go through the same action — a drag that half-commits is how §1 comes back
-      through a new surface.
-- [ ] **Click-to-manage modal (§2.6).** Bars currently link to the reservation page; the spec wants
-      the reservation view as a modal so the user never leaves the calendar.
+- [x] **Drag-to-move (§2.5) — DONE** (`7b6fb30`). Vertical only; the drop submits the same action
+      the form uses, so it inherits the transaction, clash check, pinning and CRS boundary.
+      ⚠️ Playwright's `dragTo` does not drive HTML5 DnD here — verification is via dispatched
+      DragEvents. A literal mouse drag is not covered by automation; worth one manual check.
+- [x] **Click-to-manage modal (§2.6) — DONE** (`7e3f0d8`). Opens over the grid, no navigation.
+      Deep folio work still opens the folio, deliberately — a second place to post a charge is how
+      two screens drift apart.
+- [ ] **The 0–12h re-optimisation pass (§2.3).** The only piece of §2 still missing. Auto-assignment
+      places a booking once and then leaves it; the spec wants unpinned placements re-examined close
+      to arrival, when the house's picture is most accurate. `canReassign` already encodes who may
+      be moved.
 - [ ] Drag-edge-to-extend is explicitly a fast-follow, NOT this round.
 
 ---
