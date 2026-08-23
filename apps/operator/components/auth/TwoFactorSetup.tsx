@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useState, useTransition } from "react";
-import { ShieldCheck, ShieldOff, Copy } from "lucide-react";
+import { ShieldCheck, ShieldOff, Copy, Download } from "lucide-react";
+import { OtpInput } from "@revio/ui/otp-input";
 import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor, type TwoFactorState } from "@/lib/actions-2fa";
 
 const inputCls =
@@ -15,6 +16,41 @@ const inputCls =
  * mistypes, is exactly where they were — able to sign in with a password — rather than locked out
  * of the console that runs the business.
  */
+/**
+ * Save the recovery codes as a file.
+ *
+ * A clipboard is not somewhere you keep something for a year — it survives until the next copy, and
+ * these are shown exactly once. A plain text file costs nothing (a Blob and an object URL, no
+ * dependency, no server round trip) and lands somewhere a person can actually put in a safe, print,
+ * or drop into a password manager.
+ *
+ * Plain text rather than PDF on purpose: it is readable on anything, greppable, and small. The
+ * header says what the file is, because a bare list of ten strings found in Downloads next year
+ * means nothing to whoever finds it.
+ */
+function downloadRecoveryCodes(codes: string[]) {
+  const body = [
+    "Revio Operator — two-factor recovery codes",
+    `Generated ${new Date().toISOString().slice(0, 10)}`,
+    "",
+    "Each code works ONCE. Use one in place of the six-digit code if you lose",
+    "access to your authenticator app. Keep this file somewhere other than the",
+    "phone the app is on.",
+    "",
+    ...codes.map((c, i) => `${String(i + 1).padStart(2, " ")}. ${c}`),
+    "",
+  ].join("\n");
+
+  const url = URL.createObjectURL(new Blob([body], { type: "text/plain;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `revio-recovery-codes-${new Date().toISOString().slice(0, 10)}.txt`;
+  a.click();
+  // Revoke on the next tick, not immediately: some browsers have not started reading the blob yet
+  // when click() returns, and a revoked URL silently produces an empty file.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export function TwoFactorSetup({ enabled }: { enabled: boolean }) {
   const [state, formAction, pending] = useActionState<TwoFactorState | null, FormData>(confirmTwoFactor, null);
   const [offer, setOffer] = useState<{ secret: string; uri: string; qrDataUrl: string | null } | null>(null);
@@ -39,13 +75,22 @@ export function TwoFactorSetup({ enabled }: { enabled: boolean }) {
             <li key={c} className="rounded bg-white px-2 py-1 font-mono text-[13px] tracking-wide text-ink-900">{c}</li>
           ))}
         </ul>
-        <button
-          type="button"
-          onClick={() => void navigator.clipboard?.writeText(state.recoveryCodes.join("\n"))}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted"
-        >
-          <Copy className="h-3.5 w-3.5" /> Copy all
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void navigator.clipboard?.writeText(state.recoveryCodes.join("\n"))}
+            className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted"
+          >
+            <Copy className="h-3.5 w-3.5" /> Copy all
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadRecoveryCodes(state.recoveryCodes)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted"
+          >
+            <Download className="h-3.5 w-3.5" /> Download .txt
+          </button>
+        </div>
       </div>
     );
   }
@@ -114,7 +159,7 @@ export function TwoFactorSetup({ enabled }: { enabled: boolean }) {
       </div>
       <label className="block max-w-[220px]">
         <span className="mb-1 block text-[11.5px] font-semibold text-ink-600">Code from your app</span>
-        <input name="code" required autoComplete="one-time-code" className={inputCls} placeholder="123456" />
+        <OtpInput className={inputCls} />
       </label>
       {state?.step === "enrolling" && state.error && (
         <p role="alert" className="text-[12px] font-medium text-danger-600">{state.error}</p>

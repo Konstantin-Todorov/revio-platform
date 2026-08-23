@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { OtpInput } from "@revio/ui/otp-input";
 import { verifyTwoFactor, type LoginResult } from "@/lib/actions-auth";
 
 const inputCls =
@@ -13,24 +14,13 @@ export function TwoFactorForm() {
     <form action={formAction} className="space-y-3.5">
       <label className="block">
         <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">Authentication code</span>
-        <input
-          name="code"
-          required
-          /* `one-time-code` is what lets a phone offer the code from the SMS/authenticator sheet, and
-             `autoFocus` matters here more than anywhere: this screen exists to be typed into and
-             nothing else is on it. */
-          autoComplete="one-time-code"
-          autoFocus
-          /* NOT inputMode="numeric": a recovery code is letters and a dash, and forcing a number pad
-             would make the fallback path unusable on the device most likely to need it. */
-          className={inputCls}
-          placeholder="123456"
-          aria-describedby="code-hint"
-        />
+        {/* Submits itself on the sixth digit — this screen exists to receive a code and nothing
+            else, so making someone reach for a button afterwards is a step for its own sake. */}
+        <OtpInput className={inputCls} ariaDescribedBy="code-hint" />
       </label>
       <p id="code-hint" className="text-[12px] text-ink-500">
-        Open your authenticator app and enter the current six-digit code. You can also use one of your
-        recovery codes.
+        Open your authenticator app and enter the current six-digit code — it submits on the last digit.
+        You can also use one of your recovery codes.
       </p>
 
       {state?.error && (
