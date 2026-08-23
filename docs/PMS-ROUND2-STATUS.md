@@ -90,16 +90,30 @@ boundary §2.7 is careful to protect.
 
 ## Open — in build order
 
+### ⚠️ A trap this round set, worth knowing before touching occupancy code
+
+Rooms used to be allocated **at check-in**, which made "has a live assignment" and "is in the
+building" the same sentence — and three separate files said the first while meaning the second.
+Auto-assignment breaks that equivalence: a booking can hold a room for next Tuesday.
+
+The Front Desk immediately read **4 in-house** when one guest had arrived. `deriveStayState` now
+requires `checkedInAt`, so the rule lives in one tested place. **Any new query about occupancy must
+ask whether it means "room held" or "guest here" — they are different questions now.**
+
 ### §2 remainder
 
 Built and verified locally (commits `ffc20e3`, `98073e3`): the tape chart, the
 housekeeping-aware assignment engine, the atomic + pinned move rebuild, cross-type moves with the
 booked-vs-accommodated model. **Still open:**
 
-- [ ] **Auto-assignment writer (§2.3).** The scoring engine exists and is tested; nothing calls it
-      yet. Until it does, a reservation with no assignment does not appear on the calendar at all —
-      the grid draws assignments, and "no unassigned state" is the premise that makes that safe.
-      Needs: assign on receipt, re-optimise while unpinned, and the 0–12h best-information pass.
+- [x] **Auto-assignment writer (§2.3) — DONE** (`943fff7`). `lib/auto-assign.ts` +
+      `POST /api/jobs/assign`, lease-guarded, each placement re-checked inside its own transaction.
+      Verified: three invisible future bookings placed with zero double-bookings.
+      **Still to add:** the 0–12h best-information re-optimisation pass — today an unpinned
+      assignment is left alone once made, which is safe but leaves the "provisional until arrival"
+      half of §2.3 unbuilt.
+      ⚠️ **It also needs a scheduler.** Nothing calls the route on a timer, so bookings are placed
+      only when someone runs it. Same dependency as §3's auto-close — see `GO-LIVE.md` item 12.
 - [ ] **Drag-to-move (§2.5).** The move works and is atomic; dragging a bar is the interaction that
       is missing. It must go through the same action — a drag that half-commits is how §1 comes back
       through a new surface.
