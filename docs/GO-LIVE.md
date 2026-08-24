@@ -98,12 +98,25 @@ CI exists and is green, but nothing enforces it — a red CI still deploys. **No
 workflow**: with required status checks, direct pushes to `main` are rejected and everything goes
 through a PR. Worth it before real clients; decide deliberately.
 
-### 10. Error monitoring and uptime alerts
-There is none. The app's Sync/Error Center covers OTA failures, not an unhandled exception in
-checkout. Today the detection mechanism is a hotel emailing you. Sentry + an uptime ping.
+### 10. ~~Error monitoring and uptime alerts~~ ✅ done 2026-08-24
 
-The 2026-08-23 outage is the argument: every service and the database stopped, and nothing told
-anyone. An uptime check would have.
+- **`/api/health` on all five services** — checks the DATABASE, not just that Node answers. A
+  container whose connection is gone serves a static page while every screen behind it is broken.
+- **`.github/workflows/uptime.yml`** — every 10 minutes, from GitHub, i.e. **outside Railway**. A
+  monitor inside Railway would have died at the same instant as the thing it watches, which is what
+  happened on 2026-08-23. A failure emails and opens an `outage` issue; recovery closes it.
+- **`/api/health/jobs`** — a dead-man's switch. Uptime says a service answers; only this says the
+  night audit ran. 503 when any job has not succeeded in 30 minutes (the cron runs every ~5).
+- **Unhandled exceptions** are recorded in `AppError`, one row per distinct fault, and listed on
+  Platform Health.
+
+Verified end to end by deliberately breaking a probe: the issue opened, and a healthy run closed it.
+That test found a real bug — the failure text was being interpolated into the alerting script, so a
+404 page containing a backtick silently stopped the alarm.
+
+**Still worth adding:** a Railway usage alert *below* the hard cap. The 2026-08-23 outage was a
+ceiling, not a crash, and this monitor would now catch it within ten minutes — but a warning before
+it executes is better than an alert afterwards. That is a Railway dashboard setting.
 
 ### 11. Backups are drilled, not just taken
 `docs/RESTORE.md` records a real restore drill (RTO ≈1 min) — good. Re-drill after the next schema

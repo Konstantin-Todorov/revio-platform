@@ -1,5 +1,39 @@
 # Channex PMS Certification — Runbook & Status
 
+> ## ✅ CERTIFIED — production account live (2026-08-24)
+>
+> The production organisation exists at app.channex.io as **konstantin.todoroff PMS**, plan
+> **Standard**, and is currently **empty**: no properties, no channels.
+>
+> **Billing is per property with at least one active channel — that count is 0**, so nothing accrues
+> until a real hotel connects. Creating a property alone does not bill; activating a channel does.
+>
+> **API key `Revio Platform — production`** was created (all properties, any IP — Railway has no
+> stable egress address, so an IP whitelist would break on every redeploy). Verified against
+> `GET /api/v1/properties` → HTTP 200. **A Channex key is shown once**; if it is lost, withdraw it and
+> create another — that costs nothing.
+>
+> ### ⚠️ Still to do — the key is not yet stored in the platform
+>
+> Preferred: **Operator console → Connectivity → Channex production** for the tenant, which encrypts
+> it at rest per tenant (`ConnectivityCredential`, `operator_only` RLS).
+> Fallback: `CHANNEX_PROD_KEY` on the `channel-manager`, `reservation` and `pms` services — those are
+> the three that push ARI. The `jobs` service does not need it; it only calls their HTTP endpoints.
+>
+> ### No webhooks — deliberately
+>
+> The integration is **pull-based**: we call Channex on a 5-minute cron and acknowledge each booking
+> revision. Channex never calls us, there is no callback URL registered, and adding one would mean a
+> new public endpoint with signature verification to maintain for latency nobody has asked for.
+> Leave **Property Webhooks** and **Global Webhooks** empty.
+>
+> ### Nothing else should be created yet
+>
+> All three tenants in production are **demo** tenants, and the rule in `factory.ts` is explicit:
+> *never point a real adapter at demo data*. A production Channex property for a demo hotel would be
+> wrong and would eventually bill. The next step belongs to the first real hotel, not to us.
+
+
 Everything needed to complete the [Channex PMS certification form](https://forms.gle/xA8F3eSYBPBd8apYA)
 and get **production** access. Source: Channex "PMS certification tests" (14 scenarios).
 
