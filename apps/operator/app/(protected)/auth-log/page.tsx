@@ -1,4 +1,4 @@
-import { listAuthEvents } from "@revio/db";
+import { listAuthEvents, deviceLabel } from "@revio/db";
 import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +61,7 @@ export default async function AuthLogPage() {
                   <th className="px-4 py-2">Product</th>
                   <th className="px-4 py-2">Account</th>
                   <th className="px-4 py-2">From</th>
+                  <th className="px-4 py-2">Device</th>
                   <th className="px-4 py-2">Detail</th>
                 </tr>
               </thead>
@@ -78,7 +79,17 @@ export default async function AuthLogPage() {
                           that is the row worth reading, so it is shown rather than hidden. */}
                       <td className="px-4 py-2 text-ink-800">{e.email ?? <span className="text-ink-400">—</span>}</td>
                       <td className="px-4 py-2 tnum text-ink-500">{e.ip ?? "—"}</td>
-                      <td className="px-4 py-2 text-ink-500">{e.detail ?? ""}</td>
+                      {/* The user-agent was already being stored and never shown, which is worse
+                          than not collecting it. Reduced to the part a person can act on: nobody
+                          recognises a Blink build number, everybody recognises "Chrome on macOS". */}
+                      <td className="px-4 py-2 text-ink-500">
+                        {deviceLabel(e.userAgent) ?? <span className="text-ink-400">—</span>}
+                      </td>
+                      {/* A sign-in from an address this account has not used before is the row
+                          worth stopping on — everything else in this table is somebody working. */}
+                      <td className={`px-4 py-2 ${/first sign-in/.test(e.detail ?? "") ? "font-semibold text-warning-700" : "text-ink-500"}`}>
+                        {e.detail ?? ""}
+                      </td>
                     </tr>
                   );
                 })}
@@ -89,7 +100,8 @@ export default async function AuthLogPage() {
       )}
 
       <p className="mt-3 text-[11px] text-ink-400">
-        IP addresses come from the request and can be forged — they are useful as a pattern, not as proof.
+        A sign-in from a new address is highlighted. IP addresses come from the request and can be forged —
+        they are useful as a pattern, not as proof.
         Events older than a year are deleted automatically.
       </p>
     </div>

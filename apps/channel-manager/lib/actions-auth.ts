@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { checkLoginAllowed, forSystem, recordLoginFailure, recordLoginSuccess,
-  recordAuthEvent, requestOrigin, AUTH_EVENT,
+  recordAuthEvent, requestOrigin, isNewOrigin, signInDetail, AUTH_EVENT,
 } from "@revio/db";
 import { sessionTtlSeconds } from "@revio/core";
 import { getSession } from "./session";
@@ -49,9 +49,14 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
   // "Remember me" is a real choice, not a longer default. A shared reception terminal and a
   // manager's own laptop want opposite answers, and the cookie's maxAge must match the token's
   // expiry or the browser keeps a credential the server has already stopped honouring.
+  // Checked BEFORE the row is written, or the sign-in we are about to record would itself be the
+  // prior visit and every address would look familiar.
+  const newOrigin = await isNewOrigin({ userId: user.id }, origin.ip);
+  const remembered = fd.get("remember") != null;
   await recordAuthEvent({
     scope: "cm", type: AUTH_EVENT.signIn,
     userId: user.id, tenantId: user.tenantId, email, ...origin,
+    detail: signInDetail({ newOrigin, remembered }),
   });
 
   const ttl = sessionTtlSeconds(fd.get("remember") != null);

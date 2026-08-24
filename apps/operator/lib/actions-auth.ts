@@ -5,7 +5,7 @@ import { OPERATOR_LOGIN_GATE } from "@revio/core";
 import {
   checkLoginAllowed, forSystem, recordLoginFailure, recordLoginSuccess,
   requiresSecondFactor, verifySecondFactor,
-  recordAuthEvent, requestOrigin, AUTH_EVENT,
+  recordAuthEvent, requestOrigin, isNewOrigin, signInDetail, AUTH_EVENT,
 } from "@revio/db";
 import { headers } from "next/headers";
 import { sessionTtlSeconds } from "@revio/core";
@@ -71,7 +71,11 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
     redirect("/login/2fa");
   }
 
-  await recordAuthEvent({ scope: "operator", type: AUTH_EVENT.signIn, operatorUserId: op.id, email, ...origin });
+  const newOrigin = await isNewOrigin({ operatorUserId: op.id }, origin.ip);
+  await recordAuthEvent({
+    scope: "operator", type: AUTH_EVENT.signIn, operatorUserId: op.id, email, ...origin,
+    detail: signInDetail({ newOrigin, remembered: remember }),
+  });
 
   // "Remember me" is a real choice, not a longer default. A shared reception terminal and a
   // manager's own laptop want opposite answers, and the cookie's maxAge must match the token's
@@ -121,7 +125,11 @@ export async function verifyTwoFactor(_prev: LoginResult | null, fd: FormData): 
     ...origin,
     detail: result.usedRecoveryCode ? `${result.recoveryCodesRemaining ?? "?"} codes left` : null,
   });
-  await recordAuthEvent({ scope: "operator", type: AUTH_EVENT.signIn, operatorUserId: pending.operatorId, ...origin });
+  const newOrigin = await isNewOrigin({ operatorUserId: pending.operatorId }, origin.ip);
+  await recordAuthEvent({
+    scope: "operator", type: AUTH_EVENT.signIn, operatorUserId: pending.operatorId, ...origin,
+    detail: signInDetail({ newOrigin, remembered: pending.remember }),
+  });
 
   await clearPendingTwoFactorCookie();
   const ttl = sessionTtlSeconds(pending.remember);

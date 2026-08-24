@@ -38,6 +38,9 @@ export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
 export {
   recordAuthEvent,
   requestOrigin,
+  deviceLabel,
+  isNewOrigin,
+  signInDetail,
   listAuthEvents,
   listAuthEventsForTenant,
   pruneAuthEvents,

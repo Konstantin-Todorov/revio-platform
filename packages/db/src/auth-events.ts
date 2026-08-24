@@ -105,12 +105,87 @@ export function requestOrigin(headers: Headers): { ip: string | null; userAgent:
   return { ip, userAgent: headers.get("user-agent") };
 }
 
+/**
+ * A user-agent string, reduced to the thing a person can act on.
+ *
+ * The raw string is 120 characters of version numbers that nobody reads, and showing it makes the
+ * table unusable. "Chrome on macOS" is what actually answers "was that me?" — a hotelier knows what
+ * they were sitting at, and does not know their Blink build number.
+ *
+ * Order matters: Edge and Opera both claim to be Chrome, and Chrome claims to be Safari, so the more
+ * specific brands have to be tested first or everything comes out as Chrome.
+ */
+export function deviceLabel(userAgent: string | null | undefined): string | null {
+  if (!userAgent) return null;
+  const ua = userAgent;
+
+  const browser =
+    /Edg\//.test(ua) ? "Edge"
+    : /OPR\/|Opera/.test(ua) ? "Opera"
+    : /Firefox\//.test(ua) ? "Firefox"
+    : /Chrome\//.test(ua) ? "Chrome"
+    : /Safari\//.test(ua) ? "Safari"
+    : null;
+
+  const os =
+    /iPhone|iPad|iPod/.test(ua) ? "iOS"
+    : /Android/.test(ua) ? "Android"
+    : /Mac OS X|Macintosh/.test(ua) ? "macOS"
+    : /Windows/.test(ua) ? "Windows"
+    : /Linux/.test(ua) ? "Linux"
+    : null;
+
+  if (browser && os) return `${browser} on ${os}`;
+  return browser ?? os;
+}
+
+/**
+ * Has this account signed in from this address before?
+ *
+ * The one thing that turns an authentication log from a wall of rows into something worth reading. A
+ * hotelier does not scan fifty "signed in" lines looking for an unfamiliar IP; they notice the row
+ * that says the address is new.
+ *
+ * Deliberately narrow: it answers "new to this ACCOUNT", not "new to the platform" — an office
+ * everyone else works from is still new to the manager who has only ever signed in from home.
+ *
+ * One indexed lookup, and it fails safe: if the query errors, the sign-in is reported as familiar
+ * rather than raising a false alarm on every login because the database hiccuped.
+ */
+export async function isNewOrigin(
+  who: { userId?: string | null; operatorUserId?: string | null },
+  ip: string | null,
+): Promise<boolean> {
+  if (!ip) return false;
+  if (!who.userId && !who.operatorUserId) return false;
+  try {
+    const seen = await forSystem().authEvent.count({
+      where: who.userId
+        ? { type: AUTH_EVENT.signIn, ip, userId: who.userId }
+        : { type: AUTH_EVENT.signIn, ip, operatorUserId: who.operatorUserId! },
+    });
+    return seen === 0;
+  } catch {
+    return false;
+  }
+}
+
+/** What a successful sign-in is worth saying, if anything. */
+export function signInDetail(opts: { newOrigin: boolean; remembered: boolean }): string | null {
+  const parts: string[] = [];
+  if (opts.newOrigin) parts.push("first sign-in from this address");
+  // Worth recording because it explains a session that is still alive a fortnight later.
+  if (opts.remembered) parts.push("stays signed in");
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 export interface AuthEventRow {
   id: string;
   type: string;
   scope: string;
   email: string | null;
   ip: string | null;
+  userAgent: string | null;
   detail: string | null;
   createdAt: Date;
 }
@@ -126,7 +201,7 @@ export async function listAuthEventsForTenant(tenantId: string, limit = 100): Pr
     where: { tenantId },
     orderBy: { createdAt: "desc" },
     take: Math.min(limit, 500),
-    select: { id: true, type: true, scope: true, email: true, ip: true, detail: true, createdAt: true },
+    select: { id: true, type: true, scope: true, email: true, ip: true, userAgent: true, detail: true, createdAt: true },
   });
 }
 
@@ -136,7 +211,7 @@ export async function listAuthEvents(limit = 200): Promise<(AuthEventRow & { ten
     orderBy: { createdAt: "desc" },
     take: Math.min(limit, 1000),
     select: {
-      id: true, type: true, scope: true, email: true, ip: true, detail: true, createdAt: true,
+      id: true, type: true, scope: true, email: true, ip: true, userAgent: true, detail: true, createdAt: true,
       tenantId: true,
     },
   });
