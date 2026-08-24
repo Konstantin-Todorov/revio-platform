@@ -195,6 +195,38 @@ model Invoice {
   @@index([tenantId])
 }
 
+/// An unhandled server error, aggregated by signature.
+///
+/// Deliberately one row per DISTINCT fault, not one per occurrence. A single bug on a hot route
+/// produces thousands of identical exceptions; storing each is how an error log fills a database and
+/// buries the second, rarer bug that actually needed reading. `count` carries the volume, which is
+/// the only part that differs.
+///
+/// `operator_only` — a stack trace can contain a query, an id, a fragment of somebody's data, and it
+/// is ours to read, never a hotel's.
+model AppError {
+  id          String    @id @default(cuid())
+  /// Which app: cm | crs | pms | operator | booking.
+  service     String
+  /// Stable hash of the message plus the first application stack frame. Two occurrences of the same
+  /// fault must collide here, or aggregation does nothing.
+  signature   String
+  message     String
+  /// The route being served, when known — usually the fastest route to reproducing it.
+  route       String?
+  stack       String?
+  count       Int       @default(1)
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  /// Set when somebody has dealt with it. A resolved fault that recurs is un-resolved automatically.
+  resolvedAt  DateTime?
+  /// When we last emailed about this signature — the rate limit that stops an alert storm.
+  notifiedAt  DateTime?
+
+  @@unique([service, signature])
+  @@index([resolvedAt, lastSeenAt])
+}
+
 /// Our own legal identity, as it appears on every invoice we send.
 ///
 /// A single row — there is one Revio. Modelled as a table rather than environment variables because

@@ -33,5 +33,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.[a-zA-Z0-9]+$).*)"],
+  // api/health is polled by an EXTERNAL uptime monitor that has no session, so the cookie gate
+  // must not redirect it — a monitor following a 307 to /login would report the service
+  // healthy while its database was unreachable.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|.*\\.[a-zA-Z0-9]+$).*)"],
 };

@@ -1,5 +1,7 @@
 import { CheckCircle2, XCircle, AlertTriangle, ArrowUpDown } from "lucide-react";
 import { getPlatformHealth } from "@/lib/data";
+import { listAppErrors } from "@revio/db";
+import { AppErrorList } from "@/components/health/AppErrorList";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +14,7 @@ function relative(d: Date): string {
 }
 
 export default async function HealthPage() {
-  const h = await getPlatformHealth();
+  const [h, appErrors] = await Promise.all([getPlatformHealth(), listAppErrors(30)]);
   const rate = h.window24h.successRate;
 
   const cards = [
@@ -90,8 +92,29 @@ export default async function HealthPage() {
         )}
       </Card>
 
+      {/* Unhandled exceptions. Distinct from the Sync/Error Centers above, which cover OTA failures
+          — this is the platform breaking, and until now it went to a log nobody reads. */}
+      <Card className="mt-4">
+        <CardHeader
+          title={`Unhandled errors${appErrors.length ? ` · ${appErrors.length}` : ""}`}
+          action={
+            <span className="text-[11px] text-ink-400">
+              one row per distinct fault, newest first
+            </span>
+          }
+        />
+        <AppErrorList
+          errors={appErrors.map((e) => ({
+            id: e.id, service: e.service, message: e.message, route: e.route, stack: e.stack,
+            count: e.count, firstSeen: e.firstSeenAt.toISOString(), lastSeen: e.lastSeenAt.toISOString(),
+          }))}
+        />
+      </Card>
+
       <p className="mt-4 text-[11.5px] text-ink-400">
         Sync runs inside the application, so queue depth and retry backlog are not measured.
+        Uptime is checked every 10 minutes from outside Railway by <code>.github/workflows/uptime.yml</code>,
+        which also verifies the scheduled jobs are still running.
       </p>
     </div>
   );

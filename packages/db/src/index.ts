@@ -8,6 +8,11 @@ export {
   type TxOptions,
 } from "./rls.js";
 export { encryptSecret, decryptSecret, keyHint, hasPreviousKey } from "./crypto.js";
+export { checkHealth, type HealthResult, type HealthState } from "./health.js";
+export {
+  recordAppError, listAppErrors, countOpenAppErrors, resolveAppError, pruneAppErrors,
+  errorSignature, type AppErrorRow, type ServiceName,
+} from "./app-errors.js";
 export {
   checkLoginAllowed,
   recordLoginFailure,
