@@ -3,7 +3,9 @@
 Every item from the three documents in `docs/specs/inbox/`, enumerated so none is lost. Sections
 reference the source docs; open them for the full reasoning rather than duplicating it here.
 
-**Source:** `CRS Updates 08` · `Link - CM - updates 08` · `Revio Website changes`
+**Source (all in `docs/specs/inbox/`):**
+`RevioCRS-Live-Refinement` · `RevioLink-OBP-Implementation` · `RevioPMS-Live-Refinement` ·
+`RevioPMS-OBP-Implementation` · `Revio Website changes`
 
 Status: ☐ open · ◐ in progress · ☑ done
 
@@ -150,6 +152,51 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
 - ☑ **(b)** Link edits apply immediately, are reasserted by the CRS, and are **logged and visible**.
   ⚠️ The reassertion must **re-push to channels**, or the OTA keeps selling the stale Link value.
 - ☑ **(c)** Rides the channel-limitations line. **Not an L1 blocker** — channels/sync layer only.
+
+---
+
+## J. RevioPMS Round 2 — **already shipped in earlier sessions**
+
+Audited against the code 2026-08-25. The two PMS documents arrived later than the others; almost
+everything in them was already built, which is worth recording so it is not rebuilt.
+
+- ☑ **§1.3** Checkout is one atomic transaction — `withTenantTransaction`, four call sites.
+- ☑ **§1.3-B** Queries read status, not proxies — "open" means `status = open`; "overstayed" requires
+  not-checked-out.
+- ☑ **§1.4** `Closed — outstanding` as a managed state: `Folio.outcome` / `outcomeNote` / `outcomeAt`
+  / `outcomeById`, and all four resolutions (`reopen`, `paid_offsystem`, `receivable`, `written_off`),
+  manager-gated and logged.
+- ☑ **§1.5** Receivables view — a third tab beside Open and History, its count on the label.
+- ☑ **§1.6** Empty split folios removable.
+- ☑ **§2** Reservations calendar with the tape grid, drag-to-move and the §2.6 click-to-manage modal.
+- ☑ **§3** Close Day auto-close — running on the cron, 6/6 green.
+
+### Still open in the PMS docs
+- ☐ **J1** *(§1.4 accounting nuance)* Verify **mark-paid and write-off are reported separately**
+  everywhere they surface. Both close a folio at zero by different mechanisms — one is revenue
+  collected, the other revenue lost — and an owner must never see €513 written off presented as a
+  payment. The states exist and are labelled on the folio; what needs checking is every report that
+  aggregates them.
+- ☐ **J2** *(§4 / P1–P15)* OBP on the PMS side. Depends on the shared model (H1). Sequenced last.
+
+## K. OBP on the PMS *(RevioPMS-OBP-Implementation, P1–P15)*
+
+The PMS **consumes** the model; it never owns one. Folded into H, built after H1–H3.
+
+- ☐ **K1** *(P2)* Occupancy as a first-class field on every reservation; captured inbound and on
+  walk-ins. "Doesn't fit" guard applies.
+- ☐ **K2** *(P3)* One resolver — `resolve_rate(room type, plan, date, occupancy)`. Per-room is the
+  single max-occupancy row, so per-room properties behave exactly as today.
+- ☐ **K3** *(P4)* ⚠️ **The crux.** A **rate snapshot per night** on the reservation. The PMS bills the
+  snapshot and never silently re-resolves — a guest confirmed at €120 must not be billed €132 because
+  the occupancy table moved afterwards. The CRS quotes live; the PMS bills what was quoted.
+- ☐ **K4** *(P6–P8)* Re-resolve **only** on a real change — mid-stay occupancy change, cross-type
+  move, check-in confirmation — each atomic with the folio, on the existing state machine.
+- ☐ **K5** *(P9)* Night audit posts the snapshot nightly rate. Auto-close inherits it, no separate path.
+- ☐ **K6** *(P10)* Folio line shows the occupancy it was priced at.
+- ☐ **K7** *(P5 / §4.5)* Calendar gets an occupancy badge (`2p`) and **no rate strip** — the PMS
+  calendar stays rate-free by design, deliberately unlike the CRS one.
+- ☐ **K8** *(P11)* Children/infants as separate folio lines. After adult OBP.
 
 ---
 
