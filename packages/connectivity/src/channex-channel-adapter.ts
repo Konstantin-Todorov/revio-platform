@@ -45,6 +45,26 @@ interface ApiResult {
   responseId?: string;
   error?: string;
   body: unknown;
+  /**
+   * Values Channex REFUSED inside an HTTP 200.
+   *
+   * The sharp edge of this API: a push containing one bad value returns 200, `"message": "Success"`,
+   * and a task id — while quietly dropping that value into `meta.warnings`. Verified live against
+   * the sandbox: two rates sent, one at 0, response 200 with a task id and a single warning
+   * "rate must be greater than 0". Treating 200 as success means a hotel sets a price, sees it
+   * confirmed, and the OTA never receives it.
+   */
+  warnings?: ChannexWarning[];
+}
+
+/** One rejected value from `meta.warnings[]`, flattened into something readable. */
+export interface ChannexWarning {
+  /** The date the rejected object covered, when Channex names one. */
+  date?: string;
+  ratePlanId?: string;
+  roomTypeId?: string;
+  /** e.g. "rate must be greater than 0". */
+  message: string;
 }
 
 export class ChannexChannelAdapter implements ChannelAdapter {
@@ -105,7 +125,33 @@ export class ChannexChannelAdapter implements ChannelAdapter {
       for (const update of supported) rejected.push({ update, reason: `availability: ${availability.error}` });
     }
 
-    const result: PushResult = { ok: restrictions.ok && availability.ok, rejected };
+    /*
+     * Values Channex refused inside a 200 OK.
+     *
+     * Without this the push reports complete success and the hotel's price never reaches the OTA —
+     * verified live: two rates sent, one at 0, HTTP 200 with "message": "Success", a task id, and the
+     * bad one dropped into meta.warnings. A silent partial failure on a PRICE is the worst kind: the
+     * hotel believes it is selling at one rate and the channel is selling at another.
+     *
+     * Matched back to the update by (rate plan, date) where Channex names them, so the Error Center
+     * points at the cell somebody actually edited rather than at "a push".
+     */
+    for (const w of [...(restrictions.warnings ?? []), ...(availability.warnings ?? [])]) {
+      const match = supported.find(
+        (u) =>
+          (!w.date || u.date === w.date) &&
+          (!w.ratePlanId || u.externalRateId === w.ratePlanId) &&
+          (!w.roomTypeId || u.externalRoomId === w.roomTypeId),
+      );
+      const where = [w.date, w.ratePlanId ? `rate plan ${w.ratePlanId}` : null].filter(Boolean).join(" · ");
+      const reason = `channel rejected: ${w.message}${where ? ` (${where})` : ""}`;
+      if (match) rejected.push({ update: match, reason });
+      else if (supported[0]) rejected.push({ update: supported[0], reason });
+    }
+
+    // A push with rejected values is NOT a success, whatever the status code said.
+    const warned = (restrictions.warnings?.length ?? 0) + (availability.warnings?.length ?? 0) > 0;
+    const result: PushResult = { ok: restrictions.ok && availability.ok && !warned, rejected };
     // Channex returns a task id per call ({data:[{id,type:"task"}]}); keep both — the certification
     // form wants the task id from each ARI push.
     const tasks: NonNullable<PushResult["tasks"]> = [];
@@ -126,13 +172,20 @@ export class ChannexChannelAdapter implements ChannelAdapter {
    * identity-only object would read as "clear everything". `ok: true` with no task id means there
    * was genuinely nothing to send, which is not a failure.
    */
-  async pushRatesAndRestrictions(updates: AriUpdate[]): Promise<{ ok: boolean; taskId?: string; error?: string }> {
+  async pushRatesAndRestrictions(
+    updates: AriUpdate[],
+  ): Promise<{ ok: boolean; taskId?: string; error?: string; warnings?: ChannexWarning[] }> {
     const values = mergeDateRanges(
       updates.map((u) => toRestrictionValue(this.propertyId, u)).filter((v): v is ChannexRestrictionValue => v !== null),
     );
     if (values.length === 0) return { ok: true };
     const res = await this.post("/restrictions", { values });
-    return res.ok ? { ok: true, ...(res.responseId ? { taskId: res.responseId } : {}) } : { ok: false, error: res.error ?? `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: res.error ?? `HTTP ${res.status}` };
+    return {
+      ok: true,
+      ...(res.responseId ? { taskId: res.responseId } : {}),
+      ...(res.warnings?.length ? { warnings: res.warnings } : {}),
+    };
   }
 
   /**
@@ -144,7 +197,9 @@ export class ChannexChannelAdapter implements ChannelAdapter {
    * the last and is unharmed, but the payload then asserts a fact repeatedly instead of once, which
    * is noise on the wire and reads as a bug to anyone inspecting it.
    */
-  async pushAvailability(updates: AriUpdate[]): Promise<{ ok: boolean; taskId?: string; error?: string }> {
+  async pushAvailability(
+    updates: AriUpdate[],
+  ): Promise<{ ok: boolean; taskId?: string; error?: string; warnings?: ChannexWarning[] }> {
     const byRoomDate = new Map<string, ChannexAvailabilityValue>();
     for (const u of updates) {
       const v = toAvailabilityValue(this.propertyId, u);
@@ -153,7 +208,12 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     const values = mergeDateRanges([...byRoomDate.values()]);
     if (values.length === 0) return { ok: true };
     const res = await this.post("/availability", { values });
-    return res.ok ? { ok: true, ...(res.responseId ? { taskId: res.responseId } : {}) } : { ok: false, error: res.error ?? `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: res.error ?? `HTTP ${res.status}` };
+    return {
+      ok: true,
+      ...(res.responseId ? { taskId: res.responseId } : {}),
+      ...(res.warnings?.length ? { warnings: res.warnings } : {}),
+    };
   }
 
   async pullReservations(since: string): Promise<RawReservation[]> {
@@ -258,8 +318,55 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     const responseId = Array.isArray(dataField)
       ? (dataField[0] as { id?: string } | undefined)?.id
       : (dataField as { id?: string } | undefined)?.id;
-    return { ok: true, status: res.status, body: parsed, ...(responseId ? { responseId } : {}) };
+    const warnings = extractWarnings(parsed);
+    return {
+      ok: true, status: res.status, body: parsed,
+      ...(responseId ? { responseId } : {}),
+      ...(warnings.length ? { warnings } : {}),
+    };
   }
+}
+
+/**
+ * Pull the rejected values out of a 200 response.
+ *
+ * Shape confirmed live against the sandbox:
+ *
+ *     { "data": [{ "id": "…", "type": "task" }],
+ *       "meta": { "message": "Success",
+ *                 "warnings": [ { "warning": { "rate": ["must be greater than 0"] },
+ *                                 "date": "2027-03-02", "rate_plan_id": "…" } ] } }
+ *
+ * `warning` is a field→messages map, so one entry can carry several problems. Flattened to
+ * "field message" because that is what a hotelier can act on; the raw object is not.
+ */
+function extractWarnings(body: unknown): ChannexWarning[] {
+  const meta = (body as { meta?: { warnings?: unknown } } | null)?.meta;
+  const raw = meta?.warnings;
+  if (!Array.isArray(raw)) return [];
+
+  const out: ChannexWarning[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const detail = e.warning;
+    const parts: string[] = [];
+    if (detail && typeof detail === "object") {
+      for (const [field, messages] of Object.entries(detail as Record<string, unknown>)) {
+        const list = Array.isArray(messages) ? messages : [messages];
+        for (const m of list) parts.push(`${field} ${String(m)}`);
+      }
+    } else if (typeof detail === "string") {
+      parts.push(detail);
+    }
+    out.push({
+      message: parts.join("; ") || "rejected by the channel",
+      ...(typeof e.date === "string" ? { date: e.date } : {}),
+      ...(typeof e.rate_plan_id === "string" ? { ratePlanId: e.rate_plan_id } : {}),
+      ...(typeof e.room_type_id === "string" ? { roomTypeId: e.room_type_id } : {}),
+    });
+  }
+  return out;
 }
 
 /** Channex returns validation problems under `errors`; pull out a readable message. */
