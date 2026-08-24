@@ -36,6 +36,18 @@ export {
 } from "./auth-tokens.js";
 export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
 export {
+  recordAuthEvent,
+  requestOrigin,
+  listAuthEvents,
+  listAuthEventsForTenant,
+  pruneAuthEvents,
+  AUTH_EVENT,
+  AUTH_EVENT_RETENTION_DAYS,
+  type AuthEventType,
+  type AuthEventScope,
+  type AuthEventRow,
+} from "./auth-events.js";
+export {
   beginTotpEnrolment,
   confirmTotpEnrolment,
   verifySecondFactor,

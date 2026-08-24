@@ -12,6 +12,7 @@ import bcrypt from "bcryptjs";
 import { validatePassword, inviteEmail, passwordResetEmail, passwordChangedEmail } from "@revio/core";
 import { isBreachedPassword, breachMessage } from "@revio/core/server";
 import { forSystem } from "./rls.js";
+import { recordAuthEvent, AUTH_EVENT, type AuthEventScope } from "./auth-events.js";
 import { issueToken, resolveToken, consumeToken, revokeTokensFor } from "./auth-tokens.js";
 import { checkLoginAllowed, recordLoginFailure, type LoginScope } from "./login-gate.js";
 
@@ -179,18 +180,35 @@ export async function completePasswordSet(args: {
    */
   const sessionsValidFrom = new Date();
 
+  // Recorded whether the password was set for the first time or reset (N5). A password change ends
+  // every existing session, so it is the most consequential thing that can happen to an account
+  // without anybody signing in — and the row that explains why somebody was logged out.
+  // `account`, not an app: a hotel identity signs into three products with one password, and this
+  // change ends the sessions of all of them.
+  const scope: AuthEventScope = resolved.token.operatorUserId ? "operator" : "account";
+
   if (resolved.token.operatorUserId) {
     const op = await prisma.operatorUser.update({
       where: { id: resolved.token.operatorUserId },
       data: { passwordHash, sessionsValidFrom },
     });
     name = op.name ?? undefined;
+    await recordAuthEvent({
+      scope, type: AUTH_EVENT.passwordChanged,
+      operatorUserId: op.id, email: resolved.token.email,
+      detail: resolved.token.purpose === "invite" ? "set from invitation" : "reset",
+    });
   } else if (resolved.token.userId) {
     const user = await prisma.user.update({
       where: { id: resolved.token.userId },
       data: { passwordHash, sessionsValidFrom },
     });
     name = user.name ?? undefined;
+    await recordAuthEvent({
+      scope, type: AUTH_EVENT.passwordChanged,
+      userId: user.id, tenantId: user.tenantId, email: resolved.token.email,
+      detail: resolved.token.purpose === "invite" ? "set from invitation" : "reset",
+    });
   } else {
     return { ok: false, message: "This link is not attached to an account." };
   }

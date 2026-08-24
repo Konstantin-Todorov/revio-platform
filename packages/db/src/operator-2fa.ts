@@ -9,6 +9,7 @@ import {
 } from "@revio/core/server";
 import { forSystem } from "./rls.js";
 import { encryptSecret, decryptSecret } from "./crypto.js";
+import { recordAuthEvent, AUTH_EVENT } from "./auth-events.js";
 
 /**
  * Two-factor authentication for the Operator console (N4).
@@ -101,6 +102,10 @@ export async function confirmTotpEnrolment(
     data: hashes.map((codeHash) => ({ operatorUserId, codeHash })),
   });
 
+  await recordAuthEvent({
+    scope: "operator", type: AUTH_EVENT.twoFactorEnabled, operatorUserId,
+    detail: `${codes.length} recovery codes issued`,
+  });
   return { ok: true, recoveryCodes: codes };
 }
 
@@ -174,6 +179,9 @@ export async function disableTotp(operatorUserId: string): Promise<void> {
     data: { totpSecret: null, totpEnabledAt: null, totpLastStep: null },
   });
   await db.operatorRecoveryCode.deleteMany({ where: { operatorUserId } });
+  // Turning the second factor OFF is the event most worth having: it is what an attacker who has
+  // the password would do next, and the only trace it otherwise leaves is an absence.
+  await recordAuthEvent({ scope: "operator", type: AUTH_EVENT.twoFactorDisabled, operatorUserId });
 }
 
 /** Does this account need a second factor to sign in? */

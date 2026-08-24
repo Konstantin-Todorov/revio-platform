@@ -1528,6 +1528,43 @@ model AuditEntry {
 /// real accounts would turn the lockout message into an account-existence oracle.
 ///
 /// The decision logic lives in `@revio/core` (`auth/login-gate.ts`); this table is only its memory.
+/// Who signed in, when, from where, and what happened to their account (N5).
+///
+/// `LoginAttempt` next to this is a rate-limiting COUNTER, not a record — `recordLoginSuccess`
+/// deletes the row, so until now a successful sign-in left no trace anywhere. "Who logged into my
+/// account at 3am" had no answer, which for software a hotel runs its business on is a gap the
+/// audit log for room moves and folio charges only made more obvious.
+///
+/// Deliberately separate from `AuditEntry`: that records what somebody DID to hotel data, this
+/// records what happened to an ACCOUNT. They have different retention, different readers, and a
+/// failed sign-in belongs to no tenant at all.
+model AuthEvent {
+  id        String   @id @default(cuid())
+  /// cm | crs | pms | operator — which front door.
+  scope     String
+  /// See AUTH_EVENT in packages/db/src/auth-events.ts.
+  type      String
+  /// Null when the attempt matched no account, which is exactly when it is most worth keeping.
+  userId         String?
+  operatorUserId String?
+  /// Null for operator events and for failures against an unknown address. A hotel may read its own
+  /// staff's events; nothing else is theirs to see.
+  tenantId  String?
+  /// The address as typed. Kept even when it matches nothing — a run of attempts against
+  /// almost-right addresses is the signal.
+  email     String?
+  ip        String?
+  userAgent String?
+  /// Short human-readable context: "recovery code", "2 codes left", a lockout reason.
+  detail    String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@index([operatorUserId, createdAt])
+  @@index([scope, type, createdAt])
+}
+
 model LoginAttempt {
   id              String    @id @default(cuid())
   /// Which app the attempt was against: cm | crs | pms | operator.

@@ -1,7 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { checkLoginAllowed, forSystem, recordLoginFailure, recordLoginSuccess } from "@revio/db";
+import { headers } from "next/headers";
+import { checkLoginAllowed, forSystem, recordLoginFailure, recordLoginSuccess,
+  recordAuthEvent, requestOrigin, AUTH_EVENT,
+} from "@revio/db";
 import { sessionTtlSeconds } from "@revio/core";
 import { getSession } from "./session";
 import { verifyPassword, signSession, setSessionCookie, clearSessionCookie } from "./auth";
@@ -19,12 +22,24 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
   // Brute-force gate. Checked BEFORE the password, so a locked address never reaches bcrypt — which
   // also sheds the CPU cost an attacker was trying to impose. Counted against the email as typed
   // whether or not it exists, so the lockout message cannot be used to discover who has an account.
+  const origin = requestOrigin(await headers());
+
   const gate = await checkLoginAllowed("cm", email);
-  if (!gate.allowed) return { error: gate.message };
+  if (!gate.allowed) {
+    await recordAuthEvent({ scope: "cm", type: AUTH_EVENT.signInBlocked, email, ...origin, detail: "rate limited" });
+    return { error: gate.message };
+  }
 
   const user = await prisma.user.findUnique({ where: { email }, include: { tenant: true } });
   if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
     await recordLoginFailure("cm", email);
+    // The tenant is recorded only when the address matched a real account. A failure against an
+    // unknown address has no tenant, and guessing one would let a hotel read attempts that are not
+    // theirs — the RLS policy keeps those rows operator-only for exactly that reason.
+    await recordAuthEvent({
+      scope: "cm", type: AUTH_EVENT.signInFailed, email,
+      userId: user?.id ?? null, tenantId: user?.tenantId ?? null, ...origin,
+    });
     return { error: "Invalid email or password." };
   }
   await recordLoginSuccess("cm", email);
@@ -34,6 +49,11 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
   // "Remember me" is a real choice, not a longer default. A shared reception terminal and a
   // manager's own laptop want opposite answers, and the cookie's maxAge must match the token's
   // expiry or the browser keeps a credential the server has already stopped honouring.
+  await recordAuthEvent({
+    scope: "cm", type: AUTH_EVENT.signIn,
+    userId: user.id, tenantId: user.tenantId, email, ...origin,
+  });
+
   const ttl = sessionTtlSeconds(fd.get("remember") != null);
   await setSessionCookie(await signSession({ kind: "hotel", sub: user.id }, ttl), ttl);
   redirect("/dashboard");
