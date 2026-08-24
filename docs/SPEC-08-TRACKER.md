@@ -11,11 +11,11 @@ Status: ☐ open · ◐ in progress · ☑ done
 
 ## A. Company identity — bilingual (asked directly, 2026-08-24)
 
-- ☐ **A1** Legal name stored in **both Cyrillic and Latin**; the invoice picks by the customer's
+- ☑ **A1** Legal name stored in **both Cyrillic and Latin**; the invoice picks by the customer's
   country — a Bulgarian buyer gets `Уебър БГ ЕООД`, everyone else `WEBER BG EOOD`. Both are
   legitimate; the document should not look like two different companies.
-- ☐ **A2** Same for the registered address, or an invoice reads half in one script and half in the other.
-- ☐ **A3** Post code is **7002** (the website draft says 7000 — the draft is wrong).
+- ☑ **A2** Same for the registered address, or an invoice reads half in one script and half in the other.
+- ☑ **A3** Post code is **7002** (the website draft says 7000 — the draft is wrong).
 
 ## B. Channex sync
 
@@ -47,25 +47,25 @@ Status: ☐ open · ◐ in progress · ☑ done
   gap shaded (green when positive).
 - ☐ **D4** *(§2.2)* Source/Channel → donut + **net-after-commission** bar.
 - ☐ **D5** *(§2.2)* Room-type & Rate-plan → two bar charts.
-- ☐ **D6** *(§2.2)* Cancellations → gauge/big number carrying both framings; drivers as small
+- ◐ **D6** *(§2.2)* Cancellations → gauge/big number carrying both framings; drivers as small
   visuals; the reservation list **leaves Analytics entirely**.
-- ☐ **D7** *(§2.2)* Availability grid → **heatmap**, cell coloured by remaining as % of capacity,
+- ☑ **D7** *(§2.2)* Availability grid → **heatmap**, cell coloured by remaining as % of capacity,
   count kept as the label. Biggest single upgrade in the module.
 - ☐ **D8** *(§2.2)* On-the-books → add the missing hero: a **forward horizon curve** (committed
   occupancy/room-nights, next 30 days). Also defuses a trust trap — identical 7d/30d cards read as a
   failed recompute when they are simply correct.
 - ☐ **D9** *(§2.2)* Forecast disclaimer wording **identical, word for word**, to the Dashboard's.
-- ☐ **D10** *(§2.3)* "Low" availability is an absolute `≤ 2` — wrong at scale (2 of 3 suites is 67%
+- ☑ **D10** *(§2.3)* "Low" availability is an absolute `≤ 2` — wrong at scale (2 of 3 suites is 67%
   free; 2 of 40 is nearly sold out). Make it **% of room-type capacity**. Now load-bearing: it is the
   heatmap's colour scale. Same for **overbooked**.
-- ☐ **D11** *(§2.5)* **OTA empty state lies.** It reports "commission paid €0 · no OTA revenue" when
+- ☑ **D11** *(§2.5)* **OTA empty state lies.** It reports "commission paid €0 · no OTA revenue" when
   there *is* €780 of OTA revenue and the rate is merely unconfigured — then treats an unset rate as
   0% and reports distribution as free. Three-way state; suppress "revenue kept" when the rate is
   unset. Never render an unconfigured rate as €0 paid.
-- ☐ **D12** *(§2.6)* **Cancellations computes on book-date but displays stay-date chips.** Either
+- ☑ **D12** *(§2.6)* **Cancellations computes on book-date but displays stay-date chips.** Either
   obey the lens like every other tab, or hard-wire to book-date, grey the toggle and label the
   denominator in words.
-- ☐ **D13** *(§2.7)* Availability header says "next 30 days", renders 29 columns.
+- ☑ **D13** *(§2.7)* Availability header says "next 30 days", renders 29 columns.
 
 ## E. RevioCRS — Reservations *(§3)*
 

@@ -488,19 +488,48 @@ export async function getPickupReport() {
   return { property, rows, vsDate: candidate ? ymd(candidate.snapshotDate) : null, todayIso };
 }
 
-export async function getCancellationReport(range: ResolvedRange) {
+/**
+ * Cancellations — now honouring the Stay/Book lens like every other tab (§2.6).
+ *
+ * It previously filtered on `importedAt` regardless of the lens, while the screen displayed
+ * Stay-date chips. The numbers were internally consistent and answered a different question from the
+ * one the header claimed: "Last 28 days · 1 of 8 created" under the stay lens, while every other tab
+ * on the same range reported 9 active / 21 room-nights. A number that quietly answers a question
+ * nobody asked is worse than a missing one, because it gets quoted.
+ *
+ * Both questions are legitimate and they have different denominators:
+ *
+ *   book — of the bookings MADE in this window, how many were later cancelled. A cancellation is an
+ *          event on the booking timeline, so this is arguably the truer cancellation metric.
+ *   stay — of the stays DUE to fall in this window, how many cancelled. What a manager means by
+ *          "how much of next month fell over".
+ *
+ * `basisLabel` travels with the numbers so the screen states the denominator in words rather than
+ * leaving the reader to infer it from a chip.
+ */
+export async function getCancellationReport(range: ResolvedRange, lens: "stay" | "book" = "book") {
   const { propertyIds, primary: property } = await getScope();
   const startD = new Date(`${range.start}T00:00:00Z`);
   const endD = new Date(`${range.endExcl}T00:00:00Z`);
+
   const created = await prisma.reservation.findMany({
-    where: { propertyId: { in: propertyIds }, importedAt: { gte: startD, lt: endD } },
+    where: {
+      propertyId: { in: propertyIds },
+      ...(lens === "book"
+        ? { importedAt: { gte: startD, lt: endD } }
+        : // A stay counts if ANY of its nights fall in the window — the same overlap test the
+          // product-performance stay lens uses, so the two tabs cannot disagree about "in range".
+          { lines: { some: { checkIn: { lt: endD }, checkOut: { gt: startD } } } }),
+    },
     include: { lines: { include: { roomType: { select: { name: true } } } }, channel: { select: { name: true } }, bookingSource: { select: { name: true } } },
     orderBy: { importedAt: "desc" },
   });
+
   const cancelled = created.filter((r) => r.status === "cancelled");
   const nightsOf = (r: (typeof created)[number]) => r.lines.reduce((s, l) => s + l.quantity * stayNights(ymd(l.checkIn), ymd(l.checkOut)), 0);
   const grossNights = created.reduce((s, r) => s + nightsOf(r), 0);
   const cancelledNights = cancelled.reduce((s, r) => s + nightsOf(r), 0);
+
   return {
     property,
     cancelled,
@@ -509,6 +538,12 @@ export async function getCancellationReport(range: ResolvedRange) {
     createdCount: created.length,
     cancelledNights,
     grossNights,
+    basis: lens,
+    /** Printed on the screen so the denominator is never left to inference. */
+    basisLabel:
+      lens === "book"
+        ? `of ${created.length} reservation${created.length === 1 ? "" : "s"} created in this period`
+        : `of ${created.length} stay${created.length === 1 ? "" : "s"} falling in this period`,
   };
 }
 

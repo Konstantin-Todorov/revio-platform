@@ -136,3 +136,62 @@ describe("channelEconomics", () => {
     expect(e.rows.map((r) => r.sourceName)).toEqual(["Big", "Mid", "Small"]);
   });
 });
+
+describe("the three commission states (§2.5)", () => {
+  /** `category` is the kind of source ("ota" / "direct"); the NAME is separate. */
+  const line = (category: string, revenueMinor: number, commissionPct: number | null, sourceName = category) => ({
+    sourceName, category, reservations: 1, roomNights: 1, revenueMinor, commissionPct,
+  });
+
+  it("no OTA revenue at all — nothing is owed and nothing is unknown", () => {
+    const e = channelEconomics([line("direct", 100000, null)]);
+    expect(e.otaRevenueMinor).toBe(0);
+    expect(e.commissionIncomplete).toBe(false);
+    expect(e.unratedOtaRevenueMinor).toBe(0);
+  });
+
+  it("OTA revenue with a rate — computes normally", () => {
+    const e = channelEconomics([line("direct", 100000, null), line("ota", 78000, 15)]);
+    expect(e.commissionIncomplete).toBe(false);
+    expect(e.commissionPaidMinor).toBe(11700);
+    expect(e.blendedOtaRatePct).toBeCloseTo(15);
+  });
+
+  it("OTA revenue with NO rate — flagged, not reported as free", () => {
+    /*
+     * The exact case from the screen: €780 of OTA revenue on a channel with no commission rate.
+     * The old card printed "commission paid €0 · no OTA revenue in this period" above a row saying
+     * "OTA · €780 · commission not set" — two contradictory statements, one of them false, and the
+     * false one flattered us.
+     */
+    const e = channelEconomics([line("direct", 288540, null), line("ota", 78000, null)]);
+    expect(e.otaRevenueMinor).toBe(78000);
+    expect(e.unratedOtaRevenueMinor).toBe(78000);
+    expect(e.commissionIncomplete).toBe(true);
+    // The blended rate is genuinely unknown — it must not be zero.
+    expect(e.blendedOtaRatePct).toBeNull();
+    expect(e.commissionAvoidedMinor).toBeNull();
+  });
+
+  it("distinguishes 'no OTA revenue' from 'no rate' — the whole bug in one assertion", () => {
+    const none = channelEconomics([line("direct", 100000, null)]);
+    const unrated = channelEconomics([line("direct", 100000, null), line("ota", 78000, null)]);
+    // Both have a null blended rate. Only one means distribution was free.
+    expect(none.blendedOtaRatePct).toBeNull();
+    expect(unrated.blendedOtaRatePct).toBeNull();
+    expect(none.commissionIncomplete).not.toBe(unrated.commissionIncomplete);
+  });
+
+  it("partially rated OTA revenue still counts as incomplete", () => {
+    // One channel configured, one not. The total is understated, so it must still be flagged.
+    const e = channelEconomics([line("ota", 50000, 15, "Booking.com"), line("ota", 30000, null, "Expedia")]);
+    expect(e.ratedOtaRevenueMinor).toBe(50000);
+    expect(e.unratedOtaRevenueMinor).toBe(30000);
+    expect(e.commissionIncomplete).toBe(true);
+  });
+
+  it("rated and unrated always sum to total OTA revenue", () => {
+    const e = channelEconomics([line("ota", 50000, 15, "Booking.com"), line("ota", 30000, null, "Expedia"), line("direct", 10000, null)]);
+    expect(e.ratedOtaRevenueMinor + e.unratedOtaRevenueMinor).toBe(e.otaRevenueMinor);
+  });
+});

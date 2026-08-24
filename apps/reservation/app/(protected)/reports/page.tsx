@@ -7,7 +7,7 @@ import { getProperty, getScope, todayInTz } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { EvolutionChart, type EvoBucket } from "@/components/reports/EvolutionChart";
 import { money } from "@/lib/format";
-import { isCommissionFreeCategory } from "@revio/core";
+import { isCommissionFreeCategory, availabilityPressure, LOW_AVAILABILITY_SHARE } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -136,7 +136,7 @@ export default async function ReportsPage({
       {report === "pickup" && <PickupReport />}
       {report === "source" && <SourceReport range={range} />}
       {report === "products" && <ProductsReport range={range} lens={lens} />}
-      {report === "cancellation" && <CancellationReport range={range} />}
+      {report === "cancellation" && <CancellationReport range={range} lens={lens} />}
       {report === "otb" && <OtbReport todayIso={todayIso} />}
       {report === "availability" && <AvailabilityReport />}
     </div>
@@ -446,10 +446,20 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
             <div className="tnum mt-1 text-[1.6rem] font-bold leading-none text-ink-900">
               {money(e.commissionPaidMinor, currency)}
             </div>
+            {/* Three states, not two (§2.5). "No blended rate" has two causes that mean opposite
+                things: no OTA business at all, or OTA business whose channel has no rate set. The
+                card used to print the first message in both cases — asserting distribution was free
+                directly above a row reading "OTA · €780 · commission not set". */}
             <div className="mt-1.5 text-[12px] text-ink-500">
-              {e.blendedOtaRatePct == null
-                ? "no OTA revenue in this period"
-                : `${pct(e.blendedOtaRatePct)} of ${money(e.otaRevenueMinor, currency)} OTA revenue`}
+              {e.otaRevenueMinor === 0 ? (
+                "no OTA revenue in this period"
+              ) : e.commissionIncomplete ? (
+                <span className="font-medium text-warning-600">
+                  {money(e.unratedOtaRevenueMinor, currency)} OTA revenue · commission rate not set
+                </span>
+              ) : (
+                `${pct(e.blendedOtaRatePct!)} of ${money(e.otaRevenueMinor, currency)} OTA revenue`
+              )}
             </div>
           </div>
 
@@ -471,9 +481,11 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
               {e.commissionAvoidedMinor == null ? "—" : money(e.commissionAvoidedMinor, currency)}
             </div>
             <div className="mt-1.5 text-[12px] text-ink-500">
-              {e.commissionAvoidedMinor == null
-                ? "needs OTA revenue in the period to have a rate to compare against"
-                : `if direct bookings had come through your channels at ${pct(e.blendedOtaRatePct!)}`}
+              {e.commissionAvoidedMinor != null
+                ? `if direct bookings had come through your channels at ${pct(e.blendedOtaRatePct!)}`
+                : e.otaRevenueMinor > 0
+                  ? "set a commission rate on your channels and this becomes computable"
+                  : "needs OTA revenue in the period to have a rate to compare against"}
             </div>
           </div>
         </div>
@@ -481,8 +493,20 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
           <span className="font-semibold text-ink-600">Commission paid is actual</span> — your channels&rsquo; own
           rates applied to the revenue they brought. <span className="font-semibold text-ink-600">Commission
           avoided is an estimate</span>: it assumes those direct guests would otherwise have booked through an
-          OTA, which some would and some would not. Revenue kept after real commission:{" "}
-          <span className="tnum font-semibold text-ink-700">{money(e.netOfCommissionMinor, currency)}</span>.
+          OTA, which some would and some would not.{" "}
+          {e.commissionIncomplete ? (
+            // Suppressed on purpose. With an unset rate this figure silently treats real commission
+            // as zero, which reports distribution as free — the one thing this card exists not to do.
+            <span className="font-medium text-warning-600">
+              Revenue kept is not shown: {money(e.unratedOtaRevenueMinor, currency)} of OTA revenue has no
+              commission rate configured, so the real cost is unknown.
+            </span>
+          ) : (
+            <>
+              Revenue kept after real commission:{" "}
+              <span className="tnum font-semibold text-ink-700">{money(e.netOfCommissionMinor, currency)}</span>.
+            </>
+          )}
         </div>
       </Card>
 
@@ -528,76 +552,173 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
   );
 }
 
-async function CancellationReport({ range }: { range: ReturnType<typeof resolveRange> }) {
-  const r = await getCancellationReport(range);
+/**
+ * Cancellations (§2.2, §2.6) — a visual, with the denominator stated.
+ *
+ * Two changes from the table this replaces. It now honours the Stay/Book lens like every other tab
+ * (it silently computed on book-date while displaying stay-date chips), and it says which
+ * denominator it used in words, because "1 of 8" invites the reader to supply the wrong one.
+ *
+ * The reservation-level list has left Analytics entirely, per the §2.0 mandate. "Which specific
+ * bookings cancelled" is a record question and Reservations already answers it —
+ * `status = cancelled` is an existing filter — so the link goes there rather than duplicating a
+ * table that would drift out of step with the real one.
+ */
+async function CancellationReport({ range, lens }: { range: ReturnType<typeof resolveRange>; lens: "stay" | "book" }) {
+  const r = await getCancellationReport(range, lens);
+
+  // Cancellations by source: the driver worth seeing. An OTA cancelling twice as often as direct is
+  // a distribution decision; the same rate everywhere is just seasonality.
+  const bySource = new Map<string, number>();
+  for (const res of r.cancelled) {
+    const name = res.channel?.name ?? res.bookingSource?.name ?? "Direct";
+    bySource.set(name, (bySource.get(name) ?? 0) + 1);
+  }
+  const sources = [...bySource.entries()].sort((a, b) => b[1] - a[1]);
+  const worstSource = Math.max(1, ...sources.map(([, n]) => n));
+
+  // The gauge reads on a 0–30% scale: above that is a crisis, and a 0–100% arc renders every real
+  // hotel as a barely-visible sliver.
+  const gaugePct = Math.min(100, (r.headlineRatePct / 30) * 100);
+  const tone = r.headlineRatePct >= 20 ? "text-danger-600" : r.headlineRatePct >= 10 ? "text-warning-600" : "text-success-600";
+  const bar = r.headlineRatePct >= 20 ? "bg-danger-500" : r.headlineRatePct >= 10 ? "bg-warning-500" : "bg-success-500";
+
   return (
     <Card>
-      <CardHeader title={`Cancellations · ${range.label} · headline ${pct(r.headlineRatePct)} (${r.cancelled.length} of ${r.createdCount} created) · room-night rate ${pct(r.roomNightRatePct)} (${r.cancelledNights} of ${r.grossNights})`} />
-      {r.cancelled.length === 0 ? (
-        <div className="px-4 py-6 text-[13px] text-ink-500">No cancellations among reservations created in this range.</div>
-      ) : (
-        <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
+      <CardHeader
+        title={`Cancellations · ${range.label}`}
+        subtitle={`Counted ${lens === "book" ? "by booking date" : "by stay date"} — ${r.basisLabel}`}
+      />
+      <div className="grid gap-6 px-4 py-5 md:grid-cols-2">
+        {/* Both framings, side by side. The headline rate and the room-night rate answer different
+            questions and a hotel that shows only one is usually showing the flattering one. */}
+        <div>
+          <div className="flex items-baseline gap-2">
+            <span className={`tnum text-[2.4rem] font-bold leading-none ${tone}`}>{pct(r.headlineRatePct)}</span>
+            <span className="text-[12.5px] text-ink-500">of reservations</span>
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-sunken" role="img"
+               aria-label={`Cancellation rate ${pct(r.headlineRatePct)} of reservations`}>
+            <div className={`h-full rounded-full ${bar}`} style={{ width: `${gaugePct}%` }} />
+          </div>
+          <p className="mt-1.5 text-[11.5px] text-ink-400">
+            {r.cancelled.length} of {r.createdCount} · scale ends at 30%
+          </p>
+
+          <div className="mt-4 flex items-baseline gap-2">
+            <span className="tnum text-[1.5rem] font-bold leading-none text-ink-900">{pct(r.roomNightRatePct)}</span>
+            <span className="text-[12.5px] text-ink-500">of room-nights</span>
+          </div>
+          <p className="mt-1 text-[11.5px] text-ink-400">
+            {r.cancelledNights} of {r.grossNights} nights — the number that matters for revenue
+          </p>
+        </div>
+
+        {/* Drivers. */}
+        <div>
+          <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">By source</h4>
+          {sources.length === 0 ? (
+            <p className="text-[13px] text-ink-500">No cancellations in this period.</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {sources.map(([name, n]) => (
+                <li key={name} className="flex items-center gap-2 text-[12.5px]">
+                  <span className="w-28 shrink-0 truncate text-ink-600">{name}</span>
+                  <span className="h-3 rounded-sm bg-danger-500/70" style={{ width: `${(n / worstSource) * 100}%`, minWidth: "0.5rem" }} />
+                  <span className="tnum text-ink-700">{n}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <p className="mt-4 text-[11.5px] leading-relaxed text-ink-400">
+            Which bookings cancelled is a list, so it lives where lists live —{" "}
+            <Link href="/reservations?status=cancelled" className="font-semibold text-brand-700 hover:underline">
+              Reservations, filtered to cancelled
+            </Link>
+            . Export CSV here carries the full detail.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Availability heatmap (§2.2, §2.3) — the biggest single visual upgrade in the module.
+ *
+ * The same room-type × day matrix, but each cell is coloured by remaining as a **share of that room
+ * type's capacity**, with the count kept as the label. A labelled cell is still a visual and still
+ * fully reconcilable, which is what the §2.0 mandate requires — the colour answers "where is it
+ * tight" at a glance, and the number is still there to defend.
+ *
+ * The scale is `availabilityPressure`, shared with the Inventory Calendar so the same day cannot
+ * read differently on two screens. It replaces `remaining <= 2`, which called two-of-three suites
+ * urgent and three-of-forty rooms comfortable.
+ *
+ * The header states the actual date range rather than "next 30 days". §2.7 reported a column count
+ * that disagreed with the header; the data is right (30 dates), so the ambiguity was the header
+ * asserting a number the reader then had to verify by counting. A stated range is self-checking.
+ */
+async function AvailabilityReport() {
+  const board = await getInventoryBoard({ days: 30 });
+  const first = board.dates[0];
+  const last = board.dates[board.dates.length - 1];
+  const dayLabel = (iso: string) => Number(iso.slice(8, 10));
+
+  const TONE: Record<string, string> = {
+    overbooked: "bg-danger-500 text-white",
+    soldout: "bg-danger-100 text-danger-700",
+    low: "bg-warning-100 text-warning-700",
+    open: "bg-success-50 text-ink-600",
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title={`Availability · ${first} → ${last} · remaining per room type`}
+        subtitle="Shaded by how much of each room type is still sellable — not by an absolute count"
+      />
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12.5px]">
           <thead>
             <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              {["Guest", "Stay", "Room", "Source", "Total", "Cancelled"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
+              <th className="sticky left-0 z-10 bg-white px-4 py-2.5">Room type</th>
+              {board.dates.map((d) => <th key={d} className="tnum min-w-[34px] px-1 py-2.5 text-center">{dayLabel(d)}</th>)}
             </tr>
           </thead>
           <tbody>
-            {r.cancelled.map((res) => {
-              const line = res.lines[0];
+            {board.sections.map((s) => {
+              const capacity = s.roomType.totalRooms;
               return (
-                <tr key={res.id} className="border-b border-surface-border/60 last:border-0">
-                  <td className="px-4 py-2.5"><Link href={`/reservations/${res.id}`} className="font-semibold text-brand-700 hover:underline">{res.guestName}</Link></td>
-                  <td className="tnum px-4 py-2.5 text-ink-600">{line ? `${line.checkIn.toISOString().slice(0, 10)} → ${line.checkOut.toISOString().slice(0, 10)}` : "—"}</td>
-                  <td className="px-4 py-2.5 text-ink-600">{line?.roomType.name ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-ink-600">{res.channel?.name ?? res.bookingSource?.name ?? "Direct"}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-700">{money(res.totalMinor, res.currency)}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-500">{res.cancelledAt ? res.cancelledAt.toISOString().slice(0, 10) : "—"}</td>
+                <tr key={s.roomType.id} className="border-b border-surface-border/60 last:border-0">
+                  <td className="sticky left-0 z-10 bg-white px-4 py-2 font-semibold text-ink-900">
+                    {s.roomType.name}
+                    <span className="ml-1.5 text-[10.5px] font-normal text-ink-400">{capacity} rooms</span>
+                  </td>
+                  {s.cells.map((cell, i) => {
+                    const pressure = availabilityPressure(cell.remaining, capacity);
+                    return (
+                      <td key={i} className="px-0.5 py-1 text-center">
+                        <span
+                          className={`tnum inline-block min-w-[26px] rounded px-1 py-0.5 text-[11.5px] font-semibold ${TONE[pressure]}`}
+                          title={`${board.dates[i]} · ${cell.remaining} of ${capacity} remaining`}
+                        >
+                          {cell.remaining}
+                        </span>
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
           </tbody>
         </table>
-        </div>
-      )}
-    </Card>
-  );
-}
-
-async function AvailabilityReport() {
-  const board = await getInventoryBoard({ days: 30 });
-  return (
-    <Card>
-      <CardHeader title="Availability · next 30 days · remaining per room type" />
-      <div className="overflow-x-auto">
-        <table className="w-full text-[12.5px]">
-          <thead>
-            <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              <th className="sticky left-0 bg-white px-4 py-2.5">Room type</th>
-              {board.dates.map((d) => <th key={d} className="tnum min-w-[36px] px-1 py-2.5 text-center">{Number(d.slice(8, 10))}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {board.sections.map((s) => (
-              <tr key={s.roomType.id} className="border-b border-surface-border/60 last:border-0">
-                <td className="sticky left-0 bg-white px-4 py-2 font-semibold text-ink-900">{s.roomType.name}</td>
-                {s.cells.map((cell, i) => (
-                  <td key={i} className="px-1 py-2 text-center">
-                    <span className={`tnum inline-block min-w-[22px] rounded px-0.5 text-[11.5px] font-semibold ${
-                      cell.remaining < 0 ? "bg-danger-500 text-white" : cell.remaining === 0 ? "bg-danger-50 text-danger-600" : cell.remaining <= 2 ? "bg-warning-50 text-warning-600" : "text-ink-600"
-                    }`}>
-                      {cell.remaining}
-                    </span>
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
       <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-        <StatusPill tone="danger">overbooked</StatusPill> <StatusPill tone="warning">low</StatusPill> — day-by-day availability is on the Inventory Calendar.
+        <StatusPill tone="danger">overbooked</StatusPill> <StatusPill tone="warning">under {Math.round(LOW_AVAILABILITY_SHARE * 100)}% left</StatusPill>{" "}
+        — relative to each room type, so a small type is not flagged for having two of three free.
+        Day-by-day detail is on the Inventory Calendar.
       </p>
     </Card>
   );

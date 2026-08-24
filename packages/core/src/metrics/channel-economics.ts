@@ -62,6 +62,12 @@ export interface ChannelEconomics {
    * mostly through a 12% channel and rarely through a 20% one does not face an average of 16%.
    * `null` when there is no OTA revenue in the period.
    */
+  /** OTA revenue on channels whose commission rate IS configured. */
+  ratedOtaRevenueMinor: number;
+  /** OTA revenue on channels with no rate — real revenue whose cost we cannot compute. */
+  unratedOtaRevenueMinor: number;
+  /** True when the commission figures are known to be incomplete. See the field notes above. */
+  commissionIncomplete: boolean;
   blendedOtaRatePct: number | null;
   /**
    * ESTIMATE. Direct revenue × the blended OTA rate: what direct bookings would have cost had they
@@ -116,6 +122,16 @@ export function channelEconomics(lines: readonly ChannelRevenueLine[]): ChannelE
   const totalRevenueMinor = directRevenueMinor + otaRevenueMinor + otherRevenueMinor;
   const blendedOtaRatePct =
     ratedOtaRevenueMinor > 0 ? (commissionPaidMinor / ratedOtaRevenueMinor) * 100 : null;
+  /*
+   * OTA revenue whose channel has no commission rate configured.
+   *
+   * Reported separately because a null blended rate has TWO causes that mean opposite things, and
+   * collapsing them is how a screen ends up asserting something false: "commission paid €0 · no OTA
+   * revenue in this period" printed directly above a row reading "OTA · €780 · commission not set".
+   * The first is a fact about the business; the second is a fact about our configuration, and only
+   * one of them means distribution was free.
+   */
+  const unratedOtaRevenueMinor = otaRevenueMinor - ratedOtaRevenueMinor;
 
   const rows: ChannelEconomicsRow[] = lines
     .map((l) => ({
@@ -137,6 +153,14 @@ export function channelEconomics(lines: readonly ChannelRevenueLine[]): ChannelE
     directSharePct: totalRevenueMinor > 0 ? (directRevenueMinor / totalRevenueMinor) * 100 : 0,
     commissionPaidMinor,
     netOfCommissionMinor: totalRevenueMinor - commissionPaidMinor,
+    ratedOtaRevenueMinor,
+    unratedOtaRevenueMinor,
+    /**
+     * True when some OTA revenue has no rate behind it, so `commissionPaidMinor` and
+     * `netOfCommissionMinor` understate the real cost. A caller showing either MUST say so —
+     * rendering an unconfigured rate as €0 paid reports distribution as free when it is not.
+     */
+    commissionIncomplete: unratedOtaRevenueMinor > 0,
     blendedOtaRatePct,
     commissionAvoidedMinor:
       blendedOtaRatePct == null ? null : Math.round((directRevenueMinor * blendedOtaRatePct) / 100),
