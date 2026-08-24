@@ -1,8 +1,11 @@
-import { CreditCard, TrendingUp, FileText, Send, CheckCircle2, FilePlus2 } from "lucide-react";
+import { CreditCard, TrendingUp, FileText, CheckCircle2, FilePlus2 } from "lucide-react";
 import { getBilling } from "@/lib/data";
 import { setPlan } from "@/lib/actions";
 import { generateInvoices, setInvoiceStatus } from "@/lib/actions-billing";
+import Link from "next/link";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
+import { IssueInvoiceButton } from "@/components/billing/IssueInvoiceButton";
+import { getCompany } from "@/lib/invoice-doc";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +18,7 @@ const inputCls = "h-8 rounded-md border border-surface-border bg-white px-2 text
 
 export default async function BillingPage() {
   const { period, clients, mrr, unpaidCount, recent, demoCount } = await getBilling();
+  const company = await getCompany();
 
   const cards = [
     { icon: TrendingUp, tone: "success", value: money(mrr), label: "MRR", sub: "active clients" },
@@ -38,6 +42,13 @@ export default async function BillingPage() {
           </form>
         }
       />
+
+      {!company && (
+        <div className="mb-3 rounded-md bg-warning-50 px-3 py-2.5 text-[12.5px] font-medium text-warning-600">
+          No company details set, so no invoice can be issued. Add your legal name, address, VAT number
+          and bank details in <Link href="/settings" className="underline">Settings</Link>.
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         {cards.map((c) => {
@@ -96,9 +107,13 @@ export default async function BillingPage() {
                     ) : (
                       <div className="flex items-center gap-2">
                         <StatusPill tone={STATUS_TONE[c.currentInvoice.status]}>{c.currentInvoice.status}</StatusPill>
-                        {c.currentInvoice.status === "draft" && (
-                          <form action={setInvoiceStatus}><input type="hidden" name="id" value={c.currentInvoice.id} /><input type="hidden" name="status" value="sent" />
-                            <button type="submit" className="inline-flex items-center gap-1 rounded border border-surface-border px-1.5 py-0.5 text-[11px] font-semibold text-ink-600 hover:bg-surface-muted"><Send className="h-3 w-3" />Send</button></form>
+                        {/* Issuing, not "sending", is the real transition: it allocates the number
+                            and freezes the document. Flipping a status used to do neither. */}
+                        {!c.currentInvoice.number && <IssueInvoiceButton invoiceId={c.currentInvoice.id} />}
+                        {c.currentInvoice.number && (
+                          <Link href={`/invoice/${c.currentInvoice.id}`} className="tnum text-[11px] font-semibold text-brand-700 hover:underline">
+                            {c.currentInvoice.number}
+                          </Link>
                         )}
                         {c.currentInvoice.status === "sent" && (
                           <form action={setInvoiceStatus}><input type="hidden" name="id" value={c.currentInvoice.id} /><input type="hidden" name="status" value="paid" />
@@ -123,7 +138,12 @@ export default async function BillingPage() {
                 <span className="font-medium text-ink-800">{i.tenant}</span>
                 <span className="flex items-center gap-3">
                   <span className="text-ink-400">{i.period}</span>
-                  <span className="tnum font-semibold text-ink-900">{money(i.amountMinor, i.currency)}</span>
+                  {i.number ? (
+                    <Link href={`/invoice/${i.id}`} className="tnum text-[11.5px] font-semibold text-brand-700 hover:underline">{i.number}</Link>
+                  ) : (
+                    <span className="text-[11px] uppercase tracking-wide text-ink-300">draft</span>
+                  )}
+                  <span className="tnum font-semibold text-ink-900">{money(i.grossMinor ?? i.amountMinor, i.currency)}</span>
                   <StatusPill tone={STATUS_TONE[i.status]}>{i.status}</StatusPill>
                 </span>
               </li>

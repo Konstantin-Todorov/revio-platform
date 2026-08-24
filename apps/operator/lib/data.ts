@@ -744,7 +744,11 @@ export async function getBilling() {
       id: t.id, name: t.name, plan: t.plan, status: t.status, isDemo: t.isDemo,
       products: billedProducts(ent) || "—",
       priceMinor,
-      currentInvoice: current ? { id: current.id, status: current.status, amountMinor: current.amountMinor } : null,
+      // `number` is what tells the screen whether this is still a draft or a real document, so it
+      // travels with the row rather than being inferred from `status`.
+      currentInvoice: current
+        ? { id: current.id, status: current.status, amountMinor: current.amountMinor, number: current.number, grossMinor: current.grossMinor }
+        : null,
     };
   });
 
@@ -757,6 +761,7 @@ export async function getBilling() {
   const recent = invoices.slice(0, 15).map((i) => ({
     id: i.id, tenant: tenantName.get(i.tenantId) ?? "—", period: i.period,
     amountMinor: i.amountMinor, currency: i.currency, status: i.status, isDemo: demoIds.has(i.tenantId),
+    number: i.number, grossMinor: i.grossMinor,
   }));
   return {
     period, clients, mrr,

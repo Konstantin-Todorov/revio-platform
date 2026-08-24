@@ -8,6 +8,9 @@ import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
 import { AccountPanel } from "@/components/clients/AccountPanel";
 import { ContactsPanel } from "@/components/clients/ContactsPanel";
 import { RelationshipLog } from "@/components/clients/RelationshipLog";
+import { ClientBillingForm } from "@/components/billing/ClientBillingForm";
+import { getClientBilling } from "@/lib/invoice-doc";
+import { getOperatorSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +33,7 @@ const ago = (d: Date | null) => {
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const c = await getClientDetail(id);
+  const [billing, session] = await Promise.all([getClientBilling(id), getOperatorSession()]);
   if (!c) notFound();
 
   const { tenant, economics } = c;
@@ -196,6 +200,40 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ))}
           </ul>
         )}
+      </Card>
+
+      {/* Who to invoice. Deliberately apart from the CRM above: that records what we BELIEVE about a
+          relationship, this records what gets printed on a tax document. Its absence blocks issuing,
+          so the card says so rather than letting it be discovered when an invoice is due. */}
+      <Card className="mb-4">
+        <CardHeader
+          title="Billing details"
+          action={!billing ? <StatusPill tone="warning">Not set</StatusPill> : undefined}
+        />
+        <div className="px-4 py-4">
+          {!billing && (
+            <p className="mb-3 rounded-md bg-warning-50 px-3 py-2 text-[12px] font-medium text-warning-600">
+              This client cannot be invoiced until their legal name, country and address are recorded.
+            </p>
+          )}
+          <ClientBillingForm
+            tenantId={tenant.id}
+            tradingName={tenant.name}
+            canEdit={session?.role === "super_admin"}
+            values={{
+              legalName: billing?.legalName ?? "",
+              vatId: billing?.vatId ?? "",
+              companyId: billing?.companyId ?? "",
+              addressLine: billing?.addressLine ?? "",
+              city: billing?.city ?? "",
+              postCode: billing?.postCode ?? "",
+              country: billing?.country ?? "",
+              billingEmail: billing?.billingEmail ?? "",
+              attention: billing?.attention ?? "",
+              notes: billing?.notes ?? "",
+            }}
+          />
+        </div>
       </Card>
 
       {/* 5. What was said last time — ours, plus the moments the platform already knew about. */}

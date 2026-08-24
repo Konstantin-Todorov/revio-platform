@@ -50,6 +50,7 @@ model Tenant {
   crmAccount  ClientAccount?
   crmContacts ClientContact[]
   crmNotes    ClientNote[]
+  crmBilling  ClientBilling?
 }
 
 model User {
@@ -93,17 +94,17 @@ model OperatorUser {
   /// The TOTP shared secret, ENCRYPTED at rest with the same AES-256-GCM helper the OTA
   /// credentials use. A plaintext secret in this column is a second factor that the database
   /// hands to anyone who can read it, which is no second factor at all.
-  totpSecret        String?
+  totpSecret    String?
   /// Null until a code has actually been verified. Enrolment stores the secret first and only
   /// switches 2FA ON once the person proves their app generates matching codes — otherwise a
   /// mistyped setup locks them out of the console with no way back in.
-  totpEnabledAt     DateTime?
+  totpEnabledAt DateTime?
   /// The last 30-second step accepted for this account, so a code cannot be replayed inside its
   /// own window. TOTP is only single-use if something remembers; without this a code read over a
   /// shoulder stays valid for the rest of its period.
-  totpLastStep      Int?
+  totpLastStep  Int?
 
-  createdAt         DateTime  @default(now())
+  createdAt DateTime @default(now())
 
   ownedAccounts ClientAccount[]
   recoveryCodes OperatorRecoveryCode[]
@@ -148,6 +149,7 @@ model Invoice {
   id          String    @id @default(cuid())
   tenantId    String
   period      String // billing month "YYYY-MM"
+  /// The NET price for the period — list prices exclude VAT. See apps/operator/lib/vat.ts.
   amountMinor Int
   currency    String    @default("EUR")
   status      String    @default("draft") // draft | sent | paid
@@ -155,8 +157,115 @@ model Invoice {
   createdAt   DateTime  @default(now())
   paidAt      DateTime?
 
+  // --- The issued document -------------------------------------------------
+  // Everything below is NULL while the invoice is a draft and frozen the moment it is issued.
+  // `number == null` is therefore the same statement as "not yet issued", which is why issuing is a
+  // transition rather than a field somebody can edit.
+  //
+  // These are SNAPSHOTS, not lookups. Our address, our bank account and the customer's VAT number
+  // all change over time, and a document that silently reprints with today's details is no longer
+  // the document that was sent. An invoice has to keep saying what it said.
+  /// Gapless, allocated at issue: "REV-2026-0001".
+  number          String?   @unique
+  issuedAt        DateTime?
+  dueDate         DateTime?
+  issuerName      String?
+  issuerVatId     String?
+  issuerCompanyId String?
+  issuerAddress   String?
+  issuerIban      String?
+  issuerBic       String?
+  issuerBankName  String?
+  buyerName       String?
+  buyerVatId      String?
+  buyerCompanyId  String?
+  buyerAddress    String?
+  netMinor        Int?
+  taxMinor        Int?
+  grossMinor      Int?
+  vatRatePct      Int?
+  /// domestic | eu_reverse_charge | eu_b2c | outside_eu | not_registered
+  vatTreatment    String?
+  /// Printed beside a 0% line. A zero with no reason is not a valid invoice.
+  vatNote         String?
+  /// The billed lines as they read at issue, so a later price change cannot rewrite history.
+  lineSnapshot    Json?
+
   @@unique([tenantId, period])
   @@index([tenantId])
+}
+
+/// Our own legal identity, as it appears on every invoice we send.
+///
+/// A single row — there is one Revio. Modelled as a table rather than environment variables because
+/// an address or a bank account is something an operator should be able to correct at 9pm without a
+/// deploy, and because the values have to be snapshotted onto each invoice anyway.
+model OperatorCompany {
+  id               String   @id @default("singleton")
+  legalName        String
+  /// Absent = not VAT registered, which zero-rates every invoice. See decideVat().
+  vatId            String?
+  /// Company registration number (EIK in Bulgaria).
+  companyId        String?
+  addressLine      String?
+  city             String?
+  postCode         String?
+  /// ISO 3166-1 alpha-2. Decides domestic vs reverse charge for every customer.
+  country          String   @default("BG")
+  email            String?
+  phone            String?
+  website          String?
+  iban             String?
+  bic              String?
+  bankName         String?
+  /// Our domestic standard VAT rate, percent.
+  standardVatPct   Int      @default(20)
+  invoicePrefix    String   @default("REV")
+  paymentTermsDays Int      @default(14)
+  /// Free text printed at the foot of every invoice.
+  footerNote       String?
+  updatedAt        DateTime @updatedAt
+}
+
+/// Gapless invoice numbering, one counter per year.
+///
+/// Same discipline as the hotel-side InvoiceSeries: the counter is claimed with a single atomic
+/// increment, so two invoices issued in the same second cannot take the same number. A gap or a
+/// duplicate in an invoice sequence is an audit finding, not a cosmetic bug.
+model OperatorInvoiceSeries {
+  id         String @id @default(cuid())
+  year       Int    @unique
+  nextNumber Int    @default(1)
+}
+
+/// A client's LEGAL identity, for the invoice we send them.
+///
+/// Deliberately not part of ClientAccount. That table holds what we BELIEVE about a relationship —
+/// its stage, a summary, who owns it — and this holds facts that get printed on a tax document. Kept
+/// apart so a CRM note and a legally-binding company name are not edited by the same hand on the
+/// same screen, and so its absence means something precise: this client cannot be invoiced yet.
+///
+/// `Tenant.name` is the trading name the hotel uses ("Hotel Sofia Group"); `legalName` is the entity
+/// that actually owes the money, and they are routinely different.
+model ClientBilling {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique
+  legalName    String
+  vatId        String?
+  companyId    String?
+  addressLine  String?
+  city         String?
+  postCode     String?
+  /// ISO 3166-1 alpha-2. Absent blocks issuing — see decideVat(), which refuses to guess.
+  country      String?
+  billingEmail String?
+  /// Who the invoice should be addressed to — "Accounts payable", a finance manager's name.
+  attention    String?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 // --- Operator CRM (L6) ------------------------------------------------------
@@ -1539,25 +1648,25 @@ model AuditEntry {
 /// records what happened to an ACCOUNT. They have different retention, different readers, and a
 /// failed sign-in belongs to no tenant at all.
 model AuthEvent {
-  id        String   @id @default(cuid())
+  id             String   @id @default(cuid())
   /// cm | crs | pms | operator — which front door.
-  scope     String
+  scope          String
   /// See AUTH_EVENT in packages/db/src/auth-events.ts.
-  type      String
+  type           String
   /// Null when the attempt matched no account, which is exactly when it is most worth keeping.
   userId         String?
   operatorUserId String?
   /// Null for operator events and for failures against an unknown address. A hotel may read its own
   /// staff's events; nothing else is theirs to see.
-  tenantId  String?
+  tenantId       String?
   /// The address as typed. Kept even when it matches nothing — a run of attempts against
   /// almost-right addresses is the signal.
-  email     String?
-  ip        String?
-  userAgent String?
+  email          String?
+  ip             String?
+  userAgent      String?
   /// Short human-readable context: "recovery code", "2 codes left", a lockout reason.
-  detail    String?
-  createdAt DateTime @default(now())
+  detail         String?
+  createdAt      DateTime @default(now())
 
   @@index([tenantId, createdAt])
   @@index([userId, createdAt])
@@ -1624,13 +1733,13 @@ model AuthToken {
 /// a lease is infrastructure, held by a process across every tenant, before any session exists.
 model JobLease {
   /// The job's stable name, e.g. "channex-pull". One row per job, ever.
-  name       String   @id
+  name       String    @id
   /// Who holds it — instance id + pid. Only ever read by a human working out which box is looping.
   holder     String
   /// A lease is a promise to finish or die by this time; after it, anyone may take over. This is
   /// what makes a crashed instance recoverable without anybody clearing a flag by hand.
   expiresAt  DateTime
-  acquiredAt DateTime @default(now())
+  acquiredAt DateTime  @default(now())
   /// Bumped on every successful run — the cheapest possible "is the poller alive" signal.
   lastRunAt  DateTime?
 

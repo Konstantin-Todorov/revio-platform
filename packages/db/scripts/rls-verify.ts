@@ -26,7 +26,17 @@ const record = (name: string, ok: boolean, detail: string) => {
 /** Models keyed by their own id rather than a tenantId column (the Tenant row IS the tenant). */
 const SELF_KEYED = new Set(["Tenant"]);
 /** Operator-perimeter tables: invisible to a hotel connection by design, so "0 rows" is a pass. */
-const OPERATOR_ONLY = new Set(["ConnectivityCredential", "Invoice", "OperatorUser"]);
+const OPERATOR_ONLY = new Set(["ConnectivityCredential", "Invoice", "OperatorUser", "ClientBilling"]);
+
+/**
+ * Operator tables with NO `tenantId`, so the tenant sweep below never reaches them.
+ *
+ * The sweep enumerates models that carry a tenantId, which is the right rule for proving tenant
+ * isolation and the wrong rule for proving these are locked at all — they would simply go unchecked.
+ * `OperatorCompany` holds our bank account and `OperatorInvoiceSeries` the invoice counter; neither
+ * belongs to a hotel, and neither should be readable from a hotel's connection.
+ */
+const OPERATOR_GLOBAL = ["OperatorCompany", "OperatorInvoiceSeries"] as const;
 
 async function main() {
   const [{ current_user: role, is_super: isSuper, bypass }] = await prisma.$queryRaw<
@@ -90,6 +100,18 @@ async function main() {
       leaked === 0 && seen <= total,
       `${seen} of ${total} rows, ${leaked} of B's`,
     );
+  }
+
+  // 2b. Operator-global tables. No tenantId, so the sweep above skipped them entirely — checked
+  //     explicitly rather than assumed, because "not enumerated" is how a table ends up with no
+  //     policy and nobody noticing.
+  for (const name of OPERATOR_GLOBAL) {
+    const key = name.charAt(0).toLowerCase() + name.slice(1);
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const total = await (sys as any)[key].count();
+    const seen = await (dbA as any)[key].count();
+    /* eslint-enable @typescript-eslint/no-explicit-any */
+    record(`${name}: operator-only, hidden from a hotel`, seen === 0, `${seen} of ${total} rows`);
   }
 
   // 3. Writes are policed too. A SELECT-only policy would let one tenant plant rows in another's

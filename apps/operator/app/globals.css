@@ -67,3 +67,66 @@
     left: 0;
   }
 }
+
+
+/**
+ * Printing an invoice.
+ *
+ * Copied deliberately, and byte for byte, from apps/pms/app/globals.css. Both apps print a numbered
+ * financial document, and the rules that make that work — hiding every branch that does not contain
+ * the document, never splitting a line item across sheets — were worked out once already. A second,
+ * subtly different set would drift, and the first symptom would be a customer's invoice breaking
+ * across a page while the hotel's guest invoice still printed correctly.
+ *
+ * Mark the document with `data-print-doc` and any control inside it with `data-print-hide`.
+ */
+@media print {
+  /* Hide every branch that does not contain the document, walking down from the body. The
+     :has() form keeps the ancestors of the document visible without naming the shell's structure,
+     so the layout can be rearranged later without silently breaking printing. */
+  body *:not(:has([data-print-doc])):not([data-print-doc]):not([data-print-doc] *) {
+    display: none !important;
+  }
+
+  body,
+  body *:has([data-print-doc]) {
+    display: block !important;
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  [data-print-doc] {
+    display: block !important;
+    /* On screen the document is a card. On paper the page IS the card, so the border and shadow
+       become ink for no reason. */
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  /* A tax document must not split a line item across two sheets, and a total stranded alone on
+     page two is how a guest ends up querying a bill that is correct. */
+  [data-print-doc] tr,
+  [data-print-doc] li,
+  [data-print-doc] [data-print-keep] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Controls are not part of the document, even inside it. */
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+}
