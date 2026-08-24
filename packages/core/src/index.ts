@@ -35,3 +35,4 @@ export * from "./rooms/amenities.js";
 export * from "./branding/logo.js";
 
 export * from "./onboarding/welcome.js";
+export * from "./invoicing/numbering.js";

@@ -1182,6 +1182,19 @@ model PropertyDefaults {
   // City tax (spec §4.4): the CRS DEFINES the rule, the PMS applies it to the folio, the CM
   // discloses it to the OTA. The setting NEVER changes the rate exported to the channel manager.
   cityTaxMode              String  @default("payable_on_spot") // payable_on_spot | included
+  /// How this property numbers its tax documents.
+  ///
+  /// `bg_10digit` — ЗДДС чл. 114, ал. 1, т. 2: a ten-digit number, Arabic numerals only, ascending,
+  /// no duplication, no gaps, and never reset at year end. Default, because that is the market.
+  /// `prefixed`   — the readable `INV-2026-0001` form, for a jurisdiction that permits it.
+  ///
+  /// A property setting rather than a constant: the numbering rule is the single most
+  /// country-specific thing about an invoice, and hardcoding ours would quietly make every foreign
+  /// hotel non-compliant instead of only the Bulgarian ones.
+  invoiceNumberScheme      String  @default("bg_10digit")
+  /// Where this property's own range begins. A hotel that already issues invoices by hand needs its
+  /// software range clear of the numbers in its books — same problem, same answer, per property.
+  invoiceNumberStart       BigInt  @default(1000000000)
   holdTtlMinutes           Int     @default(30)
   // Close Day escalation (round-2 §3.4). An unclosed day must never accumulate: miss seven and the
   // eighth needs closing seven times, which corrupts the daily record. Two stages, both per-property
@@ -1223,13 +1236,20 @@ model PropertyDefaults {
 
 // Gapless numbering (spec §4.3) — a per-property, per-doc-type counter incremented atomically so an
 // invoice/proforma/credit-note series never skips a number. Separate series per docType.
+/// The gapless counter behind a property's issued documents.
+///
+/// Under the Bulgarian scheme `docType` is **"tax"** for both invoices and credit notes: an известие
+/// is a данъчен документ like a фактура, and "no duplication" applies across all of a taxable
+/// person's documents, so one ascending range per property is the reading that cannot be wrong.
+/// A proforma is NOT a tax document and keeps its own, separate, non-numeric run.
 model InvoiceSeries {
   id         String @id @default(cuid())
   tenantId   String
   propertyId String
-  docType    String // invoice | proforma | credit_note
+  docType    String // tax | proforma  (legacy rows: invoice | credit_note)
   prefix     String @default("")
-  nextNumber Int    @default(1)
+  /// BigInt: a ten-digit number reaches 9999999999, past the 2147483647 ceiling of a 32-bit integer.
+  nextNumber BigInt @default(1)
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 

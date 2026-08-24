@@ -185,12 +185,12 @@ export default async function ConfigurationPage() {
       {/* Read-only: invoice series + outlets */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Invoice series" subtitle="Gapless numbering per document type" />
+          <CardHeader title="Invoice series" subtitle="Gapless numbering — invoices and credit notes share one range" />
           <div className="p-4 text-[13px]">
             {(["invoice", "proforma", "credit_note"] as const).map((dt) => (
               <div key={dt} className="flex items-center justify-between border-b border-surface-border/50 py-1.5 last:border-0">
                 <span className="flex items-center gap-1.5 text-ink-700"><ReceiptText className="h-3.5 w-3.5 text-ink-400" /> {DOC_LABEL[dt]}</span>
-                <span className="tnum text-ink-500">next #{nextByDoc[dt] ?? 1}</span>
+                <span className="tnum text-ink-500">next {nextByDoc[dt] ?? "—"}</span>
               </div>
             ))}
           </div>

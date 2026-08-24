@@ -3,6 +3,10 @@ import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { fiscalizeInvoice } from "./fiscal";
 import { ymd } from "./format";
+import { withTenantTransaction, type TenantTx } from "@revio/db";
+import {
+  formatDocumentNumber, seriesKeyFor, seriesStartFor, type InvoiceNumberScheme,
+} from "@revio/core";
 
 /**
  * The Invoicing module (spec §4.3/§4.6). Charges live on folios; an invoice is "render this folio
@@ -14,7 +18,6 @@ import { ymd } from "./format";
 
 export type DocType = "invoice" | "proforma" | "credit_note";
 export const DOC_LABEL: Record<string, string> = { invoice: "Invoice", proforma: "Proforma", credit_note: "Credit note" };
-const DOC_PREFIX: Record<DocType, string> = { invoice: "INV", proforma: "PRO", credit_note: "CN" };
 
 // Kinds that are invoice CONTENT (goods/services supplied). Payments + deposit movements are
 // settlement, not invoice lines.
@@ -57,21 +60,35 @@ export function computeTaxSummary(
   return { rows, netMinor, taxMinor, grossMinor };
 }
 
-/** Allocate the next GAPLESS number for a series. The counter is bumped in a single atomic UPDATE
- * (increment), so concurrent issues can never reuse or skip a number. */
-async function nextNumber(tenantId: string, propertyId: string, docType: DocType): Promise<string> {
-  let series = await prisma.invoiceSeries.findFirst({ where: { propertyId, docType }, select: { id: true } });
-  if (!series) {
-    try {
-      series = await prisma.invoiceSeries.create({ data: { tenantId, propertyId, docType }, select: { id: true } });
-    } catch {
-      series = await prisma.invoiceSeries.findFirst({ where: { propertyId, docType }, select: { id: true } });
-    }
-  }
-  const updated = await prisma.invoiceSeries.update({ where: { id: series!.id }, data: { nextNumber: { increment: 1 } }, select: { nextNumber: true } });
-  const n = updated.nextNumber - 1; // the value we just claimed
-  const year = new Date().getFullYear();
-  return `${DOC_PREFIX[docType]}-${year}-${String(n).padStart(4, "0")}`;
+/**
+ * Claim the next number, inside a transaction the caller supplies.
+ *
+ * It takes `tx` rather than reaching for the module client on purpose: the number and the document
+ * must commit together. Allocating first and writing second means any failure in between burns a
+ * number no document will carry — and "без пропуски", no gaps, is the rule rather than a preference.
+ * The old version did exactly that, and also printed the year into the number, which restarts the
+ * sequence every January and hands out a duplicate.
+ */
+async function claimNumber(
+  tx: TenantTx,
+  tenantId: string,
+  propertyId: string,
+  docType: DocType,
+  scheme: InvoiceNumberScheme,
+  configuredStart: bigint,
+): Promise<string> {
+  const key = seriesKeyFor(scheme, docType);
+  const existing = await tx.invoiceSeries.findFirst({ where: { propertyId, docType: key }, select: { id: true, nextNumber: true } });
+  const series =
+    existing ??
+    (await tx.invoiceSeries.create({
+      data: { tenantId, propertyId, docType: key, nextNumber: seriesStartFor(scheme, docType, configuredStart) },
+      select: { id: true, nextNumber: true },
+    }));
+
+  const claimed = series.nextNumber;
+  await tx.invoiceSeries.update({ where: { id: series.id }, data: { nextNumber: claimed + 1n } });
+  return formatDocumentNumber({ scheme, docType, claimed, year: new Date().getFullYear() });
 }
 
 export interface GenerateInvoiceInput {
@@ -97,27 +114,34 @@ export async function generateInvoice(input: GenerateInvoiceInput): Promise<stri
 
   const supply = await supplyDateFor(input.reservationId);
   const summary = computeTaxSummary(folio.lines, rates);
-  const number = await nextNumber(session.tenantId, property.id, input.docType);
 
   const snapshot = folio.lines
     .filter((l) => !l.voided && INVOICE_KINDS.has(l.kind))
     .map((l) => ({ kind: l.kind, description: l.description, outlet: l.outlet, taxCategory: l.taxCategory, amountMinor: l.amountMinor }));
 
-  const inv = await prisma.taxInvoice.create({
-    data: {
-      tenantId: session.tenantId, propertyId: property.id, reservationId: input.reservationId, folioId: folio.id,
-      docType: input.docType, number,
-      issuerName: defaults?.invoiceIssuerName || property.name,
-      issuerVatId: defaults?.invoiceVatId ?? null,
-      issuerAddress: defaults?.invoiceAddress || property.address || null,
-      buyerName: input.buyerName, buyerVatId: input.buyerVatId ?? null, buyerAddress: input.buyerAddress ?? null,
-      supplyDate: supply,
-      currency: folio.currency,
-      netMinor: summary.netMinor, taxMinor: summary.taxMinor, grossMinor: summary.grossMinor,
-      taxSummary: summary.rows, lineSnapshot: snapshot,
-      createdById: input.userId ?? null,
-    },
-    select: { id: true },
+  const scheme = (defaults?.invoiceNumberScheme ?? "bg_10digit") as InvoiceNumberScheme;
+  const configuredStart = defaults?.invoiceNumberStart ?? 1000000000n;
+
+  // The number and the document commit together, or neither does. See `claimNumber`.
+  const { inv, number } = await withTenantTransaction(session.tenantId, async (tx) => {
+    const number = await claimNumber(tx, session.tenantId, property.id, input.docType, scheme, configuredStart);
+    const inv = await tx.taxInvoice.create({
+      data: {
+        tenantId: session.tenantId, propertyId: property.id, reservationId: input.reservationId, folioId: folio.id,
+        docType: input.docType, number,
+        issuerName: defaults?.invoiceIssuerName || property.name,
+        issuerVatId: defaults?.invoiceVatId ?? null,
+        issuerAddress: defaults?.invoiceAddress || property.address || null,
+        buyerName: input.buyerName, buyerVatId: input.buyerVatId ?? null, buyerAddress: input.buyerAddress ?? null,
+        supplyDate: supply,
+        currency: folio.currency,
+        netMinor: summary.netMinor, taxMinor: summary.taxMinor, grossMinor: summary.grossMinor,
+        taxSummary: summary.rows as unknown as object[], lineSnapshot: snapshot,
+        createdById: input.userId ?? null,
+      },
+      select: { id: true },
+    });
+    return { inv, number };
   });
 
   // Fiscalization boundary (spec §4.7) — if this property's jurisdiction pack requires real-time
