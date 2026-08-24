@@ -109,11 +109,20 @@ export default async function BillingPage() {
                         <StatusPill tone={STATUS_TONE[c.currentInvoice.status]}>{c.currentInvoice.status}</StatusPill>
                         {/* Issuing, not "sending", is the real transition: it allocates the number
                             and freezes the document. Flipping a status used to do neither. */}
-                        {!c.currentInvoice.number && <IssueInvoiceButton invoiceId={c.currentInvoice.id} />}
-                        {c.currentInvoice.number && (
+                        {c.currentInvoice.number ? (
                           <Link href={`/invoice/${c.currentInvoice.id}`} className="tnum text-[11px] font-semibold text-brand-700 hover:underline">
                             {c.currentInvoice.number}
                           </Link>
+                        ) : (
+                          <>
+                            {/* A draft is openable too. It was not, and that made the document
+                                unreachable until it had been issued — so the only way to see what an
+                                invoice would say was to commit to sending it. */}
+                            <Link href={`/invoice/${c.currentInvoice.id}`} className="text-[11px] font-semibold text-ink-500 hover:text-ink-900 hover:underline">
+                              Preview
+                            </Link>
+                            <IssueInvoiceButton invoiceId={c.currentInvoice.id} />
+                          </>
                         )}
                         {c.currentInvoice.status === "sent" && (
                           <form action={setInvoiceStatus}><input type="hidden" name="id" value={c.currentInvoice.id} /><input type="hidden" name="status" value="paid" />
@@ -138,11 +147,14 @@ export default async function BillingPage() {
                 <span className="font-medium text-ink-800">{i.tenant}</span>
                 <span className="flex items-center gap-3">
                   <span className="text-ink-400">{i.period}</span>
-                  {i.number ? (
-                    <Link href={`/invoice/${i.id}`} className="tnum text-[11.5px] font-semibold text-brand-700 hover:underline">{i.number}</Link>
-                  ) : (
-                    <span className="text-[11px] uppercase tracking-wide text-ink-300">draft</span>
-                  )}
+                  <Link
+                    href={`/invoice/${i.id}`}
+                    className={i.number
+                      ? "tnum text-[11.5px] font-semibold text-brand-700 hover:underline"
+                      : "text-[11px] uppercase tracking-wide text-ink-400 hover:text-ink-700 hover:underline"}
+                  >
+                    {i.number ?? "draft"}
+                  </Link>
                   <span className="tnum font-semibold text-ink-900">{money(i.grossMinor ?? i.amountMinor, i.currency)}</span>
                   <StatusPill tone={STATUS_TONE[i.status]}>{i.status}</StatusPill>
                 </span>
