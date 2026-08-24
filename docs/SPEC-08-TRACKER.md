@@ -69,7 +69,7 @@ Status: ☐ open · ◐ in progress · ☑ done
 
 ## E. RevioCRS — Reservations *(§3)*
 
-- ☐ **E1** *(§3.3)* **Date fields only open the picker from the calendar icon.** `showPicker()` on
+- ☑ **E1** *(§3.3)* **Date fields only open the picker from the calendar icon.** `showPicker()` on
   click/focus, **everywhere native date inputs appear** — new-reservation search, reservations
   filter, bulk-edit modal (§5.4). Highest-frequency annoyance; do first.
 - ☐ **E2** *(§3.3)* Better fix: a two-month **range picker** for arrival→departure.
@@ -95,14 +95,14 @@ Status: ☐ open · ◐ in progress · ☑ done
   Biggest at-a-glance weakness.
 - ☐ **G2** *(§5.2)* Grade the Remaining row by pressure, reusing D10's relative threshold. Subtle
   shading only — it must stay editable.
-- ☐ **G3** *(§5.3)* **Make the derived cascade explicit** — one line: *"Derived plans follow Standard
+- ☑ **G3** *(§5.3)* **Make the derived cascade explicit** — one line: *"Derived plans follow Standard
   — change it and they recompute."* One line, and it is the difference between the feature feeling
   clever and feeling risky. **Do first.**
 - ☐ **G4** *(§5.3)* **Tab the bulk modal** — Rates | Availability | Restrictions.
 - ☐ **G5** *(§5.3)* Co-locate rate-plan selection with the Price control.
 - ☐ **G6** *(§5.3)* Unit-aware Value field (€/%) with an inline result, and a Preview that spells out
   the blast radius including every derived recompute.
-- ☐ **G7** *(§5.4)* "Set exact price" must say it sets the **master only**.
+- ☑ **G7** *(§5.4)* "Set exact price" must say it sets the **master only**.
 
 ---
 

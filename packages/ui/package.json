@@ -18,7 +18,8 @@
     "./sign-out-everywhere": "./src/sign-out-everywhere.tsx",
     "./field-guard": "./src/field-guard.tsx",
     "./login-fields": "./src/login-fields.tsx",
-    "./otp-input": "./src/otp-input.tsx"
+    "./otp-input": "./src/otp-input.tsx",
+    "./date-picker-affordance": "./src/date-picker-affordance.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

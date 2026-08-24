@@ -10,7 +10,10 @@ type PlanOpt = { id: string; name: string; priceLogic: string; parentName: strin
 
 const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
 const RATE_MODES: [CrsBulkRateMode, string][] = [
-  ["set", "Set exact price (€)"], ["inc_pct", "Increase by %"], ["dec_pct", "Decrease by %"],
+  // "on the selected plans" matters: with derived plans in play, "set exact" reads as though it
+  // flattens every plan to one figure. It sets the plans you ticked; the derived ones recompute off
+  // them and keep their own offsets.
+  ["set", "Set exact price (€) on the selected plans"], ["inc_pct", "Increase by %"], ["dec_pct", "Decrease by %"],
   ["inc_amt", "Increase by amount (€)"], ["dec_amt", "Decrease by amount (€)"],
 ];
 
@@ -163,6 +166,22 @@ export function CrsBulkPanel({
                 </span>
               ))}
             </div>
+            {/*
+              §5.3 — the #1 easy win, and it is one sentence.
+              The derived rows are greyed with a DERIVED tag, which tells the user "you cannot edit
+              these" and says nothing about what happens when they change Standard. So they do not
+              know whether Non-Refundable follows or goes stale, and that doubt is the entire friction
+              with the feature. The model is strong; it was simply invisible.
+            */}
+            {derivedPlans.length > 0 && (
+              <span className="mt-1.5 flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-brand-800">
+                <span aria-hidden>📎</span>
+                <span>
+                  Derived plans follow Standard — change it and they recompute. You only ever edit the
+                  plan they come from.
+                </span>
+              </span>
+            )}
             <span className="mt-1 block text-[11px] text-ink-400">Restrictions apply per room type regardless of rate plan.</span>
           </div>
         </div>

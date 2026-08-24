@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Hanken_Grotesk } from "next/font/google";
 import "./globals.css";
+import { DatePickerAffordance } from "@revio/ui/date-picker-affordance";
 
 const hanken = Hanken_Grotesk({
   subsets: ["latin"],
@@ -17,7 +18,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={hanken.variable}>
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* One listener: every native date field opens its picker from anywhere on it. */}
+        <DatePickerAffordance />
+      </body>
     </html>
   );
 }
