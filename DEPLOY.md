@@ -245,3 +245,55 @@ It is written against the AWS SDK and typechecks, but the first deploy with `STO
 should be verified by uploading one photo and confirming it loads from `STORAGE_PUBLIC_BASE`.
 Existing photos do not migrate themselves: the keys stay valid, but the bytes have to be copied from
 `.storage/` into the bucket with the same key layout (`t/<tenant>/p/<property>/rooms/<roomType>/…`).
+
+## Rotating the keys (N5)
+
+Two secrets protect different things, and they rotate differently. Neither changes how anyone signs
+in — the login screen and its fields are untouched.
+
+| Secret | Protects | Effect of rotating |
+| --- | --- | --- |
+| `AUTH_SECRET` | Session cookies (signed JWTs) | Everyone signed out — **unless** the previous key is kept for a window |
+| `CONNECTIVITY_SECRET` | OTA API keys at rest | None on users; existing rows must be re-encrypted |
+
+### AUTH_SECRET — no one gets logged out
+
+A plain swap invalidates every token at once: every hotel, mid-shift, at a front desk with guests
+waiting. That cost is why key rotation gets postponed indefinitely, so it is designed away.
+
+1. On every service, set `AUTH_SECRET_PREVIOUS` to the **current** value and `AUTH_SECRET` to the new
+   one. New tokens are signed with the new key; old ones are still accepted.
+2. Wait out the longest session — **14 days** ("remember me"; 12 hours otherwise).
+3. Remove `AUTH_SECRET_PREVIOUS`. Any token still signed with the old key is now refused, which by
+   then means only a session that should have expired anyway.
+
+Each service has its own `AUTH_SECRET`, so this is per-service and can be done one at a time.
+
+### CONNECTIVITY_SECRET — re-encrypt, never just swap
+
+Every stored credential is sealed with the current key. Changing the variable alone turns each one
+into noise, silently — and it surfaces later as a hotel's rates mysteriously failing to push.
+
+1. On every service: `CONNECTIVITY_SECRET_PREVIOUS` = the **old** key, `CONNECTIVITY_SECRET` = the
+   new one. Reads try the new key and fall back to the old, so nothing breaks in the meantime.
+2. Re-encrypt every row:
+   ```bash
+   CONNECTIVITY_SECRET=<new> CONNECTIVITY_SECRET_PREVIOUS=<old> \
+   DATABASE_URL="$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)" \
+   pnpm --filter @revio/db rotate-connectivity-key --dry-run    # inspect first
+   ```
+   Then again without `--dry-run`. It reads each row, re-seals it, and **reads it back** to confirm —
+   writing a row that cannot be decrypted is the one failure the script exists to prevent. Idempotent
+   and safe to re-run.
+3. Remove `CONNECTIVITY_SECRET_PREVIOUS` everywhere. Anything still needing the old key now fails
+   loudly, which is the point: the rotation is finished or it is not.
+
+A row readable by neither key is reported and **skipped, never deleted** — an unreadable credential
+is a job for a person, and destroying it would turn a recoverable mistake into a hotel that quietly
+stops syncing.
+
+### When to rotate
+
+On the ordinary schedule (annually is defensible), and immediately if a key may have been exposed —
+a leaked `.env`, a departing contractor with production access, a compromised laptop. Both are
+Railway variables; neither has ever been committed.

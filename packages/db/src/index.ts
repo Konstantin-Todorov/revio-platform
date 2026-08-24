@@ -7,7 +7,7 @@ export {
   type TenantTx,
   type TxOptions,
 } from "./rls.js";
-export { encryptSecret, decryptSecret, keyHint } from "./crypto.js";
+export { encryptSecret, decryptSecret, keyHint, hasPreviousKey } from "./crypto.js";
 export {
   checkLoginAllowed,
   recordLoginFailure,

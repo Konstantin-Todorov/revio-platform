@@ -68,9 +68,28 @@ export async function signSession(
     .sign(secret());
 }
 
+/**
+ * The PREVIOUS signing key, during a rotation (N5).
+ *
+ * Changing `AUTH_SECRET` invalidates every token signed with the old one, so a plain swap logs out
+ * every user of every product at once — mid-shift, at a front desk, with guests waiting. That is a
+ * real cost, and it is the reason key rotation gets postponed indefinitely at most companies.
+ *
+ * With `AUTH_SECRET_PREVIOUS` set, new tokens are signed with the new key and old ones are still
+ * accepted, so nobody notices. Remove the variable once the longest session TTL has passed (14 days
+ * for "remember me") and the old key is dead.
+ *
+ * Verification only — never signing. A rotation that kept issuing tokens under the old key would
+ * never finish.
+ */
+function previousSecret(): Uint8Array | null {
+  const value = process.env.AUTH_SECRET_PREVIOUS;
+  return value && value.length >= MIN_SECRET_LENGTH ? new TextEncoder().encode(value) : null;
+}
+
 export async function verifySessionToken(token: string): Promise<VerifiedSession | null> {
   try {
-    const { payload } = await jwtVerify(token, secret());
+    const { payload } = await verifyWithEitherKey(token);
     if (payload.kind !== "hotel" && payload.kind !== "operator") return null;
     return {
       kind: payload.kind as SessionPayload["kind"],
@@ -123,7 +142,7 @@ export async function readPendingTwoFactor(): Promise<{ operatorId: string; reme
   const token = (await cookies()).get(PENDING_2FA_COOKIE)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, secret());
+    const { payload } = await verifyWithEitherKey(token);
     if (payload.kind !== "operator_2fa") return null;
     return { operatorId: String(payload.sub), remember: payload.remember === true };
   } catch {
@@ -133,6 +152,17 @@ export async function readPendingTwoFactor(): Promise<{ operatorId: string; reme
 
 export async function clearPendingTwoFactorCookie(): Promise<void> {
   (await cookies()).delete(PENDING_2FA_COOKIE);
+}
+
+/** Try the current key, then the previous one if a rotation is in progress. */
+async function verifyWithEitherKey(token: string) {
+  try {
+    return await jwtVerify(token, secret());
+  } catch (err) {
+    const previous = previousSecret();
+    if (!previous) throw err;
+    return await jwtVerify(token, previous);
+  }
 }
 
 export async function setSessionCookie(
