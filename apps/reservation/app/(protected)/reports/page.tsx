@@ -6,8 +6,9 @@ import { getCancellationReport, getPickupReport, getProductPerformance, getProdu
 import { getProperty, getScope, todayInTz } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { EvolutionChart, type EvoBucket } from "@/components/reports/EvolutionChart";
-import { money } from "@/lib/format";
+import { money, FORECAST_DISCLAIMER } from "@/lib/format";
 import { isCommissionFreeCategory, availabilityPressure, LOW_AVAILABILITY_SHARE } from "@revio/core";
+import { BarList, Donut, PaceCurve, ForwardCurve } from "@/components/reports/Visuals";
 
 export const dynamic = "force-dynamic";
 
@@ -240,30 +241,19 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
         )}
       </Card>
 
-      {/* Performance by room type (§2.5) — compare room types against each other. */}
+      {/* §2.2 — the room-type table becomes bars: one per type, length = revenue, sorted descending,
+          with room-nights and ADR riding as labels so nothing stops being reconcilable. */}
       <Card>
-        <CardHeader title="Performance by room type" subtitle="Room-nights, revenue and ADR per type for the selected period" />
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                {["Room type", "Reservations", "Room-nights", "Revenue", "ADR"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {prod.roomTypes.map((row) => (
-                <tr key={row.name} className="border-b border-surface-border/60 last:border-0">
-                  <td className="px-4 py-2.5 font-semibold text-ink-900">{row.name}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-700">{row.reservations}</td>
-                  <td className="tnum px-4 py-2.5 font-semibold text-ink-900">{row.nights}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-700">{money(row.revenueMinor, currency)}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-600">{row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"}</td>
-                </tr>
-              ))}
-              {prod.roomTypes.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-[13px] text-ink-400">No sold nights in this range.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+        <CardHeader title="Performance by room type" subtitle="Revenue per type — room-nights and ADR on each bar" />
+        <BarList
+          emptyMessage="No sold nights in this range."
+          data={prod.roomTypes.map((row) => ({
+            label: row.name,
+            value: row.revenueMinor,
+            valueLabel: money(row.revenueMinor, currency),
+            meta: `${row.nights} nights · ADR ${row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"}`,
+          }))}
+        />
       </Card>
 
       {/* Raw day-level data kept as a drill-down / export (§2.6). */}
@@ -330,51 +320,71 @@ async function ProductionReport({ range }: { range: ReturnType<typeof resolveRan
   );
 }
 
-/** Room-type & Rate-plan performance (spec §3.2): nights, revenue, ADR per product. */
+/**
+ * Room-type & Rate-plan performance — two bar charts side by side (§2.2).
+ *
+ * Both were grids of five columns where the question is "which of these earns most". Length answers
+ * it instantly; room-nights and ADR ride as labels so the numbers are still there to defend.
+ */
 async function ProductsReport({ range, lens }: { range: ReturnType<typeof resolveRange>; lens: "stay" | "book" }) {
   const r = await getProductPerformance(range, lens);
   const currency = r.property.baseCurrency;
-  const table = (title: string, rows: typeof r.roomTypes) => (
-    <Card>
-      <CardHeader title={title} />
-      <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-            {["Product", "Reservations", "Room-nights", "Revenue", "ADR"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.name} className="border-b border-surface-border/60 last:border-0">
-              <td className="px-4 py-2.5 font-semibold text-ink-900">{row.name}</td>
-              <td className="tnum px-4 py-2.5 text-ink-700">{row.reservations}</td>
-              <td className="tnum px-4 py-2.5 text-ink-700">{row.nights}</td>
-              <td className="tnum px-4 py-2.5 font-semibold text-ink-900">{money(row.revenueMinor, currency)}</td>
-              <td className="tnum px-4 py-2.5 text-ink-600">{row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"}</td>
-            </tr>
-          ))}
-          {rows.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-[13px] text-ink-400">No sold nights in this range.</td></tr>}
-        </tbody>
-      </table>
-      </div>
-    </Card>
-  );
+  const basis = lens === "book" ? "booked in range" : "stays in range";
+
+  const bars = (rows: typeof r.roomTypes) =>
+    rows.map((row) => ({
+      label: row.name,
+      value: row.revenueMinor,
+      valueLabel: money(row.revenueMinor, currency),
+      meta: `${row.nights} nights · ADR ${row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"}`,
+    }));
+
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      {table(`By room type · ${range.label} · ${lens === "book" ? "booked in range" : "stays in range"}`, r.roomTypes)}
-      {table(`By rate plan · ${range.label} · ${lens === "book" ? "booked in range" : "stays in range"}`, r.ratePlans)}
+      <Card>
+        <CardHeader title={`By room type · ${range.label}`} subtitle={basis} />
+        <BarList data={bars(r.roomTypes)} emptyMessage="No sold nights in this range." />
+      </Card>
+      <Card>
+        <CardHeader title={`By rate plan · ${range.label}`} subtitle={basis} />
+        <BarList data={bars(r.ratePlans)} emptyMessage="No sold nights in this range." />
+      </Card>
     </div>
   );
 }
 
-/** On-the-books (spec §3.2): committed FUTURE performance — confirmed reservations only,
- * honestly labelled (the future has no realized occupancy; this is not a prediction). */
+/**
+ * On-the-books — committed FUTURE performance (§2.2).
+ *
+ * The cards were already visual-compliant, and this tab correctly hides the historical range chips
+ * (a forward view has no business offering backward ranges) — it is the counter-example that proves
+ * Cancellations had the chip logic wrong. What was missing is the hero.
+ *
+ * The forward curve does three jobs. It shows the shape of committed demand — where you are full and
+ * where you are empty. It complements Pickup & Pace: pace is how fast the books fill, this is the
+ * current position on them. And it **defuses a trust trap**: on sparse data the 7-day and 30-day
+ * cards show identical revenue and room-nights, which is entirely correct when every committed night
+ * falls inside the first week — but identical cards read as a failed recompute. The curve makes the
+ * clustering self-evident, so the right numbers stop looking wrong.
+ */
 async function OtbReport({ todayIso }: { todayIso: string }) {
   const { getForecast } = await import("@/lib/metrics");
-  const [f7, f30] = await Promise.all([getForecast(todayIso, 7), getForecast(todayIso, 30)]);
+  const [f7, f30, board] = await Promise.all([
+    getForecast(todayIso, 7),
+    getForecast(todayIso, 30),
+    getInventoryBoard({ days: 30 }),
+  ]);
   const property = await getProperty();
   const currency = property.baseCurrency;
+
+  // Committed room-nights per day, summed across every room type — the same `confirmed` figure the
+  // availability waterfall uses, so this curve and the heatmap cannot disagree.
+  const committed = board.dates.map((date, i) => ({
+    date,
+    value: board.sections.reduce((sum, s) => sum + (s.cells[i]?.confirmed ?? 0), 0),
+  }));
+  const clustered = committed.filter((p) => p.value > 0).length;
+
   const block = (f: typeof f7) => (
     <Card className="p-5">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Next {f.days} days — on the books</div>
@@ -386,42 +396,61 @@ async function OtbReport({ todayIso }: { todayIso: string }) {
       </div>
     </Card>
   );
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <Card>
+        <CardHeader
+          title="Committed demand · next 30 days"
+          subtitle={
+            f7.roomsSoldNights === f30.roomsSoldNights && f30.roomsSoldNights > 0
+              ? `Every committed night falls in the next 7 days — that is why the two cards below match`
+              : `Room-nights already sold, per arrival date · ${clustered} day${clustered === 1 ? "" : "s"} with business`
+          }
+        />
+        <ForwardCurve points={committed} unitLabel="Room-nights committed" />
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-2">{block(f7)}{block(f30)}</div>
+
+      {/* §2.2 — word-for-word identical to the Dashboard's Forecast disclaimer. Same concept surfaced
+          twice; aligned wording lets a user connect the two views instead of reading them as
+          unrelated claims. */}
       <p className="text-[12px] text-ink-400">
-        Expected values from confirmed bookings — not a prediction model. New pickup raises these; cancellations lower them.
+        {FORECAST_DISCLAIMER}
       </p>
     </div>
   );
 }
 
+/**
+ * Pickup & Pace — the poster child for the §2.2 change.
+ *
+ * The table it replaces was stay-date × sold-now × sold-at-snapshot × pickup: a shape rendered as
+ * rows, where reading "where is demand building" meant scanning thirty subtractions. Two lines with
+ * the gap between them shaded IS pickup, and the answer arrives in one glance.
+ *
+ * The row detail stays available in the export, per the §2.0 guarantee.
+ */
 async function PickupReport() {
   const r = await getPickupReport();
+  const gained = r.rows.filter((x) => x.pickup > 0).length;
+  const lost = r.rows.filter((x) => x.pickup < 0).length;
+
   return (
     <Card>
-      <CardHeader title={`Pickup & Pace · next 30 days · ${r.vsDate ? `vs the ${r.vsDate} snapshot` : "first snapshot recorded today — pace appears as history accumulates"}`} />
-      <div className="max-h-[520px] overflow-auto">
-        <table className="w-full text-[13px]">
-          <thead className="sticky top-0 bg-white">
-            <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              {["Stay date", "Sold now", "Sold at snapshot", "Pickup"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {r.rows.map((row) => (
-              <tr key={row.date} className="border-b border-surface-border/60 last:border-0">
-                <td className="tnum px-4 py-2 text-ink-700">{row.date}</td>
-                <td className="tnum px-4 py-2 font-semibold text-ink-900">{row.soldNow}</td>
-                <td className="tnum px-4 py-2 text-ink-600">{row.soldAtSnap}</td>
-                <td className={`tnum px-4 py-2 font-bold ${row.pickup > 0 ? "text-success-600" : row.pickup < 0 ? "text-danger-600" : "text-ink-400"}`}>
-                  {row.pickup > 0 ? `+${row.pickup}` : row.pickup}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <CardHeader
+        title="Pickup & Pace · next 30 days"
+        subtitle={
+          r.vsDate
+            ? `Against the ${r.vsDate} snapshot · ${gained} date${gained === 1 ? "" : "s"} gained, ${lost} lost`
+            : "First snapshot recorded today — pace appears as history accumulates"
+        }
+      />
+      <PaceCurve points={r.rows.map((row) => ({ date: row.date, soldNow: row.soldNow, soldThen: row.soldAtSnap }))} />
+      <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
+        Shaded band is pickup since the snapshot. Day-by-day figures are in the CSV export.
+      </p>
     </Card>
   );
 }
@@ -511,41 +540,54 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
       </Card>
 
       <Card>
-        <CardHeader title={`Source mix · ${range.label}`} />
-        <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              {["Source", "Reservations", "Room-nights", "Revenue", "Share", "Commission"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {e.rows.map((s) => (
-              <tr key={s.sourceName} className="border-b border-surface-border/60 last:border-0">
-                <td className="px-4 py-2.5 font-semibold text-ink-900">{s.sourceName}</td>
-                <td className="tnum px-4 py-2.5 text-ink-700">{s.reservations}</td>
-                <td className="tnum px-4 py-2.5 text-ink-700">{s.roomNights}</td>
-                <td className="tnum px-4 py-2.5 font-semibold text-ink-900">{money(s.revenueMinor, currency)}</td>
-                <td className="tnum px-4 py-2.5 text-ink-700">{pct(s.sharePct)}</td>
-                <td className="tnum px-4 py-2.5 text-ink-700">
-                  {/* Classify by CATEGORY, never by the computed amount. A commissioned channel that
-                      earned nothing this period also computes to zero, and rendering that as "none"
-                      tells the hotel an OTA is free — the one claim this screen must never make. */}
-                  {isCommissionFreeCategory(s.category) ? (
-                    <span className="font-semibold text-success-600">none</span>
-                  ) : s.commissionMinor == null ? (
-                    <span className="text-ink-400" title="No commission rate configured for this channel">not set</span>
-                  ) : (
-                    <>
-                      {money(s.commissionMinor, currency)}
-                      <span className="ml-1 text-ink-400">({s.commissionPct}%)</span>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <CardHeader
+          title={`Source mix · ${range.label}`}
+          subtitle="Where the business comes from, and what each channel actually nets"
+        />
+        {/* §1.3 / §2.2 — composition, because the question is about shares of a whole. The old table
+            of six columns made you compute the story; the donut states it, and the net bar below
+            carries the commercial point: direct at ~0% against an OTA at 15–18%. */}
+        <Donut
+          centreLabel={money(e.totalRevenueMinor, currency)}
+          centreSub="total revenue"
+          slices={e.rows.map((row) => ({
+            label: row.sourceName,
+            value: row.revenueMinor,
+            valueLabel: money(row.revenueMinor, currency),
+            note: isCommissionFreeCategory(row.category)
+              ? "no commission"
+              : row.commissionMinor == null
+                ? "rate not set"
+                : `${row.commissionPct}% commission`,
+            noteTone: !isCommissionFreeCategory(row.category) && row.commissionMinor == null ? "warning" : "muted",
+          }))}
+        />
+
+        <div className="border-t border-surface-border">
+          <div className="px-4 pt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+            What you keep, after commission
+          </div>
+          <BarList
+            emptyMessage="No revenue in this period."
+            data={e.rows.map((row) => {
+              const net = row.revenueMinor - (row.commissionMinor ?? 0);
+              const free = isCommissionFreeCategory(row.category);
+              const unknown = !free && row.commissionMinor == null;
+              return {
+                label: row.sourceName,
+                value: net,
+                valueLabel: unknown ? `${money(row.revenueMinor, currency)}?` : money(net, currency),
+                // Unknown commission is never rendered as "you keep all of it" — the whole §2.5 fix,
+                // restated here because this bar is the one a hotelier reads as take-home.
+                meta: unknown
+                  ? "rate not set — real figure is lower"
+                  : free
+                    ? `${row.roomNights} nights · keeps 100%`
+                    : `${row.roomNights} nights · −${money(row.commissionMinor ?? 0, currency)}`,
+                colour: free ? "#16a34a" : unknown ? "#98a2b3" : "#f59e0b",
+              };
+            })}
+          />
         </div>
       </Card>
     </div>

@@ -37,24 +37,24 @@ Status: ☐ open · ◐ in progress · ☑ done
 
 ## D. RevioCRS — Analytics *(§2)*
 
-- ☐ **D1** *(§2.0)* **Mandate: no data grids.** Every panel a visual. Two guarantees that keep the
+- ☑ **D1** *(§2.0)* **Mandate: no data grids.** Every panel a visual. Two guarantees that keep the
   "defend a number" job intact: every visual carries **data labels** on the mark (not tooltip-only),
   and **Export CSV stays on every tab**. Row-level detail routes to Reservations (`status = cancelled`
   already exists) and the CSV.
-- ☐ **D2** *(§2.2)* Performance: room-type table → horizontal bars, sorted by revenue, room-nights
+- ☑ **D2** *(§2.2)* Performance: room-type table → horizontal bars, sorted by revenue, room-nights
   and ADR as labels.
-- ☐ **D3** *(§2.2)* Pickup & Pace → **pace curve**: sold-now and sold-at-snapshot as two lines, the
+- ☑ **D3** *(§2.2)* Pickup & Pace → **pace curve**: sold-now and sold-at-snapshot as two lines, the
   gap shaded (green when positive).
-- ☐ **D4** *(§2.2)* Source/Channel → donut + **net-after-commission** bar.
-- ☐ **D5** *(§2.2)* Room-type & Rate-plan → two bar charts.
-- ◐ **D6** *(§2.2)* Cancellations → gauge/big number carrying both framings; drivers as small
+- ☑ **D4** *(§2.2)* Source/Channel → donut + **net-after-commission** bar.
+- ☑ **D5** *(§2.2)* Room-type & Rate-plan → two bar charts.
+- ☑ **D6** *(§2.2)* Cancellations → gauge/big number carrying both framings; drivers as small
   visuals; the reservation list **leaves Analytics entirely**.
 - ☑ **D7** *(§2.2)* Availability grid → **heatmap**, cell coloured by remaining as % of capacity,
   count kept as the label. Biggest single upgrade in the module.
-- ☐ **D8** *(§2.2)* On-the-books → add the missing hero: a **forward horizon curve** (committed
+- ☑ **D8** *(§2.2)* On-the-books → add the missing hero: a **forward horizon curve** (committed
   occupancy/room-nights, next 30 days). Also defuses a trust trap — identical 7d/30d cards read as a
   failed recompute when they are simply correct.
-- ☐ **D9** *(§2.2)* Forecast disclaimer wording **identical, word for word**, to the Dashboard's.
+- ☑ **D9** *(§2.2)* Forecast disclaimer wording **identical, word for word**, to the Dashboard's.
 - ☑ **D10** *(§2.3)* "Low" availability is an absolute `≤ 2` — wrong at scale (2 of 3 suites is 67%
   free; 2 of 40 is nearly sold out). Make it **% of room-type capacity**. Now load-bearing: it is the
   heatmap's colour scale. Same for **overbooked**.

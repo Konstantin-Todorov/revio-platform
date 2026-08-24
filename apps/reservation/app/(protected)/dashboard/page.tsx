@@ -11,7 +11,7 @@ import { DashboardView, type KpiCard } from "@/components/dashboard/DashboardVie
 import { ensurePickupSnapshot } from "@/lib/pickup";
 import { releaseExpiredHolds } from "@/lib/holds";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { money } from "@/lib/format";
+import { money, FORECAST_DISCLAIMER } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -257,7 +257,7 @@ export default async function DashboardPage({
           </table>
           </div>
           <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-            Expected values from confirmed bookings — not a prediction model.
+            {FORECAST_DISCLAIMER}
           </p>
         </Card>
       </div>

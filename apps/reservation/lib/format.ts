@@ -37,3 +37,17 @@ export function isWeekend(d: Date): boolean {
 export function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
+
+/**
+ * The forecast disclaimer, defined once (§2.2).
+ *
+ * It appears on the Dashboard Forecast and on the Analytics On-the-books tab, and the two had
+ * drifted — the same concept in two wordings reads as two unrelated claims, and a user cannot
+ * connect the views. Sharing the string is the only way it stays true; two copies of a sentence in
+ * two files are two sentences.
+ *
+ * The honesty here is load-bearing and not decoration: these are committed bookings, not a model,
+ * and the moment a hotelier reads them as a prediction the number becomes a promise we did not make.
+ */
+export const FORECAST_DISCLAIMER =
+  "Expected values from confirmed bookings — not a prediction model. New pickup raises these; cancellations lower them.";
