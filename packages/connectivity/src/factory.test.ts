@@ -28,4 +28,29 @@ describe("createChannelAdapter", () => {
   it("throws if a channex mode is missing credentials", () => {
     expect(() => createChannelAdapter({ mode: "channex-sandbox", channelCode: "booking" })).toThrow(/credentials/);
   });
+
+  /*
+   * An EMPTY credential is the realistic one, and it used to sail straight through.
+   * `process.env.CHANNEX_PROD_KEY ?? ""` and `channel.externalPropertyId ?? ""` both produce `""` on
+   * a hotel that is simply half-configured, and the request then went out with an empty auth header —
+   * a 401 that reads as "Channex rejected us" for a cause that is entirely ours.
+   */
+  it("refuses an empty API key and names where to set it", () => {
+    expect(() =>
+      createChannelAdapter({ mode: "channex-prod", channelCode: "booking", channex: { apiKey: "", propertyId: "p" } }),
+    ).toThrow(/CHANNEX_PROD_KEY/);
+    expect(() =>
+      createChannelAdapter({ mode: "channex-sandbox", channelCode: "booking", channex: { apiKey: "   ", propertyId: "p" } }),
+    ).toThrow(/CHANNEX_SANDBOX_KEY/);
+  });
+
+  it("refuses an empty Channex property id", () => {
+    expect(() =>
+      createChannelAdapter({ mode: "channex-prod", channelCode: "booking", channex: { apiKey: "k", propertyId: "" } }),
+    ).toThrow(/property/i);
+  });
+
+  it("still needs no credentials in mock mode — demo hotels must never require a key", () => {
+    expect(() => createChannelAdapter({ mode: "mock", channelCode: "booking" })).not.toThrow();
+  });
 });

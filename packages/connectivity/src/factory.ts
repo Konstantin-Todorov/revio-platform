@@ -41,6 +41,27 @@ export function createChannelAdapter(selection: AdapterSelection): ChannelAdapte
     throw new Error(`createChannelAdapter: mode "${selection.mode}" requires channex credentials.`);
   }
 
+  // Empty is not the same as missing, and it used to be treated as if it were. Both of these arrive
+  // as `""` from perfectly ordinary call sites — `process.env.CHANNEX_PROD_KEY ?? ""` when nobody set
+  // the variable, `channel.externalPropertyId ?? ""` on a channel created but not yet pointed at a
+  // Channex property. Neither is a programming error; both are a hotel that is half-configured.
+  //
+  // Without this guard the request went out with an empty `user-api-key` header and came back 401,
+  // which reads as "Channex rejected us" — so the hotel is told their channel is broken and we go
+  // looking at Channex's status page. The cause is ours and it is one missing field. Say so here,
+  // before the network call, where the message can name the fix.
+  if (!cfg.apiKey.trim()) {
+    throw new Error(
+      `No Channex API key for this hotel (${selection.mode}). Add it in the Operator console under ` +
+        `Connectivity, or set ${selection.mode === "channex-prod" ? "CHANNEX_PROD_KEY" : "CHANNEX_SANDBOX_KEY"}.`,
+    );
+  }
+  if (!cfg.propertyId.trim()) {
+    throw new Error(
+      "This channel has no Channex property ID. Open the channel and set the property it maps to.",
+    );
+  }
+
   const baseUrl =
     cfg.baseUrl ?? (selection.mode === "channex-prod" ? CHANNEX_PRODUCTION_URL : CHANNEX_STAGING_URL);
 

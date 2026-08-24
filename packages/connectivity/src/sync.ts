@@ -11,7 +11,7 @@ import { forSystem, decryptSecret, forTenant } from "@revio/db";
 import {
   channelSupports, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type DerivedRateConfig, type RestrictionRuleHit,
-  type RestrictionType,
+  type RestrictionType, type ChannelAdapter,
 } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { decidePull, type Stay } from "./pull-merge.js";
@@ -52,6 +52,52 @@ async function channexKey(tenantId: string, mode: string): Promise<string> {
     }
   }
   return (mode === "channex_prod" ? process.env.CHANNEX_PROD_KEY : process.env.CHANNEX_SANDBOX_KEY) ?? "";
+}
+
+/**
+ * Build the adapter for a channel, turning a CONFIGURATION failure into a recorded event.
+ *
+ * `createChannelAdapter` throws when the key or the Channex property id is missing. That is the right
+ * thing for it to do, but a throw from here escapes the server action and is shown as an opaque
+ * "something went wrong" — while the Sync Center and Error Center, the two screens a hotelier
+ * actually opens when a channel misbehaves, stay completely empty. The most likely misconfiguration
+ * on the platform would have been its least visible failure.
+ *
+ * So a half-configured channel is recorded exactly like any other failed sync: same table, same
+ * screens, with the missing field named. Returns null when it could not be built; the event is
+ * already written by then.
+ */
+async function adapterFor(
+  prisma: Db,
+  channel: { id: string; tenantId: string; propertyId: string; code: string; name: string; connectivityMode: string; externalPropertyId: string | null },
+  kind: "push" | "pull",
+): Promise<ChannelAdapter | null> {
+  const mode = adapterMode(channel.connectivityMode);
+  try {
+    return createChannelAdapter({
+      mode,
+      channelCode: channel.code,
+      ...(mode !== "mock"
+        ? {
+            channex: {
+              apiKey: await channexKey(channel.tenantId, channel.connectivityMode),
+              propertyId: channel.externalPropertyId ?? "",
+            },
+          }
+        : {}),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Channel is not configured.";
+    await prisma.syncEvent.create({
+      data: {
+        tenantId: channel.tenantId, propertyId: channel.propertyId, channelId: channel.id,
+        kind, status: "failed",
+        summary: `${channel.name} is not fully set up — nothing was sent.`,
+        detail: message,
+      },
+    });
+    return null;
+  }
 }
 
 export interface SyncOutcome {
@@ -397,14 +443,10 @@ export async function syncChannel(
     }
   }
 
-  const mode = adapterMode(channel.connectivityMode);
-  const adapter = createChannelAdapter({
-    mode,
-    channelCode: channel.code,
-    ...(mode !== "mock"
-      ? { channex: { apiKey: await channexKey(tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
-      : {}),
-  });
+  const adapter = await adapterFor(prisma, channel, "push");
+  if (!adapter) {
+    return { ok: false, pushed: 0, rejected: 0, mode: channel.connectivityMode, error: "Channel is not fully set up." };
+  }
 
   const result = await adapter.pushAri(updates);
 
@@ -493,14 +535,10 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
   const roomByExternal = new Map(roomMaps.map((m) => [m.externalRoomId!, m]));
   const rateByExternal = new Map(rateMaps.map((m) => [m.externalRateId!, m.ratePlanId]));
 
-  const mode = adapterMode(channel.connectivityMode);
-  const adapter = createChannelAdapter({
-    mode,
-    channelCode: channel.code,
-    ...(mode !== "mock"
-      ? { channex: { apiKey: await channexKey(tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
-      : {}),
-  });
+  const adapter = await adapterFor(prisma, channel, "pull");
+  if (!adapter) {
+    return { ok: false, imported: 0, updated: 0, unchanged: 0, mode: channel.connectivityMode, error: "Channel is not fully set up." };
+  }
 
   const useFeed = typeof adapter.pullRevisions === "function" && typeof adapter.acknowledgeBooking === "function";
   const since = new Date(Date.now() - PULL_LOOKBACK_DAYS * DAY_MS).toISOString();
