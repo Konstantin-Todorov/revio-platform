@@ -98,10 +98,13 @@ at a demo tenant.
 Railway environment on the same project, seeded with the demo tenants, is the single change that most
 reduces the chance of a customer seeing a bad deploy.
 
-### 9. Branch protection on `main`
-CI exists and is green, but nothing enforces it — a red CI still deploys. **Note this changes the
-workflow**: with required status checks, direct pushes to `main` are rejected and everything goes
-through a PR. Worth it before real clients; decide deliberately.
+### 9. ~~Branch protection on `main`~~ ✅ solved differently, 2026-08-24
+Branch protection would have forced every change through a pull request and changed how the repo is
+worked day to day. A **CI gate** gets the same protection and changes nothing about pushing:
+`main` builds, `production` deploys, and `production` only moves when CI passed on that exact commit.
+Verified in all three states — promoted on green, **held** on red, recovered after. See `DEPLOY.md`.
+
+⚠️ **Inert until each Railway service is pointed at `production`.** One dashboard change per service.
 
 ### 10. ~~Error monitoring and uptime alerts~~ ✅ done 2026-08-24
 

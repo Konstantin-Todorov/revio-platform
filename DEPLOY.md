@@ -297,3 +297,51 @@ stops syncing.
 On the ordinary schedule (annually is defensible), and immediately if a key may have been exposed —
 a leaked `.env`, a departing contractor with production access, a compromised laptop. Both are
 Railway variables; neither has ever been committed.
+
+## The CI gate — `main` builds, `production` deploys
+
+Railway auto-deploys its watched branch. With no customers that is right; with a live hotel it means
+a red CI still reaches a front desk, and the failing test arrives four minutes later as a
+notification nobody is watching.
+
+So there are two branches:
+
+| Branch | What it is |
+| --- | --- |
+| `main` | where work lands; CI runs here |
+| `production` | fast-forwarded to `main` **only when CI passed on that exact commit** |
+
+`.github/workflows/promote.yml` does the promotion. When CI fails, `production` does not move and the
+last verified build stays live — no one has to notice anything, which is the only kind of safety net
+that works at 7am.
+
+Verified end to end on 2026-08-24: a green build promoted, a deliberately failing build was **held**
+with `production` unchanged, and the next green build recovered. (Safe to test live because it was a
+failing *test* — Railway runs `next build`, which does not execute tests, so the deployed app was
+never affected.)
+
+### ⚠️ One-time switch, per service
+
+**Each Railway service still watches `main`.** Until that changes, the gate is inert and Railway
+deploys straight from `main` as before.
+
+For each of `channel-manager`, `reservation`, `pms`, `operator`, `booking`, `revio-websites`:
+
+> Railway → the service → **Settings → Source → Branch** → change `main` to `production`.
+
+`jobs` (the cron service) can stay on `main` or move too — it runs no user-facing code, so it is the
+one place the gate matters least.
+
+**After switching, a deploy takes one CI cycle (~4 min) longer.** That delay is the feature.
+
+### Rolling back
+
+`production` is a plain branch, so a rollback is a push:
+
+```bash
+git push --force origin <last-good-sha>:refs/heads/production
+```
+
+Force is correct *here* and only here — you are deliberately moving the deploy pointer backwards.
+The promote workflow refuses to force for exactly this reason: it must never do by accident what you
+are doing on purpose.
