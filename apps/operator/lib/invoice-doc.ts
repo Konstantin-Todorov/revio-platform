@@ -42,13 +42,14 @@ export async function getClientBilling(tenantId: string) {
  * about which document is which.
  */
 async function nextInvoiceNumber(prefix: string, year: number): Promise<string> {
-  let series = await prisma.operatorInvoiceSeries.findUnique({ where: { year }, select: { id: true } });
+  const key = { prefix_year: { prefix, year } };
+  let series = await prisma.operatorInvoiceSeries.findUnique({ where: key, select: { id: true } });
   if (!series) {
     try {
-      series = await prisma.operatorInvoiceSeries.create({ data: { year }, select: { id: true } });
+      series = await prisma.operatorInvoiceSeries.create({ data: { prefix, year }, select: { id: true } });
     } catch {
       // Lost the race to create it; the winner's row is what we want anyway.
-      series = await prisma.operatorInvoiceSeries.findUnique({ where: { year }, select: { id: true } });
+      series = await prisma.operatorInvoiceSeries.findUnique({ where: key, select: { id: true } });
     }
   }
   const updated = await prisma.operatorInvoiceSeries.update({
@@ -122,16 +123,30 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
     };
   }
 
+  /*
+   * A demo tenant issues under its own prefix.
+   *
+   * Demo hotels are billed exactly like real ones so the flow stays testable — but numbers cannot be
+   * reclaimed, and three rehearsals would mean the first real customer is invoiced REV-2026-0004
+   * with three documents missing from the sequence. That is a question from an auditor rather than a
+   * cosmetic detail, so the two sequences are kept apart.
+   */
+  const prefix = tenant.isDemo ? "DEMO" : company.invoicePrefix;
+
   const amounts = applyVat(netMinor, vat.ratePct);
   const issuedAt = new Date();
   const dueDate = new Date(issuedAt.getTime() + company.paymentTermsDays * 86_400_000);
-  const number = await nextInvoiceNumber(company.invoicePrefix, issuedAt.getFullYear());
+  const number = await nextInvoiceNumber(prefix, issuedAt.getFullYear());
 
   await prisma.invoice.update({
     where: { id: invoiceId },
     data: {
       number, issuedAt, dueDate,
-      status: "sent",
+      // Only a DRAFT becomes "sent". An invoice can already be paid and carry no number — every
+      // invoice generated before this feature existed is exactly that — and issuing the document for
+      // one must not walk its status backwards from paid to sent. The money arrived; giving the
+      // record a number afterwards does not un-arrive it.
+      ...(invoice.status === "draft" ? { status: "sent" } : {}),
       issuerName: company.legalName,
       issuerVatId: company.vatId,
       issuerCompanyId: company.companyId,

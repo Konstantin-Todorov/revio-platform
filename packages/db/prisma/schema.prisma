@@ -234,8 +234,13 @@ model OperatorCompany {
 /// duplicate in an invoice sequence is an audit finding, not a cosmetic bug.
 model OperatorInvoiceSeries {
   id         String @id @default(cuid())
-  year       Int    @unique
+  /// The number prefix this counter belongs to. Demo tenants run their own ("DEMO"), so rehearsing
+  /// the billing flow never consumes a number from the real, legally-sequenced series.
+  prefix     String @default("REV")
+  year       Int
   nextNumber Int    @default(1)
+
+  @@unique([prefix, year])
 }
 
 /// A client's LEGAL identity, for the invoice we send them.

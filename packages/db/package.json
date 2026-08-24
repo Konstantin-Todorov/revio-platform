@@ -22,7 +22,8 @@
     "claim-verify": "tsx scripts/claim-verify.ts",
     "lease-verify": "tsx scripts/lease-verify.ts",
     "state-audit": "psql \"$DATABASE_URL\" -f scripts/state-audit.sql",
-    "rotate-connectivity-key": "tsx scripts/rotate-connectivity-key.ts"
+    "rotate-connectivity-key": "tsx scripts/rotate-connectivity-key.ts",
+    "demo-billing": "tsx scripts/demo-billing.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
