@@ -1,0 +1,86 @@
+# Only code that passed CI reaches a hotel.
+#
+# Railway auto-deploys every push to its watched branch. That is the right default with no customers
+# and the wrong one with a live property: a red CI does not stop the deploy today, so a broken build
+# reaches a front desk and the failing test result arrives four minutes later as a notification
+# nobody is looking at.
+#
+# The fix is a branch, not a policy. `main` is where work lands and where CI runs; `production` is
+# fast-forwarded to `main` ONLY when CI has gone green on that exact commit. Railway watches
+# `production`. When CI fails, `production` simply does not move — the last known-good build stays
+# live, which is the correct behaviour and requires nobody to notice anything.
+#
+# Chosen over branch protection deliberately: protection would force every change through a pull
+# request and change how the repo is worked in day to day. This changes nothing about pushing and
+# costs one CI cycle of delay before a deploy — which is a delay we want.
+#
+# ⚠️ Inert until each Railway service is pointed at `production` instead of `main`.
+
+name: Promote to production
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    # The whole gate, in one line.
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # The commit CI actually tested — not whatever main happens to be now. Two pushes in quick
+          # succession would otherwise promote a commit that was never verified.
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Fast-forward production to the verified commit
+        run: |
+          set -euo pipefail
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          echo "CI passed on $SHA — promoting."
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Fast-forward only. If production has somehow diverged, stop rather than force — a forced
+          # push here would silently discard whatever is actually running.
+          if git ls-remote --exit-code --heads origin production >/dev/null 2>&1; then
+            git fetch origin production:production
+            if ! git merge-base --is-ancestor production "$SHA"; then
+              echo "::error::production is not an ancestor of $SHA — refusing to force. Reconcile by hand."
+              exit 1
+            fi
+          fi
+
+          git push origin "$SHA:refs/heads/production"
+          echo "::notice::production now at $SHA"
+
+      - name: Say what was promoted
+        run: |
+          echo "### Promoted to production" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`${{ github.event.workflow_run.head_sha }}\` — ${{ github.event.workflow_run.head_commit.message }}" >> "$GITHUB_STEP_SUMMARY"
+
+  blocked:
+    # Not a failure of this workflow — a deliberate, visible refusal to deploy.
+    if: github.event.workflow_run.conclusion != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report the held deploy
+        run: |
+          echo "::warning::CI concluded '${{ github.event.workflow_run.conclusion }}' — production NOT updated. The previous build stays live."
+          echo "### Deploy held" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "CI concluded **${{ github.event.workflow_run.conclusion }}** on \`${{ github.event.workflow_run.head_sha }}\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "\`production\` was left where it was, so the last verified build is still serving." >> "$GITHUB_STEP_SUMMARY"
