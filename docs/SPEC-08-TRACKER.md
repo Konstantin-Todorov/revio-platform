@@ -85,8 +85,9 @@ Status: ☐ open · ◐ in progress · ☑ done
   preferences/privacy, keep an audit trail. Cheap now, painful once duplicates exist.
 - ☐ **F3** *(§4.4)* **Low-sample labels.** "Average stay 3.0 nights" from ONE stay claims a pattern
   that does not exist. Below a threshold say "Last stay", or annotate the sample.
-- ☐ **F4** *(§4.5)* **Question for you:** should the profile hydrate contact fields from linked
-  reservations? Contact is empty on a guest with a confirmed stay.
+- ☐ **F4** *(§4.5)* Hydrate contact fields from the most recent linked reservation carrying a value.
+  **Enrich empty · never overwrite · tag OTA-sourced as an alias** — OTA relay addresses are fine for
+  messaging and are not ground truth. Powers the F1 prefill.
 - ☐ **F5** *(§4.6)* Do **not** apply the Analytics visual mandate here. No charts on a guest profile.
 
 ## G. RevioCRS — Inventory Calendar *(§5)*
@@ -143,10 +144,12 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   event**, not a local config change. *(§6.10)*
 - ☐ **H14** *(later)* Children / infants axis — do **not** fold into adult occupancy. *(§6.9)*
 
-### Decisions needed before H11 *(the doc marks these `[interpretation — confirm]`, L10)*
-- ☐ **(a)** Pricing *model* CRS-owned and read-only in Link when connected?
-- ☐ **(b)** Link edits transient, reasserted by the CRS, surfaced — not blocked, not silent?
-- ☐ **(c)** Per-channel occupancy capability rides the existing channel-limitations line?
+### Decisions — all answered 2026-08-24, see `docs/SPEC-08-DECISIONS.md`
+- ☑ **(a)** Model **single-owned** by the CRS, not conflict-resolved. Toggle disabled in Link with a
+  "managed by your CRS" note. A value conflict is recoverable; a model mismatch is incoherent.
+- ☑ **(b)** Link edits apply immediately, are reasserted by the CRS, and are **logged and visible**.
+  ⚠️ The reassertion must **re-push to channels**, or the OTA keeps selling the stale Link value.
+- ☑ **(c)** Rides the channel-limitations line. **Not an L1 blocker** — channels/sync layer only.
 
 ---
 
@@ -167,8 +170,10 @@ Full copy replacement, in page order. Repo: `revio-websites`.
 - ☐ **I9** Company block — **post code 7002**, and the legal name in both scripts (A1).
 
 ### ⚠️ Copy that makes a promise the software does not keep
-- ☐ **I10** *"Free until your first booking syncs — the platform records the first successful push."*
-  **No such concept exists in billing.** Invoices generate for every active client from creation.
-  Either build it or reword it; a public promise we cannot honour is worse than a weaker one.
+- ☐ **I10** *"Free until your first booking syncs."* **Decision: BUILD it.** Record the first
+  successful booking sync per property → set `billingStartDate` → suppress invoicing before it. A
+  property that never gets a first booking stays free, which is correct. **Blocks I1** — the promise
+  must not be published while billing ignores it. Interim line if the page ships first: *"Free setup
+  — we don't start billing until you're live."*
 - ☑ *"Per property, excluding VAT"* — confirms the VAT-exclusive reading already implemented.
 - ☑ Pricing table matches `pricing.ts` exactly: €0/€50/€150/€300, €49/€59/€69, 10%/20%, 2%.
