@@ -81,7 +81,7 @@ export default async function SettingsPage() {
             bic: company?.bic ?? "",
             bankName: company?.bankName ?? "",
             standardVatPct: company?.standardVatPct ?? 20,
-            invoicePrefix: company?.invoicePrefix ?? "REV",
+            invoiceNumberStart: String(company?.invoiceNumberStart ?? 1000000000n),
             paymentTermsDays: company?.paymentTermsDays ?? 14,
             footerNote: company?.footerNote ?? "",
           }}

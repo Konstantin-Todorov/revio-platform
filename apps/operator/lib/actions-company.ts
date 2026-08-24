@@ -59,12 +59,30 @@ export async function saveCompany(_prev: ActionResult | null, fd: FormData): Pro
     bic: opt(fd, "bic"),
     bankName: opt(fd, "bankName"),
     standardVatPct: int(fd, "standardVatPct", 20),
-    invoicePrefix: str(fd, "invoicePrefix") || "REV",
+
     paymentTermsDays: int(fd, "paymentTermsDays", 14),
     footerNote: opt(fd, "footerNote"),
   };
 
-  await prisma.operatorCompany.upsert({ where: { id: "singleton" }, create: { id: "singleton", ...data }, update: data });
+  /*
+   * The starting number is settable ONCE, and only until the first invoice is issued.
+   *
+   * Moving it afterwards either repeats a number or leaves a gap, and Bulgarian numbering forbids
+   * both — so the field silently going through would be worse than it being missing. Once the
+   * counter exists it owns the sequence and this value is only history.
+   */
+  const started = await prisma.operatorInvoiceSeries.findUnique({ where: { kind: "real" }, select: { id: true } });
+  const startRaw = str(fd, "invoiceNumberStart").replace(/\s/g, "");
+  let invoiceNumberStart: bigint | undefined;
+  if (!started && startRaw) {
+    if (!/^\d{1,10}$/.test(startRaw)) {
+      return { ok: false, error: "The first invoice number must be up to ten digits, digits only." };
+    }
+    invoiceNumberStart = BigInt(startRaw);
+  }
+
+  const full = invoiceNumberStart === undefined ? data : { ...data, invoiceNumberStart };
+  await prisma.operatorCompany.upsert({ where: { id: "singleton" }, create: { id: "singleton", ...full }, update: full });
   revalidatePath("/settings");
   revalidatePath("/billing");
   return { ok: true, message: "Company details saved." };

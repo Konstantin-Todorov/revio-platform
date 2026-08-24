@@ -23,7 +23,7 @@ export interface CompanyValues {
   addressLine: string; city: string; postCode: string; country: string;
   email: string; phone: string; website: string;
   iban: string; bic: string; bankName: string;
-  standardVatPct: number; invoicePrefix: string; paymentTermsDays: number; footerNote: string;
+  standardVatPct: number; invoiceNumberStart: string; paymentTermsDays: number; footerNote: string;
 }
 
 export function CompanyForm({ values, canEdit }: { values: CompanyValues; canEdit: boolean }) {
@@ -120,9 +120,16 @@ export function CompanyForm({ values, canEdit }: { values: CompanyValues; canEdi
               <input id="standardVatPct" name="standardVatPct" type="number" min={0} max={99} defaultValue={values.standardVatPct} className={input} />
             </div>
             <div>
-              <label className={label} htmlFor="invoicePrefix">Number prefix</label>
-              <input id="invoicePrefix" name="invoicePrefix" defaultValue={values.invoicePrefix} className={input} placeholder="REV" />
-              <p className={hint}>Numbers run REV-2026-0001 and never repeat.</p>
+              <label className={label} htmlFor="invoiceNumberStart">First invoice number</label>
+              <input
+                id="invoiceNumberStart" name="invoiceNumberStart" inputMode="numeric" pattern="[0-9]*"
+                defaultValue={values.invoiceNumberStart} className={`${input} tnum`} placeholder="1000000000"
+              />
+              <p className={hint}>
+                Ten digits, digits only — Bulgarian law requires that, ascending with no gaps and no
+                repeats. Keep this clear of the numbers already issued by hand. Locked once the first
+                invoice is issued.
+              </p>
             </div>
             <div>
               <label className={label} htmlFor="paymentTermsDays">Payment terms (days)</label>

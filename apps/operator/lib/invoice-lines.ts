@@ -52,3 +52,27 @@ export function vatLabel(d: Pick<VatDecision, "treatment" | "ratePct">): string 
   if (d.treatment === "not_registered") return "VAT — not registered (0%)";
   return `VAT ${d.ratePct}%`;
 }
+
+/**
+ * Format a number the way Bulgarian law requires: ten digits, Arabic numerals, nothing else.
+ *
+ * ЗДДС чл. 114, ал. 1, т. 2 — "пореден десетразряден номер, съдържащ само арабски цифри". No prefix,
+ * no year, no separator. The first version of this shipped as `REV-2026-0001` and was wrong on all
+ * three counts, plus it restarted each January, which produces a duplicate in year two.
+ */
+export function formatInvoiceNumber(n: bigint): string {
+  return n.toString().padStart(10, "0");
+}
+
+/**
+ * A demo number, deliberately NOT a valid one.
+ *
+ * Demo tenants are billed like real clients so the flow stays testable end to end, and their
+ * documents must be impossible to mistake for tax documents. A second ten-digit range would be
+ * numerically tidy and visually identical to the real thing; a letter prefix is illegal on a
+ * Bulgarian invoice, which is exactly what makes it safe here.
+ */
+export function formatDemoNumber(n: bigint): string {
+  return `DEMO-${n.toString().padStart(6, "0")}`;
+}
+

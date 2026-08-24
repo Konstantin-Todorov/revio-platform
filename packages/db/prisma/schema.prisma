@@ -233,46 +233,55 @@ model AppError {
 /// an address or a bank account is something an operator should be able to correct at 9pm without a
 /// deploy, and because the values have to be snapshotted onto each invoice anyway.
 model OperatorCompany {
-  id               String   @id @default("singleton")
-  legalName        String
+  id                 String   @id @default("singleton")
+  legalName          String
   /// Absent = not VAT registered, which zero-rates every invoice. See decideVat().
-  vatId            String?
+  vatId              String?
   /// Company registration number (EIK in Bulgaria).
-  companyId        String?
-  addressLine      String?
-  city             String?
-  postCode         String?
+  companyId          String?
+  addressLine        String?
+  city               String?
+  postCode           String?
   /// ISO 3166-1 alpha-2. Decides domestic vs reverse charge for every customer.
-  country          String   @default("BG")
-  email            String?
-  phone            String?
-  website          String?
-  iban             String?
-  bic              String?
-  bankName         String?
+  country            String   @default("BG")
+  email              String?
+  phone              String?
+  website            String?
+  iban               String?
+  bic                String?
+  bankName           String?
   /// Our domestic standard VAT rate, percent.
-  standardVatPct   Int      @default(20)
-  invoicePrefix    String   @default("REV")
-  paymentTermsDays Int      @default(14)
+  standardVatPct     Int      @default(20)
+  /// Where this software's range of invoice numbers begins.
+  ///
+  /// Bulgarian law (ЗДДС чл. 114(1)(2), ППЗДДС чл. 78) requires a TEN-DIGIT number containing only
+  /// Arabic numerals, ascending, with no duplication and no gaps — and it explicitly permits several
+  /// ranges for one taxable person. So the software takes its own range well clear of the numbers
+  /// already issued by hand: 1000000000 upward, leaving 0000000001–0999999999 to the existing books.
+  ///
+  /// BigInt because a ten-digit number reaches 9999999999, which overflows a 32-bit integer. Only
+  /// read when the counter is first created — moving it afterwards would either repeat a number or
+  /// leave a gap, and both are exactly what the rule forbids.
+  invoiceNumberStart BigInt   @default(1000000000)
+  paymentTermsDays   Int      @default(14)
   /// Free text printed at the foot of every invoice.
-  footerNote       String?
-  updatedAt        DateTime @updatedAt
+  footerNote         String?
+  updatedAt          DateTime @updatedAt
 }
 
-/// Gapless invoice numbering, one counter per year.
+/// The invoice counter. One row per independent run of numbers.
 ///
-/// Same discipline as the hotel-side InvoiceSeries: the counter is claimed with a single atomic
-/// increment, so two invoices issued in the same second cannot take the same number. A gap or a
-/// duplicate in an invoice sequence is an audit finding, not a cosmetic bug.
+/// **Not keyed by year.** An annual reset is normal across much of Europe and is wrong here:
+/// Bulgarian numbering is one continuous ascending run for the life of the company, so a year in the
+/// key would produce a duplicate every January.
+///
+/// `kind` is "real" or "demo". Demo tenants are billed like real ones so the flow stays testable, and
+/// their numbers must never come out of the legally-sequenced range.
 model OperatorInvoiceSeries {
   id         String @id @default(cuid())
-  /// The number prefix this counter belongs to. Demo tenants run their own ("DEMO"), so rehearsing
-  /// the billing flow never consumes a number from the real, legally-sequenced series.
-  prefix     String @default("REV")
-  year       Int
-  nextNumber Int    @default(1)
-
-  @@unique([prefix, year])
+  kind       String @unique
+  /// BigInt: a ten-digit number reaches 9999999999 and a 32-bit integer stops at 2147483647.
+  nextNumber BigInt
 }
 
 /// A client's LEGAL identity, for the invoice we send them.

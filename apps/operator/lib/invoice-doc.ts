@@ -1,10 +1,10 @@
 import "server-only";
-import { forSystem } from "@revio/db";
+import { forSystem, withSystemTransaction } from "@revio/db";
 import { decideVat, applyVat } from "./vat";
 import { type Entitlements } from "./pricing";
-import { invoiceLines, formatAddress } from "./invoice-lines";
+import { invoiceLines, formatAddress, formatInvoiceNumber, formatDemoNumber } from "./invoice-lines";
 
-export { invoiceLines, formatAddress, vatLabel, type InvoiceLine } from "./invoice-lines";
+export { invoiceLines, formatAddress, vatLabel, formatInvoiceNumber, type InvoiceLine } from "./invoice-lines";
 
 /**
  * Turning a billing row into an actual invoice.
@@ -31,34 +31,6 @@ export async function getCompany() {
 
 export async function getClientBilling(tenantId: string) {
   return prisma.clientBilling.findUnique({ where: { tenantId } });
-}
-
-/**
- * Allocate the next number for a year, gaplessly.
- *
- * A single atomic increment claims the value, exactly as the hotel-side series does. Read-then-write
- * would hand the same number to two invoices issued in the same second, and a duplicate invoice
- * number is an audit finding rather than a glitch — the customer's accounts and ours stop agreeing
- * about which document is which.
- */
-async function nextInvoiceNumber(prefix: string, year: number): Promise<string> {
-  const key = { prefix_year: { prefix, year } };
-  let series = await prisma.operatorInvoiceSeries.findUnique({ where: key, select: { id: true } });
-  if (!series) {
-    try {
-      series = await prisma.operatorInvoiceSeries.create({ data: { prefix, year }, select: { id: true } });
-    } catch {
-      // Lost the race to create it; the winner's row is what we want anyway.
-      series = await prisma.operatorInvoiceSeries.findUnique({ where: key, select: { id: true } });
-    }
-  }
-  const updated = await prisma.operatorInvoiceSeries.update({
-    where: { id: series!.id },
-    data: { nextNumber: { increment: 1 } },
-    select: { nextNumber: true },
-  });
-  const claimed = updated.nextNumber - 1;
-  return `${prefix}-${year}-${String(claimed).padStart(4, "0")}`;
 }
 
 export type IssueResult = { ok: true; number: string } | { ok: false; error: string };
@@ -123,49 +95,72 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
     };
   }
 
-  /*
-   * A demo tenant issues under its own prefix.
-   *
-   * Demo hotels are billed exactly like real ones so the flow stays testable — but numbers cannot be
-   * reclaimed, and three rehearsals would mean the first real customer is invoiced REV-2026-0004
-   * with three documents missing from the sequence. That is a question from an auditor rather than a
-   * cosmetic detail, so the two sequences are kept apart.
-   */
-  const prefix = tenant.isDemo ? "DEMO" : company.invoicePrefix;
-
   const amounts = applyVat(netMinor, vat.ratePct);
   const issuedAt = new Date();
   const dueDate = new Date(issuedAt.getTime() + company.paymentTermsDays * 86_400_000);
-  const number = await nextInvoiceNumber(prefix, issuedAt.getFullYear());
 
-  await prisma.invoice.update({
-    where: { id: invoiceId },
-    data: {
-      number, issuedAt, dueDate,
-      // Only a DRAFT becomes "sent". An invoice can already be paid and carry no number — every
-      // invoice generated before this feature existed is exactly that — and issuing the document for
-      // one must not walk its status backwards from paid to sent. The money arrived; giving the
-      // record a number afterwards does not un-arrive it.
-      ...(invoice.status === "draft" ? { status: "sent" } : {}),
-      issuerName: company.legalName,
-      issuerVatId: company.vatId,
-      issuerCompanyId: company.companyId,
-      issuerAddress: formatAddress(company),
-      issuerIban: company.iban,
-      issuerBic: company.bic,
-      issuerBankName: company.bankName,
-      buyerName: billing.legalName,
-      buyerVatId: billing.vatId,
-      buyerCompanyId: billing.companyId,
-      buyerAddress: formatAddress(billing),
-      netMinor: amounts.netMinor,
-      taxMinor: amounts.taxMinor,
-      grossMinor: amounts.grossMinor,
-      vatRatePct: vat.ratePct,
-      vatTreatment: vat.treatment,
-      vatNote: vat.note,
-      lineSnapshot: lines,
-    },
+  /*
+   * Allocate the number and write the document in ONE transaction.
+   *
+   * "Без пропуски" — no gaps — is not a tidiness preference, it is the rule. Allocating first and
+   * writing second means any failure in between (a dropped connection, a constraint, a restart)
+   * burns a number that no document will ever carry, and a missing number in a Bulgarian invoice
+   * sequence is something an auditor asks about and nobody can answer afterwards.
+   *
+   * A transaction makes the two atomic: either the counter moved and the invoice carries the number,
+   * or neither happened and the next attempt takes the same one.
+   *
+   * Demo tenants draw from a separate counter under a deliberately invalid format, so rehearsing the
+   * flow can never consume a number from the legally-sequenced range.
+   */
+  const kind = tenant.isDemo ? "demo" : "real";
+  const number = await withSystemTransaction(async (tx) => {
+    const existing = await tx.operatorInvoiceSeries.findUnique({ where: { kind }, select: { id: true, nextNumber: true } });
+    const series =
+      existing ??
+      (await tx.operatorInvoiceSeries.create({
+        // The real range starts where the company says its books leave off; demo starts at 1 because
+        // it is not a legal sequence and nothing has to be reserved around it.
+        data: { kind, nextNumber: kind === "real" ? company.invoiceNumberStart : 1n },
+        select: { id: true, nextNumber: true },
+      }));
+
+    const claimed = series.nextNumber;
+    await tx.operatorInvoiceSeries.update({ where: { id: series.id }, data: { nextNumber: claimed + 1n } });
+
+    const formatted = kind === "real" ? formatInvoiceNumber(claimed) : formatDemoNumber(claimed);
+
+    await tx.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        number: formatted, issuedAt, dueDate,
+        // Only a DRAFT becomes "sent". An invoice can already be paid and carry no number — every
+        // invoice generated before this feature existed is exactly that — and issuing the document
+        // for one must not walk its status backwards from paid to sent. The money arrived; giving
+        // the record a number afterwards does not un-arrive it.
+        ...(invoice.status === "draft" ? { status: "sent" } : {}),
+        issuerName: company.legalName,
+        issuerVatId: company.vatId,
+        issuerCompanyId: company.companyId,
+        issuerAddress: formatAddress(company),
+        issuerIban: company.iban,
+        issuerBic: company.bic,
+        issuerBankName: company.bankName,
+        buyerName: billing.legalName,
+        buyerVatId: billing.vatId,
+        buyerCompanyId: billing.companyId,
+        buyerAddress: formatAddress(billing),
+        netMinor: amounts.netMinor,
+        taxMinor: amounts.taxMinor,
+        grossMinor: amounts.grossMinor,
+        vatRatePct: vat.ratePct,
+        vatTreatment: vat.treatment,
+        vatNote: vat.note,
+        lineSnapshot: lines as unknown as object[],
+      },
+    });
+
+    return formatted;
   });
 
   return { ok: true, number };
