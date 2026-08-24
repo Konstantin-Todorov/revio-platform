@@ -19,8 +19,9 @@ const label = "mb-1 block text-[11.5px] font-semibold text-ink-600";
 const hint = "mt-1 text-[11px] leading-snug text-ink-400";
 
 export interface CompanyValues {
-  legalName: string; vatId: string; companyId: string;
-  addressLine: string; city: string; postCode: string; country: string;
+  legalName: string; legalNameLatin: string; vatId: string; companyId: string;
+  addressLine: string; addressLineLatin: string; city: string; cityLatin: string;
+  postCode: string; country: string;
   email: string; phone: string; website: string;
   iban: string; bic: string; bankName: string;
   standardVatPct: number; invoiceNumberStart: string; paymentTermsDays: number; footerNote: string;
@@ -35,10 +36,18 @@ export function CompanyForm({ values, canEdit }: { values: CompanyValues; canEdi
         <div>
           <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-ink-400">Who we are</h4>
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2">
+            <div>
               <label className={label} htmlFor="legalName">Legal company name *</label>
-              <input id="legalName" name="legalName" required defaultValue={values.legalName} className={input} placeholder="Revio Soft EOOD" />
-              <p className={hint}>The registered entity, exactly as it appears on your company registration — not the brand name.</p>
+              <input id="legalName" name="legalName" required defaultValue={values.legalName} className={input} placeholder="Уебър БГ ЕООД" />
+              <p className={hint}>The registered entity exactly as it appears in the commercial register — not the brand name.</p>
+            </div>
+            <div>
+              <label className={label} htmlFor="legalNameLatin">Same name, Latin script</label>
+              <input id="legalNameLatin" name="legalNameLatin" defaultValue={values.legalNameLatin} className={input} placeholder="WEBER BG EOOD" />
+              <p className={hint}>
+                Used on invoices to customers outside Bulgaria — both are official names for the same
+                company. Leave empty to use the one above for everybody.
+              </p>
             </div>
             <div>
               <label className={label} htmlFor="vatId">VAT number</label>
@@ -55,17 +64,26 @@ export function CompanyForm({ values, canEdit }: { values: CompanyValues; canEdi
         <div>
           <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-ink-400">Registered address</h4>
           <div className="grid grid-cols-4 gap-3">
-            <div className="col-span-4">
+            <div className="col-span-2">
               <label className={label} htmlFor="addressLine">Street address</label>
-              <input id="addressLine" name="addressLine" defaultValue={values.addressLine} className={input} placeholder="12 Vitosha Boulevard" />
+              <input id="addressLine" name="addressLine" defaultValue={values.addressLine} className={input} placeholder="ул. Преслав 6" />
+            </div>
+            <div className="col-span-2">
+              <label className={label} htmlFor="addressLineLatin">Street address, Latin script</label>
+              <input id="addressLineLatin" name="addressLineLatin" defaultValue={values.addressLineLatin} className={input} placeholder="6 Preslav St" />
+              <p className={hint}>Travels with the Latin name — an invoice never mixes the two scripts.</p>
             </div>
             <div>
               <label className={label} htmlFor="postCode">Post code</label>
               <input id="postCode" name="postCode" defaultValue={values.postCode} className={input} placeholder="1000" />
             </div>
-            <div className="col-span-2">
+            <div>
               <label className={label} htmlFor="city">City</label>
-              <input id="city" name="city" defaultValue={values.city} className={input} placeholder="Sofia" />
+              <input id="city" name="city" defaultValue={values.city} className={input} placeholder="Русе" />
+            </div>
+            <div>
+              <label className={label} htmlFor="cityLatin">City, Latin</label>
+              <input id="cityLatin" name="cityLatin" defaultValue={values.cityLatin} className={input} placeholder="Ruse" />
             </div>
             <div>
               <label className={label} htmlFor="country">Country *</label>

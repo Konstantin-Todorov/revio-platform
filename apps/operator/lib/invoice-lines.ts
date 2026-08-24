@@ -76,3 +76,62 @@ export function formatDemoNumber(n: bigint): string {
   return `DEMO-${n.toString().padStart(6, "0")}`;
 }
 
+/**
+ * Which rendering of our own identity belongs on this invoice.
+ *
+ * "Уебър БГ ЕООД" and "WEBER BG EOOD" are both official names for the same registered entity. The
+ * choice is about the reader, not about correctness: a Bulgarian customer's accountant reconciles
+ * against the commercial register and expects Cyrillic; a customer elsewhere receives a document
+ * they cannot read, cannot check, and in some finance departments cannot file.
+ *
+ * Name and address are chosen **together**. Picking them independently produces "WEBER BG EOOD" above
+ * "ул. Преслав 6, Русе", which reads as two different companies — exactly the doubt an invoice exists
+ * to remove.
+ *
+ * Falls back to the primary rendering whenever the Latin one is absent, so a company that has only
+ * one name is never left with a blank issuer.
+ */
+export interface BilingualIdentity {
+  legalName: string;
+  legalNameLatin?: string | null;
+  addressLine?: string | null;
+  addressLineLatin?: string | null;
+  city?: string | null;
+  cityLatin?: string | null;
+  postCode?: string | null;
+  country?: string | null;
+}
+
+export interface ChosenIdentity {
+  legalName: string;
+  addressLine: string | null;
+  city: string | null;
+  /** Which rendering was used — recorded so a reissued document cannot silently switch scripts. */
+  script: "cyrillic" | "latin";
+}
+
+export function chooseIdentity(company: BilingualIdentity, buyerCountry: string | null | undefined): ChosenIdentity {
+  const home = (company.country ?? "BG").trim().toUpperCase();
+  const buyer = (buyerCountry ?? "").trim().toUpperCase();
+  // No country on the buyer means we cannot say they read Cyrillic, so use the international
+  // rendering when we have one. Guessing "domestic" would hand a foreign customer a document in a
+  // script they cannot read, which is the worse of the two failures.
+  const useLatin = buyer !== home && !!company.legalNameLatin?.trim();
+
+  if (!useLatin) {
+    return {
+      legalName: company.legalName,
+      addressLine: company.addressLine ?? null,
+      city: company.city ?? null,
+      script: "cyrillic",
+    };
+  }
+  return {
+    legalName: company.legalNameLatin!.trim(),
+    // Each part falls back independently: a Latin name with only a Cyrillic street is still better
+    // than a blank address, and the post code and country are script-neutral either way.
+    addressLine: company.addressLineLatin?.trim() || company.addressLine || null,
+    city: company.cityLatin?.trim() || company.city || null,
+    script: "latin",
+  };
+}

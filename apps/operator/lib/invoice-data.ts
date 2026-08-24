@@ -1,4 +1,4 @@
-import { formatAddress } from "./invoice-lines";
+import { formatAddress, chooseIdentity } from "./invoice-lines";
 import type { InvoiceDocData, InvoiceDocLine } from "./invoice-html";
 
 /**
@@ -23,8 +23,11 @@ export function invoiceDocData(
     tenantName: string | null;
     /** Only read for a draft preview; null once issued. */
     company: {
-      legalName: string; vatId: string | null; companyId: string | null; email: string | null;
-      addressLine: string | null; city: string | null; postCode: string | null; country: string;
+      legalName: string; legalNameLatin: string | null; vatId: string | null; companyId: string | null;
+      email: string | null;
+      addressLine: string | null; addressLineLatin: string | null;
+      city: string | null; cityLatin: string | null;
+      postCode: string | null; country: string;
       iban: string | null; bic: string | null; bankName: string | null; footerNote: string | null;
     } | null;
     billing: {
@@ -39,16 +42,27 @@ export function invoiceDocData(
       ? [{ description: invoice.lineItems, netMinor: invoice.amountMinor }]
       : [];
 
+  // A DRAFT has no snapshot, so the preview picks the rendering the same way issuing will — the
+  // preview must show the document that would actually be produced, not a different one.
+  const previewIssuer = ctx.company ? chooseIdentity(ctx.company, ctx.billing?.country) : null;
+
   return {
     number: invoice.number,
     period: invoice.period,
     issuedAt: invoice.issuedAt,
     dueDate: invoice.dueDate,
     currency: invoice.currency,
-    issuerName: invoice.issuerName ?? ctx.company?.legalName ?? null,
+    issuerName: invoice.issuerName ?? previewIssuer?.legalName ?? null,
     issuerVatId: invoice.issuerVatId ?? ctx.company?.vatId ?? null,
     issuerCompanyId: invoice.issuerCompanyId ?? ctx.company?.companyId ?? null,
-    issuerAddress: invoice.issuerAddress ?? (ctx.company ? formatAddress(ctx.company) : null),
+    issuerAddress:
+      invoice.issuerAddress ??
+      (previewIssuer && ctx.company
+        ? formatAddress({
+            addressLine: previewIssuer.addressLine, city: previewIssuer.city,
+            postCode: ctx.company.postCode, country: ctx.company.country,
+          })
+        : null),
     issuerIban: invoice.issuerIban ?? ctx.company?.iban ?? null,
     issuerBic: invoice.issuerBic ?? ctx.company?.bic ?? null,
     issuerBankName: invoice.issuerBankName ?? ctx.company?.bankName ?? null,

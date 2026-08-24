@@ -46,10 +46,13 @@ export async function saveCompany(_prev: ActionResult | null, fd: FormData): Pro
 
   const data = {
     legalName,
+    legalNameLatin: opt(fd, "legalNameLatin"),
     vatId: opt(fd, "vatId"),
     companyId: opt(fd, "companyId"),
     addressLine: opt(fd, "addressLine"),
+    addressLineLatin: opt(fd, "addressLineLatin"),
     city: opt(fd, "city"),
+    cityLatin: opt(fd, "cityLatin"),
     postCode: opt(fd, "postCode"),
     country: c,
     email: opt(fd, "email"),
@@ -103,6 +106,7 @@ export async function saveClientBilling(_prev: ActionResult | null, fd: FormData
 
   const data = {
     legalName,
+    legalNameLatin: opt(fd, "legalNameLatin"),
     vatId: opt(fd, "vatId"),
     companyId: opt(fd, "companyId"),
     addressLine: opt(fd, "addressLine"),

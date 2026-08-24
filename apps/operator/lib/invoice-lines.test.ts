@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { invoiceLines, formatAddress, vatLabel } from "./invoice-lines";
+import { invoiceLines, formatAddress, vatLabel, chooseIdentity } from "./invoice-lines";
 import { monthlyPriceMinor, PRODUCT_KEYS, type Entitlements } from "./pricing";
 
 const ALL_COMBINATIONS: Entitlements[] = [];
@@ -90,5 +90,74 @@ describe("vatLabel", () => {
 
   it("states the rate for an ordinary domestic sale", () => {
     expect(vatLabel({ treatment: "domestic", ratePct: 20 })).toBe("VAT 20%");
+  });
+});
+
+describe("chooseIdentity — which rendering of our name goes on the invoice", () => {
+  const company = {
+    legalName: "Уебър БГ ЕООД",
+    legalNameLatin: "WEBER BG EOOD",
+    addressLine: "ул. Преслав 6",
+    addressLineLatin: "6 Preslav St",
+    city: "Русе",
+    cityLatin: "Ruse",
+    postCode: "7002",
+    country: "BG",
+  };
+
+  it("gives a Bulgarian customer the Cyrillic name their accountant reconciles against", () => {
+    const c = chooseIdentity(company, "BG");
+    expect(c.legalName).toBe("Уебър БГ ЕООД");
+    expect(c.addressLine).toBe("ул. Преслав 6");
+    expect(c.script).toBe("cyrillic");
+  });
+
+  it("gives a foreign customer a document they can actually read", () => {
+    const c = chooseIdentity(company, "DE");
+    expect(c.legalName).toBe("WEBER BG EOOD");
+    expect(c.addressLine).toBe("6 Preslav St");
+    expect(c.city).toBe("Ruse");
+    expect(c.script).toBe("latin");
+  });
+
+  it("never mixes the two scripts on one document", () => {
+    // "WEBER BG EOOD" above "ул. Преслав 6, Русе" reads as two different companies — exactly the
+    // doubt an invoice exists to remove. Name and address are chosen together or not at all.
+    for (const country of ["BG", "DE", "US", null]) {
+      const c = chooseIdentity(company, country);
+      const cyrillic = /[Ѐ-ӿ]/;
+      const nameIsCyrillic = cyrillic.test(c.legalName);
+      expect(cyrillic.test(c.addressLine ?? "")).toBe(nameIsCyrillic);
+      expect(cyrillic.test(c.city ?? "")).toBe(nameIsCyrillic);
+    }
+  });
+
+  it("falls back to the only name we have rather than leaving the issuer blank", () => {
+    const oneName = { ...company, legalNameLatin: null, addressLineLatin: null, cityLatin: null };
+    const c = chooseIdentity(oneName, "DE");
+    expect(c.legalName).toBe("Уебър БГ ЕООД");
+    expect(c.script).toBe("cyrillic");
+  });
+
+  it("treats a blank Latin name as absent, not as a name", () => {
+    expect(chooseIdentity({ ...company, legalNameLatin: "   " }, "DE").legalName).toBe("Уебър БГ ЕООД");
+  });
+
+  it("uses the international rendering when the buyer's country is unknown", () => {
+    // We cannot claim an unknown customer reads Cyrillic. Handing a foreign buyer an unreadable
+    // document is the worse of the two mistakes.
+    expect(chooseIdentity(company, null).script).toBe("latin");
+  });
+
+  it("falls back part by part when only some Latin fields exist", () => {
+    const partial = { ...company, cityLatin: null };
+    const c = chooseIdentity(partial, "DE");
+    expect(c.legalName).toBe("WEBER BG EOOD");
+    expect(c.addressLine).toBe("6 Preslav St");
+    expect(c.city).toBe("Русе"); // better than blank
+  });
+
+  it("is not fooled by case or padding on the country", () => {
+    expect(chooseIdentity(company, " bg ").script).toBe("cyrillic");
   });
 });

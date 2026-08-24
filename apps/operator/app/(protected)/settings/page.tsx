@@ -68,10 +68,13 @@ export default async function SettingsPage() {
           canEdit={isAdmin}
           values={{
             legalName: company?.legalName ?? "",
+            legalNameLatin: company?.legalNameLatin ?? "",
             vatId: company?.vatId ?? "",
             companyId: company?.companyId ?? "",
             addressLine: company?.addressLine ?? "",
+            addressLineLatin: company?.addressLineLatin ?? "",
             city: company?.city ?? "",
+            cityLatin: company?.cityLatin ?? "",
             postCode: company?.postCode ?? "",
             country: company?.country ?? "BG",
             email: company?.email ?? "",

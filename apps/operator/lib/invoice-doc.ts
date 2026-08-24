@@ -2,9 +2,9 @@ import "server-only";
 import { forSystem, withSystemTransaction } from "@revio/db";
 import { decideVat, applyVat } from "./vat";
 import { type Entitlements } from "./pricing";
-import { invoiceLines, formatAddress, formatInvoiceNumber, formatDemoNumber } from "./invoice-lines";
+import { invoiceLines, formatAddress, formatInvoiceNumber, formatDemoNumber, chooseIdentity } from "./invoice-lines";
 
-export { invoiceLines, formatAddress, vatLabel, formatInvoiceNumber, type InvoiceLine } from "./invoice-lines";
+export { invoiceLines, formatAddress, vatLabel, formatInvoiceNumber, chooseIdentity, type InvoiceLine } from "./invoice-lines";
 
 /**
  * Turning a billing row into an actual invoice.
@@ -95,6 +95,14 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
     };
   }
 
+  /*
+   * Which rendering of our name this customer receives.
+   *
+   * Chosen once, here, and snapshotted onto the invoice — so reissuing the document later cannot
+   * silently switch scripts on a customer who has already filed it.
+   */
+  const issuer = chooseIdentity(company, billing.country);
+
   const amounts = applyVat(netMinor, vat.ratePct);
   const issuedAt = new Date();
   const dueDate = new Date(issuedAt.getTime() + company.paymentTermsDays * 86_400_000);
@@ -139,10 +147,13 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
         // for one must not walk its status backwards from paid to sent. The money arrived; giving
         // the record a number afterwards does not un-arrive it.
         ...(invoice.status === "draft" ? { status: "sent" } : {}),
-        issuerName: company.legalName,
+        issuerName: issuer.legalName,
         issuerVatId: company.vatId,
         issuerCompanyId: company.companyId,
-        issuerAddress: formatAddress(company),
+        issuerAddress: formatAddress({
+          addressLine: issuer.addressLine, city: issuer.city,
+          postCode: company.postCode, country: company.country,
+        }),
         issuerIban: company.iban,
         issuerBic: company.bic,
         issuerBankName: company.bankName,

@@ -234,7 +234,19 @@ model AppError {
 /// deploy, and because the values have to be snapshotted onto each invoice anyway.
 model OperatorCompany {
   id                 String   @id @default("singleton")
+  /// The registered name in Cyrillic, as it appears in the Bulgarian commercial register.
   legalName          String
+  /// The same entity in Latin script, for customers who cannot read the Cyrillic one.
+  ///
+  /// Both are legitimate names for the same company — this is not a translation, it is the other
+  /// official rendering. An invoice picks by the customer's country so a German hotel does not
+  /// receive a document it cannot file, and a Bulgarian one gets the name its accountant expects.
+  /// Empty means "we only have the one", and the Cyrillic name is used for everybody.
+  legalNameLatin     String?
+  /// Registered address in Latin, paired with `legalNameLatin`. Kept together deliberately: an
+  /// invoice carrying a Cyrillic name above a Latin address reads as two different companies.
+  addressLineLatin   String?
+  cityLatin          String?
   /// Absent = not VAT registered, which zero-rates every invoice. See decideVat().
   vatId              String?
   /// Company registration number (EIK in Bulgaria).
