@@ -62,6 +62,11 @@ live key cannot move real money by accident. Before a hotel takes a deposit or a
 - real card collection needs Stripe Elements — the booking engine has no card fields today.
 
 ### 5. Fiscalization (Bulgaria) — a legal gate, not a feature
+**Numbering is now correct** (see `docs/INVOICE-NUMBERING.md`) — ten digits, no annual reset, no gaps,
+both for our invoices and for the ones hotels issue guests. That was a separate defect found on
+2026-08-24 and fixed before anything was issued. It is necessary and **not sufficient**: real-time
+reporting under Наредба Н-18 is still missing, and the rest of this item stands.
+
 `TaxInvoice.fiscalRef` + a jurisdiction pack exist; the Bulgarian N-18 integration does not.
 A BG property issuing invoices without it is not compliant. See `docs/specs/BG-FISCALIZATION-RESEARCH.md`.
 
