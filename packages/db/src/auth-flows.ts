@@ -10,6 +10,7 @@
  */
 import bcrypt from "bcryptjs";
 import { validatePassword, inviteEmail, passwordResetEmail, passwordChangedEmail } from "@revio/core";
+import { isBreachedPassword, breachMessage } from "@revio/core/server";
 import { forSystem } from "./rls.js";
 import { issueToken, resolveToken, consumeToken, revokeTokensFor } from "./auth-tokens.js";
 import { checkLoginAllowed, recordLoginFailure, type LoginScope } from "./login-gate.js";
@@ -146,6 +147,18 @@ export async function completePasswordSet(args: {
 
   const strength = validatePassword(args.password, { email: resolved.token.email });
   if (!strength.ok) return { ok: false, message: strength.message };
+
+  /*
+   * The breach check (N5), and this is the ONLY place it runs.
+   *
+   * Checked when a password is CHOSEN, never at sign-in: sign-in must not depend on an outbound
+   * request, and blocking somebody at the door does not improve a password they already have.
+   *
+   * It fails open — an outage at Have I Been Pwned must not stop a hotel's new manager finishing
+   * their invitation. `skipped` says so rather than pretending the answer was "clean".
+   */
+  const breach = await isBreachedPassword(args.password);
+  if (breach.breached) return { ok: false, message: breachMessage(breach.count) };
 
   // Atomic: the loser of a race gets this, not a second password write.
   if (!(await consumeToken(resolved.token.id))) {

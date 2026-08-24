@@ -74,7 +74,7 @@ export function checkToken(record: TokenRecord, now: number): TokenCheck {
   return { usable: true };
 }
 
-/** Minimum viable password rules. The full policy — breach checks, rotation — is N5. */
+/** Password rules. Local checks here; the breach check is `isBreachedPassword` in core/server. */
 export const PASSWORD_MIN_LENGTH = 10;
 
 export type PasswordCheck = { ok: true } | { ok: false; message: string };
@@ -86,6 +86,19 @@ export type PasswordCheck = { ok: true } | { ok: false; message: string };
  * produce `Password1!` and are not asked for — NIST dropped them for the same reason. A longer
  * minimum buys far more than a wider alphabet.
  */
+function isSequential(value: string): boolean {
+  const clean = value.replace(/[^a-z0-9]/g, "");
+  if (clean.length < 6) return false;
+  let ascending = true;
+  let descending = true;
+  for (let i = 1; i < clean.length; i++) {
+    const delta = clean.charCodeAt(i) - clean.charCodeAt(i - 1);
+    if (delta !== 1) ascending = false;
+    if (delta !== -1) descending = false;
+  }
+  return ascending || descending;
+}
+
 export function validatePassword(password: string, context: { email?: string } = {}): PasswordCheck {
   if (password.length < PASSWORD_MIN_LENGTH) {
     return { ok: false, message: `Use at least ${PASSWORD_MIN_LENGTH} characters.` };
@@ -99,6 +112,38 @@ export function validatePassword(password: string, context: { email?: string } =
   // The handful that would otherwise sail past a length check on this platform specifically.
   const OBVIOUS = ["revio1234", "password", "12345678", "qwertyuiop", "letmein123"];
   if (OBVIOUS.some((bad) => lower === bad || lower.startsWith(bad))) {
+    return { ok: false, message: "That password is too easy to guess. Choose something else." };
+  }
+
+  /*
+   * Length alone lets through the three shapes people reach for when told "at least ten characters"
+   * (N5). None of these is caught by a length rule, and all three are near the top of every cracking
+   * dictionary — so the minimum would be doing almost nothing for the people most likely to hit it.
+   */
+
+  // One character repeated: "aaaaaaaaaa", "1111111111".
+  if (/^(.)\1+$/.test(password)) {
+    return { ok: false, message: "That's the same character repeated. Choose something else." };
+  }
+
+  // A run along the alphabet or the number row, forwards or backwards.
+  if (isSequential(lower)) {
+    return { ok: false, message: "That's a simple sequence. Choose something less predictable." };
+  }
+
+  // A walk across the keyboard: "qwertyuiop", "asdfghjkl", "1qaz2wsx".
+  const ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm", "1234567890"];
+  const stripped = lower.replace(/[^a-z0-9]/g, "");
+  if (
+    stripped.length >= 6 &&
+    ROWS.some((row) => row.includes(stripped) || [...row].reverse().join("").includes(stripped))
+  ) {
+    return { ok: false, message: "That's a row of keys. Choose something less predictable." };
+  }
+
+  // The property or product name with numbers after it — the exact thing a hotel picks under
+  // pressure, and the first thing anyone targeting THIS platform would try.
+  if (/^(revio|hotel|reception|frontdesk|welcome|admin)\d*$/.test(stripped)) {
     return { ok: false, message: "That password is too easy to guess. Choose something else." };
   }
 

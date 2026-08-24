@@ -11,3 +11,4 @@
  * everyone has to remember.
  */
 export * from "./auth/totp.js";
+export * from "./auth/breach-check.js";

@@ -35,7 +35,7 @@ export default async function SettingsPage() {
             <div className="mt-0.5"><StatusPill tone={isAdmin ? "success" : "neutral"}>{ROLE_LABEL[session!.role]}</StatusPill></div>
           </div>
         </div>
-        <p className="mt-3 text-[11.5px] text-ink-400">New operator accounts start with the password <code className="rounded bg-surface-sunken px-1">revio1234</code>.</p>
+        <p className="mt-3 text-[11.5px] text-ink-400">New operator accounts are invited by email and choose their own password. Nobody here can set or read it.</p>
       </Card>
 
       {/* N4 — the second factor, on the account that can read every hotel on the platform. */}
