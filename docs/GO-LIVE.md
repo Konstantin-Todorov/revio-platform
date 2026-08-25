@@ -104,7 +104,7 @@ worked day to day. A **CI gate** gets the same protection and changes nothing ab
 `main` builds, `production` deploys, and `production` only moves when CI passed on that exact commit.
 Verified in all three states — promoted on green, **held** on red, recovered after. See `DEPLOY.md`.
 
-⚠️ **Inert until each Railway service is pointed at `production`.** One dashboard change per service.
+✅ **Live since 2026-08-25** — all six user-facing services switched and verified. The website is a separate repo and got its own gate plus its first-ever CI.
 
 ### 10. ~~Error monitoring and uptime alerts~~ ✅ done 2026-08-24
 

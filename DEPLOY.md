@@ -320,19 +320,22 @@ with `production` unchanged, and the next green build recovered. (Safe to test l
 failing *test* — Railway runs `next build`, which does not execute tests, so the deployed app was
 never affected.)
 
-### ⚠️ One-time switch, per service
+### ✅ Switched — 2026-08-25
 
-**Each Railway service still watches `main`.** Until that changes, the gate is inert and Railway
-deploys straight from `main` as before.
+All six user-facing services now watch `production`, verified one by one:
 
-For each of `channel-manager`, `reservation`, `pms`, `operator`, `booking`, `revio-websites`:
+| Service | Branch |
+| --- | --- |
+| channel-manager · reservation · pms · operator · booking | `production` |
+| revio-websites | `production` |
+| jobs | `main` — runs no user-facing code, so the gate matters least here |
 
-> Railway → the service → **Settings → Source → Branch** → change `main` to `production`.
+**`revio-websites` is a separate repository** and needed its own `production` branch, its own promote
+workflow, and CI — which it had never had at all. A broken build went straight to reviosoft.app, the
+public site and the first thing a prospect sees, while the platform repo had been gated since the
+beginning.
 
-`jobs` (the cron service) can stay on `main` or move too — it runs no user-facing code, so it is the
-one place the gate matters least.
-
-**After switching, a deploy takes one CI cycle (~4 min) longer.** That delay is the feature.
+**A deploy now takes one CI cycle (~4 min) longer.** That delay is the feature.
 
 ### Rolling back
 
