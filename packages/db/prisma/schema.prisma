@@ -601,6 +601,7 @@ model RoomType {
   pickupSnapshots  PickupSnapshot[]
   units            Unit[]
   photos           RoomTypePhoto[]
+  ratePlanMappings ChannelRatePlanMapping[]
 
   @@index([propertyId])
 }
@@ -807,18 +808,35 @@ model ChannelRoomTypeMapping {
   @@index([channelId])
 }
 
+/// One of our rate plans, as it exists on one channel — **per room type**.
+///
+/// Channex (and every OTA under it) ties a rate plan to exactly ONE room type. We model a rate plan
+/// at property level: a hotel has one "Standard Rate" that applies to all six of its room types.
+/// Those two models only line up if the mapping carries the room type as well.
+///
+/// Without `roomTypeId` a hotel with three room types and one Standard Rate mapped that plan to a
+/// single Channex rate plan, and every push sent all three room types at it — last write wins, so
+/// two of the three silently carried the wrong price and had no rate plan on the channel at all. The
+/// certification property never showed it because its data was hand-shaped 2×4 to match Channex.
+///
+/// **Nullable on purpose.** Null means "this mapping applies to any room type", which is what the
+/// mock channels have always meant and what every existing row is. The resolver prefers an exact
+/// room-type match and falls back to the null row, so nothing that works today stops working.
 model ChannelRatePlanMapping {
   id             String  @id @default(cuid())
   tenantId       String
   channelId      String
   ratePlanId     String
+  /// Null = applies to every room type (legacy rows, mock channels).
+  roomTypeId     String?
   externalRateId String?
   status         String  @default("incomplete") // complete | incomplete
 
-  channel  Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  channel  Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  ratePlan RatePlan  @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
+  roomType RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
 
-  @@unique([channelId, ratePlanId])
+  @@unique([channelId, ratePlanId, roomTypeId])
   @@index([channelId])
 }
 

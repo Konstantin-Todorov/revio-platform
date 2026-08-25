@@ -15,6 +15,7 @@ import {
 } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { decidePull, type Stay } from "./pull-merge.js";
+import { indexRateMappings, resolveExternalRateId } from "./rate-mapping.js";
 
 /** The tenant-scoped Prisma proxy each app already builds (`@revio/db` `forTenant`). */
 type Db = ReturnType<typeof forTenant>;
@@ -218,6 +219,18 @@ export async function syncChannel(
   const roomMaps = scope?.roomTypeIds ? allRoomMaps.filter((m) => scope.roomTypeIds!.includes(m.roomTypeId)) : allRoomMaps;
   const rateMaps = scope?.ratePlanIds ? allRateMaps.filter((m) => scope.ratePlanIds!.includes(m.ratePlanId)) : allRateMaps;
 
+  /*
+   * Which channel rate plan each (room type, plan) pair pushes to.
+   *
+   * Channex ties a rate plan to ONE room type; we model plans at property level. Before this index
+   * existed the loop below paired every room type with every rate mapping, so a hotel with three
+   * room types and one Standard Rate sent all three at the same Channex rate plan — last write wins,
+   * two room types silently priced wrong on every OTA, and the push reported success.
+   *
+   * A pair with no mapping is now SKIPPED rather than pushed at somebody else's rate plan.
+   */
+  const rateIndex = indexRateMappings(rateMaps);
+
   const todayIso = ymd(new Date());
   const start = new Date(`${todayIso}T00:00:00Z`);
   // Scoped dates are the edit's own; unscoped is the rolling horizon. Sorted so `end` is the real
@@ -405,9 +418,14 @@ export async function syncChannel(
         if (apMin != null) restrictions.advancePurchaseMin = apMin;
         if (apMax != null) restrictions.advancePurchaseMax = apMax;
 
+        // Resolve per (room type, plan). Null means this pair is not mapped to the channel — skip
+        // it rather than write one room type's price onto another's rate plan.
+        const externalRateId = resolveExternalRateId(rateIndex, rm.roomTypeId, pm.ratePlanId);
+        if (!externalRateId) continue;
+
         const update: AriUpdate = {
           externalRoomId: rm.externalRoomId!,
-          externalRateId: pm.externalRateId!,
+          externalRateId,
           date: k,
           currency: property.baseCurrency,
           restrictions,

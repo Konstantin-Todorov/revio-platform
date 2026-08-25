@@ -43,3 +43,4 @@ export {
   type Expectation,
   type Verdict,
 } from "./cert-expectations.js";
+export { indexRateMappings, resolveExternalRateId, unmappedPairs, type RatePlanMappingRow, type RateMappingIndex } from "./rate-mapping.js";

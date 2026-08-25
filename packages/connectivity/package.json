@@ -20,7 +20,8 @@
     "channex:lifecycle": "tsx scripts/channex-lifecycle.ts",
     "channex:cert-booking": "tsx scripts/channex-cert-booking.ts",
     "channex:cert-verify": "tsx --env-file=.env.local scripts/channex-cert-verify.ts",
-    "channex:task": "tsx --env-file=.env.local scripts/channex-task.ts"
+    "channex:task": "tsx --env-file=.env.local scripts/channex-task.ts",
+    "channex:onboard": "tsx scripts/channex-onboard.ts"
   },
   "dependencies": {
     "@revio/core": "workspace:*",
