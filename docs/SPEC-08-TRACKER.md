@@ -38,10 +38,10 @@ Status: ☐ open · ◐ in progress · ☑ done
 
 ## C. RevioCRS — Dashboard *(§1)*
 
-- ☐ **C1** *(§1.2)* "Occupancy & revenue by day" renders **nothing** on load. Default to a 30-day
+- ☑ **C1** *(§1.2)* "Occupancy & revenue by day" renders **nothing** on load. Default to a 30-day
   window; never blank. **Dual axis** — occupancy as a line (left, %), revenue as bars (right, €).
   Both on by default; legend click mutes either. Not a toggle: the gap between them is the insight.
-- ☐ **C2** *(§1.3)* Source mix is bars-as-rows. Make it a composition visual (donut or stacked) over
+- ☑ **C2** *(§1.3)* Source mix is bars-as-rows. Make it a composition visual (donut or stacked) over
   **all** sources, each carrying its **cost of distribution** — the 2% vs 15–18% story. Plain chart
   may ship first; the net-of-commission layer is additive.
 
@@ -102,9 +102,9 @@ Status: ☐ open · ◐ in progress · ☑ done
 
 ## G. RevioCRS — Inventory Calendar *(§5)*
 
-- ☐ **G1** *(§5.2)* Restrictions row renders a bare "." — **badges** instead (MIN 2, CTA, CTD, closed).
+- ☑ **G1** *(§5.2)* Restrictions row renders a bare "." — **badges** instead (MIN 2, CTA, CTD, closed).
   Biggest at-a-glance weakness.
-- ☐ **G2** *(§5.2)* Grade the Remaining row by pressure, reusing D10's relative threshold. Subtle
+- ☑ **G2** *(§5.2)* Grade the Remaining row by pressure, reusing D10's relative threshold. Subtle
   shading only — it must stay editable.
 - ☑ **G3** *(§5.3)* **Make the derived cascade explicit** — one line: *"Derived plans follow Standard
   — change it and they recompute."* One line, and it is the difference between the feature feeling

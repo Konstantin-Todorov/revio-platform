@@ -9,7 +9,7 @@ import { RateCell } from "@/components/inventory/RateCell";
 import { CollapseAll } from "@/components/inventory/CollapseAll";
 import { ParamMultiSelect } from "@/components/inventory/ParamMultiSelect";
 import { CrsCalendarBulkButton } from "@/components/inventory/CrsCalendarBulkButton";
-import { deriveRate, type DerivedRateConfig } from "@revio/core";
+import { deriveRate, type DerivedRateConfig, availabilityPressure } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +23,23 @@ const ROWS = [
   { key: "remaining", label: "Remaining" },
 ] as const;
 
+/**
+ * Shade the Remaining row by pressure (§5.2), using the SAME rule as the Analytics heatmap.
+ *
+ * It carried its own copy — `remaining <= 2 || share <= 0.2` — and the absolute half is the bug §2.3
+ * removed: two of three suites is 67% free and was flagged urgent, while three of forty rooms said
+ * nothing. Two screens disagreeing about whether the same day is tight is its own bug, so the rule
+ * now lives in one place and both read it.
+ */
+const TONE: Record<string, string> = {
+  overbooked: "bg-danger-500 text-white",
+  soldout: "bg-danger-50 text-danger-600",
+  low: "bg-warning-50 text-warning-600",
+  open: "text-success-600",
+};
+
 function remainingTone(remaining: number, available: number): string {
-  if (remaining < 0) return "bg-danger-500 text-white";
-  if (remaining === 0) return "bg-danger-50 text-danger-600";
-  if (remaining <= 2 || (available > 0 && remaining / available <= 0.2)) return "bg-warning-50 text-warning-600";
-  return "text-success-600";
+  return TONE[availabilityPressure(remaining, available)]!;
 }
 
 export default async function InventoryCalendarPage({
@@ -259,15 +271,24 @@ function SectionRows({
         <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">Restrictions</td>
         {section.cells.map((cell, i) => (
           <td key={i} className={`px-1 py-1 text-center ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
-            <span className="inline-flex items-center justify-center gap-1">
-              {cell.restr.minLos != null && cell.restr.minLos > 1 && (
-                <span title={`Min stay ${cell.restr.minLos} nights`} className="rounded bg-brand-50 px-1 text-[9.5px] font-bold text-brand-700">{cell.restr.minLos}n</span>
+            {/* §5.2 — the biggest at-a-glance weakness on this grid.
+                Three coloured dots and a "·" told a reader nothing without hovering every cell, one
+                at a time, across a month. A restriction is a word; these are now words. */}
+            <span className="inline-flex flex-wrap items-center justify-center gap-0.5">
+              {cell.restr.stopSell && (
+                <span title="Stop sell — not bookable" className="rounded bg-danger-500 px-1 text-[9px] font-bold uppercase tracking-wide text-white">closed</span>
               )}
-              {cell.restr.stopSell && <span title="Stop sell" className="inline-block h-2 w-2 rounded-full bg-danger-500" />}
-              {cell.restr.cta && <span title="Closed to arrival" className="inline-block h-2 w-2 rounded-full bg-brand-600" />}
-              {cell.restr.ctd && <span title="Closed to departure" className="inline-block h-2 w-2 rounded-full bg-accent-500" />}
+              {cell.restr.minLos != null && cell.restr.minLos > 1 && (
+                <span title={`Minimum stay ${cell.restr.minLos} nights`} className="rounded bg-brand-50 px-1 text-[9px] font-bold uppercase tracking-wide text-brand-700">min {cell.restr.minLos}</span>
+              )}
+              {cell.restr.cta && (
+                <span title="Closed to arrival — a stay may not begin on this date" className="rounded bg-brand-100 px-1 text-[9px] font-bold uppercase tracking-wide text-brand-700">cta</span>
+              )}
+              {cell.restr.ctd && (
+                <span title="Closed to departure — a stay may not end on this date" className="rounded bg-accent-100 px-1 text-[9px] font-bold uppercase tracking-wide text-accent-700">ctd</span>
+              )}
               {!cell.restr.stopSell && !cell.restr.cta && !cell.restr.ctd && (cell.restr.minLos ?? 1) <= 1 && (
-                <span className="text-ink-200">·</span>
+                <span className="text-[9px] text-ink-200" title="No restrictions">—</span>
               )}
             </span>
           </td>

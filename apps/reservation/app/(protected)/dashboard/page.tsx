@@ -12,6 +12,9 @@ import { ensurePickupSnapshot } from "@/lib/pickup";
 import { releaseExpiredHolds } from "@/lib/holds";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { money, FORECAST_DISCLAIMER } from "@/lib/format";
+import { TrendChart } from "@/components/dashboard/TrendChart";
+import { Donut } from "@/components/reports/Visuals";
+import { isCommissionFreeCategory } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -92,8 +95,23 @@ export default async function DashboardPage({
     { key: "pickup", label: "Pickup · 30d", value: (c.pickup.value >= 0 ? "+" : "") + c.pickup.value, sub: c.pickup.vsDate ? `room-nights vs ${c.pickup.vsDate}` : "baseline recorded today", href: "/reports?report=pickup", yoy: null },
   ];
 
-  const series = metrics.perDay.slice(0, 62);
-  const maxRevenue = Math.max(1, ...series.map((d) => d.revenueMinor));
+  /*
+   * The hero trend never renders blank (§1.2).
+   *
+   * On the default "Today" view the range is one day, so `perDay` had a single point and the chart
+   * showed "pick a multi-day range to see the daily trend" — a blank box in the best space on the
+   * page, pushing the content that works below the fold. A dashboard's hero must show the shape of
+   * the business ON LOAD; the date control then refines it.
+   *
+   * So a short range falls back to a 30-day window. The fallback is labelled on the card, because a
+   * chart showing a different period from the KPI row above it, without saying so, is worse than a
+   * blank one.
+   */
+  const trendIsFallback = metrics.perDay.length < 2;
+  const trendMetrics = trendIsFallback
+    ? await getRangeMetrics(resolveRange(ops.todayIso, "l28d"))
+    : metrics;
+  const series = trendMetrics.perDay.slice(0, 62);
 
   return (
     <div className="space-y-5">
@@ -131,64 +149,48 @@ export default async function DashboardPage({
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Occupancy + revenue per day */}
         <Card>
-          <CardHeader title={`Occupancy & revenue by day${metrics.perDay.length > 62 ? " (first 62 days)" : ""}`} />
-          {series.length <= 1 ? (
-            <div className="px-4 py-6 text-[13px] text-ink-500">Pick a multi-day range to see the daily trend.</div>
-          ) : (
-            <div className="px-4 py-4">
-              <div className="flex h-28 items-end gap-[2px]">
-                {series.map((d) => (
-                  <div key={d.date} className="group relative flex-1">
-                    <div
-                      className="w-full rounded-t bg-brand-600/80 transition-colors group-hover:bg-brand-700"
-                      style={{ height: `${Math.max(2, d.occupancyPct)}%` }}
-                      title={`${d.date} · ${d.occupancyPct.toFixed(0)}% · ${money(d.revenueMinor, currency)}`}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="mt-1 flex justify-between text-[10px] text-ink-400">
-                <span>{series[0]!.date}</span>
-                <span>occupancy % per day · hover for revenue</span>
-                <span>{series[series.length - 1]!.date}</span>
-              </div>
-              <div className="mt-3 flex h-14 items-end gap-[2px]">
-                {series.map((d) => (
-                  <div key={d.date} className="flex-1">
-                    <div
-                      className="w-full rounded-t bg-warning-500/70"
-                      style={{ height: `${Math.max(2, (d.revenueMinor / maxRevenue) * 100)}%` }}
-                      title={`${d.date} · ${money(d.revenueMinor, currency)}`}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className="mt-1 text-center text-[10px] text-ink-400">revenue per day ({c.revenueDisplay})</div>
-            </div>
-          )}
+          <CardHeader
+            title="Occupancy & revenue by day"
+            subtitle={
+              trendIsFallback
+                ? "Last 28 days — pick a multi-day range above to match the KPIs"
+                : `${series.length} days${trendMetrics.perDay.length > 62 ? " (first 62 shown)" : ""}`
+            }
+          />
+          <TrendChart
+            points={series.map((d) => ({ date: d.date, occupancyPct: d.occupancyPct, revenueMinor: d.revenueMinor }))}
+            currency={currency}
+            revenueBasis={c.revenueDisplay}
+          />
         </Card>
 
-        {/* Source mix */}
+        {/* §1.3 — source mix is a COMPOSITION question ("where does my business come from, and what
+             does each channel net me"), and it was two fill-bars, which loses the whole. A donut
+             shows the shares; the note on each row carries the commercial half — direct at ~0%
+             against an OTA at 15–18% is the strongest argument this product has, and it was absent. */}
         <Card>
-          <CardHeader title="Source mix — revenue share" />
+          <CardHeader title="Source mix" subtitle="Revenue share, and what each channel costs you" />
           {metrics.sourceMix.length === 0 ? (
             <div className="px-4 py-6 text-[13px] text-ink-500">No sold reservations in this range yet.</div>
           ) : (
-            <ul className="space-y-2.5 px-4 py-4">
-              {metrics.sourceMix.map((s) => (
-                <li key={s.name}>
-                  <div className="flex items-baseline justify-between text-[12.5px]">
-                    <span className="font-semibold text-ink-900">{s.name}</span>
-                    <span className="tnum text-ink-500">
-                      {s.reservations} res · {s.roomNights} rn · {money(s.revenueMinor, currency)} · {pct(s.sharePct)}
-                    </span>
-                  </div>
-                  <div className="mt-1 h-2 overflow-hidden rounded-full bg-surface-sunken">
-                    <div className="h-full rounded-full bg-brand-600" style={{ width: `${Math.max(2, s.sharePct)}%` }} />
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <Donut
+              centreLabel={money(metrics.sourceMix.reduce((t, x) => t + x.revenueMinor, 0), currency)}
+              centreSub="revenue"
+              slices={metrics.sourceMix.map((src) => {
+                const row = metrics.economics.rows.find((r) => r.sourceName === src.name);
+                const free = row ? isCommissionFreeCategory(row.category) : false;
+                const unset = !!row && !free && row.commissionMinor == null;
+                return {
+                  label: src.name,
+                  value: src.revenueMinor,
+                  valueLabel: money(src.revenueMinor, currency),
+                  // Never render an unconfigured rate as "no commission" — the §2.5 lesson, which is
+                  // the same mistake one screen over.
+                  note: free ? "no commission" : unset ? "rate not set" : row ? `${row.commissionPct}% commission` : undefined,
+                  noteTone: unset ? "warning" : "muted",
+                };
+              })}
+            />
           )}
         </Card>
       </div>
