@@ -102,7 +102,14 @@ export default async function BillingPage() {
                   <td className="px-4 py-2.5 text-[11.5px] text-ink-500">{c.products}</td>
                   <td className="px-4 py-2.5 tnum font-semibold text-ink-900">{money(c.priceMinor)}</td>
                   <td className="px-4 py-2.5">
-                    {!c.currentInvoice ? (
+                    {!c.billingStartsAt ? (
+                      /* Not a gap — the promise being kept. "Free until your first booking syncs" is
+                         on every product page, and an operator seeing a blank cell should read it as
+                         working, not as a job that failed to run. */
+                      <span className="text-[11.5px] font-medium text-success-600" title="Free until their first booking syncs">
+                        free — no booking synced yet
+                      </span>
+                    ) : !c.currentInvoice ? (
                       <span className="text-[11.5px] text-ink-400">not generated</span>
                     ) : (
                       <div className="flex items-center gap-2">

@@ -744,6 +744,9 @@ export async function getBilling() {
       id: t.id, name: t.name, plan: t.plan, status: t.status, isDemo: t.isDemo,
       products: billedProducts(ent) || "—",
       priceMinor,
+      // Null until their first booking syncs. Carried to the screen so "no invoice" reads as the
+      // promise being kept rather than as something that failed to run.
+      billingStartsAt: t.billingStartsAt,
       // `number` is what tells the screen whether this is still a draft or a real document, so it
       // travels with the row rather than being inferred from `status`.
       currentInvoice: current

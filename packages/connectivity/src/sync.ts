@@ -822,6 +822,30 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
   // so said nothing at all about a booking further out than that.
   if (touched.length > 0) await syncRealChannels(prisma, propertyId, stayScope(touched));
 
+  /*
+   * "Free until your first booking syncs" — the moment that makes it true.
+   *
+   * The promise is on every product page. This is the only place in the platform that can honestly
+   * say it has happened: a booking arrived from a real channel and landed. Set once, never moved —
+   * re-stamping it on a later pull would restart the free period and quietly cancel the bill.
+   *
+   * A mock channel does not count. A demo hotel's fake booking is not the platform having worked
+   * for anybody, and demo tenants are stamped billable at creation anyway so the flow stays testable.
+   *
+   * Never allowed to fail the pull. The booking is already saved; a failure to record that billing
+   * may now start must not roll it back, and the next imported booking sets it regardless.
+   */
+  if (imported > 0 && channel.connectivityMode !== "mock") {
+    try {
+      await forSystem().tenant.updateMany({
+        where: { id: channel.tenantId, billingStartsAt: null },
+        data: { billingStartsAt: new Date() },
+      });
+    } catch {
+      // Deliberately silent — see above.
+    }
+  }
+
   return { ok: true, imported, updated, unchanged, mode: channel.connectivityMode };
 }
 

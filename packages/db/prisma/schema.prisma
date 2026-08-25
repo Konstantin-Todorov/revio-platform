@@ -25,22 +25,35 @@ datasource db {
 // --- Tenancy ---------------------------------------------------------------
 
 model Tenant {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   name              String
-  slug              String   @unique
+  slug              String    @unique
   // Entitlements: which products this hotel account bought ("sold separately").
-  hasChannelManager Boolean  @default(true)
-  hasReservation    Boolean  @default(false)
-  hasPms            Boolean  @default(false)
+  hasChannelManager Boolean   @default(true)
+  hasReservation    Boolean   @default(false)
+  hasPms            Boolean   @default(false)
   // Commercial profile, set by the operator. plan ≈ room-count tier / package; status gates access.
-  plan              String   @default("starter") // starter | growth | scale
-  status            String   @default("active") // active | suspended
+  plan              String    @default("starter") // starter | growth | scale
+  status            String    @default("active") // active | suspended
   // Ours, for testing — kept alongside real clients in production forever, because a staging copy of
   // a five-app platform is a second thing to keep in sync and it always drifts. A demo tenant behaves
   // EXACTLY like a real one in every product; the flag only stops the operator console counting it as
   // business. See apps/operator/lib/demo.ts for the rule.
-  isDemo            Boolean  @default(false)
-  createdAt         DateTime @default(now())
+  isDemo            Boolean   @default(false)
+  /// When this client became billable — the moment their first booking actually synced.
+  ///
+  /// The public promise is "free until your first booking syncs", and until this column existed the
+  /// software did not implement it: invoices generated from the month a tenant was created, whether
+  /// or not the platform had ever done anything for them. A promise on a pricing page that the
+  /// billing code ignores is the kind of thing a customer discovers on their first invoice.
+  ///
+  /// Null = not yet billable. A property that never takes a booking stays free forever, which is the
+  /// correct answer: no value delivered, no charge.
+  ///
+  /// Set once, by the first successful channel pull that imports a reservation, and never moved —
+  /// re-stamping it on a later sync would restart the free period and quietly cancel the bill.
+  billingStartsAt   DateTime?
+  createdAt         DateTime  @default(now())
 
   properties Property[]
   users      User[]
