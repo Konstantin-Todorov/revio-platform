@@ -7,7 +7,7 @@
  * inventory (a CRS booking, a PMS OOO / walk-in / check-in) can now call `syncRealChannels(db, propertyId)`
  * and the change reaches Channex immediately — no manual Re-sync in the CM.
  */
-import { forSystem, decryptSecret, forTenant } from "@revio/db";
+import { forSystem, decryptSecret, forTenant, markBillable } from "@revio/db";
 import {
   channelSupports, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type DerivedRateConfig, type RestrictionRuleHit,
@@ -823,27 +823,14 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
   if (touched.length > 0) await syncRealChannels(prisma, propertyId, stayScope(touched));
 
   /*
-   * "Free until your first booking syncs" — the moment that makes it true.
+   * "Free until your first booking syncs" — the moment that makes it true for a client with channel
+   * management. `markBillable` owns the rule and refuses if this tenant's trigger is setup instead.
    *
-   * The promise is on every product page. This is the only place in the platform that can honestly
-   * say it has happened: a booking arrived from a real channel and landed. Set once, never moved —
-   * re-stamping it on a later pull would restart the free period and quietly cancel the bill.
-   *
-   * A mock channel does not count. A demo hotel's fake booking is not the platform having worked
-   * for anybody, and demo tenants are stamped billable at creation anyway so the flow stays testable.
-   *
-   * Never allowed to fail the pull. The booking is already saved; a failure to record that billing
-   * may now start must not roll it back, and the next imported booking sets it regardless.
+   * A mock channel does not count: a demo hotel's fake booking is not the platform having worked for
+   * anybody.
    */
   if (imported > 0 && channel.connectivityMode !== "mock") {
-    try {
-      await forSystem().tenant.updateMany({
-        where: { id: channel.tenantId, billingStartsAt: null },
-        data: { billingStartsAt: new Date() },
-      });
-    } catch {
-      // Deliberately silent — see above.
-    }
+    await markBillable(channel.tenantId, "first_booking_synced");
   }
 
   return { ok: true, imported, updated, unchanged, mode: channel.connectivityMode };

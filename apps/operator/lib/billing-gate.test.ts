@@ -1,17 +1,17 @@
 import { describe, it, expect } from "vitest";
+import { isBillablePeriod } from "@revio/db";
 
 /**
  * "Free until your first booking syncs."
  *
- * The rule `generateInvoices` applies, isolated so it is testable without a database. Two conditions,
- * and the second is the one that is easy to leave out — a gate that only defers the FIRST invoice
- * then bills the whole back-catalogue the moment a booking lands is the same broken promise with a
- * delay on it.
+ * Tests the REAL predicate from `@revio/db`, not a copy of it — a re-implementation here would pass
+ * happily while the shipped rule drifted, which is the failure this file is supposed to catch.
+ *
+ * Two conditions, and the second is the one easy to leave out: a gate that only defers the FIRST
+ * invoice then bills the whole back-catalogue the moment a booking lands is the same broken promise
+ * with a delay on it.
  */
-function isBillable(period: string, billingStartsAt: Date | null): boolean {
-  if (!billingStartsAt) return false;
-  return period >= billingStartsAt.toISOString().slice(0, 7);
-}
+const isBillable = isBillablePeriod;
 
 const at = (iso: string) => new Date(`${iso}T12:00:00Z`);
 

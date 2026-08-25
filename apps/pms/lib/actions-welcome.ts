@@ -9,6 +9,7 @@ import { MANAGER_ROLES } from "./roles";
 import { activeProperty } from "./data";
 import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
+import { markBillable } from "@revio/db";
 
 /**
  * RevioPMS's first-run writes.
@@ -277,5 +278,17 @@ export async function finishWelcome(): Promise<void> {
       data: { setupCompleted: { push: SETUP_KEY[PRODUCT] } },
     });
   }
+  /*
+   * A client with no channel manager becomes billable here.
+   *
+   * The refund policy is explicit: with channel management we wait for the first synced booking;
+   * without it, billing begins when the property is configured and ready. A CRS-only or PMS-only
+   * hotel will never have a booking sync, so waiting for one would leave them free forever.
+   *
+   * `markBillable` decides which trigger applies to this tenant and ignores the wrong one, so this
+   * call is safe on every product.
+   */
+  await markBillable(property.tenantId, "setup_completed");
+
   redirect("/dashboard?welcome=done");
 }

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { forSystem } from "@revio/db";
+import { forSystem, isBillablePeriod } from "@revio/db";
 import { getOperatorSession } from "./session";
 import { monthlyPriceMinor, billedProducts, priceBreakdown, type Entitlements } from "./pricing";
 
@@ -42,20 +42,13 @@ export async function generateInvoices(): Promise<void> {
      *
      * The line is on every product page and this loop used to ignore it entirely: a client was billed
      * from the month they were created, whether or not the platform had ever done anything for them.
-     * A promise a pricing page makes and the billing code breaks is discovered by the customer, on
-     * their first invoice.
      *
-     * Null means no booking has ever synced, so nothing is owed yet. A hotel that never takes one
-     * stays free — correct, not a loophole.
+     * `isBillablePeriod` carries both conditions — never before they became billable, and never for a
+     * month that ended before that date. It is shared with the rule that SETS the date, so the two
+     * halves of one promise cannot drift apart.
      */
-    if (!t.billingStartsAt) continue;
-    /*
-     * And nothing is owed for a month that ended before they became billable.
-     *
-     * Without this the gate would only defer the first invoice, then bill the whole back-catalogue
-     * the moment a booking landed — which is the same broken promise with a delay on it.
-     */
-    if (period < t.billingStartsAt.toISOString().slice(0, 7)) continue;
+    if (!isBillablePeriod(period, t.billingStartsAt)) continue;
+
     const ent: Entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
     const amountMinor = monthlyPriceMinor(t.plan, ent);
     if (amountMinor <= 0) continue;

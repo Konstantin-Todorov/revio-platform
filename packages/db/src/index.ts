@@ -8,6 +8,7 @@ export {
   type TxOptions,
 } from "./rls.js";
 export { encryptSecret, decryptSecret, keyHint, hasPreviousKey } from "./crypto.js";
+export { markBillable, isBillablePeriod, type BillableReason } from "./billing-start.js";
 export { checkHealth, type HealthResult, type HealthState } from "./health.js";
 export {
   recordAppError, listAppErrors, countOpenAppErrors, resolveAppError, pruneAppErrors,
