@@ -67,10 +67,25 @@ jobs:
           echo "::notice::production now at $SHA"
 
       - name: Say what was promoted
+        # Through the ENVIRONMENT, never interpolated into the script.
+        #
+        # `${{ }}` substitution happens before bash parses the line, so a commit message containing
+        # an apostrophe — "it can't oversell" — closes the quote and the step dies with "unexpected
+        # EOF". The promotion had already succeeded; only this cosmetic step failed, which is worse
+        # than it sounds: a red "Promote to production" reads as a deploy that did not happen.
+        #
+        # Exactly the bug the uptime workflow had, for exactly the same reason.
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          MSG: ${{ github.event.workflow_run.head_commit.message }}
         run: |
-          echo "### Promoted to production" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`${{ github.event.workflow_run.head_sha }}\` — ${{ github.event.workflow_run.head_commit.message }}" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Promoted to production"
+            echo ""
+            echo "\`$SHA\`"
+            echo ""
+            echo "$MSG" | head -1
+          } >> "$GITHUB_STEP_SUMMARY"
 
   blocked:
     # Not a failure of this workflow — a deliberate, visible refusal to deploy.
