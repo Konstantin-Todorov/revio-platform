@@ -21,6 +21,14 @@ Status: ☐ open · ◐ in progress · ☑ done
 
 ## B. Channex sync
 
+- ☑ **B0** A rate plan maps **per room type**. Channex ties a plan to one room type; we model plans at
+  property level, so a hotel with 3 room types and 1 plan pushed all three at the same Channex rate
+  plan — last write wins, two room types silently mispriced on every OTA, Sync Center green. Found by
+  checking a real property's shape rather than the certification property's, which was hand-built
+  2×4 and is the one arrangement where this cannot go wrong.
+- ☑ **B4** `channex:onboard` — one command from signed hotel to connected: key stored encrypted,
+  Channex property, room types and rate plans built from our data, every mapping written, with
+  `--dry-run` and an undo. Refuses to run against a demo tenant.
 - ☑ **B1** Parse `meta.warnings` — Channex rejects values inside an HTTP 200. Verified live, fixed,
   deployed. *(CRS §6.7a / CM L7)*
 - ☐ **B2** Rate value convention: integer minor units everywhere, never a decimal string. *(§6.7a)*
@@ -206,7 +214,7 @@ Full copy replacement, in page order. Repo: `revio-websites`.
 
 - ☐ **I1** Homepage — hero, three products, why composable, built right, the part nobody can copy,
   why Revio (eight), what you're choosing between, pricing, four promises, FAQ, closing, footer.
-- ☐ **I2** Product pages ×4 — ~95% keep; apply only the listed changes. "Live today" → **"Live in
+- ☑ **I2** Product pages ×4 — ~95% keep; apply only the listed changes. "Live today" → **"Live in
   production"** on every eyebrow.
 - ☐ **I3** About — full reframe. Kill the underdog framing; lead with strength.
 - ☐ **I4** Security — keep 90%; fix "What we don't have yet".
@@ -214,13 +222,15 @@ Full copy replacement, in page order. Repo: `revio-websites`.
 - ☐ **I6** How it works.
 - ☐ **I7** Meta / SEO / social.
 - ☐ **I8** Every "why us" claim ends in a labelled **Proof —** line.
-- ☐ **I9** Company block — **post code 7002**, and the legal name in both scripts (A1).
+- ☑ **I9** Company block — **post code 7002**, and the legal name in both scripts (A1).
 
 ### ⚠️ Copy that makes a promise the software does not keep
-- ☐ **I10** *"Free until your first booking syncs."* **Decision: BUILD it.** Record the first
-  successful booking sync per property → set `billingStartDate` → suppress invoicing before it. A
-  property that never gets a first booking stays free, which is correct. **Blocks I1** — the promise
-  must not be published while billing ignores it. Interim line if the page ships first: *"Free setup
-  — we don't start billing until you're live."*
+- ☑ **I10** *"Free until your first booking syncs."* **Built.** `Tenant.billingStartsAt`, null until
+  earned. **Two paths, because the refund policy has two**: with channel management, the first synced
+  booking; without it, setup completion — the first version had only the first path and would have
+  left every CRS-only and PMS-only client free forever. The rule lives once in `markBillable`;
+  `isBillablePeriod` is shared with the invoice generator so the two halves cannot drift. The copy
+  said "the first successful push", which is us sending rates OUT and proves nothing — corrected.
+  **No longer blocks I1.**
 - ☑ *"Per property, excluding VAT"* — confirms the VAT-exclusive reading already implemented.
 - ☑ Pricing table matches `pricing.ts` exactly: €0/€50/€150/€300, €49/€59/€69, 10%/20%, 2%.
