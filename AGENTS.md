@@ -1,227 +1,122 @@
-# Revio — Hotel Software Platform
+# Working on this repo as an agent
 
-Revio is a **composable line of hotel software products** that share one core. Each product is
-sold and used independently, but they run on a single shared inventory engine so a hotel can buy
-one today and add the others later with zero migration.
+**Read `CLAUDE.md` first — it is the architecture and the product.** This file is the operational
+half: the rules that cause real damage when broken, and how two agents share one repo without
+standing on each other.
 
-This file is the **big picture**. Every folder below has its own `AGENTS.md` that narrows scope to
-that module. When you work inside a module, Codex loads **this file + that module's file**, so
-each module "knows it belongs to something bigger" while keeping its own boundaries. Read the local
-`AGENTS.md` before changing anything in a module.
+Applies to every agent (Codex, Claude Code, anything else). One set of rules, one place.
 
-## The products
+---
 
-The **platform brand is Revio**; each product has a market name. Engineering paths stay descriptive
-(`@revio/core`, `apps/channel-manager`) — product names live in the UI and docs, not deep code paths.
+## 1 · The eight things that will actually hurt
 
-| App (folder) | Product name | What it does | Sold to |
-| --- | --- | --- | --- |
-| `apps/channel-manager` | **RevioLink** | Push availability/rates/restrictions to OTAs, pull bookings back, keep them in sync. **First product, the demo, the priority sale.** | A hotel that already has a PMS |
-| `apps/reservation` | **RevioCRS** | Reservations, rates & restrictions, guests, analytics. The system of record for every booking, from any source. | A small property with no OTA needs |
-| `apps/pms` | **RevioPMS** | Front desk, housekeeping, folios & invoicing, outlets, maintenance. | An operations layer over a foreign system |
-| `apps/booking` | **RevioDirect** | The hotel's **own** booking page — the only public, unauthenticated surface. Configured from RevioCRS, not sold on its own. | An existing customer's guests |
-| `apps/operator` | **Revio Operator** | **Our** admin console: all hotels, billing, integration keys, entitlements, sync health. | Internal (the SaaS operator) |
+Each of these has already gone wrong here at least once. They are not style preferences.
 
-## The one rule that governs everything
+**RLS — `forSystem()` in a user-facing request is a data breach.**
+`forTenant(id)` scopes every query to one hotel; `forSystem()` bypasses it and exists for the
+operator console, jobs, and resolving a public booking slug. Choosing between them **is** the
+security decision, so it belongs at the top of a request, never buried in a data helper. RLS is
+enforced in production — every service connects as a restricted role that cannot bypass it.
 
-**There is a single source of truth for availability**, and it lives in `packages/core`. The whole
-reason the Channel Manager exists is to stop two guests booking the same room. If products kept their
-own copies of inventory, we would recreate that exact double-booking problem *inside our own
-platform*. So:
+**Taking inventory is a claim, never a check-then-write.**
+```ts
+// NEVER. Two guests clicking the last room in the same second both pass.
+const remaining = await remainingByNight(...)
+if (remaining < qty) return "sold out"
+await prisma.hold.create(...)
+```
+Use `claimHold()` in `@revio/db`. Compute the waterfall for the *message*, claim for the *room*.
+`pnpm --filter @revio/db claim-verify` proves the primitive; `engine-race` proves the booking path.
 
-- **One database. One inventory core.** Every app reads and writes inventory **only** through
-  `@revio/core` — never with their own ad-hoc queries against inventory tables.
-- Apps **never import another app's internals.** Apps depend on `packages/*`, not on each other.
-- "Sold separately" is a **licensing** decision, not a code-separation decision — see Entitlements.
+**Money is integer minor units + an ISO currency code.** Never a float, anywhere.
 
-## How products are sold separately: Entitlements
+**No card numbers and no image bytes in Postgres.** Cards: gateway token + brand + last4 only, via
+`@revio/payments`. Images: keys only, bytes in object storage via `@revio/storage`.
 
-A hotel account has **entitlements** (which modules it bought). The same login shows only the apps the
-hotel is entitled to. Buying another product later just flips an entitlement — the data is already
-shared. This is our edge over all-in-one suites (Mews/Cloudbeds) and pure channel managers
-(SiteMinder): land with CM, expand into CRS/PMS without re-onboarding.
+**Multi-step writes need `withTenantTransaction`.** Every op through `forTenant()` is its own
+transaction, so sequential `await`s commit partially. Anything all-or-nothing must be wrapped.
 
-Three tenant entitlements exist — `hasChannelManager` · `hasReservation` · `hasPms`. **RevioDirect is
-deliberately not one of them:** it is switched on per *property* (`Property.bookingEngineEnabled`),
-because a chain can sell one hotel direct and not another, and because the booking page is a surface
-of the hotel's own CRS rather than a product with its own login.
+**Never import `node:crypto` into the `@revio/db` barrel.** `instrumentation.ts` is bundled for the
+edge runtime and webpack follows the dynamic import, so it breaks the operator build. A
+`NEXT_RUNTIME` guard does not help. Use the `@revio/db/errors` subpath. This broke the build twice.
 
-## Multi-tenancy & isolation
+**Never interpolate `${{ }}` into a shell script in a GitHub workflow.** A commit message containing
+an apostrophe closes the quote and the step dies. Pass through `env:`. This broke twice, in two
+repos, the same way.
 
-- Shared Postgres with **Row-Level Security**: every tenant-owned row carries `tenant_id`; the DB
-  physically refuses to return another tenant's rows even if app code has a bug.
-- Two perimeters: **Operator** (sees all hotels — operator console only) vs **Hotel** (sees only its
-  own data and only purchased modules). Operator business data (contracts, billing, OTA tokens) lives
-  in an admin schema the hotel can never read.
-- Integration tokens are encrypted at rest and never exposed to a hotel.
+**Prisma doc comments are `///`, not `/** */`.** The schema will not parse otherwise.
 
-## Connectivity is behind an adapter — demo runs on a mock
+## 2 · Two Channex traps that pass every test and still lose money
 
-Every channel (Booking.com, Expedia, …) is reached through one `ChannelAdapter` interface in
-`packages/core`. A `MockChannelAdapter` implements the same interface, so the **entire ARI loop runs
-live on seeded demo data** before we hold any real OTA certification. When real OTA / Channex access
-arrives, we swap the adapter — nothing else changes. **Build and demo against the mock first.**
+**A Channex rate plan belongs to ONE room type.** We model plans at property level. A hotel with 3
+room types and one "Standard Rate" needs **three** Channex rate plans — send one and the last write
+wins, two room types are mispriced on every OTA, and the Sync Center is green because every call
+succeeded. `ChannelRatePlanMapping` is keyed by `(channel, plan, roomType)` for this reason.
 
-## The ARI loop (the product, in one line)
+**A Channex `HTTP 200 "Success"` can be a rejection.** The refusal is inside `meta.warnings`.
+Verified live on production, twice. `extractWarnings` handles it — never add a Channex call that
+ignores the warnings array.
 
-`edit → derive → push → book → pull → re-push`. Everything in the Channel Manager either configures
-this loop (Rooms & Rates, Restrictions, Channels, Mapping) or monitors it (Dashboard, Sync Center,
-Error Center, Audit Log). See `apps/channel-manager/AGENTS.md` and `docs/`.
+## 3 · Deploying — the gate is the point
 
-## Tech stack
+`main` is where work lands and where CI runs. **`production` is fast-forwarded to `main` only when
+CI has gone green on that exact commit**, and Railway watches `production`. A red CI simply leaves
+production where it is.
 
-- **TypeScript end-to-end.** Shared domain types live in `packages/core` and are imported by every app.
-- **Next.js (App Router)** for the apps; for the demo the API lives in Next route handlers calling
-  `@revio/core` (modular monolith). Extractable to a standalone service later without rewriting domain logic.
-- **Postgres + Prisma** (RLS enabled). **Redis + BullMQ** for the sync queue (in-process for the demo,
-  externalized later).
-- **Tailwind** + design tokens in `packages/ui` (derived from the Atlas direction — see `design/`).
-- Package scope: `@revio/*`. Node ≥ 20, pnpm workspaces.
+- **Never push to `production` directly.** It is not protected; it is trusted.
+- A push that supersedes an in-flight CI cancels it (`cancel-in-progress`). If two pushes land close
+  together the first one's CI never finishes — which is fine, but **check that the promote actually
+  fired** before telling anyone a change is live. It has been missed once.
+- Before claiming something is deployed: `git fetch && git rev-parse origin/production` and compare.
 
-## Layout
+## 4 · Before you commit
 
 ```
-apps/        channel-manager · reservation · pms · operator · booking   (each with its own AGENTS.md)
-packages/    core (domain + inventory + rates + restrictions + adapters) · db · ui (tokens)
-             connectivity (Channex + push/pull orchestration) · booking (public guest domain)
-             email (templates → transport) · payments (the only card path) · storage (uploaded media)
-docs/        spec & architecture (questionnaire answers, CM developer reference, architecture analysis)
-design/      Atlas/Haven/Pulse handoff prototypes + Revio brand
+pnpm -r typecheck && pnpm -r test && pnpm -r lint && pnpm -r build
 ```
+All four, all green. Builds are memory-hungry — if `pnpm -r build` is OOM-killed (exit 137), build
+the five apps one at a time.
 
-The five non-`core` packages all exist for the same reason: **two apps needed the same thing, and an
-app may never import another app's internals.** Each was extracted at the moment a second caller
-appeared — never speculatively.
+Commit messages here explain **why**, in prose, and name what was wrong before. They are the design
+record; a one-line "fix bug" loses information nothing else captures.
 
-## Conventions
+Commit and push **only when the work is done and verified**. Never `--force`.
 
-- Money is integer **minor units** (cents) + an ISO currency code — never floats.
-- Dates for inventory are calendar dates (`YYYY-MM-DD`), timezone-resolved at the property.
-- Domain logic is **pure and tested** in `packages/core`; apps stay thin (UI + wiring).
-- Don't widen a product's scope past what its `AGENTS.md` says is in V1.
+## 5 · Two agents, one repo
 
-## Deployment
+Neither agent can see the other's session. The repo is the only channel, so:
 
-- **Repo:** https://github.com/Konstantin-Todorov/revio-platform (branch `main`).
-- **Live — RevioLink (CM):** https://cm.reviosoft.app
-- **Live — Operator Console:** https://operator.reviosoft.app
-- **Live — RevioCRS:** https://crs.reviosoft.app
-- **Live — RevioPMS:** https://pms.reviosoft.app
-- **NOT deployed — RevioDirect:** local only (`localhost:3004`) until phase K9. It needs its own
-  service, a `book.revio.app` domain and an object-storage bucket (`DEPLOY.md` → Object storage);
-  until then room photos are served from local disk, which does not survive a container restart.
-- **Railway project:** `revio-platform` — one Postgres shared by all services; each app is its own web
-  service. **Each service defines its own build/start via Railway config** (NOT a root `railway.json` —
-  that applied to every service and was removed): build = Nixpacks `pnpm install → db:generate → next
-  build` for its own `--filter`; start = `prisma migrate deploy` → `next start` on `$PORT`.
-- **Auto-deploy:** both services track `main` — **every `git push` builds and deploys both
-  automatically.** Migrations run on each deploy; the DB is never reset.
-- **Adding an app** (CRS/PMS): `railway add --service <name>`, set `DATABASE_URL=${{Postgres.DATABASE_URL}}`,
-  patch its build/start to its own `--filter`, set source repo. See `DEPLOY.md`.
-- Local: `pnpm --filter @revio/<app> dev`. Seed/inspect the remote DB from this machine via
-  Postgres's `DATABASE_PUBLIC_URL` (the internal `DATABASE_URL` isn't reachable off-Railway).
+**`docs/WORK-LOG.md` is the shared board.** Before starting anything non-trivial, append a claim.
+When you finish, mark it done. Read it before you start — it is how you find out the other agent is
+already three commits into the thing you were about to build.
 
-## Auth (live)
+**Pull before you start and before you push.** `git pull --rebase origin main`.
 
-Self-hosted email + password (bcryptjs) + signed JWT session cookies (jose). `getSession()` /
-`getOperatorSession()` now resolve **real** identity; `middleware.ts` gates by cookie; `/login` lives in
-each app outside the `(protected)` route group. CM cookie `revio_session`, operator `revio_op_session`,
-CRS `revio_crs_session`.
-`AUTH_SECRET` is set per Railway service. **Demo logins (password `revio1234`):** RevioLink + RevioCRS →
-`admin@hotelsofia.demo` or `owner@blacksea.demo`; Operator → `operator@revio.app`.
+**Prefer small, complete commits over long branches.** Two agents rebasing week-old work onto each
+other is where the real conflicts come from.
 
-**RevioDirect has no auth and no session** — it is the public surface, so it has no tenant context
-until a slug resolves. That inversion is why it gets its own app and its own rules; see
-`apps/booking/AGENTS.md` before touching anything in it.
+**Stay out of a file another agent has claimed** unless the log says they are done. If you must
+touch it, say so in the log entry.
 
-## Status
+**Do not silently reverse a decision.** The comments in this codebase state *why* something is the
+way it is, at length and on purpose. If a comment explains a choice and you think it is wrong, say
+so in the commit message and in the log — do not just change it. Several of those comments are
+load-bearing (see §1 and §2).
 
-RevioLink + Operator Console are **built, tested, live, and behind login** with GitHub auto-deploy.
-**RevioCRS V1 is COMPLETE — all 5 phases shipped 2026-07-03**: availability waterfall + metrics formula
-sheet + ChannelManagerConnector in `@revio/core` (CM pushes subtract OOO/closures/holds and apply
-property-default restrictions), full CRS data model + RLS, `apps/reservation` (port 3002) with Dashboard
-(metrics/Action Center/Forecast) / Reservations (Availability Search → instant Hold → confirm,
-modify/cancel/no-show) / Guests / Inventory Calendar / Rates & Restrictions (4-level priority,
-source-scoped rules) / Reports+CSV / Global Search / Distribution / Settings (permissions matrix,
-taxes & fees), pickup-snapshot + hold-expiry jobs (see `apps/reservation/AGENTS.md`).
-Operator onboards clients; **clients self-manage staff (roles) + properties** from RevioLink Settings.
-Both apps now have a **responsive (mobile) shell**; **RLS** is built + verified locally (prod = Phase 2,
-`DEPLOY.md`); and the **Channex adapter is built + live-verified against the sandbox** (`@revio/connectivity`,
-not yet wired into the app). **RevioPMS V1 is COMPLETE — all 5 phases built, tested, live** (founder-confirmed
-spec `docs/PMS-REFERENCE.md`): `apps/pms` (port 3003, cookie `revio_pms_session`, `hasPms` gate) at
-https://pms.reviosoft.app — the physical **Unit** model + housekeeping board (Phase 1),
-Front Desk check-in/out/room-move/walk-in (Phase 2), Folio & Billing with labels-only payments + a
-check-out balance gate (Phase 3), Minibar/POS catalog + tap-to-post (Phase 4), Maintenance + manual
-Close Day night-audit (Phase 5). The one cross-product write: a Unit going out-of-order (from housekeeping
-or maintenance) → a `RoomInventoryPeriod` → the shared availability waterfall. **All four products
-(RevioLink · Operator · RevioCRS · RevioPMS) are now built and live.** **Cross-product Channex auto-push
-is live**: the push/pull orchestration moved into `@revio/connectivity` (`sync.ts`, parameterized by a
-tenant-scoped Prisma proxy), so a CRS booking or a PMS walk-in/OOO **immediately** pushes updated ARI to
-Channex (verified on prod: a PMS OOO and a CRS save each produced a Channex task `success:true`). The
-**Operator console is complete** (Overview · Clients · Connectivity · Platform Health · Settings · Billing
-— billing UI + `Invoice` model with operator-only RLS, **payments mocked**). **Entitlement gating verified**
-across one/some/all product combos. Marketing/positioning copy for the future product websites is drafted
-in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. See `BUILD-PLAN.md` for
-the phased order, `ARCHITECTURE.md` for rationale,
-`ACCESS-MODEL.md` for the access model, and `DEPLOY.md` for the deploy runbook.
+**Founder decisions are recorded, not re-litigated:** `docs/SPEC-08-DECISIONS.md` and
+`docs/SPEC-08-TRACKER.md`. Check them before proposing something that sounds new.
 
-**→ ✅ V2 PLATFORM OVERHAUL COMPLETE (founder specs 2026-07-09, `docs/specs/`) — all phases A–F shipped,
-tested, live.** Governed by six specs: `HIERARCHY.md`, `CM-GUIDE-V2.md` + `CM-UPDATES-V1.md` (RevioLink),
-`CRS-GUIDE-V1.md` (RevioCRS — **two-tier precedence replaced the 4-level priority**), `PMS-GUIDE-V1.md`
-(RevioPMS), `BOOKING-ENGINE-ADDENDUM.md` (build deferred; its three seams built). Delivered in order
-**A foundations → B RevioLink → C RevioCRS → D/E RevioPMS → F assignment + gateway/compliance seams**
-(tasks A0–F3). Headline additions: two-tier ARI precedence + push attribution + per-channel capability
-map; CRS Analytics + STLY-364 + portfolio scope; PMS Reservation view / Guests / User Management /
-Configuration, housekeeping smart-routing + inspection gate + scoped roles; the **charge-posting service**
-(every folio line, outlet+tax tagged), split folios, **deposits-as-liability**, stay extras + city-tax
-suppression, a jurisdiction-agnostic **Invoicing module** (gapless series, tax-per-rate), night-audit
-report, room-assignment suggestions. **THREE integration boundaries, all mock-first with a real path:**
-Channex (distribution) · **Stripe test-mode** (payments §4.5, F2 — TEST keys on Railway, never live) ·
-**fiscalization** (§4.7, F3 — `TaxInvoice.fiscalRef` + jurisdiction pack; `docs/specs/BG-FISCALIZATION-
-RESEARCH.md`). Real email (Resend) is wired (mock-log until `RESEND_API_KEY` set). Every screen's **Keep**
-list was honoured. Older `docs/CM-REVISIONS.md` (2026-06-27) is superseded where the specs overlap it.
+## 6 · Live customer rules
 
-**→ 🟡 REVIODIRECT (phase K) — K1–K4 SHIPPED, local only, 2026-07-27→30.** The fifth app, `apps/booking`
-(port 3004), governed by `docs/specs/BOOKING-ENGINE-DESIGN.md` + the founder's `BOOKING-ENGINE-ADDENDUM.md`.
-**A guest can now book end to end**: `search → choose a room → hold + details + card guarantee → confirmed`,
-writing the one shared reservation tagged `source = Direct` — so it lands in RevioCRS and on the RevioPMS
-front desk with no integration step. That is the product's structural claim, and it is now demonstrated
-rather than argued. Shipped: **all-in pricing** (K2 — one `computeStayCharges` used by the quote, the
-summary, the confirmation, the email and the folio, so the first number a guest sees is the number they
-pay); a **UX/UI overhaul** (K2b — two-month range calendar, pinned search bar, four-step progress, mobile
-first); **room photos** (K3 — `RoomTypePhoto` + `@revio/storage`, bytes in object storage and never in
-Postgres, `sharp` re-encode to WebP); **hold-on-open + the card guarantee** (K4 — a SetupIntent through
-`@revio/payments`, no card fields anywhere, token + last4 only). Sold-out dates return **real** alternative
-stays, re-quoted from the same availability engine. Branding is configured in **RevioCRS → Booking Engine**
-(base preset, then edits; every `booking*` column nullable = inherit the email branding) and every derived
-brand colour is **measured** to 4.5:1 rather than assumed — `apps/booking/lib/brand.test.ts` pins that
-across twelve awkward hotel colours. Four shared packages came out of this work, each at the moment a
-second caller appeared: `@revio/booking` · `@revio/email` · `@revio/payments` · `@revio/storage`.
-**Still open:** K5 Stripe Connect onboarding + request-to-book fallback · K6 returning-guest recognition ·
-K7 CRS distribution settings · K8 direct-vs-OTA analytics incl. commission saved · K9 deploy. **Not built
-and deliberately so:** real card collection (needs Stripe Elements + a live-mode decision), extras/upsell
-(the step-3 slot exists and is empty), and any Operator visibility into the booking engine.
+There is a real property being onboarded. Treat production as production.
 
-**→ 🔜 REFINEMENT ROUND intake (founder docs 2026-07-20, `docs/specs/`) — NOT yet built; plan pending
-founder sign-off.** **THREE systems, three docs** (one doc per system; the `Revio Development Docs.docx`
-title reads "RevioCRS" but that's a **typo — it's the RevioLink/CM doc**, founder-confirmed; the founder is
-re-sending the corrected file). **RevioLink R1** (`CM-REFINEMENT-R1.md`) + **RevioCRS R2**
-(`CRS-REFINEMENT-R2.md`) + **RevioPMS R1** (`PMS-REFINEMENT-R1.md`). CM + CRS **share** the Calendar / Bulk
-/ Rooms & Rates changes — build them **once as shared components, reused across both** (paperclip=derived,
-one bulk engine, one preview→apply→result modal everywhere). **RevioLink** asks: Dashboard Reservation-
-Summary card (by action date); Calendar bulk-in-modal-over-calendar + remove derived filter + paperclip +
-hide search; Bulk **multi-field editor + confirm-then-result modal** + rename "Restriction Rules"→"Your
-active restriction rules"; Rooms & Rates vertical restack + **editable Rate Plan Linkage** (cycle/recalc/
-precedence guardrails). **RevioCRS** adds on top: Dashboard YoY/LW toggle w/ basis labels; **Analytics full
-redesign** (summary cards + evolution bar charts + performance-by-room-type, replacing the day table);
-Reservations 3-click column sort; Guests **Notes** tab; Settings low-availability alert + staff CRUD on the
-shared identity (+ the shared Calendar/Bulk/linkage changes). **RevioPMS** (10 screens): Front Desk
-exception-strip + overdue/extend-checkout + FD-metric KPIs; Reservation-view action hub; **Guests
-identity/merge + n≥2 preference guard + GDPR/blacklist**; Folios **Open/History split** + mandatory-deposit
-check-in gate + checkout-readiness; **Extras & Charges** rename + void/qty + real catalog; Housekeeping
-**role-scoped views** + Dirty→In progress→Awaiting inspection→Ready pipeline + per-cleaner assignment +
-**clock-in** + event-stream analytics; Rooms beds/occupancy + floor-as-object + bulk-edit; Maintenance crew
-view + On-hold + **OOO↔revenue loop**; **Configuration expansion** (E7 already shipped a base — §9 is the
-target); **Staff & Access Management** rename + workforce roster + clock-in + user security. **Two pending
-founder items:** PMS **§11 Close Day** section ("will add later today") and the re-sent corrected RevioLink
-doc. Task phases **G (RevioLink R1)** + **H (RevioCRS R2)** + **J (RevioPMS R1)** to be created on sign-off.
+- **Stripe is TEST-mode only.** Never a live key.
+- **Payments are mocked.** Do not wire a real gateway without an explicit decision.
+- **Demo tenants (`Tenant.isDemo`) stay out of money and portfolio metrics** and must never be
+  pointed at a real Channex property. Operations and health metrics *do* include them.
+- **Back up before any migration.** `docs/RESTORE.md`.
+- **Channex bills per property with an active channel.** Creating properties, rooms, rates and
+  pushing ARI are all free; activating a channel is not. Rehearse with `--sandbox`.
+- **Fiscalization: we do not fiscalize, deliberately and permanently.** Driving a hotel's fiscal
+  device makes our software СУПТО under Наредба Н-18 and lands the obligations on the *hotel*. See
+  `docs/specs/BG-FISCALIZATION-RESEARCH.md` before touching anything invoice-related.
