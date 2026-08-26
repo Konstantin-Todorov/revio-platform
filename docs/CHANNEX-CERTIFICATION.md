@@ -13,12 +13,39 @@
 > `GET /api/v1/properties` → HTTP 200. **A Channex key is shown once**; if it is lost, withdraw it and
 > create another — that costs nothing.
 >
-> ### ⚠️ Still to do — the key is not yet stored in the platform
+> ### ✅ Where the key lives — done 2026-08-26
 >
-> Preferred: **Operator console → Connectivity → Channex production** for the tenant, which encrypts
-> it at rest per tenant (`ConnectivityCredential`, `operator_only` RLS).
-> Fallback: `CHANNEX_PROD_KEY` on the `channel-manager`, `reservation` and `pms` services — those are
-> the three that push ARI. The `jobs` service does not need it; it only calls their HTTP endpoints.
+> **Two places, and they are not alternatives — they are a lookup order.** `channexKey()` in
+> `packages/connectivity/src/sync.ts` reads the per-tenant credential first and falls back to the
+> environment:
+>
+> | | What it is | Set where |
+> | --- | --- | --- |
+> | **Per-tenant** | `ConnectivityCredential`, encrypted, one row per (tenant, mode) | Operator → Connectivity |
+> | **Fallback** | `CHANNEX_PROD_KEY` env var | Railway, on the three pushing services |
+>
+> The per-tenant row is the right answer once a hotel exists — each client's own Channex account,
+> revocable on its own. The env fallback is what makes everything work **before** that, and what
+> catches a hotel whose credential has not been entered yet.
+>
+> **Which services need what:**
+>
+> | Service | `CONNECTIVITY_SECRET` | `CHANNEX_PROD_KEY` | Why |
+> | --- | --- | --- | --- |
+> | channel-manager · reservation · pms | ✅ | ✅ | all three push ARI, so all three decrypt and all three need the fallback |
+> | operator | ✅ | — | it **writes** credentials, so it must encrypt; it never pushes |
+> | jobs | — | — | it only calls the others' HTTP endpoints |
+>
+> ⚠️ **`CONNECTIVITY_SECRET` must be byte-identical everywhere.** A credential encrypted by the
+> operator and read by the PMS is the same ciphertext and the same key; a different value on one
+> service means that service silently cannot read any stored credential. `reservation` and `pms` are
+> set by Railway reference (`${{channel-manager.CONNECTIVITY_SECRET}}`) rather than a pasted copy,
+> so they cannot drift apart.
+>
+> **This was found by asking why a key saved in the Operator console never appeared in the database.**
+> The console was fine. `reservation` and `pms` had no `CONNECTIVITY_SECRET` at all — so a CRS booking
+> or a PMS out-of-order would have failed to decrypt the credential, fallen through to an unset env
+> var, and pushed nothing. The first real hotel would have found that, not us.
 >
 > ### No webhooks — deliberately
 >
