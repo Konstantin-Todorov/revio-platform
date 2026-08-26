@@ -1108,6 +1108,12 @@ model Guest {
   firstName         String
   lastName          String
   email             String?
+  /// True when `email` is an OTA forwarding address (abc@guest.booking.com) rather than the guest's
+  /// own. It works while the booking is live and stops afterwards, so it is fine for messaging and is
+  /// not identity — no screen may present it as the guest's address, and it must never reach a
+  /// marketing list. Set when the address is first learned, not derived on read: the domain list
+  /// changes, and a stored fact should not change with it.
+  emailIsOtaAlias   Boolean  @default(false)
   phone             String?
   company           String?
   specialRequests   String? // free text

@@ -7,6 +7,7 @@ import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/component
 import { money } from "@/lib/format";
 import { sampleLabel, hasPattern } from "@revio/core";
 import { CalendarPlus } from "lucide-react";
+import { OTA_ALIAS_NOTE } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,17 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
           <input type="hidden" name="id" value={guest.id} />
           <div><label className={labelCls}>First name</label><input name="firstName" defaultValue={guest.firstName} className={inputCls} /></div>
           <div><label className={labelCls}>Last name</label><input name="lastName" defaultValue={guest.lastName} className={inputCls} /></div>
-          <div><label className={labelCls}>Email</label><input type="email" name="email" defaultValue={guest.email ?? ""} className={inputCls} /></div>
+          <div>
+            <label className={labelCls}>Email</label>
+            <input type="email" name="email" defaultValue={guest.email ?? ""} className={inputCls} />
+            {/*
+              F4 rule 3. Without this line the address looks like the guest's own, and a hotel emails
+              a relay that stopped forwarding when the booking closed — believing it reached someone.
+            */}
+            {guest.emailIsOtaAlias && (
+              <p className="mt-1 text-[11.5px] leading-relaxed text-warning-600">{OTA_ALIAS_NOTE}</p>
+            )}
+          </div>
           <div><label className={labelCls}>Phone</label><input name="phone" defaultValue={guest.phone ?? ""} className={inputCls} /></div>
           <div><label className={labelCls}>Company</label><input name="company" defaultValue={guest.company ?? ""} className={inputCls} /></div>
           <div><label className={labelCls}>Special requests</label><input name="specialRequests" defaultValue={guest.specialRequests ?? ""} className={inputCls} /></div>

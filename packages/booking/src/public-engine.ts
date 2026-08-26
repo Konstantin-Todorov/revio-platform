@@ -14,7 +14,8 @@
 import { claimHold, type forTenant } from "@revio/db";
 import {
   computeStayCharges, computeWaterfall, deriveRate, expandInventoryPeriods, extrasTotalMinor,
-  isAdvancePurchaseClosed, recogniseGuest, resolveChosenExtras, resolveRestriction, type SellableExtra,
+  hasChanges, hydrateGuestContact, isAdvancePurchaseClosed, isOtaAliasEmail, recogniseGuest,
+  resolveChosenExtras, resolveRestriction, type SellableExtra,
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
 } from "@revio/core";
 import { syncRealChannels, stayScope } from "@revio/connectivity";
@@ -502,8 +503,30 @@ export async function publicCreateReservation(
         tenantId: property.tenantId, propertyId: property.id,
         firstName: p.guest.firstName.trim(), lastName: p.guest.lastName.trim(),
         email, phone: p.guest.phone?.trim() || null,
+        emailIsOtaAlias: isOtaAliasEmail(email),
       },
     }));
+
+  /*
+   * F4 (§4.5) — fill in what the profile is missing from what this booking supplied.
+   *
+   * Matching by email short-circuited to the existing row, so everything else the guest typed was
+   * discarded: someone who has stayed twice could have entered their phone number both times and
+   * still have a blank phone on file. Enrich empty, never overwrite — a value already there was
+   * confirmed by a person and outranks anything derived, which is what makes this safe to run on
+   * every booking without a human deciding.
+   *
+   * Skipped entirely when nothing moved, so a fourth stay with identical details produces no write.
+   */
+  if (survivor) {
+    const patch = hydrateGuestContact(
+      { email: survivor.email, phone: survivor.phone, company: survivor.company },
+      { email, phone: p.guest.phone ?? null },
+    );
+    if (hasChanges(patch)) {
+      await db.guest.update({ where: { id: survivor.id }, data: patch });
+    }
+  }
 
   /*
    * Prior stays, counted BEFORE this booking is written so the current one cannot count itself.

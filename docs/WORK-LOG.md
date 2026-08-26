@@ -18,6 +18,16 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-08-26 · Claude · DONE · CRS F4 — guest contact hydration
+**Enrich-empty / never-overwrite / tag-OTA. `packages/core/src/guests/contact-hydration.ts`, 16 tests.**
+Files: `packages/core/src/guests/contact-hydration.ts`, `packages/booking/src/public-engine.ts`,
+`apps/reservation/app/(protected)/guests/[id]/page.tsx`, `Guest.emailIsOtaAlias` (migration `20260826140000`)
+Notes: the spec said hydrate "from the most recent linked reservation" — **`Reservation` has no
+contact fields**, so the source is the booking being made. The bug it fixes: matching a returning
+guest by email short-circuited and threw away the phone they had just typed. Never-overwrite is what
+makes it safe to run unattended; do not relax it. OTA relay domains are a fixed list, not a
+heuristic — a false positive tells a hotel a real address is fake.
+
 ### 2026-08-26 · Claude · DONE · coordination
 **`AGENTS.md` + this log, so two agents can share the repo.**
 Files: `AGENTS.md`, `docs/WORK-LOG.md`

@@ -95,7 +95,14 @@ Status: ☐ open · ◐ in progress · ☑ done
   preferences/privacy, keep an audit trail. Cheap now, painful once duplicates exist.
 - ☑ **F3** *(§4.4)* **Low-sample labels.** "Average stay 3.0 nights" from ONE stay claims a pattern
   that does not exist. Below a threshold say "Last stay", or annotate the sample.
-- ☐ **F4** *(§4.5)* Hydrate contact fields from the most recent linked reservation carrying a value.
+- ☑ **F4** *(§4.5)* Contact hydration — `hydrateGuestContact` in `@revio/core`, 16 tests.
+  Enrich-empty / never-overwrite / tag-OTA, as decided. **The spec said "from the most recent linked
+  reservation", but `Reservation` carries no contact fields** — email and phone live only on `Guest`,
+  so the real source is the booking being made. Wired into `public-engine.ts`, which was matching a
+  returning guest by email and discarding everything else they typed: a guest could enter their phone
+  on two stays and still have a blank phone on file. `Guest.emailIsOtaAlias` is new (migration
+  `20260826140000`) and surfaced on the CRS guest profile — an untagged relay address gets emailed
+  after it has stopped forwarding.
   **Enrich empty · never overwrite · tag OTA-sourced as an alias** — OTA relay addresses are fine for
   messaging and are not ground truth. Powers the F1 prefill.
 - ☐ **F5** *(§4.6)* Do **not** apply the Analytics visual mandate here. No charts on a guest profile.
