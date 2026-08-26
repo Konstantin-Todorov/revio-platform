@@ -212,16 +212,23 @@ The PMS **consumes** the model; it never owns one. Folded into H, built after H1
 
 Full copy replacement, in page order. Repo: `revio-websites`.
 
-- ☐ **I1** Homepage — hero, three products, why composable, built right, the part nobody can copy,
+- ☑ **I1** Homepage — hero, three products, why composable, built right, the part nobody can copy,
   why Revio (eight), what you're choosing between, pricing, four promises, FAQ, closing, footer.
 - ☑ **I2** Product pages ×4 — ~95% keep; apply only the listed changes. "Live today" → **"Live in
   production"** on every eyebrow.
-- ☐ **I3** About — full reframe. Kill the underdog framing; lead with strength.
-- ☐ **I4** Security — keep 90%; fix "What we don't have yet".
-- ☐ **I5** Compare — category-based, no competitor names.
-- ☐ **I6** How it works.
-- ☐ **I7** Meta / SEO / social.
-- ☐ **I8** Every "why us" claim ends in a labelled **Proof —** line.
+- ☑ **I3** About — hero reframed to access + accountability; the deficit column became four
+  advantages with the same trade-offs kept in one honest paragraph beneath. "Five consecutive high
+  seasons" deleted outright.
+- ☑ **I4** Security — all four cards lead with the reason, not scarcity. **The 2FA card was wrong
+  in our own disfavour**: TOTP is live on the operator console (enrolment, challenge, recovery
+  codes, replay refused). Copy now says so, and names hotel-account 2FA as what is actually next.
+- ☑ **I5** Compare — `/compare` compares four approaches; `config/approaches.ts`. The three
+  `/vs/[brand]` pages 301 to it rather than 404.
+- ☑ **I6** How it works — kept the X/✓ migration contrast, condensed the two homepage repeats to a
+  callback and a link, added the `#zero-migration` / `#promises` anchors they point at.
+- ☑ **I7** Meta — homepage description per spec. OG/Twitter cards were already complete.
+- ☑ **I8** All eight `DIFFERENTIATORS` carry a proof line. One was **overclaiming** — "a real
+  Bulgarian fiscalization path" — and is now ЗДДС чл. 114 numbering, which is true and checkable.
 - ☑ **I9** Company block — **post code 7002**, and the legal name in both scripts (A1).
 
 ### ⚠️ Copy that makes a promise the software does not keep
