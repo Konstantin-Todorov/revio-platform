@@ -45,6 +45,10 @@ export {
 } from "./cert-expectations.js";
 export { indexRateMappings, resolveExternalRateId, unmappedPairs, type RatePlanMappingRow, type RateMappingIndex } from "./rate-mapping.js";
 export {
-  CHANNEL_CODES, parseAdapter, toField, visibleFields, defaultSettings, missingRequired,
-  type ChannelAdapterDescriptor, type ChannelField, type ChannelFieldType,
+  CHANNEL_CODES, parseAdapter, toField, visibleFields, visibleFieldsFor, defaultSettings, missingRequired,
+  type ChannelAdapterDescriptor, type ChannelField, type ChannelFieldType, type FieldRule,
 } from "./channex-channels.js";
+export {
+  channexApiConfig, fetchChannelAdapter, testChannelConnection, createChannexChannel, activateChannexChannel,
+  type ChannexApiConfig, type ConnectionTest,
+} from "./channex-channel-api.js";

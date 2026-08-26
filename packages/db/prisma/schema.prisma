@@ -780,6 +780,9 @@ model Channel {
   // channel set to channex_* talks to the real Channex API. externalPropertyId is the Channex Property UUID.
   connectivityMode      String    @default("mock") // mock | channex_sandbox | channex_prod
   externalPropertyId    String?
+  /// The Channex CHANNEL uuid — distinct from externalPropertyId, which says which hotel. Set when a
+  /// channel is created through the API; needed to activate, update or delete it afterwards.
+  externalChannelId     String?
   currency              String    @default("EUR")
   commissionPct         Float     @default(15)
   conversionType        String    @default("none") // none|manual|auto|channel_override

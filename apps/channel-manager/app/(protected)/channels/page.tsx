@@ -3,6 +3,8 @@ import { getChannels } from "@/lib/data";
 import { pullChannelBookings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { ChannelSettingsDialog, AddChannelDialog } from "@/components/channels/ChannelDialogs";
+import { ConnectChannelDialog } from "@/components/channels/ConnectChannelDialog";
+import { CHANNEL_CODES } from "@revio/connectivity";
 import {
   PauseChannelButton, ResumeChannelButton, DisconnectChannelButton, ReconnectChannelButton, FullSyncButton,
 } from "@/components/channels/ChannelActions";
@@ -45,12 +47,31 @@ export default async function ChannelsPage() {
   const active = channels.filter((c) => c.status !== "disconnected");
   const dormant = channels.filter((c) => c.status === "disconnected");
 
+  /*
+   * Which "add a channel" button this hotel gets.
+   *
+   * A property already on Channex gets the real one: it asks Channex what the channel needs, tests
+   * the credentials, and creates a connection that reaches Booking.com. A demo property gets the old
+   * mock dialog, which fabricates external ids so the ARI loop has something to push at.
+   *
+   * The test is a Channex property id rather than an entitlement, because that is the thing the real
+   * flow actually requires — and a hotel mid-onboarding has the entitlement before it has the
+   * property.
+   */
+  const onChannex = channels.some((c) => c.externalPropertyId && c.connectivityMode !== "mock");
+  const connectedCodes = channels.map((c) => c.code);
+  const addButton = onChannex ? (
+    <ConnectChannelDialog channels={CHANNEL_CODES} connectedCodes={connectedCodes} />
+  ) : (
+    <AddChannelDialog connectedCodes={connectedCodes} />
+  );
+
   return (
     <div>
       <PageHeader
         title="Channels"
         subtitle="Connected OTAs, mapping health and per-channel settings"
-        action={<AddChannelDialog connectedCodes={channels.map((c) => c.code)} />}
+        action={addButton}
       />
 
       {channels.length === 0 && (
@@ -64,7 +85,7 @@ export default async function ChannelsPage() {
             work with, then map your room types to their listings.
           </p>
           <div className="mt-4 flex justify-center">
-            <AddChannelDialog connectedCodes={[]} />
+            {addButton}
           </div>
         </Card>
       )}
