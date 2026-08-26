@@ -31,8 +31,8 @@ Status: ☐ open · ◐ in progress · ☑ done
   `--dry-run` and an undo. Refuses to run against a demo tenant.
 - ☑ **B1** Parse `meta.warnings` — Channex rejects values inside an HTTP 200. Verified live, fixed,
   deployed. *(CRS §6.7a / CM L7)*
-- ☐ **B2** Rate value convention: integer minor units everywhere, never a decimal string. *(§6.7a)*
-- ☐ **B3** Reject a rate ≤ 0 before sending rather than learning it from a warning. *(§6.7a)*
+- ☑ **B2** Rate value convention: integer minor units everywhere, never a decimal string. *(§6.7a)*
+- ☑ **B3** Reject a rate ≤ 0 before sending rather than learning it from a warning. *(§6.7a)*
 
 ---
 
@@ -85,7 +85,7 @@ Status: ☐ open · ◐ in progress · ☑ done
 - ☐ **E2** *(§3.3)* Better fix: a two-month **range picker** for arrival→departure.
 - ☑ **E3** *(§3.2)* Known-booking **bypass** — guest-first entry, converging on the same
   hold → details → confirm tail. Search-first stays the default.
-- ☐ **E4** *(§3.2)* Show **rate plans at the shop step**, not only after hold — agents upsell on rate choice.
+- ☑ **E4** *(§3.2)* Show **rate plans at the shop step**, not only after hold — agents upsell on rate choice.
 - ☐ **E5** *(§3.1 build note)* Confirm holds carry a TTL. *(believed already true — verify)*
 
 ## F. RevioCRS — Guests *(§4)*

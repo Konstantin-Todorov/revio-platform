@@ -108,6 +108,18 @@ export function unsupportedReason(u: AriUpdate): string | null {
   if (r.advancePurchaseMin != null || r.advancePurchaseMax != null) {
     return "advance_purchase restriction is not supported by Channex";
   }
+  /*
+   * Channex requires a rate > 0, and rejects a zero or negative one per-object — inside an HTTP 200,
+   * as a warning. We now parse those, so it would surface either way; catching it here surfaces it
+   * BEFORE the call, against the specific cell, and without spending a request to be told.
+   *
+   * A zero rate is also almost never what somebody meant. It reaches here from an empty price field
+   * or an over-enthusiastic percentage decrease, and "the channel refused this" is a better answer
+   * than a room quietly listed at nothing.
+   */
+  if (u.priceMinor != null && u.priceMinor <= 0) {
+    return `rate must be greater than zero (got ${u.priceMinor / 100})`;
+  }
   return null;
 }
 

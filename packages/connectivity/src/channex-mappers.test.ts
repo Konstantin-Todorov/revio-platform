@@ -329,3 +329,33 @@ describe("mergeDateRanges", () => {
     ]);
   });
 });
+
+describe("a rate of zero never leaves the building", () => {
+  const base = (priceMinor: number | undefined) => ({
+    externalRoomId: "r", externalRateId: "p", date: "2027-03-01",
+    currency: "EUR", bookable: 2, restrictions: {},
+    ...(priceMinor !== undefined ? { priceMinor } : {}),
+  });
+
+  it("rejects a zero rate before the request is made", () => {
+    // Channex refuses it per-object inside a 200. We parse those now, so it would surface either
+    // way — but catching it here names the cell and costs no request.
+    expect(unsupportedReason(base(0))).toMatch(/greater than zero/);
+  });
+
+  it("rejects a negative rate", () => {
+    // Reachable from an over-enthusiastic percentage decrease.
+    expect(unsupportedReason(base(-500))).toMatch(/greater than zero/);
+  });
+
+  it("allows any positive rate", () => {
+    expect(unsupportedReason(base(1))).toBeNull();
+    expect(unsupportedReason(base(12000))).toBeNull();
+  });
+
+  it("leaves an availability-only update alone", () => {
+    // No price on the update is not a price of zero — a stop-sell or a rooms-to-sell edit carries
+    // no rate at all and must not be rejected for it.
+    expect(unsupportedReason(base(undefined))).toBeNull();
+  });
+});

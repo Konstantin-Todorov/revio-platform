@@ -410,12 +410,39 @@ export async function searchAvailability(q: StaySearch) {
   const property = await getProperty();
   const roomTypes = await prisma.roomType.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" } });
   const standard = await prisma.ratePlan.findFirst({ where: { propertyId: property.id, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } });
+  /*
+   * §3.2 — every plan, priced, at the shop step.
+   *
+   * The step showed one number, "from €X (Standard Rate)", so an agent on the phone could not offer
+   * Non-Refundable or Breakfast without first taking a hold and moving on. Agents close and upsell
+   * on rate choice, and the choice was one screen too late.
+   *
+   * Quoted in parallel below, so N plans cost one round trip rather than N.
+   */
+  const sellablePlans = await prisma.ratePlan.findMany({
+    where: { propertyId: property.id, active: true },
+    select: { id: true, name: true },
+    orderBy: { sortOrder: "asc" },
+  });
 
   const results = await Promise.all(
     roomTypes.map(async (rt) => {
       const nights = await remainingByNight(rt.id, q.checkIn, q.checkOut);
       const remainingMin = nights.length ? Math.min(...nights.map((n) => n.remaining)) : 0;
       const totalMinor = standard ? await stayQuote(rt.id, standard.id, q.checkIn, q.checkOut, q.quantity) : null;
+      const planQuotes = (
+        await Promise.all(
+          sellablePlans.map(async (rp) => ({
+            id: rp.id,
+            name: rp.name,
+            totalMinor: await stayQuote(rt.id, rp.id, q.checkIn, q.checkOut, q.quantity),
+          })),
+        )
+      )
+        // A plan with no price for these dates is not on sale for them. Showing it at "—" invites an
+        // agent to quote a rate that does not exist.
+        .filter((x): x is { id: string; name: string; totalMinor: number } => x.totalMinor != null)
+        .sort((a, b) => a.totalMinor - b.totalMinor);
       const blocked = remainingMin >= q.quantity ? await stayViolation(rt.id, q.checkIn, q.checkOut, q.sourceCategory) : null;
       return {
         roomType: rt,
@@ -424,6 +451,7 @@ export async function searchAvailability(q: StaySearch) {
         available: remainingMin >= q.quantity && !blocked,
         blocked,
         totalMinor,
+        planQuotes,
         requested: q.roomTypeId ? q.roomTypeId === rt.id : true,
       };
     }),

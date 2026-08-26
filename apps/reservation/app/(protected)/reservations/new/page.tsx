@@ -124,6 +124,23 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
                         <> · from <span className="tnum font-semibold text-ink-900">{money(r.totalMinor)}</span> ({search.standardPlanName})</>
                       )}
                     </div>
+                    {/* §3.2 — every plan, priced, before the hold.
+                        The step used to show one number, so an agent on the phone could not offer
+                        Non-Refundable or Breakfast without first taking a hold and moving on. Agents
+                        close and upsell on rate choice, and the choice was one screen too late. */}
+                    {r.available && r.planQuotes.length > 1 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {r.planQuotes.map((pq) => (
+                          <span
+                            key={pq.id}
+                            className="rounded border border-surface-border px-1.5 py-0.5 text-[11px] text-ink-600"
+                            title={`${pq.name} — ${money(pq.totalMinor)} for the whole stay`}
+                          >
+                            {pq.name} <span className="tnum font-semibold text-ink-900">{money(pq.totalMinor)}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   {r.available && r.fitsGuests ? (
                     <form action={placeHold}>
