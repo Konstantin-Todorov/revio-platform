@@ -204,8 +204,8 @@ async function GoLive({
       {channels === 0 ? (
         <div className="space-y-3">
           <p className="text-[14px] text-ink-700">
-            Nothing has left Revio yet. Connect your first channel to start sending availability and
-            prices to it.
+            Nothing has left Revio yet. The Channels screen sets your rooms up for distribution and
+            then connects your first OTA — neither step puts anything on sale until you say so.
           </p>
           <Link
             href="/channels"

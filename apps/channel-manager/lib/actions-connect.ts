@@ -10,8 +10,10 @@ import {
   fetchChannelAdapter,
   testChannelConnection,
   createChannexChannel,
+  provisionChannexProperty,
   type ChannelField,
 } from "@revio/connectivity";
+import { forSystem } from "@revio/db";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { guard } from "./authz";
@@ -181,4 +183,145 @@ async function channexPropertyId(propertyId: string): Promise<string | null> {
     select: { externalPropertyId: true },
   });
   return existing?.externalPropertyId ?? null;
+}
+
+export type ProvisionOutcome = { ok: true; rooms: number; rates: number } | { ok: false; error: string };
+
+/**
+ * Put this property onto Channex — the step that used to require somebody at Revio running a script.
+ *
+ * A hotel finished its own onboarding, reached "Connect a channel", and could go no further. Worse,
+ * the Channels page did not say so: with no Channex property it offered the MOCK dialog, so a real
+ * hotel could create a fabricated channel, see it marked connected, and believe it was selling.
+ *
+ * Safe to click and safe to click twice:
+ *
+ *  - **Refuses a demo tenant.** A production adapter must never point at demo data, and this is the
+ *    same rule `factory.ts` and the CLI enforce.
+ *  - **Refuses if already provisioned**, rather than creating a second Channex property that would
+ *    be billed and would take half the pushes.
+ *  - **Costs nothing.** Channex bills per property with an ACTIVE CHANNEL. This creates the property,
+ *    its rooms and its rates; no channel is connected and no meter starts. The screen says so.
+ */
+export async function provisionChannex(): Promise<ProvisionOutcome> {
+  const g = await guard("manageDistribution");
+  if (!g.ok) return { ok: false, error: g.error };
+
+  const property = await getProperty();
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: property.tenantId },
+    select: { name: true, isDemo: true, hasChannelManager: true },
+  });
+  if (!tenant) return { ok: false, error: "Could not read this hotel." };
+  if (tenant.isDemo) {
+    return {
+      ok: false,
+      error: "This is a demo hotel. A real Channex property must never point at demo data.",
+    };
+  }
+  if (!tenant.hasChannelManager) {
+    return { ok: false, error: "RevioLink is not enabled for this hotel." };
+  }
+
+  const already = await prisma.channel.findFirst({
+    where: { propertyId: property.id, externalPropertyId: { not: null } },
+    select: { id: true },
+  });
+  if (already) return { ok: false, error: "This property is already connected to Channex." };
+
+  const [roomTypes, ratePlans] = await Promise.all([
+    prisma.roomType.findMany({
+      where: { propertyId: property.id, active: true },
+      select: { id: true, name: true, totalRooms: true, maxGuests: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.ratePlan.findMany({
+      where: { propertyId: property.id },
+      select: { id: true, name: true, priceLogic: true, roomTypeLinks: { select: { roomTypeId: true } } },
+      orderBy: { sortOrder: "asc" },
+    }),
+  ]);
+
+  // Production unless the deployment says otherwise. A hotel clicking this in the real product means
+  // the real thing; the sandbox is reached by the CLI, where rehearsing is the explicit intent.
+  const mode = process.env.CHANNEX_MODE === "sandbox" ? "channex_sandbox" : "channex_prod";
+  const cfg = await channexApiConfig(property.tenantId, mode);
+
+  try {
+    const result = await provisionChannexProperty(
+      {
+        tenantId: property.tenantId,
+        tenantName: tenant.name,
+        property: {
+          id: property.id,
+          name: property.name,
+          baseCurrency: property.baseCurrency,
+          timezone: property.timezone,
+          address: property.address ?? null,
+          contactEmail: property.contactEmail ?? null,
+          phone: property.phone ?? null,
+        },
+        roomTypes,
+        ratePlans: ratePlans.map((r) => ({
+          id: r.id,
+          name: r.name,
+          priceLogic: r.priceLogic,
+          roomTypeIds: r.roomTypeLinks.map((l) => l.roomTypeId),
+        })),
+        mode,
+        apiKey: cfg.apiKey,
+      },
+      {
+        upsertCredential: async (tenantId, m, cipher) => {
+          await forSystem().connectivityCredential.upsert({
+            where: { tenantId_mode: { tenantId, mode: m } },
+            create: { tenantId, mode: m, cipher },
+            update: { cipher },
+          });
+        },
+        writeChannel: async (i) => {
+          const existing = await prisma.channel.findFirst({
+            where: { propertyId: i.propertyId, code: "channex" },
+            select: { id: true },
+          });
+          return existing
+            ? prisma.channel.update({
+                where: { id: existing.id },
+                data: { connectivityMode: i.mode, externalPropertyId: i.channexPropertyId, status: "connected" },
+                select: { id: true },
+              })
+            : prisma.channel.create({
+                data: {
+                  tenantId: i.tenantId, propertyId: i.propertyId, name: "Channex", code: "channex",
+                  connectivityMode: i.mode, externalPropertyId: i.channexPropertyId,
+                  status: "connected", currency: i.currency,
+                },
+                select: { id: true },
+              });
+        },
+        writeRoomMapping: async (channelId, tenantId, roomTypeId, externalRoomId) => {
+          await prisma.channelRoomTypeMapping.upsert({
+            where: { channelId_roomTypeId: { channelId, roomTypeId } },
+            create: { tenantId, channelId, roomTypeId, externalRoomId, status: "complete" },
+            update: { externalRoomId, status: "complete" },
+          });
+        },
+        writeRateMapping: async (channelId, tenantId, ratePlanId, roomTypeId, externalRateId) => {
+          await prisma.channelRatePlanMapping.upsert({
+            where: { channelId_ratePlanId_roomTypeId: { channelId, ratePlanId, roomTypeId } },
+            create: { tenantId, channelId, ratePlanId, roomTypeId, externalRateId, status: "complete" },
+            update: { externalRateId, status: "complete" },
+          });
+        },
+      },
+    );
+
+    revalidatePath("/channels");
+    return { ok: true, rooms: result.roomMap.length, rates: result.rateMap.length };
+  } catch (e) {
+    // ChannexProvisionError messages are written for a hotelier and name the fix; anything else is
+    // reported as-is rather than flattened into "something went wrong".
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
 }

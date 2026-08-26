@@ -1,9 +1,10 @@
 import { Download, Radio } from "lucide-react";
-import { getChannels } from "@/lib/data";
+import { getChannels, getProperty } from "@/lib/data";
 import { pullChannelBookings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { ChannelSettingsDialog, AddChannelDialog } from "@/components/channels/ChannelDialogs";
 import { ConnectChannelDialog } from "@/components/channels/ConnectChannelDialog";
+import { ProvisionChannex } from "@/components/channels/ProvisionChannex";
 import { CHANNEL_CODES } from "@revio/connectivity";
 import {
   PauseChannelButton, ResumeChannelButton, DisconnectChannelButton, ReconnectChannelButton, FullSyncButton,
@@ -43,28 +44,37 @@ const STATUS_PILL: Record<string, { tone: "success" | "warning" | "danger" | "ne
 
 export default async function ChannelsPage() {
   const { channels, mapStats } = await getChannels();
+  // A demo hotel is the one case where a fabricated channel is correct — the mock adapter is what
+  // makes the whole ARI loop demonstrable without an OTA.
+  const property = await getProperty();
+  const isDemo = property.tenant.isDemo;
+  const propertyName = property.name;
   const statById = Object.fromEntries(mapStats.map((m) => [m.channelId, m]));
   const active = channels.filter((c) => c.status !== "disconnected");
   const dormant = channels.filter((c) => c.status === "disconnected");
 
   /*
-   * Which "add a channel" button this hotel gets.
+   * Which "add a channel" affordance this hotel gets. THREE states, not two.
    *
-   * A property already on Channex gets the real one: it asks Channex what the channel needs, tests
-   * the credentials, and creates a connection that reaches Booking.com. A demo property gets the old
-   * mock dialog, which fabricates external ids so the ARI loop has something to push at.
+   * The two-state version shipped earlier was a real hazard: a hotel with no Channex property fell
+   * through to the MOCK dialog, which fabricates external ids. A demo hotel wants exactly that. A
+   * real hotel that has just finished onboarding gets a channel marked connected that pushes
+   * nowhere — and no way to tell.
    *
-   * The test is a Channex property id rather than an entitlement, because that is the thing the real
-   * flow actually requires — and a hotel mid-onboarding has the entitlement before it has the
-   * property.
+   *   on Channex   → the real dialog: ask Channex what the channel needs, test, create
+   *   demo tenant  → the mock dialog, which is what it is for
+   *   neither      → provision first. Not a dialog, because there is nothing to fill in.
+   *
+   * The test is a Channex property id rather than an entitlement: that is what the real flow
+   * requires, and a hotel mid-onboarding has the entitlement before it has the property.
    */
   const onChannex = channels.some((c) => c.externalPropertyId && c.connectivityMode !== "mock");
   const connectedCodes = channels.map((c) => c.code);
   const addButton = onChannex ? (
     <ConnectChannelDialog channels={CHANNEL_CODES} connectedCodes={connectedCodes} />
-  ) : (
+  ) : isDemo ? (
     <AddChannelDialog connectedCodes={connectedCodes} />
-  );
+  ) : null;
 
   return (
     <div>
@@ -74,7 +84,13 @@ export default async function ChannelsPage() {
         action={addButton}
       />
 
-      {channels.length === 0 && (
+      {/*
+        A real hotel that is not on Channex yet is asked to provision, NOT offered a channel dialog.
+        There is nothing for them to fill in at this point, and offering a form implies otherwise.
+      */}
+      {!onChannex && !isDemo && <ProvisionChannex propertyName={propertyName} />}
+
+      {channels.length === 0 && (onChannex || isDemo) && (
         <Card className="border-dashed p-10 text-center">
           <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
             <Radio className="h-5 w-5" />

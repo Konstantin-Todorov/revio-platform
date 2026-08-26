@@ -52,3 +52,7 @@ export {
   channexApiConfig, fetchChannelAdapter, testChannelConnection, createChannexChannel, activateChannexChannel,
   type ChannexApiConfig, type ConnectionTest,
 } from "./channex-channel-api.js";
+export {
+  provisionChannexProperty, ChannexProvisionError,
+  type ProvisionInput, type ProvisionResult, type ProvisionWrites,
+} from "./channex-provision.js";
