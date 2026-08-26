@@ -21,7 +21,7 @@ export default async function Page({ params }: { params: Promise<{ token: string
 
   return (
     <AuthShell title="Welcome — set your password" intro="One login covers every Revio product your hotel uses.">
-      <SetPasswordForm token={token} purpose="invite" />
+      <SetPasswordForm token={token} purpose="invite" email={resolved.token.email} />
     </AuthShell>
   );
 }

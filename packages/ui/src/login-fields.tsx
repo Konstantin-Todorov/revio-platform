@@ -29,6 +29,15 @@ export interface LoginFieldsProps {
   error?: string;
   /** Shown after a password reset completes, so the person knows the new one is live. */
   justSet?: boolean;
+  /**
+   * Pre-fill the address, carried over from the set-password screen.
+   *
+   * Not a convenience. Someone who has just chosen a password has not yet typed their email
+   * ANYWHERE, so a browser has no pair to save — and the new staff member leaves with a password
+   * stored nowhere. Arriving with the address filled in gives the password manager both halves at
+   * the moment it is about to ask.
+   */
+  defaultEmail?: string;
   forgotHref?: string;
 }
 
@@ -40,6 +49,7 @@ export function LoginFields({
   pending,
   error,
   justSet = false,
+  defaultEmail,
   forgotHref = "/forgot-password",
 }: LoginFieldsProps) {
   const [reveal, setReveal] = useState(false);
@@ -61,7 +71,10 @@ export function LoginFields({
           type="email"
           required
           autoComplete="email"
-          autoFocus
+          defaultValue={defaultEmail}
+          // Focus follows what is still empty: with the address already filled in, landing on it
+          // means the first keystroke goes to the wrong box.
+          autoFocus={!defaultEmail}
           // Both fields are marked, not just the password: the server deliberately does not say
           // WHICH was wrong (that would confirm an address exists), so highlighting one would be a
           // guess the interface is not entitled to make.
@@ -81,6 +94,7 @@ export function LoginFields({
             type={reveal ? "text" : "password"}
             required
             autoComplete="current-password"
+            autoFocus={Boolean(defaultEmail)}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? errorId : undefined}
             // Caps Lock is the commonest reason a correct password is refused, and the one thing the

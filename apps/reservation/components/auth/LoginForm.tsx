@@ -11,7 +11,7 @@ import { login, type LoginResult } from "@/lib/actions-auth";
  * accent colour and a placeholder — so every omission was made four times, and every fix had to be.
  * What differs per product stays here; what should never differ does not.
  */
-export function LoginForm({ justSet = false }: { justSet?: boolean }) {
+export function LoginForm({ justSet = false, defaultEmail }: { justSet?: boolean; defaultEmail?: string }) {
   const [state, formAction, pending] = useActionState<LoginResult | null, FormData>(login, null);
 
   return (
@@ -24,6 +24,7 @@ export function LoginForm({ justSet = false }: { justSet?: boolean }) {
         pending={pending}
         error={state?.error}
         justSet={justSet}
+        {...(defaultEmail ? { defaultEmail } : {})}
       />
     </form>
   );

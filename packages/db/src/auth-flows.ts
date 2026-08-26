@@ -127,7 +127,16 @@ export async function inviteStaff(args: {
 }
 
 export type SetPasswordResult =
-  | { ok: true; email: SendableEmail | null }
+  | {
+      ok: true;
+      email: SendableEmail | null;
+      /**
+       * The address whose password was just set — NOT the same thing as `email` above, which is the
+       * confirmation message to send. The caller needs this to hand the login screen a pre-filled
+       * address, so the browser's password manager is offered the same pair it was just shown.
+       */
+      accountEmail: string;
+    }
   | { ok: false; message: string };
 
 /**
@@ -224,5 +233,5 @@ export async function completePasswordSet(args: {
       ? { to: resolved.token.email, ...passwordChangedEmail({ ...(name ? { name } : {}), context: args.contextName }) }
       : null;
 
-  return { ok: true, email: notice };
+  return { ok: true, email: notice, accountEmail: resolved.token.email };
 }

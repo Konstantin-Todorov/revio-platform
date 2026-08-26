@@ -8,6 +8,7 @@ import { checkLoginAllowed, forSystem, recordLoginFailure, recordLoginSuccess,
 import { sessionTtlSeconds } from "@revio/core";
 import { getSession } from "./session";
 import { verifyPassword, signSession, setSessionCookie, clearSessionCookie } from "./auth";
+import { roleHome } from "./roles";
 
 // Login resolves a user by email before any tenant context exists → bypass RLS (app.bypass=on).
 const prisma = forSystem();
@@ -61,7 +62,21 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
 
   const ttl = sessionTtlSeconds(fd.get("remember") != null);
   await setSessionCookie(await signSession({ kind: "hotel", sub: user.id }, ttl), ttl);
-  redirect("/dashboard");
+
+  /*
+   * Land on the screen this role is actually allowed to see.
+   *
+   * This used to be a flat `redirect("/dashboard")`, which a scoped role may not open — so the
+   * protected layout immediately redirected AGAIN to `roleHome(role)`. A redirect chained off a
+   * server action's redirect leaves the client with an RSC payload it cannot apply, and the symptom
+   * is a **white screen that comes right on a manual reload**: reported from real use, signing in as
+   * a new housekeeping account.
+   *
+   * The layout guard stays where it is — it is what stops a housekeeper reaching /dashboard by
+   * typing the URL, which is an ordinary navigation and redirects cleanly. It just should never have
+   * been the thing deciding where sign-in lands.
+   */
+  redirect(roleHome(user.role));
 }
 
 export async function logout(): Promise<void> {

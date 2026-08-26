@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { ROLE_LABEL } from "./roles";
+import { summariseShifts, type PersonShifts } from "./shifts";
 
 /**
  * Workforce availability (PMS-REFINEMENT-R1 §6.7 / §10.2) — who is clocked in right now. "Active" = a
@@ -77,4 +78,46 @@ export async function getActiveCleanerCount(): Promise<number> {
   return prisma.staffShift.count({
     where: { propertyId: property.id, clockOutAt: null, role: { in: ["housekeeper", "hk_supervisor"] } },
   });
+}
+
+/**
+ * Shift HISTORY over a window — the read that did not exist.
+ *
+ * Everything above answers "who is on the floor right now". This answers "who worked, when" — the
+ * question a manager actually asks the morning after, and the one the rows have been able to answer
+ * since the day the table shipped. Manager-only, and gated at the screen as well as here.
+ *
+ * The summarising is pure and lives in `shifts.ts`; this only fetches.
+ */
+export async function getShiftHistory(fromIso: string, toIso: string): Promise<PersonShifts[]> {
+  const { session, property } = await activeProperty();
+  const rows = await prisma.staffShift.findMany({
+    where: {
+      propertyId: property.id,
+      // Overlaps the window rather than starts inside it: a night shift beginning at 22:00 belongs to
+      // the day a manager is looking at, and "started within the range" would drop it.
+      clockInAt: { lt: new Date(`${toIso}T23:59:59.999Z`) },
+      OR: [{ clockOutAt: null }, { clockOutAt: { gte: new Date(`${fromIso}T00:00:00.000Z`) } }],
+    },
+    orderBy: { clockInAt: "desc" },
+  });
+  if (rows.length === 0) return [];
+
+  const users = await prisma.user.findMany({
+    where: { tenantId: session.tenantId, id: { in: [...new Set(rows.map((r) => r.userId))] } },
+    select: { id: true, name: true },
+  });
+  const nameOf = new Map(users.map((u) => [u.id, u.name]));
+
+  return summariseShifts(
+    rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      userName: nameOf.get(r.userId) ?? "—",
+      role: r.role,
+      clockInAt: r.clockInAt,
+      clockOutAt: r.clockOutAt,
+      clockedInById: r.clockedInById,
+    })),
+  );
 }

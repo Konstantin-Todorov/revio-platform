@@ -1,13 +1,26 @@
 import { Clock, Users } from "lucide-react";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { getStaff } from "@/lib/data";
-import { getWorkforceSummary } from "@/lib/workforce";
+import { getWorkforceSummary, getShiftHistory } from "@/lib/workforce";
+import { ShiftHistory } from "@/components/users/ShiftHistory";
 import { UsersManager } from "@/components/users/UsersManager";
 
 export const dynamic = "force-dynamic";
 
+/** The shift record's default window. Long enough to see a pattern, short enough to read. */
+const HISTORY_DAYS = 14;
+
 export default async function UsersPage() {
-  const [{ property, users, meId, canManage }, workforce] = await Promise.all([getStaff(), getWorkforceSummary()]);
+  const to = new Date();
+  const from = new Date(to.getTime() - HISTORY_DAYS * 86_400_000);
+  const fromIso = from.toISOString().slice(0, 10);
+  const toIso = to.toISOString().slice(0, 10);
+
+  const [{ property, users, meId, canManage }, workforce, history] = await Promise.all([
+    getStaff(),
+    getWorkforceSummary(),
+    getShiftHistory(fromIso, toIso),
+  ]);
 
   return (
     <div>
@@ -47,6 +60,11 @@ export default async function UsersPage() {
           </div>
         )}
       </Card>
+
+      {/* Manager-only. Hiding it from a housekeeper is not just tidiness: a record of when colleagues
+          worked is employee data, and the route guard already keeps scoped roles off this screen —
+          this is the second gate for a manager-less role that can still reach it. */}
+      {canManage && <ShiftHistory people={history} fromIso={fromIso} toIso={toIso} />}
 
       <UsersManager users={users} meId={meId} canManage={canManage} />
     </div>

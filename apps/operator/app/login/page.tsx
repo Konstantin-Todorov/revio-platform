@@ -6,11 +6,13 @@ export const metadata = { title: "Sign in · Revio Operator" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ passwordSet?: string }>;
+  searchParams: Promise<{ passwordSet?: string; email?: string }>;
 }) {
   // Read here rather than with useSearchParams in the form: this page is a server component,
   // and the hook forces a Suspense boundary at prerender for a single boolean.
-  const justSet = (await searchParams).passwordSet === "1";
+  const sp = await searchParams;
+  const justSet = sp.passwordSet === "1";
+  const defaultEmail = sp.email;
   return (
     <div className="flex min-h-screen items-stretch bg-surface-muted">
       {/* Brand panel */}
@@ -36,7 +38,7 @@ export default async function LoginPage({
           <h2 className="text-[20px] font-bold tracking-tight text-ink-900">Operator sign in</h2>
           <p className="mb-6 mt-1 text-[13px] text-ink-500">Restricted to Revio staff.</p>
 
-          <LoginForm justSet={justSet} />
+          <LoginForm justSet={justSet} {...(defaultEmail ? { defaultEmail } : {})} />
 
           {/* Opt-in, and off unless SHOW_DEMO_LOGINS=1 is set. This console sees every tenant on the
               platform, so printing a working password on its own front door hands over all of them —

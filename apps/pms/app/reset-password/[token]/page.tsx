@@ -21,7 +21,7 @@ export default async function Page({ params }: { params: Promise<{ token: string
 
   return (
     <AuthShell title="Choose a new password" intro="Pick something you don't use anywhere else.">
-      <SetPasswordForm token={token} purpose="reset" />
+      <SetPasswordForm token={token} purpose="reset" email={resolved.token.email} />
     </AuthShell>
   );
 }

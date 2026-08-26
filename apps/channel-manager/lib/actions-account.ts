@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { completePasswordSet, requestPasswordReset } from "@revio/db";
 import { sendEmail } from "@revio/email";
+import { clearSessionCookie } from "./auth";
 
 /**
  * Invite and password-reset actions. The rules live in @revio/core, the storage in @revio/db; this
@@ -58,5 +59,26 @@ export async function setPassword(_prev: AccountResult | null, fd: FormData): Pr
   if (result.email) {
     await sendEmail({ to: [result.email.to], subject: result.email.subject, text: result.email.text });
   }
-  redirect("/login?passwordSet=1");
+
+  /*
+   * Sign out whoever is currently on this browser before going to the login screen.
+   *
+   * `completePasswordSet` moves `sessionsValidFrom` on the account being SET, and its comment
+   * reasoned that the person doing this "is not signed in on this device (they got here from an
+   * emailed link)". That is false in the workflow that actually happens: a manager signed in as
+   * themselves opens the new staff member's invitation in the same browser, sets the password — and
+   * the redirect to /login sees their own still-valid cookie and bounces them straight back into
+   * THEIR OWN account. Reported from real use.
+   *
+   * Two things wrong with that and both matter. The new account's password was set and nobody can
+   * tell, so they try to use a machine they believe is theirs and it is the manager's. And the
+   * manager's session survived a screen whose entire purpose was to hand the machine to someone else.
+   *
+   * Clearing the cookie is the whole fix: the login screen then behaves as it reads.
+   */
+  await clearSessionCookie();
+
+  // The address goes with them so the login form arrives filled in and the browser's password
+  // manager is offered the same pair it was just shown. Encoded — an email may contain a "+".
+  redirect(`/login?passwordSet=1&email=${encodeURIComponent(result.accountEmail ?? "")}`);
 }
