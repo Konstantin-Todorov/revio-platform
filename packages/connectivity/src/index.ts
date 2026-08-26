@@ -44,3 +44,7 @@ export {
   type Verdict,
 } from "./cert-expectations.js";
 export { indexRateMappings, resolveExternalRateId, unmappedPairs, type RatePlanMappingRow, type RateMappingIndex } from "./rate-mapping.js";
+export {
+  CHANNEL_CODES, parseAdapter, toField, visibleFields, defaultSettings, missingRequired,
+  type ChannelAdapterDescriptor, type ChannelField, type ChannelFieldType,
+} from "./channex-channels.js";
