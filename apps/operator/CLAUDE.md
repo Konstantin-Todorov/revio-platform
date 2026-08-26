@@ -181,6 +181,22 @@ Reads cross-tenant data through `@revio/core` admin APIs that bypass tenant RLS 
 operator identity. Never embed hotel-facing screens here; link out instead. Keep operator business data
 (contracts, tokens, billing) in the admin schema, isolated from tenant data.
 
+## Platform history (`/platform-history`)
+
+This is the operator's **curated decision record**, not a second git log and not a customer-facing
+release feed. `lib/platform-history.ts` holds two typed, read-only manifests:
+
+- milestones record only changes that altered what the platform could safely promise, with commit ids
+  or named verification controls as evidence;
+- the roadmap uses **Now / Next / Later**, MoSCoW priority and `S–XL` effort. Effort describes shape,
+  never a promised delivery date. Every `Now` item is a launch requirement; adding one means moving
+  another out rather than silently increasing capacity.
+
+Do not read `.git` at runtime: a production image is not guaranteed to contain repository history,
+and hundreds of implementation commits are not an operating narrative. Do not add a database table
+until a second writer or runtime status exists; today this is versioned platform metadata with one
+caller, so it belongs in this app. Git and the module guides remain the detailed source of truth.
+
 ## Status (2026-07-05) — all screens built + live
 `https://operator.reviosoft.app`. Built: **Overview** (cross-tenant stats + per-client
 health), **Clients** (onboard = tenant+owner+property+entitlements; toggle CM/CRS/PMS; suspend/activate),

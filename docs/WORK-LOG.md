@@ -18,6 +18,15 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-08-26 · Codex · DONE · Operator platform history
+**Adding a curated milestone ledger and a prioritised Now / Next / Later launch roadmap.**
+Files: `apps/operator/app/(protected)/platform-history/page.tsx`,
+`apps/operator/lib/platform-history{,.test}.ts`, `apps/operator/components/shell/Sidebar.tsx`,
+`apps/operator/CLAUDE.md`, `docs/WORK-LOG.md`
+Notes: isolated worktree and branch `codex/operator-platform-history`; no database, core, guest,
+connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
+Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
+
 ### 2026-08-26 · Claude · CLAIMED · CRS F2 — guest merge
 **Extracting guest merge + duplicate detection to `@revio/core`, then adding the CRS half.**
 Files: `packages/core/src/guests/merge.ts` (new), `apps/pms/lib/{actions-guests,guest-identity}.ts`,
