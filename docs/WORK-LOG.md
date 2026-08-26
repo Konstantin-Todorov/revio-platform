@@ -18,6 +18,16 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-08-26 · Claude · CLAIMED · CRS F2 — guest merge
+**Extracting guest merge + duplicate detection to `@revio/core`, then adding the CRS half.**
+Files: `packages/core/src/guests/merge.ts` (new), `apps/pms/lib/{actions-guests,guest-identity}.ts`,
+`apps/reservation/**/guests/**`
+Notes: merge already exists in the PMS only. Extracting because a second caller has appeared — and it
+fixes four things on the way: the merge is **not transactional** (four sequential writes, so a failure
+half-merges), duplicate detection **loads every guest in the property** and is then called twice per
+profile, the contact back-fill duplicates `hydrateGuestContact`, and it can copy an OTA alias onto the
+winner without carrying `emailIsOtaAlias`. **Codex: leave guests alone until this is DONE.**
+
 ### 2026-08-26 · Claude · DONE · CRS F4 — guest contact hydration
 **Enrich-empty / never-overwrite / tag-OTA. `packages/core/src/guests/contact-hydration.ts`, 16 tests.**
 Files: `packages/core/src/guests/contact-hydration.ts`, `packages/booking/src/public-engine.ts`,
