@@ -15,7 +15,13 @@
  *   5. writes the Channel row in `channex_prod` mode with every mapping filled in
  *   6. pushes ARI and reads the task back, so "connected" means it actually worked
  *
- *   pnpm channex:onboard --tenant <slug> --property <name|id> [--dry-run] [--cleanup]
+ *   pnpm channex:onboard --tenant <slug> --property <name|id> [--dry-run] [--sandbox] [--cleanup]
+ *
+ * **`--sandbox` rehearses the whole thing on staging.channex.io.** Use it to learn the process, to
+ * check a hotel's data produces the right room types and rate plans, and to train somebody — all
+ * without touching a billed production account. It sets the channel to `channex_sandbox`, which is
+ * what makes the adapter talk to staging: the MODE picks the base URL, so a sandbox key on a
+ * `channex_prod` channel authenticates against the wrong host and every push is rejected.
  *
  * **`--dry-run` prints the whole plan and touches nothing.** Run it first, every time: this creates
  * objects in a billed production account, and Channex charges per property with an active channel.
@@ -27,8 +33,18 @@
 import { forSystem } from "@revio/db";
 import { encryptSecret } from "@revio/db";
 
-const BASE = process.env.CHANNEX_BASE_URL ?? "https://app.channex.io/api/v1";
-const KEY = process.env.CHANNEX_PROD_KEY ?? "";
+const SANDBOX = process.argv.includes("--sandbox");
+/*
+ * The mode picks the host, so the two must agree.
+ *
+ * `createChannelAdapter` derives the base URL from the channel's `connectivityMode` — production for
+ * `channex_prod`, staging for `channex_sandbox`. A rehearsal that stored a sandbox key on a
+ * `channex_prod` channel authenticated a staging key against the production host and had all 42
+ * updates rejected. Deriving both from one flag makes that mismatch impossible.
+ */
+const BASE = process.env.CHANNEX_BASE_URL ?? (SANDBOX ? "https://staging.channex.io/api/v1" : "https://app.channex.io/api/v1");
+const MODE = SANDBOX ? "channex_sandbox" : "channex_prod";
+const KEY = (SANDBOX ? process.env.CHANNEX_API_KEY : process.env.CHANNEX_PROD_KEY) ?? "";
 
 const args = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -63,7 +79,13 @@ async function api(method: string, path: string, body?: unknown): Promise<any> {
 }
 
 async function main() {
-  if (!KEY) throw new Error("CHANNEX_PROD_KEY is not set. Export it, or run against the sandbox with CHANNEX_BASE_URL + CHANNEX_API_KEY.");
+  if (!KEY) {
+    throw new Error(
+      SANDBOX
+        ? "CHANNEX_API_KEY is not set — the sandbox key lives in packages/connectivity/.env.local."
+        : "CHANNEX_PROD_KEY is not set. Export it, or rehearse with --sandbox.",
+    );
+  }
   const slug = flag("tenant");
   const propertyRef = flag("property");
   if (!slug) throw new Error("--tenant <slug> is required.");
@@ -112,7 +134,7 @@ async function main() {
   if (roomTypes.length === 0) throw new Error("That property has no active room types — add them before connecting a channel.");
   if (ratePlans.length === 0) throw new Error("That property has no rate plans.");
 
-  console.log(`\n${tenant.name} → ${property.name}`);
+  console.log(`\n${tenant.name} → ${property.name}   [${SANDBOX ? "SANDBOX — staging.channex.io" : "PRODUCTION — billed"}]`);
   console.log(`  ${roomTypes.length} room type(s), ${ratePlans.length} rate plan(s), ${property.baseCurrency}\n`);
 
   if (has("cleanup")) return cleanup(db, property.id);
@@ -120,12 +142,12 @@ async function main() {
   // 1 — the key, encrypted, on the same path the console writes.
   if (!DRY) {
     await db.connectivityCredential.upsert({
-      where: { tenantId_mode: { tenantId: tenant.id, mode: "channex_prod" } },
-      create: { tenantId: tenant.id, mode: "channex_prod", cipher: encryptSecret(KEY) },
+      where: { tenantId_mode: { tenantId: tenant.id, mode: MODE } },
+      create: { tenantId: tenant.id, mode: MODE, cipher: encryptSecret(KEY) },
       update: { cipher: encryptSecret(KEY) },
     });
   }
-  say("stored the production key, encrypted", `tenant ${tenant.name}`);
+  say(`stored the ${SANDBOX ? "sandbox" : "production"} key, encrypted`, `tenant ${tenant.name}`);
 
   // 2 — the Channex property.
   let channexPropertyId = "DRY-RUN";
@@ -209,13 +231,13 @@ async function main() {
     const channel = existing
       ? await db.channel.update({
           where: { id: existing.id },
-          data: { connectivityMode: "channex_prod", externalPropertyId: channexPropertyId, status: "connected" },
+          data: { connectivityMode: MODE, externalPropertyId: channexPropertyId, status: "connected" },
           select: { id: true },
         })
       : await db.channel.create({
           data: {
             tenantId: tenant.id, propertyId: property.id, name: "Channex", code: "channex",
-            connectivityMode: "channex_prod", externalPropertyId: channexPropertyId,
+            connectivityMode: MODE, externalPropertyId: channexPropertyId,
             status: "connected", currency: property.baseCurrency,
           },
           select: { id: true },
