@@ -585,12 +585,18 @@ export async function getGuestDetail(id: string) {
   let leadDaysTotal = 0;
   let leadCount = 0;
   let lifetimeMinor = 0;
+  const roomIdCounts = new Map<string, number>();
+  const guestCounts = new Map<number, number>();
   for (const r of sold) {
     lifetimeMinor += r.propertyTotalMinor ?? r.totalMinor;
     for (const l of r.lines) {
       const n = Math.max(1, Math.round((l.checkOut.getTime() - l.checkIn.getTime()) / DAY)) * l.quantity;
       nights += n;
       roomCounts.set(l.roomType.name, (roomCounts.get(l.roomType.name) ?? 0) + n);
+      // Keyed by ID as well as name, so "Book again" can pre-select the room type rather than only
+      // name it. A name is for reading; an id is for acting on.
+      roomIdCounts.set(l.roomTypeId, (roomIdCounts.get(l.roomTypeId) ?? 0) + n);
+      guestCounts.set(l.guestsCount ?? 1, (guestCounts.get(l.guestsCount ?? 1) ?? 0) + 1);
       leadDaysTotal += Math.max(0, Math.round((l.checkIn.getTime() - r.importedAt.getTime()) / DAY));
       leadCount++;
     }
@@ -598,8 +604,14 @@ export async function getGuestDetail(id: string) {
   const cancelled = guest.reservations.filter((r) => r.status === "cancelled").length;
   const noShows = guest.reservations.filter((r) => r.status === "no_show").length;
   const preferredRoomType = [...roomCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const preferredRoomTypeId = [...roomIdCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const typicalGuests = [...guestCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
   const derived = {
     preferredRoomType,
+    /** The same preference as an id — what the "Book again" link needs to pre-select it. */
+    preferredRoomTypeId,
+    /** Their usual party size, so a rebook does not start at one guest for a couple who always book two. */
+    typicalGuests,
     avgLosNights: sold.length > 0 ? nights / sold.length : 0,
     avgLeadDays: leadCount > 0 ? Math.round(leadDaysTotal / leadCount) : 0,
     stays: sold.length,

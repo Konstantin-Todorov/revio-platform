@@ -19,12 +19,13 @@ const labelCls = "mb-1 block text-[11px] font-semibold uppercase tracking-wide t
 export default async function NewReservationPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; guests?: string; qty?: string; rt?: string; src?: string; hold?: string; error?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; guests?: string; qty?: string; rt?: string; src?: string; hold?: string; error?: string; guest?: string }>;
 }) {
   const sp = await searchParams;
+
   await releaseExpiredHolds();
 
-  if (sp.hold) return <HoldForm holdId={sp.hold} guests={Number(sp.guests) || 1} sourceId={sp.src} error={sp.error} />;
+  if (sp.hold) return <HoldForm holdId={sp.hold} guests={Number(sp.guests) || 1} sourceId={sp.src} error={sp.error} guestId={sp.guest} />;
   return <SearchStep sp={sp} />;
 }
 
@@ -157,7 +158,18 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
 
 /* --- Step 2: guest details against a live hold ------------------------------- */
 
-async function HoldForm({ holdId, guests, sourceId, error }: { holdId: string; guests: number; sourceId?: string; error?: string }) {
+/**
+ * Step 2: hold taken, details captured.
+ *
+ * `guestId` is the known-booking bypass (§3.2 / §4.2). Search-first is the right primary door for a
+ * CRS — an agent on the phone answers "what have you got, how much" live — but it forces discovery
+ * even when the answer is already known: a repeat guest, a rebook, "the usual". For those the shop
+ * step is friction, not help.
+ *
+ * So a guest id prefills these fields and the flow is otherwise untouched: same hold, same confirm,
+ * same tail. A second door, not a second flow.
+ */
+async function HoldForm({ holdId, guests, sourceId, error, guestId }: { holdId: string; guests: number; sourceId?: string; error?: string; guestId?: string }) {
   const { property, ratePlans, sources } = await getCreateFormData();
   const hold = await prisma.hold.findFirst({
     where: { id: holdId, propertyId: property.id, status: "active", expiresAt: { gt: new Date() } },
@@ -179,6 +191,15 @@ async function HoldForm({ holdId, guests, sourceId, error }: { holdId: string; g
   const checkIn = hold.checkIn.toISOString().slice(0, 10);
   const checkOut = hold.checkOut.toISOString().slice(0, 10);
   const minsLeft = Math.max(1, Math.round((hold.expiresAt.getTime() - Date.now()) / 60_000));
+
+  // Scoped to this property as well as the id: a guest id from another property's URL must resolve
+  // to nothing rather than to somebody else's guest.
+  const prefill = guestId
+    ? await prisma.guest.findFirst({
+        where: { id: guestId, propertyId: property.id },
+        select: { firstName: true, lastName: true, email: true, phone: true, company: true, specialRequests: true },
+      })
+    : null;
 
   const quotes = new Map<string, number | null>();
   for (const rp of ratePlans) quotes.set(rp.id, await stayQuote(hold.roomTypeId, rp.id, checkIn, checkOut, hold.quantity));
@@ -209,14 +230,23 @@ async function HoldForm({ holdId, guests, sourceId, error }: { holdId: string; g
           <input type="hidden" name="guests" value={guests} />
 
           <div>
-            <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-ink-400">Guest</div>
+            <div className="mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-ink-400">
+              Guest
+              {prefill && (
+                <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[9.5px] font-bold normal-case tracking-normal text-brand-700">
+                  returning · details prefilled
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <div><label className={labelCls}>First name *</label><input name="firstName" required className={inputCls} /></div>
-              <div><label className={labelCls}>Last name *</label><input name="lastName" required className={inputCls} /></div>
-              <div><label className={labelCls}>Email</label><input type="email" name="email" className={inputCls} /></div>
-              <div><label className={labelCls}>Phone</label><input name="phone" className={inputCls} /></div>
-              <div className="col-span-2"><label className={labelCls}>Company</label><input name="company" className={inputCls} /></div>
-              <div className="col-span-2"><label className={labelCls}>Special requests</label><input name="specialRequests" placeholder="Free text — e.g. high floor, late arrival" className={inputCls} /></div>
+              <div><label className={labelCls}>First name *</label><input name="firstName" required defaultValue={prefill?.firstName ?? ""} className={inputCls} /></div>
+              <div><label className={labelCls}>Last name *</label><input name="lastName" required defaultValue={prefill?.lastName ?? ""} className={inputCls} /></div>
+              <div><label className={labelCls}>Email</label><input type="email" name="email" defaultValue={prefill?.email ?? ""} className={inputCls} /></div>
+              <div><label className={labelCls}>Phone</label><input name="phone" defaultValue={prefill?.phone ?? ""} className={inputCls} /></div>
+              <div className="col-span-2"><label className={labelCls}>Company</label><input name="company" defaultValue={prefill?.company ?? ""} className={inputCls} /></div>
+              {/* Prefilled but editable — a returning guest's standing request is a good default and
+                  a poor assumption. */}
+              <div className="col-span-2"><label className={labelCls}>Special requests</label><input name="specialRequests" defaultValue={prefill?.specialRequests ?? ""} placeholder="Free text — e.g. high floor, late arrival" className={inputCls} /></div>
             </div>
           </div>
 

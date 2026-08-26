@@ -37,3 +37,4 @@ export * from "./branding/logo.js";
 export * from "./onboarding/welcome.js";
 export * from "./invoicing/numbering.js";
 export * from "./metrics/availability-pressure.js";
+export * from "./guests/sample.js";

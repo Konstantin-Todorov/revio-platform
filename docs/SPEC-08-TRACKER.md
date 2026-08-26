@@ -83,17 +83,17 @@ Status: ☐ open · ◐ in progress · ☑ done
   click/focus, **everywhere native date inputs appear** — new-reservation search, reservations
   filter, bulk-edit modal (§5.4). Highest-frequency annoyance; do first.
 - ☐ **E2** *(§3.3)* Better fix: a two-month **range picker** for arrival→departure.
-- ☐ **E3** *(§3.2)* Known-booking **bypass** — guest-first entry, converging on the same
+- ☑ **E3** *(§3.2)* Known-booking **bypass** — guest-first entry, converging on the same
   hold → details → confirm tail. Search-first stays the default.
 - ☐ **E4** *(§3.2)* Show **rate plans at the shop step**, not only after hold — agents upsell on rate choice.
 - ☐ **E5** *(§3.1 build note)* Confirm holds carry a TTL. *(believed already true — verify)*
 
 ## F. RevioCRS — Guests *(§4)*
 
-- ☐ **F1** *(§4.2)* **"Book again" on the profile** — the concrete home for E3. Highest-leverage add.
+- ☑ **F1** *(§4.2)* **"Book again" on the profile** — the concrete home for E3. Highest-leverage add.
 - ☐ **F2** *(§4.3)* **Guest merge / de-duplication.** Pick the survivor, fold history/notes/
   preferences/privacy, keep an audit trail. Cheap now, painful once duplicates exist.
-- ☐ **F3** *(§4.4)* **Low-sample labels.** "Average stay 3.0 nights" from ONE stay claims a pattern
+- ☑ **F3** *(§4.4)* **Low-sample labels.** "Average stay 3.0 nights" from ONE stay claims a pattern
   that does not exist. Below a threshold say "Last stay", or annotate the sample.
 - ☐ **F4** *(§4.5)* Hydrate contact fields from the most recent linked reservation carrying a value.
   **Enrich empty · never overwrite · tag OTA-sourced as an alias** — OTA relay addresses are fine for

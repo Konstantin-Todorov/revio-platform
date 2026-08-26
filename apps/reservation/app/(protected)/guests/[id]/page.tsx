@@ -5,6 +5,8 @@ import { setGuestRecognitionOptOut, updateGuest } from "@/lib/actions-reservatio
 import { GuestNotes, type GuestNoteRow } from "@/components/guests/GuestNotes";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
+import { sampleLabel, hasPattern } from "@revio/core";
+import { CalendarPlus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +37,21 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
       <PageHeader
         title={`${guest.firstName} ${guest.lastName}`}
         subtitle={`${property.name} · guest since ${guest.createdAt.toISOString().slice(0, 10)}`}
-        action={<Link href="/guests" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← All guests</Link>}
+        action={
+          <div className="flex items-center gap-3">
+            {/* §4.2 — the concrete home for the §3.2 bypass, and the highest-leverage add on this
+                screen. Their room type and typical party come along, so a rebook is one click into
+                the same hold → details → confirm tail search-first uses. */}
+            <Link
+              href={`/reservations/new?guest=${guest.id}${derived.preferredRoomTypeId ? `&rt=${derived.preferredRoomTypeId}` : ""}${derived.typicalGuests ? `&guests=${derived.typicalGuests}` : ""}`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700"
+            >
+              <CalendarPlus className="h-4 w-4" />
+              {derived.stays > 0 ? "Book again" : "New reservation"}
+            </Link>
+            <Link href="/guests" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← All guests</Link>
+          </div>
+        }
       />
 
       <Card>
@@ -57,11 +73,25 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
       {/* Preference layer (spec §3.4) — the edge of "not a CRM": a light, derived layer only. */}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Preferences" subtitle="Worked out from this guest's past bookings" />
+          {/* §4.4 — the labels now match the evidence.
+              "Average stay 3.0 nights" and "Usual room 404" from a single visit were correct numbers
+              wearing the wrong words: both claim a pattern established by repetition, and at n=1
+              there is no pattern, only the one value that happened. Below two stays the wording
+              drops to "Last", and the sample is stated. */}
+          <CardHeader
+            title="Preferences"
+            subtitle={
+              derived.stays === 0
+                ? "Nothing to work from yet — this fills in after their first stay"
+                : hasPattern(derived.stays)
+                  ? `Worked out from ${derived.stays} past stays`
+                  : "From their single stay so far — not yet a pattern"
+            }
+          />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Preferred room type</dt><dd className="mt-0.5 font-semibold text-ink-900">{derived.preferredRoomType ?? "—"}</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Average stay</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLosNights.toFixed(1)} nights` : "—"}</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Average lead time</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLeadDays} days` : "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Preferred room type", "Room type booked")}</dt><dd className="mt-0.5 font-semibold text-ink-900">{derived.preferredRoomType ?? "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Average stay", "Last stay")}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLosNights.toFixed(1)} nights` : "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Average lead time", "Lead time")}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLeadDays} days` : "—"}</dd></div>
             <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Booking frequency</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays} stay{derived.stays === 1 ? "" : "s"}</dd></div>
             <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Lifetime accommodation</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(derived.lifetimeAccommodationMinor, property.baseCurrency)}</dd></div>
             <div>
@@ -81,8 +111,8 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
               <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Ancillary spend (lifetime)</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.ancillarySpendMinor, property.baseCurrency)}</dd></div>
               <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Avg ancillary / stay</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.avgAncillaryPerStayMinor, property.baseCurrency)}</dd></div>
-              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Usual room</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteUnit ?? "—"}</dd></div>
-              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Usual floor</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteFloor ?? "—"}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Usual room", "Last room")}</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteUnit ?? "—"}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Usual floor", "Last floor")}</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteFloor ?? "—"}</dd></div>
             </dl>
           ) : (
             <p className="px-4 py-5 text-[13px] text-ink-500">
