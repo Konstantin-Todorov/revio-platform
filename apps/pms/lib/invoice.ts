@@ -144,10 +144,21 @@ export async function generateInvoice(input: GenerateInvoiceInput): Promise<stri
     return { inv, number };
   });
 
-  // Fiscalization boundary (spec §4.7) — if this property's jurisdiction pack requires real-time
-  // reporting (e.g. Bulgaria N-18), report the document and stamp the returned fiscal seal on it.
+  // Fiscalization boundary (spec §4.7). Revio does NOT produce fiscal receipts — the hotel's own
+  // registered device does, and its number is recorded against the document afterwards. See the long
+  // note in `lib/fiscal.ts` for why becoming СУПТО is a choice we are declining. For a real tenant
+  // this returns null; only a demo tenant gets a (clearly labelled) fabricated seal.
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: session.tenantId },
+    select: { isDemo: true },
+  });
   const fiscal = await fiscalizeInvoice(
-    { jurisdiction: defaults?.jurisdiction ?? "generic", fiscalizationEnabled: defaults?.fiscalizationEnabled ?? false, eInvoicingEnabled: defaults?.eInvoicingEnabled ?? false },
+    {
+      jurisdiction: defaults?.jurisdiction ?? "generic",
+      fiscalizationEnabled: defaults?.fiscalizationEnabled ?? false,
+      eInvoicingEnabled: defaults?.eInvoicingEnabled ?? false,
+      isDemo: tenant?.isDemo ?? false,
+    },
     { docType: input.docType, number, grossMinor: summary.grossMinor, currency: folio.currency },
   );
   if (fiscal) await prisma.taxInvoice.update({ where: { id: inv.id }, data: { fiscalRef: fiscal.fiscalRef } });

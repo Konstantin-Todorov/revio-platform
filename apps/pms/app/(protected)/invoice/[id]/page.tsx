@@ -117,7 +117,9 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
         </div>
 
         <p className="mt-4 border-t border-surface-border pt-3 text-[10.5px] text-ink-400">
-          {inv.fiscalRef ? `Fiscal reference: ${inv.fiscalRef}` : "Not yet fiscalized — real-time fiscal reporting (e.g. Bulgaria N-18) connects at the compliance boundary."}
+          {inv.fiscalRef
+            ? `Fiscal receipt: ${inv.fiscalRef}`
+            : "No fiscal receipt recorded against this document. Cash and card payments taken at the property must be receipted on the property's own registered fiscal device (Наредба Н-18 чл. 3 ал. 1); transfers, company accounts and OTA prepayments are exempt."}
         </p>
       </div>
     </div>

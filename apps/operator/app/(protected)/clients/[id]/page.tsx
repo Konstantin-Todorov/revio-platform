@@ -93,6 +93,39 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           most early attention flags is the same phone call. */}
       <SetupProgressCard setup={c.setup} ageDays={c.ageDays} stalled={c.setupStalled} />
 
+      {/* 1c. What WE still owe them. Deliberately its own card and NOT merged into the progress bar
+          above: that one is work the hotel does and we ring them about, this one is work we do and
+          they cannot see. The alarm banner exists because "sold, switched on, nothing behind it" is
+          not a step remaining — it is a wrong state the customer can already walk into. */}
+      {(c.provisioningAlarm || c.provisioning.steps.length > 0) && (
+        <Card>
+          <h2 className="text-[13px] font-semibold text-ink-900">On our side</h2>
+          {c.provisioningAlarm && (
+            <p className="mt-2 rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-[12.5px] text-danger-700">
+              {c.provisioningAlarm}
+            </p>
+          )}
+          <ul className="mt-3 space-y-2.5">
+            {c.provisioning.steps.map((s) => (
+              <li key={s.key} className="flex gap-2.5">
+                <span
+                  className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                    s.severity === "blocking" ? "bg-danger-500" : s.severity === "soon" ? "bg-warn-500" : "bg-ink-300"
+                  }`}
+                />
+                <span>
+                  <span className="text-[13px] font-semibold text-ink-900">{s.title}</span>
+                  <span className="mt-0.5 block text-[12.5px] text-ink-500">{s.why}</span>
+                  {s.how && (
+                    <code className="mt-1 block font-mono text-[11.5px] text-ink-400">{s.how}</code>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       {/* 2. Who they are and when this renews. The relationship comes before the arithmetic, because
           the arithmetic is useless if nobody knows who to phone about it. */}
       <div className="grid gap-4 lg:grid-cols-2">

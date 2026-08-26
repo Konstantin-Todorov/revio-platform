@@ -40,6 +40,52 @@ That is why `channexKey()` looks in two places, in order:
 
 ---
 
+## Which steps apply — one, two, or all three products
+
+There are seven ways to buy the platform. **Six of them provision identically**, because RevioCRS and
+RevioPMS need nothing outside our own database: the shared core *is* their integration. Only
+**RevioLink** requires anything external.
+
+| They bought | Steps that apply | Time on our side |
+| --- | --- | --- |
+| RevioCRS only | 1 · 2 · 5 | minutes |
+| RevioPMS only | 1 · 2 · 5 | minutes |
+| RevioCRS + RevioPMS | 1 · 2 · 5 | minutes |
+| **anything with RevioLink** | **1 · 2 · 3 · 4 · 5 · 6** | days — the OTA authorises on their own clock |
+
+So the rule is one line, and it is worth stating rather than deriving each time:
+
+> **Steps 3, 4 and 6 exist only for `hasChannelManager`.** Everything else is the same work whether a
+> hotel bought one product or three.
+
+`channex:onboard` now **refuses** to run for a tenant without the entitlement (override `--i-know`),
+because a Channex property with no channel is a property in an account we are billed against per
+property, and a mapping nobody maintains.
+
+### The trap: a second product bought later
+
+This is the case that reports green while being broken, so it is the one to know.
+
+A hotel runs **RevioCRS**. Rooms, rate plans, prices, taxes — all done, checklist 100%. They buy
+**RevioLink**. The entitlement is a checkbox, so it flips instantly and the app appears in their
+switcher. The onboarding checklist re-reads the *same shared rows*, finds everything satisfied, and
+reports the new product **fully set up**.
+
+It is not. There is no Channex property, no credential and no channel. RevioLink is an empty shell,
+and the hotel can open it and edit rates that reach nobody.
+
+**"No migration" is a promise about data, and it holds. RevioLink is the one product that also needs
+something provisioned outside our database — and no amount of shared schema inherits that.**
+
+`apps/operator/lib/provisioning.ts` is the answer: a second, separate list of what **we** owe a
+client, shown on the client page under *On our side*, with `soldButNotProvisioned` raising the alarm
+above it. It is deliberately not merged into the setup progress bar — that one is work the hotel does
+and we ring them about; this one is work we do and they cannot see.
+
+**When you flip an entitlement to RevioLink, open the client page and read that card.**
+
+---
+
 ## The process
 
 ### 1 · Create the client — Operator console
@@ -69,12 +115,24 @@ A rate plan per *pair* is not a detail: Channex ties a rate plan to one room typ
 plans at property level. A hotel with 3 room types and one "Standard Rate" needs **three** Channex
 rate plans, and getting that wrong prices two of the three room types wrong on every OTA — silently.
 
-### 4 · Connect the hotel's OTAs — Channex dashboard, by hand
-Each channel needs that hotel's own credentials and, usually, an authorisation from the OTA's own
-extranet. This is the step that cannot be automated, and the step that starts Channex billing —
-a property only costs money once it has **an active channel**.
+### 4 · Connect the hotel's OTAs — from RevioLink
 
-Then map the OTA's rooms and rates to ours on Channex's mapping screen.
+**Updated 2026-08-26: this no longer means opening the Channex dashboard.** Channex describes its own
+connection form over the API — `GET /channels/adapter?code=BookingCom` returns the fields, types,
+labels, defaults and dropdown options — so one screen renders the right form for any channel while
+knowing nothing about that channel. `packages/connectivity/src/channex-channels.ts` parses it;
+`CHANNEL_CODES` lists the seven verified codes (`BookingCom`, `Expedia`, `Agoda`, `Airbnb`,
+`Hotelbeds`, `Ctrip`, `Despegar` — note `booking` and `Booking` both 500).
+
+What the hotel actually types is small. **Booking.com asks for one visible field: their Hotel ID.**
+Everything else on that descriptor — machine account, payout permissions, VCC flags — is `hidden`.
+
+**One part stays manual, permanently:** the hotel authorises us in the *OTA's own extranet*
+(Booking.com asking them to consent to a connectivity provider changing their rates). No API of ours
+can answer that for them. Airbnb additionally needs an OAuth handshake.
+
+This is also the step that **starts Channex billing** — a property costs nothing until it has an
+active channel.
 
 ### 5 · Verify — from the product, not from a script
 Re-sync from RevioLink and confirm the Sync Center shows a success with a task id. A push that

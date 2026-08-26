@@ -91,8 +91,25 @@ async function main() {
   if (!slug) throw new Error("--tenant <slug> is required.");
 
   const db = forSystem();
-  const tenant = await db.tenant.findUnique({ where: { slug }, select: { id: true, name: true, isDemo: true } });
+  const tenant = await db.tenant.findUnique({
+    where: { slug },
+    select: { id: true, name: true, isDemo: true, hasChannelManager: true },
+  });
   if (!tenant) throw new Error(`No tenant with slug "${slug}".`);
+
+  /*
+   * Channex provisioning is the ONE thing that distinguishes the seven ways to buy this platform.
+   * RevioCRS and RevioPMS need nothing outside our own database — the shared core is their
+   * integration — so a Channex property for a client without RevioLink is a property that will never
+   * have a channel: clutter in an account we are billed against per property, and a mapping nobody
+   * maintains. Refused rather than warned, because the operator running this has already decided.
+   */
+  if (!tenant.hasChannelManager && !has("i-know")) {
+    throw new Error(
+      `"${tenant.name}" does not have RevioLink. Channex is only needed for the channel manager — ` +
+        `RevioCRS and RevioPMS need no external provisioning. Grant the entitlement first, or pass --i-know.`,
+    );
+  }
 
   /*
    * The rule from factory.ts, enforced rather than remembered.

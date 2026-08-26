@@ -7,6 +7,7 @@ import {
 } from "./pricing";
 import { clientAttention, sortBySeverity, worstSeverity } from "./attention";
 import { clientSetup, daysSince, setupStalled } from "./onboarding";
+import { provisioningState, soldButNotProvisioned } from "./provisioning";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { channelEconomics, SOLD_STATUSES } from "@revio/core";
@@ -388,7 +389,8 @@ export async function getClientDetail(id: string) {
   const [roomTypes, units, channels, channelsConnected, reservations, openErrors, lastSync,
          lastReservation, reservationsLast30d, invoices, recentFailures, lines,
          firstReservation, operators,
-         ratePlans, prices, taxes, catalogItems, unmappedRt, unmappedRp] = await Promise.all([
+         ratePlans, prices, taxes, catalogItems, unmappedRt, unmappedRp,
+         hasChannexCredential, channelsWithExternalProperty, channelsLive] = await Promise.all([
     prisma.roomType.count({ where: { tenantId: id } }),
     prisma.unit.count({ where: { tenantId: id } }),
     prisma.channel.findMany({ where: { tenantId: id }, select: { id: true, name: true, code: true, status: true, commissionPct: true, lastSyncAt: true, errorCount: true } }),
@@ -424,6 +426,12 @@ export async function getClientDetail(id: string) {
     prisma.posItem.count({ where: { tenantId: id } }),
     prisma.channelRoomTypeMapping.count({ where: { channel: { tenantId: id }, status: { not: "complete" } } }),
     prisma.channelRatePlanMapping.count({ where: { channel: { tenantId: id }, status: { not: "complete" } } }),
+    // Provisioning facts — what WE owe them (provisioning.ts), not what they owe their setup.
+    prisma.connectivityCredential.count({ where: { tenantId: id } }).then((n) => n > 0),
+    prisma.channel.count({ where: { tenantId: id, externalPropertyId: { not: null } } }),
+    // "Live" is stricter than "connected": a channel that has actually pushed. It is the state
+    // Channex bills on, so it is the one worth counting separately.
+    prisma.channel.count({ where: { tenantId: id, status: "connected", lastSyncAt: { not: null } } }),
   ]);
 
   // Aggregate by source the same way the CRS does, then hand it to the shared function.
@@ -447,6 +455,30 @@ export async function getClientDetail(id: string) {
   );
 
   const entitlements = { channelManager: tenant.hasChannelManager, reservation: tenant.hasReservation, pms: tenant.hasPms };
+
+  /*
+   * What WE still owe this client, as opposed to what they still owe their own setup. See
+   * `provisioning.ts` — the case it exists for is a CRS client who buys RevioLink, whose hotel-side
+   * checklist reads 100% because the shared core already holds everything, while the product they
+   * just paid for has no Channex property behind it.
+   */
+  const provisioning = provisioningState({
+    entitlements,
+    hasChannexCredential,
+    channelsWithExternalProperty,
+    channelsConnected,
+    channelsLive,
+    isDemo: tenant.isDemo,
+  });
+  const provisioningAlarm = soldButNotProvisioned({
+    entitlements,
+    hasChannexCredential,
+    channelsWithExternalProperty,
+    channelsConnected,
+    channelsLive,
+    isDemo: tenant.isDemo,
+  });
+
   const unpaidInvoices = invoices.filter((i) => i.status !== "paid").map((i) => ({ period: i.period, amountMinor: i.amountMinor, status: i.status }));
   const bookingEngineProperties = tenant.properties.filter((p) => p.bookingEngineEnabled).length;
   const monthly = monthlyPriceMinor(tenant.plan, entitlements);
@@ -532,6 +564,7 @@ export async function getClientDetail(id: string) {
   return {
     tenant, entitlements, attention, opportunities,
     setup, ageDays, setupStalled: setupStalled(setup, ageDays),
+    provisioning, provisioningAlarm,
     pipelineMinor: pipelineMinor(opportunities),
     drift: tierDrift(tenant.plan, units),
     billing: { monthlyMinor: monthly, products: billedProducts(entitlements), invoices },
