@@ -109,9 +109,9 @@ Status: ☐ open · ◐ in progress · ☑ done
 - ☑ **G3** *(§5.3)* **Make the derived cascade explicit** — one line: *"Derived plans follow Standard
   — change it and they recompute."* One line, and it is the difference between the feature feeling
   clever and feeling risky. **Do first.**
-- ☐ **G4** *(§5.3)* **Tab the bulk modal** — Rates | Availability | Restrictions.
-- ☐ **G5** *(§5.3)* Co-locate rate-plan selection with the Price control.
-- ☐ **G6** *(§5.3)* Unit-aware Value field (€/%) with an inline result, and a Preview that spells out
+- ☑ **G4** *(§5.3)* **Tab the bulk modal** — Rates | Availability | Restrictions.
+- ☑ **G5** *(§5.3)* Co-locate rate-plan selection with the Price control.
+- ☑ **G6** *(§5.3)* Unit-aware Value field (€/%) with an inline result, and a Preview that spells out
   the blast radius including every derived recompute.
 - ☑ **G7** *(§5.4)* "Set exact price" must say it sets the **master only**.
 

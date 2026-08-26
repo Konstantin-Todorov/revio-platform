@@ -53,6 +53,16 @@ export function CrsBulkPanel({
   const [advMax, setAdvMax] = useState("");
   const [avail, setAvail] = useState("");
 
+  /*
+   * §5.3 — three tabs instead of one scroll.
+   *
+   * A price change had to wade past rooms-to-sell, min/max stay, min/max advance and CTA/CTD to
+   * reach the field it wanted. Rates is first and default because it is the reason the modal is
+   * opened; the other two are there when they are needed and out of the way when they are not.
+   */
+  const [tab, setTab] = useState<"rates" | "availability" | "restrictions">("rates");
+  /** € or %, from the operation — so the Value field can say which it wants. */
+  const rateUnit = rateMode === "inc_pct" || rateMode === "dec_pct" ? "%" : "€";
   const [inlineError, setInlineError] = useState<string | null>(null);
   const [phase, setPhase] = useState<"closed" | "confirm" | "result">("closed");
   const [result, setResult] = useState<CrsBulkResult | null>(null);
@@ -81,7 +91,20 @@ export function CrsBulkPanel({
     if (p.rate) {
       const label = RATE_MODES.find(([m]) => m === p.rate!.mode)?.[1] ?? p.rate.mode;
       const names = planIds.map((id) => manualPlans.find((m) => m.id === id)?.name).filter(Boolean).join(", ") || "standard plan";
-      lines.push(`Price — ${label}: ${p.rate.value} · on ${names}`);
+      const unit = p.rate.mode === "inc_pct" || p.rate.mode === "dec_pct" ? "%" : "€";
+      lines.push(`Price — ${label}: ${p.rate.value}${unit} · on ${names}`);
+      /*
+       * §5.3 — the blast radius, stated before the commit.
+       *
+       * The derived plans recompute off whatever you just changed, and the preview never said so.
+       * A user could see "Price — increase by 10%" and have no idea five other plans were about to
+       * move with it. Naming them is the difference between a bulk edit that feels safe and one
+       * that feels like a gamble.
+       */
+      if (derivedPlans.length > 0) {
+        const following = derivedPlans.map((d) => d.name).join(", ");
+        lines.push(`…and ${derivedPlans.length} derived plan${derivedPlans.length === 1 ? "" : "s"} recompute off it: ${following}`);
+      }
     }
     if (p.availability !== undefined) lines.push(`Rooms to sell → ${p.availability}`);
     if (p.minLos !== undefined) lines.push(`Min stay → ${showNum(p.minLos)}`);
@@ -151,66 +174,128 @@ export function CrsBulkPanel({
               ))}
             </div>
           </div>
-          <div>
-            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Rate plans <span className="font-normal text-ink-400">(for the price change — manual only)</span></span>
-            <div className="grid grid-cols-2 gap-1.5">
-              {manualPlans.map((rp) => (
-                <label key={rp.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
-                  <input type="checkbox" checked={planIds.includes(rp.id)} onChange={() => setPlanIds((a) => toggle(a, rp.id))} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
-                  {rp.name}
-                </label>
-              ))}
-              {derivedPlans.map((rp) => (
-                <span key={rp.id} title={`Derived from ${rp.parentName ?? "its parent"} — its price follows the parent automatically`} className="flex cursor-not-allowed items-center gap-2 rounded-md border border-dashed border-surface-border px-2.5 py-1.5 text-[12.5px] text-ink-300">
-                  📎 {rp.name} <span className="text-[10px] uppercase">derived</span>
-                </span>
-              ))}
-            </div>
-            {/*
-              §5.3 — the #1 easy win, and it is one sentence.
-              The derived rows are greyed with a DERIVED tag, which tells the user "you cannot edit
-              these" and says nothing about what happens when they change Standard. So they do not
-              know whether Non-Refundable follows or goes stale, and that doubt is the entire friction
-              with the feature. The model is strong; it was simply invisible.
-            */}
-            {derivedPlans.length > 0 && (
-              <span className="mt-1.5 flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-brand-800">
-                <span aria-hidden>📎</span>
-                <span>
-                  Derived plans follow Standard — change it and they recompute. You only ever edit the
-                  plan they come from.
-                </span>
-              </span>
-            )}
-            <span className="mt-1 block text-[11px] text-ink-400">Restrictions apply per room type regardless of rate plan.</span>
-          </div>
         </div>
 
         <div className="space-y-3.5">
           <div className="rounded-md bg-surface-muted px-3 py-2 text-[11.5px] font-medium text-ink-500">
             Fill only the fields you want to change — the rest stay as they are. At least one is required.
           </div>
-          <div className="grid grid-cols-[1fr,7rem] gap-2">
-            <Field label="Price"><select value={rateMode} onChange={(e) => setRateMode(e.target.value as CrsBulkRateMode | "")} className={inputCls}>
-              <option value="">— No change —</option>
-              {RATE_MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
-            </select></Field>
-            <Field label="Value"><input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} disabled={rateMode === ""} placeholder="—" className={`${inputCls} disabled:opacity-50`} /></Field>
+
+          {/* Each tab shows a dot when it carries a pending change, so switching away from a tab
+              cannot hide an edit that is about to be applied. */}
+          <div className="flex gap-1 rounded-md bg-surface-sunken p-1">
+            {([
+              ["rates", "Rates", rateMode !== ""],
+              ["availability", "Availability", avail !== ""],
+              ["restrictions", "Restrictions", [minLos, maxLos, advMin, advMax, cta, ctd, stopSell].some((v) => v !== "")],
+            ] as const).map(([key, label, dirty]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                aria-pressed={tab === key}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                  tab === key ? "bg-white text-ink-900 shadow-sm" : "text-ink-500 hover:text-ink-700"
+                }`}
+              >
+                {label}
+                {dirty && <span className="h-1.5 w-1.5 rounded-full bg-brand-600" />}
+              </button>
+            ))}
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Rooms to sell"><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
-            <div />
-            <Field label="Min stay (nights)"><input type="number" min="0" value={minLos} onChange={(e) => setMinLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
-            <Field label="Max stay (nights)"><input type="number" min="0" value={maxLos} onChange={(e) => setMaxLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
-            <Field label="Min advance (days)"><input type="number" min="0" value={advMin} onChange={(e) => setAdvMin(e.target.value)} placeholder="—" className={inputCls} /></Field>
-            <Field label="Max advance (days)"><input type="number" min="0" value={advMax} onChange={(e) => setAdvMax(e.target.value)} placeholder="—" className={inputCls} /></Field>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <Field label="Closed to arrival"><select value={cta} onChange={(e) => setCta(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="on">Closed</option><option value="off">Open</option></select></Field>
-            <Field label="Closed to departure"><select value={ctd} onChange={(e) => setCtd(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="on">Closed</option><option value="off">Open</option></select></Field>
-            <Field label="Rate plan status"><select value={stopSell} onChange={(e) => setStopSell(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="off">Open (sell)</option><option value="on">Close (stop-sell)</option></select></Field>
-          </div>
-          <p className="text-[11px] text-ink-400">Min/max stay & advance: enter <span className="font-semibold">0</span> to clear an existing value.</p>
+
+          {tab === "rates" && (
+            <div className="space-y-3">
+              {/* §5.3 — the rate plans live HERE now, beside Price. They were in the scope block at
+                  the top while Price was scrolled far below, so one logical operation ("change THESE
+                  plans BY this much") was split across a scroll. */}
+            <div>
+              <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Rate plans <span className="font-normal text-ink-400">(for the price change — manual only)</span></span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {manualPlans.map((rp) => (
+                  <label key={rp.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
+                    <input type="checkbox" checked={planIds.includes(rp.id)} onChange={() => setPlanIds((a) => toggle(a, rp.id))} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
+                    {rp.name}
+                  </label>
+                ))}
+                {derivedPlans.map((rp) => (
+                  <span key={rp.id} title={`Derived from ${rp.parentName ?? "its parent"} — its price follows the parent automatically`} className="flex cursor-not-allowed items-center gap-2 rounded-md border border-dashed border-surface-border px-2.5 py-1.5 text-[12.5px] text-ink-300">
+                    📎 {rp.name} <span className="text-[10px] uppercase">derived</span>
+                  </span>
+                ))}
+              </div>
+              {/*
+                §5.3 — the #1 easy win, and it is one sentence.
+                The derived rows are greyed with a DERIVED tag, which tells the user "you cannot edit
+                these" and says nothing about what happens when they change Standard. So they do not
+                know whether Non-Refundable follows or goes stale, and that doubt is the entire friction
+                with the feature. The model is strong; it was simply invisible.
+              */}
+              {derivedPlans.length > 0 && (
+                <span className="mt-1.5 flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-brand-800">
+                  <span aria-hidden>📎</span>
+                  <span>
+                    Derived plans follow Standard — change it and they recompute. You only ever edit the
+                    plan they come from.
+                  </span>
+                </span>
+              )}
+              <span className="mt-1 block text-[11px] text-ink-400">Restrictions apply per room type regardless of rate plan.</span>
+            </div>
+
+              <div className="grid grid-cols-[1fr,8rem] gap-2">
+                <Field label="Price"><select value={rateMode} onChange={(e) => setRateMode(e.target.value as CrsBulkRateMode | "")} className={inputCls}>
+                  <option value="">— No change —</option>
+                  {RATE_MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+                </select></Field>
+                {/* §5.3 — the field echoes its own unit. "12" means something different under
+                    "Increase by %" and "Increase by amount", and the input gave no clue which. */}
+                <Field label={rateMode === "" ? "Value" : rateUnit === "%" ? "Value (%)" : "Value (€)"}>
+                  <div className="relative">
+                    <input
+                      type="number" step="0.01" value={rateValue}
+                      onChange={(e) => setRateValue(e.target.value)}
+                      disabled={rateMode === ""} placeholder="—"
+                      className={`${inputCls} ${rateMode === "" ? "" : "pr-6"} disabled:opacity-50`}
+                    />
+                    {rateMode !== "" && (
+                      <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[12px] font-semibold text-ink-400">
+                        {rateUnit}
+                      </span>
+                    )}
+                  </div>
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {tab === "availability" && (
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Rooms to sell"><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
+              <div />
+              <p className="col-span-2 text-[11px] text-ink-400">
+                Sets the number of rooms offered for sale on each selected day, per room type. Leave empty to change nothing.
+              </p>
+            </div>
+          )}
+
+          {tab === "restrictions" && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Min stay (nights)"><input type="number" min="0" value={minLos} onChange={(e) => setMinLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
+                <Field label="Max stay (nights)"><input type="number" min="0" value={maxLos} onChange={(e) => setMaxLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
+                <Field label="Min advance (days)"><input type="number" min="0" value={advMin} onChange={(e) => setAdvMin(e.target.value)} placeholder="—" className={inputCls} /></Field>
+                <Field label="Max advance (days)"><input type="number" min="0" value={advMax} onChange={(e) => setAdvMax(e.target.value)} placeholder="—" className={inputCls} /></Field>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Closed to arrival"><select value={cta} onChange={(e) => setCta(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="on">Closed</option><option value="off">Open</option></select></Field>
+                <Field label="Closed to departure"><select value={ctd} onChange={(e) => setCtd(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="on">Closed</option><option value="off">Open</option></select></Field>
+                <Field label="Rate plan status"><select value={stopSell} onChange={(e) => setStopSell(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="off">Open (sell)</option><option value="on">Close (stop-sell)</option></select></Field>
+              </div>
+              <p className="text-[11px] text-ink-400">Min/max stay &amp; advance: enter <span className="font-semibold">0</span> to clear an existing value.</p>
+            </div>
+          )}
+
           {inlineError && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{inlineError}</p>}
           <button type="button" onClick={openPreview} className="w-full rounded-md bg-brand-800 px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700">
             Preview &amp; apply
