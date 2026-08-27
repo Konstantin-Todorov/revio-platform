@@ -6,6 +6,7 @@ import { postFolioLineWith } from "./posting";
 import { MANAGER_ROLES } from "./roles";
 import { ymd, todayInTz } from "./format";
 import type { HkStatus } from "./hk-meta";
+import { summariseOutcomes, outcomeHeadline, type OutcomeTotal } from "./folio-outcomes";
 
 export type FolioLineRow = {
   id: string; kind: string; description: string; amountMinor: number;
@@ -509,4 +510,41 @@ export async function createSplitFolio(tenantId: string, propertyId: string, res
   if (!primary) return null;
   const f = await prisma.folio.create({ data: { tenantId, propertyId, reservationId, currency: primary.currency, isPrimary: false, label: label || "Split" }, select: { id: true } });
   return f.id;
+}
+
+/**
+ * How closed folios ended, in totals — J1 (§1.4).
+ *
+ * The verification that prompted this found that `written_off` and `paid_offsystem` could not be
+ * conflated (a write-off posts no folio line, so nothing summing payments can count it as income) and
+ * were also **not reported anywhere at all** — an owner could not answer "how much did we write off
+ * last month" without opening folios one at a time. See `folio-outcomes.ts`.
+ *
+ * Windowed on `closedAt`, not `openedAt`: the question is about the month the money was resolved in,
+ * which is when the decision was taken, not when the guest arrived.
+ */
+export async function folioOutcomeSummary(sinceDays = 90): Promise<{
+  totals: OutcomeTotal[];
+  headline: ReturnType<typeof outcomeHeadline>;
+  sinceDays: number;
+}> {
+  const { property } = await activeProperty();
+  const since = new Date(Date.now() - sinceDays * 86_400_000);
+
+  const folios = await prisma.folio.findMany({
+    where: { propertyId: property.id, status: "closed", closedAt: { gte: since } },
+    select: { outcome: true, lines: { select: { kind: true, amountMinor: true, voided: true } } },
+  });
+
+  const rows = folios.map((f) => ({
+    outcome: f.outcome,
+    // What the folio was WORTH — the charges, not the balance. A settled folio has a zero balance
+    // and is not therefore worth nothing; the revenue it represents is the charges on it.
+    grossMinor: f.lines
+      .filter((l) => !l.voided && l.kind !== "payment" && !l.kind.startsWith("deposit_"))
+      .reduce((s, l) => s + l.amountMinor, 0),
+  }));
+
+  const totals = summariseOutcomes(rows);
+  return { totals, headline: outcomeHeadline(totals), sinceDays };
 }

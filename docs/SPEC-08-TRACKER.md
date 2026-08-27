@@ -192,11 +192,14 @@ everything in them was already built, which is worth recording so it is not rebu
 - ☑ **§3** Close Day auto-close — running on the cron, 6/6 green.
 
 ### Still open in the PMS docs
-- ☐ **J1** *(§1.4 accounting nuance)* Verify **mark-paid and write-off are reported separately**
-  everywhere they surface. Both close a folio at zero by different mechanisms — one is revenue
-  collected, the other revenue lost — and an owner must never see €513 written off presented as a
-  payment. The states exist and are labelled on the folio; what needs checking is every report that
-  aggregates them.
+- ☑ **J1** *(§1.4)* **Verified, and it passed by absence — which is not the same as passing.**
+  A write-off posts no folio line at all (only `Folio.outcome`), so nothing that sums payments can
+  ever count it as income: the conflation the spec feared does not exist. But `written_off` and
+  `paid_offsystem` were reported **nowhere** — one label on one folio, no total anywhere — so an
+  owner could not answer "how much did we write off last month" without opening folios one at a
+  time. Closed with `folio-outcomes.ts` (10 tests) and a summary on Folios → History: collected,
+  owed and lost as **three numbers that are never added together**, and every row shown at zero
+  because an absent row reads as "not measured".
 - ☐ **J2** *(§4 / P1–P15)* OBP on the PMS side. Depends on the shared model (H1). Sequenced last.
 
 ## K. OBP on the PMS *(RevioPMS-OBP-Implementation, P1–P15)*

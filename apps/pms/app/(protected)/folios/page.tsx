@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Receipt, Archive, FileText, CircleDollarSign } from "lucide-react";
 import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { listFolios, listFolioHistory, listReceivables } from "@/lib/folio";
+import { listFolios, listFolioHistory, listReceivables, folioOutcomeSummary } from "@/lib/folio";
+import { OutcomeSummary } from "@/components/folios/OutcomeSummary";
 import { OpenFoliosTable, type OpenFolioRow } from "@/components/folios/OpenFoliosTable";
 import { money } from "@/lib/format";
 
@@ -15,10 +16,12 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
   // Receivables is loaded on EVERY tab, not just its own, because its count belongs on the tab
   // label: money owed by people who have already left is the thing most easily forgotten, and a tab
   // you have to open to discover there is anything in it is a tab nobody opens.
-  const [{ rows: openRows }, history, receivables] = await Promise.all([
+  const [{ rows: openRows }, history, receivables, outcomes] = await Promise.all([
     listFolios(),
     tab === "history" ? listFolioHistory(sp.q) : Promise.resolve(null),
     listReceivables(),
+    // Only on History: it is the financial record, and this is the summary of it (J1).
+    tab === "history" ? folioOutcomeSummary() : Promise.resolve(null),
   ]);
 
   const Tab = ({ id, label, icon: Icon, count }: { id: "open" | "history" | "receivables"; label: string; icon: typeof Receipt; count?: number }) => (
@@ -108,6 +111,17 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
           </Card>
         )
       ) : (
+        <>
+        {/* J1 — above the archive, because the totals are the thing an owner came for and the rows
+            are how they check them. Collected, owed and lost stay three numbers. */}
+        {outcomes && (
+          <OutcomeSummary
+            totals={outcomes.totals}
+            headline={outcomes.headline}
+            sinceDays={outcomes.sinceDays}
+            currency={receivables.property.baseCurrency}
+          />
+        )}
         <Card>
           {/* History search (§4.2) — read-only archive; find a guest's folio, its invoices reachable. */}
           <form method="GET" className="flex items-center gap-2 border-b border-surface-border px-4 py-2.5">
@@ -161,6 +175,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
             History is read-only — a closed folio is corrected with a credit note, never edited.
           </p>
         </Card>
+        </>
       )}
     </div>
   );

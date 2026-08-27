@@ -27,6 +27,16 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-27 · Claude · DONE · PMS J1 — folio outcomes reported separately
+**Verified the write-off/paid split, found it reported nowhere, built the summary.**
+Files: `apps/pms/lib/folio-outcomes.ts` (new, 10 tests), `apps/pms/lib/folio.ts`,
+`apps/pms/components/folios/OutcomeSummary.tsx`, `apps/pms/app/(protected)/folios/page.tsx`
+Notes: the good news is structural — a write-off posts **no folio line**, so no revenue query can
+count it. Do not "simplify" that by posting a zero-value payment line; it is what makes the
+separation impossible to get wrong. Collected / owed / lost must stay three numbers on the screen —
+there is deliberately no combined total, because €513 written off and €513 paid off-system are the
+same figure and opposite events.
+
 ### 2026-08-26 · Claude · DONE · CRS F2 — guest merge
 **Extracting guest merge + duplicate detection to `@revio/core`, then adding the CRS half.**
 Files: `packages/core/src/guests/merge.ts` (new), `apps/pms/lib/{actions-guests,guest-identity}.ts`,
@@ -104,7 +114,6 @@ Pull one of these rather than inventing work, and claim it above first.
 | --- | --- | --- |
 | **E2** two-month range picker, arrival→departure | CRS | tracker §E |
 | **F5** *(do nothing)* no charts on a guest profile | CRS | recorded so nobody adds them |
-| **J1** verify mark-paid and write-off report separately | PMS | verification, may be a no-op |
 | **H1–H14, K1–K8** occupancy-based pricing | all | **parked by agreement, sequenced last** — do not start without saying so |
 
 ## Standing facts worth not rediscovering
