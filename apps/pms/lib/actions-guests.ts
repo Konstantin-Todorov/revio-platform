@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { hasChanges, planMerge } from "@revio/core";
+import { withTenantTransaction } from "@revio/db";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { MANAGER_ROLES } from "./roles";
@@ -19,33 +21,44 @@ export async function mergeGuests(fd: FormData): Promise<void> {
 
   const winnerId = str(fd, "winnerId");
   const loserId = str(fd, "loserId");
-  if (!winnerId || !loserId || winnerId === loserId) return;
+  if (!winnerId || !loserId) return;
 
   const [winner, loser] = await Promise.all([
     prisma.guest.findFirst({ where: { id: winnerId, propertyId: s.activePropertyId } }),
     prisma.guest.findFirst({ where: { id: loserId, propertyId: s.activePropertyId } }),
   ]);
-  if (!winner || !loser || loser.mergedIntoId || winner.mergedIntoId) return;
+  if (!winner || !loser) return;
 
-  // Re-parent the loser's records to the winner.
-  await prisma.reservation.updateMany({ where: { guestId: loserId }, data: { guestId: winnerId } });
-  await prisma.guestNote.updateMany({ where: { guestId: loserId }, data: { guestId: winnerId } });
+  // The rules live in @revio/core so the CRS decides identically. This used to be a hand-written
+  // copy of the same back-fill, which is how two rules drift apart.
+  const plan = planMerge(winner, loser);
+  if (!plan.ok) return;
 
-  // Back-fill any contact detail the winner is missing (never overwrite existing winner data).
-  const fill: Record<string, string> = {};
-  if (!winner.email && loser.email) fill.email = loser.email;
-  if (!winner.phone && loser.phone) fill.phone = loser.phone;
-  if (!winner.company && loser.company) fill.company = loser.company;
-  if (Object.keys(fill).length) await prisma.guest.update({ where: { id: winnerId }, data: fill });
-
-  // Flag the loser as merged (soft — not deleted).
-  await prisma.guest.update({ where: { id: loserId }, data: { mergedIntoId: winnerId } });
+  /*
+   * ⚠️ ONE transaction, because a half-merge is worse than no merge.
+   *
+   * This was four sequential awaits, and `forTenant()` wraps each operation in its own transaction —
+   * so a failure after the re-parent but before the flag left the loser's reservations attached to
+   * the winner while the loser still appeared in every list as a live guest with no history. The
+   * hotel then sees two records where one has silently been emptied.
+   *
+   * See AGENTS.md §1 and the note on withTenantTransaction.
+   */
+  await withTenantTransaction(s.tenantId, async (tx) => {
+    await tx.reservation.updateMany({ where: { guestId: loserId }, data: { guestId: winnerId } });
+    await tx.guestNote.updateMany({ where: { guestId: loserId }, data: { guestId: winnerId } });
+    if (hasChanges(plan.fill)) {
+      await tx.guest.update({ where: { id: winnerId }, data: plan.fill });
+    }
+    // Last, and inside the same transaction: this is the step that makes the merge visible.
+    await tx.guest.update({ where: { id: loserId }, data: { mergedIntoId: winnerId } });
+  });
 
   await logAudit(s.activePropertyId, s.tenantId, {
     entity: "guest",
     field: "merge",
-    oldValue: `${loser.firstName} ${loser.lastName} (${loserId.slice(-6)})`,
-    newValue: `${winner.firstName} ${winner.lastName} (${winnerId.slice(-6)})`,
+    oldValue: `${plan.describe.loser} (${loserId.slice(-6)})`,
+    newValue: `${plan.describe.winner} (${winnerId.slice(-6)})`,
     userId: s.userId,
   });
 

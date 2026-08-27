@@ -10,6 +10,8 @@ import { stayScope } from "@revio/connectivity";
 import { claimHold } from "@revio/db";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
+import { hasChanges, planMerge } from "@revio/core";
+import { withTenantTransaction } from "@revio/db";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -522,4 +524,43 @@ export async function deleteGuestNote(fd: FormData): Promise<void> {
   if (note) await prisma.guestNote.delete({ where: { id: noteId } });
   revalidatePath(`/guests/${guestId}`);
   redirect(`/guests/${guestId}#notes`);
+}
+
+/**
+ * Merge a duplicate guest into a survivor — F2.
+ *
+ * The same operation the PMS performs, through the same rules in `@revio/core`, so a hotel running
+ * both products cannot get two different answers about who the same person is.
+ *
+ * One transaction, deliberately: `forTenant()` wraps each operation separately, so a run of awaits
+ * that fails halfway leaves the loser's reservations on the winner while the loser still shows in
+ * every list as a live guest with no history. See AGENTS.md §1.
+ */
+export async function mergeGuest(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
+  const property = await getProperty();
+
+  const winnerId = str(fd, "winnerId");
+  const loserId = str(fd, "loserId");
+  if (!winnerId || !loserId) redirect("/guests");
+
+  const [winner, loser] = await Promise.all([
+    prisma.guest.findFirst({ where: { id: winnerId, propertyId: property.id } }),
+    prisma.guest.findFirst({ where: { id: loserId, propertyId: property.id } }),
+  ]);
+  if (!winner || !loser) redirect("/guests");
+
+  const plan = planMerge(winner!, loser!);
+  if (!plan.ok) redirect(`/guests/${winnerId}`);
+
+  await withTenantTransaction(property.tenantId, async (tx) => {
+    await tx.reservation.updateMany({ where: { guestId: loserId }, data: { guestId: winnerId } });
+    await tx.guestNote.updateMany({ where: { guestId: loserId }, data: { guestId: winnerId } });
+    if (hasChanges(plan.fill)) await tx.guest.update({ where: { id: winnerId }, data: plan.fill });
+    await tx.guest.update({ where: { id: loserId }, data: { mergedIntoId: winnerId } });
+  });
+
+  revalidatePath("/guests");
+  revalidatePath(`/guests/${winnerId}`);
+  redirect(`/guests/${winnerId}`);
 }

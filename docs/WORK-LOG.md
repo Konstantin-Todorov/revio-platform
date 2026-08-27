@@ -27,7 +27,7 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
-### 2026-08-26 · Claude · CLAIMED · CRS F2 — guest merge
+### 2026-08-26 · Claude · DONE · CRS F2 — guest merge
 **Extracting guest merge + duplicate detection to `@revio/core`, then adding the CRS half.**
 Files: `packages/core/src/guests/merge.ts` (new), `apps/pms/lib/{actions-guests,guest-identity}.ts`,
 `apps/reservation/**/guests/**`
@@ -35,7 +35,10 @@ Notes: merge already exists in the PMS only. Extracting because a second caller 
 fixes four things on the way: the merge is **not transactional** (four sequential writes, so a failure
 half-merges), duplicate detection **loads every guest in the property** and is then called twice per
 profile, the contact back-fill duplicates `hydrateGuestContact`, and it can copy an OTA alias onto the
-winner without carrying `emailIsOtaAlias`. **Codex: leave guests alone until this is DONE.**
+winner without carrying `emailIsOtaAlias`. **Done — guests are free.** Two things before touching them: the merge rules live in
+`@revio/core/guests/merge.ts` and BOTH products call them, so change them there and never in an app;
+and an OTA relay address must never match on email — two guests can hold `x@guest.booking.com` and be
+different people.
 
 ### 2026-08-26 · Claude · DONE · CRS F4 — guest contact hydration
 **Enrich-empty / never-overwrite / tag-OTA. `packages/core/src/guests/contact-hydration.ts`, 16 tests.**
@@ -100,8 +103,6 @@ Pull one of these rather than inventing work, and claim it above first.
 | Item | Where | Note |
 | --- | --- | --- |
 | **E2** two-month range picker, arrival→departure | CRS | tracker §E |
-| **F2** guest merge / de-duplication | CRS | pick survivor, fold history + notes |
-| **F4** hydrate guest contact from latest reservation | CRS | **enrich-empty / don't-overwrite / tag-OTA** — founder-decided, do not vary |
 | **F5** *(do nothing)* no charts on a guest profile | CRS | recorded so nobody adds them |
 | **J1** verify mark-paid and write-off report separately | PMS | verification, may be a no-op |
 | **H1–H14, K1–K8** occupancy-based pricing | all | **parked by agreement, sequenced last** — do not start without saying so |

@@ -40,3 +40,4 @@ export * from "./metrics/availability-pressure.js";
 export * from "./guests/sample.js";
 export * from "./fiscal/receipt-requirement.js";
 export * from "./guests/contact-hydration.js";
+export * from "./guests/merge.js";

@@ -1,58 +1,70 @@
 import "server-only";
+import { matchDuplicates, normalisePhone, type DuplicateCandidate } from "@revio/core";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
 
 /**
  * Stable guest identity + duplicate detection (PMS-REFINEMENT-R1 §3.5 — "foundational, build first").
- * Without a stable id across direct / OTA / walk-in, "Ventsi Mukov" and "Ventsi Mukov Mukov" fragment and
- * every guest metric rots. Duplicate detection surfaces likely-same-person candidates; the merge action
- * (actions-guests.ts) collapses them onto one winner. Merge is a SOFT merge — the loser is re-parented and
- * flagged (mergedIntoId), never deleted, so ids stay resolvable.
+ *
+ * Without a stable id across direct / OTA / walk-in, "Ventsi Mukov" and "Ventsi Mukov Mukov" fragment
+ * and every guest metric rots. This finds likely-same-person candidates; `actions-guests.ts` collapses
+ * them onto one winner. A merge is SOFT — the loser is re-parented and flagged, never deleted, so ids
+ * stay resolvable.
+ *
+ * **The matching rules moved to `@revio/core` when the CRS needed them too.** This file is now only
+ * the query. That is not just tidiness: the rules are pure and tested there, and the version that
+ * lived here matched two OTA relay addresses as the same person on the strongest signal it had.
  */
 
-const normName = (first: string, last: string) => `${first} ${last}`.toLowerCase().replace(/\s+/g, " ").trim();
-const normPhone = (p: string | null | undefined) => (p ?? "").replace(/\D/g, "");
-
-export type DuplicateCandidate = {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  reason: "email" | "phone" | "name";
-};
+export type { DuplicateCandidate };
 
 /**
- * Likely duplicates of a guest within the same property: another (non-merged) Guest sharing a
- * case-insensitive email, a digits-only phone, or a normalized full name. Strongest signal wins the
- * reason label. Never returns the guest itself or already-merged records.
+ * Likely duplicates of a guest, within the same property.
+ *
+ * ⚠️ **The candidate set is narrowed in SQL.** This used to load every non-merged guest in the
+ * property and filter in JavaScript, then get called a second time by `duplicateCount` — so opening a
+ * profile at a hotel with twenty thousand guests read the table twice. The `OR` below is three
+ * indexed-ish lookups against the same three signals the pure matcher uses, so the rows that reach
+ * memory are already the plausible ones.
+ *
+ * The phone arm is the imprecise one: we compare on trailing digits, which SQL cannot express against
+ * a column stored in whatever format it arrived in. So it is a `contains` on the significant digits —
+ * deliberately wider than the real rule, because `matchDuplicates` makes the final decision and a
+ * candidate it rejects costs nothing.
  */
 export async function findDuplicateGuests(guestId: string): Promise<DuplicateCandidate[]> {
   const { property } = await activeProperty();
   const guest = await prisma.guest.findFirst({ where: { id: guestId, propertyId: property.id } });
   if (!guest) return [];
 
-  const others = await prisma.guest.findMany({
-    where: { propertyId: property.id, mergedIntoId: null, id: { not: guestId } },
+  const phoneKey = normalisePhone(guest.phone);
+  const signals = [
+    ...(guest.email ? [{ email: { equals: guest.email, mode: "insensitive" as const } }] : []),
+    ...(phoneKey.length >= 6 ? [{ phone: { contains: phoneKey } }] : []),
+    {
+      AND: [
+        { firstName: { equals: guest.firstName, mode: "insensitive" as const } },
+        { lastName: { equals: guest.lastName, mode: "insensitive" as const } },
+      ],
+    },
+  ];
+
+  const candidates = await prisma.guest.findMany({
+    where: {
+      propertyId: property.id,
+      mergedIntoId: null,
+      id: { not: guestId },
+      OR: signals,
+    },
+    // A guest with a very common name at a large property should not pull an unbounded set into
+    // memory. Someone with more than this many candidates has a data problem a list will not solve.
+    take: 50,
   });
 
-  const email = guest.email?.toLowerCase().trim() || null;
-  const phone = normPhone(guest.phone);
-  const name = normName(guest.firstName, guest.lastName);
-
-  const out: DuplicateCandidate[] = [];
-  for (const o of others) {
-    let reason: DuplicateCandidate["reason"] | null = null;
-    if (email && o.email && o.email.toLowerCase().trim() === email) reason = "email";
-    else if (phone.length >= 6 && normPhone(o.phone) === phone) reason = "phone";
-    else if (name && normName(o.firstName, o.lastName) === name) reason = "name";
-    if (reason) out.push({ id: o.id, name: `${o.firstName} ${o.lastName}`.trim(), email: o.email, phone: o.phone, reason });
-  }
-  // email > phone > name
-  const rank = { email: 0, phone: 1, name: 2 };
-  return out.sort((a, b) => rank[a.reason] - rank[b.reason]);
+  return matchDuplicates(guest, candidates);
 }
 
-/** Count of open duplicate candidates for a guest — a light badge for the profile (§3.5). */
+/** Count of open duplicate candidates — a light badge for the profile (§3.5). */
 export async function duplicateCount(guestId: string): Promise<number> {
   return (await findDuplicateGuests(guestId)).length;
 }

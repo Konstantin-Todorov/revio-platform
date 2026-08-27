@@ -91,8 +91,13 @@ Status: ☐ open · ◐ in progress · ☑ done
 ## F. RevioCRS — Guests *(§4)*
 
 - ☑ **F1** *(§4.2)* **"Book again" on the profile** — the concrete home for E3. Highest-leverage add.
-- ☐ **F2** *(§4.3)* **Guest merge / de-duplication.** Pick the survivor, fold history/notes/
-  preferences/privacy, keep an audit trail. Cheap now, painful once duplicates exist.
+- ☑ **F2** *(§4.3)* Guest merge — CRS half built, and the rules **extracted to `@revio/core`**
+  (`guests/merge.ts`, 24 tests): `matchDuplicates` · `planMerge` · `suggestWinner`. Extracted because
+  a second caller appeared, which fixed four things in the PMS version: the merge was **not
+  transactional**, duplicate detection **read every guest in the property** (twice per profile), the
+  contact back-fill was a second hand-written copy of `hydrateGuestContact`, and it matched **two OTA
+  relay addresses as the same person**. Phone matching now compares trailing digits, so `+359…`,
+  `00359…` and `0…` are one number rather than three.
 - ☑ **F3** *(§4.4)* **Low-sample labels.** "Average stay 3.0 nights" from ONE stay claims a pattern
   that does not exist. Below a threshold say "Last stay", or annotate the sample.
 - ☑ **F4** *(§4.5)* Contact hydration — `hydrateGuestContact` in `@revio/core`, 16 tests.

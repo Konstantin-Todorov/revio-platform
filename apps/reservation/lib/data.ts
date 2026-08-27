@@ -1,7 +1,9 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult } from "@revio/core";
+import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
+  matchDuplicates, normalisePhone, type DuplicateCandidate,
+} from "@revio/core";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -872,4 +874,40 @@ function alsoRuns(e: { channelManager: boolean; reservation: boolean; pms: boole
     [e.pms, "RevioPMS"],
   ];
   return all.filter(([owned, name]) => owned && name !== "RevioCRS").map(([, name]) => name);
+}
+
+/**
+ * Likely duplicates of a guest — F2, the CRS half of the identity foundation.
+ *
+ * Same rules as the PMS, because they are the same rules: `matchDuplicates` in `@revio/core` decides,
+ * and this only narrows the candidate set in SQL so a large property does not read its whole guest
+ * table to render one profile. The phone arm is deliberately wider than the real rule (a `contains`
+ * on significant digits) because the pure matcher makes the final call and a rejected candidate is free.
+ */
+export async function findDuplicateGuests(guestId: string): Promise<DuplicateCandidate[]> {
+  const property = await getProperty();
+  const guest = await prisma.guest.findFirst({ where: { id: guestId, propertyId: property.id } });
+  if (!guest) return [];
+
+  const phoneKey = normalisePhone(guest.phone);
+  const candidates = await prisma.guest.findMany({
+    where: {
+      propertyId: property.id,
+      mergedIntoId: null,
+      id: { not: guestId },
+      OR: [
+        ...(guest.email ? [{ email: { equals: guest.email, mode: "insensitive" as const } }] : []),
+        ...(phoneKey.length >= 6 ? [{ phone: { contains: phoneKey } }] : []),
+        {
+          AND: [
+            { firstName: { equals: guest.firstName, mode: "insensitive" as const } },
+            { lastName: { equals: guest.lastName, mode: "insensitive" as const } },
+          ],
+        },
+      ],
+    },
+    take: 50,
+  });
+
+  return matchDuplicates(guest, candidates);
 }

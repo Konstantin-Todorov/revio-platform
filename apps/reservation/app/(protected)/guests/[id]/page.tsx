@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getGuestDetail } from "@/lib/data";
+import { findDuplicateGuests, getGuestDetail } from "@/lib/data";
 import { setGuestRecognitionOptOut, updateGuest } from "@/lib/actions-reservations";
 import { GuestNotes, type GuestNoteRow } from "@/components/guests/GuestNotes";
+import { DuplicateGuests } from "@/components/guests/DuplicateGuests";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
 import { sampleLabel, hasPattern } from "@revio/core";
@@ -24,6 +25,7 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const detail = await getGuestDetail(id);
   if (!detail) notFound();
+  const duplicates = await findDuplicateGuests(id);
   const { property, guest, derived, fromPms, notes } = detail;
   const noteRows: GuestNoteRow[] = notes.map((n) => ({
     id: n.id,
@@ -176,6 +178,14 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
         />
         <GuestNotes guestId={guest.id} notes={noteRows} />
       </Card>
+
+      {/* Above the booking history on purpose: the history is what a merge changes, so the offer to
+          merge should be read before it, not after. */}
+      <DuplicateGuests
+        guestId={guest.id}
+        guestName={`${guest.firstName} ${guest.lastName}`}
+        candidates={duplicates}
+      />
 
       <Card>
         <CardHeader title={`Booking history (${guest.reservations.length})`} />
