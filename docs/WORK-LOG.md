@@ -27,6 +27,20 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-29 · Claude · CLAIMED · Guest data rights — export + erasure
+**GDPR Art. 15/17/20. The DPA already promises this and it does not exist.**
+Files: `packages/core/src/guests/erasure.ts` (new), `packages/db/prisma/schema.prisma`
+(`Guest.erasedAt`), `apps/reservation/lib/{data,actions-reservations}.ts`,
+`apps/reservation/app/(protected)/guests/[id]/**`, `apps/reservation/app/api/guests/[id]/export/`
+Notes: `dpa.astro` tells hotels they can "find, export, correct and erase a guest record yourself".
+Find and correct exist; **export and erase do not**. That is a contract, not marketing — a hotel's
+DPO relies on it to answer a data-subject request.
+Guest PII lives in FOUR places and one must survive: `Guest`, `Reservation.guestName` (a
+denormalised copy, the one that gets missed), `Reservation.notes`, `GuestNote.body` — and
+`TaxInvoice.buyer*`, which is **legally retained and must never be erased** (Art. 17(3)(b)).
+Erasure anonymises in place and never deletes: a deleted guest row would break occupancy history and
+orphan an invoice from its stay. **Codex: stay out of guests until this is DONE.**
+
 ### 2026-08-29 · Claude · DONE · E5 + F5 — verifications, no code
 **Holds always carry a TTL (verified); no charts on a guest profile (recorded).**
 Files: `docs/SPEC-08-TRACKER.md` only
