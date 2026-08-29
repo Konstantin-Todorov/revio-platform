@@ -1,0 +1,13 @@
+# Reporting a security issue in Revio.
+# https://www.rfc-editor.org/rfc/rfc9116
+
+Contact: mailto:security@reviosoft.app
+Expires: 2027-08-29T00:00:00.000Z
+Preferred-Languages: en, bg
+Canonical: https://reviosoft.app/.well-known/security.txt
+Policy: https://reviosoft.app/security
+
+# We will acknowledge your report and tell you what we are doing about it.
+# We will not pursue you for research done in good faith against your own account
+# or a test property. Please do not run automated scans against a live hotel's
+# data, and please do not access a guest record that is not yours.

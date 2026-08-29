@@ -1,3 +1,5 @@
+import { securityHeaders } from "../../config/security-headers.mjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -23,6 +25,9 @@ const nextConfig = {
       ".jsx": [".tsx", ".jsx"],
     };
     return config;
+  },
+  async headers() {
+    return securityHeaders();
   },
 };
 

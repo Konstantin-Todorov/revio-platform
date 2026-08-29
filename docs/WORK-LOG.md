@@ -27,6 +27,20 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-29 · Claude · DONE · Security headers, security.txt, stale docs
+**Five apps now send security headers; four had none. Three documents corrected.**
+Files: `config/security-headers.mjs` (new), `apps/*/next.config.mjs`,
+`apps/*/public/.well-known/security.txt`, `docs/ACTION-REQUIRED.md`, `CLAUDE.md`,
+`packages/core/CLAUDE.md`
+Notes: **no CSP on purpose** — a wrong one breaks the page rather than degrading, and Next needs
+specific allowances; it belongs in its own change with a report-only phase. **No HSTS `preload`** —
+that is a browser-vendor list and slow to reverse. Booking keeps `SAMEORIGIN` rather than `DENY`
+because whether a hotel may embed its own booking page is a product decision, not a default this
+file should quietly make. Verified against a running server, not just the config.
+Docs corrected: ACTION-REQUIRED item 1 (the Channex key **is** stored — verified 200) and item 4
+(fiscalization was **wrong** and is no longer a blocker), and `CLAUDE.md` claimed GDPR shipped in
+phase J when it had not.
+
 ### 2026-08-29 · Claude · DONE · Guest data rights — export + erasure
 **GDPR Art. 15/17/20. The DPA already promises this and it does not exist.**
 Files: `packages/core/src/guests/erasure.ts` (new), `packages/db/prisma/schema.prisma`

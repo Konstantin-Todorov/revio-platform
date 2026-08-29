@@ -16,6 +16,11 @@ inventory/rate/restriction query inside an app, stop — add it here instead, be
   parent changes, unless a date was manually overridden.
 - `restrictions/` — **priority resolution**: manual edit / Bulk Update > Restriction Rule >
   Rate Plan default.
+- `guests/` — identity and rights. `merge.ts` (duplicate detection + merge, shared by CRS and PMS),
+  `contact-hydration.ts` (enrich-empty / never-overwrite / tag-OTA), `erasure.ts` (GDPR Art. 15/17/20).
+  **Erasure anonymises in place and never deletes** — reservations carry `guestId` and occupancy is
+  computed from stays, so removing a guest would rewrite the hotel's history; tax invoices are
+  retained under Art. 17(3)(b). It must also clear `Reservation.guestName`, the denormalised copy.
 - `metrics/` — the CRS **formula sheet** (occupancy, ADR, RevPAR, cancellation rates, LOS, lead time,
   pickup; room-nights with range clipping + prorated revenue). Dashboard and Reports read the SAME
   functions — the numbers cannot disagree.

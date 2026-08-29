@@ -380,7 +380,7 @@ redesign** (summary cards + evolution bar charts + performance-by-room-type, rep
 Reservations 3-click column sort; Guests **Notes** tab; Settings low-availability alert + staff CRUD on the
 shared identity (+ the shared Calendar/Bulk/linkage changes). **RevioPMS** (10 screens): Front Desk
 exception-strip + overdue/extend-checkout + FD-metric KPIs; Reservation-view action hub; **Guests
-identity/merge + n≥2 preference guard + GDPR/blacklist**; Folios **Open/History split** + mandatory-deposit
+identity/merge + n≥2 preference guard**; Folios **Open/History split** + mandatory-deposit
 check-in gate + checkout-readiness; **Extras & Charges** rename + void/qty + real catalog; Housekeeping
 **role-scoped views** + Dirty→In progress→Awaiting inspection→Ready pipeline + per-cleaner assignment +
 **clock-in** + event-stream analytics; Rooms beds/occupancy + floor-as-object + bulk-edit; Maintenance crew

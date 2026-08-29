@@ -9,16 +9,16 @@ Ordered by what goes wrong if it is missed. Last reviewed **2026-08-24**.
 
 ## 🔴 Blocks the first paying client
 
-### 1. Store the Channex production API key
-**Status:** key created and verified (HTTP 200 against `app.channex.io`), **not stored in the platform**.
+### 1. ~~Store the Channex production API key~~ ✅ DONE
+**Status (verified 2026-08-29):** `CHANNEX_PROD_KEY` is set on `channel-manager`, `reservation` and
+`pms`, and authenticates — a live `GET /properties` returned **HTTP 200** with 0 properties.
 
-Paste it into **Operator → Connectivity → Channex production** for the tenant. That encrypts it at
-rest per tenant (`ConnectivityCredential`, `operator_only` RLS) and is the path the code prefers.
-Fallback is `CHANNEX_PROD_KEY` on `channel-manager`, `reservation` and `pms` — the three services
-that push ARI. The `jobs` service does not need it; it only calls their HTTP endpoints.
+⚠️ An **unauthenticated** Channex request returns 401 with no `data` key. A script that reads
+`len(data)` will report "0 properties" either way. Check the status code, not the array.
 
-A Channex key is shown **once**. If it is lost, withdraw it and create another — that costs nothing.
-If you would rather not use a key that passed through a chat transcript, do that now rather than later.
+The per-tenant encrypted path (**Operator → Connectivity**, `ConnectivityCredential`, `operator_only`
+RLS) is still preferred over the env fallback and is what a hotel bringing its own Channex account
+will use. Nothing is blocked on it today.
 
 ### 2. Confirm the VAT treatment with an accountant
 Three readings are ours and should be checked against your actual registrations **before the first
@@ -38,13 +38,24 @@ A client cannot be invoiced without their **legal** entity name, country and add
 name is not who owes the money, and the country decides the VAT treatment. Client page → Billing
 details. The three demo tenants are already filled in so the flow can be rehearsed.
 
-### 4. Fiscalization — Наредба Н-18
-**Not implemented.** A Bulgarian property issuing guest invoices without real-time fiscal reporting
-is not compliant. Invoice *numbering* is now correct (`docs/INVOICE-NUMBERING.md`), which is necessary
-and **not sufficient** — do not read one as the other.
+### 4. Fiscalization — ⚠️ THIS ITEM WAS WRONG, and is no longer a blocker
 
-This is the item with the longest lead time and the least ability to be rushed.
-See `docs/specs/BG-FISCALIZATION-RESEARCH.md` and `GO-LIVE.md` §5.
+It said a Bulgarian property cannot issue guest invoices without real-time fiscal reporting, and
+called it the longest-lead item on the list. **Reading Наредба Н-18 itself on 2026-08-26 contradicted
+that**, and the correction is recorded rather than deleted because the wrong version was believed for
+a month.
+
+**чл. 3 ал. 1 exempts bank transfer** (`кредитен превод`), direct debit and cash paid into a payment
+account. Only **cash and card taken at the property** require a fiscal receipt — and any hotel taking
+those already has a registered device, because they have been trading legally. A property selling
+through OTAs, invoicing companies and taking transfers needs **no fiscal device at all**.
+
+**We do not fiscalize, deliberately and permanently.** СУПТО is voluntary since чл. 118 ЗДДС was
+amended, and driving a hotel's fiscal device would make our software СУПТО — landing the obligations
+on the *hotel*: exclusive use for all sales at that site, every fiscal device demoted to our printer,
+and a declaration to НАП naming where our database lives.
+
+**Nothing here blocks a launch.** Full reasoning and sources: `docs/specs/BG-FISCALIZATION-RESEARCH.md`.
 
 ---
 
