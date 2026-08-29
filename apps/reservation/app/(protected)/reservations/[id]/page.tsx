@@ -5,6 +5,7 @@ import { getReservationDetail, getCreateFormData, PAYMENT_GUARANTEES } from "@/l
 import { cancelCrsReservation, markNoShow, modifyReservation } from "@/lib/actions-reservations";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { money, relativeTime } from "@/lib/format";
+import { DateField } from "@revio/ui/date-field";
 
 export const dynamic = "force-dynamic";
 
@@ -128,8 +129,8 @@ export default async function ReservationDetailPage({
                   {roomTypes.map((rt) => <option key={rt.id} value={rt.id}>{rt.name}</option>)}
                 </select>
               </div>
-              <div><label className={labelCls}>Arrival</label><input type="date" name="checkIn" defaultValue={checkInIso} className={inputCls} /></div>
-              <div><label className={labelCls}>Departure</label><input type="date" name="checkOut" defaultValue={line.checkOut.toISOString().slice(0, 10)} className={inputCls} /></div>
+              <div><label className={labelCls}>Arrival</label><DateField name="checkIn" defaultValue={checkInIso} className={inputCls} /></div>
+              <div><label className={labelCls}>Departure</label><DateField name="checkOut" defaultValue={line.checkOut.toISOString().slice(0, 10)} className={inputCls} /></div>
               <div><label className={labelCls}>Rooms</label><input type="number" name="quantity" min={1} defaultValue={line.quantity} className={inputCls} /></div>
               <div><label className={labelCls}>Total ({r.currency})</label><input type="number" name="price" step="0.01" min="0" defaultValue={(r.totalMinor / 100).toFixed(2)} className={inputCls} /></div>
               <button className="h-[38px] rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">Apply change</button>

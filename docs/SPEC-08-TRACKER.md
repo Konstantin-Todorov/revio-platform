@@ -82,7 +82,14 @@ Status: ☐ open · ◐ in progress · ☑ done
 - ☑ **E1** *(§3.3)* **Date fields only open the picker from the calendar icon.** `showPicker()` on
   click/focus, **everywhere native date inputs appear** — new-reservation search, reservations
   filter, bulk-edit modal (§5.4). Highest-frequency annoyance; do first.
-- ☐ **E2** *(§3.3)* Better fix: a two-month **range picker** for arrival→departure.
+- ☑ **E2** *(§3.3)* **Both halves.** The availability search's two native date inputs became one
+  two-month range picker (`@revio/ui/stay-range-field`) — extracted from the booking engine, which
+  already had one, because a second caller appeared. It still submits `from`/`to`, so the search
+  stays a GET form and therefore a shareable URL. And the **global** half: every remaining native
+  date input across all four staff apps (23 of them, 13 files) is now `@revio/ui/date-field`, which
+  calls `showPicker()` on click — the field opens when you click the field, not only the glyph. The
+  calendar helpers moved to `@revio/core/stays/calendar` (13 tests); `apps/booking/lib/dates`
+  re-exports them so one implementation serves both.
 - ☑ **E3** *(§3.2)* Known-booking **bypass** — guest-first entry, converging on the same
   hold → details → confirm tail. Search-first stays the default.
 - ☑ **E4** *(§3.2)* Show **rate plans at the shop step**, not only after hold — agents upsell on rate choice.

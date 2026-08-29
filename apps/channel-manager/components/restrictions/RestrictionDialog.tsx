@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { Plus, Pencil } from "lucide-react";
 import { saveRestrictionRule, type ActionResult } from "@/lib/actions-config";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
+import { DateField } from "@revio/ui/date-field";
 
 type Rule = {
   id: string; name: string; type: string; roomTypeId: string | null; ratePlanId: string | null;
@@ -53,8 +54,8 @@ export function RestrictionDialog({ rule, roomTypes, ratePlans, channels }: { ru
             </Field>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="From"><input name="dateFrom" type="date" defaultValue={rule ? iso(rule.dateFrom) : today} required className={inputCls} /></Field>
-            <Field label="To"><input name="dateTo" type="date" defaultValue={rule ? iso(rule.dateTo) : today} required className={inputCls} /></Field>
+            <Field label="From"><DateField name="dateFrom" defaultValue={rule ? iso(rule.dateFrom) : today} required className={inputCls} /></Field>
+            <Field label="To"><DateField name="dateTo" defaultValue={rule ? iso(rule.dateTo) : today} required className={inputCls} /></Field>
             <Field label="Value" hint="Days/nights"><input name="value" type="number" min={0} defaultValue={rule?.valueInt ?? 2} className={inputCls} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-3">

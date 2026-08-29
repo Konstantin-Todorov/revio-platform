@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { addInventoryPeriod } from "@/lib/actions-inventory";
+import { DateField } from "@revio/ui/date-field";
 
 /**
  * Add an out-of-order or closure period — the date-sensitive layer the waterfall subtracts from the
@@ -44,10 +45,10 @@ export function PeriodDialog({
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="From">
-              <input type="date" name="dateFrom" defaultValue={todayIso} min={todayIso} required className={inputCls} />
+              <DateField name="dateFrom" defaultValue={todayIso} min={todayIso} required className={inputCls} />
             </Field>
             <Field label="To (inclusive)">
-              <input type="date" name="dateTo" defaultValue={todayIso} min={todayIso} required className={inputCls} />
+              <DateField name="dateTo" defaultValue={todayIso} min={todayIso} required className={inputCls} />
             </Field>
           </div>
           <Field label="Units affected" hint={`1–${maxRooms} for this room type.`}>

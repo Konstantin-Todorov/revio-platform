@@ -27,6 +27,16 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-29 · Claude · DONE · CRS E2 — range picker + global date-field fix
+**One two-month range picker on availability search; `showPicker()` on every other date input.**
+Files: `packages/ui/src/{stay-range-field,date-field}.tsx` (new),
+`packages/core/src/stays/calendar.ts` (moved from `apps/booking/lib/dates`, 13 tests),
+13 files across all four staff apps
+Notes: `apps/booking/lib/dates` now **re-exports** the calendar helpers from core rather than owning
+them — do not re-add local copies, a second calendar is how two products start disagreeing about
+which day a stay begins. `DateField` swallows a `showPicker()` throw on purpose: unsupported
+browsers fall back to typing and the glyph, which is where we started.
+
 ### 2026-08-27 · Claude · DONE · PMS J1 — folio outcomes reported separately
 **Verified the write-off/paid split, found it reported nowhere, built the summary.**
 Files: `apps/pms/lib/folio-outcomes.ts` (new, 10 tests), `apps/pms/lib/folio.ts`,
@@ -112,7 +122,6 @@ Pull one of these rather than inventing work, and claim it above first.
 
 | Item | Where | Note |
 | --- | --- | --- |
-| **E2** two-month range picker, arrival→departure | CRS | tracker §E |
 | **F5** *(do nothing)* no charts on a guest profile | CRS | recorded so nobody adds them |
 | **H1–H14, K1–K8** occupancy-based pricing | all | **parked by agreement, sequenced last** — do not start without saying so |
 

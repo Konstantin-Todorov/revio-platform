@@ -10,6 +10,7 @@ import { ParamMultiSelect } from "@/components/calendar/ParamMultiSelect";
 import { MonthView } from "@/components/calendar/MonthView";
 import { BookingDialog } from "@/components/booking/BookingDialog";
 import { weekday, dayMonth, isWeekend, ymd } from "@/lib/format";
+import { DateField } from "@revio/ui/date-field";
 
 export const dynamic = "force-dynamic";
 
@@ -270,9 +271,9 @@ export default async function CalendarPage({
           {rt.length > 0 && <input type="hidden" name="rt" value={rt.join(",")} />}
           {rows.length > 0 && <input type="hidden" name="rows" value={rows.join(",")} />}
           {rp.length > 0 && <input type="hidden" name="rp" value={rp.join(",")} />}
-          <input type="date" name="start" defaultValue={start} className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
+          <DateField name="start" defaultValue={start} className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
           <span className="text-[11px] text-ink-400">→</span>
-          <input type="date" name="end" title="Optional end date — the view caps at 30 consecutive days" className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
+          <DateField name="end" title="Optional end date — the view caps at 30 consecutive days" className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
           <button type="submit" className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Go</button>
         </form>
 

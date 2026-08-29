@@ -6,6 +6,7 @@ import { saveAccount, markRenewed, type ActionResult } from "@/lib/actions-crm";
 import { STAGES, STAGE_LABEL, renewalStatus, type Stage } from "@/lib/account";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
+import { DateField } from "@revio/ui/date-field";
 
 const STAGE_TONE: Record<Stage, "success" | "info" | "warning" | "danger" | "neutral"> = {
   prospect: "neutral",
@@ -134,7 +135,7 @@ export function AccountPanel({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Renewal date">
-              <input type="date" name="renewalDate" defaultValue={account.renewalDate ?? ""} className={inputCls} />
+              <DateField name="renewalDate" defaultValue={account.renewalDate ?? ""} className={inputCls} />
             </Field>
             <Field label="Contract term (months)" hint="Used when you mark them renewed.">
               <input type="number" min={1} max={120} name="contractTermMonths" defaultValue={account.contractTermMonths ?? 12} className={inputCls} />

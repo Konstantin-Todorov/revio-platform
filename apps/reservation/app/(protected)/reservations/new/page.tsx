@@ -7,6 +7,7 @@ import {
 import { prisma } from "@/lib/db";
 import { releaseExpiredHolds } from "@/lib/holds";
 import { placeHold, releaseHold, confirmReservation } from "@/lib/actions-reservations";
+import { StayRangeField } from "@revio/ui/stay-range-field";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
 
@@ -62,13 +63,15 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
 
       <Card className="p-4">
         <form method="GET" className="grid grid-cols-2 items-end gap-3 lg:grid-cols-6">
-          <div>
-            <label className={labelCls}>Arrival</label>
-            <input type="date" name="from" defaultValue={from} min={todayIso} className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls}>Departure</label>
-            <input type="date" name="to" defaultValue={to} className={inputCls} />
+          {/*
+            E2 (§3.3). Two native date inputs became one range picker: the click-target bug is fixed
+            for free, and — the reason it was worth doing rather than calling showPicker() — the
+            clerk can now SEE the shape of the stay instead of picking two dates that never appear
+            together. It still submits `from` and `to`, so this stays a GET form and a search stays a
+            shareable URL.
+          */}
+          <div className="col-span-2">
+            <StayRangeField defaultFrom={from} defaultTo={to} minISO={todayIso} label="Arrival → departure" />
           </div>
           <div>
             <label className={labelCls}>Guests</label>

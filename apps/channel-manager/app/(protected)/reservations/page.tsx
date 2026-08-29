@@ -4,6 +4,7 @@ import { cancelReservation } from "@/lib/actions-calendar";
 import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { BookingDialog } from "@/components/booking/BookingDialog";
 import { money, relativeTime, ymd } from "@/lib/format";
+import { DateField } from "@revio/ui/date-field";
 
 export const dynamic = "force-dynamic";
 
@@ -70,10 +71,10 @@ export default async function ReservationsPage({
           {DATE_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
         </select>
         <label className="flex items-center gap-1 text-[12px] text-ink-500">
-          from <input type="date" name="from" defaultValue={sp.from ?? ""} className={fieldCls} />
+          from <DateField name="from" defaultValue={sp.from ?? ""} className={fieldCls} />
         </label>
         <label className="flex items-center gap-1 text-[12px] text-ink-500">
-          → <input type="date" name="to" defaultValue={sp.to ?? ""} className={fieldCls} />
+          → <DateField name="to" defaultValue={sp.to ?? ""} className={fieldCls} />
         </label>
         <button type="submit" className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Filter</button>
         {filtered && (

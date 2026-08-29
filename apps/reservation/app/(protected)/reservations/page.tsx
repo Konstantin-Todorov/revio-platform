@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { releaseExpiredHolds } from "@/lib/holds";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { DateField } from "@revio/ui/date-field";
 
 export const dynamic = "force-dynamic";
 
@@ -108,9 +109,9 @@ export default async function ReservationsPage({
           <select name="dateType" defaultValue={dateType} className={inputCls}>
             {DATE_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
-          <input type="date" name="from" defaultValue={sp.from ?? ""} className={inputCls} />
+          <DateField name="from" defaultValue={sp.from ?? ""} className={inputCls} />
           <span className="text-[11.5px] text-ink-400">→</span>
-          <input type="date" name="to" defaultValue={sp.to ?? ""} className={inputCls} />
+          <DateField name="to" defaultValue={sp.to ?? ""} className={inputCls} />
           <button className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Filter</button>
           {filtered && <Link href="/reservations" className="text-[12px] font-semibold text-brand-700 hover:underline">Clear</Link>}
           <span className="ml-auto text-[11.5px] text-ink-400">{reservations.length} shown</span>

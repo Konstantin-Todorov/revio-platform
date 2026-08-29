@@ -6,6 +6,7 @@ import { addNote, toggleNotePin, deleteNote, type ActionResult } from "@/lib/act
 import { NOTE_KINDS, NOTE_LABEL, type NoteKind } from "@/lib/account";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { inputCls } from "@/components/ui/Modal";
+import { DateField } from "@revio/ui/date-field";
 
 export interface LogItem {
   id: string;
@@ -71,7 +72,7 @@ export function RelationshipLog({ tenantId, items }: { tenantId: string; items: 
             {NOTE_KINDS.map((k) => <option key={k} value={k}>{NOTE_LABEL[k as NoteKind]}</option>)}
           </select>
           {/* A call logged on Monday for a call made on Friday belongs on Friday. */}
-          <input type="date" name="occurredAt" defaultValue={today} max={today} className={`${inputCls} w-auto`} />
+          <DateField name="occurredAt" defaultValue={today} max={today} className={`${inputCls} w-auto`} />
         </div>
         <input type="hidden" name="tenantId" value={tenantId} />
         <textarea

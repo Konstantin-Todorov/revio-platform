@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { applyCrsBulkUpdateMulti, type CrsBulkPayload, type CrsBulkRateMode, type CrsBulkResult } from "@/lib/actions-rates";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
+import { DateField } from "@revio/ui/date-field";
 
 type Opt = { id: string; name: string };
 type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null };
@@ -148,8 +149,8 @@ export function CrsBulkPanel({
       <div className={`grid gap-5 ${cols}`}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="From"><input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} /></Field>
-            <Field label="To"><input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} /></Field>
+            <Field label="From"><DateField value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} /></Field>
+            <Field label="To"><DateField value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} /></Field>
           </div>
           <div>
             <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Days of week</span>

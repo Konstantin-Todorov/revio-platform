@@ -41,3 +41,4 @@ export * from "./guests/sample.js";
 export * from "./fiscal/receipt-requirement.js";
 export * from "./guests/contact-hydration.js";
 export * from "./guests/merge.js";
+export * from "./stays/calendar.js";

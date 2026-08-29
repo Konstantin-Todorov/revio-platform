@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, Settings2 } from "lucide-react";
+import { DateField } from "@revio/ui/date-field";
 
 /**
  * The dashboard's preset row + KPI grid, customizable PER USER (spec §3.1: "let the customer
@@ -98,9 +99,9 @@ export function DashboardView({
         ))}
         <form method="GET" className="ml-1 flex items-center gap-1.5">
           <input type="hidden" name="range" value="custom" />
-          <input type="date" name="from" defaultValue={customStart} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
+          <DateField name="from" defaultValue={customStart} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
           <span className="text-[11px] text-ink-400">→</span>
-          <input type="date" name="to" defaultValue={customEnd} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
+          <DateField name="to" defaultValue={customEnd} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
           <button className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted">Apply</button>
         </form>
 
