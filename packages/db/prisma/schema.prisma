@@ -155,6 +155,46 @@ model ConnectivityCredential {
   @@index([tenantId])
 }
 
+// A demand-generation enquiry from the public website — operator-only, like everything else that is
+// ours ABOUT a prospect rather than a hotel's own data.
+//
+// It exists because a demo request used to be an email and nothing else. Resend delivered every one
+// of them, and the founder still could not find them: a mail client is a notification channel, not a
+// record, and a lead that is filtered, archived by accident or read on a phone and forgotten leaves
+// no trace anywhere in the product. This is the place to look.
+//
+// Deliberately NOT a Tenant or a ClientAccount. These people are not customers and most never will
+// be; giving them a tenant row would put strangers into every portfolio count on the Overview.
+model Lead {
+  id            String    @id @default(cuid())
+  name          String
+  email         String
+  company       String?
+  /// Free text as typed — "40", "about 25", "12 apartments". Never parsed into a number: the answer
+  /// to "how many rooms" is sometimes a sentence, and coercing it loses what they actually said.
+  rooms         String?
+  currentSystem String?
+  channels      String?
+  /// Products they ticked, comma-separated as the form sent them.
+  interestedIn  String?
+  message       String?
+  /// The figure the pricing calculator was showing when they asked — so a reply quotes the same
+  /// number they were looking at rather than recomputing it into a different one.
+  quote         String?
+  page          String?
+  utmSource     String?
+  utmMedium     String?
+  utmCampaign   String?
+  referrer      String?
+  /// Set when somebody has dealt with it. Null is the working queue.
+  handledAt     DateTime?
+  handledById   String?
+  createdAt     DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([handledAt])
+}
+
 // Operator-side billing (our invoices to the hotels). Operator business data — a hotel can NEVER read
 // it (RLS = bypass-only, like ConnectivityCredential). Payments are MOCKED in V1 (no gateway): status
 // moves draft → sent → paid manually; no card/money is handled here.

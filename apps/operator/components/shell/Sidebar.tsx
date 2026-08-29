@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X, Inbox} from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 
@@ -10,6 +10,9 @@ const SECTIONS: { title?: string; items: { href: string; label: string; icon: ty
   { items: [
     { href: "/overview", label: "Overview", icon: LayoutDashboard },
     { href: "/clients", label: "Clients", icon: Building2 },
+    // Beside Clients on purpose: a demo request is the stage before one, and the two get looked at
+    // in the same sitting.
+    { href: "/leads", label: "Demo requests", icon: Inbox },
   ] },
   { title: "Platform", items: [
     // Plans sits above Billing: the price list is the decision, the invoices are the consequence.

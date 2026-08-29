@@ -27,6 +27,21 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-29 · Claude · DONE · Website leads are stored, not just emailed
+**A demo request exists only as an email. Lose the email, lose the lead.**
+Files: `packages/db/prisma/schema.prisma` (`Lead`, operator_only), migration,
+`apps/operator/app/api/leads/route.ts` (new), `apps/operator/app/(protected)/leads/**`,
+`apps/operator/components/shell/Sidebar.tsx`, `revio-websites/src/pages/api/contact.ts`
+Notes: founder reported not finding submissions. **Resend says every notification was delivered** to
+`CONTACT_INBOX` (their Gmail) — so this is not a delivery bug, it is that there is nowhere in the
+product to *look*. Email is a notification channel, not a record.
+The website is a separate repo with no database, so it POSTs to an operator endpoint behind a shared
+secret. That call is **best-effort and must never fail the visitor's submission** — a lead we could
+not file is still a lead we must answer. **Done.** `Lead` is `operator_only` and deliberately **not** a Tenant or ClientAccount — these people
+are not customers and most never will be, so a tenant row would put strangers into every portfolio
+count on Overview. `LEADS_INGEST_SECRET` is set on both services and matches; the operator endpoint
+**fails closed** when it is unset.
+
 ### 2026-08-29 · Claude · DONE · Security headers, security.txt, stale docs
 **Five apps now send security headers; four had none. Three documents corrected.**
 Files: `config/security-headers.mjs` (new), `apps/*/next.config.mjs`,

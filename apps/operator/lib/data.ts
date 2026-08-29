@@ -845,3 +845,53 @@ export async function getConnectivity() {
     channexChannels: channexByTenant.get(t.id) ?? 0,
   }));
 }
+
+export interface LeadRow {
+  id: string;
+  name: string;
+  email: string;
+  company: string | null;
+  rooms: string | null;
+  currentSystem: string | null;
+  channels: string | null;
+  interestedIn: string | null;
+  message: string | null;
+  quote: string | null;
+  page: string | null;
+  source: string | null;
+  handledAt: Date | null;
+  createdAt: Date;
+}
+
+/**
+ * Website demo requests — the record that did not exist.
+ *
+ * Every notification email was delivered and the founder still could not find them, because a mail
+ * client is a notification channel and not a place to look. Unhandled first, because this is a
+ * queue to work rather than an archive to browse.
+ */
+export async function listLeads(limit = 200): Promise<{ rows: LeadRow[]; openCount: number }> {
+  const leads = await prisma.lead.findMany({
+    orderBy: [{ handledAt: "asc" }, { createdAt: "desc" }],
+    take: Math.min(limit, 500),
+  });
+  return {
+    rows: leads.map((l) => ({
+      id: l.id,
+      name: l.name,
+      email: l.email,
+      company: l.company,
+      rooms: l.rooms,
+      currentSystem: l.currentSystem,
+      channels: l.channels,
+      interestedIn: l.interestedIn,
+      message: l.message,
+      quote: l.quote,
+      page: l.page,
+      source: [l.utmSource, l.utmMedium, l.utmCampaign].filter(Boolean).join(" / ") || l.referrer,
+      handledAt: l.handledAt,
+      createdAt: l.createdAt,
+    })),
+    openCount: leads.filter((l) => !l.handledAt).length,
+  };
+}
