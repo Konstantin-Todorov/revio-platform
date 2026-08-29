@@ -4,6 +4,7 @@ import { findDuplicateGuests, getGuestDetail } from "@/lib/data";
 import { setGuestRecognitionOptOut, updateGuest } from "@/lib/actions-reservations";
 import { GuestNotes, type GuestNoteRow } from "@/components/guests/GuestNotes";
 import { DuplicateGuests } from "@/components/guests/DuplicateGuests";
+import { DataRights } from "@/components/guests/DataRights";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
 import { sampleLabel, hasPattern } from "@revio/core";
@@ -21,8 +22,22 @@ const inputCls =
   "w-full rounded-md border border-surface-border bg-white px-3 py-2 text-[13px] text-ink-900 outline-none transition-colors focus:border-brand-600";
 const labelCls = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400";
 
-export default async function GuestDetailPage({ params }: { params: Promise<{ id: string }> }) {
+const ERASE_NOTICE: Record<string, string> = {
+  confirm: "Type ERASE in the box to confirm — this cannot be undone.",
+  "already-erased": "This guest record has already been erased.",
+  "merged-record":
+    "This record has been merged into another. Erase the surviving record instead — that is the one holding the guest's data.",
+};
+
+export default async function GuestDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ erase?: string }>;
+}) {
   const { id } = await params;
+  const eraseState = (await searchParams).erase;
   const detail = await getGuestDetail(id);
   if (!detail) notFound();
   const duplicates = await findDuplicateGuests(id);
@@ -187,6 +202,15 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
         candidates={duplicates}
       />
 
+      {/* Last on the page, deliberately: erasure is irreversible and should not sit above the
+          everyday editing. */}
+      <DataRights
+        guestId={guest.id}
+        guestName={`${guest.firstName} ${guest.lastName}`}
+        erasedAt={guest.erasedAt}
+        {...(eraseState && ERASE_NOTICE[eraseState] ? { notice: ERASE_NOTICE[eraseState] } : {})}
+      />
+
       <Card>
         <CardHeader title={`Booking history (${guest.reservations.length})`} />
         {guest.reservations.length === 0 ? (
@@ -225,6 +249,15 @@ export default async function GuestDetailPage({ params }: { params: Promise<{ id
           </div>
         )}
       </Card>
+
+      {/* Last on the page, deliberately. Erasure is irreversible and there is no undo anywhere in
+          this product, so it sits below the everyday editing rather than beside it. */}
+      <DataRights
+        guestId={guest.id}
+        guestName={`${guest.firstName} ${guest.lastName}`}
+        erasedAt={guest.erasedAt}
+        {...(eraseState && ERASE_NOTICE[eraseState] ? { notice: ERASE_NOTICE[eraseState] } : {})}
+      />
     </div>
   );
 }

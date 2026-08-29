@@ -10,7 +10,7 @@ import { stayScope } from "@revio/connectivity";
 import { claimHold } from "@revio/db";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
-import { hasChanges, planMerge } from "@revio/core";
+import { hasChanges, planMerge, planGuestErasure } from "@revio/core";
 import { withTenantTransaction } from "@revio/db";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -563,4 +563,67 @@ export async function mergeGuest(fd: FormData): Promise<void> {
   revalidatePath("/guests");
   revalidatePath(`/guests/${winnerId}`);
   redirect(`/guests/${winnerId}`);
+}
+
+/**
+ * Erase a guest — GDPR Art. 17.
+ *
+ * **It anonymises; it never deletes.** Deleting the row would orphan every reservation (occupancy and
+ * ADR are computed from stays, so one erasure would silently rewrite the hotel's history) and would
+ * detach a tax invoice from the stay it was issued for. Art. 17(3)(b) exempts data held to meet a
+ * legal obligation, which is exactly what those invoices are.
+ *
+ * So: the stay happened, the revenue is real, and nobody can tell you who it was.
+ *
+ * The reservation update is the part that is easy to forget — `Reservation.guestName` is a
+ * denormalised copy captured at booking, and anonymising only the `Guest` table leaves the name on
+ * every stay, on the front desk and in every export.
+ *
+ * One transaction, because a half-erasure is a data-protection incident rather than a bug.
+ */
+export async function eraseGuest(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
+  const property = await getProperty();
+
+  const id = str(fd, "id");
+  // Typed confirmation, not a checkbox. This is irreversible and there is no undo anywhere in the
+  // product; a misclick on a guest profile must not be able to destroy a record.
+  if (str(fd, "confirm").trim().toUpperCase() !== "ERASE") {
+    redirect(`/guests/${id}?erase=confirm`);
+  }
+
+  const guest = await prisma.guest.findFirst({ where: { id, propertyId: property.id } });
+  if (!guest) redirect("/guests");
+
+  const plan = planGuestErasure(guest!, { mergedIntoId: guest!.mergedIntoId });
+  if (!plan.ok) redirect(`/guests/${id}?erase=${plan.refusal}`);
+
+  await withTenantTransaction(property.tenantId, async (tx) => {
+    await tx.guest.update({ where: { id }, data: plan.guest });
+    // The denormalised copy. Scoped to this property as well as this guest — the id came off a URL.
+    await tx.reservation.updateMany({
+      where: { guestId: id, propertyId: property.id },
+      data: plan.reservation,
+    });
+    // Free text written by staff about a person. It cannot be anonymised, so it goes.
+    if (plan.deleteNotes) await tx.guestNote.deleteMany({ where: { guestId: id } });
+  });
+
+  /*
+   * Audited WITHOUT the erased values.
+   *
+   * That someone exercised the right, who actioned it and when is exactly what a controller must be
+   * able to show. Recording the name that was removed would put it straight back into the database
+   * in a table nobody thinks to check — an audit trail that defeats the thing it audits.
+   */
+  await logAudit(property.id, property.tenantId, {
+    entity: "guest",
+    field: "erased",
+    oldValue: `guest ${id.slice(-6)}`,
+    newValue: "personal data removed (GDPR Art. 17); invoices retained under Art. 17(3)(b)",
+  });
+
+  revalidatePath("/guests");
+  revalidatePath(`/guests/${id}`);
+  redirect(`/guests/${id}?erase=done`);
 }

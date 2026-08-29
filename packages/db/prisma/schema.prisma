@@ -1129,6 +1129,11 @@ model Guest {
   // leaving the booking history itself intact — a hotel still has to keep records it is legally
   // required to keep, and "don't greet me by name" is a different request from "erase me".
   recognitionOptOut Boolean  @default(false)
+  /// When this guest exercised their right to erasure (GDPR Art. 17). The row SURVIVES with the
+  /// person removed from it: reservations keep their link so occupancy and revenue history stay
+  /// correct, and the tax invoice stays reconcilable to its stay. Set once and never cleared — it is
+  /// what stops a second erasure and what tells a screen this is not merely an incomplete record.
+  erasedAt          DateTime?
 
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   reservations Reservation[]
