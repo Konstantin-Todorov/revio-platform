@@ -93,7 +93,15 @@ Status: ☐ open · ◐ in progress · ☑ done
 - ☑ **E3** *(§3.2)* Known-booking **bypass** — guest-first entry, converging on the same
   hold → details → confirm tail. Search-first stays the default.
 - ☑ **E4** *(§3.2)* Show **rate plans at the shop step**, not only after hold — agents upsell on rate choice.
-- ☐ **E5** *(§3.1 build note)* Confirm holds carry a TTL. *(believed already true — verify)*
+- ☑ **E5** *(§3.1)* **Verified — a hold cannot exist without a TTL.** `Hold.expiresAt` is
+  `DateTime`, **not nullable**, so the database refuses one. Every production path goes through
+  `claimHold`, whose input type requires it (CRS: `holdTtlMinutes ?? 30`; RevioDirect:
+  `HOLD_MINUTES`). The only other `hold.create` in the repo is in `claim-verify.ts`, which
+  deliberately reproduces the old broken shape to prove the race still exists.
+  **The property that actually matters:** all ten availability reads filter `expiresAt > now()`, so
+  an expired hold stops blocking inventory the instant it lapses. `releaseExpiredHolds` is cleanup
+  and bookkeeping — it is *not* what makes the room sellable again, so a late or failed sweep cannot
+  cost a booking.
 
 ## F. RevioCRS — Guests *(§4)*
 
@@ -117,7 +125,10 @@ Status: ☐ open · ◐ in progress · ☑ done
   after it has stopped forwarding.
   **Enrich empty · never overwrite · tag OTA-sourced as an alias** — OTA relay addresses are fine for
   messaging and are not ground truth. Powers the F1 prefill.
-- ☐ **F5** *(§4.6)* Do **not** apply the Analytics visual mandate here. No charts on a guest profile.
+- ☑ **F5** *(§4.6)* **A standing decision, verified true.** No charts on a guest profile — the
+  Analytics visual mandate does not reach here. One guest's history is a handful of rows, and a bar
+  chart of four bookings dresses a small number as an insight. Checked: the profile renders no chart
+  component. The item stays on the record so nobody adds one later.
 
 ## G. RevioCRS — Inventory Calendar *(§5)*
 

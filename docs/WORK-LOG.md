@@ -27,6 +27,14 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-29 · Claude · DONE · E5 + F5 — verifications, no code
+**Holds always carry a TTL (verified); no charts on a guest profile (recorded).**
+Files: `docs/SPEC-08-TRACKER.md` only
+Notes: E5's real safety property is that **availability reads filter `expiresAt > now()`** in all ten
+places — the sweeper is cleanup, not correctness, so a failed sweep cannot cost a booking. Do not
+"optimise" those filters away on the grounds that a job exists. F5 is a do-nothing item kept on the
+record so nobody adds a chart to a profile showing four bookings.
+
 ### 2026-08-29 · Claude · DONE · CRS E2 — range picker + global date-field fix
 **One two-month range picker on availability search; `showPicker()` on every other date input.**
 Files: `packages/ui/src/{stay-range-field,date-field}.tsx` (new),
@@ -122,7 +130,6 @@ Pull one of these rather than inventing work, and claim it above first.
 
 | Item | Where | Note |
 | --- | --- | --- |
-| **F5** *(do nothing)* no charts on a guest profile | CRS | recorded so nobody adds them |
 | **H1–H14, K1–K8** occupancy-based pricing | all | **parked by agreement, sequenced last** — do not start without saying so |
 
 ## Standing facts worth not rediscovering
