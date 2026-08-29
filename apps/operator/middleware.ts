@@ -33,8 +33,19 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // api/health is polled by an EXTERNAL uptime monitor that has no session, so the cookie gate
-  // must not redirect it — a monitor following a 307 to /login would report the service
-  // healthy while its database was unreachable.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|.*\\.[a-zA-Z0-9]+$).*)"],
+  /*
+   * Two machine endpoints are exempt, for the same reason: the caller is a server with no cookie,
+   * and a redirect to /login is not an error it can report — it is a 307 that looks like a success.
+   *
+   *   api/health  — polled by an EXTERNAL uptime monitor. Following the redirect would report the
+   *                 service healthy while its database was unreachable.
+   *   api/leads   — the marketing site POSTs a demo request here. Caught by testing the deployed
+   *                 endpoint rather than trusting it: it answered 307 to both a missing secret and
+   *                 a wrong one, so every lead would have been silently swallowed by the login page
+   *                 while the website's own error handling stayed quiet by design.
+   *
+   * Neither is unguarded. Health returns only up/down; leads requires a shared secret and refuses
+   * outright when one is not configured.
+   */
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/leads|.*\\.[a-zA-Z0-9]+$).*)"],
 };
