@@ -27,6 +27,19 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-30 · Claude · CLAIMED · OBP H1 — the occupancy data model
+**Occupancy-based pricing, unparked by the founder. Branch `obp/h1-data-model`, NOT main.**
+Files: `packages/db/prisma/schema.prisma` + migration, `packages/core/src/rates/occupancy*.ts`,
+`packages/db/prisma/seed.ts`
+Notes: on a branch because it rewires the rate-resolution path the villa will sell through, and the
+villa onboards shortly. Nothing reaches `main` until the piece is coherent and green.
+**Build order is fixed by the spec (§6.11 / L10) and must not be reordered** — H1 data model first.
+⚠️ Found a **vestigial** foundation: `OccupancyAdjustment` + `occupancyPrice()` exist, are tested,
+and are read by **nothing** — only the seed writes one. It is an older "delta from the base price"
+shape, not the spec's "occupancy option is a first-class row". Being evolved into the options store
+rather than left beside a parallel table.
+**Codex: stay out of rates, rate plans and room types until this is DONE.**
+
 ### 2026-08-30 · Claude · DONE · Hotel-account MFA (TOTP)
 **The account that controls rates and guest data has no second factor. Operator does.**
 Files: `packages/db/src/two-factor.ts` (new, generic), `packages/db/src/operator-2fa.ts` (moves onto
