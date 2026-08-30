@@ -26,7 +26,21 @@ export interface ChannexRestrictionValue {
   date?: string;
   date_from?: string;
   date_to?: string;
+  /*
+   * TWO RATE SHAPES, and picking the wrong one is the OBP crux (§6.7a).
+   *
+   *   per_room   → `rate`, a single scalar.
+   *   per_person → `rates`, an array of { occupancy, rate }.
+   *
+   * A per-person daily push is therefore NOT N calls, one per occupancy — it is ONE change object
+   * carrying every occupancy for that date or range. Sending N objects would still be accepted, and
+   * would multiply a year's push by the room's max occupancy for no benefit.
+   *
+   * They are mutually exclusive. Setting both leaves Channex to choose, which is a coin toss over
+   * what a hotel charges.
+   */
   rate?: number; // minor units, matching Channex's integer rate (e.g. 12000 = 120.00). Verified live.
+  rates?: { occupancy: number; rate: number }[];
   // Channex properties don't all support the generic `min_stay`; `min_stay_arrival`/`min_stay_through`
   // are the supported forms (sending `min_stay` triggers a warning and the whole row is rejected).
   min_stay_arrival?: number;

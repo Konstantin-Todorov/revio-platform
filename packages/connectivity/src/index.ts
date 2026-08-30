@@ -56,3 +56,7 @@ export {
   provisionChannexProperty, ChannexProvisionError,
   type ProvisionInput, type ProvisionResult, type ProvisionWrites,
 } from "./channex-provision.js";
+export {
+  applyRates, usableRates, toChannexOptions, toDerivedOption, resolveRateMode,
+  type OccupancyRate, type SellMode, type ChannexOccupancyOption,
+} from "./channex-occupancy.js";
