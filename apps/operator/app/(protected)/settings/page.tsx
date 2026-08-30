@@ -4,7 +4,8 @@ import { getOperatorUsers } from "@/lib/data";
 import { getOperatorSession } from "@/lib/session";
 import { inviteOperator, updateOperatorRole, removeOperator } from "@/lib/actions-settings";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
+import { TwoFactorSetup } from "@revio/ui/two-factor-setup";
+import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor } from "@/lib/actions-2fa";
 import { CompanyForm } from "@/components/billing/CompanyForm";
 import { getCompany } from "@/lib/invoice-doc";
 import { requiresSecondFactor } from "@revio/db";
@@ -44,7 +45,11 @@ export default async function SettingsPage() {
       {/* N4 — the second factor, on the account that can read every hotel on the platform. */}
       <Card className="mb-4 p-4">
         <h3 className="mb-3 text-[13px] font-bold text-ink-900">Two-factor authentication</h3>
-        <TwoFactorSetup enabled={twoFactorOn} />
+        <TwoFactorSetup
+            enabled={twoFactorOn}
+            productName="Revio Operator"
+            actions={{ start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor }}
+          />
       </Card>
 
       {/* Our own legal identity. Without it there is no issuer, and issuing is blocked. */}

@@ -10,6 +10,9 @@ import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primit
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { StaffManagement, type StaffRow } from "@/components/settings/StaffManagement";
 import { money } from "@/lib/format";
+import { TwoFactorSetup } from "@revio/ui/two-factor-setup";
+import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor } from "@/lib/actions-2fa";
+import { userRequiresSecondFactor } from "@revio/db";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +26,8 @@ const GROUP_LABEL: Record<string, string> = {
 };
 
 export default async function SettingsPage() {
+  const _s2fa = await getSession();
+  const twoFactorOn = _s2fa ? await userRequiresSecondFactor(_s2fa.userId) : false;
   const property = await getProperty();
   const session = await getSession();
   const [roles, users, taxes, defaults] = await Promise.all([
@@ -251,6 +256,23 @@ export default async function SettingsPage() {
           Housekeeping, folios and the night audit live in RevioPMS.
         </p>
       </Card>
-    </div>
+    
+      {/* One account across RevioLink, RevioCRS and RevioPMS — so this card appears in all three and
+          protects the same person wherever they turned it on. A hotel that only bought one product
+          must still have somewhere to enable it. */}
+      <Card>
+        <CardHeader
+          title="Two-factor authentication"
+          subtitle="Protects this account in every Revio product you use"
+        />
+        <div className="p-5">
+          <TwoFactorSetup
+            enabled={twoFactorOn}
+            productName="RevioCRS"
+            actions={{ start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor }}
+          />
+        </div>
+      </Card>
+</div>
   );
 }

@@ -20,6 +20,7 @@
     "./login-fields": "./src/login-fields.tsx",
     "./stay-range-field": "./src/stay-range-field.tsx",
     "./date-field": "./src/date-field.tsx",
+    "./two-factor-setup": "./src/two-factor-setup.tsx",
     "./set-password-fields": "./src/set-password-fields.tsx",
     "./otp-input": "./src/otp-input.tsx",
     "./date-picker-affordance": "./src/date-picker-affordance.tsx"

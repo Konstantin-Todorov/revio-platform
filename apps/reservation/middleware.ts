@@ -9,6 +9,10 @@ export function middleware(req: NextRequest) {
   // sign in — so these must be reachable without a session or the whole flow is a dead link.
   const isPublic =
     pathname === "/login" ||
+    // Step two of signing in: reached with a correct password and NO session yet, so requiring one
+    // would make two-factor authentication unreachable. It is not unguarded — the page demands a
+    // valid pending token and sends anyone without one back to the start.
+    pathname === "/login/2fa" ||
     pathname === "/forgot-password" ||
     pathname.startsWith("/reset-password/") ||
     pathname.startsWith("/accept-invite/");

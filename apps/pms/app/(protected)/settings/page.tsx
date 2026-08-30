@@ -3,10 +3,16 @@ import { BedDouble, Wine, Moon, Radio, Users, Building2 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { connectivityModeLabel } from "@revio/core";
 import { getPmsSettings } from "@/lib/data";
+import { TwoFactorSetup } from "@revio/ui/two-factor-setup";
+import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor } from "@/lib/actions-2fa";
+import { userRequiresSecondFactor } from "@revio/db";
+import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
+  const _s2fa = await getSession();
+  const twoFactorOn = _s2fa ? await userRequiresSecondFactor(_s2fa.userId) : false;
   const { property, channels, counts } = await getPmsSettings();
 
   const links = [
@@ -77,6 +83,23 @@ export default async function SettingsPage() {
           A room going out-of-order here comes off sale on these channels automatically (shared availability core).
         </p>
       </Card>
-    </div>
+    
+      {/* One account across RevioLink, RevioCRS and RevioPMS — so this card appears in all three and
+          protects the same person wherever they turned it on. A hotel that only bought one product
+          must still have somewhere to enable it. */}
+      <Card>
+        <CardHeader
+          title="Two-factor authentication"
+          subtitle="Protects this account in every Revio product you use"
+        />
+        <div className="p-5">
+          <TwoFactorSetup
+            enabled={twoFactorOn}
+            productName="RevioPMS"
+            actions={{ start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor }}
+          />
+        </div>
+      </Card>
+</div>
   );
 }

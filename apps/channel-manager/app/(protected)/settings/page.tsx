@@ -8,10 +8,15 @@ import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { PropertySettingsForm } from "@/components/settings/PropertySettingsForm";
 import { DeliverySettingsForm } from "@/components/settings/DeliverySettingsForm";
 import { AddPropertyDialog } from "@/components/settings/UserManagement";
+import { TwoFactorSetup } from "@revio/ui/two-factor-setup";
+import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor } from "@/lib/actions-2fa";
+import { userRequiresSecondFactor } from "@revio/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
+  const _s2fa = await getSession();
+  const twoFactorOn = _s2fa ? await userRequiresSecondFactor(_s2fa.userId) : false;
   const [{ property, users, properties, totalRooms }, session] = await Promise.all([getSettings(), getSession()]);
   const canManage = session?.role === "owner" || session?.role === "admin";
   // Revocation is recorded on the shared identity, so it reaches every product this hotel runs. The
@@ -104,6 +109,23 @@ export default async function Page() {
           </Card>
         </div>
       </div>
-    </div>
+    
+      {/* One account across RevioLink, RevioCRS and RevioPMS — so this card appears in all three and
+          protects the same person wherever they turned it on. A hotel that only bought one product
+          must still have somewhere to enable it. */}
+      <Card>
+        <CardHeader
+          title="Two-factor authentication"
+          subtitle="Protects this account in every Revio product you use"
+        />
+        <div className="p-5">
+          <TwoFactorSetup
+            enabled={twoFactorOn}
+            productName="RevioLink"
+            actions={{ start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor }}
+          />
+        </div>
+      </Card>
+</div>
   );
 }

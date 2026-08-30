@@ -33,10 +33,9 @@ async function qrFor(uri: string): Promise<string | null> {
  * belongs to one person's phone.
  */
 
-export type TwoFactorState =
-  | { step: "idle"; error?: string }
-  | { step: "enrolling"; secret: string; uri: string; qrDataUrl: string | null; error?: string }
-  | { step: "done"; recoveryCodes: string[] };
+// The shape is owned by the shared component that renders it, so the two cannot drift.
+export type { TwoFactorState } from "@revio/ui/two-factor-setup";
+import type { TwoFactorState } from "@revio/ui/two-factor-setup";
 
 export async function startTwoFactor(): Promise<TwoFactorState> {
   const session = await getOperatorSession();

@@ -3,7 +3,25 @@
 import { useActionState, useState, useTransition } from "react";
 import { ShieldCheck, ShieldOff, Copy, Download } from "lucide-react";
 import { OtpInput } from "@revio/ui/otp-input";
-import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor, type TwoFactorState } from "@/lib/actions-2fa";
+
+/**
+ * The enrolment flow, shared by the Operator console and all three hotel products.
+ *
+ * It was written for the operator and copied nowhere — when hotel accounts needed the same screen it
+ * moved here rather than becoming a second copy of a security flow. The server actions arrive as
+ * PROPS, which is how `SignOutEverywhere` in this package already works: each app owns its own
+ * actions (its own session, its own perimeter) while the screen exists once.
+ */
+export type TwoFactorState =
+  | { step: "idle"; error?: string }
+  | { step: "enrolling"; secret: string; uri: string; qrDataUrl: string | null; error?: string }
+  | { step: "done"; recoveryCodes: string[] };
+
+export interface TwoFactorActions {
+  start: () => Promise<TwoFactorState>;
+  confirm: (prev: TwoFactorState | null, fd: FormData) => Promise<TwoFactorState>;
+  turnOff: (prev: { error?: string } | null, fd: FormData) => Promise<{ error?: string }>;
+}
 
 const inputCls =
   "h-10 w-full rounded-md border border-surface-border bg-white px-3 text-[14px] text-ink-900 outline-none focus:border-brand-600";
@@ -28,9 +46,9 @@ const inputCls =
  * header says what the file is, because a bare list of ten strings found in Downloads next year
  * means nothing to whoever finds it.
  */
-function downloadRecoveryCodes(codes: string[]) {
+function downloadRecoveryCodes(codes: string[], productName: string) {
   const body = [
-    "Revio Operator — two-factor recovery codes",
+    `${productName} — two-factor recovery codes`,
     `Generated ${new Date().toISOString().slice(0, 10)}`,
     "",
     "Each code works ONCE. Use one in place of the six-digit code if you lose",
@@ -51,7 +69,17 @@ function downloadRecoveryCodes(codes: string[]) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function TwoFactorSetup({ enabled }: { enabled: boolean }) {
+export function TwoFactorSetup({
+  enabled,
+  actions,
+  /** "Revio Operator" or the hotel product name — used in the recovery-code file header. */
+  productName = "Revio",
+}: {
+  enabled: boolean;
+  actions: TwoFactorActions;
+  productName?: string;
+}) {
+  const { start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor } = actions;
   const [state, formAction, pending] = useActionState<TwoFactorState | null, FormData>(confirmTwoFactor, null);
   const [offer, setOffer] = useState<{ secret: string; uri: string; qrDataUrl: string | null } | null>(null);
   const [starting, startTransition] = useTransition();
@@ -85,7 +113,7 @@ export function TwoFactorSetup({ enabled }: { enabled: boolean }) {
           </button>
           <button
             type="button"
-            onClick={() => downloadRecoveryCodes(state.recoveryCodes)}
+            onClick={() => downloadRecoveryCodes(state.recoveryCodes, productName)}
             className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted"
           >
             <Download className="h-3.5 w-3.5" /> Download .txt

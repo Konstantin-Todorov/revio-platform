@@ -134,3 +134,52 @@ export async function clearSessionCookie(): Promise<void> {
 export async function readSessionToken(): Promise<string | undefined> {
   return (await cookies()).get(SESSION_COOKIE)?.value;
 }
+
+/**
+ * The PENDING second-factor token — a correct password, and nothing more.
+ *
+ * The distinction is the whole feature. Issuing a session and then asking for a code on the next
+ * screen would mean the password alone had already authenticated somebody: anything reading the
+ * cookie rather than the screen would let them straight in. This is a different `kind`, which
+ * `getSession` refuses, so there is no session until the code is right.
+ *
+ * Five minutes: long enough to find a phone, short enough that a stolen password is not worth much
+ * later. It carries the "remember me" choice because that was decided on the first screen and must
+ * not be silently downgraded by the second.
+ */
+const PENDING_2FA_COOKIE = "revio_cm_2fa";
+const PENDING_2FA_TTL_SECONDS = 5 * 60;
+
+export async function signPendingTwoFactor(userId: string, remember: boolean): Promise<string> {
+  return new SignJWT({ kind: "hotel_2fa", sub: userId, remember })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + PENDING_2FA_TTL_SECONDS)
+    .sign(secret());
+}
+
+export async function setPendingTwoFactorCookie(token: string): Promise<void> {
+  (await cookies()).set(PENDING_2FA_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: PENDING_2FA_TTL_SECONDS,
+  });
+}
+
+export async function readPendingTwoFactor(): Promise<{ userId: string; remember: boolean } | null> {
+  const token = (await cookies()).get(PENDING_2FA_COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await verifyWithEitherKey(token);
+    if (payload.kind !== "hotel_2fa") return null;
+    return { userId: String(payload.sub), remember: payload.remember === true };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearPendingTwoFactorCookie(): Promise<void> {
+  (await cookies()).delete(PENDING_2FA_COOKIE);
+}
