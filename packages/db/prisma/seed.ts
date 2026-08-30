@@ -140,9 +140,25 @@ async function main() {
     data: { ...t, name: "Standard Rate", code: "BAR", tags: ["flexible", "best-available"], priceLogic: "manual", cancellationPolicyId: fc1.id, mealPlanId: roomOnly.id, defMinLos: 1, sortOrder: 0 },
   });
 
-  // Occupancy pricing: Standard Rate is quoted for 2 guests; 1 guest pays €10 less.
-  await prisma.occupancyAdjustment.create({
-    data: { tenantId, ratePlanId: standard.id, occupancy: 1, adjustmentType: "fixed", direction: "decrease", value: 1000, rounding: "none" },
+  /*
+   * Occupancy options for the Standard Rate — the OBP store (CRS §6.3).
+   *
+   * The demo stays PER-ROOM, which is the platform default and what every existing screen expects.
+   * Under per-room a plan has exactly one option, at the room's ceiling, and it is primary — the
+   * one-row special case that lets per-room and per-person share one schema.
+   *
+   * The old seed wrote a single `OccupancyAdjustment` ("1 guest pays €10 less") against a model
+   * nothing read. The equivalent under the new shape is a derived row, kept here so the demo has a
+   * real per-person example to look at without switching the property's model.
+   */
+  await prisma.ratePlanOccupancy.createMany({
+    data: [
+      { tenantId, ratePlanId: standard.id, occupancy: 2, isPrimary: true, mode: "manual", rateMinor: 12000 },
+      {
+        tenantId, ratePlanId: standard.id, occupancy: 1, isPrimary: false, mode: "derived",
+        adjustmentType: "fixed", direction: "decrease", value: 1000, rounding: "none",
+      },
+    ],
   });
 
   type DerivedSpec = { name: string; code: string; tags: string[]; cfg: Omit<DerivedRateConfig, "parentRatePlanId">; policy: string; meal: string };

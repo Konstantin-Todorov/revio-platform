@@ -159,8 +159,18 @@ models share one schema.
 
 Build order is fixed by §6.11 / L10 and should not be reordered:
 
-- ☐ **H1** Data model — occupancy dimension on rates; `pricing_model` + `primary_occupancy` on plans;
-  `max_occupancy` + `default_occupancy` on room types. *(§6.3)*
+- ☑ **H1** Data model — **done, on branch `obp/h1-data-model`.** Rate is now
+  `(room type, rate plan, date, occupancy)`. **Per-room is the one-row special case at max
+  occupancy**, so both models share one schema and switching is a row expand/collapse, not a fork.
+  `PropertyDefaults` gains the §6.2 config; `RoomType.defaultOccupancy`; `RatePlan.pricingModel` ·
+  `primaryOccupancy` · `rateMode` · children/infant fees. **`OccupancyAdjustment` was renamed to
+  `RatePlanOccupancy`** — it was a price *delta* read by nothing, and the spec needs a first-class
+  row with `isPrimary` and its own rate; the old delta columns survive as the derivation rule.
+  `packages/core/src/rates/occupancy-options.ts` holds validation + resolution + model switching,
+  **31 tests**. The compound key change made the compiler enumerate all **10** rate-writing sites
+  across CRS and Link — each resolves occupancy through `occupancyKeysFor`, hoisted out of every
+  bulk loop. Migration proven: full chain applies clean, rename keeps its RLS policy, backfill sets
+  existing rows to the room's max.
 - ☐ **H2** Settings — property default + per-plan override, seed modes, display pref, age policy
   scaffold, CM capability flag. *(§6.2)*
 - ☐ **H3** Channex sync — `sell_mode`, occupancy `options`, `rate_mode` incl. **cascade**, the daily

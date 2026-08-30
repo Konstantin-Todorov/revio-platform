@@ -88,3 +88,4 @@ export {
   type SellableByNight,
 } from "./inventory-claim.js";
 export * from "@prisma/client";
+export { occupancyKeysFor, occupancyKeyFor } from "./occupancy-key.js";

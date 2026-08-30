@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { occupancyKeyFor, occupancyKeysFor } from "@revio/db";
 import { prisma } from "./db";
 import { computeWaterfall, deriveRate, isOverbooking, ROOM_OCCUPYING_STATUSES, type Capability, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
@@ -99,10 +100,13 @@ export async function saveCell(input: { roomTypeId: string; date: string; field:
     const priceMinor = Math.max(0, Math.round(parseFloat(input.value) * 100));
     const ratePlanId = await standardPlanId(propertyId);
     if (!ratePlanId) return; // no base rate plan to price against
+    // A calendar cell edits "the" price, which since OBP H1 is a real occupancy row — the primary.
+    // Resolved rather than assumed, so this cell cannot disagree with the bulk editor beside it.
+    const occupancy = await occupancyKeyFor(prisma, input.roomTypeId);
     await prisma.ratePrice.upsert({
-      where: { roomTypeId_ratePlanId_date: { roomTypeId: input.roomTypeId, ratePlanId, date } },
+      where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId: input.roomTypeId, ratePlanId, date, occupancy } },
       update: { priceMinor, source: "calendar" },
-      create: { tenantId, propertyId, roomTypeId: input.roomTypeId, ratePlanId, date, priceMinor, source: "calendar" },
+      create: { tenantId, propertyId, roomTypeId: input.roomTypeId, ratePlanId, date, occupancy, priceMinor, source: "calendar" },
     });
     await logAudit(propertyId, tenantId, { entity: `${rt.name} · Standard Rate`, field: "price", newValue: `€${priceMinor / 100}` });
   } else if (input.field === "inventory") {
@@ -255,6 +259,11 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
   const allPlanLinks = hasRestrictionFields
     ? await prisma.ratePlanRoomType.findMany({ where: { roomTypeId: { in: roomTypeIds } } })
     : [];
+
+  // Resolved ONCE for the whole operation. A bulk edit is dates × plans × room types, and this value
+  // cannot change while it runs — a lookup inside that loop would be thousands of round trips for
+  // one number per room type.
+  const occupancyKeys = await occupancyKeysFor(prisma, roomTypeIds);
   const everyPlanOfRoom = new Map<string, Set<string>>();
   for (const l of allPlanLinks) {
     everyPlanOfRoom.set(l.roomTypeId, (everyPlanOfRoom.get(l.roomTypeId) ?? new Set()).add(l.ratePlanId));
@@ -280,7 +289,8 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
       if (doRate) {
         const { mode, value } = payload.rate!;
         for (const rpId of roomPlans) {
-          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
+          const occupancy = occupancyKeys.get(roomTypeId) ?? 1;
+          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: rpId, date, occupancy } } });
           const base = existing?.priceMinor ?? 0;
           let next = base;
           if (mode === "set") next = Math.round(value * 100);
@@ -289,9 +299,9 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
           else if (mode === "inc_amt") next = base + Math.round(value * 100);
           else if (mode === "dec_amt") next = Math.max(0, base - Math.round(value * 100));
           await prisma.ratePrice.upsert({
-            where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
+            where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: rpId, date, occupancy } },
             update: { priceMinor: next, source: "bulk" },
-            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
+            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, occupancy, priceMinor: next, source: "bulk" },
           });
         }
       }
@@ -513,9 +523,11 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
     }),
   ]);
   const invByDate = new Map(cells.map((c) => [c.date.toISOString().slice(0, 10), c.inventory]));
+  // One room type, so one lookup — before the loop, not inside it.
+  const quoteOccupancy = await occupancyKeyFor(prisma, roomTypeId);
 
   for (const date of dates) {
-    const sp = stdId ? await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: stdId, date } } }) : null;
+    const sp = stdId ? await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: stdId, date, occupancy: quoteOccupancy } } }) : null;
     const stdMinor = sp?.priceMinor ?? 0;
     totalMinor += (derivedCfg ? deriveRate(stdMinor, derivedCfg) : stdMinor) * quantity;
 

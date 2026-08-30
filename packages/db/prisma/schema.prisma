@@ -655,7 +655,13 @@ model RoomType {
   // Physical room/bed count — a CAP & safety-net only. Rooms-to-sell is managed per date
   // (DailyCell.inventory); exceeding totalRooms warns but does not block.
   totalRooms  Int
+  /// The occupancy ceiling — how many occupancy rows a per-person plan carries, and what "doesn't
+  /// fit" is measured against. This is `max_occupancy` in the OBP spec; the name predates it.
   maxGuests   Int
+  /// Which occupancy is the PRIMARY one — the rate shown by default and the one restrictions ride
+  /// on. Null means "the ceiling", which is the pre-OBP behaviour and the correct default: a room
+  /// priced per-room is priced for a full room.
+  defaultOccupancy Int?
   description String?
   // Guest-facing room content (K11). All optional: a hotel goes live before its copywriting, and
   // every surface renders correctly with any subset of these, including none of them.
@@ -767,6 +773,22 @@ model RatePlan {
   derivedFloorMinor   Int?
   derivedCeilingMinor Int?
 
+  /// per_room | per_person | null = inherit the property default. Mirrors Channex `sell_mode`,
+  /// which is per rate plan for exactly this reason.
+  pricingModel         String?
+  /// Which occupancy option is primary. Null inherits the room type's `defaultOccupancy`.
+  /// Exactly one option per plan is primary, and restrictions ride on it — Channex has no
+  /// occupancy dimension on restrictions (§6.7a).
+  primaryOccupancy     Int?
+  /// manual | derived | cascade | auto. **`cascade` is the one that matters**: a plan that is BOTH
+  /// derived from a parent AND per-person derives each occupancy from the parent's MATCHING
+  /// occupancy. The two derivation axes — plan-to-plan and occupancy-to-occupancy — are orthogonal,
+  /// and tangling them is named in the spec as the main failure mode.
+  rateMode             String?
+  /// Children and infants are a SEPARATE axis from adult occupancy (§6.9) and must never be folded
+  /// into it. Stored here so the model is ready; pricing activates later.
+  childrenFeeMinor     Int      @default(0)
+  infantFeeMinor       Int      @default(0)
   cancellationPolicyId String?
   mealPlanId           String?
 
@@ -796,22 +818,50 @@ model RatePlan {
   channelMappings      ChannelRatePlanMapping[]
   ratePrices           RatePrice[]
   resLines             ReservationLine[]
-  occupancyAdjustments OccupancyAdjustment[]
+  occupancyOptions     RatePlanOccupancy[]
 
   @@index([propertyId])
 }
 
-// Occupancy-based pricing: a price delta applied for a given guest count, relative to the rate plan's
-// base (max-occupancy) price. Implements "price for 2 guests − €10 = price for 1 guest".
-model OccupancyAdjustment {
-  id             String @id @default(cuid())
-  tenantId       String
-  ratePlanId     String
-  occupancy      Int // number of guests this price applies to
-  adjustmentType String // percent | fixed
-  direction      String // increase | decrease
-  value          Int // percent (0-100) or minor units
-  rounding       String @default("none")
+// One occupancy row under a rate plan — the Channex `options[]` entry, and the OBP store.
+//
+// ## This model was renamed, and the rename is the point
+//
+// It was `OccupancyAdjustment`: a price DELTA relative to the plan's base price. That shape works
+// for "two guests minus €10" and breaks on everything else the spec asks for — it cannot say which
+// occupancy is primary, it cannot hold an explicit price for an occupancy, and it has no row at all
+// for a per-room plan. It was also read by nothing: only the seed ever wrote one.
+//
+// The spec's shape is a first-class ROW per occupancy, which is also Channex's shape:
+//
+//   per_room   → exactly ONE row, at the room's max occupancy, primary.
+//   per_person → one row per occupancy 1…max, contiguous, no gaps, exactly one primary.
+//
+// Per-room being the one-row special case is what makes switching models a row expand/collapse
+// rather than a fork in every query — and it is why both models share one schema.
+//
+// The old delta fields survive as the DERIVATION rule (`options[].derived_option`), which is what
+// they always were. `mode` says whether this row's price is stated or computed.
+model RatePlanOccupancy {
+  id         String @id @default(cuid())
+  tenantId   String
+  ratePlanId String
+  /// Number of ADULTS this row prices. Children and infants are a separate axis (§6.9).
+  occupancy  Int
+  /// Exactly one per plan. The rate shown by default, and the one restrictions ride on — Channex
+  /// restrictions have no occupancy dimension, so they attach to the primary and only to it.
+  isPrimary  Boolean @default(false)
+  /// manual — `rateMinor` is the price. derived — compute it from the primary using the rule below.
+  mode       String  @default("manual")
+  /// The plan-level default price for this occupancy. Per-DATE prices live on RatePrice; this is
+  /// what a date with no explicit price falls back to, and what seeds a new calendar range.
+  rateMinor  Int?
+
+  // --- the derivation rule (Channex `derived_option`) — the old adjustment fields, unchanged ---
+  adjustmentType String? // percent | fixed
+  direction      String? // increase | decrease
+  value          Int? // percent (0-100) or minor units
+  rounding       String  @default("none")
 
   ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
 
@@ -930,6 +980,15 @@ model RatePrice {
   roomTypeId String
   ratePlanId String
   date       DateTime @db.Date
+  /// The occupancy this price is for — the dimension OBP adds.
+  ///
+  /// A per-room plan stores ONE row per date at the room's max occupancy, which is the same shape a
+  /// per-person plan uses for its top row. That is deliberate: every reader can ask for
+  /// (room, plan, date, occupancy) without branching on the pricing model, and switching a plan
+  /// between models expands or collapses rows instead of moving data between tables.
+  ///
+  /// Nullable ONLY so the migration can backfill existing rows; every write sets it.
+  occupancy  Int?
   priceMinor Int
   // Two-tier precedence provenance (docs/specs/CRS-GUIDE-V1.md §1.4): calendar and bulk are
   // PEERS — last write wins by recency — so every date-scoped value records when it was last
@@ -941,7 +1000,9 @@ model RatePrice {
   roomType RoomType @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
   ratePlan RatePlan @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
 
-  @@unique([roomTypeId, ratePlanId, date])
+  // Occupancy is part of the key now. Without it a per-person plan could store only one price per
+  // date and the second occupancy would silently overwrite the first.
+  @@unique([roomTypeId, ratePlanId, date, occupancy])
   @@index([propertyId, date])
 }
 
@@ -1289,6 +1350,27 @@ model PropertyDefaults {
   id                       String  @id @default(cuid())
   tenantId                 String
   propertyId               String  @unique
+  // --- Occupancy-based pricing (CRS §6.2). The property DEFAULT; a rate plan may override it,
+  // because Channex sets sell_mode per rate plan and a hotel can legitimately run some plans
+  // per-room and some per-person.
+  /// per_room | per_person. Per-room is not a different model — it is the one-row special case at
+  /// max occupancy, which is what lets switching be a row expand/collapse rather than a fork.
+  pricingModel             String  @default("per_room")
+  /// How rows are seeded when a plan first becomes per-person: copy | derive.
+  /// `copy` puts the existing price on every occupancy; `derive` applies the seed offset downward
+  /// from the primary. Neither loses the rate that was already there.
+  occupancySeedMode        String  @default("copy")
+  /// all | primary_expand. How per-occupancy prices render in the calendar and booking engine.
+  /// A per-person plan on a 4-guest room is four rows per date; showing all of them by default
+  /// makes a month unreadable, so the primary shows and the rest expand.
+  occupancyDisplay         String  @default("primary_expand")
+  /// Age bands, scaffolding the children/infant axis (§6.9) which is deliberately NOT adult
+  /// occupancy. Shipped now so rate-plan child fees have something to reference later.
+  ageInfantMax             Int     @default(2)
+  ageChildMax              Int     @default(11)
+  /// Whether the connected channel manager supports per-occupancy rates. READ-ONLY, detected from
+  /// the CM — it gates whether OBP can be enabled at all or must degrade (§6.7).
+  cmObpCapability          Boolean @default(false)
   defStopSell              Boolean @default(false)
   defMinLos                Int?
   defMaxLos                Int?

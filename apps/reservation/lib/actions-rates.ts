@@ -7,6 +7,7 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
+import { occupancyKeyFor, occupancyKeysFor } from "@revio/db";
 
 
 /**
@@ -257,10 +258,14 @@ export async function saveCalendarRate(args: { roomTypeId: string; date: string;
   if (!Number.isFinite(priceMinor) || priceMinor < 0) return;
   const date = utcDay(args.date);
 
-  const before = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId: roomType.id, ratePlanId: standard.id, date } } });
+  // "The" price is a real occupancy row since OBP H1 — the primary. Resolved, never assumed, so the
+  // calendar and the bulk editor cannot key the same edit differently.
+  const occupancy = await occupancyKeyFor(prisma, roomType.id);
+  const key = { roomTypeId: roomType.id, ratePlanId: standard.id, date, occupancy };
+  const before = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date_occupancy: key } });
   await prisma.ratePrice.upsert({
-    where: { roomTypeId_ratePlanId_date: { roomTypeId: roomType.id, ratePlanId: standard.id, date } },
-    create: { tenantId, propertyId, roomTypeId: roomType.id, ratePlanId: standard.id, date, priceMinor, source: "calendar" },
+    where: { roomTypeId_ratePlanId_date_occupancy: key },
+    create: { tenantId, propertyId, roomTypeId: roomType.id, ratePlanId: standard.id, date, occupancy, priceMinor, source: "calendar" },
     update: { priceMinor, source: "calendar" },
   });
   await logAudit(propertyId, tenantId, {
@@ -309,21 +314,25 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
     if (!Number.isFinite(value) || value < 0) return { ok: false, error: "Enter a price value." };
   }
 
+  // Once for the whole operation: dates × plans × room types cannot change this value mid-run.
+  const occupancyKeys = await occupancyKeysFor(prisma, roomTypeIds);
+
   let affected = 0;
   for (const roomTypeId of roomTypeIds) {
     for (const date of dates) {
       if (updateType.startsWith("rate_")) {
         for (const rpId of ratePlanIds) {
-          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
+          const occupancy = occupancyKeys.get(roomTypeId) ?? 1;
+          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: rpId, date, occupancy } } });
           const base = existing?.priceMinor ?? 0;
           let next = base;
           if (updateType === "rate_set") next = Math.round(value * 100);
           else if (updateType === "rate_inc_pct") next = Math.round(base * (1 + value / 100));
           else if (updateType === "rate_dec_pct") next = Math.round(base * (1 - value / 100));
           await prisma.ratePrice.upsert({
-            where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
+            where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: rpId, date, occupancy } },
             update: { priceMinor: next, source: "bulk" },
-            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
+            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, occupancy, priceMinor: next, source: "bulk" },
           });
         }
       } else {
@@ -449,6 +458,9 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   }
 
   const hasCell = Object.keys(cell).length > 0;
+  // Once for the whole operation: dates × plans × room types cannot change this value mid-run.
+  const occupancyKeys = await occupancyKeysFor(prisma, roomTypeIds);
+
   let affected = 0;
   for (const roomTypeId of roomTypeIds) {
     for (const date of dates) {
@@ -458,7 +470,8 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
       if (doRate) {
         const { mode, value } = payload.rate!;
         for (const rpId of ratePlanIds) {
-          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } } });
+          const occupancy = occupancyKeys.get(roomTypeId) ?? 1;
+          const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: rpId, date, occupancy } } });
           const base = existing?.priceMinor ?? 0;
           let next = base;
           if (mode === "set") next = Math.round(value * 100);
@@ -467,9 +480,9 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
           else if (mode === "inc_amt") next = base + Math.round(value * 100);
           else if (mode === "dec_amt") next = Math.max(0, base - Math.round(value * 100));
           await prisma.ratePrice.upsert({
-            where: { roomTypeId_ratePlanId_date: { roomTypeId, ratePlanId: rpId, date } },
+            where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: rpId, date, occupancy } },
             update: { priceMinor: next, source: "bulk" },
-            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, priceMinor: next, source: "bulk" },
+            create: { tenantId, propertyId, roomTypeId, ratePlanId: rpId, date, occupancy, priceMinor: next, source: "bulk" },
           });
         }
       }

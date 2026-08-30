@@ -43,3 +43,4 @@ export * from "./guests/contact-hydration.js";
 export * from "./guests/merge.js";
 export * from "./stays/calendar.js";
 export * from "./guests/erasure.js";
+export * from "./rates/occupancy-options.js";
