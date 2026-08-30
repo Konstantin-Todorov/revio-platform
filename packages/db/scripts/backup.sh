@@ -28,8 +28,18 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DEST="$OUT/$STAMP"
 mkdir -p "$DEST"
 
-echo "→ resolving connection details from Railway"
-PROD_URL="$(railway variables --service Postgres --json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).DATABASE_PUBLIC_URL')"
+# The URL comes from the environment when it is there, and from the Railway CLI when it is not.
+#
+# Env first so this runs somewhere with no CLI and nobody logged in — which is the whole point of the
+# scheduled job in `.github/workflows/backup.yml`. The pre-push hook on a developer's machine keeps
+# working exactly as before, because nothing sets the variable there.
+if [ -n "${DATABASE_PUBLIC_URL:-}" ]; then
+  echo "→ using DATABASE_PUBLIC_URL from the environment"
+  PROD_URL="$DATABASE_PUBLIC_URL"
+else
+  echo "→ resolving connection details from Railway"
+  PROD_URL="$(railway variables --service Postgres --json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).DATABASE_PUBLIC_URL')"
+fi
 
 SERVER_MAJOR="$(psql "$PROD_URL" -tAc 'SHOW server_version;' | cut -d. -f1)"
 DUMP_BIN="${PG_DUMP:-pg_dump}"

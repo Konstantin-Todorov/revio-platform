@@ -11,7 +11,7 @@ because the drill below was actually run, and because it found things that reaso
 | --- | --- | --- |
 | Railway **volume backups** (daily/weekly/monthly snapshots) | 🚫 **unavailable — Pro plan only** | Verified in the dashboard 2026-08-05: *"Backups and point-in-time recovery (PITR) are only available for customers on the Pro plan."* The account is on **Hobby**. There is no toggle to click. |
 | Railway **point-in-time recovery** (continuous WAL archiving) | 🚫 **unavailable — Pro plan only** | Same gate. Note the window only covers time *after* enabling, so it recovers nothing retroactively. |
-| **Logical dumps** (`pg_dump`) | ✅ **automatic before every migrating push** | `.githooks/pre-push` → `packages/db/scripts/backup.sh`. The only layer that survives deleting the Railway project itself. |
+| **Logical dumps** (`pg_dump`) | ✅ **nightly, unattended** + before every migrating push | `.github/workflows/backup.yml` nightly at 03:12 UTC, and `.githooks/pre-push` on any migrating push. Both run `packages/db/scripts/backup.sh`. The only layer that survives deleting the Railway project itself — artifacts live at GitHub, not inside the project they protect. |
 | **Storage bucket** (room photos, brand assets) | ✅ same run | **No database backup contains these bytes.** |
 
 **The plan gate, priced honestly.** Hobby is $5/month and includes $5 of usage; Pro is $20 and
@@ -184,9 +184,14 @@ Then compare row counts against whatever you still have, and expect append-only 
 1. **Nothing, until there is a paying hotel.** What is at risk today is demo data and test bookings;
    losing it costs an afternoon of reseeding. The pre-push hook covers the operation most likely to
    destroy real data — a migration — and it covers it precisely.
-2. **When the first real client signs, close the unattended gap.** The hook runs when *you* push; it
-   cannot catch a bad edit made through the UI on a Tuesday afternoon. Two ways, and the choice is
-   about money rather than engineering:
+2. ~~**When the first real client signs, close the unattended gap.**~~ ✅ **DONE 2026-08-30** — a
+   nightly GitHub Actions job (`.github/workflows/backup.yml`) runs the same script and stores the
+   result as an artifact. Two rhythms rather than one: **daily kept 14 days** answers "undo
+   yesterday", **Sunday kept 120 days** answers "what did this look like in the spring" — about 50 MB
+   live at any time, at 1.6 MB a copy. Chosen over a Railway cron because a copy held at GitHub
+   survives losing the Railway project, which is the whole point of this layer.
+
+   Still worth considering later, and still a money question rather than an engineering one:
    - **Upgrade to Pro** (~+$15/month today) for volume backups + PITR — restore to any minute, no
      maintenance, but the copies die with the project.
    - **A Railway cron service** running `backup.sh` on a schedule and uploading to a *separate*

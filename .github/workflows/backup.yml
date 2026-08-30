@@ -1,0 +1,117 @@
+# An unattended backup, because the pre-push hook cannot catch a Tuesday.
+#
+# `.githooks/pre-push` takes a full backup before any push carrying a migration, and it covers the
+# operation most likely to destroy data — precisely and automatically. What it cannot cover is
+# everything else: a bad edit made through the UI, a delete run against the wrong row, a Railway
+# incident. Those happen on days nobody pushes a migration, and once a real hotel is taking bookings
+# the data changes daily while the schema does not — so the hook would fire rarely, exactly when the
+# data is worth most.
+#
+# ## Retention: two rhythms, not one
+#
+# A backup is 1.6 MB (≈900 KB database + ≈700 KB bucket). Keeping everything forever would still be
+# small, but "everything forever" is not a policy, it is an absence of one — and the value of the
+# 40th consecutive daily is near zero while the value of last month's is not.
+#
+#   daily   → kept 14 days   answers "undo yesterday"
+#   Sunday  → kept 120 days  answers "what did this look like in the spring"
+#
+# That is ~14 dailies plus ~17 weeklies live at any time: about 50 MB, and each one individually
+# restorable. GitHub deletes them on the retention clock, so nothing accumulates without a decision.
+#
+# ## Why GitHub and not a Railway cron
+#
+# Railway's own backups and any bucket we write to live INSIDE the project they protect, and Railway
+# documents that wiping a volume deletes its backups. A copy held at GitHub survives losing the
+# Railway project entirely, which is the one property the pg_dump layer exists to provide.
+
+name: Backup
+
+on:
+  schedule:
+    # 03:12 UTC — off the hour, because everyone schedules on the hour and the runner queue shows it.
+    - cron: "12 3 * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why this backup is being taken (recorded in the manifest)"
+        required: false
+        default: "manual"
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Match pg_dump to the server's major version
+        # pg_dump refuses to dump a NEWER server, and the runner's default client trails. The script
+        # aborts on a mismatch rather than writing a zero-byte file, so this must be right or the job
+        # fails loudly — which is the correct behaviour and the reason the check is in the script.
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-18
+          echo "PG_DUMP=/usr/lib/postgresql/18/bin/pg_dump" >> "$GITHUB_ENV"
+
+      - name: Decide the retention for this run
+        id: keep
+        # Sunday's copy is the one worth keeping for a season; the rest answer "undo yesterday".
+        run: |
+          if [ "$(date -u +%u)" = "7" ]; then
+            echo "days=120" >> "$GITHUB_OUTPUT"
+            echo "label=weekly" >> "$GITHUB_OUTPUT"
+          else
+            echo "days=14" >> "$GITHUB_OUTPUT"
+            echo "label=daily" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Take the backup
+        env:
+          # Through the environment, never interpolated into the script — a `${{ }}` substitution
+          # happens before bash parses the line, and this repo has already been bitten twice by that.
+          DATABASE_PUBLIC_URL: ${{ secrets.DATABASE_PUBLIC_URL }}
+          STORAGE_BUCKET: ${{ secrets.STORAGE_BUCKET }}
+          STORAGE_REGION: ${{ secrets.STORAGE_REGION }}
+          STORAGE_ENDPOINT: ${{ secrets.STORAGE_ENDPOINT }}
+          STORAGE_ACCESS_KEY_ID: ${{ secrets.STORAGE_ACCESS_KEY_ID }}
+          STORAGE_SECRET_ACCESS_KEY: ${{ secrets.STORAGE_SECRET_ACCESS_KEY }}
+          BACKUP_REASON: ${{ inputs.reason || format('scheduled · {0}', steps.keep.outputs.label) }}
+          # Nothing to prune: each run starts on a clean runner and GitHub owns retention.
+          BACKUP_KEEP: "0"
+        run: ./packages/db/scripts/backup.sh backups
+
+      - name: Refuse to upload an empty backup
+        # The failure this whole job exists to avoid is a backup that looks taken and holds nothing.
+        # The script already checks the dump; this checks what is about to be stored.
+        run: |
+          DIR="$(find backups -mindepth 1 -maxdepth 1 -type d | sort | tail -1)"
+          [ -n "$DIR" ] || { echo "::error::no backup directory was produced"; exit 1; }
+          SIZE=$(du -sk "$DIR" | cut -f1)
+          echo "backup $DIR is ${SIZE} KB"
+          [ "$SIZE" -ge 200 ] || { echo "::error::backup is only ${SIZE} KB — refusing to store it"; exit 1; }
+          echo "DIR=$DIR" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revio-backup-${{ steps.keep.outputs.label }}-${{ github.run_id }}
+          path: ${{ env.DIR }}
+          retention-days: ${{ steps.keep.outputs.days }}
+          if-no-files-found: error
+
+      - name: Say what was stored
+        run: cat "$DIR/MANIFEST.txt"
