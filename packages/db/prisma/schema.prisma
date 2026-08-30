@@ -82,8 +82,17 @@ model User {
   // password change and by "sign out everywhere" — never routinely, because moving it signs the
   // person out of the device in their hand too. Null = never revoked.
   sessionsValidFrom DateTime?
+  /// Two-factor authentication, on the SHARED identity — enrolling once in RevioCRS protects the
+  /// same person in RevioLink and RevioPMS. Three per-app secrets would be three chances to leave
+  /// one unprotected, and the account is one person either way.
+  /// `totpSecret` is encrypted at rest. `totpLastStep` makes each 30-second step single-use, which
+  /// is what people already assume a one-time password means.
+  totpSecret        String?
+  totpEnabledAt     DateTime?
+  totpLastStep      Int?
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recoveryCodes UserRecoveryCode[]
 
   @@index([tenantId])
 }
@@ -193,6 +202,21 @@ model Lead {
 
   @@index([createdAt])
   @@index([handledAt])
+}
+
+// One-time recovery codes for a HOTEL staff account (mirrors OperatorRecoveryCode). Hashed with
+// bcrypt like a password — a leaked table must not be a set of working credentials. `usedAt` rather
+// than deletion, so "already used" can be said out loud: that is a different problem for the person
+// holding the printed sheet than "wrong code".
+model UserRecoveryCode {
+  id       String    @id @default(cuid())
+  userId   String
+  codeHash String
+  usedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // Operator-side billing (our invoices to the hotels). Operator business data — a hotel can NEVER read

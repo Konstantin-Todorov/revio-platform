@@ -67,6 +67,13 @@ export {
   type SecondFactorResult,
 } from "./operator-2fa.js";
 export {
+  beginUserTotpEnrolment,
+  confirmUserTotpEnrolment,
+  disableUserTotp,
+  verifyUserSecondFactor,
+  userRequiresSecondFactor,
+} from "./user-2fa.js";
+export {
   acquireJobLease,
   releaseJobLease,
   withJobLease,
