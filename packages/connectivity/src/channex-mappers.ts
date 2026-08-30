@@ -5,6 +5,7 @@
  */
 
 import type { AriUpdate, RawReservation, RawRevision } from "@revio/core";
+import { applyRates } from "./channex-occupancy.js";
 
 // --- Channex wire types (subset we use) -----------------------------------
 
@@ -150,7 +151,28 @@ export function toRestrictionValue(propertyId: string, u: AriUpdate): ChannexRes
     rate_plan_id: u.externalRateId,
     date: u.date,
   };
-  if (u.priceMinor != null) value.rate = u.priceMinor;
+  /*
+   * The rate, in whichever of the two shapes this plan uses (§6.7a).
+   *
+   * `occupancyRates` means per-person: one change object carrying every occupancy. Its absence means
+   * per-room and a scalar. `applyRates` owns that choice and deletes whichever field it is not
+   * using, because leaving both set lets Channex pick.
+   *
+   * `channelSupportsOccupancy` is true here: degradation for a single-rate channel is decided by the
+   * caller, which knows the channel — this mapper only knows the plan.
+   */
+  if (u.occupancyRates?.length) {
+    const applied = applyRates({
+      value,
+      sellMode: "per_person",
+      rates: u.occupancyRates,
+      primaryOccupancy: u.primaryOccupancy ?? u.occupancyRates[u.occupancyRates.length - 1]!.occupancy,
+      channelSupportsOccupancy: true,
+    });
+    if (applied.ok) Object.assign(value, applied.value);
+  } else if (u.priceMinor != null) {
+    value.rate = u.priceMinor;
+  }
   if (r.minLos != null) {
     value.min_stay_arrival = r.minLos;
     value.min_stay_through = r.minLos;

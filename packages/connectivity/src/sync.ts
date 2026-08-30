@@ -9,9 +9,10 @@
  */
 import { forSystem, decryptSecret, forTenant, markBillable } from "@revio/db";
 import {
-  channelSupports, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed,
-  resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type DerivedRateConfig, type RestrictionRuleHit,
+  channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
+  resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
   type RestrictionType, type ChannelAdapter,
+  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
 } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { decidePull, type Stay } from "./pull-merge.js";
@@ -211,7 +212,12 @@ export async function syncChannel(
   const wants = (f: PushField) => (scope?.fields ?? ALL_PUSH_FIELDS).includes(f);
   const [allRoomMaps, allRateMaps] = await Promise.all([
     prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: "complete", externalRoomId: { not: null } }, include: { roomType: true } }),
-    prisma.channelRatePlanMapping.findMany({ where: { channelId, status: "complete", externalRateId: { not: null } }, include: { ratePlan: true } }),
+    prisma.channelRatePlanMapping.findMany({
+      where: { channelId, status: "complete", externalRateId: { not: null } },
+      // occupancyOptions decides the shape of the push: their presence on a per-person plan is
+      // what turns a scalar `rate` into a `rates[]` array.
+      include: { ratePlan: { include: { occupancyOptions: true } } },
+    }),
   ]);
   // Present-but-empty is not the same as absent. Absent means "the caller did not narrow this axis";
   // empty means "the caller narrowed it to nothing" — a cancellation with no lines, say — and must
@@ -318,26 +324,54 @@ export async function syncChannel(
   const planCellMap = new Map(
     cells.filter((c) => c.ratePlanId != null).map((c) => [planCellKey(c.roomTypeId, c.ratePlanId!, ymd(c.date)), c]),
   );
-  const priceMap = new Map(prices.map((p) => [`${p.roomTypeId}:${p.ratePlanId}:${ymd(p.date)}`, p.priceMinor]));
+  /*
+   * Pricing goes through `resolveRate` in @revio/core — the same function the booking engine and
+   * the CRS search call (OBP §6.6).
+   *
+   * The whole point is that these three cannot disagree. What the OTA is told, what a direct guest
+   * is quoted, and what the folio eventually bills are the same number because they are the same
+   * code, not because three implementations were kept in step by hand.
+   */
+  const priceMap = new Map(
+    prices.map((p) => [`${p.roomTypeId}:${p.ratePlanId}:${ymd(p.date)}:${p.occupancy ?? ""}`, p.priceMinor]),
+  );
+  const lookup: PriceLookup = (rtId, rpId, k, occ) => priceMap.get(`${rtId}:${rpId}:${k}:${occ}`) ?? null;
+  const planIndex = new Map(
+    allRateMaps.map((m) => [m.ratePlanId, toResolvablePlan(m.ratePlan)]),
+  );
+  const propertyModel = propertyDefaults?.pricingModel ?? "per_room";
+  const roomById = new Map(allRoomMaps.map((m) => [m.roomTypeId, m.roomType]));
+
+  /** Every occupancy this plan sells at, for this room type — the `rates[]` payload. */
+  function occupancyRatesFor(
+    roomTypeId: string,
+    rp: (typeof rateMaps)[number]["ratePlan"],
+    k: string,
+  ): { occupancy: number; minor: number | null }[] {
+    const room = roomById.get(roomTypeId);
+    const plan = planIndex.get(rp.id);
+    if (!room || !plan) return [];
+    const ceiling = Math.max(1, room.maxGuests);
+    return Array.from({ length: ceiling }, (_, i) => i + 1).map((occupancy) => ({
+      occupancy,
+      minor: resolveRate({
+        lookup, plans: planIndex, roomTypeId,
+        maxOccupancy: ceiling, roomDefaultOccupancy: room.defaultOccupancy,
+        propertyModel, plan, dateKey: k, occupancy,
+      }),
+    }));
+  }
 
   function priceFor(roomTypeId: string, rp: (typeof rateMaps)[number]["ratePlan"], k: string): number | null {
-    const direct = priceMap.get(`${roomTypeId}:${rp.id}:${k}`);
-    if (direct != null) return direct;
-    if (rp.priceLogic === "derived" && rp.parentRatePlanId) {
-      const parent = priceMap.get(`${roomTypeId}:${rp.parentRatePlanId}:${k}`);
-      if (parent == null) return null;
-      const cfg: DerivedRateConfig = {
-        parentRatePlanId: rp.parentRatePlanId,
-        adjustmentType: (rp.derivedType as "percent" | "fixed") ?? "percent",
-        direction: (rp.derivedDirection as "increase" | "decrease") ?? "decrease",
-        value: rp.derivedValue ?? 0,
-        rounding: (rp.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
-        ...(rp.derivedFloorMinor != null ? { floorMinor: rp.derivedFloorMinor } : {}),
-        ...(rp.derivedCeilingMinor != null ? { ceilingMinor: rp.derivedCeilingMinor } : {}),
-      };
-      return deriveRate(parent, cfg);
-    }
-    return null;
+    const room = roomById.get(roomTypeId);
+    const plan = planIndex.get(rp.id);
+    if (!room || !plan) return null;
+    // The scalar a per-room plan sends: the room's price, which resolveRate reads at the ceiling.
+    return resolveRate({
+      lookup, plans: planIndex, roomTypeId,
+      maxOccupancy: Math.max(1, room.maxGuests), roomDefaultOccupancy: room.defaultOccupancy,
+      propertyModel, plan, dateKey: k, occupancy: Math.max(1, room.maxGuests),
+    });
   }
 
   const updates: AriUpdate[] = [];
@@ -433,7 +467,29 @@ export async function syncChannel(
         // A stop-sell still forces bookable to 0 — but only when this push is carrying availability
         // at all. Attaching it to a rate-only edit is what Channex rejected.
         if (wants("availability")) update.bookable = stopSell ? 0 : bookable;
-        if (wants("rate")) update.priceMinor = price;
+        if (wants("rate")) {
+          /*
+           * Per-person plans carry the whole occupancy array; per-room carries the scalar.
+           *
+           * Set one or the other, never both — `toRestrictionValue` deletes whichever it is not
+           * using, but sending a plan the wrong shape entirely is the failure that Channex accepts
+           * with a 200: a scalar on a per-person plan flattens every party size to one price.
+           */
+          const plan = planIndex.get(pm.ratePlanId);
+          const perPerson = effectiveModel(plan?.pricingModel, propertyModel) === "per_person";
+          if (perPerson) {
+            const rates = occupancyRatesFor(rm.roomTypeId, pm.ratePlan, k);
+            if (rates.some((r) => r.minor != null && r.minor > 0)) {
+              update.occupancyRates = rates;
+              const room = roomById.get(rm.roomTypeId);
+              update.primaryOccupancy = effectivePrimary(
+                plan?.primaryOccupancy, room?.defaultOccupancy, Math.max(1, room?.maxGuests ?? 1),
+              );
+            }
+          } else {
+            update.priceMinor = price;
+          }
+        }
         updates.push(update);
         emitted++;
       }
@@ -967,4 +1023,44 @@ export async function listChannelProducts(
   } catch {
     return { rooms: [], rates: [] };
   }
+}
+
+/**
+ * A Prisma rate plan as `resolveRate` wants it.
+ *
+ * Deliberately the same shape the booking engine builds. Two adapters would be two chances for the
+ * push and the quote to read the same row differently — which is the parity failure this whole
+ * feature is trying to prevent, reintroduced at the last step.
+ */
+function toResolvablePlan(rp: {
+  id: string; pricingModel: string | null; primaryOccupancy: number | null;
+  parentRatePlanId: string | null; priceLogic: string;
+  derivedType: string | null; derivedDirection: string | null; derivedValue: number | null;
+  derivedRounding: string | null; derivedFloorMinor: number | null; derivedCeilingMinor: number | null;
+  occupancyOptions?: { occupancy: number; isPrimary: boolean; mode: string; rateMinor: number | null;
+    adjustmentType: string | null; direction: string | null; value: number | null; rounding: string }[];
+}): ResolvablePlan {
+  return {
+    id: rp.id,
+    pricingModel: rp.pricingModel,
+    primaryOccupancy: rp.primaryOccupancy,
+    parentRatePlanId: rp.parentRatePlanId,
+    priceLogic: rp.priceLogic,
+    derivedType: rp.derivedType,
+    derivedDirection: rp.derivedDirection,
+    derivedValue: rp.derivedValue,
+    derivedRounding: rp.derivedRounding,
+    derivedFloorMinor: rp.derivedFloorMinor,
+    derivedCeilingMinor: rp.derivedCeilingMinor,
+    options: (rp.occupancyOptions ?? []).map((o) => ({
+      occupancy: o.occupancy,
+      isPrimary: o.isPrimary,
+      mode: o.mode === "derived" ? "derived" : "manual",
+      rateMinor: o.rateMinor,
+      adjustmentType: o.adjustmentType as "percent" | "fixed" | null,
+      direction: o.direction as "increase" | "decrease" | null,
+      value: o.value,
+      rounding: o.rounding as never,
+    })),
+  };
 }

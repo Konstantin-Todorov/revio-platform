@@ -25,6 +25,18 @@ export interface AriUpdate {
    */
   bookable?: number;
   priceMinor?: number;
+  /**
+   * Per-occupancy prices, for a plan that sells per person (OBP §6.7a).
+   *
+   * When present this REPLACES `priceMinor` rather than accompanying it — a per-person plan sends a
+   * `rates[]` array and a per-room plan sends a scalar, and the two are mutually exclusive on the
+   * wire. Carrying both would leave Channex to choose which of two numbers a hotel charges.
+   *
+   * Ordered by occupancy and sent in ONE change object, not one object per occupancy.
+   */
+  occupancyRates?: { occupancy: number; minor: number | null }[];
+  /** Which occupancy a single-rate channel is given when it cannot take the array. */
+  primaryOccupancy?: number;
   currency: string;
   restrictions: {
     stopSell?: boolean;

@@ -173,19 +173,21 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   existing rows to the room's max.
 - ☐ **H2** Settings — property default + per-plan override, seed modes, display pref, age policy
   scaffold, CM capability flag. *(§6.2)*
-- ◐ **H3** Channex sync — **mapper done** (`channex-occupancy.ts`, 19 tests): the two rate shapes
+- ☑ **H3** Channex sync — **done.** Mapper (`channex-occupancy.ts`, 19 tests): the two rate shapes
   (`rate` scalar vs a `rates[]` array in ONE object), `options[]`, `derived_option`, `rate_mode`
-  incl. **cascade**, and degradation to the primary for single-rate channels. Wiring into `sync.ts`
-  remains. The daily
+  incl. **cascade**, and degradation to the primary for single-rate channels — **wired into
+  `sync.ts`**, which now resolves through the shared resolver. The daily
   `rates[]` push, batching, warnings. *(§6.7 / §6.7a / L7)*
 - ☐ **H4** Bulk-edit occupancy matrix + primary-plus-offsets. Mixed max across room types: render to
   the highest cap, **skip** beyond each type's own max. *(§6.4 / L4)*
 - ☐ **H5** Calendar per-occupancy display — expand-on-demand or compact inline. **Never** N permanent
   rows per plan. *(§6.5 / L3)*
-- ◐ **H6** Rate resolution — **`resolveRate` done** (`resolve-rate.ts`, 20 tests): one function for
+- ☑ **H6** Rate resolution — **done.** `resolveRate` (`resolve-rate.ts`, 20 tests): one function for
   the booking engine, CRS, Channex push and PMS folio, so the four cannot disagree. Both derivation
   axes in the right order — cascade takes the parent's price **at this occupancy**, not the parent's
-  primary re-offset, which is a different number. Call sites still to switch over. *(§6.6)*
+  primary re-offset, which is a different number. **RevioDirect and the Channex push both call it**;
+  CRS agent quoting follows with the H4/H5 screens. `obp-parity.test.ts` proves quote == push by
+  computing both, not by inspection. *(§6.6)*
 - ☐ **H7** PMS — folio line at the occupancy rate, re-resolve when occupancy changes mid-stay, room
   moves/upgrades re-price, walk-ins quoted at occupancy, night audit posts the occupancy rate. *(§6.6)*
 - ☐ **H8** RevioLink inbound — capture occupancy on channel bookings so the folio reconciles. *(§6.6 / L8)*

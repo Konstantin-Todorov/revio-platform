@@ -13,10 +13,11 @@
  */
 import { claimHold, type forTenant } from "@revio/db";
 import {
-  computeStayCharges, computeWaterfall, deriveRate, expandInventoryPeriods, extrasTotalMinor,
+  computeStayCharges, computeWaterfall, expandInventoryPeriods, extrasTotalMinor,
   hasChanges, hydrateGuestContact, isAdvancePurchaseClosed, isOtaAliasEmail, recogniseGuest,
   resolveChosenExtras, resolveRestriction, type SellableExtra,
-  ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type DerivedRateConfig, type RestrictionRuleHit, type RestrictionType,
+  ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type RestrictionType,
+  resolveRate, type PriceLookup, type ResolvablePlan,
 } from "@revio/core";
 import { syncRealChannels, stayScope } from "@revio/connectivity";
 
@@ -124,7 +125,9 @@ async function loadStayContext(
     }),
     db.ratePlan.findMany({
       where: { propertyId: property.id, active: true, directChannelEnabled: true },
-      include: { roomTypeLinks: true, cancellationPolicy: true, mealPlan: true },
+      // occupancyOptions is what makes a per-person plan quotable at all — without it the
+      // resolver has no rows and returns null rather than a price.
+      include: { roomTypeLinks: true, cancellationPolicy: true, mealPlan: true, occupancyOptions: true },
       orderBy: { sortOrder: "asc" },
     }),
     // ROOM-LEVEL read (`cellOf` keys on room + date): room-wide cells only. A plan-scoped cell would
@@ -152,27 +155,37 @@ async function loadStayContext(
   ]);
 
   const cellOf = (rtId: string, k: string) => cells.find((c) => c.roomTypeId === rtId && ymd(c.date) === k);
-  const priceMap = new Map(prices.map((p) => [`${p.roomTypeId}:${p.ratePlanId}:${ymd(p.date)}`, p.priceMinor]));
 
-  const priceFor = (rtId: string, rp: (typeof plans)[number], k: string): number | null => {
-    const direct = priceMap.get(`${rtId}:${rp.id}:${k}`);
-    if (direct != null) return direct;
-    if (rp.priceLogic === "derived" && rp.parentRatePlanId) {
-      const parent = priceMap.get(`${rtId}:${rp.parentRatePlanId}:${k}`);
-      if (parent == null) return null;
-      const cfg: DerivedRateConfig = {
-        parentRatePlanId: rp.parentRatePlanId,
-        adjustmentType: (rp.derivedType as "percent" | "fixed") ?? "percent",
-        direction: (rp.derivedDirection as "increase" | "decrease") ?? "decrease",
-        value: rp.derivedValue ?? 0,
-        rounding: (rp.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
-        ...(rp.derivedFloorMinor != null ? { floorMinor: rp.derivedFloorMinor } : {}),
-        ...(rp.derivedCeilingMinor != null ? { ceilingMinor: rp.derivedCeilingMinor } : {}),
-      };
-      return deriveRate(parent, cfg);
-    }
-    return null;
-  };
+  /*
+   * Pricing is resolved by `resolveRate` in @revio/core, not here — OBP §6.6.
+   *
+   * This is the most parity-critical surface on the platform: the number a guest sees before they
+   * type a card has to match what the OTAs are showing and what the folio eventually bills. The way
+   * to guarantee that is not care, it is shared code — the CRS search, the Channex push and the PMS
+   * folio call the same function with the same inputs.
+   *
+   * The party size is `q.guests`, which this search has always captured. Under a per-person plan it
+   * now decides the price rather than only filtering out rooms that are too small.
+   */
+  const priceMap = new Map(
+    prices.map((p) => [`${p.roomTypeId}:${p.ratePlanId}:${ymd(p.date)}:${p.occupancy ?? ""}`, p.priceMinor]),
+  );
+  const lookup: PriceLookup = (rtId, rpId, k, occ) => priceMap.get(`${rtId}:${rpId}:${k}:${occ}`) ?? null;
+  const planIndex = new Map(plans.map((rp) => [rp.id, toResolvable(rp)]));
+  const propertyModel = defaults?.pricingModel ?? "per_room";
+
+  const priceFor = (rt: (typeof roomTypes)[number], rp: (typeof plans)[number], k: string, occupancy: number): number | null =>
+    resolveRate({
+      lookup,
+      plans: planIndex,
+      roomTypeId: rt.id,
+      maxOccupancy: rt.maxGuests,
+      roomDefaultOccupancy: rt.defaultOccupancy,
+      propertyModel,
+      plan: planIndex.get(rp.id)!,
+      dateKey: k,
+      occupancy,
+    });
 
   // Direct-channel rule hits: rules with no source scope, or scoped to the "direct" category.
   const ruleHits = (type: string, rtId: string, rpId: string, k: string): RestrictionRuleHit[] =>
@@ -280,7 +293,7 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
       let total = 0;
       let complete = true;
       for (const k of nights) {
-        const p = priceFor(rt.id, rp, k);
+        const p = priceFor(rt, rp, k, q.guests);
         if (p == null) { complete = false; break; }
         total += p;
       }
@@ -448,7 +461,7 @@ export async function publicCreateReservation(
 
   let accommodationMinor = 0;
   for (const k of nights) {
-    const price = priceFor(rt.id, rp, k);
+    const price = priceFor(rt, rp, k, p.guests);
     if (price == null) return { error: "This rate isn't fully priced for those dates." };
     accommodationMinor += price;
   }
@@ -857,4 +870,44 @@ export async function publicReleaseHold(db: Db, propertyId: string, holdId: stri
 /** Short, human, sayable-over-the-phone. Derived from the id so it needs no extra column or sequence. */
 export function bookingReference(reservationId: string): string {
   return `RV-${reservationId.slice(-6).toUpperCase()}`;
+}
+
+/**
+ * A Prisma rate plan as the shared resolver wants it.
+ *
+ * Here rather than inline at each call site so the two axes are mapped once: `priceLogic` +
+ * `derived*` is the plan-to-plan axis, `pricingModel` + `options` is the occupancy axis, and they
+ * are read from different columns for a reason.
+ */
+function toResolvable(rp: {
+  id: string; pricingModel: string | null; primaryOccupancy: number | null;
+  parentRatePlanId: string | null; priceLogic: string;
+  derivedType: string | null; derivedDirection: string | null; derivedValue: number | null;
+  derivedRounding: string | null; derivedFloorMinor: number | null; derivedCeilingMinor: number | null;
+  occupancyOptions?: { occupancy: number; isPrimary: boolean; mode: string; rateMinor: number | null;
+    adjustmentType: string | null; direction: string | null; value: number | null; rounding: string }[];
+}): ResolvablePlan {
+  return {
+    id: rp.id,
+    pricingModel: rp.pricingModel,
+    primaryOccupancy: rp.primaryOccupancy,
+    parentRatePlanId: rp.parentRatePlanId,
+    priceLogic: rp.priceLogic,
+    derivedType: rp.derivedType,
+    derivedDirection: rp.derivedDirection,
+    derivedValue: rp.derivedValue,
+    derivedRounding: rp.derivedRounding,
+    derivedFloorMinor: rp.derivedFloorMinor,
+    derivedCeilingMinor: rp.derivedCeilingMinor,
+    options: (rp.occupancyOptions ?? []).map((o) => ({
+      occupancy: o.occupancy,
+      isPrimary: o.isPrimary,
+      mode: o.mode === "derived" ? "derived" : "manual",
+      rateMinor: o.rateMinor,
+      adjustmentType: o.adjustmentType as "percent" | "fixed" | null,
+      direction: o.direction as "increase" | "decrease" | null,
+      value: o.value,
+      rounding: o.rounding as never,
+    })),
+  };
 }
