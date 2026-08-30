@@ -27,6 +27,18 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-30 · Claude · CLAIMED · Hotel-account MFA (TOTP)
+**The account that controls rates and guest data has no second factor. Operator does.**
+Files: `packages/db/src/two-factor.ts` (new, generic), `packages/db/src/operator-2fa.ts` (moves onto
+it), `packages/db/prisma/schema.prisma` (`User.totp*`, `UserRecoveryCode`), migration,
+`apps/{reservation,channel-manager,pms}/lib/{auth,actions-auth,actions-account}.ts`,
+`apps/*/app/login/2fa/`, `apps/*/components/auth/`
+Notes: extracting the operator implementation rather than copying it — second caller. **One shared
+identity across CRS/CM/PMS**, so enrolling in one product protects all three; that is the same
+property `sessionsValidFrom` already has and it must not be broken into three per-app secrets.
+Scope is larger than the M I first estimated: shared layer + three login challenges + enrolment.
+**Codex: stay out of auth in the hotel apps and out of `@revio/db` two-factor until DONE.**
+
 ### 2026-08-29 · Claude · DONE · Website leads are stored, not just emailed
 **A demo request exists only as an email. Lose the email, lose the lead.**
 Files: `packages/db/prisma/schema.prisma` (`Lead`, operator_only), migration,
