@@ -71,6 +71,17 @@ const EXEMPT = {
   "actions-workforce.ts:clockInUser": "delegated clock-in, gated on DELEGATOR_ROLES (manager, supervisor, reception)",
   "actions-workforce.ts:clockOutUser": "delegated clock-out, gated on DELEGATOR_ROLES",
 
+  // Protecting YOUR OWN account. Same shape as clocking yourself in, below: the action reads
+  // `session.userId` and never accepts an id from the form, so it can only ever touch the caller's
+  // own second factor. A capability here would be backwards — it would mean a receptionist needs
+  // permission to secure their own login, and the people most worth protecting are the ones with the
+  // fewest permissions to spend on it. Turning it OFF is the sensitive direction and is gated on the
+  // current password rather than a role: an unattended laptop must not be enough to remove the
+  // protection that exists for the case where somebody else has your laptop.
+  "actions-2fa.ts:startTwoFactor": "begins enrolment for your OWN account; acts only on session.userId",
+  "actions-2fa.ts:confirmTwoFactor": "completes enrolment for your OWN account; acts only on session.userId",
+  "actions-2fa.ts:turnOffTwoFactor": "disables 2FA on your OWN account, gated on re-entering your current password",
+
   // Clocking YOURSELF in and out. A session is the whole authorisation: the action reads the caller's
   // own userId and can only ever touch that person's shift. A capability here would mean a cleaner
   // needs permission to record that they started cleaning.
