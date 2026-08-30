@@ -44,3 +44,4 @@ export * from "./guests/merge.js";
 export * from "./stays/calendar.js";
 export * from "./guests/erasure.js";
 export * from "./rates/occupancy-options.js";
+export * from "./rates/pricing-model-switch.js";
