@@ -29,8 +29,15 @@ export interface OccupancyKeySource {
 /**
  * The occupancy to key a plain rate write on, per room type.
  *
- * `defaultOccupancy` when the hotel has set one, the ceiling otherwise — which is the pre-OBP
- * meaning of every existing row and what the H1 migration backfilled them to.
+ * **The ceiling, always** — `maxGuests`. These callers are the pre-OBP paths that mean "the price
+ * for this room", and under a per-room plan that row lives at max occupancy: it is where the plan's
+ * single option is, where the H1 migration backfilled every existing row, and where `resolveRate`
+ * looks for it.
+ *
+ * ⚠️ NOT `defaultOccupancy`. That says which occupancy is PRIMARY for a per-PERSON plan and has no
+ * bearing on where a per-room row lives. An earlier version used it and the two disagreed whenever a
+ * hotel had set a default below the ceiling — a stored calendar override would have been read as
+ * missing and the plan's default price used instead. Caught by a resolver test, not in production.
  */
 export async function occupancyKeysFor(
   db: OccupancyKeySource,
@@ -41,7 +48,7 @@ export async function occupancyKeysFor(
     where: { id: { in: [...new Set(roomTypeIds)] } },
     select: { id: true, maxGuests: true, defaultOccupancy: true },
   });
-  return new Map(rows.map((r) => [r.id, r.defaultOccupancy ?? r.maxGuests]));
+  return new Map(rows.map((r) => [r.id, r.maxGuests]));
 }
 
 /** One room type. Convenience for the single-cell paths; never call this in a loop. */
