@@ -27,7 +27,7 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
-### 2026-08-30 · Claude · CLAIMED · OBP H1 — the occupancy data model
+### 2026-08-30 · Claude · DONE · OBP H1 · H2 · H3 · H6 — merged to main
 **Occupancy-based pricing, unparked by the founder. Branch `obp/h1-data-model`, NOT main.**
 Files: `packages/db/prisma/schema.prisma` + migration, `packages/core/src/rates/occupancy*.ts`,
 `packages/db/prisma/seed.ts`
@@ -38,7 +38,18 @@ villa onboards shortly. Nothing reaches `main` until the piece is coherent and g
 and are read by **nothing** — only the seed writes one. It is an older "delta from the base price"
 shape, not the spec's "occupancy option is a first-class row". Being evolved into the options store
 rather than left beside a parallel table.
-**Codex: stay out of rates, rate plans and room types until this is DONE.**
+**Merged.** H1 data model · H2 model switching · H3 Channex mapper + sync wiring · H6 the shared
+resolver. **90 tests.** Three invariants that must not be undone:
+1. **Per-room is the one-row special case at the CEILING.** Options and stored prices both live
+   there. An earlier version had `occupancyKeysFor` writing at `defaultOccupancy` and the two
+   disagreed — a stored calendar override read as missing. Caught by a test, not production.
+2. **`resolveRate` is the only rate resolver.** RevioDirect and the Channex push both call it, and
+   `obp-parity.test.ts` proves quote == push by computing both. Do not add a local `priceFor`; there
+   were two identical copies before this and adding an occupancy axis would have made four.
+3. **Cascade takes the parent's price AT THIS OCCUPANCY**, not the parent's primary re-offset. That
+   applies two discounts and is a different number — asserted as 8000 and specifically not 7600.
+**Still open and a hotel cannot switch OBP on yet:** H2 settings UI, H4 bulk matrix, H5 calendar,
+H7 PMS folio, H8 inbound, H9–H13. Inert at the per-room default until those land.
 
 ### 2026-08-30 · Claude · DONE · Hotel-account MFA (TOTP)
 **The account that controls rates and guest data has no second factor. Operator does.**
