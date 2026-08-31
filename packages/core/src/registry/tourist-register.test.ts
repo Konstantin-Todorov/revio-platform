@@ -3,7 +3,7 @@ import {
   registerCategory, validateRegisterEntry, isRegisterEntryComplete, registerNights,
   registerRetainedUntil, mayEraseRegisterEntry, EEA_OR_CH,
   REGISTER_COLUMNS, registerRow, registerToCsv, averageNightlyPrice,
-  expectedNameScript, nameScriptMatches, splitName,
+  expectedNameScript, nameScriptMatches, splitName, floorNumber,
   type TouristRegisterEntry,
 } from "./tourist-register.js";
 
@@ -338,5 +338,22 @@ describe("splitName — the guess that saves the desk retyping", () => {
     // Recorded rather than fixed: no rule recovers this from one string. The desk corrects it
     // against the document, and an entry cannot be reported until somebody has looked.
     expect(splitName("Anna Maria Rossi").middleName).toBe("Maria");
+  });
+});
+
+describe("floorNumber — Етаж is a floor, not a sentence", () => {
+  it("takes the number out of a labelled floor", () => {
+    // Ours are seeded "Floor 3", which is fine on a housekeeping board and wrong in a government form.
+    expect(floorNumber("Floor 3")).toBe("3");
+    expect(floorNumber("Ет. 2")).toBe("2");
+    expect(floorNumber("3")).toBe("3");
+  });
+  it("passes a wordy floor through — then the words are the answer", () => {
+    expect(floorNumber("Mezzanine")).toBe("Mezzanine");
+    expect(floorNumber("Партер")).toBe("Партер");
+  });
+  it("handles a basement and an absent floor", () => {
+    expect(floorNumber("Floor -1")).toBe("-1");
+    expect(floorNumber(null)).toBe("");
   });
 });

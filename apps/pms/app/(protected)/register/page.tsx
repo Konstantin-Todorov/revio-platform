@@ -68,7 +68,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-600" />
           <div className="text-[13px] text-warning-700">
             <strong className="font-semibold">{incomplete.length} of these {entries.length} aren’t ready to file.</strong>{" "}
-            Something the register has to contain is still missing — open the guest below and finish it. The
+            Something the register has to contain is still missing — click a name below to finish it. The
             export includes them as they are, so the gaps are visible rather than silent.
           </div>
         </div>
@@ -99,10 +99,16 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
                   const name = [e.firstName, e.middleName, e.lastName].filter((v) => v && v.trim()).join(" ");
                   return (
                     <tr key={e.id} className={`border-b border-surface-border/60 last:border-0 hover:bg-surface-muted ${e.cancelled ? "opacity-50" : ""}`}>
-                      <td className="tnum whitespace-nowrap px-3 py-2 font-bold text-ink-400">{e.registerNo}</td>
+                      <td className="tnum whitespace-nowrap px-3 py-2 font-bold text-ink-400">
+                        {/* The warning above says to open the guest and finish it, so the row has to
+                            go somewhere. Without this the instruction was unfollowable. */}
+                        <Link href={`/reservation/${e.reservationId}`} className="hover:text-brand-700">{e.registerNo}</Link>
+                      </td>
                       <td className="tnum whitespace-nowrap px-3 py-2 text-ink-600">{e.registeredAt} {e.registeredAtTime}</td>
                       <td className={`px-3 py-2 font-semibold ${e.cancelled ? "text-ink-400 line-through" : name ? "text-ink-900" : "text-ink-400 italic"}`}>
-                        {name || "not captured"}
+                        <Link href={`/reservation/${e.reservationId}`} className="hover:text-brand-700 hover:underline">
+                          {name || "not captured"}
+                        </Link>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-ink-600">{e.nationality ? countryName(e.nationality) : "—"}</td>
                       <td className="whitespace-nowrap px-3 py-2 text-ink-600">

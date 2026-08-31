@@ -89,7 +89,7 @@ export async function getRegisterEntries(
   timezone: string,
   fromIso: string,
   toIso: string,
-): Promise<(TouristRegisterEntry & { id: string })[]> {
+): Promise<(TouristRegisterEntry & { id: string; reservationId: string })[]> {
   const rows = await prisma.stayGuest.findMany({
     where: {
       propertyId,
@@ -124,6 +124,7 @@ export async function getRegisterEntries(
 
     return {
       id: g.id,
+      reservationId: g.reservationId,
       registerNo: g.registerNo,
       registeredAt: ymd(g.registeredAt),
       registeredAtTime: hmInTz(g.registeredAt, timezone),

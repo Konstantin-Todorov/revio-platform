@@ -60,6 +60,9 @@ export function GuestRegisterCard({ reservationId, rows }: { reservationId: stri
           const ok = problems.length === 0;
           const needsSeries = registerCategory(r.nationality) === "other";
           const script = expectedNameScript(r.nationality);
+          // Before citizenship is set there is nothing to assume, and assuming produced a "latin"
+          // hint over a Bulgarian guest's name and a "required" one over a series they do not need.
+          const known = r.nationality.trim() !== "";
           const named = [r.firstName, r.middleName, r.lastName].filter((v) => v && v.trim()).join(" ");
           const blank = named === "" && r.documentNumber == null && r.personalId == null;
 
@@ -89,16 +92,16 @@ export function GuestRegisterCard({ reservationId, rows }: { reservationId: stri
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   <label>
-                    <Lbl hint={script === "cyrillic" ? "кирилица" : "latin"}>First name</Lbl>
-                    <input name="firstName" defaultValue={r.firstName} className={input} placeholder={script === "cyrillic" ? "Мария" : "John"} />
+                    <Lbl hint={!known ? undefined : script === "cyrillic" ? "кирилица" : "latin"}>First name</Lbl>
+                    <input name="firstName" defaultValue={r.firstName} className={input} placeholder={known && script === "cyrillic" ? "Мария" : "John"} />
                   </label>
                   <label>
                     <Lbl hint="бащино · often blank">Patronymic</Lbl>
                     <input name="middleName" defaultValue={r.middleName ?? ""} className={input} placeholder="—" />
                   </label>
                   <label>
-                    <Lbl hint={script === "cyrillic" ? "кирилица" : "latin"}>Family name</Lbl>
-                    <input name="lastName" defaultValue={r.lastName} className={input} placeholder={script === "cyrillic" ? "Иванова" : "Smith"} />
+                    <Lbl hint={!known ? undefined : script === "cyrillic" ? "кирилица" : "latin"}>Family name</Lbl>
+                    <input name="lastName" defaultValue={r.lastName} className={input} placeholder={known && script === "cyrillic" ? "Иванова" : "Smith"} />
                   </label>
                   <label>
                     <Lbl>Date of birth</Lbl>
@@ -135,7 +138,7 @@ export function GuestRegisterCard({ reservationId, rows }: { reservationId: stri
                     <input name="documentNumber" defaultValue={r.documentNumber ?? ""} className={input} placeholder="641234567" />
                   </label>
                   <label>
-                    <Lbl hint={needsSeries ? "required" : "non-EU/EEA only"}>Document series</Lbl>
+                    <Lbl hint={!known ? "non-EU/EEA only" : needsSeries ? "required" : "not needed"}>Document series</Lbl>
                     <input name="documentSeries" defaultValue={r.documentSeries ?? ""} className={input} placeholder="—" />
                   </label>
 

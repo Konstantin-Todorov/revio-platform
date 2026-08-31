@@ -27,6 +27,25 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · Register rehearsed end to end on the demo hotel
+**Walk-in → two entries → completed one → downloaded the CSV → checked it against the образец.**
+Files: `packages/core/src/registry/tourist-register.ts`, `apps/pms/lib/register.ts`,
+`apps/pms/app/(protected)/register/page.tsx`, `apps/pms/components/register/GuestRegisterCard.tsx`
+Notes: The pipeline is correct — 23 columns in the образец's order, BOM present as raw bytes
+(`EF BB BF`), semicolons, Bulgarian dates, `жена` / `Лична карта` / `не`, times in Sofia (21:52 for
+an 18:52 UTC walk-in), price split per person. Four findings, all now fixed:
+
+1. **Walk-ins seeded no register at all** — logged separately above. The reason to rehearse.
+2. **Етаж exported as "Floor 3"** — English prose into a Bulgarian government form. `floorNumber`
+   takes the number where the label has one and passes wordy floors ("Партер") through untouched.
+3. **The register rows linked nowhere** while the warning said to open the guest and finish it. The
+   instruction was literally unfollowable. Both the number and the name are links now.
+4. **The hints assumed a foreigner before citizenship was known** — a "latin" hint sat over a
+   Bulgarian guest's name and "required" over a series they do not need.
+
+⚠️ `Response.text()` strips a UTF-8 BOM per spec, so checking for it that way says `false` on a file
+that has one. Check `arrayBuffer()`. I nearly "fixed" a bug that did not exist.
+
 ### 2026-08-31 · Claude · DONE · Walk-ins were accommodated and never registered
 **Found by rehearsing, not by reading. Two paths accommodate a guest; I had wired one.**
 Files: `apps/pms/lib/actions-frontdesk.ts`

@@ -334,6 +334,20 @@ function bgDate(iso: string | null): string {
 const yesNo = (v: boolean) => (v ? "да" : "не");
 
 /**
+ * Етаж, as a floor rather than as a sentence.
+ *
+ * A property labels its own floors, and ours label them "Floor 3" because the seed is in English.
+ * That is fine on a housekeeping board and wrong in a Bulgarian government form. Where the label
+ * contains a number the number IS the floor, so that is what goes in the column; anything without
+ * one ("Mezzanine", "Партер") is passed through untouched, because then the words are the answer.
+ */
+export function floorNumber(label: string | null): string {
+  if (!label) return "";
+  const m = label.match(/-?\d+/);
+  return m ? m[0] : label.trim();
+}
+
+/**
  * One entry as the образец's row — 23 cells, aligned to `REGISTER_COLUMNS`.
  *
  * Everything is rendered as text on purpose. This file is opened in Excel, where an identity
@@ -358,7 +372,7 @@ export function registerRow(e: TouristRegisterEntry): string[] {
     e.documentType ? DOCUMENT_TYPE_BG[e.documentType] : "",
     docNumber,
     e.documentCountry ?? "",
-    e.floor ?? "",
+    floorNumber(e.floor),
     e.unitLabel ?? "",
     bgDate(e.arrivalDate),
     e.arrivalTime ?? "",
