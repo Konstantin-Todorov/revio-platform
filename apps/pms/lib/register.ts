@@ -1,5 +1,5 @@
 import { claimRegisterNo, withTenantTransaction } from "@revio/db";
-import { averageNightlyPrice, registerNights, type TouristRegisterEntry } from "@revio/core";
+import { averageNightlyPrice, registerNights, splitName, type TouristRegisterEntry } from "@revio/core";
 import { prisma } from "./db";
 import { ymd, utcDay, addDaysYmd, hmInTz } from "./format";
 
@@ -74,24 +74,6 @@ export async function seedRegisterEntries(input: RegisterSeedInput): Promise<voi
       }
     }
   });
-}
-
-/**
- * Split a single booking name into the образец's three parts.
- *
- * A guess, and knowingly so: a channel sends one string, and no rule recovers a patronymic from it
- * reliably. It exists to save the desk retyping the common case, not to be trusted — every entry is
- * checked against the document before it can be reported, and that is where a wrong split is caught.
- */
-export function splitName(raw: string): { firstName: string | null; middleName: string | null; lastName: string | null } {
-  const parts = raw.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return { firstName: null, middleName: null, lastName: null };
-  if (parts.length === 1) return { firstName: parts[0]!, middleName: null, lastName: null };
-  return {
-    firstName: parts[0]!,
-    middleName: parts.length > 2 ? parts.slice(1, -1).join(" ") : null,
-    lastName: parts[parts.length - 1]!,
-  };
 }
 
 /**

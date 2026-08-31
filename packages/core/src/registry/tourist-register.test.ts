@@ -3,7 +3,7 @@ import {
   registerCategory, validateRegisterEntry, isRegisterEntryComplete, registerNights,
   registerRetainedUntil, mayEraseRegisterEntry, EEA_OR_CH,
   REGISTER_COLUMNS, registerRow, registerToCsv, averageNightlyPrice,
-  expectedNameScript, nameScriptMatches,
+  expectedNameScript, nameScriptMatches, splitName,
   type TouristRegisterEntry,
 } from "./tourist-register.js";
 
@@ -304,5 +304,39 @@ describe("averageNightlyPrice", () => {
   it("is null when nothing is known, and null rather than a division by zero", () => {
     expect(averageNightlyPrice(null, 3)).toBeNull();
     expect(averageNightlyPrice(36000, 0)).toBeNull();
+  });
+});
+
+describe("splitName — the guess that saves the desk retyping", () => {
+  it("splits a Bulgarian three-part name into its three parts", () => {
+    expect(splitName("Мария Петрова Иванова")).toEqual({
+      firstName: "Мария", middleName: "Петрова", lastName: "Иванова",
+    });
+  });
+
+  it("splits two words into given and family, with no invented patronymic", () => {
+    expect(splitName("John Smith")).toEqual({ firstName: "John", middleName: null, lastName: "Smith" });
+  });
+
+  it("keeps a single word as the GIVEN name, not the family one", () => {
+    // It is what a channel sends when it only has a first name; putting it in the family column
+    // would state a fact rather than leave a blank.
+    expect(splitName("Madonna")).toEqual({ firstName: "Madonna", middleName: null, lastName: null });
+  });
+
+  it("puts everything between the ends into the patronymic", () => {
+    expect(splitName("Jean Paul Marie Dubois").middleName).toBe("Paul Marie");
+  });
+
+  it("survives the whitespace a channel actually sends", () => {
+    expect(splitName("  John   Smith  ")).toEqual({ firstName: "John", middleName: null, lastName: "Smith" });
+    expect(splitName("")).toEqual({ firstName: null, middleName: null, lastName: null });
+    expect(splitName("   ")).toEqual({ firstName: null, middleName: null, lastName: null });
+  });
+
+  it("is a guess and will be wrong — a two-given-name foreigner gains a patronymic", () => {
+    // Recorded rather than fixed: no rule recovers this from one string. The desk corrects it
+    // against the document, and an entry cannot be reported until somebody has looked.
+    expect(splitName("Anna Maria Rossi").middleName).toBe("Maria");
   });
 });

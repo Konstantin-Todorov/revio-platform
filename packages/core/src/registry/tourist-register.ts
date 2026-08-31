@@ -391,3 +391,28 @@ export function averageNightlyPrice(totalMinor: number | null, nights: number): 
   if (totalMinor == null || nights <= 0) return null;
   return Math.round(totalMinor / nights);
 }
+
+/**
+ * Split a single booking name into the образец's three parts.
+ *
+ * A guess, and knowingly so. A channel sends one string and no rule recovers a Bulgarian patronymic
+ * from it reliably — "Anna Maria Rossi" has no middle name, and this will call one. It exists to
+ * save the desk retyping the common case, not to be trusted: every entry is checked against the
+ * document before it can be reported, and that is where a wrong split is caught.
+ *
+ * Two parts means given + family, which is the shape almost every foreign booking arrives in. Three
+ * or more puts everything between the ends into the patronymic, which is how a Bulgarian three-part
+ * name reads.
+ */
+export function splitName(raw: string): { firstName: string | null; middleName: string | null; lastName: string | null } {
+  const parts = raw.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: null, middleName: null, lastName: null };
+  // One word is a given name, not a family name: it is what a channel sends when it has only a
+  // first name, and putting it in the family column would be a fact rather than a blank.
+  if (parts.length === 1) return { firstName: parts[0]!, middleName: null, lastName: null };
+  return {
+    firstName: parts[0]!,
+    middleName: parts.length > 2 ? parts.slice(1, -1).join(" ") : null,
+    lastName: parts[parts.length - 1]!,
+  };
+}
