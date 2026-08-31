@@ -359,3 +359,53 @@ describe("a rate of zero never leaves the building", () => {
     expect(unsupportedReason(base(undefined))).toBeNull();
   });
 });
+
+/*
+ * Inbound occupancy — OBP §P2 / H8. Added 2026-08-31.
+ *
+ * The party size has to land on the reservation or a per-person property bills the default
+ * occupancy: the parity failure arriving from the inbound side, and silent because every number
+ * involved still looks plausible.
+ */
+describe("inbound occupancy", () => {
+  const booking = (room: Record<string, unknown>) => ({
+    id: "bk1",
+    attributes: {
+      status: "new", amount: "240.00", currency: "EUR",
+      customer: { name: "Ana", surname: "Petrova" },
+      rooms: [{ room_type_id: "rt", rate_plan_id: "rp", days: { "2026-09-01": "120.00" }, ...room }],
+    },
+  });
+
+  it("reads an occupancy object", () => {
+    expect(toRawReservation(booking({ occupancy: { adults: 2, children: 1 } })).lines[0]!.adults).toBe(2);
+  });
+
+  it("reads a flat field, which some channels use instead", () => {
+    expect(toRawReservation(booking({ adults: 3 })).lines[0]!.adults).toBe(3);
+  });
+
+  it("coerces the string form several channels send", () => {
+    expect(toRawReservation(booking({ occupancy: { adults: "2" } })).lines[0]!.adults).toBe(2);
+  });
+
+  it("NEVER defaults when the channel said nothing", () => {
+    // A guessed occupancy looks like fact and prices the stay wrongly with nothing to notice.
+    // Absent can be resolved from the plan's primary and flagged.
+    expect(toRawReservation(booking({})).lines[0]!.adults).toBeUndefined();
+  });
+
+  it("treats zero as 'not stated' rather than a party of nobody", () => {
+    expect(toRawReservation(booking({ occupancy: { adults: 0 } })).lines[0]!.adults).toBeUndefined();
+  });
+
+  it("ignores children and infants — they are a separate axis", () => {
+    // Folding them in would price two adults and two children as four adults.
+    const line = toRawReservation(booking({ occupancy: { adults: 2, children: 2, infants: 1 } })).lines[0]!;
+    expect(line.adults).toBe(2);
+  });
+
+  it("caps at the platform maximum rather than trusting a wild number", () => {
+    expect(toRawReservation(booking({ adults: 400 })).lines[0]!.adults).toBe(18);
+  });
+});

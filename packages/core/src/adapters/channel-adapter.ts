@@ -85,6 +85,17 @@ export interface RawReservation {
      * seeds the guest's folio from it. Without it the room line on the bill is zero.
      */
     priceMinor?: number;
+    /**
+     * Adults on this room, as the channel reported them (OBP §P2).
+     *
+     * Optional because not every channel sends it, and **absent must stay absent** — a defaulted
+     * occupancy looks like fact and prices the stay wrongly with nothing to notice, whereas a
+     * missing one can be resolved from the plan's primary and flagged.
+     *
+     * Adults only. Children and infants are a separate axis (§6.9) and folding them in here would
+     * price a family of two adults and two children as four adults.
+     */
+    adults?: number;
   }>;
   totalMinor: number;
   currency: string;

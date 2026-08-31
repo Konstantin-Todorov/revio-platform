@@ -728,6 +728,10 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
         checkOut: new Date(`${l.checkOut}T00:00:00Z`),
         // Carried so the PMS folio bills the room rather than seeding a zero line.
         ...(l.priceMinor != null ? { priceMinor: l.priceMinor } : {}),
+        // The party size the OTA reported (§P2). Landing it here is what lets a per-person property
+        // reconcile the folio against what was actually sold — without it, a two-guest booking bills
+        // at the plan's default occupancy and every number involved still looks plausible.
+        ...(l.adults != null ? { guestsCount: l.adults } : {}),
       });
     }
 

@@ -202,7 +202,12 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   computing both, not by inspection. *(§6.6)*
 - ☐ **H7** PMS — folio line at the occupancy rate, re-resolve when occupancy changes mid-stay, room
   moves/upgrades re-price, walk-ins quoted at occupancy, night audit posts the occupancy rate. *(§6.6)*
-- ☐ **H8** RevioLink inbound — capture occupancy on channel bookings so the folio reconciles. *(§6.6 / L8)*
+- ☑ **H8** RevioLink inbound — **done.** `inboundAdults` reads the party size wherever a channel
+  puts it (an `occupancy` object, flat fields, string or number) and lands it on
+  `ReservationLine.guestsCount`, so a per-person folio reconciles against what was actually sold.
+  **Never defaults**: absent stays absent, because a guessed occupancy looks like fact and prices
+  the stay wrongly with nothing to notice. Zero is read as "not stated", and children/infants are
+  ignored — folding them in would price two adults and two children as four adults.
 - ☐ **H9** Mapping — occupancy options + **primary-occupancy selector**; completeness redefined so
   "All mapped" cannot show green with occupancies unmapped. *(L5)*
 - ☐ **H10** Channels — per-channel occupancy capability on the limitations line; degrade single-rate
@@ -254,8 +259,8 @@ everything in them was already built, which is worth recording so it is not rebu
 
 The PMS **consumes** the model; it never owns one. Folded into H, built after H1–H3.
 
-- ◐ **K1** *(P2)* Occupancy on every reservation — `ReservationLine.guestsCount` carries adults and
-  the booking engine writes it; inbound channel capture is H8. Captured inbound and on
+- ☑ **K1** *(P2)* Occupancy on every reservation — `guestsCount` carries adults; the booking engine
+  writes it and inbound channel bookings land it (H8). Captured inbound and on
   walk-ins. "Doesn't fit" guard applies.
 - ☐ **K2** *(P3)* One resolver — `resolve_rate(room type, plan, date, occupancy)`. Per-room is the
   single max-occupancy row, so per-room properties behave exactly as today.

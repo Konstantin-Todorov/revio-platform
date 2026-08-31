@@ -92,6 +92,18 @@ interface ChannexBookingRoom {
   /** Map of stay-night → nightly price, e.g. {"2026-07-06":"120.00"}. Channex omits explicit
    *  check-in/check-out on the room; the nights come from these keys. */
   days?: Record<string, string>;
+  /*
+   * The party, as the OTA reported it (OBP §P2 / H8).
+   *
+   * Adults is the axis rates are priced on; children and infants are separate and must never be
+   * folded into it. Channex sends these as strings on some channels and numbers on others, so both
+   * are accepted and coerced once, here.
+   */
+  occupancy?: { adults?: number | string; children?: number | string; infants?: number | string } | null;
+  /** Some channels put the count flat on the room instead of in an occupancy object. */
+  adults?: number | string;
+  children?: number | string;
+  infants?: number | string;
 }
 
 interface ChannexBookingAttributes {
@@ -264,6 +276,10 @@ export function toRawReservation(b: ChannexBooking): RawReservation {
       // so the PMS can bill the guest — the booking's overall `amount` can cover several rooms.
       const perNight = Object.values(room.days ?? {}).map((v) => Number(v)).filter((n) => Number.isFinite(n));
       const priceMinor = perNight.length ? Math.round(perNight.reduce((a, b) => a + b, 0) * 100) : undefined;
+      // The party size, so the downstream folio can reconcile (§P2). Absent when the channel said
+      // nothing — never defaulted, because a guessed occupancy looks like fact and prices the stay
+      // wrongly with nothing to notice.
+      const adults = inboundAdults(room);
       return {
         externalRoomId: room.room_type_id,
         externalRateId: room.rate_plan_id,
@@ -271,6 +287,7 @@ export function toRawReservation(b: ChannexBooking): RawReservation {
         checkIn,
         checkOut,
         ...(priceMinor != null ? { priceMinor } : {}),
+        ...(adults != null ? { adults } : {}),
       };
     }),
     totalMinor: a.amount != null ? Math.round(Number(a.amount) * 100) : 0,
@@ -287,4 +304,32 @@ export function toRawRevision(r: ChannexBooking): RawRevision {
   const a: ChannexBookingAttributes = r.attributes ?? r;
   const bookingId = a.booking_id ?? r.id;
   return { revisionId: r.id, reservation: toRawReservation({ id: bookingId, attributes: a }) };
+}
+
+/**
+ * The party size on an inbound channel booking — OBP §P2.
+ *
+ * ## Why this is not just `Number(room.adults)`
+ *
+ * The count must land on the reservation or the downstream folio cannot reconcile: a per-person
+ * property that books two guests and bills for the default occupancy is the parity failure arriving
+ * from the inbound side, and it is silent because every number involved looks plausible.
+ *
+ * Channels disagree about where it lives and what type it is — an `occupancy` object on some, flat
+ * fields on others, strings on several. All of that is coerced once, here, rather than at each
+ * caller.
+ *
+ * Returns `null` rather than a default when the channel said nothing. A guessed occupancy is worse
+ * than an absent one: absent can be resolved by the plan's primary and flagged, whereas a guess
+ * looks like fact and prices the stay wrongly with nothing to notice.
+ */
+export function inboundAdults(room: {
+  occupancy?: { adults?: number | string } | null;
+  adults?: number | string;
+}): number | null {
+  const raw = room.occupancy?.adults ?? room.adults;
+  if (raw == null) return null;
+  const n = typeof raw === "string" ? Number.parseInt(raw, 10) : raw;
+  // Zero adults is not a party; some channels send 0 when they mean "not stated".
+  return Number.isFinite(n) && n >= 1 ? Math.min(Math.trunc(n), 18) : null;
 }
