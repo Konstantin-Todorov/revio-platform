@@ -7,6 +7,7 @@ import { getProperty } from "./data";
 import { getSession } from "./session";
 import { logAudit, str } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
+import { flashError } from "@revio/ui/flash";
 
 /** Save this property's guest-email branding (sender name, reply-to, logo, colour, footer). */
 export async function saveEmailBranding(fd: FormData): Promise<void> {
@@ -152,7 +153,7 @@ export async function setDefaultLanguage(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const locale = str(fd, "locale");
   // An unknown locale would silently send nothing recognisable, so a bad value is simply ignored.
-  if (!EMAIL_LOCALES.some((l) => l.key === locale)) return;
+  if (!EMAIL_LOCALES.some((l) => l.key === locale)) return flashError("That isn’t a language we send in. Reload the page and try again.");
 
   await prisma.property.update({ where: { id: propertyId }, data: { defaultLanguage: locale } });
   await logAudit(propertyId, tenantId, {

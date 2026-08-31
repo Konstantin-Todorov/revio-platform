@@ -27,6 +27,30 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · Silent failures — a mechanism, 29 fixes, and a ratchet
+**134 early `return;`s across 82 void server actions. A button pressed, nothing happens, no reason.**
+Files: `packages/ui/src/{flash.ts,flash-toast.tsx}` (new), all four protected layouts,
+11 `actions-*.ts`, `scripts/silent-lint.mjs` (new), `package.json`
+Notes: This is the product's characteristic failure and every real bug this session was a version of
+it. A form that silently does nothing is worse than an error: the user concludes the software is
+broken and presses the button again.
+
+**Why a cookie and not a return value.** These are `Promise<void>` actions wired straight to
+`<form action={…}>` in server components. Converting them means a `useActionState` client component
+per call site — 82 of them — which is a rewrite, not a fix. `flashError("…")` needs ONE line inside
+the action and nothing at the call site, so the rest can be closed one at a time by whoever next
+touches them. Not `httpOnly`: the toast clears itself browser-side, which is the only way to make it
+one-shot without a second round trip. Nothing secret goes in it.
+
+Fixed the ones a user actually hits: **every permission refusal** (14 — the worst, since the button
+is right there), every **business-rule** refusal (last owner, last super admin, already cancelled),
+and every **validation** bail. 134 → **105**.
+
+⚠️ The remaining 105 are mostly "row not found" — a stale tab, or a crafted POST with no user to
+talk to. **`scripts/silent-lint.mjs` is a BUDGET, not a gate**, wired into `pnpm verify` beside
+copy-lint and authz-lint. The number may fall and may not rise. Not every silent return is a bug —
+`prev === status` on a housekeeping room is a real no-op and now says so in a comment.
+
 ### 2026-08-31 · Claude · DONE · Register backfill + туристически данък (ЗМДТ чл. 61р–61с)
 Files: `packages/db/scripts/backfill-register.ts`, `packages/core/src/registry/tourist-tax.ts`
 (20 tests), `apps/pms/lib/{register,config,actions-config}.ts`, `apps/pms/app/(protected)/register/`,

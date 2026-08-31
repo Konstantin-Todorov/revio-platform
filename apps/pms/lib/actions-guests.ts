@@ -8,6 +8,7 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { MANAGER_ROLES } from "./roles";
 import { logAudit, str } from "./mutation-helpers";
+import { flashError } from "@revio/ui/flash";
 
 /**
  * Guest merge (PMS-REFINEMENT-R1 §3.5). Collapses a duplicate (loser) onto a survivor (winner):
@@ -17,7 +18,7 @@ import { logAudit, str } from "./mutation-helpers";
  */
 export async function mergeGuests(fd: FormData): Promise<void> {
   const s = await getSession();
-  if (!s || !MANAGER_ROLES.has(s.role)) return;
+  if (!s || !MANAGER_ROLES.has(s.role)) return flashError("Merging guest records is a manager’s job — ask one to do it.");
 
   const winnerId = str(fd, "winnerId");
   const loserId = str(fd, "loserId");

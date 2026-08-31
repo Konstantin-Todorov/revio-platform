@@ -10,6 +10,7 @@ import { activeProperty } from "./data";
 import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
 import { markBillable } from "@revio/db";
+import { flashError } from "@revio/ui/flash";
 
 /**
  * RevioPMS's first-run writes.
@@ -112,7 +113,7 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
 }
 
 export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
-  if (!(await requireManager())) return;
+  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
   const { property } = await activeProperty();
   const rt = await prisma.roomType.findUnique({ where: { id: str(fd, "id") } });
   if (!rt || rt.propertyId !== property.id) return;
@@ -121,7 +122,7 @@ export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
 }
 
 export async function finishWelcomeRooms(): Promise<void> {
-  if (!(await requireManager())) return;
+  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
   const { property } = await activeProperty();
   const count = await prisma.roomType.count({ where: { propertyId: property.id } });
   if (count === 0) return;
@@ -176,7 +177,7 @@ export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData)
 }
 
 export async function removeWelcomeUnit(fd: FormData): Promise<void> {
-  if (!(await requireManager())) return;
+  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
   const { property } = await activeProperty();
   const unit = await prisma.unit.findUnique({ where: { id: str(fd, "id") } });
   if (!unit || unit.propertyId !== property.id) return;
@@ -185,7 +186,7 @@ export async function removeWelcomeUnit(fd: FormData): Promise<void> {
 }
 
 export async function finishWelcomeUnits(): Promise<void> {
-  if (!(await requireManager())) return;
+  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
   const { property } = await activeProperty();
   const count = await prisma.unit.count({ where: { propertyId: property.id } });
   if (count === 0) return;
@@ -264,13 +265,13 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
 
 /** Leave a step for later. It stays on the dashboard checklist, which is the point of allowing it. */
 export async function skipWelcomeStep(fd: FormData): Promise<void> {
-  if (!(await requireManager())) return;
+  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
   await advance(str(fd, "from"));
 }
 
 /** The last screen. Records that first-run is over so the flow never reappears. */
 export async function finishWelcome(): Promise<void> {
-  if (!(await requireManager())) return;
+  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
   const { property } = await activeProperty();
   if (!hasFinishedSetup(property.setupCompleted, PRODUCT)) {
     await prisma.property.updateMany({

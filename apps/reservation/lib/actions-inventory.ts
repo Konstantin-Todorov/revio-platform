@@ -6,6 +6,7 @@ import { getProperty } from "./data";
 import { stayScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
+import { flashError } from "@revio/ui/flash";
 
 /** An inventory period's `dateTo` is the last CLOSED day; `stayScope` wants a check-out date. */
 function addDay(ymd: string): string {
@@ -42,7 +43,13 @@ export async function addInventoryPeriod(fd: FormData): Promise<void> {
   const dateFrom = str(fd, "dateFrom");
   const dateTo = str(fd, "dateTo");
   const note = str(fd, "note") || null;
-  if (!roomTypeId || !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo) || dateTo < dateFrom) return;
+  if (!roomTypeId) return flashError("Pick a room type first.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
+    return flashError("Give both a start and an end date.");
+  }
+  // Reported separately from a missing date: the dates are both there and both readable, so
+  // "give me the dates" would send somebody looking for a field they had already filled in.
+  if (dateTo < dateFrom) return flashError("That period ends before it starts — check the two dates.");
 
   const roomType = await prisma.roomType.findFirst({ where: { id: roomTypeId, propertyId } });
   if (!roomType) return;

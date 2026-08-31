@@ -8,6 +8,7 @@ import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { takeUnitOoo, clearUnitOoo } from "./units";
 import { logAudit, str } from "./mutation-helpers";
 import { recordOpsEvent } from "./events";
+import { flashError } from "@revio/ui/flash";
 
 /**
  * Session + capability gate for every action in this file.
@@ -64,7 +65,7 @@ export async function setMaintenanceStatus(fd: FormData): Promise<void> {
   const session = await ctx("maintenance");
   const id = str(fd, "id");
   const status = str(fd, "status");
-  if (!STATUSES.includes(status)) return;
+  if (!STATUSES.includes(status)) return flashError("That isn’t a status a task can be in. Reload the page and try again.");
   const task = await prisma.maintenanceTask.findFirst({ where: { id, propertyId: session.activePropertyId }, include: { unit: { select: { id: true, label: true } } } });
   if (!task) return;
 

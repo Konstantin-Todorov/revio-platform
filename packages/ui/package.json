@@ -23,7 +23,9 @@
     "./two-factor-setup": "./src/two-factor-setup.tsx",
     "./set-password-fields": "./src/set-password-fields.tsx",
     "./otp-input": "./src/otp-input.tsx",
-    "./date-picker-affordance": "./src/date-picker-affordance.tsx"
+    "./date-picker-affordance": "./src/date-picker-affordance.tsx",
+    "./flash": "./src/flash.ts",
+    "./flash-toast": "./src/flash-toast.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -33,12 +35,15 @@
   },
   "peerDependencies": {
     "lucide-react": "^0.460.0",
-    "react": "^19.0.0"
+    "react": "^19.0.0",
+    "next": "^15.1.3"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
     "lucide-react": "^0.460.0",
     "react": "^19.0.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "next": "^15.1.3",
+    "@types/node": "^22.0.0"
   }
 }

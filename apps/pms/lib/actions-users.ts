@@ -10,6 +10,7 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { str } from "./mutation-helpers";
 import { PMS_ROLES, MANAGER_ROLES, type PmsRole } from "./roles";
+import { flashError } from "@revio/ui/flash";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -43,7 +44,7 @@ export async function setStaffRole(fd: FormData): Promise<void> {
   if (!s) return;
   const id = str(fd, "id");
   const role = str(fd, "role");
-  if (!PMS_ROLES.includes(role as PmsRole)) return;
+  if (!PMS_ROLES.includes(role as PmsRole)) return flashError("That isn’t a role this property has. Reload the page and try again.");
   const u = await prisma.user.findUnique({ where: { id } });
   if (!u || u.tenantId !== s.tenantId) return;
   // Never demote the last remaining owner.

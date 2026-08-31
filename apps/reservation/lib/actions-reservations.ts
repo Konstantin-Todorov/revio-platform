@@ -12,6 +12,7 @@ import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
 import { hasChanges, planMerge, planGuestErasure } from "@revio/core";
 import { withTenantTransaction } from "@revio/db";
+import { flashError } from "@revio/ui/flash";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -118,7 +119,7 @@ export async function placeHold(fd: FormData): Promise<void> {
   // `redirect()` throws, so anything past the guard above has a won claim — but TypeScript only
   // knows that if the guard narrows, and a bare `claim.holdId` here would be a compile error the day
   // someone changes `redirect` to a return. The explicit check keeps the invariant readable.
-  if (!claim.ok) return;
+  if (!claim.ok) return flashError("Those dates just sold out — there is no longer a room free for the whole stay.");
   const holdId = claim.holdId;
 
   await logAudit(property.id, property.tenantId, {

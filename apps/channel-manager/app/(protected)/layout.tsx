@@ -6,6 +6,8 @@ import { ShellProvider } from "@/components/shell/ShellContext";
 import { getSession, getSwitchableProperties } from "@/lib/session";
 import { getConnectivityLabel, getNotifications } from "@/lib/data";
 import { FieldGuard } from "@revio/ui/field-guard";
+import { FlashToast } from "@revio/ui/flash-toast";
+import { readFlash, FLASH_COOKIE } from "@revio/ui/flash";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -45,6 +47,9 @@ export default async function ProtectedLayout({ children }: { children: React.Re
                 input HIDES invalid text (its value reads as ""), so without this a bad field looks
                 merely empty — nothing objects, and the form saves a value nobody chose. */}
             <FieldGuard />
+            {/* A server action that refused says so here. Without it a form that
+                legitimately declined came back looking untouched. */}
+            <FlashToast flash={await readFlash()} cookieName={FLASH_COOKIE} />
             <div key={session.activePropertyId} className="mx-auto max-w-[1400px]">{children}</div>
           </main>
         </div>

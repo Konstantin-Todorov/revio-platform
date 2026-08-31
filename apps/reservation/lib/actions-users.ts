@@ -11,6 +11,7 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { str } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
+import { flashError } from "@revio/ui/flash";
 
 /**
  * CRS Staff — user management on the ONE shared identity (CRS-REFINEMENT-R2 §8.2). Every operation
@@ -98,13 +99,13 @@ export async function updateUserRole(fd: FormData): Promise<void> {
   if (!s) return;
   const id = str(fd, "id");
   const role = str(fd, "role");
-  if (!isRole(role)) return;
+  if (!isRole(role)) return flashError("That isn’t a role this account has. Reload the page and try again.");
 
   const u = await prisma.user.findUnique({ where: { id } });
   if (!u || u.tenantId !== s.tenantId) return;
   if (u.role === "owner" && role !== "owner") {
     const owners = await prisma.user.count({ where: { tenantId: s.tenantId, role: "owner", active: true } });
-    if (owners <= 1) return;
+    if (owners <= 1) return flashError("This is the last owner. Make somebody else an owner first — an account with no owner cannot be managed.");
   }
   await prisma.user.update({ where: { id }, data: { role } });
   revalidatePath("/settings");
@@ -123,7 +124,7 @@ export async function setUserActive(fd: FormData): Promise<void> {
   if (!active && u.id === s.userId) return; // don't lock yourself out
   if (!active && u.role === "owner") {
     const owners = await prisma.user.count({ where: { tenantId: s.tenantId, role: "owner", active: true } });
-    if (owners <= 1) return; // keep at least one active owner
+    if (owners <= 1) return flashError("This is the last active owner. Activate or promote somebody else first — an account with no active owner cannot be managed.");
   }
   await prisma.user.update({ where: { id }, data: { active } });
   revalidatePath("/settings");

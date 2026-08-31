@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { forSystem, isBillablePeriod } from "@revio/db";
 import { getOperatorSession } from "./session";
 import { monthlyPriceMinor, billedProducts, priceBreakdown, type Entitlements } from "./pricing";
+import { flashError } from "@revio/ui/flash";
 
 const prisma = forSystem();
 
@@ -75,7 +76,7 @@ export async function setInvoiceStatus(fd: FormData): Promise<void> {
   if (!(await getOperatorSession())) return;
   const id = str(fd, "id");
   const status = str(fd, "status");
-  if (!["draft", "sent", "paid"].includes(status)) return;
+  if (!["draft", "sent", "paid"].includes(status)) return flashError("That isn’t a status an invoice can be in. Reload the page and try again.");
   await prisma.invoice.update({ where: { id }, data: { status, paidAt: status === "paid" ? new Date() : null } });
   revalidatePath("/billing");
 }

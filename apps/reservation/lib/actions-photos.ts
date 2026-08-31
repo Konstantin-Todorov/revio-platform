@@ -7,6 +7,7 @@ import { getProperty } from "./data";
 import { logAudit, str } from "./mutation-helpers";
 import { ImageRejected, MAX_UPLOAD_BYTES, processRoomPhoto } from "./images";
 import { guard, requireCapability } from "./authz";
+import { flashError } from "@revio/ui/flash";
 
 /**
  * Room photographs.
@@ -159,7 +160,7 @@ export async function reorderRoomPhotos(fd: FormData): Promise<void> {
   const { property, roomType } = owned;
 
   const ids = str(fd, "order").split(",").map((s) => s.trim()).filter(Boolean);
-  if (ids.length === 0) return;
+  if (ids.length === 0) return flashError("Nothing to reorder — the gallery came back empty. Reload the page and try again.");
 
   // Scope the update to this room type's own photos, so an id from another gallery is a no-op
   // rather than a cross-room reshuffle.

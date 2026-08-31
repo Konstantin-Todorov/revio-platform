@@ -6,6 +6,7 @@ import { getProperty } from "./data";
 import { logAudit, str } from "./mutation-helpers";
 import { PERMISSION_GROUPS } from "./permissions";
 import { requireCapability } from "./authz";
+import { flashError } from "@revio/ui/flash";
 
 
 
@@ -39,7 +40,7 @@ export async function savePermissionRole(fd: FormData): Promise<void> {
     await logAudit(property.id, tenantId, { entity: `Permission role · ${role.name}`, field: "access updated" });
   } else {
     const clash = await prisma.permissionRole.findFirst({ where: { tenantId, name } });
-    if (clash) return;
+    if (clash) return flashError("A role with that name already exists. Pick a different name.");
     await prisma.permissionRole.create({
       data: { tenantId, name, builtin: false, access: { create: access.map((a) => ({ tenantId, ...a })) } },
     });

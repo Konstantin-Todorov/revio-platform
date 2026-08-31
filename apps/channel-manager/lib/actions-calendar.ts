@@ -8,6 +8,7 @@ import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, eachDate, utcDay } from "./mutation-helpers";
 import type { PushField } from "./connectivity";
 import { guard, requireCapability } from "./authz";
+import { flashError } from "@revio/ui/flash";
 
 export type ActionResult = { ok: boolean; error?: string; affected?: number; warning?: string };
 
@@ -581,7 +582,8 @@ export async function cancelReservation(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
   const res = await prisma.reservation.findUnique({ where: { id }, include: { lines: true, channel: true } });
-  if (!res || res.status === "cancelled") return;
+  if (!res) return flashError("That reservation no longer exists — somebody may have removed it while this page was open.");
+  if (res.status === "cancelled") return flashError("That reservation is already cancelled.");
 
   // Cancelling drops the booking out of the "rooms sold" derivation, so availability
   // (inventory − sold) restores itself — no manual inventory edit needed.

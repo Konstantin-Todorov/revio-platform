@@ -520,12 +520,18 @@ importers:
         specifier: workspace:*
         version: link:../core
     devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.0
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.17
       lucide-react:
         specifier: ^0.460.0
         version: 0.460.0(react@19.2.7)
+      next:
+        specifier: ^15.1.3
+        version: 15.5.19(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react:
         specifier: ^19.0.0
         version: 19.2.7

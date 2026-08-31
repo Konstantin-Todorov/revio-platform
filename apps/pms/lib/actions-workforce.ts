@@ -6,6 +6,7 @@ import { getSession } from "./session";
 import { recordOpsEvent } from "./events";
 import { MANAGER_ROLES } from "./roles";
 import { str } from "./mutation-helpers";
+import { flashError } from "@revio/ui/flash";
 
 /**
  * Clock-in mechanics (PMS-REFINEMENT-R1 §6.7 / §10.3) on the ONE shared identity. Staff self-clock from
@@ -59,7 +60,7 @@ export async function clockOutSelf(): Promise<void> {
 /** Delegated clock-in: a manager/supervisor/reception clocks another user in. Logged (clockedInById). */
 export async function clockInUser(fd: FormData): Promise<void> {
   const s = await getSession();
-  if (!s || !DELEGATOR_ROLES.has(s.role)) return;
+  if (!s || !DELEGATOR_ROLES.has(s.role)) return flashError("Only a manager, supervisor or reception can clock somebody else in or out.");
   const userId = str(fd, "userId");
   const target = await prisma.user.findUnique({ where: { id: userId } });
   if (!target || target.tenantId !== s.tenantId || !target.active) return;
@@ -78,7 +79,7 @@ export async function clockInUser(fd: FormData): Promise<void> {
 /** Delegated clock-out. */
 export async function clockOutUser(fd: FormData): Promise<void> {
   const s = await getSession();
-  if (!s || !DELEGATOR_ROLES.has(s.role)) return;
+  if (!s || !DELEGATOR_ROLES.has(s.role)) return flashError("Only a manager, supervisor or reception can clock somebody else in or out.");
   const userId = str(fd, "userId");
   const open = await prisma.staffShift.findFirst({ where: { propertyId: s.activePropertyId, userId, clockOutAt: null } });
   if (!open) return;

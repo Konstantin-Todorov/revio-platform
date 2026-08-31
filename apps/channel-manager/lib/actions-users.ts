@@ -10,6 +10,7 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { str } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
+import { flashError } from "@revio/ui/flash";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -48,14 +49,14 @@ export async function updateUserRole(fd: FormData): Promise<void> {
   if (!s) return;
   const id = str(fd, "id");
   const role = str(fd, "role");
-  if (!ROLES.includes(role as (typeof ROLES)[number])) return;
+  if (!ROLES.includes(role as (typeof ROLES)[number])) return flashError("That isn’t a role this account has. Reload the page and try again.");
 
   const u = await prisma.user.findUnique({ where: { id } });
   if (!u || u.tenantId !== s.tenantId) return; // never touch another tenant's user
   // Don't demote the last remaining owner.
   if (u.role === "owner" && role !== "owner") {
     const owners = await prisma.user.count({ where: { tenantId: s.tenantId, role: "owner" } });
-    if (owners <= 1) return;
+    if (owners <= 1) return flashError("This is the last owner. Make somebody else an owner first — an account with no owner cannot be managed.");
   }
   await prisma.user.update({ where: { id }, data: { role } });
   revalidatePath("/settings");
@@ -70,7 +71,7 @@ export async function removeUser(fd: FormData): Promise<void> {
   if (!u || u.tenantId !== s.tenantId || u.id === s.userId) return; // can't remove cross-tenant or yourself
   if (u.role === "owner") {
     const owners = await prisma.user.count({ where: { tenantId: s.tenantId, role: "owner" } });
-    if (owners <= 1) return; // keep at least one owner
+    if (owners <= 1) return flashError("This is the last owner. Make somebody else an owner first — an account with no owner cannot be managed.");
   }
   await prisma.user.delete({ where: { id } });
   revalidatePath("/settings");

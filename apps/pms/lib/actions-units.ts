@@ -8,6 +8,7 @@ import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { logAudit, recordSync, str, int, utcDay } from "./mutation-helpers";
 import { recordOpsEvent } from "./events";
 import { todayInTz, addDaysYmd } from "./format";
+import { flashError } from "@revio/ui/flash";
 
 const HK_STATUSES = ["clean", "dirty", "in_progress", "inspected", "out_of_order"];
 
@@ -67,7 +68,8 @@ export async function generateUnits(fd: FormData): Promise<void> {
   const start = int(fd, "start", 1);
   const prefix = str(fd, "prefix");
   const floor = str(fd, "floor") || null;
-  if (!roomTypeId || n <= 0) return;
+  if (!roomTypeId) return flashError("Pick a room type first.");
+  if (n <= 0) return flashError("Say how many rooms to create — a number above zero.");
 
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId } });
   if (!roomType || roomType.propertyId !== session.activePropertyId) return;
@@ -176,11 +178,12 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
   const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const status = str(fd, "status");
-  if (!HK_STATUSES.includes(status)) return;
+  if (!HK_STATUSES.includes(status)) return flashError("That isn’t a housekeeping status. Reload the page and try again.");
 
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
   if (!unit || unit.propertyId !== session.activePropertyId) return;
   const prev = unit.hkStatus;
+  // Not an error: two people pressing "clean" on the same room is ordinary, and the room IS clean.
   if (prev === status) return;
 
   await prisma.unit.update({ where: { id: unitId }, data: { hkStatus: status } });
