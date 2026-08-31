@@ -177,8 +177,8 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
 **Distribution / connectivity**
 - **Channex production certification** — engineering done; remaining is the form + live screenshare
   (founder's process). See `docs/CHANNEX-CERTIFICATION.md`.
-- **Scheduled auto-pull** — pull OTA bookings on a timer (today it's on-demand / on-edit). Needs the
-  scheduler infra below.
+- ~~**Scheduled auto-pull**~~ — shipped; `apps/channel-manager/app/api/jobs/pull/route.ts` runs on the
+  cron alongside `arrivals`, `closeday` and `assign`. The "needs the scheduler infra below" note is stale.
 - Per-client real OTA channels — each needs that OTA's own credentials (a per-hotel onboarding step).
 
 **Infrastructure (unblocks several items above)**
@@ -196,7 +196,14 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
   `operator_only` policy (CM · CRS · PMS · Invoice · ConnectivityCredential) actually enforces — tenant
   isolation is a database guarantee, not a convention. Gate: `pnpm --filter @revio/db rls-verify`
   (`DEPLOY.md` §RLS).
-- Drop the unused `ProductMapping` table (superseded by two-stream mapping).
+- ~~Drop the unused `ProductMapping` table~~ — verified gone 2026-08-31; no such model in the schema.
+- **Guest register for ЕСТИ — the largest genuine gap for a Bulgarian property, and not yet started.**
+  `Guest` carries no identity fields at all: no document number, no nationality, no date of birth.
+  Reporting to ЕСТИ has been compulsory since 1 Oct 2019 for every accommodation provider, and class
+  A names **вили** explicitly, so the villa is squarely in scope. What the market ships is a check-in
+  capture of those fields plus an XML export the owner imports; the direct API needs an electronic
+  signature and is a second step, not a first. Nothing about this touches fiscalization — a guest
+  register is not a fiscal device, and building it does not make us СУПТО.
 - ~~Add `@types/node` to `packages/db`~~ — done 2026-07-26; `pnpm -r typecheck` is clean.
 
 **Deploy / ops**
