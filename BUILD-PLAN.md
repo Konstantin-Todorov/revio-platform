@@ -238,8 +238,15 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
   no row as housekeeper). Plus **error/loading/404 boundaries** in all four apps (there were none —
   `@revio/ui/status-page` + `@revio/ui/skeleton`), **eight tables** that scrolled the page sideways on
   a phone wrapped, and **numeric bounds** (commission/FX markup accepted negatives).
-  Still open for a later round: a broader responsive pass beyond the phone-critical screens, and
-  server-side validation messages (today several actions fail closed silently).
+  ~~Still open for a later round: a broader responsive pass~~ — **measured 2026-09-01 and already
+  clean.** At a 390px viewport, `documentElement.scrollWidth - innerWidth` is **0** on the PMS
+  dashboard, tape-chart calendar, guest register and activity log, and on the CRS inventory grid —
+  the two densest screens on the platform included. Static analysis found only calendar week grids
+  (`grid-cols-7`, which must stay 7) and `w-full` tables that compress rather than overflow. NB this
+  measures horizontal overflow, not comfort: nothing spills off a phone, which is not the same as
+  proving every screen is pleasant on one.
+  ~~server-side validation messages~~ — **done 2026-09-01**, see `docs/WORK-LOG.md`: `flashError` +
+  `scripts/silent-lint.mjs` as a ratchet at 105.
 - ✅ **Email engine — DONE.** `@revio/email` + `@revio/core/email`: per-hotel branded HTML templates
   (logo, sender name, reply-to, colour, four themes, font), per-email-type on/off toggles and editable
   content (`EmailTemplate` rows, `listPropertyTemplates`), sent through our own transport over Resend.
