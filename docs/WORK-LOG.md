@@ -27,6 +27,37 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · Guest register — slice 2, the официален образец + export
+**The заповед's prose is NOT the whole specification. The образец asks for more, and slice 1 was
+wrong because I had only read the prose.**
+Files: `packages/core/src/registry/tourist-register.ts` (50 tests),
+`packages/db/prisma/migrations/20260831180000_register_obrazec/`, `apps/pms/lib/register.ts`,
+`apps/pms/app/(protected)/register/`, `apps/pms/app/api/register/export/`
+Notes: The Ministry publishes **Образец на регистър за настанените туристи** beside the заповед. It
+has **23 columns**, and five things the prose never spells out:
+
+1. **The name is THREE columns** — Име / Бащино име / Фамилно име — with a script rule stated in the
+   template itself: *"за български граждани - на кирилица, за чужденци - на латиница, съгласно
+   националния документ"*. Slice 1 had a single `fullName`. Corrected by migration; production held
+   0 rows, so only dev data was split.
+2. **Тип на документ за самоличност** as its own column.
+3. **Час** of registration, arrival and departure — not just the dates. Taken from the ASSIGNMENT
+   (what happened), not the booking, and rendered in the property's timezone: a guest accommodated
+   at 00:30 Sofia is 21:30 UTC the day before, which would file the arrival on the wrong DATE too.
+4. **Средна цена на нощувка**, optional — computed per PERSON, not per room.
+5. **Анулирана регистрация** — the answer to what to do with an entry made in error. It is cancelled
+   in place, keeping its пореден номер. A register with holes in its numbering cannot be shown to
+   have had none: the gap looks identical to a removed guest.
+
+⚠️ **There is no public XSD or API.** I looked. The Ministry publishes user guides and this Excel
+образец, and the direct API route needs certification and an electronic signature. So the export is
+the образец's columns in the образец's order, as CSV — **semicolon-separated with a UTF-8 BOM**,
+because Excel on a Bulgarian machine splits on the locale list separator and reads a BOM-less file
+as ANSI, turning every Cyrillic name to mojibake.
+
+The export is gated on `frontDesk` and `no-store`: it is every identity document the property holds
+for the month, in one download. The screen shows documents by their last four characters only.
+
 ### 2026-08-31 · Claude · DONE · Guest register (ЕСТИ) — slice 1, capture
 **The largest genuine gap for a real Bulgarian property. `Guest` had no identity fields at all.**
 Files: `packages/core/src/registry/{tourist-register,countries}.ts` (new, 29 tests),

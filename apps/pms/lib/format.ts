@@ -66,3 +66,17 @@ export function minutesOfDayInTz(timezone: string): number {
   const m = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
   return (h % 24) * 60 + m;
 }
+
+/**
+ * `14:20` in the property's own timezone.
+ *
+ * The register asks for the HOUR a guest was accommodated, and a guest accommodated at 00:30 Sofia
+ * time is stored as 21:30 UTC the previous day. Rendering that in UTC would put the arrival on the
+ * wrong date as well as the wrong hour — which is a register that disagrees with the front desk's
+ * memory of the night.
+ */
+export function hmInTz(d: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit", minute: "2-digit", hour12: false, timeZone: timezone,
+  }).format(d);
+}

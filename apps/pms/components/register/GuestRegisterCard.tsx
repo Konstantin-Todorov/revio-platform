@@ -1,9 +1,9 @@
-import { AlertTriangle, Check, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Ban, Check, Plus, RotateCcw, Trash2 } from "lucide-react";
 import {
-  validateRegisterEntry, registerCategory, countryName, COUNTRY_NAMES,
+  validateRegisterEntry, registerCategory, expectedNameScript, countryName, COUNTRY_NAMES,
   type TouristRegisterEntry,
 } from "@revio/core";
-import { saveStayGuest, addStayGuest, removeStayGuest } from "@/lib/actions-register";
+import { saveStayGuest, addStayGuest, removeStayGuest, cancelStayGuest } from "@/lib/actions-register";
 import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
 
 export type RegisterRow = TouristRegisterEntry & { id: string };
@@ -59,18 +59,25 @@ export function GuestRegisterCard({ reservationId, rows }: { reservationId: stri
           const problems = problemsById.get(r.id)!;
           const ok = problems.length === 0;
           const needsSeries = registerCategory(r.nationality) === "other";
-          const blank = r.fullName.trim() === "" && r.documentNumber == null && r.personalId == null;
+          const script = expectedNameScript(r.nationality);
+          const named = [r.firstName, r.middleName, r.lastName].filter((v) => v && v.trim()).join(" ");
+          const blank = named === "" && r.documentNumber == null && r.personalId == null;
 
           return (
-            <details key={r.id} open={!ok} className="group">
+            <details key={r.id} open={!ok && !r.cancelled} className="group">
               <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-2.5 hover:bg-surface-muted">
                 <span className="tnum w-8 shrink-0 text-[11px] font-bold text-ink-300">№{r.registerNo}</span>
                 {ok
                   ? <Check className="h-4 w-4 shrink-0 text-success-600" />
                   : <AlertTriangle className="h-4 w-4 shrink-0 text-warning-600" />}
-                <span className={`flex-1 truncate text-[13px] font-semibold ${r.fullName.trim() ? "text-ink-900" : "text-ink-400 italic"}`}>
-                  {r.fullName.trim() || "Not captured yet"}
+                <span className={`flex-1 truncate text-[13px] font-semibold ${named ? "text-ink-900" : "text-ink-400 italic"} ${r.cancelled ? "line-through decoration-ink-300" : ""}`}>
+                  {named || "Not captured yet"}
                 </span>
+                {r.cancelled && (
+                  <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-ink-400">
+                    cancelled
+                  </span>
+                )}
                 <span className="shrink-0 text-[11.5px] text-ink-400">
                   {r.nationality ? countryName(r.nationality) : "—"}
                   {r.unitLabel ? ` · room ${r.unitLabel}` : ""}
@@ -81,9 +88,17 @@ export function GuestRegisterCard({ reservationId, rows }: { reservationId: stri
                 <input type="hidden" name="id" value={r.id} />
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <label className="col-span-2">
-                    <Lbl hint="as written in the document">Full name</Lbl>
-                    <input name="fullName" defaultValue={r.fullName} className={input} placeholder="Мария Петрова Иванова" />
+                  <label>
+                    <Lbl hint={script === "cyrillic" ? "кирилица" : "latin"}>First name</Lbl>
+                    <input name="firstName" defaultValue={r.firstName} className={input} placeholder={script === "cyrillic" ? "Мария" : "John"} />
+                  </label>
+                  <label>
+                    <Lbl hint="бащино · often blank">Patronymic</Lbl>
+                    <input name="middleName" defaultValue={r.middleName ?? ""} className={input} placeholder="—" />
+                  </label>
+                  <label>
+                    <Lbl hint={script === "cyrillic" ? "кирилица" : "latin"}>Family name</Lbl>
+                    <input name="lastName" defaultValue={r.lastName} className={input} placeholder={script === "cyrillic" ? "Иванова" : "Smith"} />
                   </label>
                   <label>
                     <Lbl>Date of birth</Lbl>
@@ -105,6 +120,15 @@ export function GuestRegisterCard({ reservationId, rows }: { reservationId: stri
                   <label>
                     <Lbl hint="ЕГН / ЛЧН">Personal number</Lbl>
                     <input name="personalId" defaultValue={r.personalId ?? ""} className={input} placeholder="—" />
+                  </label>
+                  <label>
+                    <Lbl>Document type</Lbl>
+                    <select name="documentType" defaultValue={r.documentType ?? ""} className={input}>
+                      <option value="">—</option>
+                      <option value="id_card">Лична карта · ID card</option>
+                      <option value="passport">Паспорт · Passport</option>
+                      <option value="other">Друг · Other</option>
+                    </select>
                   </label>
                   <label>
                     <Lbl>Document number</Lbl>
@@ -147,6 +171,17 @@ export function GuestRegisterCard({ reservationId, rows }: { reservationId: stri
                       className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-ink-400 transition-colors hover:text-danger-600"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Remove
+                    </button>
+                  )}
+                  {!blank && (
+                    <button
+                      type="submit" formAction={cancelStayGuest}
+                      title={r.cancelled ? "Put this registration back" : "Mark this registration cancelled — it keeps its number"}
+                      className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-ink-400 transition-colors hover:text-warning-700"
+                    >
+                      {r.cancelled
+                        ? <><RotateCcw className="h-3.5 w-3.5" /> Reinstate</>
+                        : <><Ban className="h-3.5 w-3.5" /> Cancel</>}
                     </button>
                   )}
                   <button type="submit" className="rounded-md bg-brand-700 px-3.5 py-1.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-800">

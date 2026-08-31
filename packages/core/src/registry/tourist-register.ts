@@ -49,13 +49,28 @@ export type Sex = "m" | "f";
  * mapping can be checked against the source without translating back.
  */
 export interface TouristRegisterEntry {
-  /** Пореден номер от регистъра — sequential within the property, never reused. */
+  /** Рег. № — sequential within the property, never reused. */
   registerNo: number;
-  /** Дата на регистрация — when the person was registered, i.e. check-in. ISO `YYYY-MM-DD`. */
+  /** Дата и час на регистрация — the образец has these as two columns off one instant. */
   registeredAt: string;
-  /** Пълното име на лицето, as written in the document. */
-  fullName: string;
-  /** ЕГН / ЛЧН / персонален идентификационен номер. */
+  registeredAtTime: string;
+
+  /**
+   * Име / Бащино име / Фамилно име, as three columns.
+   *
+   * The образец is explicit about the script: "за български граждани - на кирилица, за чужденци -
+   * на латиница, съгласно националния документ". Both halves matter — a Bulgarian written in Latin
+   * and a foreigner written in Cyrillic are each a transliteration of a document rather than what
+   * the document says.
+   *
+   * Бащино име is a Bulgarian patronymic. Most foreigners have none, and a blank is correct there
+   * rather than a middle name invented to fill the column.
+   */
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+
+  /** ЕГН / ЛНЧ. */
   personalId: string | null;
   /** Дата на раждане. ISO `YYYY-MM-DD`. */
   dateOfBirth: string | null;
@@ -63,23 +78,75 @@ export interface TouristRegisterEntry {
   sex: Sex | null;
   /** Гражданство. ISO 3166-1 alpha-2. */
   nationality: string;
+
+  /** Тип на документ за самоличност. */
+  documentType: DocumentType | null;
   /** Номер на лична карта / валиден национален документ за самоличност. */
   documentNumber: string | null;
-  /** Серия на документа — asked for by т. 1.2 only. */
+  /**
+   * Серия на документа. The образец has no column for it, but т. 1.2 of the заповед asks for
+   * "номера и серия" — so it is captured separately and printed ahead of the number in the one
+   * column the образец provides.
+   */
   documentSeries: string | null;
   /** Държава, издала националния документ. ISO 3166-1 alpha-2. */
   documentCountry: string | null;
-  /** Етаж, стая/апартамент. */
-  unitLabel: string | null;
+
+  /** Етаж and Стая/апартамент — two columns in the образец. */
   floor: string | null;
-  /** Дата на пристигане. ISO `YYYY-MM-DD`. */
+  unitLabel: string | null;
+
+  /** Дата и час на пристигане. The time is blank until the guest is actually checked in. */
   arrivalDate: string;
-  /** Дата на отпътуване. Null while the guest is still in house. ISO `YYYY-MM-DD`. */
+  arrivalTime: string | null;
+  /** Дата и час на отпътуване. Null while the guest is still in house. */
   departureDate: string | null;
-  /** Брой реализирани нощувки. */
+  departureTime: string | null;
+
+  /** Брой на реализирани нощувки. */
   nights: number;
   /** Ползване на туристически пакет (да/не). */
   touristPackage: boolean;
+  /** Средна цена на нощувка — "незадължително за попълване" on the образец. Minor units. */
+  avgNightlyPriceMinor: number | null;
+  /**
+   * Анулирана регистрация.
+   *
+   * The образец has a column for it, which is the answer to what to do with a registration made in
+   * error: it is cancelled in place, never deleted. A register whose numbering has holes cannot be
+   * shown to have had none.
+   */
+  cancelled: boolean;
+}
+
+/** Тип на документ за самоличност. */
+export type DocumentType = "id_card" | "passport" | "other";
+
+export const DOCUMENT_TYPE_BG: Readonly<Record<DocumentType, string>> = {
+  id_card: "Лична карта",
+  passport: "Паспорт",
+  other: "Друг документ за самоличност",
+};
+
+export const SEX_BG: Readonly<Record<Sex, string>> = { m: "мъж", f: "жена" };
+
+/**
+ * Which script the образец expects this person's name in.
+ *
+ * Bulgarian citizens are written in Cyrillic; everyone else in Latin, as their national document
+ * writes them.
+ */
+export function expectedNameScript(nationality: string): "cyrillic" | "latin" {
+  return nationality.trim().toUpperCase() === "BG" ? "cyrillic" : "latin";
+}
+
+const CYRILLIC = /\p{Script=Cyrillic}/u;
+const LATIN = /\p{Script=Latin}/u;
+
+/** True when the name is written in the script the образец asks for. Blank counts as fine. */
+export function nameScriptMatches(name: string, script: "cyrillic" | "latin"): boolean {
+  if (name.trim() === "") return true;
+  return script === "cyrillic" ? !LATIN.test(name) && CYRILLIC.test(name) : !CYRILLIC.test(name);
 }
 
 export interface RegisterProblem {
@@ -101,6 +168,10 @@ export function validateRegisterEntry(e: TouristRegisterEntry): RegisterProblem[
   const p: RegisterProblem[] = [];
   const blank = (v: string | null | undefined) => v == null || v.trim() === "";
 
+  // A cancelled registration is not an incomplete one. It is a closed record of something that did
+  // not happen, and chasing its blanks would put it on the "not ready to report" list forever.
+  if (e.cancelled) return p;
+
   if (e.registerNo < 1 || !Number.isInteger(e.registerNo)) {
     p.push({ field: "registerNo", message: "The register number is missing." });
   }
@@ -108,20 +179,33 @@ export function validateRegisterEntry(e: TouristRegisterEntry): RegisterProblem[
     p.push({ field: "registeredAt", message: "The registration date is missing." });
   }
 
-  // "Пълното име" — the full name as the document writes it. A single word is a first name, and the
-  // register is matched against a passport by a person who has only this string to go on.
-  if (blank(e.fullName)) {
-    p.push({ field: "fullName", message: "Full name is required." });
-  } else if (e.fullName.trim().split(/\s+/).length < 2) {
-    p.push({ field: "fullName", message: "Give the full name as written in the document, not just one name." });
-  }
+  if (blank(e.firstName)) p.push({ field: "firstName", message: "First name is required." });
+  if (blank(e.lastName)) p.push({ field: "lastName", message: "Family name is required." });
 
   if (blank(e.nationality)) {
     p.push({ field: "nationality", message: "Citizenship is required." });
+  } else {
+    /*
+     * The script rule, from the образец itself: Bulgarians in Cyrillic, foreigners in Latin, as the
+     * national document writes them. Reported per name so it is obvious which one to retype — and
+     * it fires in both directions, because a Bulgarian entered as "Ivanov" is as much a
+     * transliteration as a German entered as "Мюлер".
+     */
+    const script = expectedNameScript(e.nationality);
+    const say = script === "cyrillic"
+      ? "A Bulgarian citizen's name goes in Cyrillic, as the document writes it."
+      : "A foreign citizen's name goes in Latin, as the passport writes it.";
+    if (!nameScriptMatches(e.firstName, script)) p.push({ field: "firstName", message: say });
+    if (!nameScriptMatches(e.middleName ?? "", script)) p.push({ field: "middleName", message: say });
+    if (!nameScriptMatches(e.lastName, script)) p.push({ field: "lastName", message: say });
   }
+
   if (e.sex == null) p.push({ field: "sex", message: "Sex is required." });
   if (blank(e.dateOfBirth) || !ISO_DATE.test(e.dateOfBirth!)) {
     p.push({ field: "dateOfBirth", message: "Date of birth is required." });
+  }
+  if (e.documentType == null) {
+    p.push({ field: "documentType", message: "Say which kind of document this is." });
   }
   if (blank(e.documentNumber)) {
     p.push({ field: "documentNumber", message: "Identity document number is required." });
@@ -144,7 +228,7 @@ export function validateRegisterEntry(e: TouristRegisterEntry): RegisterProblem[
   /*
    * ЕГН is required of a Bulgarian citizen and of nobody else.
    *
-   * Both т. 1.1 and т. 1.2 list a personal identification number, but only a Bulgarian citizen
+   * Both halves of the заповед list a personal identification number, but only a Bulgarian citizen
    * certainly has one — a French tourist has no ЕГН to give, and refusing their entry for the lack
    * of it would make the register impossible to complete rather than more correct. So: demanded
    * where it always exists, captured where it sometimes does.
@@ -201,4 +285,109 @@ export function registerRetainedUntil(registeredAt: string): string {
 
 export function mayEraseRegisterEntry(registeredAt: string, today: string): boolean {
   return today >= registerRetainedUntil(registeredAt);
+}
+
+/**
+ * The official column headings, in the official order.
+ *
+ * Transcribed from **Образец на регистър за настанените туристи** as published by the Ministry of
+ * Tourism alongside the заповед. The order is the образец's, not ours, and it is not ours to tidy:
+ * this file is opened by somebody who compares it against the template.
+ *
+ * Note what the образец asks for that the заповед's prose does not: the TIME of registration,
+ * arrival and departure; the document TYPE; the name in three parts; an average nightly price
+ * (optional); and a cancellation flag.
+ */
+export const REGISTER_COLUMNS: readonly string[] = [
+  "Рег. №",
+  "Дата на регистрация",
+  "Час на регистрация",
+  "ЕГН / ЛНЧ",
+  "Гражданство",
+  "Име на лицето",
+  "Бащино име на лицето",
+  "Фамилно име на лицето",
+  "Дата на раждане",
+  "Пол",
+  "Тип на документ за самоличност",
+  "Номер на лична карта/валиден национален документ за самоличност",
+  "Държава, издала националния документ",
+  "Етаж",
+  "Стая/апартамент",
+  "Дата на пристигане",
+  "Час на пристигане",
+  "Дата на отпътуване",
+  "Час на отпътуване",
+  "Брой на реализирани нощувки",
+  "Ползване на туристически пакет (да/не)",
+  "Средна цена на нощувка",
+  "Анулирана регистрация",
+];
+
+/** `2026-09-03` → `03.09.2026`, the way a Bulgarian form writes a date. */
+function bgDate(iso: string | null): string {
+  if (!iso || !ISO_DATE.test(iso)) return "";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+const yesNo = (v: boolean) => (v ? "да" : "не");
+
+/**
+ * One entry as the образец's row — 23 cells, aligned to `REGISTER_COLUMNS`.
+ *
+ * Everything is rendered as text on purpose. This file is opened in Excel, where an identity
+ * document number like `0641234567` becomes `641234567` the moment the column is treated as a
+ * number, and a date becomes whatever the machine's locale prefers. The register is a document, not
+ * a spreadsheet to compute on.
+ */
+export function registerRow(e: TouristRegisterEntry): string[] {
+  // The заповед asks for series AND number where the образец gives one column, so the series leads.
+  const docNumber = [e.documentSeries, e.documentNumber].filter((v) => v && v.trim() !== "").join(" ");
+  return [
+    String(e.registerNo),
+    bgDate(e.registeredAt),
+    e.registeredAtTime ?? "",
+    e.personalId ?? "",
+    e.nationality ?? "",
+    e.firstName ?? "",
+    e.middleName ?? "",
+    e.lastName ?? "",
+    bgDate(e.dateOfBirth),
+    e.sex ? SEX_BG[e.sex] : "",
+    e.documentType ? DOCUMENT_TYPE_BG[e.documentType] : "",
+    docNumber,
+    e.documentCountry ?? "",
+    e.floor ?? "",
+    e.unitLabel ?? "",
+    bgDate(e.arrivalDate),
+    e.arrivalTime ?? "",
+    bgDate(e.departureDate),
+    e.departureTime ?? "",
+    String(e.nights),
+    yesNo(e.touristPackage),
+    // Blank, not "0.00", when there is no price: a zero here reads as a free night rather than as a
+    // column the образец marks "незадължително за попълване".
+    e.avgNightlyPriceMinor == null ? "" : (e.avgNightlyPriceMinor / 100).toFixed(2),
+    yesNo(e.cancelled),
+  ];
+}
+
+/**
+ * The whole register as delimiter-separated text, headings included.
+ *
+ * Semicolons, because Excel on a Bulgarian machine splits on the list separator its locale sets and
+ * that is `;` — a comma-separated file opens there as one column per row, which is the form in which
+ * somebody decides the export is broken and goes back to typing.
+ */
+export function registerToCsv(entries: readonly TouristRegisterEntry[]): string {
+  const esc = (v: string) => (/[";\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const line = (cells: readonly string[]) => cells.map(esc).join(";");
+  return [line(REGISTER_COLUMNS), ...entries.map((e) => line(registerRow(e)))].join("\r\n") + "\r\n";
+}
+
+/** Average paid per night, for the образец's optional price column. Null when nothing is known. */
+export function averageNightlyPrice(totalMinor: number | null, nights: number): number | null {
+  if (totalMinor == null || nights <= 0) return null;
+  return Math.round(totalMinor / nights);
 }

@@ -2090,8 +2090,15 @@ model StayGuest {
   /// Дата на регистрация — when the person was registered, which is check-in.
   registeredAt DateTime
 
-  /// Пълното име на лицето, as the document writes it.
-  fullName        String
+  /// Име / Бащино име / Фамилно име — three columns on the образец, not one name.
+  /// Script matters: Cyrillic for Bulgarian citizens, Latin for foreigners, as the national document
+  /// writes them. Nullable because an entry opens blank at check-in and is completed afterwards.
+  firstName       String?
+  /// Бащино име — a Bulgarian patronymic. Most foreigners have none, and blank is correct.
+  middleName      String?
+  lastName        String?
+  /// Тип на документ за самоличност — id_card | passport | other.
+  documentType    String?
   /// ЕГН / ЛЧН / персонален идентификационен номер. Required of a Bulgarian citizen; a foreign
   /// tourist may genuinely have none.
   personalId      String?
@@ -2113,6 +2120,12 @@ model StayGuest {
 
   /// Ползване на туристически пакет (да/не).
   touristPackage Boolean @default(false)
+
+  /// Анулирана регистрация — a column on the образец, and the reason a registration made in error is
+  /// cancelled in place rather than deleted. A register whose numbering has holes cannot be shown to
+  /// have had none.
+  cancelled     Boolean @default(false)
+  cancelledNote String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

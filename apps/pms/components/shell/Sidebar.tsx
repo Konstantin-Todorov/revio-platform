@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon, CalendarRange,} from "lucide-react";
+  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon, CalendarRange, BookUser,} from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 import { roleAllowsPath } from "@/lib/roles";
@@ -21,6 +21,9 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     { href: "/calendar", label: "Calendar", icon: CalendarRange },
     { href: "/guests", label: "Guests", icon: Users },
     { href: "/folios", label: "Folios & Billing", icon: Receipt },
+    // Beside Guests rather than under Setup: it is filled in at the desk, from a passport, while
+    // somebody waits — not configured once by a manager.
+    { href: "/register", label: "Guest Register", icon: BookUser },
     { href: "/minibar", label: "Extras & Charges", icon: Wine },
   ] },
   { title: "Rooms & housekeeping", items: [

@@ -1,10 +1,10 @@
 import "server-only";
-import { computeStayCharges, isCityTax } from "@revio/core";
+import { computeStayCharges, isCityTax, averageNightlyPrice } from "@revio/core";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { postFolioLineWith } from "./posting";
 import { MANAGER_ROLES } from "./roles";
-import { ymd, todayInTz } from "./format";
+import { ymd, todayInTz, hmInTz } from "./format";
 import type { HkStatus } from "./hk-meta";
 import { summariseOutcomes, outcomeHeadline, type OutcomeTotal } from "./folio-outcomes";
 
@@ -237,6 +237,15 @@ export async function getReservationDetail(reservationId: string) {
   const rooms = r.lines.reduce((n, l) => n + l.quantity, 0);
   const guests = r.lines.reduce((n, l) => n + (l.guestsCount ?? 0), 0);
 
+  // Earliest actual check-in and latest actual check-out across the stay's assignments — the hours
+  // the образец wants, taken from what happened rather than from what was booked.
+  const firstCheckedInAt = r.assignments
+    .map((a) => a.checkedInAt).filter((d): d is Date => d != null)
+    .sort((x, y) => x.getTime() - y.getTime())[0] ?? null;
+  const lastCheckedOutAt = r.assignments
+    .map((a) => a.checkedOutAt).filter((d): d is Date => d != null)
+    .sort((x, y) => y.getTime() - x.getTime())[0] ?? null;
+
   const active = r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null);
   const assignedUnits = active.map((a) => ({ assignmentId: a.id, label: a.unit.label, floor: a.unit.floor, hkStatus: a.unit.hkStatus as HkStatus }));
   const checkedIn = active.some((a) => a.checkedInAt != null);
@@ -312,20 +321,38 @@ export async function getReservationDetail(reservationId: string) {
         id: g.id,
         registerNo: g.registerNo,
         registeredAt: ymd(g.registeredAt),
-        fullName: g.fullName,
+        registeredAtTime: hmInTz(g.registeredAt, property.timezone),
+        firstName: g.firstName ?? "",
+        middleName: g.middleName,
+        lastName: g.lastName ?? "",
         personalId: g.personalId,
         dateOfBirth: g.dateOfBirth ? ymd(g.dateOfBirth) : null,
         sex: g.sex as "m" | "f" | null,
         nationality: g.nationality ?? "",
+        documentType: g.documentType as "id_card" | "passport" | "other" | null,
         documentNumber: g.documentNumber,
         documentSeries: g.documentSeries,
         documentCountry: g.documentCountry,
-        unitLabel: g.unitLabel,
         floor: g.floor,
+        unitLabel: g.unitLabel,
         arrivalDate: ci ? ymd(ci) : "",
+        // The ACTUAL arrival, off the assignment, not the booked date — the образец asks for the
+        // hour a guest was accommodated, and a stay booked for Tuesday that walked in on Wednesday
+        // has to say Wednesday.
+        arrivalTime: firstCheckedInAt ? hmInTz(firstCheckedInAt, property.timezone) : null,
         departureDate: r.departedAt ? ymd(r.departedAt) : co ? ymd(co) : null,
+        departureTime: lastCheckedOutAt ? hmInTz(lastCheckedOutAt, property.timezone) : null,
         nights,
         touristPackage: g.touristPackage,
+        // Split across the party: the column is the average price of A NIGHT for this person, and
+        // charging one guest the whole room would overstate every stay with more than one in it.
+        avgNightlyPriceMinor: averageNightlyPrice(
+          r.stayGuests.length > 0
+            ? Math.round((r.propertyTotalMinor ?? r.totalMinor) / r.stayGuests.length)
+            : null,
+          nights,
+        ),
+        cancelled: g.cancelled,
       })),
       stayLines: r.lines.map((l) => ({
         id: l.id,

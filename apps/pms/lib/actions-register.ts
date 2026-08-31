@@ -42,17 +42,21 @@ export async function saveStayGuest(fd: FormData): Promise<void> {
 
   const row = await prisma.stayGuest.findFirst({
     where: { id, propertyId: session.activePropertyId },
-    select: { id: true, reservationId: true, registerNo: true, fullName: true },
+    select: { id: true, reservationId: true, registerNo: true, firstName: true, lastName: true },
   });
   if (!row) redirect("/dashboard");
 
   const sexRaw = str(fd, "sex");
+  const typeRaw = str(fd, "documentType");
   const nationality = normaliseCountryCode(str(fd, "nationality"));
 
   await prisma.stayGuest.update({
     where: { id: row!.id },
     data: {
-      fullName: str(fd, "fullName").trim(),
+      firstName: optional(fd, "firstName"),
+      middleName: optional(fd, "middleName"),
+      lastName: optional(fd, "lastName"),
+      documentType: typeRaw === "id_card" || typeRaw === "passport" || typeRaw === "other" ? typeRaw : null,
       personalId: optional(fd, "personalId"),
       dateOfBirth: optionalDate(fd, "dateOfBirth"),
       sex: sexRaw === "m" || sexRaw === "f" ? sexRaw : null,
@@ -69,11 +73,11 @@ export async function saveStayGuest(fd: FormData): Promise<void> {
   await logAudit(session.activePropertyId, session.tenantId, {
     entity: "guest_register",
     field: `№${row!.registerNo}`,
-    oldValue: row!.fullName || "(blank)",
+    oldValue: [row!.firstName, row!.lastName].filter(Boolean).join(" ") || "(blank)",
     // The identity details themselves are NOT written to the audit trail. The trail is read by more
     // people than the register is, and copying a document number into it widens the exposure of the
     // most sensitive field we hold for no investigative gain.
-    newValue: `${str(fd, "fullName").trim() || "(blank)"} · details updated`,
+    newValue: `${[optional(fd, "firstName"), optional(fd, "lastName")].filter(Boolean).join(" ") || "(blank)"} · details updated`,
     userId: session.userId,
   });
 
@@ -109,7 +113,6 @@ export async function addStayGuest(fd: FormData): Promise<void> {
         reservationId,
         registerNo,
         registeredAt: sibling?.registeredAt ?? new Date(),
-        fullName: "",
         unitLabel: sibling?.unitLabel ?? null,
         floor: sibling?.floor ?? null,
       },
@@ -138,7 +141,7 @@ export async function removeStayGuest(fd: FormData): Promise<void> {
   if (!row) redirect("/dashboard");
 
   const captured =
-    (row!.fullName?.trim() ?? "") !== "" ||
+    row!.firstName != null || row!.lastName != null ||
     row!.personalId != null || row!.documentNumber != null ||
     row!.dateOfBirth != null || row!.nationality != null;
 
@@ -150,6 +153,41 @@ export async function removeStayGuest(fd: FormData): Promise<void> {
   await logAudit(session.activePropertyId, session.tenantId, {
     entity: "guest_register", field: `№${row!.registerNo}`,
     oldValue: "(blank entry)", newValue: "removed — nothing had been captured",
+    userId: session.userId,
+  });
+
+  revalidatePath(`/reservation/${row!.reservationId}`);
+  revalidatePath("/register");
+}
+
+/**
+ * Анулирана регистрация — cancel a registration that should not have been made.
+ *
+ * The образец carries a column for this, which is the answer to what to do with an entry that has
+ * real data in it and turned out to be wrong: it is cancelled in place, keeping its пореден номер.
+ * Deleting it would leave a hole in the numbering, and a register with holes cannot be shown to have
+ * had none — the gap looks identical to a removed guest.
+ */
+export async function cancelStayGuest(fd: FormData): Promise<void> {
+  const session = await ctx("frontDesk");
+  const id = str(fd, "id");
+
+  const row = await prisma.stayGuest.findFirst({
+    where: { id, propertyId: session.activePropertyId },
+    select: { id: true, reservationId: true, registerNo: true, cancelled: true },
+  });
+  if (!row) redirect("/dashboard");
+
+  const cancelled = !row!.cancelled;
+  await prisma.stayGuest.update({
+    where: { id: row!.id },
+    data: { cancelled, cancelledNote: cancelled ? optional(fd, "note") : null },
+  });
+
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "guest_register", field: `№${row!.registerNo}`,
+    oldValue: row!.cancelled ? "cancelled" : "active",
+    newValue: cancelled ? `cancelled — ${optional(fd, "note") ?? "no reason given"}` : "reinstated",
     userId: session.userId,
   });
 
