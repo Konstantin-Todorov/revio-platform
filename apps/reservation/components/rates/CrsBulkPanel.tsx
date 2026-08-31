@@ -5,8 +5,10 @@ import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { applyCrsBulkUpdateMulti, type CrsBulkPayload, type CrsBulkRateMode, type CrsBulkResult } from "@/lib/actions-rates";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
+import { matrixRows, expandOffsets, type BulkTargetRoom } from "@revio/core";
+import { OccupancyMatrix, type MatrixEntry } from "./OccupancyMatrix";
 
-type Opt = { id: string; name: string };
+type Opt = { id: string; name: string; maxGuests?: number };
 type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null };
 
 const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
@@ -24,15 +26,24 @@ const RATE_MODES: [CrsBulkRateMode, string][] = [
  * `compact` + `onApplied` drive the Inventory Calendar bulk modal (H2).
  */
 export function CrsBulkPanel({
-  roomTypes, ratePlans, today, preselectRoomTypeIds, compact, onApplied,
+  roomTypes, ratePlans, today, preselectRoomTypeIds, perPerson = false, primaryOccupancy = 2, compact, onApplied,
 }: {
   roomTypes: Opt[];
   ratePlans: PlanOpt[];
   today: string;
   preselectRoomTypeIds?: string[];
+  /** True when the property (or the selected plans) price per person — OBP §6.4. */
+  perPerson?: boolean;
+  primaryOccupancy?: number;
   compact?: boolean;
   onApplied?: (r: CrsBulkResult) => void;
 }) {
+  // The occupancy matrix replaces the single Price control when plans sell per person.
+  const [matrixMode, setMatrixMode] = useState<"offsets" | "manual">("offsets");
+  const [entries, setEntries] = useState<Record<number, MatrixEntry>>({});
+  const [offset, setOffset] = useState<{ direction: "inc_amt" | "inc_pct"; value: string }>({ direction: "inc_amt", value: "" });
+  const [primaryValue, setPrimaryValue] = useState("");
+
   const in30 = useMemo(() => new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10), []);
   const manualPlans = ratePlans.filter((p) => p.priceLogic === "manual");
   const derivedPlans = ratePlans.filter((p) => p.priceLogic !== "manual");
@@ -74,7 +85,16 @@ export function CrsBulkPanel({
 
   function buildPayload(): CrsBulkPayload {
     const p: CrsBulkPayload = { dateFrom, dateTo, daysOfWeek: dows.map(Number), roomTypeIds: rtIds, ratePlanIds: planIds };
-    if (rateMode !== "" && rateValue.trim() !== "" && Number.isFinite(Number(rateValue))) p.rate = { mode: rateMode, value: Number(rateValue) };
+    if (perPerson) {
+      /*
+       * One shape or the other, never both — the action would otherwise be choosing which the user
+       * meant, and a scalar and a matrix produce different prices.
+       */
+      const occ = buildOccupancyEdits();
+      if (occ.length > 0) p.occupancyRates = occ;
+    } else if (rateMode !== "" && rateValue.trim() !== "" && Number.isFinite(Number(rateValue))) {
+      p.rate = { mode: rateMode, value: Number(rateValue) };
+    }
     if (num(minLos) !== undefined) p.minLos = num(minLos)!;
     if (num(maxLos) !== undefined) p.maxLos = num(maxLos)!;
     if (cta !== "") p.cta = cta === "on";
@@ -84,6 +104,37 @@ export function CrsBulkPanel({
     if (num(advMax) !== undefined) p.advanceMax = num(advMax)!;
     if (num(avail) !== undefined) p.availability = num(avail)!;
     return p;
+  }
+
+  /** The matrix, in whichever mode is active, as explicit per-occupancy edits. */
+  function buildOccupancyEdits(): { occupancy: number; mode: CrsBulkRateMode; value: number }[] {
+    const rooms = selectedRooms();
+    const rows = matrixRows(rooms);
+    if (rows.length === 0) return [];
+
+    if (matrixMode === "offsets") {
+      const base = Number(primaryValue);
+      if (!primaryValue.trim() || !Number.isFinite(base)) return [];
+      const step = Number(offset.value);
+      const rule = offset.value.trim() && Number.isFinite(step)
+        ? { perGuestAbove: { op: offset.direction, value: step } }
+        : {};
+      return expandOffsets(rows.map((r: { occupancy: number }) => r.occupancy), primaryOccupancy, base, rule)
+        .map((e) => ({ occupancy: e.occupancy, mode: "set" as CrsBulkRateMode, value: e.value }));
+    }
+
+    return rows
+      .map((r) => ({ occupancy: r.occupancy, entry: entries[r.occupancy] }))
+      .filter((x): x is { occupancy: number; entry: MatrixEntry } =>
+        !!x.entry && x.entry.op !== "" && x.entry.value.trim() !== "" && Number.isFinite(Number(x.entry.value)))
+      .map((x) => ({ occupancy: x.occupancy, mode: x.entry.op as CrsBulkRateMode, value: Number(x.entry.value) }));
+  }
+
+  function selectedRooms(): BulkTargetRoom[] {
+    return rtIds
+      .map((id) => roomTypes.find((r) => r.id === id))
+      .filter((r): r is Opt => !!r)
+      .map((r) => ({ roomTypeId: r.id, roomName: r.name, maxOccupancy: r.maxGuests ?? 2 }));
   }
 
   function summarize(p: CrsBulkPayload): string[] {
@@ -105,6 +156,17 @@ export function CrsBulkPanel({
       if (derivedPlans.length > 0) {
         const following = derivedPlans.map((d) => d.name).join(", ");
         lines.push(`…and ${derivedPlans.length} derived plan${derivedPlans.length === 1 ? "" : "s"} recompute off it: ${following}`);
+      }
+    }
+    if (p.occupancyRates?.length) {
+      const names = manualPlans.filter((mp) => planIds.includes(mp.id)).map((mp) => mp.name).join(", ") || "every manual plan";
+      lines.push(
+        `Price per guest count — ${p.occupancyRates.map((o) => `${o.occupancy}p €${o.value}`).join(" · ")} · on ${names}`,
+      );
+      // Named here as well as in the result: a skip discovered afterwards is a surprise.
+      const short = selectedRooms().filter((r) => r.maxOccupancy < Math.max(...p.occupancyRates!.map((o) => o.occupancy)));
+      if (short.length > 0) {
+        lines.push(`…skipped where the room sleeps fewer: ${short.map((r) => `${r.roomName} (${r.maxOccupancy})`).join(", ")}`);
       }
     }
     if (p.availability !== undefined) lines.push(`Rooms to sell → ${p.availability}`);
@@ -244,6 +306,25 @@ export function CrsBulkPanel({
               <span className="mt-1 block text-[11px] text-ink-400">Restrictions apply per room type regardless of rate plan.</span>
             </div>
 
+              {/*
+                Under per-person the single Price control cannot express the edit: there is one price
+                per guest count, not one price. The matrix replaces it rather than sitting beside it,
+                because two controls for the same thing is how a scalar and a matrix both get sent.
+              */}
+              {perPerson ? (
+                <OccupancyMatrix
+                  rooms={selectedRooms()}
+                  primaryOccupancy={primaryOccupancy}
+                  mode={matrixMode}
+                  onModeChange={setMatrixMode}
+                  entries={entries}
+                  onEntryChange={(occ, e) => setEntries((prev) => ({ ...prev, [occ]: e }))}
+                  offset={offset}
+                  onOffsetChange={setOffset}
+                  primaryValue={primaryValue}
+                  onPrimaryValueChange={setPrimaryValue}
+                />
+              ) : (
               <div className="grid grid-cols-[1fr,8rem] gap-2">
                 <Field label="Price"><select value={rateMode} onChange={(e) => setRateMode(e.target.value as CrsBulkRateMode | "")} className={inputCls}>
                   <option value="">— No change —</option>
@@ -267,6 +348,7 @@ export function CrsBulkPanel({
                   </div>
                 </Field>
               </div>
+              )}
             </div>
           )}
 

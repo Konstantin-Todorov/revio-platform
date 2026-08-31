@@ -18,7 +18,9 @@ const SOURCE_LABEL: Record<string, string> = {
  * dissolved Rates & Restrictions screen), keeping their source-level targeting. */
 export default async function BulkPage({ searchParams }: { searchParams: Promise<{ rt?: string }> }) {
   const { rt } = await searchParams;
-  const { property, ratePlans, rules, roomTypes, channels } = await getRatesData();
+  const { property, ratePlans, rules, defaults, roomTypes, channels } = await getRatesData();
+  // Whether the Price control is a single field or an occupancy matrix (OBP §6.4).
+  const perPerson = (defaults?.pricingModel ?? "per_room") === "per_person";
   // Inline per-row bulk from the Inventory Calendar pre-scopes to one room type (?rt=CODE) —
   // the SAME code path and audit trail, never a parallel implementation (spec §3.5).
   const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
@@ -42,7 +44,9 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
         ) : (
         <CrsBulkPanel
           {...(preselect && preselect.length > 0 ? { preselectRoomTypeIds: preselect } : {})}
-          roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name }))}
+          roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, maxGuests: r.maxGuests }))}
+          perPerson={perPerson}
+          primaryOccupancy={roomTypes[0]?.defaultOccupancy ?? 2}
           ratePlans={ratePlans.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
           today={today}
         />

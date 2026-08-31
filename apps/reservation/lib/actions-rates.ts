@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BED_SETUPS, ROOM_AMENITY_BY_KEY, type Capability } from "@revio/core";
+import { BED_SETUPS, ROOM_AMENITY_BY_KEY, planBulkOccupancy, type Capability } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
+import { ymd } from "./format";
 import { guard, requireCapability } from "./authz";
 import { occupancyKeyFor, occupancyKeysFor } from "@revio/db";
 
@@ -372,6 +373,16 @@ export interface CrsBulkPayload {
   roomTypeIds: string[];
   ratePlanIds: string[];
   rate?: { mode: CrsBulkRateMode; value: number };
+  /**
+   * Per-occupancy prices, when the selected plans price per person (OBP §6.4).
+   *
+   * Present INSTEAD of `rate`, never alongside it. A scalar and a matrix describing the same edit
+   * would leave the action choosing which the user meant, and the two produce different prices.
+   *
+   * Occupancies a given room type cannot sleep are skipped at apply time — never sent as a price a
+   * 2-guest room cannot take. `planBulkOccupancy` owns that, and reports what it skipped.
+   */
+  occupancyRates?: { occupancy: number; mode: CrsBulkRateMode; value: number }[];
   minLos?: number | null;
   maxLos?: number | null;
   cta?: boolean;
@@ -433,14 +444,17 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   if (payload.availability !== undefined) { cell.inventory = Math.max(0, Math.trunc(payload.availability)); changed.push("availability"); }
 
   const doRate = !!payload.rate && Number.isFinite(payload.rate.value);
-  if (doRate) changed.push("rate");
+  // A matrix and a scalar describing the same edit would leave this choosing which the user meant,
+  // and the two produce different prices. The panel sends one or the other.
+  const doOccupancy = (payload.occupancyRates?.length ?? 0) > 0;
+  if (doRate || doOccupancy) changed.push("rate");
   if (changed.length === 0) return { ok: false, error: "Set at least one field to update." };
 
   const dates = eachDate(dateFrom, dateTo, daysOfWeek);
   if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
 
   let ratePlanIds: string[] = [];
-  if (doRate) {
+  if (doRate || doOccupancy) {
     const requested = payload.ratePlanIds ?? [];
     const manual = await prisma.ratePlan.findMany({
       where: { propertyId, priceLogic: "manual", active: true, ...(requested.length > 0 ? { id: { in: requested } } : {}) },
@@ -461,13 +475,63 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   // Once for the whole operation: dates × plans × room types cannot change this value mid-run.
   const occupancyKeys = await occupancyKeysFor(prisma, roomTypeIds);
 
+  // Read once, not per (room × plan × date × occupancy). A month across three rooms and two plans is
+  // hundreds of lookups otherwise, for values that cannot change while this runs.
+  const roomsById = new Map(
+    (await prisma.roomType.findMany({
+      where: { id: { in: roomTypeIds } },
+      select: { id: true, name: true, maxGuests: true },
+    })).map((r) => [r.id, r]),
+  );
+  const existingByKey = new Map<string, number>();
+  if (doOccupancy) {
+    const rows = await prisma.ratePrice.findMany({
+      where: { roomTypeId: { in: roomTypeIds }, ratePlanId: { in: ratePlanIds }, date: { in: dates } },
+      select: { roomTypeId: true, ratePlanId: true, date: true, occupancy: true, priceMinor: true },
+    });
+    for (const r of rows) {
+      existingByKey.set(`${r.roomTypeId}:${r.ratePlanId}:${ymd(r.date)}:${r.occupancy ?? ""}`, r.priceMinor);
+    }
+  }
+  const skippedOccupancies: { roomName: string; occupancies: number[] }[] = [];
+  let unpricedCount = 0;
+
   let affected = 0;
   for (const roomTypeId of roomTypeIds) {
     for (const date of dates) {
       if (hasCell) {
         await upsertRoomCell(tenantId, propertyId, roomTypeId, date, cell);
       }
-      if (doRate) {
+      if (doOccupancy) {
+        /*
+         * The per-occupancy matrix (§6.4).
+         *
+         * `planBulkOccupancy` decides which writes actually happen — it skips occupancies a room
+         * cannot sleep rather than sending a 2-guest room a price for four, and it refuses a
+         * percentage where there is no price to work from rather than writing zero. Both of those
+         * are silent failures if done by hand here.
+         */
+        const room = roomsById.get(roomTypeId);
+        if (room) {
+          const dateKey = ymd(date);
+          const planned = planBulkOccupancy({
+            rooms: [{ roomTypeId, roomName: room.name, maxOccupancy: room.maxGuests }],
+            ratePlanIds,
+            dateKeys: [dateKey],
+            edits: payload.occupancyRates!.map((o) => ({ occupancy: o.occupancy, op: o.mode, value: o.value })),
+            currentMinor: (_rt: string, rp: string, _d: string, occ: number) => existingByKey.get(`${roomTypeId}:${rp}:${dateKey}:${occ}`) ?? null,
+          });
+          for (const w of planned.writes) {
+            await prisma.ratePrice.upsert({
+              where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: w.ratePlanId, date, occupancy: w.occupancy } },
+              update: { priceMinor: w.minor, source: "bulk" },
+              create: { tenantId, propertyId, roomTypeId, ratePlanId: w.ratePlanId, date, occupancy: w.occupancy, priceMinor: w.minor, source: "bulk" },
+            });
+          }
+          skippedOccupancies.push(...planned.skipped);
+          unpricedCount += planned.unpriced;
+        }
+      } else if (doRate) {
         const { mode, value } = payload.rate!;
         for (const rpId of ratePlanIds) {
           const occupancy = occupancyKeys.get(roomTypeId) ?? 1;
@@ -494,7 +558,29 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   await recordPush(propertyId, tenantId, `Availability & rates updated in bulk (${changed.join(", ")})`);
   revalidateRates();
   revalidatePath("/bulk");
-  return { ok: true, affected, ...(warning ? { warning } : {}) };
+  /*
+   * What was NOT done is part of the result, not a footnote.
+   *
+   * A bulk edit that skips half its targets and reports plain success is the failure this feature is
+   * most exposed to: the person believes every room now prices for four guests, and the 2-guest
+   * rooms quietly do not. So the skips and the unpriced dates join the warning line.
+   */
+  const notes: string[] = warning ? [warning] : [];
+  const mergedSkips = new Map<string, Set<number>>();
+  for (const s of skippedOccupancies) {
+    const set = mergedSkips.get(s.roomName) ?? new Set<number>();
+    for (const o of s.occupancies) set.add(o);
+    mergedSkips.set(s.roomName, set);
+  }
+  for (const [roomName, occs] of mergedSkips) {
+    const list = [...occs].sort((a, b) => a - b);
+    notes.push(`${roomName} does not sleep ${list.join(" or ")} — ${list.length === 1 ? "that guest count was" : "those guest counts were"} skipped for it.`);
+  }
+  if (unpricedCount > 0) {
+    notes.push(`${unpricedCount} price${unpricedCount === 1 ? "" : "s"} had nothing to work from — a percentage needs an existing price. Set one first.`);
+  }
+
+  return { ok: true, affected, ...(notes.length > 0 ? { warning: notes.join(" ") } : {}) };
 }
 
 // --- Rate Plan Linkage (editable, CRS-REFINEMENT-R2 §6) --------------------

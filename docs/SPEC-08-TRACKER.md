@@ -182,12 +182,13 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   incl. **cascade**, and degradation to the primary for single-rate channels — **wired into
   `sync.ts`**, which now resolves through the shared resolver. The daily
   `rates[]` push, batching, warnings. *(§6.7 / §6.7a / L7)*
-- ◐ **H4** Bulk-edit occupancy matrix — **planner done** (`bulk-occupancy.ts`, 16 tests): the
+- ☑ **H4** Bulk-edit occupancy matrix — **done.** Planner (`bulk-occupancy.ts`, 16 tests): the
   matrix rows, both entry modes (manual per occupancy · primary-plus-offsets), and the mixed-cap
   rule. ⚠️ **That rule is the OPPOSITE of `planCeiling` on purpose** — render to the HIGHEST cap and
   skip per room, because this edits a matrix across rooms rather than defining one plan. Offsets
-  compound **per step from the primary**, which is what "each extra guest" means. The panel UI
-  remains.
+  compound **per step from the primary**, which is what "each extra guest" means. The panel swaps
+  its single Price control for the matrix under per-person — replaced, not added beside, so a scalar
+  and a matrix can never both be sent. Skips are named in the preview AND in the result.
 - ☑ **H5** Calendar per-occupancy display — **shipped.** The cell keeps ONE number (the primary,
   resolved by `resolveRate` so it cannot disagree with the quote or the push) plus a badge showing
   how many guest counts are priced; the rest are a click away. Deliberately **not** N permanent rows

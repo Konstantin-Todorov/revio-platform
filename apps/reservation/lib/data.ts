@@ -898,7 +898,13 @@ export async function getRatesData() {
     }),
     prisma.restrictionRule.findMany({ where: { propertyId: property.id }, orderBy: [{ active: "desc" }, { dateFrom: "asc" }] }),
     prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
-    prisma.roomType.findMany({ where: { propertyId: property.id, active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true, code: true } }),
+    // maxGuests + defaultOccupancy: the bulk occupancy matrix renders rows to the highest cap in the
+    // selection and skips per room, so it needs both.
+    prisma.roomType.findMany({
+      where: { propertyId: property.id, active: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, code: true, maxGuests: true, defaultOccupancy: true },
+    }),
     prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" }, select: { code: true, name: true } }),
   ]);
   return { property, ratePlans, rules, defaults, roomTypes, channels };
