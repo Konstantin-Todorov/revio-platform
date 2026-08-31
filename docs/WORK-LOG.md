@@ -27,6 +27,15 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · CLAIMED · OBP H4 — bulk occupancy matrix
+**The Price control becomes a matrix; two entry modes; mixed caps handled.**
+Files: `packages/core/src/rates/bulk-occupancy.ts` (new + tests),
+`apps/reservation/components/rates/CrsBulkPanel.tsx`, `apps/reservation/lib/actions-rates.ts`
+Notes: ⚠️ **The mixed-cap rule is the OPPOSITE of the plan-level one, on purpose.** §6.4: render rows
+to the HIGHEST cap across the selected room types and SKIP occupancies exceeding a given room's max
+when applying — never send occupancy 4 to a 2-cap room. `planCeiling` takes the smallest because it
+DEFINES a plan; this edits a matrix across rooms. Both are right; they answer different questions.
+
 ### 2026-08-31 · Claude · DONE · OBP H5 — per-occupancy calendar display
 **The Inventory Calendar shows the primary rate with an expand, not N permanent rows.**
 Files: `apps/reservation/lib/data.ts` (`getInventoryBoard`), `apps/reservation/components/inventory/**`
