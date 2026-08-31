@@ -905,7 +905,14 @@ export async function getRatesData() {
   const [ratePlans, rules, defaults, roomTypes, channels] = await Promise.all([
     prisma.ratePlan.findMany({
       where: { propertyId: property.id },
-      include: { parent: { select: { name: true } }, mealPlan: { select: { name: true } }, cancellationPolicy: { select: { name: true, code: true } }, _count: { select: { roomTypeLinks: true } } },
+      include: {
+        parent: { select: { name: true } }, mealPlan: { select: { name: true } },
+        cancellationPolicy: { select: { name: true, code: true } },
+        _count: { select: { roomTypeLinks: true } },
+        // The linked rooms' caps: a plan cannot be primed above the smallest room it sells, and the
+        // per-plan pricing board has to show that ceiling rather than let it be discovered on save.
+        roomTypeLinks: { select: { roomType: { select: { maxGuests: true, defaultOccupancy: true } } } },
+      },
       orderBy: { sortOrder: "asc" },
     }),
     prisma.restrictionRule.findMany({ where: { propertyId: property.id }, orderBy: [{ active: "desc" }, { dateFrom: "asc" }] }),

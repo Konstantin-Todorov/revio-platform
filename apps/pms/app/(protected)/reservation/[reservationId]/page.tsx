@@ -2,11 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft, Receipt, ArrowRightLeft, LogIn, DoorOpen, Building2, Tag, CreditCard,
-  ShieldCheck, Utensils, CircleDot, PlusCircle, KeyRound, LogOut, Ban, Sparkles, RotateCcw,
+  ShieldCheck, Utensils, CircleDot, PlusCircle, KeyRound, LogOut, Ban, Sparkles, RotateCcw, Users,
 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getReservationDetail, type TimelineEvent, type StayState } from "@/lib/folio";
-import { checkOut, reopenStay } from "@/lib/actions-frontdesk";
+import { checkOut, reopenStay, changeStayOccupancy } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
 
@@ -50,8 +50,11 @@ function fmtTime(d: Date): string {
   return d.toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
-export default async function ReservationViewPage({ params }: { params: Promise<{ reservationId: string }> }) {
+export default async function ReservationViewPage({
+  params, searchParams,
+}: { params: Promise<{ reservationId: string }>; searchParams: Promise<{ error?: string }> }) {
   const { reservationId } = await params;
+  const { error } = await searchParams;
   const data = await getReservationDetail(reservationId);
   if (!data) notFound();
   const { guestName, commercial: c, operational: o, events, isManager } = data;
@@ -77,6 +80,13 @@ export default async function ReservationViewPage({ params }: { params: Promise<
         One shared record, two phases — the commercial fields below were written by RevioCRS / the channel at
         booking; the PMS extends the same record operationally. It is never a synced copy.
       </p>
+
+      {error === "occupancy" && (
+        <div className="mb-4 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3 text-[13px] font-medium text-warning-700">
+          That guest count doesn’t fit the room. A room that sleeps two can’t be sold to three — move the
+          stay to a larger room type first.
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Commercial zone — read-only, from the CRS */}
@@ -117,6 +127,38 @@ export default async function ReservationViewPage({ params }: { params: Promise<
               </dd>
             </div>
             <Field icon={CircleDot} label="Stay state">{state.label}</Field>
+            <div className="col-span-2 border-t border-surface-border/60 pt-3">
+              <dt className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                <Users className="h-3.5 w-3.5" /> Guests in the room
+              </dt>
+              {/*
+                * Editable, and deliberately so: under a per-person rate the party size IS the price,
+                * so a party that turns up larger than the booking has to be correctable at the desk.
+                * Nights already past are left alone — the change prices forward from today.
+                */}
+              <dd className="mt-1.5 space-y-1.5">
+                {o.stayLines.map((l) => (
+                  <form key={l.id} action={changeStayOccupancy} className="flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="reservationId" value={reservationId} />
+                    <input type="hidden" name="lineId" value={l.id} />
+                    <span className="text-[12.5px] text-ink-600">{l.roomTypeName}</span>
+                    <input
+                      name="occupancy" type="number" min={1} max={l.maxGuests}
+                      defaultValue={l.guestsCount ?? 1}
+                      className="tnum w-16 rounded-md border border-surface-border bg-surface px-2 py-1 text-[13px] font-semibold text-ink-900"
+                    />
+                    <span className="text-[11.5px] text-ink-400">of {l.maxGuests} max</span>
+                    <button type="submit" className="rounded-md border border-surface-border px-2.5 py-1 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
+                      Update
+                    </button>
+                  </form>
+                ))}
+              </dd>
+              <p className="mt-1.5 text-[11px] text-ink-400">
+                Changing this reprices the remaining nights on a per-person rate. Nights already stayed keep
+                what they were sold at.
+              </p>
+            </div>
             <Field icon={Receipt} label="Folio balance">
               {o.balance ? <span className={o.balance.balance === 0 ? "text-success-600" : "text-ink-900"}>{money(o.balance.balance, o.currency)}</span> : <span className="text-ink-400">No folio yet</span>}
             </Field>

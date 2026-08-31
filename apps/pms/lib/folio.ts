@@ -220,7 +220,7 @@ export async function getReservationDetail(reservationId: string) {
       guest: true,
       channel: { select: { name: true } },
       bookingSource: { select: { name: true } },
-      lines: { include: { roomType: { select: { name: true } }, ratePlan: { select: { name: true, cancellationPolicy: { select: { name: true } }, mealPlan: { select: { name: true } } } } } },
+      lines: { include: { roomType: { select: { name: true, maxGuests: true } }, ratePlan: { select: { name: true, cancellationPolicy: { select: { name: true } }, mealPlan: { select: { name: true } } } } } },
       assignments: { include: { unit: { select: { label: true, floor: true, hkStatus: true } } }, orderBy: { createdAt: "asc" } },
       folios: { include: { lines: { orderBy: { postedAt: "asc" } } }, orderBy: [{ isPrimary: "desc" }, { openedAt: "asc" }] },
     },
@@ -292,6 +292,19 @@ export async function getReservationDetail(reservationId: string) {
       notes: r.notes,
     },
     operational: {
+      /**
+       * The stay's own lines, so the guest count can be corrected here (OBP §5.4).
+       *
+       * A party that arrives as three when the booking said two changes the price under a
+       * per-person plan, and the correction has to happen where the receptionist is standing —
+       * not by cancelling and rebooking.
+       */
+      stayLines: r.lines.map((l) => ({
+        id: l.id,
+        roomTypeName: l.roomType.name,
+        guestsCount: l.guestsCount,
+        maxGuests: l.roomType.maxGuests,
+      })),
       stayState,
       departedAt: r.departedAt,
       dueOut: co ? ymd(co) === today : false,

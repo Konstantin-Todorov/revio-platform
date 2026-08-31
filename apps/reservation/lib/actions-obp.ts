@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   planPricingModelSwitch, describeSwitch, validateOptions, describeProblem,
-  effectiveModel, effectivePrimary, planCeiling, MAX_OCCUPANCY,
+  effectiveModel, effectivePrimary, planCeiling,
   type PlanToSwitch, type PricingModel, type SeedMode,
 } from "@revio/core";
 import { withTenantTransaction } from "@revio/db";
@@ -197,27 +197,15 @@ export async function applyPricingModel(fd: FormData): Promise<void> {
   revalidatePath("/inventory");
 }
 
-/** The display preference and age bands — configuration, no rate data touched. */
-export async function saveObpDisplay(fd: FormData): Promise<void> {
-  await requireCapability("manageRates");
-  const property = await getProperty();
-
-  const display = str(fd, "occupancyDisplay") === "all" ? "all" : "primary_expand";
-  const infant = clampInt(str(fd, "ageInfantMax"), 0, 17, 2);
-  // A child band below the infant band would make the two overlap and every fee ambiguous.
-  const child = clampInt(str(fd, "ageChildMax"), infant + 1, 17, Math.max(infant + 1, 11));
-
-  await prisma.propertyDefaults.upsert({
-    where: { propertyId: property.id },
-    create: {
-      tenantId: property.tenantId, propertyId: property.id,
-      occupancyDisplay: display, ageInfantMax: infant, ageChildMax: child,
-    },
-    update: { occupancyDisplay: display, ageInfantMax: infant, ageChildMax: child },
-  });
-
-  revalidatePath("/settings");
-}
+/*
+ * `saveObpDisplay` lived here: the occupancy display preference and the infant/child age bands.
+ *
+ * It was removed because nothing read what it wrote. The age bands belong to the children/infants
+ * axis (H14), which the spec defers, and `occupancyDisplay: "all"` would expand the inventory grid
+ * to one rate row per occupancy per plan — the exact thing OBP §6.5 says must not happen to a screen
+ * whose job is a month at a glance. A settings toggle that changes nothing is worse than no toggle.
+ * The columns stay on PropertyDefaults for H14 to pick up.
+ */
 
 /**
  * A single plan's override — Channex sets `sell_mode` per rate plan, so a hotel can legitimately run
@@ -309,29 +297,8 @@ export async function saveRatePlanOccupancy(fd: FormData): Promise<ObpResult> {
   };
 }
 
-/** Which occupancy is primary for a room type — the suggested primary for its plans. */
-export async function saveRoomDefaultOccupancy(fd: FormData): Promise<void> {
-  await requireCapability("manageRates");
-  const property = await getProperty();
-  const roomTypeId = str(fd, "roomTypeId");
-
-  const room = await prisma.roomType.findFirst({ where: { id: roomTypeId, propertyId: property.id } });
-  if (!room) return;
-
-  const raw = Number(str(fd, "defaultOccupancy"));
-  // Above the ceiling is not a default, it is an unreachable one. Clamped rather than refused —
-  // this is a suggestion for plans, not a rate.
-  const value = Number.isFinite(raw) && raw > 0
-    ? Math.min(Math.max(1, Math.round(raw)), Math.min(room.maxGuests, MAX_OCCUPANCY))
-    : null;
-
-  await prisma.roomType.update({ where: { id: roomTypeId }, data: { defaultOccupancy: value } });
-  revalidatePath("/rooms-rates");
-  revalidatePath("/settings");
-}
-
-function clampInt(v: string, lo: number, hi: number, fallback: number): number {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.min(Math.max(lo, Math.round(n)), hi);
-}
+/*
+ * `saveRoomDefaultOccupancy` lived here. A room type's standard occupancy is now a field on the
+ * room type form itself (`saveRoomType`) rather than a second action against the same row — one
+ * form, one save, and no way to edit a room and silently leave its occupancy behind.
+ */

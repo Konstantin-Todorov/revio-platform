@@ -6,6 +6,7 @@ import { deleteInventoryPeriod } from "@/lib/actions-inventory";
 import { RatePlanDialog } from "@/components/rates/RatePlanDialog";
 import { RoomTypeDialog } from "@/components/rates/RoomTypeDialog";
 import { RatePlanLinkageBoard } from "@/components/rates/RatePlanLinkageBoard";
+import { RatePlanPricingBoard } from "@/components/rates/RatePlanPricingBoard";
 import { PhotoGallery } from "@/components/rates/PhotoGallery";
 import { PeriodDialog } from "@/components/inventory/PeriodDialog";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -35,7 +36,7 @@ function restrictionLabel(rp: { defMinLos: number | null; defMaxLos: number | nu
  * surfaces, never two tables that sync. */
 export default async function RoomsRatesPage({ searchParams }: { searchParams: Promise<{ blocked?: string }> }) {
   const { blocked } = await searchParams;
-  const [{ property, ratePlans }, { roomTypes, periods, todayIso }, store] = await Promise.all([
+  const [{ property, ratePlans, defaults }, { roomTypes, periods, todayIso }, store] = await Promise.all([
     getRatesData(),
     getSetupData(),
     getObjectStore(),
@@ -49,6 +50,15 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
     parentRatePlanId: rp.parentRatePlanId, parentName: rp.parent?.name ?? null,
     derivedType: rp.derivedType, derivedDirection: rp.derivedDirection, derivedValue: rp.derivedValue, derivedRounding: rp.derivedRounding,
     directChannelEnabled: rp.directChannelEnabled,
+  }));
+  const propertyModel = defaults?.pricingModel ?? "per_room";
+  const pricingPlans = ratePlans.map((rp) => ({
+    id: rp.id, name: rp.name, active: rp.active,
+    pricingModel: rp.pricingModel, primaryOccupancy: rp.primaryOccupancy,
+    // The smallest cap among the rooms it sells: a plan cannot price a party its narrowest room
+    // cannot hold, so that room — not the largest — sets the ceiling.
+    ceiling: Math.min(50, ...(rp.roomTypeLinks.length > 0 ? rp.roomTypeLinks.map((l) => Math.max(1, l.roomType.maxGuests)) : [1])),
+    roomCount: rp._count.roomTypeLinks,
   }));
   const activePeriod = (p: (typeof periods)[number]) => p.dateTo.toISOString().slice(0, 10) >= todayIso;
 
@@ -201,6 +211,14 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
           Daily prices live on the Inventory Calendar (Rate line) or Bulk Rates &amp; Availability; derived plans
           recalculate from their parent automatically.
         </p>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="How each plan prices"
+          subtitle="Per room or per person, plan by plan — a half-board rate can price per guest while a room-only rate prices per room"
+        />
+        <RatePlanPricingBoard plans={pricingPlans} propertyModel={propertyModel} />
       </Card>
 
       {/* Editable Rate Plan Linkage (CRS-REFINEMENT-R2 §6). */}

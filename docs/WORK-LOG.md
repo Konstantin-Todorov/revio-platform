@@ -27,6 +27,32 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · Four OBP actions had no UI — mixed per-room/per-person now settable
+**A tested, gated, working server action that no screen calls is not a shipped feature.**
+Files: `apps/reservation/components/rates/RatePlanPricingBoard.tsx` (new), `rooms-rates/page.tsx`,
+`RoomTypeDialog.tsx`, `apps/reservation/lib/{data,actions-rates,actions-obp}.ts`,
+`apps/pms/lib/folio.ts`, `apps/pms/app/(protected)/reservation/[reservationId]/page.tsx`
+Notes: The read/write sweep of RatePrice came back clean, so I swept the other axis — actions with
+no caller — and found four. Two were surfaced, one folded into an existing form, one deleted.
+
+- `saveRatePlanOccupancy` → **Rooms & Rates → "How each plan prices"**. This is the one that
+  mattered: Channex carries `sell_mode` on the RATE PLAN, not the property, so per-room and
+  per-person side by side is normal (half board per guest, room-only per room) and the mixture
+  pushes correctly. The capability was built and unreachable — a hotel could only choose
+  property-wide. "Follow the property" is kept distinct from an explicit choice of the same value:
+  the first tracks a later change to the default, the second does not.
+- `saveRoomDefaultOccupancy` → folded into `saveRoomType` as a field on the room form. A second
+  action against the same row is how a room gets edited with its occupancy silently left behind.
+- `changeStayOccupancy` → **PMS → the stay → Operational**. It already redirected to that page on
+  error; the page had no control and no banner for `?error=occupancy`, so the refusal was invisible.
+  Without it a party arriving larger than booked could not be corrected at the desk at all.
+- `saveObpDisplay` → **deleted**. Nothing read what it wrote: the age bands are H14 (deferred), and
+  `occupancyDisplay: "all"` would expand the grid to one rate row per occupancy per plan — what
+  §6.5 forbids. A toggle that changes nothing is worse than no toggle. Columns stay for H14.
+
+⚠️ `pnpm -s typecheck` **swallowed a real type error** and exited 0. `pnpm verify` caught it. Do not
+trust `-s` on the recursive scripts.
+
 ### 2026-08-31 · Claude · DONE · OBP write-path sweep — onboarding was writing NULL occupancy
 **Every RatePrice write audited. Four more were missing the occupancy.**
 Files: `apps/reservation/lib/actions-welcome.ts`, `apps/channel-manager/lib/actions-welcome.ts`,

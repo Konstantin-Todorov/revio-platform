@@ -9,7 +9,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 type RoomType = {
   id: string; name: string; code: string; unitKind: string;
-  totalRooms: number; maxGuests: number; description: string | null; active: boolean;
+  totalRooms: number; maxGuests: number; defaultOccupancy: number | null; description: string | null; active: boolean;
   sizeSqm: number | null; bedSetup: string | null; amenities: string[];
 };
 
@@ -53,6 +53,11 @@ export function RoomTypeDialog({ roomType }: { roomType?: RoomType }) {
             </Field>
             <Field label="Physical count" hint="The cap & safety net"><input name="totalRooms" type="number" min={0} defaultValue={roomType?.totalRooms ?? 0} className={inputCls} /></Field>
             <Field label="Max guests"><input name="maxGuests" type="number" min={1} defaultValue={roomType?.maxGuests ?? 2} className={inputCls} /></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Normally sold to" hint="Guests in a typical booking — the party size a per-person price is quoted at. Blank uses the max.">
+              <input name="defaultOccupancy" type="number" min={1} defaultValue={roomType?.defaultOccupancy ?? ""} className={inputCls} placeholder="—" />
+            </Field>
           </div>
           <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
             <input type="checkbox" name="active" defaultChecked={roomType?.active ?? true} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Active (sellable)

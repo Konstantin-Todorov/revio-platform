@@ -679,6 +679,15 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   const totalRooms = Math.max(0, int(fd, "totalRooms"));
   const maxGuests = Math.max(1, int(fd, "maxGuests", 1));
   const unitKind = str(fd, "unitKind") || "room";
+  /**
+   * The party size this room is normally sold at — the suggested primary for its rate plans (OBP §4.2).
+   *
+   * Above the cap is not a default, it is an unreachable one, so it is clamped rather than refused:
+   * this is a suggestion for pricing, not a rate. Blank means "no opinion", and the resolver then
+   * falls back to the cap.
+   */
+  const defRaw = int(fd, "defaultOccupancy");
+  const defaultOccupancy = defRaw > 0 ? Math.min(defRaw, maxGuests) : null;
   const active = fd.get("active") != null;
   const description = str(fd, "description").trim() || null;
 
@@ -706,7 +715,7 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
     if (!before || before.propertyId !== propertyId) return { ok: false, error: "Room type not found." };
     await prisma.roomType.update({
       where: { id: rowId },
-      data: { name, code, unitKind, totalRooms, maxGuests, description, active, sizeSqm, bedSetup, amenities },
+      data: { name, code, unitKind, totalRooms, maxGuests, defaultOccupancy, description, active, sizeSqm, bedSetup, amenities },
     });
     await logAudit(propertyId, tenantId, {
       entity: `Room Type · ${name}`, field: "edit",
@@ -716,7 +725,7 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   } else {
     const count = await prisma.roomType.count({ where: { propertyId } });
     const created = await prisma.roomType.create({
-      data: { tenantId, propertyId, name, code, unitKind, totalRooms, maxGuests, description, active, sizeSqm, bedSetup, amenities, sortOrder: count },
+      data: { tenantId, propertyId, name, code, unitKind, totalRooms, maxGuests, defaultOccupancy, description, active, sizeSqm, bedSetup, amenities, sortOrder: count },
     });
     // A new room type becomes sellable under every existing rate plan (room × rate = product).
     const plans = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true } });
