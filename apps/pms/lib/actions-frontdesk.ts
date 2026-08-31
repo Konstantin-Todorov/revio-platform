@@ -542,6 +542,28 @@ export async function walkIn(fd: FormData): Promise<void> {
     },
   });
   await ensureFolio(session.tenantId, session.activePropertyId, reservation.id);
+
+  /*
+   * The register, same as any other check-in — регистър на настанените туристи (чл. 116 ЗТ).
+   *
+   * A walk-in is the case most likely to be missed and least able to afford it: the guest is
+   * standing at the desk with their document already out, and for a small property they are most of
+   * the arrivals. `checkIn` seeded the register and this path did not, which would have left every
+   * walk-in accommodated and unregistered.
+   *
+   * The name is passed already split — a walk-in is typed from the document rather than parsed out
+   * of a channel's single string, so there is nothing to guess here.
+   */
+  await seedRegisterEntries({
+    tenantId: session.tenantId,
+    propertyId: session.activePropertyId,
+    reservationId: reservation.id,
+    leadGuestId: reservation.guestId,
+    leadGuestName: `${firstName} ${lastName}`,
+    registeredAt: new Date(),
+    specs: [{ unitLabel: unit.label, floor: unit.floor, guestsCount: line.guestsCount ?? 1 }],
+  });
+
   await logAudit(session.activePropertyId, session.tenantId, { entity: "walk_in", field: unit.label, newValue: `${firstName} ${lastName} · ${nights}n`, userId: session.userId });
   await recordSync(session.activePropertyId, session.tenantId, `Availability reduced — ${roomType!.name}`, "1 room off sale (new confirmed stay)",
     stayScope([{ roomTypeId, checkIn: line.checkIn, checkOut: line.checkOut }]));

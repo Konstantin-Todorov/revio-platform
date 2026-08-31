@@ -27,6 +27,19 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · Walk-ins were accommodated and never registered
+**Found by rehearsing, not by reading. Two paths accommodate a guest; I had wired one.**
+Files: `apps/pms/lib/actions-frontdesk.ts`
+Notes: `walkIn` creates the assignment with `checkedInAt`, opens the folio — and seeded no register
+entry. For a villa the walk-in is most of the arrivals, and it is the case where the guest is
+already standing there with the document out. Swept every site that sets `checkedInAt`: only
+`checkIn` and `walkIn` accommodate anybody (the `data.ts` hit is a synthetic object for a state
+calculation), and both seed now. The walk-in passes the name already split, since it is typed off
+the document rather than parsed out of a channel's single string.
+
+⚠️ Lesson: the feature was fully tested and fully deployed with a hole in it that no test could see,
+because every test exercised the path I had thought of. **Rehearse the flows, not the functions.**
+
 ### 2026-08-31 · Claude · DONE · Guest register — slice 2, the официален образец + export
 **The заповед's prose is NOT the whole specification. The образец asks for more, and slice 1 was
 wrong because I had only read the prose.**
