@@ -51,7 +51,7 @@ export default async function ConfigurationPage() {
                 defaultValue={d?.touristTaxRateMinor != null ? (d.touristTaxRateMinor / 100).toFixed(2) : ""}
                 placeholder="e.g. 1.00" className={`${inputCls} w-full`}
               />
-              <p className="mt-1 text-[10.5px] text-ink-400">Your municipality’s rate. ЗМДТ allows 0.20–3.00 лв.</p>
+              <p className="mt-1 text-[10.5px] text-ink-400">The rate your municipal council set, per night.</p>
             </div>
             <div>
               <label className={labelCls}>Declared beds <span className="text-ink-400">(легла)</span></label>

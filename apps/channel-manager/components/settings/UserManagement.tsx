@@ -83,7 +83,7 @@ export function AddPropertyDialog({ canManage }: { canManage: boolean }) {
         <form action={formAction} className="space-y-3.5">
           <Field label="Property name"><input name="name" required className={inputCls} placeholder="Grand Marina — Varna" /></Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Base currency"><select name="baseCurrency" defaultValue="EUR" className={inputCls}>{["EUR", "USD", "GBP", "BGN"].map((c) => <option key={c}>{c}</option>)}</select></Field>
+            <Field label="Base currency"><select name="baseCurrency" defaultValue="EUR" className={inputCls}>{["EUR", "USD", "GBP"].map((c) => <option key={c}>{c}</option>)}</select></Field>
             <Field label="Time zone"><input name="timezone" defaultValue="Europe/Sofia" className={inputCls} /></Field>
           </div>
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}

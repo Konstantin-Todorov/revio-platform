@@ -105,7 +105,6 @@ export function PropertyFields({ values }: { values: PropertyFieldValues }) {
             <span className={welcomeLabel}>Currency</span>
             <select name="baseCurrency" defaultValue={values.baseCurrency} className={welcomeInput}>
               <option value="EUR">EUR — Euro</option>
-              <option value="BGN">BGN — Bulgarian lev</option>
               <option value="USD">USD — US dollar</option>
               <option value="GBP">GBP — Pound sterling</option>
               <option value="RON">RON — Romanian leu</option>

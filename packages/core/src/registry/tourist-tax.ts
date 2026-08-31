@@ -13,9 +13,19 @@
  * arithmetic on their own nights, to be checked by whoever does their books.
  */
 
-/** чл. 61с ал. 1 — the municipal council sets the rate per нощувка within this band. */
-export const STATUTORY_RATE_MIN_MINOR = 20;
-export const STATUTORY_RATE_MAX_MINOR = 300;
+/*
+ * There is deliberately NO statutory rate band constant here.
+ *
+ * чл. 61с ал. 1 states one, and it was written in лева: 0.20 to 3.00. Bulgaria is on the euro, and
+ * I could not establish from the published sources what those figures became on redenomination —
+ * what turned up was a PROPOSAL to raise the ceiling, which is not law. So the band is not asserted
+ * anywhere, in code or on screen.
+ *
+ * Nothing was validating against it in any case, which made it a claim about the law that no
+ * behaviour depended on — exactly the shape of the fiscalization note that was wrong for a month.
+ * The hotel enters the rate its own council set, in its own currency, and that is the only figure
+ * that is certainly right.
+ */
 
 /** чл. 61с ал. 4 — the annual floor is assessed at 30% occupancy of the bed base. */
 export const ANNUAL_OCCUPANCY_FLOOR = 0.3;

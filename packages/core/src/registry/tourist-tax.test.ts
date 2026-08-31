@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   monthlyTouristTax, annualTouristTaxFloor, daysInYear, estimateBeds, nightsInMonth,
   monthlyTaxDueDate, annualDeclarationDueDate, annualTopUpDueDate,
-  STATUTORY_RATE_MIN_MINOR, STATUTORY_RATE_MAX_MINOR, ANNUAL_OCCUPANCY_FLOOR,
+  ANNUAL_OCCUPANCY_FLOOR,
 } from "./tourist-tax.js";
 
 describe("monthlyTouristTax — чл. 61с ал. 2", () => {
@@ -15,10 +15,6 @@ describe("monthlyTouristTax — чл. 61с ал. 2", () => {
   });
   it("never goes negative on nonsense input", () => {
     expect(monthlyTouristTax(-5, 100)).toBe(0);
-  });
-  it("holds the statutory band the council chooses within", () => {
-    expect(STATUTORY_RATE_MIN_MINOR).toBe(20);
-    expect(STATUTORY_RATE_MAX_MINOR).toBe(300);
   });
 });
 

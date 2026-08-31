@@ -87,7 +87,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           <p className="px-4 py-5 text-[13px] text-ink-500">
             Your municipality’s rate per night isn’t set yet, so there is nothing to total.
             Add it in <Link href="/configuration" className="font-semibold text-accent-600 hover:underline">Configuration</Link> —
-            each council sets its own, between 0.20 and 3.00 лв, by settlement and category.
+            each council sets its own, by settlement and by category.
           </p>
         ) : (
           <div className="grid gap-px bg-surface-border sm:grid-cols-3">

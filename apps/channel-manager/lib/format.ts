@@ -1,3 +1,5 @@
+// BGN stays here although it is no longer offered as a choice: Bulgaria is on the euro, but a
+// historical row denominated in лева must still render as лева rather than as a bare number.
 const SYMBOLS: Record<string, string> = { EUR: "€", USD: "$", GBP: "£", BGN: "лв" };
 
 export function money(minor: number, currency = "EUR"): string {

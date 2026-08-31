@@ -27,6 +27,23 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · Bulgaria is on the euro — лв removed from choices and claims
+**Confirmed by the founder.** Files: `packages/core/src/registry/tourist-tax.ts`,
+`packages/ui/src/welcome-fields.tsx`, `apps/channel-manager/components/settings/*`,
+`apps/pms/app/(protected)/{configuration,register}/page.tsx`, three `format.ts`
+
+- **BGN removed from every currency PICKER.** Offering it to a new Bulgarian hotel is a trap they
+  would only discover after pricing a season in a currency that no longer circulates. Verified 0
+  rows anywhere use BGN before removing it.
+- **BGN kept in the symbol maps**, with a comment. A currency stops being offered long before the
+  last record denominated in it stops existing, and a historical row must not render as a bare number.
+- ⚠️ **The statutory rate band is now asserted NOWHERE.** чл. 61с ал. 1 states 0.20–3.00, written in
+  лева. I could not establish from published sources what those became on redenomination — what
+  turned up was a *proposal* to raise the ceiling, which is not law. Nothing validated against the
+  constants anyway, so they were a claim about the law that no behaviour depended on: the exact
+  shape of the fiscalization note that was wrong for a month. Removed from the code and from both
+  screens. The hotel enters the rate its own council set.
+
 ### 2026-08-31 · Claude · DONE · Silent failures — a mechanism, 29 fixes, and a ratchet
 **134 early `return;`s across 82 void server actions. A button pressed, nothing happens, no reason.**
 Files: `packages/ui/src/{flash.ts,flash-toast.tsx}` (new), all four protected layouts,

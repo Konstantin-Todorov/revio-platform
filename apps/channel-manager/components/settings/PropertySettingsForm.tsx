@@ -10,7 +10,9 @@ type Property = {
   checkInTime: string; checkOutTime: string; contactEmail: string | null; phone: string | null;
 };
 
-const CURRENCIES = ["EUR", "USD", "GBP", "BGN"];
+// No BGN: Bulgaria is on the euro. Old rows still RENDER as лв (see format.ts) — a currency can
+// stop being offered long before the last record in it stops existing.
+const CURRENCIES = ["EUR", "USD", "GBP"];
 
 export function PropertySettingsForm({ property }: { property: Property }) {
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(savePropertySettings, null);
