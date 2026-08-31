@@ -171,8 +171,12 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   across CRS and Link — each resolves occupancy through `occupancyKeysFor`, hoisted out of every
   bulk loop. Migration proven: full chain applies clean, rename keeps its RLS policy, backfill sets
   existing rows to the room's max.
-- ☐ **H2** Settings — property default + per-plan override, seed modes, display pref, age policy
-  scaffold, CM capability flag. *(§6.2)*
+- ◐ **H2** Settings — **property toggle shipped.** Preview and apply share
+  `planPricingModelSwitch`, so the confirmation is computed by the code that performs it; one
+  `withTenantTransaction`, because half a switch leaves some plans per-person and some per-room with
+  nothing recording which. Seed mode and the safety sentence ("your current price stays on the
+  primary occupancy") are on the screen. Per-plan override + room `defaultOccupancy` exist as gated
+  actions; their Rooms & Rates surfaces land with H4/H5.
 - ☑ **H3** Channex sync — **done.** Mapper (`channex-occupancy.ts`, 19 tests): the two rate shapes
   (`rate` scalar vs a `rates[]` array in ONE object), `options[]`, `derived_option`, `rate_mode`
   incl. **cascade**, and degradation to the primary for single-rate channels — **wired into

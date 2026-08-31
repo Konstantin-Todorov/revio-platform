@@ -10,6 +10,7 @@ import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primit
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { StaffManagement, type StaffRow } from "@/components/settings/StaffManagement";
 import { money } from "@/lib/format";
+import { PricingModelCard } from "@/components/settings/PricingModelCard";
 import { TwoFactorSetup } from "@revio/ui/two-factor-setup";
 import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor } from "@/lib/actions-2fa";
 import { userRequiresSecondFactor } from "@revio/db";
@@ -257,6 +258,20 @@ export default async function SettingsPage() {
         </p>
       </Card>
     
+
+      {/* Occupancy-based pricing (§6.2). Above the tax card because it decides the SHAPE of every
+          rate, and somebody reading this page top to bottom should meet that before the details. */}
+      <Card>
+        <CardHeader
+          title="How you price rooms"
+          subtitle="One price per room, or a price for each number of guests"
+        />
+        <PricingModelCard
+          current={(defaults?.pricingModel as "per_room" | "per_person") ?? "per_room"}
+          seedMode={(defaults?.occupancySeedMode as "copy" | "derive") ?? "copy"}
+        />
+      </Card>
+
       {/* One account across RevioLink, RevioCRS and RevioPMS — so this card appears in all three and
           protects the same person wherever they turned it on. A hotel that only bought one product
           must still have somewhere to enable it. */}
