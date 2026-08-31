@@ -27,6 +27,17 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · OBP write-path sweep — onboarding was writing NULL occupancy
+**Every RatePrice write audited. Four more were missing the occupancy.**
+Files: `apps/reservation/lib/actions-welcome.ts`, `apps/channel-manager/lib/actions-welcome.ts`,
+`packages/db/prisma/seed.ts`, `packages/db/scripts/cert-property.ts`
+Notes: ⚠️ **Both onboarding flows wrote rate rows with no occupancy at all** — so a hotel onboarding
+after the OBP migration set a price and saw "—" on every calendar cell, because `resolveRate` asks
+for a specific occupancy and a NULL row matches none. `skipDuplicates` would not have deduped a
+retry either: NULL is not equal to itself in a unique index. **This was on the villa's path.**
+Onboarding now also creates the plan's `RatePlanOccupancy` row, so a date beyond the 180-night
+window falls back to the plan's own price instead of resolving null.
+
 ### 2026-08-31 · Claude · DONE · OBP bug sweep — five bugs I introduced
 **Adding a dimension to a key broke every reader that assumed one row.**
 Files: `apps/pms/lib/actions-frontdesk.ts`, `apps/pms/lib/move-reconciliation.ts`,

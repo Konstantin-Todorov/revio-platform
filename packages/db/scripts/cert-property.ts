@@ -79,7 +79,9 @@ async function main() {
     const date = ymd(i);
     const weekend = [5, 6].includes(date.getUTCDay());
     for (const { plan, room, base } of plans) {
-      priceRows.push({ ...p, roomTypeId: room.id, ratePlanId: plan.id, date, priceMinor: base + (weekend ? 2000 : 0) });
+      // Occupancy is part of the RatePrice key since OBP; both cert rooms sleep 2, and a per-room
+      // price lives at the room's ceiling.
+      priceRows.push({ ...p, roomTypeId: room.id, ratePlanId: plan.id, date, occupancy: room.maxGuests, priceMinor: base + (weekend ? 2000 : 0) });
     }
   }
   await prisma.ratePrice.createMany({ data: priceRows.map((r) => ({ ...r, source: "seed" })) });

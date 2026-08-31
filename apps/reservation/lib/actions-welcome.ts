@@ -144,13 +144,32 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
     where: { propertyId: property.id, active: true },
     orderBy: { sortOrder: "asc" },
   });
-  const roomTypes = await prisma.roomType.findMany({ where: { propertyId: property.id }, select: { id: true } });
+  /*
+   * ⚠️ Occupancy is REQUIRED on every write, and this is where that was missed.
+   *
+   * `RatePrice` is keyed by (room, plan, date, occupancy) since OBP. These rows were written with no
+   * occupancy at all, which meant a brand-new hotel finished onboarding, set a price, and saw "—"
+   * on every calendar cell: `resolveRate` looks up a specific occupancy and a NULL row matches
+   * nothing. Worse, NULL is not equal to itself in a unique index, so `skipDuplicates` would not
+   * even dedupe a second run.
+   *
+   * Written at the room's ceiling — the one-row per-room shape, and where the migration backfilled
+   * every existing row.
+   */
+  const roomTypes = await prisma.roomType.findMany({
+    where: { propertyId: property.id },
+    select: { id: true, maxGuests: true, defaultOccupancy: true },
+  });
   if (!plan || roomTypes.length === 0) return { error: "Add a room type first." };
 
   const DAYS = 180;
   const today = new Date();
-  const rows: { tenantId: string; propertyId: string; ratePlanId: string; roomTypeId: string; date: Date; priceMinor: number }[] = [];
+  const rows: {
+    tenantId: string; propertyId: string; ratePlanId: string; roomTypeId: string;
+    date: Date; occupancy: number; priceMinor: number;
+  }[] = [];
   for (const rt of roomTypes) {
+    const occupancy = Math.max(1, rt.maxGuests);
     for (let d = 0; d < DAYS; d++) {
       const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + d));
       rows.push({
@@ -159,11 +178,31 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
         ratePlanId: plan.id,
         roomTypeId: rt.id,
         date,
+        occupancy,
         priceMinor,
       });
     }
   }
   await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
+
+  /*
+   * And the plan needs its occupancy option, or it has no default price to fall back on.
+   *
+   * A plan created by provisioning has none — the H13 backfill only covered plans that existed when
+   * it ran. Without this a date outside the 180-night window prices as null rather than falling back
+   * to the plan's own rate.
+   */
+  for (const rt of roomTypes) {
+    const occupancy = Math.max(1, rt.maxGuests);
+    await prisma.ratePlanOccupancy.upsert({
+      where: { ratePlanId_occupancy: { ratePlanId: plan.id, occupancy } },
+      create: {
+        tenantId: session.tenantId, ratePlanId: plan.id, occupancy,
+        isPrimary: true, mode: "manual", rateMinor: priceMinor, rounding: "none",
+      },
+      update: { rateMinor: priceMinor },
+    });
+  }
 
   revalidatePath("/calendar");
   return advance("prices");

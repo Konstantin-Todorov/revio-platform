@@ -174,15 +174,28 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
     where: { propertyId: property.id, active: true },
     orderBy: { sortOrder: "asc" },
   });
-  const roomTypes = await prisma.roomType.findMany({ where: { propertyId: property.id }, select: { id: true } });
+  /*
+   * ⚠️ Occupancy is required on every RatePrice write since OBP — see the same note in RevioCRS's
+   * `actions-welcome.ts`. Written without it, a brand-new hotel finished onboarding and saw "—" on
+   * every calendar cell, because `resolveRate` asks for a specific occupancy and a NULL row matches
+   * none. Written at the room's ceiling: the per-room one-row shape.
+   */
+  const roomTypes = await prisma.roomType.findMany({
+    where: { propertyId: property.id },
+    select: { id: true, maxGuests: true },
+  });
   if (!plan || roomTypes.length === 0) return { error: "Add a room type first." };
 
   // 180 days is a season, not the full 500-day horizon: enough to be sellable today, small enough
   // that a number typed in thirty seconds is not committed two years out.
   const DAYS = 180;
   const today = new Date();
-  const rows: { tenantId: string; propertyId: string; ratePlanId: string; roomTypeId: string; date: Date; priceMinor: number }[] = [];
+  const rows: {
+    tenantId: string; propertyId: string; ratePlanId: string; roomTypeId: string;
+    date: Date; occupancy: number; priceMinor: number;
+  }[] = [];
   for (const rt of roomTypes) {
+    const occupancy = Math.max(1, rt.maxGuests);
     for (let d = 0; d < DAYS; d++) {
       const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + d));
       rows.push({
@@ -191,11 +204,25 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
         ratePlanId: plan.id,
         roomTypeId: rt.id,
         date,
+        occupancy,
         priceMinor,
       });
     }
   }
   await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
+
+  // The plan's own default price, so a date beyond the 180-night window still resolves.
+  for (const rt of roomTypes) {
+    const occupancy = Math.max(1, rt.maxGuests);
+    await prisma.ratePlanOccupancy.upsert({
+      where: { ratePlanId_occupancy: { ratePlanId: plan.id, occupancy } },
+      create: {
+        tenantId: session.tenantId, ratePlanId: plan.id, occupancy,
+        isPrimary: true, mode: "manual", rateMinor: priceMinor, rounding: "none",
+      },
+      update: { rateMinor: priceMinor },
+    });
+  }
 
   revalidatePath("/calendar");
   return advance("prices");

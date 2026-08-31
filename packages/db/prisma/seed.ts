@@ -255,7 +255,7 @@ async function main() {
   const ddrWeekAvail = [12, 12, 10, 8, 6, 6, 8];
   const ddrWeekMinLos = [1, 1, 2, 2, 2, 2, 1];
 
-  const priceRows: { tenantId: string; propertyId: string; roomTypeId: string; ratePlanId: string; date: Date; priceMinor: number }[] = [];
+  const priceRows: { tenantId: string; propertyId: string; roomTypeId: string; ratePlanId: string; date: Date; occupancy: number; priceMinor: number }[] = [];
   const cellRows: any[] = [];
 
   for (const rt of roomTypes) {
@@ -272,7 +272,9 @@ async function main() {
       if (isDdrThisWeek) price = ddrWeekPrice[weekIdx]!;
 
       // Store only the Standard (manual) price; derived computed on read.
-      priceRows.push({ ...t, roomTypeId: rt.id, ratePlanId: standard.id, date: d, priceMinor: price });
+      // Occupancy is part of the RatePrice key since OBP. Per-room lives at the room's ceiling —
+      // the same place the migration backfilled every existing row and where `resolveRate` looks.
+      priceRows.push({ ...t, roomTypeId: rt.id, ratePlanId: standard.id, date: d, occupancy: rt.maxGuests, priceMinor: price });
 
       if (isDdrThisWeek) {
         cellRows.push({
@@ -449,7 +451,8 @@ async function main() {
     { name: "Garden Bungalow", code: "GBL", unitKind: "apartment", inv: 10, max: 4, base: 22000 },
     { name: "Beach Suite", code: "BST", unitKind: "room", inv: 5, max: 3, base: 30000 },
   ];
-  const rt2: { id: string; code: string }[] = [];
+  // maxGuests carried: a RatePrice row needs the occupancy it belongs to (OBP).
+  const rt2: { id: string; code: string; maxGuests: number }[] = [];
   for (let i = 0; i < rt2spec.length; i++) {
     const s = rt2spec[i]!;
     rt2.push(await prisma.roomType.create({ data: { ...t2, name: s.name, code: s.code, unitKind: s.unitKind, totalRooms: s.inv, maxGuests: s.max, sortOrder: i } }));
@@ -477,7 +480,7 @@ async function main() {
     for (let i = 0; i < 60; i++) {
       const d = addDays(horizonStart, i);
       const weekend = d.getUTCDay() === 5 || d.getUTCDay() === 6;
-      prices2.push({ ...t2, roomTypeId: rt.id, ratePlanId: std2.id, date: d, priceMinor: Math.round((base * (weekend ? 1.2 : 1)) / 100) * 100 });
+      prices2.push({ ...t2, roomTypeId: rt.id, ratePlanId: std2.id, date: d, occupancy: rt.maxGuests, priceMinor: Math.round((base * (weekend ? 1.2 : 1)) / 100) * 100 });
     }
   }
   await prisma.ratePrice.createMany({ data: prices2.map((r) => ({ ...r, source: "seed" })) });
