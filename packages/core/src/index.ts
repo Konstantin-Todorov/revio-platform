@@ -52,3 +52,4 @@ export * from "./rates/authorship.js";
 export * from "./registry/tourist-register.js";
 export * from "./registry/countries.js";
 export * from "./registry/tourist-tax.js";
+export * from "./export/xlsx.js";

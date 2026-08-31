@@ -61,9 +61,15 @@ export default async function ReportsPage({
         title="Analytics"
         subtitle={`${isGroup ? scope.label : property.name} · occupancy, rate and revenue for the period you choose`}
         action={
-          <a href={`/api/reports/export?${qs}`} className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-            <Download className="h-3.5 w-3.5" /> Export CSV
-          </a>
+          <div className="flex items-center gap-2">
+            <a href={`/api/reports/export?${qs}`} className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+              <Download className="h-3.5 w-3.5" /> Export Excel
+            </a>
+            {/* CSV kept as the second option: it opens anywhere, and some people genuinely want it. */}
+            <a href={`/api/reports/export?${qs}&format=csv`} className="flex h-8 items-center rounded-md border border-surface-border px-2.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
+              CSV
+            </a>
+          </div>
         }
       />
 

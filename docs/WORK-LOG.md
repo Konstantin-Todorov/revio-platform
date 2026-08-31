@@ -27,6 +27,30 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-09-01 · Claude · DONE · Excel export — a 200-line .xlsx writer, no dependency
+Files: `packages/core/src/export/xlsx.ts` (new, 20 tests), `packages/core/src/registry/tourist-register.ts`,
+`apps/pms/app/api/register/export/route.ts`, `apps/reservation/app/api/reports/export/route.ts`, both screens
+Notes: **`xlsx`/SheetJS and `exceljs` both pull a large transitive tree** into a codebase that has
+stayed dependency-light, for the 5% of a spreadsheet writer this platform needs. Wrote that 5%:
+typed cells, a bold header, nothing else. STORED (uncompressed) ZIP — a month of a register is tens
+of KB, so deflate buys nothing and costs a zlib round trip and a class of bug.
+
+**Validated with an independent implementation**, not only my own tests: Python's `zipfile` verifies
+the CRC of all 7 members (integrity OK), every part parses as XML, numbers arrive typed (`120.5`,
+`0`) and Cyrillic survives.
+
+Why it matters beyond "Excel is nicer":
+- **ЕСТИ publishes an Excel образец** and the register is filed against it. `.xlsx` is now the
+  default there and CSV the second button — and it settles the encoding question outright, since an
+  `.xlsx` carries UTF-8 in its parts and has no BOM to forget.
+- **A CSV of money opened in a comma-decimal locale arrives as text or as a different number.** A
+  typed cell cannot be reinterpreted by a locale.
+
+Details worth keeping: the DOS timestamp is **fixed at 1 Jan 1980** so two identical exports are
+byte-identical and therefore diffable and testable; `0` is written, not dropped (it is falsy, and an
+obvious emptiness check loses a real night count); document numbers stay **text** so `0641234567`
+keeps its leading zero, while only Рег. №, нощувки and цена become numbers.
+
 ### 2026-09-01 · Claude · DONE · Activity in RevioCRS too — and two more stale doc items closed
 Files: `packages/ui/src/activity-table.tsx` (new), `apps/reservation/lib/activity.ts` (new),
 `apps/reservation/app/(protected)/(property)/activity/`, both Sidebars, `BUILD-PLAN.md`

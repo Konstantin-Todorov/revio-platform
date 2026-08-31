@@ -430,3 +430,34 @@ export function splitName(raw: string): { firstName: string | null; middleName: 
     lastName: parts[parts.length - 1]!,
   };
 }
+
+/**
+ * One entry as TYPED spreadsheet cells, for the .xlsx export.
+ *
+ * Three columns become real numbers — the register number, the night count and the price — because
+ * those are quantities somebody sums. Everything else stays text, and the identity document
+ * emphatically so: `0641234567` typed as a number loses its leading zero, and a document number is
+ * a label rather than a quantity. That is the same reason the CSV is text throughout; here the risk
+ * is narrower, so the three genuine numbers are allowed to be numbers.
+ */
+export function registerRowCells(e: TouristRegisterEntry): (string | number | null)[] {
+  const row = registerRow(e);
+  const price = e.avgNightlyPriceMinor == null ? null : e.avgNightlyPriceMinor / 100;
+  return row.map((v, i) => {
+    if (i === 0) return e.registerNo;
+    if (i === 19) return e.nights;
+    if (i === 21) return price;
+    return v === "" ? null : v;
+  });
+}
+
+/** The whole register as a one-sheet workbook payload. */
+export function registerSheet(entries: readonly TouristRegisterEntry[]): {
+  name: string;
+  rows: (string | number | null)[][];
+} {
+  return {
+    name: "Настанени туристи",
+    rows: [[...REGISTER_COLUMNS], ...entries.map(registerRowCells)],
+  };
+}

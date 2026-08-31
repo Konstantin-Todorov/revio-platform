@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { registerToCsv } from "@revio/core";
+import { registerToCsv, registerSheet, buildXlsx, XLSX_CONTENT_TYPE } from "@revio/core";
 import { roleHasCapability } from "@/lib/roles";
 import { activeProperty } from "@/lib/data";
 import { getRegisterEntries } from "@/lib/register";
@@ -26,6 +26,27 @@ export async function GET(req: NextRequest) {
 
   const entries = await getRegisterEntries(property.id, property.timezone, from, to);
 
+  const stem = `registar-nastaneni-turisti-${from}-${to}`;
+
+  /*
+   * Excel by default, CSV on request.
+   *
+   * ЕСТИ publishes an Excel образец and the register is filed against it, so a workbook is the
+   * format the Ministry actually asks for. It also settles the encoding question outright: an .xlsx
+   * carries UTF-8 in its parts, so there is no BOM to remember and no locale that can turn a
+   * Cyrillic name into mojibake. CSV stays for anyone who wants it.
+   */
+  if (sp.get("format") !== "csv") {
+    const xlsx = buildXlsx([registerSheet(entries)]);
+    return new NextResponse(Buffer.from(xlsx), {
+      headers: {
+        "Content-Type": XLSX_CONTENT_TYPE,
+        "Content-Disposition": `attachment; filename="${stem}.xlsx"`,
+        "Cache-Control": "no-store, private",
+      },
+    });
+  }
+
   /*
    * A UTF-8 byte-order mark, and it is not optional.
    *
@@ -38,7 +59,7 @@ export async function GET(req: NextRequest) {
   return new NextResponse(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="registar-nastaneni-turisti-${from}-${to}.csv"`,
+      "Content-Disposition": `attachment; filename="${stem}.csv"`,
       // Never cached, anywhere. This is a file of identity documents.
       "Cache-Control": "no-store, private",
     },

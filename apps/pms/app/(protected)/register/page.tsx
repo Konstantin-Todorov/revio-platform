@@ -49,12 +49,21 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
         title="Guest register"
         subtitle="Регистър на настанените туристи · every guest who stayed the night, in the order they were registered"
         action={
-          <a
-            href={`/api/register/export?from=${from}&to=${to}`}
-            className="inline-flex items-center gap-1.5 rounded-md bg-brand-700 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-800"
-          >
-            <Download className="h-4 w-4" /> Export {label}
-          </a>
+          <div className="flex items-center gap-2">
+            <a
+              href={`/api/register/export?from=${from}&to=${to}`}
+              className="inline-flex items-center gap-1.5 rounded-md bg-brand-700 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-800"
+            >
+              <Download className="h-4 w-4" /> Export {label}
+            </a>
+            {/* Excel is the primary button because ЕСТИ publishes an Excel образец. */}
+            <a
+              href={`/api/register/export?from=${from}&to=${to}&format=csv`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-2 text-[12.5px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700"
+            >
+              CSV
+            </a>
+          </div>
         }
       />
 
@@ -200,7 +209,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           <FileSpreadsheet className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <p>
             The export has the columns of the official образец, in its order, so it can be checked against the
-            template line by line. Open it in Excel and upload it to ЕСТИ. Documents are shown here by their last
+            template line by line. It downloads as an Excel workbook — open it, check it, and upload it to ЕСТИ. The CSV button is there if you prefer one. Documents are shown here by their last
             four characters only — the full number is in the export and on the guest’s own entry.
           </p>
         </div>

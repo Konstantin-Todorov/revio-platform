@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { buildXlsx, XLSX_CONTENT_TYPE } from "@revio/core";
 import { getSession } from "@/lib/session";
 import { getInventoryBoard, getProperty, todayInTz } from "@/lib/data";
 import { getCancellationReport, getPickupReport, getProductPerformance, getProductionByDay, getRangeMetrics, resolveRange } from "@/lib/metrics";
@@ -24,41 +25,43 @@ export async function GET(req: NextRequest) {
 
   const lens = sp.get("lens") === "book" ? ("book" as const) : ("stay" as const);
 
-  let body = "";
+  // The rows, not the joined text: the same report goes out as CSV or as a workbook, and
+  // building the string first would mean rebuilding every branch to add the second format.
+  let rows: (string | number)[][] = [];
   if (report === "products") {
     const r = await getProductPerformance(range, lens);
-    body = csv([
+    rows = [
       ["product", "kind", "reservations", "room_nights", "revenue", "adr"],
       ...r.roomTypes.map((row) => [row.name, "room_type", row.reservations, row.nights, moneyCol(row.revenueMinor), moneyCol(row.adrMinor)]),
       ...r.ratePlans.map((row) => [row.name, "rate_plan", row.reservations, row.nights, moneyCol(row.revenueMinor), moneyCol(row.adrMinor)]),
-    ]);
+    ];
   } else if (report === "production") {
     const r = await getProductionByDay(range);
-    body = csv([
+    rows = [
       ["booked_on", "bookings", "room_nights", "revenue_booked", "since_cancelled"],
       ...r.rows.map((row) => [row.date, row.bookings, row.nights, moneyCol(row.revenueMinor), row.cancelled]),
-    ]);
+    ];
   } else if (report === "pickup") {
     const r = await getPickupReport();
-    body = csv([
+    rows = [
       ["stay_date", "sold_now", `sold_at_snapshot_${r.vsDate ?? "none"}`, "pickup"],
       ...r.rows.map((row) => [row.date, row.soldNow, row.soldAtSnap, row.pickup]),
-    ]);
+    ];
   } else if (report === "source") {
     const m = await getRangeMetrics(range);
     // Commission travels with the mix: this export is what gets pasted into an owner's board pack,
     // and revenue-per-source without cost-per-source is the half of the story that flatters the OTAs.
     // Blank (not 0) where no rate is configured — the spreadsheet must not imply a channel was free.
-    body = csv([
+    rows = [
       ["source", "category", "reservations", "room_nights", `revenue_${property.baseCurrency}`, "share_pct", "commission_pct", `commission_${property.baseCurrency}`],
       ...m.economics.rows.map((s) => [
         s.sourceName, s.category, s.reservations, s.roomNights, moneyCol(s.revenueMinor), s.sharePct.toFixed(1),
         s.commissionPct ?? "", s.commissionMinor == null ? "" : moneyCol(s.commissionMinor),
       ]),
-    ]);
+    ];
   } else if (report === "cancellation") {
     const r = await getCancellationReport(range);
-    body = csv([
+    rows = [
       ["guest", "check_in", "check_out", "room_type", "source", `total_${property.baseCurrency}`, "cancelled_at"],
       ...r.cancelled.map((res) => {
         const line = res.lines[0];
@@ -72,25 +75,63 @@ export async function GET(req: NextRequest) {
           res.cancelledAt?.toISOString().slice(0, 10) ?? "",
         ];
       }),
-    ]);
+    ];
   } else if (report === "availability") {
     const board = await getInventoryBoard({ days: 30 });
-    body = csv([
+    rows = [
       ["room_type", ...board.dates],
       ...board.sections.map((s) => [s.roomType.name, ...s.cells.map((c) => c.remaining)]),
-    ]);
+    ];
   } else {
     const m = await getRangeMetrics(range);
-    body = csv([
+    rows = [
       ["date", "available_room_nights", "rooms_sold", "occupancy_pct", `revenue_${m.cards.revenueDisplay}_${property.baseCurrency}`],
       ...m.perDay.map((d) => [d.date, d.available, d.soldNights, d.occupancyPct.toFixed(1), moneyCol(d.revenueMinor)]),
-    ]);
+    ];
   }
 
-  return new NextResponse(body, {
+  const stem = `revio-${report}-${range.start}`;
+
+  /*
+   * Excel unless CSV is asked for.
+   *
+   * A report is read, not re-parsed, and a spreadsheet is where it gets read. It also removes the
+   * failure that made CSV annoying here: money written as `1234.56` and opened on a machine whose
+   * locale uses a comma decimal separator arrives as text, or as a different number. A typed cell
+   * cannot be reinterpreted.
+   */
+  if (sp.get("format") !== "csv") {
+    // The header row stays text; every cell below it that is a clean number becomes one.
+    const sheet = rows.map((r, i) =>
+      i === 0 ? r.map(String) : r.map((v) => (typeof v === "number" ? v : numericOrText(v))),
+    );
+    const xlsx = buildXlsx([{ name: report, rows: sheet }]);
+    return new NextResponse(Buffer.from(xlsx), {
+      headers: {
+        "Content-Type": XLSX_CONTENT_TYPE,
+        "Content-Disposition": `attachment; filename="${stem}.xlsx"`,
+      },
+    });
+  }
+
+  return new NextResponse(csv(rows), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="revio-${report}-${range.start}.csv"`,
+      "Content-Disposition": `attachment; filename="${stem}.csv"`,
     },
   });
+}
+
+/**
+ * A cell that is entirely a number becomes one; anything else stays text.
+ *
+ * Deliberately strict. A date like `2026-09-01` must NOT become a number, an ID with a leading zero
+ * must keep it, and a blank must stay blank rather than becoming a zero somebody sums.
+ */
+function numericOrText(v: string | number): string | number | null {
+  const s = String(v).trim();
+  if (s === "") return null;
+  if (!/^-?\d+(\.\d+)?$/.test(s)) return s;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : s;
 }
