@@ -48,3 +48,4 @@ export * from "./rates/pricing-model-switch.js";
 export * from "./rates/resolve-rate.js";
 export * from "./rates/bulk-occupancy.js";
 export * from "./rates/stay-rate.js";
+export * from "./rates/authorship.js";

@@ -74,7 +74,43 @@ export async function getDashboard() {
           prisma.channelRoomTypeMapping.count({ where: { channel: { propertyId }, status: { not: "complete" } } }),
           prisma.channelRatePlanMapping.count({ where: { channel: { propertyId }, status: { not: "complete" } } }),
         ]);
-        return rt + rp;
+
+        /*
+         * Occupancy counts toward mapping completeness — OBP §L5 / L9.
+         *
+         * "All mapped" must not show green while a per-person plan has no occupancy rows, because
+         * that plan cannot price the guest counts it claims to sell. Everything else about it IS
+         * mapped, which is exactly what makes the green misleading: the screen would be telling the
+         * truth about room types and rate plans and the wrong thing overall.
+         *
+         * Counted only under per-person. A per-room plan has one row by definition and there is
+         * nothing to be incomplete about.
+         */
+        const defaults = await prisma.propertyDefaults.findUnique({
+          where: { propertyId }, select: { pricingModel: true },
+        });
+        if ((defaults?.pricingModel ?? "per_room") !== "per_person") return rt + rp;
+
+        const plans = await prisma.ratePlan.findMany({
+          where: { propertyId, active: true, pricingModel: { not: "per_room" } },
+          select: {
+            id: true,
+            _count: { select: { occupancyOptions: true } },
+            roomTypeLinks: { select: { roomType: { select: { maxGuests: true, active: true } } } },
+          },
+        });
+        const allRooms = await prisma.roomType.findMany({
+          where: { propertyId, active: true }, select: { maxGuests: true },
+        });
+        const unmappedOccupancy = plans.filter((pl) => {
+          const rooms = pl.roomTypeLinks.map((l) => l.roomType).filter((r) => r.active);
+          const caps = (rooms.length > 0 ? rooms : allRooms).map((r) => r.maxGuests);
+          if (caps.length === 0) return false;
+          // A per-person plan needs one row per occupancy up to the smallest cap it sells on.
+          return pl._count.occupancyOptions < Math.min(...caps);
+        }).length;
+
+        return rt + rp + unmappedOccupancy;
       })(),
       prisma.reservation.findMany({
         where: { propertyId },

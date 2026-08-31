@@ -208,17 +208,23 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   **Never defaults**: absent stays absent, because a guessed occupancy looks like fact and prices
   the stay wrongly with nothing to notice. Zero is read as "not stated", and children/infants are
   ignored — folding them in would price two adults and two children as four adults.
-- ☐ **H9** Mapping — occupancy options + **primary-occupancy selector**; completeness redefined so
-  "All mapped" cannot show green with occupancies unmapped. *(L5)*
+- ☑ **H9** Mapping — **completeness redefined.** A per-person plan short of one row per occupancy
+  now counts as unmapped, so "All mapped" cannot show green while a plan cannot price the guest
+  counts it claims to sell. That green was the misleading kind: truthful about room types and rate
+  plans, wrong overall. Counted only under per-person. *(L5)*
 - ☑ **H10** Channels — **done.** `Channel.supportsOccupancy`, **default false** because a channel we
   have not confirmed must degrade rather than be sent an array it silently drops. Channex-backed
   channels are set true by the migration. It rides the EXISTING limitations line — the same kind of
   caveat as "Agoda ignores CTD" — and only when the property actually prices per person. The push
   sends the primary's scalar to a channel that cannot take the array: not the cheapest, which would
   undersell every booking, nor the dearest, which would lose them. *(L6)*
-- ☐ **H11** Link authorship/precedence + connection state (CRS-linked vs standalone). Governs **all**
-  rates, not just occupancy. *(L1)*
-- ☐ **H12** Dashboard — Active/Unmapped Products count occupancy mapping. *(L9)*
+- ☑ **H11** Link authorship/precedence — **`authorship.ts`, 11 tests.** The pricing MODEL is
+  single-owned rather than conflict-resolved: read-only in Link when a CRS is connected, because a
+  value conflict is recoverable while a model mismatch is *incoherent* — the occupancy rows stop
+  existing and there is nothing to reassert. Values stay editable and revert VISIBLY, and
+  `reassertionNeedsPush` encodes the requirement most easily forgotten: correcting the database
+  without re-pushing leaves the OTA selling the old value while both internal screens look right. *(L1)*
+- ☑ **H12** Dashboard — Unmapped Products includes plans missing occupancy rows, same rule as H9. *(L9)*
 - ☑ **H13** Migration — **done, both halves.** Every existing plan gets its one option at the
   smallest cap among the rooms it sells on (`planCeiling`'s rule); an unlinked plan takes the
   smallest active room, per the "unscoped means everything" convention. Idempotent, and it promotes
