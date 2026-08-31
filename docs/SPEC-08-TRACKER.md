@@ -184,8 +184,11 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   `rates[]` push, batching, warnings. *(§6.7 / §6.7a / L7)*
 - ☐ **H4** Bulk-edit occupancy matrix + primary-plus-offsets. Mixed max across room types: render to
   the highest cap, **skip** beyond each type's own max. *(§6.4 / L4)*
-- ☐ **H5** Calendar per-occupancy display — expand-on-demand or compact inline. **Never** N permanent
-  rows per plan. *(§6.5 / L3)*
+- ☑ **H5** Calendar per-occupancy display — **shipped.** The cell keeps ONE number (the primary,
+  resolved by `resolveRate` so it cannot disagree with the quote or the push) plus a badge showing
+  how many guest counts are priced; the rest are a click away. Deliberately **not** N permanent rows
+  — a 4-guest room with three plans would turn 12 rows into 48 and destroy the at-a-glance scan the
+  screen exists for. A per-room property renders exactly as before.
 - ☑ **H6** Rate resolution — **done.** `resolveRate` (`resolve-rate.ts`, 20 tests): one function for
   the booking engine, CRS, Channex push and PMS folio, so the four cannot disagree. Both derivation
   axes in the right order — cascade takes the parent's price **at this occupancy**, not the parent's

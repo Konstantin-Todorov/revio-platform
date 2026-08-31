@@ -27,6 +27,16 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · OBP H5 — per-occupancy calendar display
+**The Inventory Calendar shows the primary rate with an expand, not N permanent rows.**
+Files: `apps/reservation/lib/data.ts` (`getInventoryBoard`), `apps/reservation/components/inventory/**`
+Notes: §6.5 is explicit — **do NOT explode the grid** to one rate row per occupancy per plan per
+room type; that destroys the at-a-glance scan the calendar exists for. Primary by default with a
+badge, expand on demand. A per-room plan renders exactly as it does today: `occupancyRates` is absent, and absent means
+"unchanged". ⚠️ `roomType.maxGuests` is the occupancy ceiling; `totalRooms` counts rooms. I used the
+wrong one as a fallback and the typechecker caught it — a hotel with six doubles would have had a
+"primary occupancy" of six.
+
 ### 2026-08-31 · Claude · DONE · OBP H2 (screens) — turning it on
 **The settings a hotel uses to switch to per-person pricing, and the transactional apply.**
 Files: `apps/reservation/lib/actions-obp.ts` (new), `apps/reservation/components/settings/**`,

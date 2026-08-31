@@ -6,6 +6,7 @@ import { ensurePickupSnapshot } from "@/lib/pickup";
 import { PageHeader } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RateCell } from "@/components/inventory/RateCell";
+import { OccupancyRatePopover } from "@/components/inventory/OccupancyRatePopover";
 import { CollapseAll } from "@/components/inventory/CollapseAll";
 import { ParamMultiSelect } from "@/components/inventory/ParamMultiSelect";
 import { CrsCalendarBulkButton } from "@/components/inventory/CrsCalendarBulkButton";
@@ -249,7 +250,16 @@ function SectionRows({
           <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">Rate</td>
           {section.cells.map((cell, i) => (
             <td key={i} className={`px-1 py-1 text-center ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
-              <RateCell roomTypeId={section.roomType.id} date={dates[i]!} value={cell.rate} />
+              <span className="inline-flex items-center">
+                <RateCell roomTypeId={section.roomType.id} date={dates[i]!} value={cell.rate} />
+                {/* Present only under per-person. A per-room property renders exactly as before. */}
+                {cell.occupancyRates && (
+                  <OccupancyRatePopover
+                    rates={cell.occupancyRates}
+                    primaryOccupancy={section.roomType.defaultOccupancy ?? section.roomType.maxGuests}
+                  />
+                )}
+              </span>
             </td>
           ))}
         </tr>

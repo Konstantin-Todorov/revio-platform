@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
   matchDuplicates, normalisePhone, type DuplicateCandidate,
+  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
 } from "@revio/core";
 import { getSession } from "./session";
 
@@ -105,9 +106,26 @@ export interface CellRestrictions {
 }
 
 export interface InventorySection {
-  roomType: { id: string; name: string; code: string; totalRooms: number; unitKind: string; active: boolean };
+  roomType: {
+    id: string; name: string; code: string; totalRooms: number;
+    /** The occupancy ceiling — NOT `totalRooms`, which counts rooms. */
+    maxGuests: number; defaultOccupancy: number | null;
+    unitKind: string; active: boolean;
+  };
   /** One waterfall per visible date, aligned with `dates`. */
-  cells: (WaterfallResult & { manualOverride: boolean; rate: string; restr: CellRestrictions })[];
+  cells: (WaterfallResult & {
+    manualOverride: boolean;
+    /** The headline rate — the primary occupancy's under per-person, the room's under per-room. */
+    rate: string;
+    /**
+     * Every occupancy priced, present ONLY under per-person (OBP §6.5).
+     *
+     * Absent means the property prices per room and the cell must render exactly as it did before
+     * OBP existed — the calendar's at-a-glance scan is the thing this feature must not cost.
+     */
+    occupancyRates?: { occupancy: number; minor: number | null }[];
+    restr: CellRestrictions;
+  })[];
 }
 
 const HORIZON_DAYS_MAX = 730;
@@ -143,7 +161,13 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
   const rtIds = roomTypes.map((r) => r.id);
 
   const [standard, defaults, rules, prices, periods, cells, holds, lines] = await Promise.all([
-    prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } }),
+    // occupancyOptions included: without them the resolver has no rows and a per-person calendar
+    // shows every cell as "—".
+    prisma.ratePlan.findFirst({
+      where: { propertyId, priceLogic: "manual", active: true },
+      include: { occupancyOptions: true },
+      orderBy: { sortOrder: "asc" },
+    }),
     prisma.propertyDefaults.findUnique({ where: { propertyId } }),
     prisma.restrictionRule.findMany({ where: { propertyId, active: true, dateFrom: { lt: end }, dateTo: { gte: start } } }),
     prisma.ratePrice.findMany({ where: { roomTypeId: { in: rtIds }, date: { gte: start, lt: end } } }),
@@ -176,9 +200,68 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
   ]);
 
   const cellByKey = new Map(cells.map((c) => [`${c.roomTypeId}:${ymd(c.date)}`, c]));
+  /*
+   * Prices for the calendar, keyed by occupancy as well as date (OBP §6.5).
+   *
+   * The calendar has always shown the STANDARD plan's rate — the headline number a hotel scans a
+   * month by. Under per-person that headline is the PRIMARY occupancy's rate, and the others are
+   * available on demand. What must not happen, and the spec says so in as many words, is the grid
+   * growing one rate row per occupancy per plan per room type: that destroys the at-a-glance scan
+   * the screen exists for.
+   */
   const priceByKey = new Map(
-    standard ? prices.filter((pr) => pr.ratePlanId === standard.id).map((pr) => [`${pr.roomTypeId}:${ymd(pr.date)}`, pr.priceMinor]) : [],
+    standard
+      ? prices
+          .filter((pr) => pr.ratePlanId === standard.id)
+          .map((pr) => [`${pr.roomTypeId}:${ymd(pr.date)}:${pr.occupancy ?? ""}`, pr.priceMinor] as const)
+      : [],
   );
+  const priceLookup: PriceLookup = (rtId, rpId, k, occ) =>
+    rpId === standard?.id ? (priceByKey.get(`${rtId}:${k}:${occ}`) ?? null) : null;
+
+  const propertyModel = defaults?.pricingModel ?? "per_room";
+  const standardResolvable: ResolvablePlan | null = standard
+    ? {
+        id: standard.id,
+        pricingModel: standard.pricingModel,
+        primaryOccupancy: standard.primaryOccupancy,
+        parentRatePlanId: standard.parentRatePlanId,
+        priceLogic: standard.priceLogic,
+        derivedType: standard.derivedType,
+        derivedDirection: standard.derivedDirection,
+        derivedValue: standard.derivedValue,
+        derivedRounding: standard.derivedRounding,
+        derivedFloorMinor: standard.derivedFloorMinor,
+        derivedCeilingMinor: standard.derivedCeilingMinor,
+        options: (standard.occupancyOptions ?? []).map((o) => ({
+          occupancy: o.occupancy,
+          isPrimary: o.isPrimary,
+          mode: o.mode === "derived" ? ("derived" as const) : ("manual" as const),
+          rateMinor: o.rateMinor,
+          adjustmentType: o.adjustmentType as "percent" | "fixed" | null,
+          direction: o.direction as "increase" | "decrease" | null,
+          value: o.value,
+          rounding: o.rounding as never,
+        })),
+      }
+    : null;
+  const planIndex = new Map(standardResolvable ? [[standardResolvable.id, standardResolvable]] : []);
+
+  /** Every occupancy this room sells at on this date — null entries stay null, never zero. */
+  function ratesFor(rt: { id: string; maxGuests: number; defaultOccupancy: number | null }, d: string) {
+    if (!standardResolvable) return null;
+    const ceiling = Math.max(1, rt.maxGuests);
+    const perPerson = effectiveModel(standardResolvable.pricingModel, propertyModel) === "per_person";
+    if (!perPerson) return null;
+    return Array.from({ length: ceiling }, (_, i) => i + 1).map((occupancy) => ({
+      occupancy,
+      minor: resolveRate({
+        lookup: priceLookup, plans: planIndex, roomTypeId: rt.id,
+        maxOccupancy: ceiling, roomDefaultOccupancy: rt.defaultOccupancy,
+        propertyModel, plan: standardResolvable, dateKey: d, occupancy,
+      }),
+    }));
+  }
 
   // Resolve one restriction for one (room type, date) via the TWO-TIER precedence
   // (date-scoped cell [calendar/bulk, recency] > matching rules > standard-plan default >
@@ -228,7 +311,17 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
       const cell = cellByKey.get(`${rt.id}:${d}`);
       const manual = cell?.inventory;
       const { outOfOrder, closed } = periodByDate.get(d)!;
-      const priceMinor = priceByKey.get(`${rt.id}:${d}`);
+      // The headline number: the primary occupancy under per-person, the room price under per-room.
+      // `resolveRate` decides which, so the calendar cannot disagree with the quote or the push.
+      const priceMinor = standardResolvable
+        ? resolveRate({
+            lookup: priceLookup, plans: planIndex, roomTypeId: rt.id,
+            maxOccupancy: Math.max(1, rt.maxGuests), roomDefaultOccupancy: rt.defaultOccupancy,
+            propertyModel, plan: standardResolvable, dateKey: d,
+            occupancy: effectivePrimary(standardResolvable.primaryOccupancy, rt.defaultOccupancy, Math.max(1, rt.maxGuests)),
+          })
+        : null;
+      const occupancyRates = ratesFor(rt, d);
       return {
         ...computeWaterfall({
           physical: rt.totalRooms,
@@ -240,12 +333,21 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
         }),
         manualOverride: manual != null,
         rate: priceMinor != null ? String(Math.round(priceMinor / 100)) : "—",
+        // Present only under per-person. Absent means "render exactly as before", which is what a
+        // per-room property must keep doing byte for byte.
+        ...(occupancyRates ? { occupancyRates } : {}),
         restr: resolveFor(rt.id, d, cell),
       };
     });
 
     return {
-      roomType: { id: rt.id, name: rt.name, code: rt.code, totalRooms: rt.totalRooms, unitKind: rt.unitKind, active: rt.active },
+      roomType: {
+        id: rt.id, name: rt.name, code: rt.code, totalRooms: rt.totalRooms,
+        // maxGuests is the occupancy ceiling; totalRooms is how many of this room exist. Confusing
+        // the two gives a "primary occupancy" of six on a hotel with six doubles.
+        maxGuests: rt.maxGuests, defaultOccupancy: rt.defaultOccupancy,
+        unitKind: rt.unitKind, active: rt.active,
+      },
       cells: cellsOut,
     };
   });
