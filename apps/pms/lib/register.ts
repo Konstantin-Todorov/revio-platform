@@ -1,5 +1,9 @@
 import { claimRegisterNo, withTenantTransaction } from "@revio/db";
-import { averageNightlyPrice, registerNights, splitName, type TouristRegisterEntry } from "@revio/core";
+import {
+  averageNightlyPrice, registerNights, splitName, estimateBeds, monthlyTouristTax,
+  annualTouristTaxFloor, monthlyTaxDueDate, annualDeclarationDueDate, annualTopUpDueDate,
+  type TouristRegisterEntry,
+} from "@revio/core";
 import { prisma } from "./db";
 import { ymd, utcDay, addDaysYmd, hmInTz } from "./format";
 
@@ -156,4 +160,79 @@ export async function getRegisterEntries(
       cancelled: g.cancelled,
     };
   });
+}
+
+export interface TouristTaxSummary {
+  /** Nights actually provided in the month — cancelled registrations are not nights. */
+  monthNights: number;
+  monthTaxMinor: number;
+  monthDueDate: string;
+  /** The calendar year to date: what чл. 61с ал. 4 will be measured against. */
+  yearNights: number;
+  yearTaxMinor: number;
+  floorMinor: number;
+  topUpMinor: number;
+  clearsFloor: boolean;
+  declarationDueDate: string;
+  topUpDueDate: string;
+  /** Null until the property states them — every figure above is zero without both. */
+  rateMinor: number | null;
+  beds: number | null;
+  suggestedBeds: number;
+}
+
+/**
+ * The month's tourist tax and the year's floor — ЗМДТ чл. 61с.
+ *
+ * Counted off the REGISTER, not off the folios, because that is what the municipality assesses on:
+ * чл. 61с ал. 2 has the officer compute the month from ЕСТИ data. Billing a guest for a city-tax
+ * fee and registering them are different acts, and a register that disagrees with the folio is a
+ * discrepancy the hotel needs to see rather than one we should paper over by counting the easier one.
+ */
+export async function getTouristTax(
+  propertyId: string,
+  timezone: string,
+  monthIso: string,
+): Promise<TouristTaxSummary> {
+  const year = Number(monthIso.slice(0, 4));
+  const [defaults, roomTypes] = await Promise.all([
+    prisma.propertyDefaults.findUnique({
+      where: { propertyId },
+      select: { touristTaxRateMinor: true, touristTaxBeds: true },
+    }),
+    prisma.roomType.findMany({ where: { propertyId, active: true }, select: { maxGuests: true, totalRooms: true } }),
+  ]);
+
+  const rateMinor = defaults?.touristTaxRateMinor ?? null;
+  const suggestedBeds = estimateBeds(roomTypes);
+  const beds = defaults?.touristTaxBeds ?? null;
+
+  const monthEntries = await getRegisterEntries(propertyId, timezone, `${monthIso}-01`, monthEnd(monthIso));
+  const yearEntries = await getRegisterEntries(propertyId, timezone, `${year}-01-01`, `${year}-12-31`);
+  const nightsOf = (rows: { nights: number; cancelled: boolean }[]) =>
+    rows.reduce((n, e) => n + (e.cancelled ? 0 : e.nights), 0);
+
+  const monthNights = nightsOf(monthEntries);
+  const yearNights = nightsOf(yearEntries);
+  const yearTaxMinor = monthlyTouristTax(yearNights, rateMinor ?? 0);
+  const floor = annualTouristTaxFloor({ year, beds: beds ?? 0, rateMinor: rateMinor ?? 0, paidMinor: yearTaxMinor });
+
+  return {
+    monthNights,
+    monthTaxMinor: monthlyTouristTax(monthNights, rateMinor ?? 0),
+    monthDueDate: monthlyTaxDueDate(monthIso),
+    yearNights,
+    yearTaxMinor,
+    floorMinor: floor.floorMinor,
+    topUpMinor: floor.topUpMinor,
+    clearsFloor: floor.clearsFloor,
+    declarationDueDate: annualDeclarationDueDate(year),
+    topUpDueDate: annualTopUpDueDate(year),
+    rateMinor, beds, suggestedBeds,
+  };
+}
+
+function monthEnd(monthIso: string): string {
+  const [y, m] = monthIso.split("-").map(Number);
+  return `${monthIso}-${String(new Date(Date.UTC(y!, m!, 0)).getUTCDate()).padStart(2, "0")}`;
 }

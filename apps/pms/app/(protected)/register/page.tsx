@@ -4,8 +4,9 @@ import { AlertTriangle, Download, FileSpreadsheet } from "lucide-react";
 import { validateRegisterEntry, countryName, DOCUMENT_TYPE_BG } from "@revio/core";
 import { roleHasCapability } from "@/lib/roles";
 import { activeProperty } from "@/lib/data";
-import { getRegisterEntries } from "@/lib/register";
+import { getRegisterEntries, getTouristTax } from "@/lib/register";
 import { todayInTz } from "@/lib/format";
+import { money } from "@/lib/format";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,10 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   const anchor = /^\d{4}-\d{2}$/.test(month ?? "") ? `${month}-01` : today;
   const { from, to } = monthBounds(anchor);
 
-  const entries = await getRegisterEntries(property.id, property.timezone, from, to);
+  const [entries, tax] = await Promise.all([
+    getRegisterEntries(property.id, property.timezone, from, to),
+    getTouristTax(property.id, property.timezone, anchor.slice(0, 7)),
+  ]);
   const incomplete = entries.filter((e) => validateRegisterEntry(e).length > 0);
   const nights = entries.reduce((n, e) => n + (e.cancelled ? 0 : e.nights), 0);
 
@@ -73,6 +77,65 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
       )}
+
+      <Card className="mb-4">
+        <CardHeader
+          title="Tourist tax"
+          subtitle="Туристически данък · ЗМДТ чл. 61с — the municipality assesses this from your ЕСТИ data, so the register is the tax base"
+        />
+        {tax.rateMinor == null ? (
+          <p className="px-4 py-5 text-[13px] text-ink-500">
+            Your municipality’s rate per night isn’t set yet, so there is nothing to total.
+            Add it in <Link href="/configuration" className="font-semibold text-accent-600 hover:underline">Configuration</Link> —
+            each council sets its own, between 0.20 and 3.00 лв, by settlement and category.
+          </p>
+        ) : (
+          <div className="grid gap-px bg-surface-border sm:grid-cols-3">
+            <div className="bg-surface px-4 py-3.5">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">This month</div>
+              <div className="tnum mt-1 text-[20px] font-bold text-ink-900">{money(tax.monthTaxMinor, property.baseCurrency)}</div>
+              <div className="mt-0.5 text-[11.5px] text-ink-500">
+                {tax.monthNights} night{tax.monthNights === 1 ? "" : "s"} · pay by {tax.monthDueDate}
+              </div>
+            </div>
+            <div className="bg-surface px-4 py-3.5">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Year to date</div>
+              <div className="tnum mt-1 text-[20px] font-bold text-ink-900">{money(tax.yearTaxMinor, property.baseCurrency)}</div>
+              <div className="mt-0.5 text-[11.5px] text-ink-500">
+                {tax.yearNights} night{tax.yearNights === 1 ? "" : "s"} · declare by {tax.declarationDueDate}
+              </div>
+            </div>
+            <div className="bg-surface px-4 py-3.5">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Annual floor · 30%</div>
+              {tax.beds == null ? (
+                <p className="mt-1 text-[12px] text-ink-500">
+                  Set your declared bed count to see this. Your rooms suggest <strong>{tax.suggestedBeds}</strong>.
+                </p>
+              ) : tax.clearsFloor ? (
+                <>
+                  <div className="tnum mt-1 text-[20px] font-bold text-success-600">Cleared</div>
+                  <div className="mt-0.5 text-[11.5px] text-ink-500">
+                    Above the {money(tax.floorMinor, property.baseCurrency)} minimum — nothing extra owed.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="tnum mt-1 text-[20px] font-bold text-warning-700">{money(tax.topUpMinor, property.baseCurrency)}</div>
+                  <div className="mt-0.5 text-[11.5px] text-ink-500">
+                    Short of the {money(tax.floorMinor, property.baseCurrency)} minimum · due {tax.topUpDueDate}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        <p className="border-t border-surface-border/60 px-4 py-2.5 text-[11.5px] text-ink-400">
+          The 30% floor is measured over the whole <strong>calendar year</strong>, never a single month — a quiet
+          February is not topped up, only a quiet twelve months. The year-to-date figure moves as the year fills,
+          so treat it as a projection until December. These are your own nights at your own rate; have your
+          accountant confirm the return before it is filed.
+        </p>
+      </Card>
 
       <Card>
         <CardHeader

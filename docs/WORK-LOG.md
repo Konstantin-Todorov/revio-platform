@@ -27,6 +27,32 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · Register backfill + туристически данък (ЗМДТ чл. 61р–61с)
+Files: `packages/db/scripts/backfill-register.ts`, `packages/core/src/registry/tourist-tax.ts`
+(20 tests), `apps/pms/lib/{register,config,actions-config}.ts`, `apps/pms/app/(protected)/register/`,
+`.../configuration/`, migration `20260831200000_tourist_tax_settings`
+
+**Backfill — in-house stays only, and that is the design decision.** A departed guest cannot be
+registered after the fact: they are gone with their document and the entry could never be completed.
+Blank rows for them would not be compliance, they would be a permanent visible failure — a register
+full of entries nobody can finish reads worse than one that starts the day the property began
+keeping it. `registeredAt` is the ACTUAL check-in instant, never today. Ran on production: **22
+entries across 14 in-house stays**, numbering verified gap-free and unique **per property**
+(21/21, 2/2, 1/1 — each property keeps its own register).
+
+**Tourist tax.** The reason it lives beside the register: **чл. 61с ал. 2 has the municipality
+assess the month from ЕСТИ data.** The register IS the tax base — a hotel with a wrong register is
+assessed on somebody else's numbers.
+
+⚠️ **The 30% floor is ANNUAL, not monthly.** Two secondary sources implied per-month. The statute
+(чл. 61с ал. 4–5) measures `ДД = (Р × Л × Д × 30%) − ДП` over the calendar year. Getting this wrong
+would bill every closed month of a seasonal property — most of the Bulgarian coast. A test pins it.
+`Л` is **легла**, beds, not rooms — seeded from room capacity as a suggestion the hotel confirms.
+
+Three dates encoded: month's tax by the **15th** (ал. 3), declaration by **31 Jan** (чл. 61р ал. 5),
+annual top-up by **1 March** (ал. 4). Rate and beds are nullable with **no default** — a default is a
+number somebody eventually files as though we knew it.
+
 ### 2026-08-31 · Claude · DONE · Register rehearsed end to end on the demo hotel
 **Walk-in → two entries → completed one → downloaded the CSV → checked it against the образец.**
 Files: `packages/core/src/registry/tourist-register.ts`, `apps/pms/lib/register.ts`,

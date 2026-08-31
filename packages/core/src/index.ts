@@ -51,3 +51,4 @@ export * from "./rates/stay-rate.js";
 export * from "./rates/authorship.js";
 export * from "./registry/tourist-register.js";
 export * from "./registry/countries.js";
+export * from "./registry/tourist-tax.js";

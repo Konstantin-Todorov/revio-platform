@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
-import { formatDocumentNumber, seriesKeyFor, seriesStartFor, type InvoiceNumberScheme } from "@revio/core";
+import { formatDocumentNumber, seriesKeyFor, seriesStartFor, estimateBeds, type InvoiceNumberScheme } from "@revio/core";
 
 /** Everything the Configuration screen (spec §3.10) needs — the property-level setup the E-phase
  * modules depend on, in one place: tax/VAT rates + issuer identity, deposit types, invoice series,
@@ -37,5 +37,13 @@ export async function getConfiguration() {
     nextByDoc[docType] = formatDocumentNumber({ scheme, docType, claimed, year: new Date().getFullYear() });
   }
 
-  return { property, canManage, defaults, depositTypes, nextByDoc, outletCounts };
+  // Seeds the declared-bed field, which is a figure the hotel agreed with its municipality rather
+  // than one we can derive — offered as a suggestion, never written for them.
+  const roomTypes = await prisma.roomType.findMany({
+    where: { propertyId: property.id, active: true },
+    select: { maxGuests: true, totalRooms: true },
+  });
+  const suggestedBeds = estimateBeds(roomTypes);
+
+  return { property, canManage, defaults, depositTypes, nextByDoc, outletCounts, suggestedBeds };
 }

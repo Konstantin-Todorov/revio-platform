@@ -27,6 +27,10 @@ export async function saveConfiguration(fd: FormData): Promise<void> {
   const data = {
     vatStandardPct: Math.max(0, Math.min(100, int(fd, "vatStandardPct", 20))),
     vatReducedPct: Math.max(0, Math.min(100, int(fd, "vatReducedPct", 9))),
+    // Null when cleared, rather than 0. A rate of zero is a rate somebody set; an empty field is a
+    // rate nobody has stated yet, and the register screen has to be able to say which.
+    touristTaxRateMinor: money2minor(fd, "touristTaxRate"),
+    touristTaxBeds: positiveOrNull(fd, "touristTaxBeds"),
     cityTaxMode: str(fd, "cityTaxMode") === "included" ? "included" : "payable_on_spot",
     invoiceIssuerName: str(fd, "invoiceIssuerName") || null,
     invoiceVatId: str(fd, "invoiceVatId") || null,
@@ -86,4 +90,19 @@ export async function deleteDepositType(fd: FormData): Promise<void> {
   await prisma.depositType.delete({ where: { id } });
   await logAudit(s.activePropertyId, s.tenantId, { entity: "deposit_type", field: t.name, newValue: "deleted", userId: s.userId });
   revalidatePath("/configuration");
+}
+
+/** A decimal amount typed into a form, as minor units. Null for a blank or unparseable field. */
+function money2minor(fd: FormData, key: string): number | null {
+  const raw = String(fd.get(key) ?? "").trim().replace(",", ".");
+  if (raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) : null;
+}
+
+function positiveOrNull(fd: FormData, key: string): number | null {
+  const raw = String(fd.get(key) ?? "").trim();
+  if (raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
 }

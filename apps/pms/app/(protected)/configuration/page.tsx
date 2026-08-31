@@ -12,7 +12,7 @@ const inputCls = "h-9 rounded-md border border-surface-border bg-white px-2.5 te
 const labelCls = "mb-1 block text-[11px] font-semibold text-ink-600";
 
 export default async function ConfigurationPage() {
-  const { property, canManage, defaults, depositTypes, nextByDoc, outletCounts } = await getConfiguration();
+  const { property, canManage, defaults, depositTypes, nextByDoc, outletCounts, suggestedBeds } = await getConfiguration();
   const d = defaults;
 
   if (!canManage) {
@@ -41,6 +41,28 @@ export default async function ConfigurationPage() {
             <div>
               <label className={labelCls}><Percent className="mr-1 inline h-3 w-3" />Reduced VAT % <span className="text-ink-400">(accommodation)</span></label>
               <input name="vatReducedPct" type="number" min={0} max={100} defaultValue={d?.vatReducedPct ?? 9} className={`${inputCls} w-full`} />
+            </div>
+            <div>
+              <label className={labelCls}>Tourist tax per night <span className="text-ink-400">(туристически данък)</span></label>
+              {/* Blank, never a default. The council sets this per settlement and per category, and a
+                  number we invented would eventually be filed as though we knew it. */}
+              <input
+                name="touristTaxRate" type="number" step="0.01" min={0} max={100}
+                defaultValue={d?.touristTaxRateMinor != null ? (d.touristTaxRateMinor / 100).toFixed(2) : ""}
+                placeholder="e.g. 1.00" className={`${inputCls} w-full`}
+              />
+              <p className="mt-1 text-[10.5px] text-ink-400">Your municipality’s rate. ЗМДТ allows 0.20–3.00 лв.</p>
+            </div>
+            <div>
+              <label className={labelCls}>Declared beds <span className="text-ink-400">(легла)</span></label>
+              <input
+                name="touristTaxBeds" type="number" min={0} max={10000}
+                defaultValue={d?.touristTaxBeds ?? ""} placeholder={String(suggestedBeds)}
+                className={`${inputCls} w-full`}
+              />
+              <p className="mt-1 text-[10.5px] text-ink-400">
+                For the 30% annual minimum. Your rooms suggest {suggestedBeds} — confirm what you declared.
+              </p>
             </div>
             <div className="col-span-2">
               <label className={labelCls}>City tax</label>

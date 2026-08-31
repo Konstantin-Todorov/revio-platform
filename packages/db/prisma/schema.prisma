@@ -1469,6 +1469,15 @@ model PropertyDefaults {
   // Invoicing config (spec §4.3/§4.6) — the "jurisdiction pack" as data, never hardcoded. VAT rates
   // per charge category (BG defaults: 20% standard, 9% reduced for accommodation) + issuer legal
   // identity for the tax document. Edited in Configuration (E7).
+  /// Туристически данък (ЗМДТ чл. 61с ал. 1) — the municipal rate per нощувка, in minor units.
+  ///
+  /// Per property because the council sets it per settlement AND per category, so two hotels of one
+  /// owner in two towns owe different amounts on the same night. Null until the hotel states theirs;
+  /// a default would be a number somebody files.
+  touristTaxRateMinor      Int?
+  /// `Л` in the чл. 61с ал. 5 formula — the DECLARED bed base, which is a figure the hotel agreed
+  /// with its municipality and not one we can derive. Seeded from room capacity as a suggestion.
+  touristTaxBeds           Int?
   vatStandardPct           Int     @default(20)
   vatReducedPct            Int     @default(9)
   invoiceIssuerName        String?
