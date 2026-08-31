@@ -1,7 +1,7 @@
 import { claimRegisterNo, withTenantTransaction } from "@revio/db";
 import {
   averageNightlyPrice, registerNights, splitName, estimateBeds, monthlyTouristTax,
-  annualTouristTaxFloor, monthlyTaxDueDate, annualDeclarationDueDate, annualTopUpDueDate,
+  annualTouristTaxFloor, monthlyTaxDueDate, annualDeclarationDueDate, annualTopUpDueDate, nightsInMonth,
   type TouristRegisterEntry,
 } from "@revio/core";
 import { prisma } from "./db";
@@ -207,13 +207,29 @@ export async function getTouristTax(
   const suggestedBeds = estimateBeds(roomTypes);
   const beds = defaults?.touristTaxBeds ?? null;
 
-  const monthEntries = await getRegisterEntries(propertyId, timezone, `${monthIso}-01`, monthEnd(monthIso));
-  const yearEntries = await getRegisterEntries(propertyId, timezone, `${year}-01-01`, `${year}-12-31`);
-  const nightsOf = (rows: { nights: number; cancelled: boolean }[]) =>
-    rows.reduce((n, e) => n + (e.cancelled ? 0 : e.nights), 0);
+  /*
+   * Ranged WIDE and then apportioned, rather than ranged by registration date.
+   *
+   * чл. 61с ал. 2 taxes the nights PROVIDED in the month. Those are not the nights of the entries
+   * registered in it: a guest registered in August for nights slept in June belongs on June's
+   * return, and a stay from 30 August to 2 September owes two nights to August and one to
+   * September. Reading the register by registration date and summing whole stays — which is what
+   * this did first — put a June holiday on the August return.
+   *
+   * So the query covers a year either side of the month and every stay is apportioned by the dates
+   * it actually covered. `nightsInMonth` is exact and additive: what a stay contributes across the
+   * months it touches sums to the stay.
+   */
+  const wideFrom = `${year - 1}-01-01`;
+  const wideTo = `${year + 1}-12-31`;
+  const all = await getRegisterEntries(propertyId, timezone, wideFrom, wideTo);
+  const live = all.filter((e) => !e.cancelled);
 
-  const monthNights = nightsOf(monthEntries);
-  const yearNights = nightsOf(yearEntries);
+  const monthNights = live.reduce((n, e) => n + nightsInMonth(e.arrivalDate, e.departureDate, monthIso), 0);
+  const yearNights = live.reduce(
+    (n, e) => n + MONTHS.reduce((m, mm) => m + nightsInMonth(e.arrivalDate, e.departureDate, `${year}-${mm}`), 0),
+    0,
+  );
   const yearTaxMinor = monthlyTouristTax(yearNights, rateMinor ?? 0);
   const floor = annualTouristTaxFloor({ year, beds: beds ?? 0, rateMinor: rateMinor ?? 0, paidMinor: yearTaxMinor });
 
@@ -232,7 +248,4 @@ export async function getTouristTax(
   };
 }
 
-function monthEnd(monthIso: string): string {
-  const [y, m] = monthIso.split("-").map(Number);
-  return `${monthIso}-${String(new Date(Date.UTC(y!, m!, 0)).getUTCDate()).padStart(2, "0")}`;
-}
+const MONTHS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"] as const;

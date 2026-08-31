@@ -110,3 +110,43 @@ export function annualTopUpDueDate(year: number): string {
 export function estimateBeds(roomTypes: readonly { maxGuests: number; totalRooms: number }[]): number {
   return roomTypes.reduce((n, rt) => n + Math.max(0, rt.maxGuests) * Math.max(0, rt.totalRooms), 0);
 }
+
+/**
+ * Nights of a stay that fall inside a given calendar month.
+ *
+ * чл. 61с ал. 2 taxes «броят на **предоставените** нощувки за месеца» — the nights PROVIDED in that
+ * month, which is not the same as the nights of the stays registered in it, and not the same as the
+ * nights of the stays that started in it.
+ *
+ * Two ways to get this wrong, and the register makes both visible:
+ *
+ *  - A stay registered in August for nights slept in June belongs to June's return. Counting it in
+ *    August overstates one month and understates another, and both are separately payable.
+ *  - A stay from 30 August to 2 September provides TWO nights in August and one in September. Billed
+ *    whole to either month, the hotel pays the right annual total on the wrong two returns.
+ *
+ * A night is identified by the date it begins, so the stay covers [arrival, departure) and the month
+ * covers [first, last]. Nothing here is timezone-sensitive: these are calendar dates already
+ * resolved in the property's own zone.
+ */
+export function nightsInMonth(
+  arrivalDate: string,
+  departureDate: string | null,
+  monthIso: string,
+): number {
+  if (departureDate == null || !/^\d{4}-\d{2}$/.test(monthIso)) return 0;
+
+  const start = `${monthIso}-01`;
+  const [y, m] = monthIso.split("-").map(Number);
+  const end = new Date(Date.UTC(y!, m!, 1)).toISOString().slice(0, 10); // first of the NEXT month
+
+  // The overlap of [arrival, departure) with [start, end), in whole nights.
+  const from = arrivalDate > start ? arrivalDate : start;
+  const to = departureDate < end ? departureDate : end;
+  if (to <= from) return 0;
+
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}

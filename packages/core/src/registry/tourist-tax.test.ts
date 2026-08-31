@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  monthlyTouristTax, annualTouristTaxFloor, daysInYear, estimateBeds,
+  monthlyTouristTax, annualTouristTaxFloor, daysInYear, estimateBeds, nightsInMonth,
   monthlyTaxDueDate, annualDeclarationDueDate, annualTopUpDueDate,
   STATUTORY_RATE_MIN_MINOR, STATUTORY_RATE_MAX_MINOR, ANNUAL_OCCUPANCY_FLOOR,
 } from "./tourist-tax.js";
@@ -99,5 +99,48 @@ describe("estimateBeds", () => {
   });
   it("ignores negative nonsense rather than subtracting beds", () => {
     expect(estimateBeds([{ maxGuests: -2, totalRooms: 10 }])).toBe(0);
+  });
+});
+
+describe("nightsInMonth — чл. 61с ал. 2 taxes nights PROVIDED in the month", () => {
+  it("counts a stay wholly inside the month", () => {
+    expect(nightsInMonth("2026-08-10", "2026-08-14", "2026-08")).toBe(4);
+  });
+
+  it("splits a stay across the month boundary", () => {
+    // 30 & 31 August are August's nights; 1 September is September's. Billed whole to either month
+    // the annual total is right and both returns are wrong.
+    expect(nightsInMonth("2026-08-30", "2026-09-02", "2026-08")).toBe(2);
+    expect(nightsInMonth("2026-08-30", "2026-09-02", "2026-09")).toBe(1);
+  });
+
+  it("gives nothing to a month the stay never touched", () => {
+    // The bug the backfill exposed: a stay registered in August for nights slept in June.
+    expect(nightsInMonth("2026-06-23", "2026-06-27", "2026-08")).toBe(0);
+    expect(nightsInMonth("2026-06-23", "2026-06-27", "2026-06")).toBe(4);
+  });
+
+  it("counts only the covered part of a stay that spans a whole month", () => {
+    expect(nightsInMonth("2026-07-20", "2026-09-05", "2026-08")).toBe(31);
+  });
+
+  it("is zero while the guest is still in house — no departure, no nights provided", () => {
+    expect(nightsInMonth("2026-08-10", null, "2026-08")).toBe(0);
+  });
+
+  it("handles February in a leap year", () => {
+    expect(nightsInMonth("2024-02-01", "2024-03-01", "2024-02")).toBe(29);
+  });
+
+  it("is zero for a same-day stay and for a reversed one", () => {
+    expect(nightsInMonth("2026-08-10", "2026-08-10", "2026-08")).toBe(0);
+    expect(nightsInMonth("2026-08-14", "2026-08-10", "2026-08")).toBe(0);
+  });
+
+  it("sums back to the stay's own night count across the months it touches", () => {
+    // The property of the split that actually matters: nothing is created or lost by it.
+    const a = nightsInMonth("2026-08-30", "2026-09-02", "2026-08");
+    const b = nightsInMonth("2026-08-30", "2026-09-02", "2026-09");
+    expect(a + b).toBe(3);
   });
 });

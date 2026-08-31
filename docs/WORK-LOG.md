@@ -40,6 +40,13 @@ keeping it. `registeredAt` is the ACTUAL check-in instant, never today. Ran on p
 entries across 14 in-house stays**, numbering verified gap-free and unique **per property**
 (21/21, 2/2, 1/1 — each property keeps its own register).
 
+⚠️ **The month's tax was counting the wrong nights, and the backfill is what showed it.** чл. 61с
+ал. 2 taxes «броят на **предоставените** нощувки за месеца» — nights PROVIDED in the month. Reading
+the register by REGISTRATION date and summing whole stays put a June holiday (registered in August
+by the backfill) on the August return, and would have billed a 30 Aug → 2 Sep stay entirely to
+August. `nightsInMonth` apportions each stay across the months it actually covered; it is exact and
+additive, so what a stay contributes across months sums back to the stay.
+
 **Tourist tax.** The reason it lives beside the register: **чл. 61с ал. 2 has the municipality
 assess the month from ЕСТИ data.** The register IS the tax base — a hotel with a wrong register is
 assessed on somebody else's numbers.
