@@ -383,10 +383,34 @@ export async function getCalendarBoard(q: CalendarQuery) {
 
   // Capability legend (spec §5.2): channels that ignore some restriction types — shown as a
   // limitation note, never as an error.
-  const chans = await prisma.channel.findMany({ where: { propertyId, status: "connected" }, select: { name: true, supportedRestrictions: true } });
+  const chans = await prisma.channel.findMany({
+    where: { propertyId, status: "connected" },
+    select: { name: true, supportedRestrictions: true, supportsOccupancy: true },
+  });
+  // Whether per-occupancy pricing is even in play — a per-room property has nothing to degrade.
+  const obpOn = (await prisma.propertyDefaults.findUnique({
+    where: { propertyId }, select: { pricingModel: true },
+  }))?.pricingModel === "per_person";
   const CAP_LABEL: Record<string, string> = { cta: "CTA", ctd: "CTD", min_los: "Min LOS", max_los: "Max LOS", advance_purchase_min: "Adv. purchase min", advance_purchase_max: "Adv. purchase max", stop_sell: "Stop sell" };
+  /*
+   * Occupancy rides the existing limitations line (§6.7 / L6), rather than getting a banner of its
+   * own. It is the same kind of caveat as "Agoda ignores CTD": a channel that cannot express
+   * per-occupancy rates still sells — it just sells at the primary occupancy's price, which is
+   * degradation, not failure. Putting it here means a hotelier reads all their channel caveats in
+   * one place instead of learning this one from a booking at the wrong price.
+   *
+   * Only shown when the property actually prices per person; a per-room property has nothing to lose.
+   */
   const capabilityNotes = chans
-    .map((c) => ({ name: c.name, missing: unsupportedRestrictions(c.supportedRestrictions).filter((x) => x !== "channel_allocation").map((x) => CAP_LABEL[x] ?? x) }))
+    .map((c) => ({
+      name: c.name,
+      missing: [
+        ...unsupportedRestrictions(c.supportedRestrictions)
+          .filter((x) => x !== "channel_allocation")
+          .map((x) => CAP_LABEL[x] ?? x),
+        ...(obpOn && !c.supportsOccupancy ? ["per-guest pricing (sells at your main guest count)"] : []),
+      ],
+    }))
     .filter((c) => c.missing.length > 0);
 
   return {

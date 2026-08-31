@@ -210,13 +210,21 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   ignored — folding them in would price two adults and two children as four adults.
 - ☐ **H9** Mapping — occupancy options + **primary-occupancy selector**; completeness redefined so
   "All mapped" cannot show green with occupancies unmapped. *(L5)*
-- ☐ **H10** Channels — per-channel occupancy capability on the limitations line; degrade single-rate
-  channels to primary + extra-guest. *(L6)*
+- ☑ **H10** Channels — **done.** `Channel.supportsOccupancy`, **default false** because a channel we
+  have not confirmed must degrade rather than be sent an array it silently drops. Channex-backed
+  channels are set true by the migration. It rides the EXISTING limitations line — the same kind of
+  caveat as "Agoda ignores CTD" — and only when the property actually prices per person. The push
+  sends the primary's scalar to a channel that cannot take the array: not the cheapest, which would
+  undersell every booking, nor the dearest, which would lose them. *(L6)*
 - ☐ **H11** Link authorship/precedence + connection state (CRS-linked vs standalone). Governs **all**
   rates, not just occupancy. *(L1)*
 - ☐ **H12** Dashboard — Active/Unmapped Products count occupancy mapping. *(L9)*
-- ☐ **H13** Migration — existing plans to a single max-occupancy option; model switch is a **sync
-  event**, not a local config change. *(§6.10)*
+- ☑ **H13** Migration — **done, both halves.** Every existing plan gets its one option at the
+  smallest cap among the rooms it sells on (`planCeiling`'s rule); an unlinked plan takes the
+  smallest active room, per the "unscoped means everything" convention. Idempotent, and it promotes
+  a primary where old delta rows left none. And the model switch now **re-pushes to channels** —
+  best-effort, because the switch has already committed and failing the action would tell a hotelier
+  nothing happened when it did. *(§6.10)*
 - ☐ **H14** *(later)* Children / infants axis — do **not** fold into adult occupancy. *(§6.9)*
 
 ### Decisions — all answered 2026-08-24, see `docs/SPEC-08-DECISIONS.md`

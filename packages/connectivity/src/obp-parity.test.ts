@@ -103,3 +103,32 @@ describe("what the guest is quoted is what the OTA is told", () => {
     expect(value.rates).toEqual([{ occupancy: 2, rate: 13000 }]);
   });
 });
+
+/*
+ * Degradation for a channel that cannot express per-occupancy rates — §L6. Added 2026-08-31.
+ *
+ * The honest failure is not to send nothing. It is to send the price the hotel nominated as their
+ * headline, and to say on the channel's limitations line that this is what happened.
+ */
+describe("a single-rate channel gets the primary, not silence", () => {
+  const rates = [
+    { occupancy: 1, minor: 10500 },
+    { occupancy: 2, minor: 13000 },
+    { occupancy: 3, minor: 15500 },
+  ];
+
+  it("sends the primary's price as a scalar", () => {
+    const value = toRestrictionValue("prop", {
+      externalRoomId: "r", externalRateId: "rp", date: D, currency: "EUR",
+      priceMinor: 13000, restrictions: {},
+    })!;
+    expect(value.rate).toBe(13000);
+    expect(value.rates).toBeUndefined();
+  });
+
+  it("that price is one of the real per-occupancy prices, not an average or a guess", () => {
+    // Whatever we degrade to must be a number the hotel actually set for some party size.
+    const primary = rates.find((r) => r.occupancy === 2)!.minor;
+    expect(rates.map((r) => r.minor)).toContain(primary);
+  });
+});

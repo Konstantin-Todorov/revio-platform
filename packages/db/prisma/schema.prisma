@@ -943,6 +943,12 @@ model Channel {
   markupPct             Float     @default(0)
   rounding              String    @default("none")
   supportedRestrictions String[]
+  /// Whether this channel can express PER-OCCUPANCY rates (OBP §6.7 / L6).
+  ///
+  /// Default false — the honest one. A channel we have not confirmed gets the primary occupancy's
+  /// rate as a scalar and says so on the limitations line, rather than being sent an options array
+  /// it silently drops. Detected at connection time from the Channex adapter, never assumed.
+  supportsOccupancy     Boolean   @default(false)
   lastSyncAt            DateTime?
   errorCount            Int       @default(0)
   pendingCount          Int       @default(0)

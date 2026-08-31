@@ -477,7 +477,10 @@ export async function syncChannel(
            */
           const plan = planIndex.get(pm.ratePlanId);
           const perPerson = effectiveModel(plan?.pricingModel, propertyModel) === "per_person";
-          if (perPerson) {
+          // A channel that cannot express per-occupancy rates gets the scalar instead — degraded,
+          // not dropped, and named on its limitations line (§L6). Sending it an options array would
+          // have it silently ignored, and the hotel would learn from a booking at the wrong price.
+          if (perPerson && channel.supportsOccupancy) {
             const rates = occupancyRatesFor(rm.roomTypeId, pm.ratePlan, k);
             if (rates.some((r) => r.minor != null && r.minor > 0)) {
               update.occupancyRates = rates;
@@ -486,6 +489,15 @@ export async function syncChannel(
                 plan?.primaryOccupancy, room?.defaultOccupancy, Math.max(1, room?.maxGuests ?? 1),
               );
             }
+          } else if (perPerson) {
+            // Degraded: the primary occupancy's price, which is the one the hotel nominated as its
+            // headline. The cheapest would undersell every booking; the dearest would lose them.
+            const room = roomById.get(rm.roomTypeId);
+            const primary = effectivePrimary(
+              plan?.primaryOccupancy, room?.defaultOccupancy, Math.max(1, room?.maxGuests ?? 1),
+            );
+            const at = occupancyRatesFor(rm.roomTypeId, pm.ratePlan, k).find((r) => r.occupancy === primary);
+            if (at?.minor != null) update.priceMinor = at.minor;
           } else {
             update.priceMinor = price;
           }

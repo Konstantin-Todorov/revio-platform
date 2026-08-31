@@ -7,6 +7,7 @@ import {
   type PlanToSwitch, type PricingModel, type SeedMode,
 } from "@revio/core";
 import { withTenantTransaction } from "@revio/db";
+import { syncRealChannels } from "@revio/connectivity";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { guard, requireCapability } from "./authz";
@@ -171,6 +172,25 @@ export async function applyPricingModel(fd: FormData): Promise<void> {
     oldValue: defaults?.pricingModel ?? "per_room",
     newValue: `${target} · ${switchPlan.changedCount} plan(s) updated`,
   });
+
+  /*
+   * A model switch is a SYNC EVENT, not a local config change (§6.10).
+   *
+   * This is the part that is easy to leave out and impossible to notice. Changing per-room to
+   * per-person changes `sell_mode` and the whole SHAPE of every rate this property sends — the OTAs
+   * are still selling the old shape until something tells them otherwise. A hotel that flips the
+   * toggle and sees the new prices on their own calendar has every reason to believe the channels
+   * have them too.
+   *
+   * Best-effort and never fatal: the switch itself has committed, and failing the action now would
+   * tell the hotelier nothing happened when it did. A failed push surfaces in the Sync Center, which
+   * is the place built for it.
+   */
+  try {
+    await syncRealChannels(prisma, property.id);
+  } catch {
+    // Reported by the Sync Center, not by throwing away a completed model change.
+  }
 
   revalidatePath("/settings");
   revalidatePath("/rates");
