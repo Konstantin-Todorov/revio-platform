@@ -460,10 +460,20 @@ export async function publicCreateReservation(
   }
 
   let accommodationMinor = 0;
+  /*
+   * The nightly figures, kept as they are computed — the snapshot the PMS will bill (§P4).
+   *
+   * Captured HERE rather than re-derived after the write, because here is the only moment they are
+   * definitively what the guest was quoted. Re-resolving a second later would already be a different
+   * question, and answering it in a second place is how the folio comes to disagree with the
+   * confirmation email.
+   */
+  const quotedNights: { date: string; occupancy: number; rateMinor: number }[] = [];
   for (const k of nights) {
     const price = priceFor(rt, rp, k, p.guests);
     if (price == null) return { error: "This rate isn't fully priced for those dates." };
     accommodationMinor += price;
+    quotedNights.push({ date: k, occupancy: p.guests, rateMinor: price });
   }
 
   /**
@@ -597,7 +607,23 @@ export async function publicCreateReservation(
       ]
         .filter(Boolean)
         .join("\n") || null,
-      lines: { create: [{ roomTypeId: rt.id, ratePlanId: rp.id, quantity: 1, checkIn, checkOut, priceMinor: totalMinor, guestsCount: p.guests }] },
+      lines: {
+        create: [{
+          roomTypeId: rt.id, ratePlanId: rp.id, quantity: 1, checkIn, checkOut,
+          priceMinor: totalMinor, guestsCount: p.guests,
+          // The per-night snapshot, written with the line so a stay can never exist without the
+          // rates it was sold at.
+          nightRates: {
+            create: quotedNights.map((n) => ({
+              tenantId: property.tenantId,
+              date: new Date(`${n.date}T00:00:00Z`),
+              occupancy: n.occupancy,
+              rateMinor: n.rateMinor,
+              source: "booking",
+            })),
+          },
+        }],
+      },
     },
   });
 

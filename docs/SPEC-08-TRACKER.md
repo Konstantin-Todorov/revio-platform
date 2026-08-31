@@ -254,7 +254,8 @@ everything in them was already built, which is worth recording so it is not rebu
 
 The PMS **consumes** the model; it never owns one. Folded into H, built after H1–H3.
 
-- ☐ **K1** *(P2)* Occupancy as a first-class field on every reservation; captured inbound and on
+- ◐ **K1** *(P2)* Occupancy on every reservation — `ReservationLine.guestsCount` carries adults and
+  the booking engine writes it; inbound channel capture is H8. Captured inbound and on
   walk-ins. "Doesn't fit" guard applies.
 - ☐ **K2** *(P3)* One resolver — `resolve_rate(room type, plan, date, occupancy)`. Per-room is the
   single max-occupancy row, so per-room properties behave exactly as today.

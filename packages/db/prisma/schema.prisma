@@ -869,6 +869,46 @@ model RatePlanOccupancy {
   @@index([ratePlanId])
 }
 
+// What a stay was QUOTED, per night — the parity-within-the-stay rule (PMS OBP §P4).
+//
+// ## Why a snapshot exists at all
+//
+// Rates move after a booking is made. If the folio re-resolved against the live rate table on every
+// render, a guest CONFIRMED at €120 could be BILLED €132 because somebody edited the occupancy table
+// in between — and the folio would disagree with the confirmation email and with the OTA's record of
+// the same booking. That is not a rounding difference, it is a dispute at the desk.
+//
+// So: the CRS QUOTES (live resolution at shop time) and the PMS BILLS WHAT WAS QUOTED. The two roles
+// are deliberately distinct, and this table is the boundary between them.
+//
+// ## Why per night rather than one figure
+//
+// A stay spans dates that can price differently, and an occupancy change mid-stay repriaces only
+// from the change forward — already-posted nights are not retroactively moved. Storing one total
+// would make both impossible to express.
+//
+// Re-resolved ONLY on a real change: occupancy changed, or a move to a different room type. Never
+// because a rate table was edited.
+model ReservationNightRate {
+  id                String   @id @default(cuid())
+  tenantId          String
+  reservationLineId String
+  /// The night this rate is for — the date the guest sleeps, not the date it was quoted.
+  date              DateTime @db.Date
+  /// The adult count this night was priced at. Kept per night because it can change mid-stay.
+  occupancy         Int
+  rateMinor         Int
+  /// When this night was last resolved, and why — "booking", "occupancy_change", "room_move".
+  /// A night that has never been re-resolved still says "booking", which is the useful default.
+  source            String   @default("booking")
+  updatedAt         DateTime @default(now()) @updatedAt
+
+  line ReservationLine @relation(fields: [reservationLineId], references: [id], onDelete: Cascade)
+
+  @@unique([reservationLineId, date])
+  @@index([reservationLineId])
+}
+
 // Room Type x Rate Plan = a sellable Product.
 model RatePlanRoomType {
   ratePlanId String
@@ -1162,9 +1202,12 @@ model ReservationLine {
   checkOut      DateTime @db.Date
   // CRS: the line's accommodation price (whole stay, minor units) + guests staying. Null on legacy rows.
   priceMinor    Int?
+  /// Adults on this line — the occupancy the stay is PRICED at (OBP §6.9: children and infants are a
+  /// separate axis and must never be folded in here).
   guestsCount   Int?
 
   reservation Reservation      @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  nightRates  ReservationNightRate[]
   roomType    RoomType         @relation(fields: [roomTypeId], references: [id])
   ratePlan    RatePlan         @relation(fields: [ratePlanId], references: [id])
   assignments RoomAssignment[]
