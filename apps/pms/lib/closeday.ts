@@ -79,7 +79,8 @@ export async function getCloseDayView() {
         propertyId: property.id, status: "active", checkedOutAt: null, checkedInAt: { not: null },
         reservation: { departedAt: null },
       },
-      include: { reservation: { include: { lines: true } } },
+      // nightRates: the night audit accrues THIS night's rate, not the stay average (§P9).
+      include: { reservation: { include: { lines: { include: { nightRates: true } } } } },
     }),
     prisma.roomAssignment.count({ where: { propertyId: property.id, checkedInAt: { gte: bizStart, lt: bizNext } } }),
     prisma.roomAssignment.count({ where: { propertyId: property.id, checkedOutAt: { gte: bizStart, lt: bizNext } } }),
@@ -89,6 +90,8 @@ export async function getCloseDayView() {
   ]);
 
   const occupiedRooms = occAssignments.length;
+  // The night being closed, as a key the snapshot can be matched on.
+  const businessDateKey = businessDate;
   // Room revenue accruing for THIS night = each in-house stay's nightly room rate (accommodation ÷ nights).
   const currency = property.baseCurrency;
   let roomRevenueMinor = 0;
@@ -97,11 +100,30 @@ export async function getCloseDayView() {
     const r = a.reservation;
     if (seen.has(r.id)) continue;
     seen.add(r.id);
-    const accom = r.propertyTotalMinor ?? r.totalMinor;
-    const ci = r.lines.map((l) => l.checkIn.getTime()).sort((x, y) => x - y)[0];
-    const co = r.lines.map((l) => l.checkOut.getTime()).sort((x, y) => y - x)[0];
-    const nights = ci != null && co != null ? Math.max(1, Math.round((co - ci) / 86_400_000)) : 1;
-    roomRevenueMinor += Math.round(accom / nights);
+    /*
+     * THIS night's rate, from the snapshot — PMS OBP §P9 (K5).
+     *
+     * The old sum divided the stay total by its nights, which is right only when every night costs
+     * the same. Under OBP they routinely do not: a mid-stay occupancy change reprices from the
+     * change forward, and a stay spanning a weekend was never flat anyway. Averaging turns a real
+     * per-night figure into a smooth one, and the night audit is where a hotel's revenue is actually
+     * recognised — the number it accrues should be the number that night earned.
+     *
+     * Falls back to the average only for a stay with no snapshot: booked before OBP, or imported.
+     */
+    const tonight = r.lines
+      .flatMap((l) => l.nightRates ?? [])
+      .find((n) => n.date.toISOString().slice(0, 10) === businessDateKey);
+
+    if (tonight) {
+      roomRevenueMinor += tonight.rateMinor;
+    } else {
+      const accom = r.propertyTotalMinor ?? r.totalMinor;
+      const ci = r.lines.map((l) => l.checkIn.getTime()).sort((x, y) => x - y)[0];
+      const co = r.lines.map((l) => l.checkOut.getTime()).sort((x, y) => y - x)[0];
+      const nights = ci != null && co != null ? Math.max(1, Math.round((co - ci) / 86_400_000)) : 1;
+      roomRevenueMinor += Math.round(accom / nights);
+    }
   }
   const inHouseReservationIds = new Set(occAssignments.map((a) => a.reservationId));
   const extrasMinor = extras.filter((e) => inHouseReservationIds.has(e.reservationId)).reduce((s, e) => s + e.priceMinor, 0);

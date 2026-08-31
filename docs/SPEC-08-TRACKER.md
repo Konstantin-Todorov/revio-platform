@@ -268,12 +268,8 @@ everything in them was already built, which is worth recording so it is not rebu
   time. Closed with `folio-outcomes.ts` (10 tests) and a summary on Folios → History: collected,
   owed and lost as **three numbers that are never added together**, and every row shown at zero
   because an absent row reads as "not measured".
-- ☐ **J2** *(§4 / P1–P15)* OBP on the PMS side. Depends on the shared model (H1). Sequenced last.
-
-## K. OBP on the PMS *(RevioPMS-OBP-Implementation, P1–P15)*
-
-The PMS **consumes** the model; it never owns one. Folded into H, built after H1–H3.
-
+- ☑ **J2** *(§4 / P1–P15)* OBP on the PMS side — K1–K7 done. K8 (children as separate folio lines)
+  waits on H14, which the spec itself defers.
 - ☑ **K1** *(P2)* Occupancy on every reservation — `guestsCount` carries adults; the booking engine
   writes it and inbound channel bookings land it (H8). Captured inbound and on
   walk-ins. "Doesn't fit" guard applies.
@@ -283,9 +279,13 @@ The PMS **consumes** the model; it never owns one. Folded into H, built after H1
   written with the line at booking so a stay cannot exist without the rates it was sold at. The
   folio bills it and only falls back to the line total when there is no snapshot. `nightRate()` owns
   the precedence — override → comp → snapshot → live resolve — with 16 tests.
-- ☐ **K4** *(P6–P8)* Re-resolve **only** on a real change — mid-stay occupancy change, cross-type
-  move, check-in confirmation — each atomic with the folio, on the existing state machine.
-- ☐ **K5** *(P9)* Night audit posts the snapshot nightly rate. Auto-close inherits it, no separate path.
+- ☑ **K4** *(P6–P8)* `repriceStay` in `apps/pms/lib/reprice.ts` — takes the caller's `tx`, never a
+  client of its own, so the change and the repricing commit together. **Forward only**; a night the
+  new shape cannot price keeps its OLD rate and is reported, because a night that silently becomes
+  free is worse than one that is briefly wrong.
+- ☑ **K5** *(P9)* Night audit accrues **this night's** snapshot rate rather than the stay total
+  divided by its nights. Averaging is right only when every night costs the same, which OBP makes
+  routinely untrue — and the night audit is where revenue is actually recognised.
 - ☑ **K6** *(P10)* The accommodation line names the occupancy it was priced at (`Deluxe Double ·
   2p · …`), and a range when a mid-stay change means the nights differ. Absent for a per-room stay,
   so that folio reads exactly as today.
