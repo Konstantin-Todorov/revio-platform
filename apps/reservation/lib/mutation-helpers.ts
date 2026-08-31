@@ -2,16 +2,47 @@ import "server-only";
 import { decimalOr, intOr, minorUnitsOr } from "@revio/core";
 import { syncRealChannels, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
+import { getSession } from "./session";
 
-/** Record an Audit Log entry. Every hand-made change is permanent and attributable. */
+/**
+ * The signed-in user, or null when there is no request context (cron, scripts, webhooks).
+ *
+ * `cookies()` throws outside a request rather than returning empty, so this cannot be a plain call.
+ */
+async function currentActorId(): Promise<string | null> {
+  try {
+    return (await getSession())?.userId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+
+/**
+ * Record an Audit Log entry. Every hand-made change is permanent and attributable.
+ *
+ * "Attributable" was an aspiration until 2026-09-01: this helper did not accept a user at all, so
+ * every entry this app has ever written names no actor. 93 of 139 `logAudit` calls across the
+ * platform recorded nothing about who acted, which makes an audit trail unable to answer the one
+ * question it exists for.
+ *
+ * The actor is resolved HERE, from the session, rather than passed by 93 call sites. A caller may
+ * still name one explicitly — a delegated action attributes to the person who performed it, not to
+ * whoever happens to be signed in — and an explicit value always wins.
+ *
+ * Falls back to null rather than throwing when there is no request to read a session from: the
+ * cron jobs and the night audit write audit entries too, and an unattributed entry is worth far
+ * more than a crashed close-day.
+ */
 export async function logAudit(
   propertyId: string,
   tenantId: string,
-  entry: { entity: string; field?: string; oldValue?: string; newValue?: string; source?: string },
+  entry: { entity: string; field?: string; oldValue?: string; newValue?: string; source?: string; userId?: string },
 ) {
   await prisma.auditEntry.create({
     data: {
       tenantId, propertyId,
+      userId: entry.userId ?? (await currentActorId()),
       entity: entry.entity,
       field: entry.field ?? null,
       oldValue: entry.oldValue ?? null,

@@ -2,6 +2,21 @@ import "server-only";
 import { decimalOr, intOr, minorUnitsOr } from "@revio/core";
 import { syncRealChannels, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
+import { getSession } from "./session";
+
+/**
+ * The signed-in user, or null when there is no request context (cron, scripts, webhooks).
+ *
+ * `cookies()` throws outside a request rather than returning empty, so this cannot be a plain call.
+ */
+async function currentActorId(): Promise<string | null> {
+  try {
+    return (await getSession())?.userId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 
 /*
  * Several helpers below take an optional `db`.
@@ -24,7 +39,8 @@ export async function logAudit(
   await db.auditEntry.create({
     data: {
       tenantId, propertyId,
-      userId: entry.userId ?? null,
+      // Explicit wins — a delegated action attributes to whoever performed it.
+      userId: entry.userId ?? (await currentActorId()),
       entity: entry.entity,
       field: entry.field ?? null,
       oldValue: entry.oldValue ?? null,

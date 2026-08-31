@@ -27,6 +27,30 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-09-01 · Claude · DONE · The audit trail named nobody — fixed, and finally shown
+**93 of 139 `logAudit` calls recorded no actor. 12,318 of 12,680 rows in production name nobody.**
+Files: `apps/{reservation,channel-manager,pms}/lib/mutation-helpers.ts`, `apps/pms/lib/activity.ts`
+(new), `apps/pms/app/(protected)/activity/` (new), `Sidebar.tsx`
+
+The helper's own doc comment read *"Every hand-made change is permanent and attributable."* It was
+never attributable: **CRS and RevioLink's `logAudit` did not accept a userId at all**, so the column
+could not be set from either app. PMS accepted it and 46 call sites passed it; the other 93 did not.
+
+Fixed at the **helper**, not the call sites — `logAudit` resolves the actor from the session itself.
+93 edits become 3, and the next call site is correct by default. An explicit `userId` still wins, so
+a delegated action attributes to whoever performed it. Wrapped in try/catch: `cookies()` THROWS
+outside a request, and the cron jobs and night audit write audit entries too — an unattributed entry
+beats a crashed close-day.
+
+**Activity screen** (PMS → Setup → Activity, `manage` only — it shows money, guests and config in
+one place). Two things the data forced:
+- **95% of entries are channel syncs** (12,037 of 12,680). Hidden by default but **counted**, with a
+  link to show them: a filter that silently drops most of the data teaches people to distrust the screen.
+- Filtering happens **after** the query, not in it: `take` cannot mean "200 human entries", so a page
+  of 200 that is 95% noise comes back nearly empty.
+- The screen **says outright** how many entries name nobody and why, rather than showing a column of
+  blanks. Everything before today is unattributable and pretending otherwise would be worse.
+
 ### 2026-08-31 · Claude · DONE · Bulgaria is on the euro — лв removed from choices and claims
 **Confirmed by the founder.** Files: `packages/core/src/registry/tourist-tax.ts`,
 `packages/ui/src/welcome-fields.tsx`, `apps/channel-manager/components/settings/*`,
