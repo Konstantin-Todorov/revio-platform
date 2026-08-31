@@ -27,6 +27,17 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · CLAIMED · OBP H2 (screens) — turning it on
+**The settings a hotel uses to switch to per-person pricing, and the transactional apply.**
+Files: `apps/reservation/lib/actions-obp.ts` (new), `apps/reservation/components/settings/**`,
+`apps/reservation/app/(protected)/(property)/settings/page.tsx`, Rooms & Rates (room type
+`defaultOccupancy`, rate plan `pricingModel` / `primaryOccupancy`)
+Notes: on `main` — the engine is merged and inert at the per-room default, so each screen is an
+ordinary gated increment. The apply MUST be one `withTenantTransaction`: a property toggle touches
+every plan on every room type, and half of it leaves some plans per-person and some per-room with
+nothing recording which. The preview is computed by `planPricingModelSwitch`, the same function that
+performs it. **Codex: stay out of CRS settings and rates screens until DONE.**
+
 ### 2026-08-30 · Claude · DONE · OBP H1 · H2 · H3 · H6 — merged to main
 **Occupancy-based pricing, unparked by the founder. Branch `obp/h1-data-model`, NOT main.**
 Files: `packages/db/prisma/schema.prisma` + migration, `packages/core/src/rates/occupancy*.ts`,
