@@ -266,7 +266,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                             setDragging({ assignmentId: bar.assignmentId, fromUnitId: row.unitId, roomTypeId: row.roomTypeId, bar });
                           }}
                           onDragEnd={() => { draggedAt.current = Date.now(); setDragging(null); setOver(null); }}
-                          title={`${bar.guestName} · ${bar.from} → ${bar.to} · ${BAR_LABEL[bar.status]}${bar.pinned ? " · room pinned" : ""}${bar.movable ? " · drag to another room to move" : ""}`}
+                          title={`${bar.guestName}${bar.occupancy != null ? ` · ${bar.occupancy} guest${bar.occupancy === 1 ? "" : "s"}` : ""} · ${bar.from} → ${bar.to} · ${BAR_LABEL[bar.status]}${bar.pinned ? " · room pinned" : ""}${bar.movable ? " · drag to another room to move" : ""}`}
                           className={`absolute inset-y-1 flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] font-semibold shadow-sm transition-all duration-150 hover:opacity-90 hover:shadow-md ${BAR_TONE[bar.status]} ${
                             bar.continuesLeft ? "rounded-l-none" : ""
                           } ${bar.continuesRight ? "rounded-r-none" : ""} ${bar.movable ? "cursor-grab active:cursor-grabbing" : ""} ${
@@ -276,6 +276,13 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                         >
                           {bar.pinned && <Pin className="h-2.5 w-2.5 shrink-0 opacity-80" />}
                           <span className="truncate">{bar.guestName}</span>
+                          {/* The occupancy badge (§P5): what the stay is priced at. Still no RATE
+                              on this chart — that is deliberate (PMS §4.5) and unchanged. */}
+                          {bar.occupancy != null && (
+                            <span className="ml-1 shrink-0 rounded bg-white/25 px-1 text-[9.5px] font-bold leading-4">
+                              {bar.occupancy}p
+                            </span>
+                          )}
                         </button>
                       );
                     })}

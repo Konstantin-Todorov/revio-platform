@@ -31,6 +31,8 @@ export interface TapeBar {
   /** The assignment this bar draws — what a drag actually moves. */
   assignmentId: string;
   guestName: string;
+  /** Adults the stay is priced at, when known. Absent renders no badge. */
+  occupancy?: number;
   /** Inclusive first night shown, `YYYY-MM-DD`, clipped to the visible window. */
   from: string;
   /** Inclusive last night shown. A stay's departure day is not a night it occupies. */
@@ -107,7 +109,8 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
       },
       include: {
         unit: { select: { id: true, label: true, roomType: { select: { name: true } } } },
-        line: { select: { roomType: { select: { name: true } } } },
+        // guestsCount is the adult count the stay is PRICED at — the occupancy badge (§P5).
+        line: { select: { roomType: { select: { name: true } }, guestsCount: true } },
         reservation: {
           select: {
             id: true, guestName: true, departedAt: true, currency: true,
@@ -147,6 +150,14 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
         reservationId: r.id,
         assignmentId: a.id,
         guestName: r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName,
+        /*
+         * The occupancy badge (§P5) — what this stay is priced at, visible at a glance.
+         *
+         * The tape chart deliberately shows NO rates (PMS §4.5), and this does not change that: it
+         * is the party size, not a price. Under per-person the two are related, and a front desk
+         * seeing `2p` can tell that adding a third guest is a repricing event rather than a note.
+         */
+        ...(a.line?.guestsCount != null ? { occupancy: a.line.guestsCount } : {}),
         from: clippedFrom,
         to: clippedTo,
         nights: dateDiff(clippedFrom, clippedTo) + 1,

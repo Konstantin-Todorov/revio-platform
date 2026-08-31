@@ -57,7 +57,15 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
 
   const reservation = await db.reservation.findFirst({
     where: { id: reservationId, propertyId },
-    include: { lines: { include: { roomType: { select: { name: true } } } } },
+    include: {
+      lines: {
+        include: {
+          roomType: { select: { name: true } },
+          // What each night was QUOTED at (§P4). The folio bills this, not a live re-resolve.
+          nightRates: { orderBy: { date: "asc" } },
+        },
+      },
+    },
   });
   if (!reservation) return null;
 
@@ -81,12 +89,41 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
   const missingPrice = reservation.lines.some((l) => l.priceMinor == null);
 
   for (const line of reservation.lines) {
-    const price = line.priceMinor ?? (missingPrice ? Math.round((bookingTotal * (line.quantity || 1)) / totalQty) : 0);
+    /*
+     * The nightly snapshot is authoritative — PMS OBP §P4 (K3/K6).
+     *
+     * `line.priceMinor` is the stay total as it stood at booking. The snapshot is the same money
+     * broken down per night AND per occupancy, which is what a per-person stay needs: it survives a
+     * mid-stay occupancy change (which reprices only forward) and it lets the folio say what party
+     * size each night was priced at.
+     *
+     * The line total is preferred only when there is no snapshot — a stay booked before OBP, or one
+     * imported without nightly rates. The two agree at booking by construction; if they ever
+     * disagree the snapshot wins, because it is what the guest was quoted per night.
+     */
+    const snapshot = line.nightRates ?? [];
+    const snapshotTotal = snapshot.reduce((sum, n) => sum + n.rateMinor, 0);
+    const price = snapshot.length > 0
+      ? snapshotTotal
+      : line.priceMinor ?? (missingPrice ? Math.round((bookingTotal * (line.quantity || 1)) / totalQty) : 0);
+
     accomTotal += price;
     rooms += line.quantity;
     guests += line.guestsCount ?? line.quantity;
+
+    /*
+     * The occupancy the room was priced at, on the folio line (K6).
+     *
+     * Without it a per-person bill is a number with no explanation: a guest querying why their room
+     * is €95 and not €120 gets "that is the rate", and the receptionist has no way to show them it
+     * is the one-guest price. Only shown when it varies from the room's own default — a per-room
+     * stay's line must read exactly as it does today.
+     */
+    const occ = snapshot.length > 0 ? [...new Set(snapshot.map((n) => n.occupancy))] : [];
+    const occLabel = occ.length === 1 ? ` · ${occ[0]}p` : occ.length > 1 ? ` · ${Math.min(...occ)}–${Math.max(...occ)}p` : "";
+
     // Seed accommodation via the charge-posting service too — no direct FolioLine writes (spec §1.7).
-    await postFolioLineWith(db, { ...base, kind: "accommodation", description: `${line.roomType.name} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price });
+    await postFolioLineWith(db, { ...base, kind: "accommodation", description: `${line.roomType.name}${occLabel} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price });
   }
 
   // CITY-TAX SUPPRESSION (spec §3.6): the CRS decides whether city tax is payable on spot or already

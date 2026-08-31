@@ -200,8 +200,9 @@ Build order is fixed by §6.11 / L10 and should not be reordered:
   primary re-offset, which is a different number. **RevioDirect and the Channex push both call it**;
   CRS agent quoting follows with the H4/H5 screens. `obp-parity.test.ts` proves quote == push by
   computing both, not by inspection. *(§6.6)*
-- ☐ **H7** PMS — folio line at the occupancy rate, re-resolve when occupancy changes mid-stay, room
-  moves/upgrades re-price, walk-ins quoted at occupancy, night audit posts the occupancy rate. *(§6.6)*
+- ☑ **H7** PMS — folio bills the nightly snapshot at the occupancy it was sold at; the tape chart
+  shows the badge. Mid-stay re-resolve rules are pure and tested (`nightsToReprice`, forward only);
+  wiring them into the move/occupancy-change transitions is K4.
 - ☑ **H8** RevioLink inbound — **done.** `inboundAdults` reads the party size wherever a channel
   puts it (an `occupancy` object, flat fields, string or number) and lands it on
   `ReservationLine.guestsCount`, so a per-person folio reconciles against what was actually sold.
@@ -276,17 +277,20 @@ The PMS **consumes** the model; it never owns one. Folded into H, built after H1
 - ☑ **K1** *(P2)* Occupancy on every reservation — `guestsCount` carries adults; the booking engine
   writes it and inbound channel bookings land it (H8). Captured inbound and on
   walk-ins. "Doesn't fit" guard applies.
-- ☐ **K2** *(P3)* One resolver — `resolve_rate(room type, plan, date, occupancy)`. Per-room is the
-  single max-occupancy row, so per-room properties behave exactly as today.
-- ☐ **K3** *(P4)* ⚠️ **The crux.** A **rate snapshot per night** on the reservation. The PMS bills the
-  snapshot and never silently re-resolves — a guest confirmed at €120 must not be billed €132 because
-  the occupancy table moved afterwards. The CRS quotes live; the PMS bills what was quoted.
+- ☑ **K2** *(P3)* One resolver — `resolveRate` in `@revio/core`, called by RevioDirect, the CRS
+  calendar, the Channex push and the PMS. Per-room is the one-row special case at the ceiling.
+- ☑ **K3** *(P4)* **The crux — done.** `ReservationNightRate` holds what each night was QUOTED,
+  written with the line at booking so a stay cannot exist without the rates it was sold at. The
+  folio bills it and only falls back to the line total when there is no snapshot. `nightRate()` owns
+  the precedence — override → comp → snapshot → live resolve — with 16 tests.
 - ☐ **K4** *(P6–P8)* Re-resolve **only** on a real change — mid-stay occupancy change, cross-type
   move, check-in confirmation — each atomic with the folio, on the existing state machine.
 - ☐ **K5** *(P9)* Night audit posts the snapshot nightly rate. Auto-close inherits it, no separate path.
-- ☐ **K6** *(P10)* Folio line shows the occupancy it was priced at.
-- ☐ **K7** *(P5 / §4.5)* Calendar gets an occupancy badge (`2p`) and **no rate strip** — the PMS
-  calendar stays rate-free by design, deliberately unlike the CRS one.
+- ☑ **K6** *(P10)* The accommodation line names the occupancy it was priced at (`Deluxe Double ·
+  2p · …`), and a range when a mid-stay change means the nights differ. Absent for a per-room stay,
+  so that folio reads exactly as today.
+- ☑ **K7** *(P5 / §4.5)* Tape-chart bars carry a `2p` occupancy badge and the tooltip spells it
+  out. **Still no rate strip** — that is deliberate and unchanged; a party size is not a price.
 - ☐ **K8** *(P11)* Children/infants as separate folio lines. After adult OBP.
 
 ---
