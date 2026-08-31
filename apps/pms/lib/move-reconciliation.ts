@@ -35,6 +35,8 @@ export async function assessMoveForReservation(reservationId: string): Promise<
       line: {
         select: {
           roomTypeId: true, checkIn: true, checkOut: true, priceMinor: true,
+          // The party size the stay is priced at — a move's difference must be computed against it.
+          guestsCount: true,
           ratePlanId: true, roomType: { select: { name: true } },
         },
       },
@@ -56,10 +58,22 @@ export async function assessMoveForReservation(reservationId: string): Promise<
   // What the destination type costs, on the SAME rate plan the guest booked. A move does not change
   // which rate plan they are on — the spec is explicit that the reservation keeps its original plan,
   // and pricing the new room on a different one would quietly re-sell the stay.
+  /*
+   * ⚠️ Occupancy-filtered. Keyed by date alone below, which OBP made ambiguous: a per-person room
+   * has a row per guest count and the map would keep an arbitrary one, so the difference quoted for
+   * a move could be computed against the wrong party size.
+   *
+   * The stay's own occupancy, falling back to the destination room's ceiling.
+   */
+  const destRoom = await prisma.roomType.findUnique({
+    where: { id: assignment.unit.roomTypeId }, select: { maxGuests: true },
+  });
+  const moveOccupancy = line.guestsCount ?? destRoom?.maxGuests ?? 1;
   const destPrices = await prisma.ratePrice.findMany({
     where: {
       roomTypeId: assignment.unit.roomTypeId,
       ratePlanId: line.ratePlanId,
+      occupancy: moveOccupancy,
       date: { gte: utcDay(nights[0]!), lte: utcDay(nights[nights.length - 1]!) },
     },
     select: { date: true, priceMinor: true },

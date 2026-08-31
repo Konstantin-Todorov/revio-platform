@@ -27,6 +27,19 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · OBP bug sweep — five bugs I introduced
+**Adding a dimension to a key broke every reader that assumed one row.**
+Files: `apps/pms/lib/actions-frontdesk.ts`, `apps/pms/lib/move-reconciliation.ts`,
+`apps/reservation/lib/data.ts`, `apps/channel-manager/lib/data.ts`, `apps/pms/lib/reprice*.ts`
+Notes: ⚠️ **The lesson worth keeping.** `RatePrice` went from one row per (room, plan, date) to one
+per occupancy. The TYPE did not change, only the cardinality — so the compiler caught nothing and
+four readers silently broke: three kept an arbitrary row via `new Map()`, and the walk-in **summed
+every occupancy**, charging roughly 4× on a 4-guest room. When you add a dimension to a key, grep
+every reader; the types will not help you.
+Fifth: `repriceStay` was **dead code** — built, tested, K4 marked done, and called by nothing. Now
+wired into the cross-type move, plus `changeStayOccupancy`, which did not exist at all: nothing
+could record that a guest added a second person.
+
 ### 2026-08-31 · Claude · DONE · OBP H4 — bulk occupancy matrix
 **The Price control becomes a matrix; two entry modes; mixed caps handled.**
 Files: `packages/core/src/rates/bulk-occupancy.ts` (new + tests),

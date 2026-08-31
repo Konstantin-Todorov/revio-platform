@@ -469,8 +469,20 @@ export async function stayQuote(roomTypeId: string, ratePlanId: string, checkIn:
   const nights = nightsOf(checkIn, checkOut);
   const rp = await prisma.ratePlan.findUniqueOrThrow({ where: { id: ratePlanId } });
   const priceSourceId = rp.priceLogic === "derived" && rp.parentRatePlanId ? rp.parentRatePlanId : rp.id;
+  /*
+   * ⚠️ Occupancy-filtered — `byDate` holds one price per date and OBP made that untrue by default.
+   * Without the filter a per-person room returns a row per guest count and the map keeps whichever
+   * came last, so the same search could quote a different price on two consecutive runs.
+   */
+  const quoteRoom = await prisma.roomType.findUnique({
+    where: { id: roomTypeId }, select: { maxGuests: true, defaultOccupancy: true },
+  });
+  const quoteOccupancy = quoteRoom?.defaultOccupancy ?? quoteRoom?.maxGuests ?? 1;
   const rows = await prisma.ratePrice.findMany({
-    where: { roomTypeId, ratePlanId: priceSourceId, date: { gte: new Date(`${checkIn}T00:00:00Z`), lt: new Date(`${checkOut}T00:00:00Z`) } },
+    where: {
+      roomTypeId, ratePlanId: priceSourceId, occupancy: quoteOccupancy,
+      date: { gte: new Date(`${checkIn}T00:00:00Z`), lt: new Date(`${checkOut}T00:00:00Z`) },
+    },
   });
   const byDate = new Map(rows.map((r) => [ymd(r.date), r.priceMinor]));
 

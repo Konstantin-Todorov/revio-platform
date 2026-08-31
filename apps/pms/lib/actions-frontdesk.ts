@@ -3,15 +3,17 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { withTenantTransaction } from "@revio/db";
-import { describeAccommodation } from "@revio/core";
+import { describeAccommodation, resolveRate } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { availableUnitsFor } from "./data";
+import { repriceStay } from "./reprice";
+import { repriceContext } from "./reprice-context";
 import { ensureFolio, reservationBalance } from "./folio";
 import { stayScope } from "@revio/connectivity";
 import { logAudit, recordSync, str, int } from "./mutation-helpers";
-import { todayInTz, addDaysYmd, utcDay } from "./format";
+import { todayInTz, addDaysYmd, utcDay, ymd } from "./format";
 
 /**
  * Session + capability gate for every action in this file.
@@ -281,13 +283,15 @@ export async function roomMove(fd: FormData): Promise<MoveOutcome> {
     where: { id: assignmentId, propertyId: session.activePropertyId, status: "active", checkedOutAt: null },
     include: {
       unit: { select: { label: true, roomTypeId: true, roomType: { select: { name: true } } } },
-      line: { select: { roomTypeId: true, roomType: { select: { name: true } } } },
+      // ratePlanId + guestsCount: a CROSS-TYPE move reprices the stay against the new room type's
+      // occupancy rates (§P7), and needs both to do it.
+      line: { select: { id: true, roomTypeId: true, ratePlanId: true, guestsCount: true, roomType: { select: { name: true } } } },
     },
   });
   if (!a) redirect("/dashboard");
   const newUnit = await prisma.unit.findFirst({
     where: { id: newUnitId, propertyId: session.activePropertyId },
-    include: { roomType: { select: { name: true } } },
+    include: { roomType: { select: { name: true, maxGuests: true, defaultOccupancy: true } } },
   });
   if (!newUnit || newUnit.id === a!.unitId) redirect(`/move/${assignmentId}?error=pick`);
 
@@ -308,6 +312,14 @@ export async function roomMove(fd: FormData): Promise<MoveOutcome> {
         accommodatedUnitLabel: newUnit!.label,
       })
     : null;
+
+  // Read OUTSIDE the transaction: it holds row locks while it runs, and a rate-plan read has no
+  // business being in there.
+  const repriceCtx = crossType ? await repriceContext(session.activePropertyId) : null;
+  // The PROPERTY's today. A server in another timezone would reprice the wrong night at midnight.
+  const propertyToday = repriceCtx
+    ? todayInTz((await prisma.property.findUniqueOrThrow({ where: { id: session.activePropertyId }, select: { timezone: true } })).timezone)
+    : "";
 
   await withTenantTransaction(session.tenantId, async (tx) => {
     // "moved", not "checked out" — the guest has not departed, and counting this as a departure
@@ -330,6 +342,39 @@ export async function roomMove(fd: FormData): Promise<MoveOutcome> {
       },
     });
     await tx.unit.update({ where: { id: a!.unitId }, data: { hkStatus: "dirty" } });
+
+    /*
+     * A CROSS-TYPE move reprices the stay against the new room type — §P7 (K4).
+     *
+     * Inside this transaction on purpose: a move that lands with the old room's rates bills the
+     * guest for a room they are not in, and a reprice that lands without the move is worse. Both or
+     * neither.
+     *
+     * Same-type moves do not reprice — the rate did not change, only the room number did.
+     *
+     * ⚠️ This call was missing when K4 was first marked done. `repriceStay` existed, was tested, and
+     * was invoked by nothing — the feature was a function nobody called.
+     */
+    if (crossType && repriceCtx) {
+      const from = ymd(a!.checkIn) > propertyToday ? ymd(a!.checkIn) : propertyToday;
+      await repriceStay({
+        tx,
+        tenantId: session.tenantId,
+        reservationLineId: a!.reservationLineId,
+        roomTypeId: newUnit!.roomTypeId,
+        ratePlanId: a!.line.ratePlanId,
+        maxOccupancy: newUnit!.roomType.maxGuests,
+        roomDefaultOccupancy: newUnit!.roomType.defaultOccupancy,
+        propertyModel: repriceCtx.propertyModel,
+        plans: repriceCtx.plans,
+        // The party size does not change with a move; only what it costs does.
+        occupancy: a!.line.guestsCount ?? 1,
+        // From today, or from arrival for a stay that has not started — never backwards over nights
+        // already slept in the old room at the old rate.
+        fromDate: from,
+        reason: "room_move",
+      });
+    }
   });
 
   await logAudit(session.activePropertyId, session.tenantId, {
@@ -384,13 +429,54 @@ export async function walkIn(fd: FormData): Promise<void> {
   const unit = avail.find((u) => u.available);
   if (!unit) redirect("/walkin?error=full");
 
-  // Price from the standard plan's nightly rates over the stay (extrapolate if the window is short).
-  const prices = await prisma.ratePrice.findMany({
-    where: { roomTypeId, ratePlanId: standard!.id, date: { gte: utcDay(today), lt: utcDay(checkOut) } },
-    select: { priceMinor: true },
+  /*
+   * Price the stay at the party size actually walking in — and this had a real bug.
+   *
+   * ⚠️ It summed every RatePrice row in the window. That was correct while there was one row per
+   * (room, plan, date), and OBP made it catastrophic: a per-person room now has one row PER GUEST
+   * COUNT, so a 4-guest room charged the 1 + 2 + 3 + 4-guest prices added together — roughly four
+   * times the rate, on a bill handed to somebody standing at the desk.
+   *
+   * Resolved through `resolveRate` now, which prices one night at one occupancy and is the same
+   * function the booking engine and the Channex push use. The rows are read per occupancy and keyed,
+   * never summed.
+   */
+  const walkInRoom = await prisma.roomType.findUniqueOrThrow({
+    where: { id: roomTypeId }, select: { maxGuests: true, defaultOccupancy: true },
   });
-  let priceMinor = prices.reduce((s, p) => s + p.priceMinor, 0);
-  if (prices.length > 0 && prices.length < nights) priceMinor = Math.round((priceMinor / prices.length) * nights);
+  const walkInOccupancy = Math.max(1, Math.min(guests, walkInRoom.maxGuests));
+  const stayNights: string[] = [];
+  for (let i = 0; i < nights; i++) stayNights.push(addDaysYmd(today, i));
+
+  const priceRows = await prisma.ratePrice.findMany({
+    where: { roomTypeId, date: { gte: utcDay(today), lt: utcDay(checkOut) } },
+    select: { roomTypeId: true, ratePlanId: true, date: true, occupancy: true, priceMinor: true },
+  });
+  const walkInMap = new Map(
+    priceRows.map((r) => [`${r.roomTypeId}:${r.ratePlanId}:${ymd(r.date)}:${r.occupancy ?? ""}`, r.priceMinor]),
+  );
+  const walkInCtx = await repriceContext(session.activePropertyId);
+  const walkInPlan = walkInCtx.plans.get(standard!.id);
+
+  const quotedNights: { date: string; occupancy: number; rateMinor: number }[] = [];
+  for (const d of stayNights) {
+    const minor = walkInPlan
+      ? resolveRate({
+          lookup: (rt, rp, k, occ) => walkInMap.get(`${rt}:${rp}:${k}:${occ}`) ?? null,
+          plans: walkInCtx.plans, roomTypeId,
+          maxOccupancy: walkInRoom.maxGuests, roomDefaultOccupancy: walkInRoom.defaultOccupancy,
+          propertyModel: walkInCtx.propertyModel, plan: walkInPlan,
+          dateKey: d, occupancy: walkInOccupancy,
+        })
+      : null;
+    if (minor != null) quotedNights.push({ date: d, occupancy: walkInOccupancy, rateMinor: minor });
+  }
+  let priceMinor = quotedNights.reduce((s, n) => s + n.rateMinor, 0);
+  // A night with no rate is extrapolated from the ones that have one, rather than billed as free —
+  // the guest is standing there and the room is not complimentary.
+  if (quotedNights.length > 0 && quotedNights.length < nights) {
+    priceMinor = Math.round((priceMinor / quotedNights.length) * nights);
+  }
 
   const guest = await prisma.guest.create({ data: { tenantId: session.tenantId, propertyId: session.activePropertyId, firstName, lastName } });
   const reservation = await prisma.reservation.create({
@@ -400,7 +486,28 @@ export async function walkIn(fd: FormData): Promise<void> {
       totalMinor: priceMinor, currency: property!.baseCurrency,
       propertyCurrency: property!.baseCurrency, propertyTotalMinor: priceMinor, fxRate: 1, fxAt: new Date(),
       guestId: guest.id, paymentGuarantee: "none", notes: "Walk-in (PMS)", createdById: session.userId,
-      lines: { create: [{ roomTypeId, ratePlanId: standard!.id, quantity: 1, checkIn: utcDay(today), checkOut: utcDay(checkOut), priceMinor, guestsCount: guests }] },
+      lines: {
+        create: [{
+          roomTypeId, ratePlanId: standard!.id, quantity: 1,
+          checkIn: utcDay(today), checkOut: utcDay(checkOut),
+          priceMinor, guestsCount: walkInOccupancy,
+          // The same per-night snapshot a channel or direct booking gets (§P4), so a walk-in's
+          // folio explains itself and survives a mid-stay occupancy change like any other stay.
+          ...(quotedNights.length === nights
+            ? {
+                nightRates: {
+                  create: quotedNights.map((n) => ({
+                    tenantId: session.tenantId,
+                    date: utcDay(n.date),
+                    occupancy: n.occupancy,
+                    rateMinor: n.rateMinor,
+                    source: "booking",
+                  })),
+                },
+              }
+            : {}),
+        }],
+      },
     },
     include: { lines: true },
   });
@@ -418,4 +525,86 @@ export async function walkIn(fd: FormData): Promise<void> {
     stayScope([{ roomTypeId, checkIn: line.checkIn, checkOut: line.checkOut }]));
   refresh();
   redirect("/dashboard");
+}
+
+/**
+ * Change the party size on a stay, and reprice from today forward — §P6 (K4).
+ *
+ * ## Why this exists at all
+ *
+ * There was no way to record that a guest added a second person. `guestsCount` was written once at
+ * booking and never again, so under per-person pricing a stay that grew mid-week kept billing the
+ * single rate — the folio quietly understating what the hotel was owed, with nothing on any screen
+ * saying so.
+ *
+ * ## Atomic, and forward only
+ *
+ * The occupancy change and the repricing commit together: a stay that says "2 guests" while still
+ * billing the one-guest rate is worse than either half alone, because both look right in isolation.
+ *
+ * Nights already slept keep their rate. A guest who adds someone on Thursday does not owe the double
+ * rate for Monday, and those nights have very likely been posted to the folio already.
+ */
+export async function changeStayOccupancy(fd: FormData): Promise<void> {
+  const session = await ctx("frontDesk");
+  const reservationId = str(fd, "reservationId");
+  const lineId = str(fd, "lineId");
+  const requested = int(fd, "occupancy") ?? 0;
+
+  const line = await prisma.reservationLine.findFirst({
+    where: { id: lineId, reservation: { id: reservationId, propertyId: session.activePropertyId } },
+    include: { roomType: { select: { id: true, maxGuests: true, defaultOccupancy: true } } },
+  });
+  if (!line) redirect(`/reservation/${reservationId}?error=notfound`);
+
+  // The "doesn't fit" guard (§3.1) applies here as much as at booking: a room that sleeps two cannot
+  // be sold to three, and letting the number through would price a party the room cannot hold.
+  const occupancy = Math.max(1, Math.min(requested, line!.roomType.maxGuests));
+  if (requested < 1 || requested > line!.roomType.maxGuests) {
+    redirect(`/reservation/${reservationId}?error=occupancy`);
+  }
+  if (occupancy === line!.guestsCount) redirect(`/reservation/${reservationId}`);
+
+  const previous = line!.guestsCount ?? occupancy;
+  const repriceCtx = await repriceContext(session.activePropertyId);
+  const property = await prisma.property.findUniqueOrThrow({
+    where: { id: session.activePropertyId }, select: { timezone: true },
+  });
+  const today = todayInTz(property.timezone);
+  const from = ymd(line!.checkIn) > today ? ymd(line!.checkIn) : today;
+
+  let outcome = { repriced: 0, unpriceable: [] as string[] };
+  await withTenantTransaction(session.tenantId, async (tx) => {
+    await tx.reservationLine.update({ where: { id: lineId }, data: { guestsCount: occupancy } });
+    outcome = await repriceStay({
+      tx,
+      tenantId: session.tenantId,
+      reservationLineId: lineId,
+      roomTypeId: line!.roomType.id,
+      ratePlanId: line!.ratePlanId,
+      maxOccupancy: line!.roomType.maxGuests,
+      roomDefaultOccupancy: line!.roomType.defaultOccupancy,
+      propertyModel: repriceCtx.propertyModel,
+      plans: repriceCtx.plans,
+      occupancy,
+      fromDate: from,
+      reason: "occupancy_change",
+    });
+  });
+
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "stay_occupancy",
+    field: `#${reservationId.slice(-6)}`,
+    oldValue: `${previous} guest(s)`,
+    // What was repriced, and what could not be — a night the new party size has no rate for keeps
+    // its old one, and somebody has to know.
+    newValue:
+      `${occupancy} guest(s) · ${outcome.repriced} night(s) repriced from ${from}` +
+      (outcome.unpriceable.length > 0 ? ` · ${outcome.unpriceable.length} night(s) have no rate at this party size and kept the old one` : ""),
+    userId: session.userId,
+  });
+
+  revalidatePath(`/reservation/${reservationId}`);
+  revalidatePath(`/folio/${reservationId}`);
+  revalidatePath("/calendar");
 }

@@ -302,7 +302,20 @@ export async function getCalendarBoard(q: CalendarQuery) {
   const rtIds = roomTypes.map((r) => r.id);
   const [prices, cells, resLines] = await Promise.all([
     standard
-      ? prisma.ratePrice.findMany({ where: { roomTypeId: { in: rtIds }, ratePlanId: standard.id, date: { gte: start, lte: end } } })
+      /*
+       * ⚠️ Occupancy-filtered. This map is keyed on (room, date) and assumed one row per key — true
+       * until OBP gave RatePrice an occupancy dimension, after which a per-person room returns one
+       * row PER GUEST COUNT and `new Map()` silently keeps whichever arrived last. The calendar
+       * would show the 1-guest price on one refresh and the 3-guest price on the next.
+       *
+       * The headline is the room's primary occupancy, which is where a per-room row also lives.
+       */
+      ? prisma.ratePrice.findMany({
+          where: {
+            roomTypeId: { in: rtIds }, ratePlanId: standard.id, date: { gte: start, lte: end },
+            occupancy: { in: allRoomTypes.map((rt) => rt.defaultOccupancy ?? rt.maxGuests) },
+          },
+        })
       : Promise.resolve([]),
     // ROOM-LEVEL read — the calendar has one row per room, so `cellMap` is keyed on room + date.
     // Plan-scoped cells must not enter it; they belong to the rate-plan rows, not these.
@@ -318,6 +331,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
   ]);
 
   const priceKey = (rt: string, k: string) => `${rt}:${k}`;
+  // Narrowed above to each room's primary, so at most one row per (room, date) reaches this map.
   const priceMap = new Map(prices.map((p) => [priceKey(p.roomTypeId, p.date.toISOString().slice(0, 10)), p.priceMinor]));
   const cellMap = new Map(cells.map((c) => [priceKey(c.roomTypeId, c.date.toISOString().slice(0, 10)), c]));
 
