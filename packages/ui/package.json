@@ -25,7 +25,8 @@
     "./otp-input": "./src/otp-input.tsx",
     "./date-picker-affordance": "./src/date-picker-affordance.tsx",
     "./flash": "./src/flash.ts",
-    "./flash-toast": "./src/flash-toast.tsx"
+    "./flash-toast": "./src/flash-toast.tsx",
+    "./activity-table": "./src/activity-table.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

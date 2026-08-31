@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, CalendarRange, Wrench, CalendarCheck, Tags, BarChart3,
-  Share2, Users, Settings, Globe, X, type LucideIcon,
+  Share2, Users, Settings, Globe, X, type LucideIcon, History,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
@@ -36,6 +36,9 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     // configures, not a preference buried in Settings.
     { href: "/booking-engine", label: "Booking Engine", icon: Globe },
     { href: "/settings", label: "Settings", icon: Settings },
+    // One history per property, whichever product wrote the row — a CRS-only client would
+    // otherwise have no way to see any of it.
+    { href: "/activity", label: "Activity", icon: History },
   ] },
 ];
 

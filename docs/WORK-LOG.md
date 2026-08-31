@@ -27,6 +27,25 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-09-01 · Claude · DONE · Activity in RevioCRS too — and two more stale doc items closed
+Files: `packages/ui/src/activity-table.tsx` (new), `apps/reservation/lib/activity.ts` (new),
+`apps/reservation/app/(protected)/(property)/activity/`, both Sidebars, `BUILD-PLAN.md`
+Notes: I had shipped the change log into the PMS only, while the `logAudit` fix covered all three
+products. **RevioCRS is sold on its own** — a client who never bought the PMS would have had rate
+edits and booking-engine changes recorded and no way to see any of them. The AuditEntry rows are ONE
+stream per property; a manager asking "who changed this" should not have to know which product wrote
+the row. Rendering extracted to `@revio/ui/activity-table`; each app keeps its own data function
+(its own session and property scope).
+
+**Two more BUILD-PLAN items were stale and are now closed by measurement, not by edit:**
+- ⚠️ **The responsive pass was already done.** At 390px, `scrollWidth − innerWidth` is **0** on the
+  PMS dashboard, tape chart, register and activity log, and on the CRS inventory grid — the two
+  densest screens included. Static hits were `grid-cols-7` calendar weeks (must stay 7) and `w-full`
+  tables that compress. Recorded WITH its limit: zero overflow ≠ comfortable on a phone.
+- ⚠️ **Arrival digests already send real email** via `apps/channel-manager/app/api/jobs/arrivals`,
+  on the cron, with a job lease so two runners cannot double-send. BUILD-PLAN said they "need the
+  scheduler below"; the scheduler shipped.
+
 ### 2026-09-01 · Claude · DONE · The audit trail named nobody — fixed, and finally shown
 **93 of 139 `logAudit` calls recorded no actor. 12,318 of 12,680 rows in production name nobody.**
 Files: `apps/{reservation,channel-manager,pms}/lib/mutation-helpers.ts`, `apps/pms/lib/activity.ts`

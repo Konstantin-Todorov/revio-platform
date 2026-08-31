@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { ActivityTable, ActivityFilters } from "@revio/ui/activity-table";
-import { getSession } from "@/lib/session";
-import { roleHasCapability } from "@/lib/roles";
 import { getActivity } from "@/lib/activity";
+import { guard } from "@/lib/authz";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +9,9 @@ export const dynamic = "force-dynamic";
 export default async function ActivityPage({
   searchParams,
 }: { searchParams: Promise<{ from?: string; to?: string; actor?: string; auto?: string }> }) {
-  const session = await getSession();
-  if (!session) redirect("/login");
-  // An audit log shows money, guests and configuration in one place. Managers only.
-  if (!roleHasCapability(session.role, "manage")) redirect("/dashboard?error=forbidden");
+  // A change log shows rates, settings and guest data in one place — the same bar as managing them.
+  const g = await guard("manageSettings");
+  if (!g.ok) redirect("/dashboard");
 
   const sp = await searchParams;
   const includeAutomatic = sp.auto === "1";
@@ -26,11 +24,14 @@ export default async function ActivityPage({
     <div>
       <PageHeader
         title="Activity"
-        subtitle={`${view.rows.length} change${view.rows.length === 1 ? "" : "s"} · who did what, and when`}
+        subtitle={`${view.rows.length} change${view.rows.length === 1 ? "" : "s"} · who changed what, and when`}
       />
       <ActivityFilters view={view} currentActor={sp.actor} includeAutomatic={includeAutomatic} />
       <Card>
-        <CardHeader title="Changes" subtitle={`${view.from} → ${view.to} · newest first`} />
+        <CardHeader
+          title="Changes"
+          subtitle={`${view.from} → ${view.to} · newest first · one history for this property, whichever product wrote it`}
+        />
         <ActivityTable
           view={view}
           showAutomaticHref={`/activity?${showAuto.toString()}`}
