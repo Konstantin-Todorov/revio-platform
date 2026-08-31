@@ -612,6 +612,7 @@ model Property {
   opsEvents            OpsEvent[]
   emailTemplates       EmailTemplate[]
   brandAssets          BrandAsset[]
+  stayGuests           StayGuest[]
 
   @@index([tenantId])
 }
@@ -644,34 +645,34 @@ model EmailTemplate {
 }
 
 model RoomType {
-  id          String   @id @default(cuid())
-  tenantId    String
-  propertyId  String
-  name        String
-  code        String
+  id               String   @id @default(cuid())
+  tenantId         String
+  propertyId       String
+  name             String
+  code             String
   // room | bed | apartment. Hotels/apartments sell whole units; hostels sell beds, so a "bed"
   // unitKind means totalRooms counts beds and availability is controlled per bed.
-  unitKind    String   @default("room")
+  unitKind         String   @default("room")
   // Physical room/bed count — a CAP & safety-net only. Rooms-to-sell is managed per date
   // (DailyCell.inventory); exceeding totalRooms warns but does not block.
-  totalRooms  Int
+  totalRooms       Int
   /// The occupancy ceiling — how many occupancy rows a per-person plan carries, and what "doesn't
   /// fit" is measured against. This is `max_occupancy` in the OBP spec; the name predates it.
-  maxGuests   Int
+  maxGuests        Int
   /// Which occupancy is the PRIMARY one — the rate shown by default and the one restrictions ride
   /// on. Null means "the ceiling", which is the pre-OBP behaviour and the correct default: a room
   /// priced per-room is priced for a full room.
   defaultOccupancy Int?
-  description String?
+  description      String?
   // Guest-facing room content (K11). All optional: a hotel goes live before its copywriting, and
   // every surface renders correctly with any subset of these, including none of them.
-  sizeSqm     Int? // floor area, the single most-asked question about a room
-  bedSetup    String? // key from BED_SETUPS in @revio/core — a fixed list so rooms compare
+  sizeSqm          Int? // floor area, the single most-asked question about a room
+  bedSetup         String? // key from BED_SETUPS in @revio/core — a fixed list so rooms compare
   // Keys from ROOM_AMENITIES. A fixed vocabulary, because this is what Channex takes as a room
   // type's `facilities` list — fill it in once here and the OTAs get it later without re-entry.
-  amenities   String[] @default([])
-  active      Boolean  @default(true)
-  sortOrder   Int      @default(0)
+  amenities        String[] @default([])
+  active           Boolean  @default(true)
+  sortOrder        Int      @default(0)
 
   property         Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   ratePlanLinks    RatePlanRoomType[]
@@ -787,8 +788,8 @@ model RatePlan {
   rateMode             String?
   /// Children and infants are a SEPARATE axis from adult occupancy (§6.9) and must never be folded
   /// into it. Stored here so the model is ready; pricing activates later.
-  childrenFeeMinor     Int      @default(0)
-  infantFeeMinor       Int      @default(0)
+  childrenFeeMinor     Int     @default(0)
+  infantFeeMinor       Int     @default(0)
   cancellationPolicyId String?
   mealPlanId           String?
 
@@ -808,17 +809,17 @@ model RatePlan {
   // Designed-in now; the widget build is deferred.
   directChannelEnabled Boolean @default(true)
 
-  dailyCells           DailyCell[]
-  property             Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  parent               RatePlan?                @relation("Derivation", fields: [parentRatePlanId], references: [id])
-  children             RatePlan[]               @relation("Derivation")
-  cancellationPolicy   CancellationPolicy?      @relation(fields: [cancellationPolicyId], references: [id])
-  mealPlan             MealPlan?                @relation(fields: [mealPlanId], references: [id])
-  roomTypeLinks        RatePlanRoomType[]
-  channelMappings      ChannelRatePlanMapping[]
-  ratePrices           RatePrice[]
-  resLines             ReservationLine[]
-  occupancyOptions     RatePlanOccupancy[]
+  dailyCells         DailyCell[]
+  property           Property                 @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  parent             RatePlan?                @relation("Derivation", fields: [parentRatePlanId], references: [id])
+  children           RatePlan[]               @relation("Derivation")
+  cancellationPolicy CancellationPolicy?      @relation(fields: [cancellationPolicyId], references: [id])
+  mealPlan           MealPlan?                @relation(fields: [mealPlanId], references: [id])
+  roomTypeLinks      RatePlanRoomType[]
+  channelMappings    ChannelRatePlanMapping[]
+  ratePrices         RatePrice[]
+  resLines           ReservationLine[]
+  occupancyOptions   RatePlanOccupancy[]
 
   @@index([propertyId])
 }
@@ -843,7 +844,7 @@ model RatePlan {
 // The old delta fields survive as the DERIVATION rule (`options[].derived_option`), which is what
 // they always were. `mode` says whether this row's price is stated or computed.
 model RatePlanOccupancy {
-  id         String @id @default(cuid())
+  id         String  @id @default(cuid())
   tenantId   String
   ratePlanId String
   /// Number of ADULTS this row prices. Children and infants are a separate axis (§6.9).
@@ -1189,6 +1190,7 @@ model Reservation {
   guest         Guest?            @relation(fields: [guestId], references: [id])
   bookingSource BookingSource?    @relation(fields: [bookingSourceId], references: [id])
   lines         ReservationLine[]
+  stayGuests    StayGuest[]
   holds         Hold[]
   assignments   RoomAssignment[]
   folios        Folio[]
@@ -1212,10 +1214,10 @@ model ReservationLine {
   /// separate axis and must never be folded in here).
   guestsCount   Int?
 
-  reservation Reservation      @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reservation Reservation            @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   nightRates  ReservationNightRate[]
-  roomType    RoomType         @relation(fields: [roomTypeId], references: [id])
-  ratePlan    RatePlan         @relation(fields: [ratePlanId], references: [id])
+  roomType    RoomType               @relation(fields: [roomTypeId], references: [id])
+  ratePlan    RatePlan               @relation(fields: [ratePlanId], references: [id])
   assignments RoomAssignment[]
 
   @@index([reservationId])
@@ -1276,7 +1278,7 @@ model Hold {
 
 // Contact + booking history ONLY — hard scope line, not a CRM (no preferences/consent/loyalty).
 model Guest {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   tenantId          String
   propertyId        String
   firstName         String
@@ -1287,11 +1289,11 @@ model Guest {
   /// not identity — no screen may present it as the guest's address, and it must never reach a
   /// marketing list. Set when the address is first learned, not derived on read: the domain list
   /// changes, and a stored fact should not change with it.
-  emailIsOtaAlias   Boolean  @default(false)
+  emailIsOtaAlias   Boolean   @default(false)
   phone             String?
   company           String?
   specialRequests   String? // free text
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
   // Guest identity/merge (PMS-REFINEMENT-R1 §3.5, "foundational — build first"): when two records are the
   // same person (direct / OTA / walk-in duplicates), the loser is soft-merged INTO the winner. At merge the
   // app re-parents reservations + notes to the winner, then sets mergedIntoId on the loser so it drops out
@@ -1302,7 +1304,7 @@ model Guest {
   // someone exercises it. Suppresses every "welcome back" and every carried-over preference, while
   // leaving the booking history itself intact — a hotel still has to keep records it is legally
   // required to keep, and "don't greet me by name" is a different request from "erase me".
-  recognitionOptOut Boolean  @default(false)
+  recognitionOptOut Boolean   @default(false)
   /// When this guest exercised their right to erasure (GDPR Art. 17). The row SURVIVES with the
   /// person removed from it: reservations keep their link so occupancy and revenue history stay
   /// correct, and the tax invoice stays reconcilable to its stay. Set once and never cleared — it is
@@ -1312,6 +1314,7 @@ model Guest {
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   reservations Reservation[]
   notes        GuestNote[]
+  stayGuests   StayGuest[]
   mergedInto   Guest?        @relation("GuestMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
   mergedFrom   Guest[]       @relation("GuestMerge")
 
@@ -2062,4 +2065,64 @@ model JobLease {
   lastRunAt  DateTime?
 
   @@index([expiresAt])
+}
+
+/// One accommodated person, one stay — the row that makes up регистърът на настанените туристи.
+///
+/// Content fixed by Заповед № Т-РД-14-10 / 11.06.2019 (чл. 116 ал. 1 ЗТ). Compulsory for every
+/// accommodation provider since 1 October 2019; class A names вили explicitly, so a villa keeps this
+/// register exactly as a hotel does. The field rules live in `@revio/core/registry/tourist-register`.
+///
+/// This is NOT fiscalization. A guest register records who slept where; it reports no sale to НАП
+/// and does not make this software СУПТО.
+model StayGuest {
+  id            String  @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  reservationId String
+  /// The guest PROFILE, when this person is one we already know. Optional on purpose: the register
+  /// must hold the travelling companion who will never have a profile of their own.
+  guestId       String?
+
+  /// Пореден номер от регистъра — sequential within the property, claimed under an advisory lock so
+  /// two simultaneous check-ins cannot take the same one. Never reused.
+  registerNo   Int
+  /// Дата на регистрация — when the person was registered, which is check-in.
+  registeredAt DateTime
+
+  /// Пълното име на лицето, as the document writes it.
+  fullName        String
+  /// ЕГН / ЛЧН / персонален идентификационен номер. Required of a Bulgarian citizen; a foreign
+  /// tourist may genuinely have none.
+  personalId      String?
+  dateOfBirth     DateTime?
+  /// Пол — "m" | "f".
+  sex             String?
+  /// Гражданство, ISO 3166-1 alpha-2. Decides which half of the order applies (т. 1.1 vs т. 1.2).
+  nationality     String?
+  documentNumber  String?
+  /// Серия на документа — asked for by т. 1.2 (non-EEA/CH citizens) only.
+  documentSeries  String?
+  /// Държава, издала националния документ, ISO 3166-1 alpha-2.
+  documentCountry String?
+
+  /// Етаж, стая/апартамент — SNAPSHOT, written at check-in. A room move next season must not
+  /// silently rewrite where somebody slept two years ago; the register records what happened.
+  unitLabel String?
+  floor     String?
+
+  /// Ползване на туристически пакет (да/не).
+  touristPackage Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  guest       Guest?      @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  @@unique([propertyId, registerNo])
+  @@index([reservationId])
+  @@index([propertyId, registeredAt])
+  @@index([guestId])
 }

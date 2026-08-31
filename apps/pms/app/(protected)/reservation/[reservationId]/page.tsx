@@ -9,6 +9,7 @@ import { getReservationDetail, type TimelineEvent, type StayState } from "@/lib/
 import { checkOut, reopenStay, changeStayOccupancy } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
+import { GuestRegisterCard } from "@/components/register/GuestRegisterCard";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,13 @@ export default async function ReservationViewPage({
         One shared record, two phases — the commercial fields below were written by RevioCRS / the channel at
         booking; the PMS extends the same record operationally. It is never a synced copy.
       </p>
+
+      {error === "register_kept" && (
+        <div className="mb-4 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3 text-[13px] font-medium text-warning-700">
+          That register entry has details in it and can’t be removed — the register has to be kept for two
+          years. Correct it instead.
+        </div>
+      )}
 
       {error === "occupancy" && (
         <div className="mb-4 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3 text-[13px] font-medium text-warning-700">
@@ -229,6 +237,8 @@ export default async function ReservationViewPage({
       </div>
 
       {/* Timeline — the history of the stay (spec §3.2), the thing almost no PMS does well. */}
+      <GuestRegisterCard reservationId={reservationId} rows={o.register} />
+
       <Card className="mt-4">
         <CardHeader title="Timeline" subtitle="Booking received → assigned → checked in → moved → charges → checked out" />
         <ol className="p-4">

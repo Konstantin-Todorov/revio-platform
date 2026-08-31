@@ -222,6 +222,7 @@ export async function getReservationDetail(reservationId: string) {
       bookingSource: { select: { name: true } },
       lines: { include: { roomType: { select: { name: true, maxGuests: true } }, ratePlan: { select: { name: true, cancellationPolicy: { select: { name: true } }, mealPlan: { select: { name: true } } } } } },
       assignments: { include: { unit: { select: { label: true, floor: true, hkStatus: true } } }, orderBy: { createdAt: "asc" } },
+      stayGuests: { orderBy: { registerNo: "asc" } },
       folios: { include: { lines: { orderBy: { postedAt: "asc" } } }, orderBy: [{ isPrimary: "desc" }, { openedAt: "asc" }] },
     },
   });
@@ -299,6 +300,33 @@ export async function getReservationDetail(reservationId: string) {
        * per-person plan, and the correction has to happen where the receptionist is standing —
        * not by cancelling and rebooking.
        */
+      /**
+       * Регистър на настанените туристи (чл. 116 ЗТ) — the people accommodated on this stay.
+       *
+       * Dates are NOT stored on the row: arrival, departure and the night count are the stay's, and
+       * a register that kept its own copy would disagree with the folio the first time a departure
+       * moved. The room IS stored, because that is a fact about the night rather than about the
+       * booking, and a move next season must not rewrite it.
+       */
+      register: r.stayGuests.map((g) => ({
+        id: g.id,
+        registerNo: g.registerNo,
+        registeredAt: ymd(g.registeredAt),
+        fullName: g.fullName,
+        personalId: g.personalId,
+        dateOfBirth: g.dateOfBirth ? ymd(g.dateOfBirth) : null,
+        sex: g.sex as "m" | "f" | null,
+        nationality: g.nationality ?? "",
+        documentNumber: g.documentNumber,
+        documentSeries: g.documentSeries,
+        documentCountry: g.documentCountry,
+        unitLabel: g.unitLabel,
+        floor: g.floor,
+        arrivalDate: ci ? ymd(ci) : "",
+        departureDate: r.departedAt ? ymd(r.departedAt) : co ? ymd(co) : null,
+        nights,
+        touristPackage: g.touristPackage,
+      })),
       stayLines: r.lines.map((l) => ({
         id: l.id,
         roomTypeName: l.roomType.name,

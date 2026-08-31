@@ -10,6 +10,7 @@ import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { availableUnitsFor } from "./data";
 import { repriceStay } from "./reprice";
 import { repriceContext } from "./reprice-context";
+import { seedRegisterEntries } from "./register";
 import { ensureFolio, reservationBalance } from "./folio";
 import { stayScope } from "@revio/connectivity";
 import { logAudit, recordSync, str, int } from "./mutation-helpers";
@@ -51,7 +52,7 @@ export async function checkIn(fd: FormData): Promise<void> {
 
   const res = await prisma.reservation.findFirst({
     where: { id: reservationId, propertyId: session.activePropertyId },
-    include: { lines: true },
+    include: { lines: true, guest: { select: { id: true } } },
   });
   if (!res) redirect("/dashboard");
 
@@ -68,7 +69,7 @@ export async function checkIn(fd: FormData): Promise<void> {
 
   const now = new Date();
   const seenUnits = new Set<string>();
-  const specs: { lineId: string; unitId: string; unitLabel: string; checkIn: Date; checkOut: Date }[] = [];
+  const specs: { lineId: string; unitId: string; unitLabel: string; floor: string | null; guestsCount: number; checkIn: Date; checkOut: Date }[] = [];
 
   for (const s of slots) {
     const [lineId, unitId] = s.split(":");
@@ -86,7 +87,10 @@ export async function checkIn(fd: FormData): Promise<void> {
     });
     if (clash > 0) redirect(`/checkin/${reservationId}?error=busy`);
     seenUnits.add(unitId!);
-    specs.push({ lineId: line!.id, unitId: unit!.id, unitLabel: unit!.label, checkIn: line!.checkIn, checkOut: line!.checkOut });
+    specs.push({
+      lineId: line!.id, unitId: unit!.id, unitLabel: unit!.label, floor: unit!.floor,
+      guestsCount: line!.guestsCount ?? 1, checkIn: line!.checkIn, checkOut: line!.checkOut,
+    });
   }
 
   for (const spec of specs) {
@@ -106,6 +110,24 @@ export async function checkIn(fd: FormData): Promise<void> {
   }
   // Open the folio so charges can be posted during the stay (Phase 3).
   await ensureFolio(session.tenantId, session.activePropertyId, reservationId);
+
+  /*
+   * Open the register entries — регистър на настанените туристи (чл. 116 ЗТ).
+   *
+   * After the folio and deliberately not before: a register that failed to write must never be the
+   * reason a guest with a key cannot be charged. The rows are created blank and completed on the
+   * stay's register card, so this cannot block a check-in either.
+   */
+  await seedRegisterEntries({
+    tenantId: session.tenantId,
+    propertyId: session.activePropertyId,
+    reservationId,
+    leadGuestId: res!.guest?.id ?? null,
+    leadGuestName: res!.guestName,
+    registeredAt: now,
+    specs,
+  });
+
   refresh();
   redirect("/dashboard");
 }

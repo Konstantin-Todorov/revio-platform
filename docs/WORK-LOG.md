@@ -27,6 +27,36 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-08-31 · Claude · DONE · Guest register (ЕСТИ) — slice 1, capture
+**The largest genuine gap for a real Bulgarian property. `Guest` had no identity fields at all.**
+Files: `packages/core/src/registry/{tourist-register,countries}.ts` (new, 29 tests),
+`packages/db/prisma/migrations/20260831160000_tourist_register/`, `packages/db/src/register-number.ts`,
+`apps/pms/lib/{register,actions-register}.ts`, `apps/pms/components/register/GuestRegisterCard.tsx`
+Notes: Field list read from **Заповед № Т-РД-14-10 / 11.06.2019** (чл. 116 ал. 1 ЗТ) — the scanned
+order itself, not a summary. Compulsory since 1 Oct 2019; class A names **вили** explicitly.
+
+- **т. 1.1 vs т. 1.2 is a real branch, not decoration.** A non-EEA/CH citizen's entry needs the
+  document SERIES as well as its number. The UK is not EEA, and that field turns on it.
+- **ЕГН is demanded of a Bulgarian citizen and nobody else.** Both halves of the order list a
+  personal number, but only a Bulgarian certainly has one — demanding it of a French tourist makes
+  the register impossible to complete rather than more correct.
+- **Rows open BLANK at check-in and never block it.** A hotel that had to type four passports before
+  it could hand over a key would keep the register somewhere else, and we would have built nothing.
+  Incompleteness is visible and chased instead.
+- **Retention (т. 3, min 2 years) outlives erasure.** GDPR Art. 17(3)(b) — the guest PROFILE is
+  anonymised, the register entry stands. `guestId` is ON DELETE SET NULL for exactly this, and
+  `removeStayGuest` refuses any entry with data in it.
+- The room is a **snapshot**; the dates are **derived**. A move next season must not rewrite where
+  somebody slept, but a departure that shifts must not leave the register disagreeing with the folio.
+- Register numbers claimed under `pg_advisory_xact_lock`, reusing the `inventory-claim` primitive —
+  `MAX+1` outside a lock hands two simultaneous check-ins the same номер.
+- `registerNights` delegates to the existing `nightsBetween`; two implementations of "how many
+  nights" is how the register and the folio stop agreeing.
+- **Not fiscalization.** A guest register reports no sale to НАП and does not make us СУПТО.
+
+⚠️ Still open — **slice 2**: the property-level register screen and the XML export. Today the
+register is per-stay only, so the owner cannot yet see or file the whole thing.
+
 ### 2026-08-31 · Claude · DONE · Four OBP actions had no UI — mixed per-room/per-person now settable
 **A tested, gated, working server action that no screen calls is not a shipped feature.**
 Files: `apps/reservation/components/rates/RatePlanPricingBoard.tsx` (new), `rooms-rates/page.tsx`,

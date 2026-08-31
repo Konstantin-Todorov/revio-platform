@@ -89,3 +89,5 @@ export {
 } from "./inventory-claim.js";
 export * from "@prisma/client";
 export { occupancyKeysFor, occupancyKeyFor } from "./occupancy-key.js";
+
+export { claimRegisterNo } from "./register-number.js";
