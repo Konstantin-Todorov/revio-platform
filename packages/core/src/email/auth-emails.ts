@@ -18,11 +18,20 @@
  * Sofia" is the fact that makes the mail trustworthy. What is fixed is the structure and the words
  * around the link.
  *
- * Plain text on purpose. These are short, they must survive every client, and a password-reset mail
- * is the last place to be loading remote images.
+ * ## Branded since 2026-09-01, and both original constraints kept
+ *
+ * These were plain text on purpose: short, must survive every client, and a password-reset mail is
+ * the last place to be loading remote images. Both reasons still hold and both are honoured — the
+ * text part is unchanged and still sent, and the HTML part contains **no images at all** (the
+ * wordmark is text in a coloured cell). Nothing to load, nothing to block, no read receipt leaked.
+ *
+ * What plain text cost was the thing it was protecting. An unbranded wall of text carrying a link
+ * that asks for a password is indistinguishable from phishing, and staff are trained to ignore
+ * exactly that. Looking like the product it came from is a security property here, not decoration.
  */
 
 import { TOKEN_POLICY, type TokenPurpose } from "../auth/tokens.js";
+import { renderSystemEmail, renderSystemEmailText, type SystemEmailBlock } from "./system-shell.js";
 
 export interface AuthEmailArgs {
   /** The person's name if we know it — the mail still works if we do not. */
@@ -38,6 +47,16 @@ export interface AuthEmailArgs {
 export interface AuthEmail {
   subject: string;
   text: string;
+  /** The branded alternative. `sendEmail` sends it beside `text` as a multipart message. */
+  html: string;
+}
+
+/** Build both parts from ONE set of blocks, so the two can never drift apart. */
+function compose(subject: string, preview: string, heading: string, blocks: SystemEmailBlock[]): AuthEmail {
+  // No `product`: an invitation covers every Revio product the hotel has, so naming one would
+  // be wrong on the exact promise the email goes on to make.
+  const args = { preview, heading, blocks };
+  return { subject, text: renderSystemEmailText(args), html: renderSystemEmail(args) };
 }
 
 /**
@@ -48,25 +67,19 @@ export function inviteEmail({ name, context, invitedBy, url }: AuthEmailArgs): A
   const greeting = name ? `Hello ${name},` : "Hello,";
   const who = invitedBy ? `${invitedBy} has added you` : "You have been added";
 
-  return {
-    subject: `You've been added to ${context} on Revio`,
-    text: `${greeting}
-
-${who} to ${context} on Revio.
-
-To get started, choose a password:
-
-${url}
-
-This link works once and expires in ${TOKEN_POLICY.invite.ttlLabel}.
-
-One login covers every Revio product your hotel uses — you will not need a separate account for each.
-
-If you weren't expecting this, you can ignore this email. No account is active until the link above
-is used.
-
-— Revio`,
-  };
+  return compose(
+    `You've been added to ${context} on Revio`,
+    `Choose a password to get started with ${context}.`,
+    `You've been added to ${context}`,
+    [
+      { p: greeting },
+      { p: `${who} to ${context} on Revio.` },
+      { action: { label: "Choose your password", url } },
+      { note: `This link works once and expires in ${TOKEN_POLICY.invite.ttlLabel}.` },
+      { p: "One login covers every Revio product your hotel uses — you will not need a separate account for each." },
+      { note: "If you weren't expecting this, you can ignore this email. No account is active until the link above is used." },
+    ],
+  );
 }
 
 /**
@@ -79,42 +92,36 @@ is used.
 export function passwordResetEmail({ name, context, url }: AuthEmailArgs): AuthEmail {
   const greeting = name ? `Hello ${name},` : "Hello,";
 
-  return {
-    subject: "Reset your Revio password",
-    text: `${greeting}
-
-Someone asked to reset the password for this email address on ${context}.
-
-If it was you, choose a new password here:
-
-${url}
-
-This link works once and expires in ${TOKEN_POLICY.reset.ttlLabel}.
-
-If it wasn't you, ignore this email — your password has not changed, and nobody can change it without
-the link above. If you keep receiving these, tell whoever runs your Revio account.
-
-— Revio`,
-  };
+  return compose(
+    "Reset your Revio password",
+    "Choose a new password for your Revio account.",
+    "Reset your password",
+    [
+      { p: greeting },
+      { p: `Someone asked to reset the password for this email address on ${context}.` },
+      { p: "If it was you, choose a new password here:" },
+      { action: { label: "Choose a new password", url } },
+      { note: `This link works once and expires in ${TOKEN_POLICY.reset.ttlLabel}.` },
+      { note: "If it wasn't you, ignore this email — your password has not changed, and nobody can change it without the link above. If you keep receiving these, tell whoever runs your Revio account." },
+    ],
+  );
 }
 
 /** Confirmation after the fact. The one email whose entire job is to be alarming if unexpected. */
 export function passwordChangedEmail({ name, context }: Omit<AuthEmailArgs, "url">): AuthEmail {
   const greeting = name ? `Hello ${name},` : "Hello,";
 
-  return {
-    subject: "Your Revio password was changed",
-    text: `${greeting}
-
-The password for your Revio account on ${context} has just been changed.
-
-If that was you, there is nothing to do.
-
-If it was not you, someone else has access to this account. Ask an owner at your hotel to reset your
-password immediately.
-
-— Revio`,
-  };
+  return compose(
+    "Your Revio password was changed",
+    "Your password has just been changed.",
+    "Your password was changed",
+    [
+      { p: greeting },
+      { p: `The password for your Revio account on ${context} has just been changed.` },
+      { p: "If that was you, there is nothing to do." },
+      { p: "If it was not you, someone else has access to this account. Ask an owner at your hotel to reset your password immediately." },
+    ],
+  );
 }
 
 /** Dispatch by purpose, for callers that hold a `TokenPurpose` rather than a specific intent. */

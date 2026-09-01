@@ -97,5 +97,5 @@ async function sendInvite(args: {
     ...(args.invitedBy ? { invitedBy: args.invitedBy } : {}),
     url: `${proto}://${host}/accept-invite/${token}`,
   });
-  await sendEmail({ to: [args.email], subject: mail.subject, text: mail.text });
+  await sendEmail({ to: [args.email], subject: mail.subject, text: mail.text, html: mail.html });
 }

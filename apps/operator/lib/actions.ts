@@ -77,7 +77,7 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
       context: name,
       url: `${product.origin}/accept-invite/${token}`,
     });
-    await sendEmail({ to: [ownerEmail], subject: mail.subject, text: mail.text });
+    await sendEmail({ to: [ownerEmail], subject: mail.subject, text: mail.text, html: mail.html });
   }
 
   revalidatePath("/clients");

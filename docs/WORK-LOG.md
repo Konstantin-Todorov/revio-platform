@@ -27,6 +27,34 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-09-01 · Claude · DONE · Every system email is branded — invites, resets, digests
+**All 17 system emails were plain text. Only guest-facing mail had HTML.**
+Files: `packages/core/src/email/{system-shell.ts,system-shell.test.ts}` (new, 22 tests),
+`auth-emails.ts`, `packages/db/src/auth-flows.ts`, 9 `actions-*.ts`, 2 job routes
+
+⚠️ **`auth-emails.ts` documented plain text as DELIBERATE** — "they must survive every client, and a
+password-reset mail is the last place to be loading remote images." Both reasons are right and both
+are **kept**, not overridden:
+- **The text part is unchanged and still sent.** `sendEmail` is multipart; nothing was lost.
+- **There are NO images. None.** The wordmark is TEXT in a navy cell. Nothing to load, nothing to
+  block, no read receipt leaked — the mail looks identical whether or not images are blocked, which
+  is the property that made plain text attractive.
+
+What plain text COST was the thing it protected: an unbranded wall of text carrying a link that asks
+for a password is what phishing looks like, and staff are trained to distrust exactly that. Looking
+like the product it came from is a security property here.
+
+Both parts are generated from **one** set of blocks, so the text and the HTML cannot drift.
+`SendableEmail` in `@revio/db` gained `html`, and every one of the 9 call sites that was silently
+dropping `mail.html` now forwards it.
+
+Details: the action renders **twice** — a button AND the bare URL — because gateways strip buttons
+and because seeing where a link goes before clicking is the best anti-phishing affordance an email
+has; `javascript:` and `data:` hrefs are refused, not escaped; lists are table rows, not `<ul>`
+(Outlook wraps a long name *under* the bullet). ⚠️ Caught by rendering it and looking: "if you
+weren't expecting this" appeared **twice** in every invite, body and footer. The body owns it now —
+only the body knows what specifically did not happen.
+
 ### 2026-09-01 · Claude · DONE · Excel export — a 200-line .xlsx writer, no dependency
 Files: `packages/core/src/export/xlsx.ts` (new, 20 tests), `packages/core/src/registry/tourist-register.ts`,
 `apps/pms/app/api/register/export/route.ts`, `apps/reservation/app/api/reports/export/route.ts`, both screens

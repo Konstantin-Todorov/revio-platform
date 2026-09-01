@@ -25,6 +25,8 @@ export interface SendableEmail {
   to: string;
   subject: string;
   text: string;
+  /** The branded HTML part, sent alongside `text` as a multipart message. */
+  html: string;
 }
 
 /**

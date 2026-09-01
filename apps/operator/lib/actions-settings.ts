@@ -42,7 +42,7 @@ export async function inviteOperator(fd: FormData): Promise<void> {
     ...(session.name ? { invitedBy: session.name } : {}),
     url: `${proto}://${host}/accept-invite/${token}`,
   });
-  await sendEmail({ to: [email], subject: mail.subject, text: mail.text });
+  await sendEmail({ to: [email], subject: mail.subject, text: mail.text, html: mail.html });
 
   revalidatePath("/settings");
 }

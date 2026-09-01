@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { JOB, acquireJobLease, forSystem, releaseJobLease } from "@revio/db";
 import { SOLD_STATUSES } from "@revio/core";
 import { sendEmail, deliveryRecipients } from "@revio/email";
+import { renderSystemEmail, renderSystemEmailText } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -91,12 +92,22 @@ export async function POST(req: NextRequest) {
       });
       const rows = arrivals.map((r) => {
         const l = r.lines[0];
-        return `• ${r.guestName} — ${l?.roomType.name ?? ""} · ${l ? `${(l.checkOut.getTime() - l.checkIn.getTime()) / 86_400_000}n` : ""} · ${r.channel?.name ?? "Direct"}`;
+        return `${r.guestName} — ${l?.roomType.name ?? ""} · ${l ? `${(l.checkOut.getTime() - l.checkIn.getTime()) / 86_400_000}n` : ""} · ${r.channel?.name ?? "Direct"}`;
       });
+      const none = job.label === "Today's arrivals" ? "No arrivals today." : "No arrivals tomorrow.";
+      const mail = {
+        preview: arrivals.length > 0 ? `${arrivals.length} arriving at ${property.name}.` : none,
+        heading: `${job.label} — ${property.name}`,
+        product: "RevioLink",
+        blocks: arrivals.length > 0
+          ? [{ p: `${arrivals.length} arriving on ${job.day}.` }, { list: rows }]
+          : [{ p: `${none} (${job.day})` }],
+      };
       const res = await sendEmail({
         to: job.to,
         subject: `${job.label} (${arrivals.length}) — ${property.name} · ${job.day}`,
-        text: arrivals.length > 0 ? `${job.label} for ${property.name}:\n\n${rows.join("\n")}\n\n— RevioLink` : `No arrivals ${job.label === "Today's arrivals" ? "today" : "tomorrow"} for ${property.name}.\n\n— RevioLink`,
+        text: renderSystemEmailText(mail),
+        html: renderSystemEmail(mail),
       });
       if (res.ok) sent++;
       await db.auditEntry.create({

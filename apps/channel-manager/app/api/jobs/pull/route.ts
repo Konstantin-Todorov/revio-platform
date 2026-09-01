@@ -14,6 +14,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { JOB, acquireJobLease, forSystem, releaseJobLease } from "@revio/db";
 import { pullChannel } from "@revio/connectivity";
 import { sendEmail, deliveryRecipients } from "@revio/email";
+import { renderSystemEmail, renderSystemEmailText } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -88,10 +89,17 @@ export async function POST(req: NextRequest) {
           const l = r.lines[0];
           return `• ${r.guestName} — ${l?.roomType.name ?? ""} · ${l ? `${l.checkIn.toISOString().slice(0, 10)} → ${l.checkOut.toISOString().slice(0, 10)}` : ""} · ${r.channel?.name ?? "Direct"}`;
         });
+        const mail = {
+          preview: `${outcome.imported} new from ${channel.name}.`,
+          heading: `${outcome.imported} new booking${outcome.imported > 1 ? "s" : ""}`,
+          product: "RevioLink",
+          blocks: [{ p: `Pulled from ${channel.name} for ${channel.property.name}.` }, { list: rows }],
+        };
         await sendEmail({
           to,
           subject: `${outcome.imported} new booking${outcome.imported > 1 ? "s" : ""} — ${channel.property.name}`,
-          text: `New booking(s) pulled from ${channel.name}:\n\n${rows.join("\n")}\n\n— RevioLink`,
+          text: renderSystemEmailText(mail),
+          html: renderSystemEmail(mail),
         });
       }
     }

@@ -9,6 +9,7 @@ import { getSession } from "./session";
 import type { PushField, PushScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
+import { renderSystemEmail, renderSystemEmailText } from "@revio/core";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -362,10 +363,20 @@ export async function pullChannelBookings(fd: FormData): Promise<void> {
         const l = r.lines[0];
         return `#${r.externalId ?? r.id.slice(-6)} · ${r.guestName} · ${l ? `${l.roomType.name} ${l.checkIn.toISOString().slice(0, 10)} → ${l.checkOut.toISOString().slice(0, 10)}` : ""} · ${(r.totalMinor / 100).toFixed(2)} ${r.currency}`;
       });
+      const mail = {
+        preview: `${fresh.length} just imported for ${property.name}.`,
+        heading: `${fresh.length} new reservation${fresh.length > 1 ? "s" : ""}`,
+        product: "RevioLink",
+        blocks: [
+          { p: `Just imported from ${fresh[0]?.channel?.name ?? "a channel"} for ${property.name}.` },
+          { list: lines },
+        ],
+      };
       const res = await sendEmail({
         to,
         subject: `${fresh.length} new reservation${fresh.length > 1 ? "s" : ""} — ${property.name}`,
-        text: `New bookings just imported from ${fresh[0]?.channel?.name ?? "a channel"}:\n\n${lines.join("\n")}\n\n— RevioLink`,
+        text: renderSystemEmailText(mail),
+        html: renderSystemEmail(mail),
       });
       await logAudit(propertyId, tenantId, {
         entity: "Reservation delivery", field: "email",
@@ -500,10 +511,20 @@ export async function sendTestEmail(): Promise<void> {
   const property = await getProperty();
   const to = property.reservationEmailPrimary ?? process.env.EMAIL_TEST_RECIPIENT;
   if (!to) return;
+  const testMail = {
+    preview: `Delivery test for ${property.name}.`,
+    heading: "Your reservation emails are working",
+    product: "RevioLink",
+    blocks: [
+      { p: `This is a test of the reservation-delivery email for ${property.name}. If you can read this, delivery works.` },
+      { note: `Sent ${new Date().toISOString()}.` },
+    ],
+  };
   const res = await sendEmail({
     to: [to],
     subject: `Revio test — ${property.name}`,
-    text: `This is a test of the reservation-delivery email for ${property.name}. If you can read this, delivery works (${new Date().toISOString()}).`,
+    text: renderSystemEmailText(testMail),
+    html: renderSystemEmail(testMail),
   });
   await logAudit(property.id, property.tenantId, {
     entity: "Property · delivery settings", field: "test_email",

@@ -40,7 +40,7 @@ export async function requestReset(_prev: AccountResult | null, fd: FormData): P
     origin: await currentOrigin(),
     contextName: CONTEXT,
   });
-  if (mail) await sendEmail({ to: [mail.to], subject: mail.subject, text: mail.text });
+  if (mail) await sendEmail({ to: [mail.to], subject: mail.subject, text: mail.text, html: mail.html });
   return { sent: true };
 }
 
