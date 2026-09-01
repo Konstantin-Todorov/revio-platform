@@ -1,4 +1,4 @@
-import { encryptSecret } from "@revio/db";
+
 
 /**
  * Putting a hotel onto Channex — from the product, not from a terminal.
@@ -77,7 +77,6 @@ export interface ProvisionResult {
 
 /** Anything the caller must persist. Kept out of this function so it stays testable and DB-free. */
 export interface ProvisionWrites {
-  upsertCredential(tenantId: string, mode: string, cipher: string): Promise<void>;
   writeChannel(input: {
     tenantId: string;
     propertyId: string;
@@ -174,9 +173,24 @@ export async function provisionChannexProperty(
     return json;
   };
 
-  // 1 — the key, encrypted, on the same path the Operator console writes.
-  await writes.upsertCredential(input.tenantId, mode, encryptSecret(apiKey));
-  say("Stored the Channex key");
+  /*
+   * 1 — DELIBERATELY NOT STORING THE KEY. This step used to read:
+   *
+   *     await writes.upsertCredential(input.tenantId, mode, encryptSecret(apiKey));
+   *
+   * which took whatever key this run authenticated with — normally the PLATFORM key, since we are
+   * the Channex customer and hotels do not have accounts — and froze a per-tenant copy of it.
+   *
+   * That copy then OVERRIDES the platform key for that tenant forever, because the lookup reads the
+   * per-tenant row first. Rotate the platform key and every previously-provisioned hotel silently
+   * keeps the old dead one. Verified on the first real hotel 2026-09-01: its "own key" was
+   * byte-identical to the platform key, nobody had pasted it, and the console showed it as a
+   * per-client credential as though somebody had chosen it.
+   *
+   * The key already exists wherever it belongs. Copying it created a second, staler source of truth
+   * and bought nothing. A hotel that genuinely brings its own Channex account still gets a row —
+   * entered deliberately in Operator → Connectivity, where it is tested before it is stored.
+   */
 
   // 2 — the property.
   const created = await api("POST", "/properties", {

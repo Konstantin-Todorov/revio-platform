@@ -97,6 +97,21 @@ Channex says "not found" — and labels the per-client key columns *(rare)*. Bef
 per-client thing on the screen was a key that should almost never be set, which implied the wrong
 thing was per-hotel.
 
+## ⚠️ Provisioning used to copy the platform key (fixed 2026-09-01)
+
+Step 1 of provisioning stored a per-tenant copy of whichever key it authenticated with — normally
+**our platform key**. That copy then **overrides** the platform key for that tenant forever, because
+the lookup reads the per-tenant row first.
+
+**Rotate the platform key and every previously-provisioned hotel silently keeps the old dead one.**
+
+Verified on the first real hotel: its "own key" was byte-identical to the platform key (`38e7b7fc`
+both). Nobody had pasted it. The console displayed it as a per-client credential as though somebody
+had chosen it, which sent the whole investigation down the wrong path for an hour.
+
+Provisioning no longer writes credentials at all. **If you see a per-tenant key on a hotel that was
+provisioned before 2026-09-01, delete it** — it is a stale copy, not a decision.
+
 ## ⚠️ The trap this codebase keeps falling into
 
 **An unauthenticated Channex request returns `401` with no `data` key.**

@@ -13,7 +13,6 @@ import {
   provisionChannexProperty,
   type ChannelField,
 } from "@revio/connectivity";
-import { forSystem } from "@revio/db";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { guard } from "./authz";
@@ -273,13 +272,6 @@ export async function provisionChannex(): Promise<ProvisionOutcome> {
         apiKey: cfg.apiKey,
       },
       {
-        upsertCredential: async (tenantId, m, cipher) => {
-          await forSystem().connectivityCredential.upsert({
-            where: { tenantId_mode: { tenantId, mode: m } },
-            create: { tenantId, mode: m, cipher },
-            update: { cipher },
-          });
-        },
         writeChannel: async (i) => {
           const existing = await prisma.channel.findFirst({
             where: { propertyId: i.propertyId, code: "channex" },
