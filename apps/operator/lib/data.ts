@@ -825,6 +825,25 @@ export async function getConnectivity() {
   });
   const channexByTenant = new Map(channexChannels.map((c) => [c.tenantId, c._count._all]));
 
+  /*
+   * The Channex PROPERTY IDs, per client — the fact that actually varies per hotel.
+   *
+   * The API key is ours and there is one of it. What is per-villa is the property id Channex
+   * generated when we provisioned, and the console showed it nowhere: the only per-client thing on
+   * this screen was a key that should almost never be set. So the page implied the wrong thing was
+   * per-hotel, which is how a key got pasted per client in the first place.
+   */
+  const channexProps = await prisma.channel.findMany({
+    where: { connectivityMode: { not: "mock" }, externalPropertyId: { not: null } },
+    select: { tenantId: true, externalPropertyId: true, connectivityMode: true, property: { select: { name: true } } },
+  });
+  const propsByTenant = new Map<string, { name: string; id: string; mode: string }[]>();
+  for (const c of channexProps) {
+    const list = propsByTenant.get(c.tenantId) ?? [];
+    list.push({ name: c.property.name, id: c.externalPropertyId!, mode: c.connectivityMode });
+    propsByTenant.set(c.tenantId, list);
+  }
+
   const credFor = (tenantId: string, mode: string) => {
     const c = creds.find((x) => x.tenantId === tenantId && x.mode === mode);
     if (!c) return null;
@@ -848,6 +867,7 @@ export async function getConnectivity() {
     sandbox: credFor(t.id, "channex_sandbox"),
     prod: credFor(t.id, "channex_prod"),
     channexChannels: channexByTenant.get(t.id) ?? 0,
+    channexProperties: propsByTenant.get(t.id) ?? [],
   }));
 }
 

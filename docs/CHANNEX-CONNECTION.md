@@ -80,6 +80,23 @@ Sandbox and production are **different Channex accounts with different keys and 
 
 ---
 
+## Two different things, and only one of them is per-hotel
+
+The console conflated these for a week, and it is the root of the confusion:
+
+| | What it is | How many | Where it lives |
+| --- | --- | --- | --- |
+| **API key** | Authenticates **us** to Channex (`user-api-key` header) | **ONE, ours** | `CHANNEX_*_KEY` on Railway |
+| **Property ID** | Identifies one villa inside our organisation | **One per property** | `Channel.externalPropertyId`, a UUID Channex generates during provisioning |
+
+**The thing that varies per villa is the property ID, not the key.** The property ID is created
+automatically by provisioning and is already stored in the right place. Nobody types it.
+
+Operator → Connectivity now shows the **Channex property ID** per client — the id to quote when
+Channex says "not found" — and labels the per-client key columns *(rare)*. Before this the only
+per-client thing on the screen was a key that should almost never be set, which implied the wrong
+thing was per-hotel.
+
 ## ⚠️ The trap this codebase keeps falling into
 
 **An unauthenticated Channex request returns `401` with no `data` key.**

@@ -117,7 +117,7 @@ export default async function Page() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                {["Client", "Sandbox key", "Production key", "Live channels"].map((h) => (
+                {["Client", "Sandbox key (rare)", "Production key (rare)", "Channex property ID", "Live channels"].map((h) => (
                   <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>
                 ))}
               </tr>
@@ -128,6 +128,23 @@ export default async function Page() {
                   <td className="px-4 py-3 font-semibold text-ink-900">{r.name}</td>
                   <td className="px-4 py-3"><KeyCell tenantId={r.id} tenantName={r.name} mode="channex_sandbox" cred={r.sandbox} /></td>
                   <td className="px-4 py-3"><KeyCell tenantId={r.id} tenantName={r.name} mode="channex_prod" cred={r.prod} /></td>
+                  <td className="px-4 py-3">
+                    {/* The per-villa fact. Shown because the API key is NOT per-villa and the screen
+                        used to imply it was. This is the id to quote when Channex says "not found". */}
+                    {r.channexProperties.length === 0 ? (
+                      <span className="text-[12px] text-ink-300">not provisioned</span>
+                    ) : (
+                      <div className="space-y-1">
+                        {r.channexProperties.map((cp) => (
+                          <div key={cp.id} className="text-[11.5px]">
+                            <span className="text-ink-600">{cp.name}</span>
+                            <span className="tnum ml-1.5 select-all rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[10.5px] text-ink-700">{cp.id}</span>
+                            {cp.mode === "channex_sandbox" && <span className="ml-1 text-[10px] font-bold uppercase text-warning-600">sandbox</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     {r.channexChannels > 0
                       ? <StatusPill tone="info">{r.channexChannels} on Channex</StatusPill>
