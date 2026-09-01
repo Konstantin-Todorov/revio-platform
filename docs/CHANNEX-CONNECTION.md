@@ -44,6 +44,33 @@ are created **switched off** — nothing sells until somebody activates it.
 
 ---
 
+## ⚠️ Why a hotel ends up TWICE in Channex (fixed 2026-09-01)
+
+Provisioning wrote our channel row **last**, after every room type and rate plan:
+
+```
+2. POST /properties      ← Channex creates it and returns a uuid
+3. POST /room_types
+4. POST /rate_plans
+5. writeChannel(...)     ← only NOW does our DB learn the uuid
+```
+
+**Anything failing between 2 and 5 left a property in Channex our database had never heard of.** The
+"already connected?" guard reads our database — so the next attempt saw nothing, created *another*
+property, and orphaned the first. Channex accepts any number of properties with the same title and
+gives each a new uuid, so the duplicate is silent and afterwards indistinguishable.
+
+That is how `Ethno Villa Cherry` exists twice (`3987f78c…`, `7eb14a83…`) while our channel row pointed
+at a third uuid that no longer exists at all.
+
+**Three changes:**
+1. The property uuid is persisted **the instant Channex returns it**. It is the one thing that cannot
+   be recreated or looked up afterwards; everything later is repairable from our own data.
+2. Provisioning **asks Channex first** whether a property with that title already exists, and refuses
+   rather than creating a twin. One GET, and it doubles as a live check that the key works.
+3. The "already connected" message now points at **Mapping** to finish a half-done setup, instead of
+   just refusing — which is what pushed somebody to press the button again.
+
 ## ⚠️ Provisioning is ONE-SHOT
 
 `provisionChannexProperty` is the **only** code in the platform that creates room types or rate plans

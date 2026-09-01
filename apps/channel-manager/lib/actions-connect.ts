@@ -227,7 +227,19 @@ export async function provisionChannex(): Promise<ProvisionOutcome> {
     where: { propertyId: property.id, externalPropertyId: { not: null } },
     select: { id: true },
   });
-  if (already) return { ok: false, error: "This property is already connected to Channex." };
+  /*
+   * Already connected — and since the channel row is now written the INSTANT Channex returns the
+   * property id, this also catches a run that stopped part-way. So the message cannot just say "no":
+   * a half-provisioned hotel needs to be told where to finish, not sent back to a button that
+   * refuses. Provisioning again would create a duplicate property, which is the thing being avoided.
+   */
+  if (already) {
+    return {
+      ok: false,
+      error: "This property is already on Channex. If setup stopped part-way, finish it in Mapping — " +
+        "running setup again would create a second property in Channex that nobody can tell apart.",
+    };
+  }
 
   const [roomTypes, ratePlans] = await Promise.all([
     prisma.roomType.findMany({

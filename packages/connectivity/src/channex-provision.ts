@@ -194,6 +194,29 @@ export async function provisionChannexProperty(
    * entered deliberately in Operator → Connectivity, where it is tested before it is stored.
    */
 
+  /*
+   * 2a — REFUSE TO CREATE A SECOND PROPERTY WITH THE SAME NAME.
+   *
+   * Channex is happy to hold ten properties called "Ethno Villa Cherry" and gives each a fresh uuid,
+   * so a duplicate is silent, permanent, and indistinguishable from the real one afterwards — you
+   * cannot tell by looking which of two identically-named properties the OTAs were mapped against.
+   *
+   * Cheap to prevent, expensive to undo, and it costs one GET. Checked against the account this key
+   * can actually see, which is also a free check that the key works before we start writing.
+   */
+  const existing = await api("GET", "/properties");
+  const clash = (existing?.data ?? []).find(
+    (x: { id: string; attributes?: { title?: string } }) =>
+      (x.attributes?.title ?? "").trim().toLowerCase() === property.name.trim().toLowerCase(),
+  );
+  if (clash) {
+    throw new ChannexProvisionError(
+      `Channex already has a property called “${property.name}” (${clash.id}). ` +
+      "Provisioning again would create a second one that nobody can tell apart. " +
+      "If that property is this hotel, connect it instead; if it is an orphan from a failed run, delete it in Channex first.",
+    );
+  }
+
   // 2 — the property.
   const created = await api("POST", "/properties", {
     property: {
@@ -212,6 +235,31 @@ export async function provisionChannexProperty(
   });
   const channexPropertyId: string = created.data.id;
   say("Created the property on Channex", channexPropertyId);
+
+  /*
+   * ⚠️ PERSIST THE ID **NOW**, before anything else can fail.
+   *
+   * This write used to happen at the very END, after every room type and rate plan. So any failure
+   * in between — a rate plan Channex refused, a timeout, a closed laptop — left a property sitting
+   * in Channex that our database had never heard of. And the "already connected?" guard reads our
+   * database, so the next attempt saw nothing, created ANOTHER property, and orphaned the first.
+   *
+   * That is how `Ethno Villa Cherry` came to exist twice in Channex (`3987f78c…`, `7eb14a83…`) while
+   * our channel row pointed at a third id that no longer exists at all. The founder guessed the
+   * cause before the code was read.
+   *
+   * The id is the one thing that cannot be recreated or looked up reliably afterwards — two
+   * properties with the same title are indistinguishable. Everything after this point is repairable
+   * from our own data; this is not. So it is written first, and a partial failure now leaves a
+   * visible, fixable channel row instead of an invisible orphan.
+   */
+  const channel = await writes.writeChannel({
+    tenantId: input.tenantId,
+    propertyId: property.id,
+    mode,
+    channexPropertyId,
+    currency: property.baseCurrency,
+  });
 
   // 3 + 4 — room types, then a rate plan per (room type × manual plan) pair.
   const roomMap: ProvisionResult["roomMap"] = [];
@@ -254,14 +302,8 @@ export async function provisionChannexProperty(
     }
   }
 
-  // 5 — our Channel row and both mapping tables.
-  const channel = await writes.writeChannel({
-    tenantId: input.tenantId,
-    propertyId: property.id,
-    mode,
-    channexPropertyId,
-    currency: property.baseCurrency,
-  });
+  // 5 — the mapping tables. The Channel row itself was written the moment Channex returned the
+  //     property id, so a failure above leaves a repairable record rather than an orphan.
   for (const m of roomMap) await writes.writeRoomMapping(channel.id, input.tenantId, m.ours, m.theirs);
   for (const m of rateMap) {
     await writes.writeRateMapping(channel.id, input.tenantId, m.ourPlan, m.ourRoom, m.theirs);
