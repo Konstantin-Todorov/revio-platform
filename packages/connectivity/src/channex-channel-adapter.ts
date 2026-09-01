@@ -223,7 +223,19 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     params.set("order[inserted_at]", "asc");
 
     const res = await this.get(`/bookings?${params.toString()}`);
-    if (!res.ok) return [];
+    /*
+     * THROW, never return []. This line used to be `if (!res.ok) return []`.
+     *
+     * An empty list and a failed request are indistinguishable to the caller, and `pullChannel`
+     * reads a short list as a quiet day. On 2026-09-01 the first real hotel's Channex key stopped
+     * authenticating and the Sync Center recorded **411 consecutive "Pulled 0 revisions · success"**
+     * — every one of them a 401. The hotel was told repeatedly that its channel was healthy while
+     * nothing at all was reaching it.
+     *
+     * `pullChannel` already wraps this in try/catch and writes a `failed` SyncEvent carrying the
+     * message, so throwing is what surfaces the reason. Returning [] is what hides it.
+     */
+    if (!res.ok) throw new Error(`Channex GET /bookings → ${res.error ?? `HTTP ${res.status}`}`);
     const data = (res.body as { data?: ChannexBooking[] } | null)?.data ?? [];
     return data.map(toRawReservation);
   }
@@ -238,7 +250,8 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     params.set("filter[property_id]", this.propertyId);
     params.set("order[inserted_at]", "asc");
     const res = await this.get(`/booking_revisions/feed?${params.toString()}`);
-    if (!res.ok) return [];
+    // Same reason as `pullReservations` above: a failed feed read is not an empty feed.
+    if (!res.ok) throw new Error(`Channex GET /booking_revisions/feed → ${res.error ?? `HTTP ${res.status}`}`);
     const data = (res.body as { data?: ChannexBooking[] } | null)?.data ?? [];
     return data.map(toRawRevision);
   }
