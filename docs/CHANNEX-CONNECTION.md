@@ -61,8 +61,16 @@ later, and it never reached Channex.
 
 | Key | Where it lives | Used by |
 | --- | --- | --- |
-| **Per-tenant** | `ConnectivityCredential`, AES-256-GCM encrypted, set in **Operator → Connectivity** | Preferred. Used whenever it exists. |
-| **Platform fallback** | `CHANNEX_PROD_KEY` / `CHANNEX_SANDBOX_KEY` on Railway (`channel-manager`, `reservation`, `pms`) | Only when the tenant has no key of its own. |
+| **Platform key — THE NORMAL CASE** | `CHANNEX_PROD_KEY` / `CHANNEX_SANDBOX_KEY` on Railway (`channel-manager`, `reservation`, `pms`; `operator` holds a reference so the console can test it) | Every hotel we onboard. |
+| **Per-tenant — THE EXCEPTION** | `ConnectivityCredential`, AES-256-GCM encrypted, set in **Operator → Connectivity** | Only a hotel that arrives already owning a Channex account. **Overrides** the platform key for that tenant. |
+
+**We are the Channex customer, not the hotel.** We are certified as a PMS partner: one organisation,
+one key scoped to all properties, and Channex bills **us** per property with an active channel. A
+hotel does not need a Channex account and is never asked for one.
+
+⚠️ A per-tenant key set by mistake points that hotel at a **different Channex account**. The property
+we provisioned under our organisation is then invisible to it, and every push fails with
+`property_id Not found property for this change` — which reads like a mapping bug and is not one.
 
 A hotel with its own key **does not care** whether the Railway variable is valid. Both were dead on
 2026-09-01 and only the per-tenant one mattered for the villa.

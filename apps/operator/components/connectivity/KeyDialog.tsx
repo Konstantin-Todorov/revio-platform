@@ -36,6 +36,11 @@ export function KeyDialog({ tenantId, tenantName, mode, hasKey }: { tenantId: st
           {/* A key that authenticates but sees no properties is not yet usable. Saying so here stops
               the green tick implying the hotel is ready to push. */}
           {state?.warning && <p className="rounded-md bg-warning-50 px-3 py-2 text-[12.5px] font-medium text-warning-700">{state.warning}</p>}
+          <p className="rounded-md bg-warning-50 px-3 py-2 text-[11.5px] text-warning-700">
+            <strong className="font-semibold">Only for a hotel that brings its own Channex account.</strong>{" "}
+            Almost none do — we are the Channex partner, and a key here <em>overrides</em> our platform key for
+            this client. If you are not sure, leave it unset.
+          </p>
           <p className="text-[11.5px] text-ink-400">
             The key is tested against Channex before it is saved. A key Channex rejects is not stored.
           </p>

@@ -92,3 +92,32 @@ export async function removeConnectivityKey(fd: FormData): Promise<void> {
   await prisma.connectivityCredential.deleteMany({ where: { tenantId, mode } });
   revalidatePath("/connectivity");
 }
+/**
+ * Test the PLATFORM key — ours, the one nearly every hotel actually uses.
+ *
+ * We are certified with Channex as a **PMS partner**: one organisation (`konstantin.todoroff PMS`),
+ * one key scoped to all properties, and Channex bills US per property with an active channel. A
+ * hotel does not need a Channex account of its own and normally does not have one.
+ *
+ * So this key — not the per-tenant rows below it — is the one that matters, and until now the
+ * console had no way to ask whether it worked. It is not stored in the database, so there is
+ * nothing to record against; the answer is said out loud instead.
+ */
+export async function testPlatformKey(fd: FormData): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again to check the platform key.");
+  const mode = String(fd.get("mode") ?? "").trim();
+  if (!MODES.has(mode)) return flashError("Reload the page and try again.");
+
+  const key = mode === "channex_prod" ? process.env.CHANNEX_PROD_KEY : process.env.CHANNEX_SANDBOX_KEY;
+  if (!key) {
+    return flashError(
+      `No ${mode === "channex_prod" ? "CHANNEX_PROD_KEY" : "CHANNEX_SANDBOX_KEY"} is set on this service. ` +
+      "It lives on channel-manager, reservation and pms in Railway — the operator console cannot read theirs.",
+    );
+  }
+
+  const r = await checkChannexKey(key, mode);
+  await setFlash(r.ok ? "success" : "error", `Platform key (${mode}): ${r.message}`);
+  revalidatePath("/connectivity");
+}

@@ -24,9 +24,28 @@
 > | **Per-tenant** | `ConnectivityCredential`, encrypted, one row per (tenant, mode) | Operator → Connectivity |
 > | **Fallback** | `CHANNEX_PROD_KEY` env var | Railway, on the three pushing services |
 >
-> The per-tenant row is the right answer once a hotel exists — each client's own Channex account,
-> revocable on its own. The env fallback is what makes everything work **before** that, and what
-> catches a hotel whose credential has not been entered yet.
+> ⚠️ **CORRECTED 2026-09-01.** The line above used to read *"the per-tenant row is the right answer
+> once a hotel exists — each client's own Channex account"*. **That describes a business model we do
+> not operate**, and following it caused the first real hotel's channel to fail.
+>
+> **We are certified as a PMS PARTNER.** One organisation (`konstantin.todoroff PMS`), one key scoped
+> to **all properties**, and **Channex bills US** per property with an active channel. A hotel does
+> not need a Channex account of its own, does not have one, and is never asked for one.
+>
+> So the correct reading of the lookup order is the opposite of what was written:
+>
+> | | When it applies |
+> | --- | --- |
+> | **`CHANNEX_*_KEY` (platform)** | **The normal case.** Every hotel we onboard. |
+> | **Per-tenant `ConnectivityCredential`** | **The exception** — a hotel that arrives already owning a Channex account and wants to keep it. Rare. |
+>
+> The per-tenant row **overrides** the platform key for that tenant. Setting one by mistake points
+> that hotel at a different Channex account, and the property we provisioned under our organisation
+> becomes invisible to it — which surfaces as `property_id Not found property for this change`.
+>
+> Operator → Connectivity now says so: a client with no row reads **"uses our platform key"** rather
+> than "not set", a client with a row is badged **own key**, and the platform key has its own
+> Check-production / Check-sandbox buttons at the top of the screen.
 >
 > **Which services need what:**
 >

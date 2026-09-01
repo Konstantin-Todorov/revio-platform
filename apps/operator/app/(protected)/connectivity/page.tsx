@@ -1,5 +1,5 @@
 import { getConnectivity } from "@/lib/data";
-import { removeConnectivityKey, testStoredKey } from "@/lib/actions-connectivity";
+import { removeConnectivityKey, testStoredKey, testPlatformKey } from "@/lib/actions-connectivity";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { KeyDialog } from "@/components/connectivity/KeyDialog";
 
@@ -42,6 +42,7 @@ function KeyCell({ tenantId, tenantName, mode, cred }: { tenantId: string; tenan
     <div className="flex flex-wrap items-center gap-2">
       {cred ? (
         <>
+          <span title="This client OVERRIDES the platform key" className="rounded bg-warning-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-warning-700">own key</span>
           <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-700">{cred.hint}</span>
           <Health cred={cred} />
           <form action={testStoredKey}>
@@ -51,7 +52,8 @@ function KeyCell({ tenantId, tenantName, mode, cred }: { tenantId: string; tenan
           </form>
         </>
       ) : (
-        <span className="text-[12px] text-ink-300">not set</span>
+        // Not an absence — the normal, correct state. Saying "not set" invited somebody to fix it.
+        <span className="text-[12px] text-ink-400">uses our platform key</span>
       )}
       <KeyDialog tenantId={tenantId} tenantName={tenantName} mode={mode} hasKey={!!cred} />
       {cred && (
@@ -70,9 +72,44 @@ export default async function Page() {
 
   return (
     <div>
+      {/*
+        * THE PLATFORM KEY IS THE NORMAL CASE, so it goes first and largest.
+        *
+        * We are certified with Channex as a PMS partner: one organisation, one key scoped to all
+        * properties, and Channex bills US per property with an active channel. A hotel does not need
+        * a Channex account of its own and normally does not have one.
+        *
+        * The per-tenant rows below are the EXCEPTION — a hotel that arrives already owning a Channex
+        * account and wants to keep it. Presenting them as the default (which this screen used to do)
+        * invites somebody to paste a key per client and quietly override the platform key for that
+        * hotel, which is exactly what went wrong on 2026-09-01.
+        */}
+      <Card className="mb-4 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-[13px] font-bold text-ink-900">Our platform key</h3>
+            <p className="mt-0.5 max-w-2xl text-[11.5px] text-ink-500">
+              One Channex organisation, one key, every property. This is what almost every hotel uses —
+              they do not need a Channex account of their own. Set on channel-manager, reservation and
+              pms in Railway; not stored here, so it is checked live.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {["channex_prod", "channex_sandbox"].map((m) => (
+              <form key={m} action={testPlatformKey}>
+                <input type="hidden" name="mode" value={m} />
+                <button type="submit" className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
+                  Check {m === "channex_prod" ? "production" : "sandbox"}
+                </button>
+              </form>
+            ))}
+          </div>
+        </div>
+      </Card>
+
       <PageHeader
         title="Connectivity"
-        subtitle="Per-client OTA / Channex credentials — encrypted at rest, never visible to hotels. A key is tested when it is saved; “Check now” asks Channex again."
+        subtitle="Per-client keys — the EXCEPTION, for a hotel that brings its own Channex account. Leave a client unset and our platform key is used. Tested on save; “Check now” asks Channex again."
       />
       <Card>
         <CardHeader title="Channex API keys" />

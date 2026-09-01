@@ -72,9 +72,13 @@ working". Three things that are not obvious and have each cost a day:
    the worst being 411 consecutive "Pulled 0 revisions · success" events on a real hotel whose key
    had been revoked. **Check the status code, never the array length.**
 
-Keys: a per-tenant encrypted `ConnectivityCredential` (Operator → Connectivity, **tested on save**)
-takes precedence over the `CHANNEX_*_KEY` Railway fallback. Sandbox and production are different
-accounts, different keys and different hosts.
+4. **We are the Channex CUSTOMER, not the hotel.** Certified as a PMS partner: one organisation,
+   one `CHANNEX_*_KEY` scoped to all properties, and Channex bills **us** per property with an active
+   channel. A hotel does not need a Channex account and is never asked for one. The per-tenant
+   `ConnectivityCredential` is the **exception** — only a hotel that arrives already owning one — and
+   it **overrides** the platform key for that tenant. Set by mistake, it points that hotel at a
+   different Channex account and every push fails with `property_id Not found property`, which reads
+   like a mapping bug and is not one. Sandbox and production are different accounts, keys and hosts.
 
 ## Connectivity is behind an adapter — demo runs on a mock
 
