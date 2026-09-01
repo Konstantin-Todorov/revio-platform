@@ -76,6 +76,16 @@ describe("checkChannexKey", () => {
     expect(await checkChannexKey("k", "channex_prod")).toMatchObject({ ok: false, status: 0 });
   });
 
+  it("uses app.channex.io for production — NOT secure.channex.io, which is not a Channex host", async () => {
+    // The bug this whole file failed to catch: a hardcoded `secure.` host 401'd every request, so
+    // the key checker reported a working production key as revoked. The host now comes from core.
+    const spy = vi.fn(async (..._args: unknown[]) => new Response(JSON.stringify({ data: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", spy);
+    await checkChannexKey("k", "channex_prod");
+    expect(String(spy.mock.calls[0]?.[0])).toContain("app.channex.io");
+    expect(String(spy.mock.calls[0]?.[0])).not.toContain("secure.channex.io");
+  });
+
   it("sends sandbox and production at DIFFERENT hosts — separate accounts, separate keys", async () => {
     const spy = vi.fn(async (..._args: unknown[]) => new Response(JSON.stringify({ data: [] }), { status: 200 }));
     vi.stubGlobal("fetch", spy);
@@ -83,7 +93,7 @@ describe("checkChannexKey", () => {
     await checkChannexKey("k", "channex_sandbox");
     const urls = spy.mock.calls.map((c) => String(c[0]));
     expect(urls).toHaveLength(2);
-    expect(urls.join(" ")).toContain("secure.channex.io");
+    expect(urls.join(" ")).toContain("app.channex.io");
     expect(urls.join(" ")).toContain("staging.channex.io");
   });
 

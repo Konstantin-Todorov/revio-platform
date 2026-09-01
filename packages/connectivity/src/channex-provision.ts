@@ -32,6 +32,8 @@
  * the plans we actually author.
  */
 
+import { CHANNEX_PROD_URL, CHANNEX_SANDBOX_URL } from "@revio/core";
+
 export interface ProvisionProperty {
   id: string;
   name: string;
@@ -95,8 +97,8 @@ export interface ProvisionWrites {
 }
 
 const HOSTS: Record<string, string> = {
-  channex_prod: "https://app.channex.io/api/v1",
-  channex_sandbox: "https://staging.channex.io/api/v1",
+  channex_prod: CHANNEX_PROD_URL,
+  channex_sandbox: CHANNEX_SANDBOX_URL,
 };
 
 /**

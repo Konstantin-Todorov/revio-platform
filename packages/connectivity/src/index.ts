@@ -49,7 +49,8 @@ export {
   type ChannelAdapterDescriptor, type ChannelField, type ChannelFieldType, type FieldRule,
 } from "./channex-channels.js";
 export {
-  channexApiConfig, fetchChannelAdapter, testChannelConnection, createChannexChannel, activateChannexChannel,
+  channexApiConfig,
+  fetchChannelAdapter, testChannelConnection, createChannexChannel, activateChannexChannel,
   type ChannexApiConfig, type ConnectionTest,
 } from "./channex-channel-api.js";
 export {

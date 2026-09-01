@@ -6,11 +6,21 @@
  * the piece that most needs unit tests — the distinction it draws is the one this codebase keeps
  * getting wrong.
  */
-/** Channex's live base URL per mode. Sandbox and production are separate accounts and separate keys. */
-const BASE: Record<string, string> = {
-  channex_prod: "https://secure.channex.io/api/v1",
-  channex_sandbox: "https://staging.channex.io/api/v1",
-};
+
+import { channexBaseUrl } from "@revio/core";
+/**
+ * The SAME hosts the pushing code uses — imported, never retyped.
+ *
+ * ⚠️ This file originally hardcoded `secure.channex.io` for production, which is **not a Channex
+ * host**. Every request 401'd, and because this function's whole job is to answer "does this key
+ * work", it confidently reported a perfectly good key as revoked — and I then spent an hour telling
+ * the founder his key was dead, and shipped two documents saying so.
+ *
+ * `factory.ts` already carried a comment warning that a wrong host "fails at the worst possible
+ * moment". I wrote a second copy of the host anyway. So there is no copy here now: the constant is
+ * the one the adapter itself resolves from, and a check that cannot disagree with the pusher is the
+ * only kind worth having.
+ */
 
 export interface KeyCheck {
   ok: boolean;
@@ -30,7 +40,7 @@ export interface KeyCheck {
  * very outage this function exists to prevent.
  */
 export async function checkChannexKey(apiKey: string, mode: string): Promise<KeyCheck> {
-  const base = BASE[mode];
+  const base = channexBaseUrl(mode);
   if (!base) return { ok: false, status: 0, properties: null, message: "Unknown mode." };
 
   let res: Response;

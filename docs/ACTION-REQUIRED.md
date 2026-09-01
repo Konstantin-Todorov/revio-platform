@@ -9,16 +9,20 @@ Ordered by what goes wrong if it is missed. Last reviewed **2026-08-24**.
 
 ## 🔴 Blocks the first paying client
 
-### 0. A WORKING Channex API key — the live blocker (2026-09-01)
-Both keys are currently **dead (HTTP 401)**: the Railway `CHANNEX_PROD_KEY` (identical on
-`channel-manager`, `reservation`, `pms`) and **Ethno Villa Cherry's own stored key**.
+### 0. ~~A WORKING Channex API key~~ — ⚠️ THIS ENTRY WAS WRONG (corrected 2026-09-01)
 
-Channex is rejecting pushes with `property_id Not found property for this change`, which is what a
-revoked key — or a key belonging to a **different Channex account** — looks like.
+It said both Channex keys were dead. **They were not.** The platform key authenticates fine —
+`GET https://app.channex.io/api/v1/properties` → **HTTP 200**, three properties visible.
 
-**What only you can do:** in the Channex dashboard, check whether the key was regenerated, and
-confirm which account owns property `d633e271-d41f-4eb8-92f7-1bac9fc31253`. Then paste a fresh key
-into **Operator → Connectivity**; it is tested on save and refused if Channex rejects it.
+Every "401" behind that claim came from my own key-health checker, which had hardcoded
+`secure.channex.io` — **not a Channex host**. Kept rather than deleted because it was acted on.
+
+**What is actually true:**
+- The platform key works. `Chervena Vila` provisioned, pushed (17×) and pulled (15×) with no errors.
+- **`Ethno Villa Cherry` points at a property id that does not exist in Channex** (`d633e271…`),
+  while **two** properties named "Ethno Villa Cherry" DO exist (`3987f78c…`, `7eb14a83…`). Provisioning
+  evidently ran more than once. That is the real remaining fault, and it needs a person to decide
+  which duplicate to keep and which to delete in Channex.
 
 Full explanation of how any of this fits together: **`docs/CHANNEX-CONNECTION.md`**.
 

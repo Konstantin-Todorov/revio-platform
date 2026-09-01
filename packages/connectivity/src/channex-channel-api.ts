@@ -1,5 +1,6 @@
 import { forSystem, decryptSecret } from "@revio/db";
 import { parseAdapter, type ChannelAdapterDescriptor } from "./channex-channels.js";
+import { CHANNEX_PROD_URL, CHANNEX_SANDBOX_URL } from "@revio/core";
 
 /**
  * Creating an OTA connection over the API, so nobody has to open the Channex dashboard.
@@ -26,8 +27,8 @@ import { parseAdapter, type ChannelAdapterDescriptor } from "./channex-channels.
  * why it is a step and not an optimisation.
  */
 
-const PROD = "https://app.channex.io/api/v1";
-const SANDBOX = "https://staging.channex.io/api/v1";
+const PROD = CHANNEX_PROD_URL;
+const SANDBOX = CHANNEX_SANDBOX_URL;
 
 export interface ChannexApiConfig {
   apiKey: string;

@@ -97,6 +97,20 @@ Channex says "not found" — and labels the per-client key columns *(rare)*. Bef
 per-client thing on the screen was a key that should almost never be set, which implied the wrong
 thing was per-hotel.
 
+## ⚠️ Production is `app.channex.io`
+
+Not `secure.`, which is not a Channex host at all. **One definition, in `@revio/core`:**
+`CHANNEX_PROD_URL` / `CHANNEX_SANDBOX_URL` / `channexBaseUrl(mode)`. The adapter, the provisioner and
+the operator's key check all resolve from it.
+
+A second copy of a host cost an afternoon on 2026-09-01: the key checker had invented `secure.`, so
+it 401'd on a perfectly good production key and reported it revoked, while pushes on the same key
+were succeeding. `factory.ts` already carried the warning that a wrong host "fails at the worst
+possible moment" — and a second copy was written anyway.
+
+`channexBaseUrl` returns **null** for an unknown mode rather than defaulting to production. A guessed
+host is how this went wrong.
+
 ## ⚠️ Provisioning used to copy the platform key (fixed 2026-09-01)
 
 Step 1 of provisioning stored a per-tenant copy of whichever key it authenticated with — normally

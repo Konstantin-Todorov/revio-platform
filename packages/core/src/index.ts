@@ -54,3 +54,4 @@ export * from "./registry/countries.js";
 export * from "./registry/tourist-tax.js";
 export * from "./export/xlsx.js";
 export * from "./email/system-shell.js";
+export * from "./adapters/channex-hosts.js";
