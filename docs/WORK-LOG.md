@@ -27,6 +27,28 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-09-01 · Claude · DONE · Two more built-but-unreachable features
+**Same sweep that found the four OBP actions, run again.** Files: three settings pages,
+`apps/pms/app/(protected)/users/page.tsx`, `apps/pms/lib/{roles,actions-workforce}.ts`, `roles.test.ts`
+
+1. ⚠️ **"Sign out everywhere" existed in ONE product of four.** `signOutEverywhere` is written in
+   RevioLink, RevioCRS, RevioPMS and Operator; only RevioLink had the button. The whole point of N3
+   is that revocation is recorded on the **shared identity** so it reaches every product — but a
+   PMS-only or CRS-only hotel had no way to trigger it, and the **operator console**, which reads
+   every hotel on the platform, was the one account with no way to end a session on a lost laptop.
+2. ⚠️ **Delegated clock-in/out had no UI at all** — while the Staff page rendered **"· by staff"**
+   for a state nothing could produce, and its empty state told people to use their own view instead.
+   The actions were built, gated, and sitting in the authz-lint exemption list with a stated reason.
+   A cleaner without a phone was simply absent from the record.
+
+`DELEGATOR_ROLES` moved from a private const in a `"use server"` file to `roles.ts` — a screen has to
+ask the same question the action answers, and `roles.ts` is the policy module that is unit-tested.
+3 tests pin it: **reception can delegate, a housekeeper cannot** (a housekeeper clocking a colleague
+in is a timesheet somebody else wrote).
+
+Also noted, not built: `abandonHold` in RevioDirect has no caller — a guest who leaves the page keeps
+the hold until its TTL expires. Correct but slow; a beacon would release it sooner.
+
 ### 2026-09-01 · Claude · DONE · Every system email is branded — invites, resets, digests
 **All 17 system emails were plain text. Only guest-facing mail had HTML.**
 Files: `packages/core/src/email/{system-shell.ts,system-shell.test.ts}` (new, 22 tests),

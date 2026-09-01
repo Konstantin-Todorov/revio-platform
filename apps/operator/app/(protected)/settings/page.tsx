@@ -5,6 +5,8 @@ import { getOperatorSession } from "@/lib/session";
 import { inviteOperator, updateOperatorRole, removeOperator } from "@/lib/actions-settings";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { TwoFactorSetup } from "@revio/ui/two-factor-setup";
+import { SignOutEverywhere } from "@revio/ui/sign-out-everywhere";
+import { signOutEverywhere } from "@/lib/actions-auth";
 import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor } from "@/lib/actions-2fa";
 import { CompanyForm } from "@/components/billing/CompanyForm";
 import { getCompany } from "@/lib/invoice-doc";
@@ -50,6 +52,13 @@ export default async function SettingsPage() {
             productName="Revio Operator"
             actions={{ start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor }}
           />
+      </Card>
+
+      {/* The console reads every hotel on the platform, so a session left alive on a lost laptop is
+          the worst one on the estate — and it was the one account with no way to end it. */}
+      <Card className="mb-4 p-4">
+        <h3 className="mb-3 text-[13px] font-bold text-ink-900">Your sign-in</h3>
+        <SignOutEverywhere action={signOutEverywhere} productNames={["the Revio operator console"]} />
       </Card>
 
       {/* Our own legal identity. Without it there is no issuer, and issuing is blocked. */}

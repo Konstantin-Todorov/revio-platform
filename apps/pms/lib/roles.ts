@@ -45,6 +45,18 @@ export function roleAllowsPath(role: string, pathname: string): boolean {
 
 const MANAGERS = ["owner", "admin", "manager"] as const;
 
+/**
+ * Who may clock somebody ELSE in or out.
+ *
+ * Reception as well as managers, deliberately: the front desk is who notices that the cleaner on the
+ * second floor never clocked in. Wider than `manage` and narrower than `housekeeping` — a housekeeper
+ * may start their own shift and nobody else's.
+ *
+ * Lives here rather than in the action file because this is the policy module: it is pure, it is
+ * unit-tested, and a screen has to ask the same question the action will answer.
+ */
+export const DELEGATOR_ROLES: ReadonlySet<string> = new Set([...MANAGERS, "hk_supervisor", "reception"]);
+
 export const CAPABILITY_ROLES = {
   /** Configuration, staff, deposit types, invoicing, close day, room inventory. */
   manage: [...MANAGERS],

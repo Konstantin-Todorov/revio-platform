@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPABILITY_ROLES, PMS_ROLES, roleAllowsPath, roleHasCapability, roleHome, SCOPED_NAV } from "./roles";
+import { CAPABILITY_ROLES, DELEGATOR_ROLES, PMS_ROLES, roleAllowsPath, roleHasCapability, roleHome, SCOPED_NAV } from "./roles";
 
 /**
  * The permission matrix is the one piece of this app where a silent mistake is a security bug rather
@@ -90,5 +90,28 @@ describe("screen scoping", () => {
       expect(roleAllowsPath(role, "/folios")).toBe(true);
       expect(roleAllowsPath(role, "/configuration")).toBe(true);
     }
+  });
+});
+
+describe("DELEGATOR_ROLES — who may clock somebody else in", () => {
+  it("includes reception, not only managers", () => {
+    // The front desk is who notices that the cleaner on the second floor never clocked in.
+    for (const r of ["owner", "admin", "manager", "hk_supervisor", "reception"]) {
+      expect(DELEGATOR_ROLES.has(r), r).toBe(true);
+    }
+  });
+
+  it("excludes the roles that may only start their OWN shift", () => {
+    // A housekeeper clocking a colleague in is a timesheet somebody else wrote.
+    for (const r of ["housekeeper", "maintenance", "outlet_pos"]) {
+      expect(DELEGATOR_ROLES.has(r), r).toBe(false);
+    }
+  });
+
+  it("is narrower than housekeeping and wider than manage", () => {
+    expect(DELEGATOR_ROLES.has("reception")).toBe(true);
+    expect(roleHasCapability("reception", "manage")).toBe(false);
+    expect(roleHasCapability("housekeeper", "housekeeping")).toBe(true);
+    expect(DELEGATOR_ROLES.has("housekeeper")).toBe(false);
   });
 });

@@ -4,6 +4,8 @@ import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/component
 import { connectivityModeLabel } from "@revio/core";
 import { getPmsSettings } from "@/lib/data";
 import { TwoFactorSetup } from "@revio/ui/two-factor-setup";
+import { SignOutEverywhere } from "@revio/ui/sign-out-everywhere";
+import { signOutEverywhere } from "@/lib/actions-auth";
 import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor } from "@/lib/actions-2fa";
 import { userRequiresSecondFactor } from "@revio/db";
 import { getSession } from "@/lib/session";
@@ -12,6 +14,12 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const _s2fa = await getSession();
+  // Named rather than "everything": a warning nobody can check is a warning nobody reads.
+  const productNames = [
+    ...(_s2fa?.entitlements.channelManager ? ["RevioLink"] : []),
+    ...(_s2fa?.entitlements.reservation ? ["RevioCRS"] : []),
+    ...(_s2fa?.entitlements.pms ? ["RevioPMS"] : []),
+  ];
   const twoFactorOn = _s2fa ? await userRequiresSecondFactor(_s2fa.userId) : false;
   const { property, channels, counts } = await getPmsSettings();
 
@@ -98,6 +106,15 @@ export default async function SettingsPage() {
             productName="RevioPMS"
             actions={{ start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor }}
           />
+        </div>
+      </Card>
+
+      {/* The revocation is recorded on the SHARED identity, so it reaches every product this hotel
+          runs — which is exactly why the button cannot live in one product only. Until now it did. */}
+      <Card>
+        <CardHeader title="Your sign-in" subtitle="Sessions on this and any other device" />
+        <div className="p-5">
+          <SignOutEverywhere action={signOutEverywhere} productNames={productNames} />
         </div>
       </Card>
 </div>

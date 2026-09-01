@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { recordOpsEvent } from "./events";
-import { MANAGER_ROLES } from "./roles";
+import { DELEGATOR_ROLES } from "./roles";
 import { str } from "./mutation-helpers";
 import { flashError } from "@revio/ui/flash";
 
@@ -18,7 +18,6 @@ import { flashError } from "@revio/ui/flash";
 
 // Roles allowed to clock OTHER staff in/out (delegated). Managers always; supervisors + reception for
 // their operational departments. (Fine-grained per-role delegation via the §9.8 matrix is a later refinement.)
-const DELEGATOR_ROLES = new Set([...MANAGER_ROLES, "hk_supervisor", "reception"]);
 
 function refresh() {
   revalidatePath("/staff");
