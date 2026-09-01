@@ -44,6 +44,20 @@ are created **switched off** — nothing sells until somebody activates it.
 
 ---
 
+## ⚠️ There are TWO onboarding paths, and they did not know about each other
+
+| Path | Where |
+| --- | --- |
+| **In-app button** | RevioLink → Channels → "Set up on Channex" |
+| **CLI script** | `packages/connectivity/scripts/channex-onboard.ts` — **what `docs/ONBOARDING-A-HOTEL.md` tells you to run** |
+
+They do the same job. Neither used to check whether the other had already run, and neither checked
+Channex for a property of the same name. **Running both — or running either twice after a partial
+failure — creates duplicate properties.** That is the most likely way one villa came to exist twice.
+
+Both now refuse a same-named property and both persist the uuid immediately. **Prefer the button**:
+the CLI exists for bulk and for a hotel that needs flags the UI does not expose.
+
 ## ⚠️ Why a hotel ends up TWICE in Channex (fixed 2026-09-01)
 
 Provisioning wrote our channel row **last**, after every room type and rate plan:

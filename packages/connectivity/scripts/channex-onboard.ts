@@ -31,7 +31,7 @@
  * leaving a billable property behind. It refuses to touch a property that has a channel attached.
  */
 import { forSystem } from "@revio/db";
-import { encryptSecret } from "@revio/db";
+
 
 const SANDBOX = process.argv.includes("--sandbox");
 /*
@@ -157,14 +157,42 @@ async function main() {
   if (has("cleanup")) return cleanup(db, property.id);
 
   // 1 — the key, encrypted, on the same path the console writes.
+  /*
+   * NOT storing the key. This used to upsert a per-tenant credential holding whatever key the run
+   * used — normally the PLATFORM key, since we are the Channex customer and hotels have no account.
+   *
+   * That copy then OVERRIDES the platform key for the tenant forever, because the lookup reads the
+   * per-tenant row first. Rotate the platform key and every hotel onboarded by this script silently
+   * keeps the old one. Same bug was removed from the in-app path on 2026-09-01; this script is the
+   * one the runbook actually tells people to use, so leaving it here would have kept the bug alive.
+   */
+  say("using the platform key", "no per-tenant copy is stored — see docs/CHANNEX-CONNECTION.md");
+
+  /*
+   * 2a — refuse to create a SECOND property with this name.
+   *
+   * There are two onboarding paths — this script and the in-app button — and neither used to know
+   * the other had run. Channex accepts any number of properties with the same title and gives each
+   * a new uuid, so a duplicate is silent and afterwards indistinguishable: nobody can tell which of
+   * two identically-named properties the OTAs were mapped against.
+   *
+   * That is how one villa came to exist twice. One GET prevents it, and it doubles as a live check
+   * that the key works before anything is written.
+   */
   if (!DRY) {
-    await db.connectivityCredential.upsert({
-      where: { tenantId_mode: { tenantId: tenant.id, mode: MODE } },
-      create: { tenantId: tenant.id, mode: MODE, cipher: encryptSecret(KEY) },
-      update: { cipher: encryptSecret(KEY) },
-    });
+    const existing = await api("GET", "/properties");
+    const clash = (existing?.data ?? []).find(
+      (x: { id: string; attributes?: { title?: string } }) =>
+        (x.attributes?.title ?? "").trim().toLowerCase() === property.name.trim().toLowerCase(),
+    );
+    if (clash) {
+      throw new Error(
+        `Channex already has a property called "${property.name}" (${clash.id}). ` +
+        "Creating another would make two nobody can tell apart. If it is this hotel, map it instead; " +
+        "if it is an orphan from a failed run, delete it in Channex first.",
+      );
+    }
   }
-  say(`stored the ${SANDBOX ? "sandbox" : "production"} key, encrypted`, `tenant ${tenant.name}`);
 
   // 2 — the Channex property.
   let channexPropertyId = "DRY-RUN";
@@ -186,6 +214,30 @@ async function main() {
       },
     });
     channexPropertyId = created.data.id;
+
+    /*
+     * PERSIST IT NOW, before a room type or rate plan can fail.
+     *
+     * The channel row used to be written at the very end. Any failure in between left a property in
+     * Channex that our database had never heard of — an invisible orphan, and the next run created
+     * another one beside it. The uuid is the only thing here that cannot be recreated or looked up
+     * afterwards, so it is written first and everything else is repaired from our own data.
+     */
+    const early = await db.channel.findFirst({ where: { propertyId: property.id, code: "channex" }, select: { id: true } });
+    if (early) {
+      await db.channel.update({
+        where: { id: early.id },
+        data: { connectivityMode: MODE, externalPropertyId: channexPropertyId, status: "connected" },
+      });
+    } else {
+      await db.channel.create({
+        data: {
+          tenantId: tenant.id, propertyId: property.id, name: "Channex", code: "channex",
+          connectivityMode: MODE, externalPropertyId: channexPropertyId,
+          status: "connected", currency: property.baseCurrency,
+        },
+      });
+    }
   }
   say("created the Channex property", channexPropertyId);
 
