@@ -9,6 +9,21 @@ Ordered by what goes wrong if it is missed. Last reviewed **2026-08-24**.
 
 ## 🔴 Blocks the first paying client
 
+### 0. A WORKING Channex API key — the live blocker (2026-09-01)
+Both keys are currently **dead (HTTP 401)**: the Railway `CHANNEX_PROD_KEY` (identical on
+`channel-manager`, `reservation`, `pms`) and **Ethno Villa Cherry's own stored key**.
+
+Channex is rejecting pushes with `property_id Not found property for this change`, which is what a
+revoked key — or a key belonging to a **different Channex account** — looks like.
+
+**What only you can do:** in the Channex dashboard, check whether the key was regenerated, and
+confirm which account owns property `d633e271-d41f-4eb8-92f7-1bac9fc31253`. Then paste a fresh key
+into **Operator → Connectivity**; it is tested on save and refused if Channex rejects it.
+
+Full explanation of how any of this fits together: **`docs/CHANNEX-CONNECTION.md`**.
+
+
+
 ### 1. ~~Store the Channex production API key~~ ✅ DONE
 **Status (verified 2026-08-29):** `CHANNEX_PROD_KEY` is set on `channel-manager`, `reservation` and
 `pms`, and authenticates — a live `GET /properties` returned **HTTP 200** with 0 properties.

@@ -27,6 +27,37 @@ Notes: isolated worktree and branch `codex/operator-platform-history`; no databa
 connectivity or deployment changes. The history is versioned metadata, not a runtime Git reader.
 Full workspace typecheck, tests, builds, root lint and copy-lint passed on `c490784`.
 
+### 2026-09-01 · Claude · DONE · First real hotel's channel was dead and the console said green
+**Diagnosis + two fixes + `docs/CHANNEX-CONNECTION.md`.** Files:
+`packages/connectivity/src/channex-channel-adapter.ts`, `pull-failure.test.ts` (new, 6 tests),
+`apps/operator/lib/{channex-key-check.ts,channex-key-check.test.ts}` (new, 11 tests),
+`actions-connectivity.ts`, `connectivity/page.tsx`, `KeyDialog.tsx`,
+migration `20260901150000_credential_health`, `CLAUDE.md`, `ACTION-REQUIRED.md`
+
+**Root cause is not ours:** the villa's Channex key returns 401 — both it and the Railway fallback.
+Channex rejected pushes with `property_id Not found property for this change`.
+
+**But two of our failures made it invisible and cost hours:**
+- ⚠️ `pullRevisions`/`pullReservations` read `if (!res.ok) return []`, so every 401 arrived as an
+  empty feed. The Sync Center wrote **411 consecutive "Pulled 0 revisions · success"**. The one
+  screen built to answer "is this working" was the screen lying. Both now throw; `pullChannel`
+  already had the try/catch that records the reason.
+- ⚠️ **Operator → Connectivity stored keys without ever testing them.** A revoked key looked
+  identical to a working one. Now tested on save (a rejected key is *refused*, not stored), a
+  **Check now** button, and three states — working / rejected / **never tested**, because never
+  tested is not the same as working and must not be green.
+
+⚠️ **The 401 trap has now caused THREE incidents** and I fell into it again mid-diagnosis, reporting
+"0 properties" from a response whose status I had not checked. Pinned by tests in both packages and
+written into `CLAUDE.md` so it loads every session.
+
+⚠️ **Provisioning is one-shot** — the only code that creates room types/rate plans in Channex, sending
+what exists at that moment. The villa added a rate plan afterwards and it never reached Channex.
+**Not yet fixed**: there is no path to push a newly-added product. Finish Rooms & Rates first.
+
+Also: the silent-lint ratchet caught **my own** three new silent returns in `testStoredKey`. Fixed
+rather than budget-raised, which is what the ratchet is for.
+
 ### 2026-09-01 · Claude · DONE · Two more built-but-unreachable features
 **Same sweep that found the four OBP actions, run again.** Files: three settings pages,
 `apps/pms/app/(protected)/users/page.tsx`, `apps/pms/lib/{roles,actions-workforce}.ts`, `roles.test.ts`

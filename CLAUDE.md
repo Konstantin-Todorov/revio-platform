@@ -55,6 +55,27 @@ of the hotel's own CRS rather than a product with its own login.
   in an admin schema the hotel can never read.
 - Integration tokens are encrypted at rest and never exposed to a hotel.
 
+## ⚠️ Channex: two hops, one-shot provisioning, and the 401 trap
+
+Read **`docs/CHANNEX-CONNECTION.md`** before touching connectivity or debugging "the channel isn't
+working". Three things that are not obvious and have each cost a day:
+
+1. **Channex is not an OTA — it is the middleman.** Hop 1 (Revio → Channex) is ours and fully
+   automatic: "Set up on Channex" creates the property, room types and rate plans through the API.
+   Hop 2 (Channex → Booking.com) needs the hotel's own OTA account and their authorisation **inside
+   the OTA's extranet**. Nobody can automate that.
+2. **Provisioning is ONE-SHOT.** `provisionChannexProperty` is the only code that creates room types
+   or rate plans in Channex, and it sends what exists at that moment. Anything added later never
+   reaches Channex. Finish Rooms & Rates *before* provisioning.
+3. **An unauthenticated Channex request is `401` with no `data` key**, so `data.length ?? 0` reads
+   "zero rows" for a dead key exactly as for an empty account. This has caused **three** incidents,
+   the worst being 411 consecutive "Pulled 0 revisions · success" events on a real hotel whose key
+   had been revoked. **Check the status code, never the array length.**
+
+Keys: a per-tenant encrypted `ConnectivityCredential` (Operator → Connectivity, **tested on save**)
+takes precedence over the `CHANNEX_*_KEY` Railway fallback. Sandbox and production are different
+accounts, different keys and different hosts.
+
 ## Connectivity is behind an adapter — demo runs on a mock
 
 Every channel (Booking.com, Expedia, …) is reached through one `ChannelAdapter` interface in

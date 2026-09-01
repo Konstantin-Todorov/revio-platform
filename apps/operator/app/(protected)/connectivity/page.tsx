@@ -1,5 +1,5 @@
 import { getConnectivity } from "@/lib/data";
-import { removeConnectivityKey } from "@/lib/actions-connectivity";
+import { removeConnectivityKey, testStoredKey } from "@/lib/actions-connectivity";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { KeyDialog } from "@/components/connectivity/KeyDialog";
 
@@ -12,13 +12,43 @@ function relative(d: Date): string {
   return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 }
 
-function KeyCell({ tenantId, tenantName, mode, cred }: { tenantId: string; tenantName: string; mode: string; cred: { hint: string; updatedAt: Date } | null }) {
+type Cred = {
+  hint: string; updatedAt: Date;
+  lastCheckOk: boolean | null; lastCheckedAt: Date | null; lastCheckMessage: string | null;
+};
+
+/**
+ * A stored key's health, in three states — and the third one is the point.
+ *
+ * Working / rejected / **never tested**. A key nobody has exercised is not a working key, and until
+ * 2026-09-01 this screen showed it identically to one that was: a revoked credential sat here
+ * looking healthy while the first real hotel's channel did nothing for hours.
+ */
+function Health({ cred }: { cred: Cred }) {
+  if (cred.lastCheckOk === null) {
+    return <StatusPill tone="warning">never tested</StatusPill>;
+  }
   return (
-    <div className="flex items-center gap-2">
+    <span title={`${cred.lastCheckMessage ?? ""}${cred.lastCheckedAt ? ` · checked ${relative(cred.lastCheckedAt)}` : ""}`}>
+      <StatusPill tone={cred.lastCheckOk ? "success" : "danger"}>
+        {cred.lastCheckOk ? "working" : "rejected"}
+      </StatusPill>
+    </span>
+  );
+}
+
+function KeyCell({ tenantId, tenantName, mode, cred }: { tenantId: string; tenantName: string; mode: string; cred: Cred | null }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
       {cred ? (
         <>
           <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[11.5px] font-semibold text-ink-700">{cred.hint}</span>
-          <span className="text-[11px] text-ink-400">{relative(cred.updatedAt)}</span>
+          <Health cred={cred} />
+          <form action={testStoredKey}>
+            <input type="hidden" name="tenantId" value={tenantId} />
+            <input type="hidden" name="mode" value={mode} />
+            <button type="submit" className="rounded-md px-2 py-1 text-[11px] font-semibold text-accent-600 transition-colors hover:bg-accent-50">Check now</button>
+          </form>
         </>
       ) : (
         <span className="text-[12px] text-ink-300">not set</span>
@@ -42,7 +72,7 @@ export default async function Page() {
     <div>
       <PageHeader
         title="Connectivity"
-        subtitle="Per-client OTA / Channex credentials — encrypted at rest, never visible to hotels"
+        subtitle="Per-client OTA / Channex credentials — encrypted at rest, never visible to hotels. A key is tested when it is saved; “Check now” asks Channex again."
       />
       <Card>
         <CardHeader title="Channex API keys" />

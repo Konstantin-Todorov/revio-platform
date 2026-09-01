@@ -33,6 +33,12 @@ export function KeyDialog({ tenantId, tenantName, mode, hasKey }: { tenantId: st
             <input name="apiKey" type="password" required autoComplete="off" className={inputCls} placeholder="uUfMh…" />
           </Field>
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
+          {/* A key that authenticates but sees no properties is not yet usable. Saying so here stops
+              the green tick implying the hotel is ready to push. */}
+          {state?.warning && <p className="rounded-md bg-warning-50 px-3 py-2 text-[12.5px] font-medium text-warning-700">{state.warning}</p>}
+          <p className="text-[11.5px] text-ink-400">
+            The key is tested against Channex before it is saved. A key Channex rejects is not stored.
+          </p>
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Cancel</button>
             <button type="submit" disabled={pending} className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">

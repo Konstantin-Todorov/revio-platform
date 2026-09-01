@@ -153,12 +153,23 @@ model OperatorRecoveryCode {
 // Operator-managed; a hotel can NEVER read it (RLS policy = bypass-only). The CM reads it server-side
 // at push/pull time via the system perimeter — the plaintext key is never sent to any client.
 model ConnectivityCredential {
-  id        String   @id @default(cuid())
-  tenantId  String
-  mode      String // channex_sandbox | channex_prod
-  cipher    String // base64 iv.tag.ciphertext (AES-256-GCM)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String    @id @default(cuid())
+  tenantId         String
+  mode             String // channex_sandbox | channex_prod
+  cipher           String // base64 iv.tag.ciphertext (AES-256-GCM)
+  /// When this key was last exercised against Channex, and what happened.
+  ///
+  /// Stored rather than checked on render: the connectivity screen would otherwise make one live
+  /// HTTP call per client per page load, and a slow Channex would make our own console look broken.
+  /// A key is tested when it is saved and whenever somebody presses Check now.
+  ///
+  /// `lastCheckOk = null` means never tested — which is NOT the same as working, and the screen
+  /// must not colour it green.
+  lastCheckedAt    DateTime?
+  lastCheckOk      Boolean?
+  lastCheckMessage String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([tenantId, mode])
   @@index([tenantId])

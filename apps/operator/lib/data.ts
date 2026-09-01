@@ -834,7 +834,12 @@ export async function getConnectivity() {
     } catch {
       hint = "•••• (undecryptable)";
     }
-    return { hint, updatedAt: c.updatedAt };
+    return {
+      hint, updatedAt: c.updatedAt,
+      // `lastCheckOk === null` means NEVER TESTED, which is not the same as working. The screen
+      // has to be able to tell those apart, so the null is carried rather than coerced.
+      lastCheckOk: c.lastCheckOk, lastCheckedAt: c.lastCheckedAt, lastCheckMessage: c.lastCheckMessage,
+    };
   };
 
   return tenants.map((t) => ({
