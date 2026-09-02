@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { resolveAppErrorAction } from "@/lib/actions-health";
+import { summariseFault } from "@revio/core";
 
 /**
  * Unhandled server errors, one row per distinct fault.
@@ -65,7 +66,20 @@ export function AppErrorList({ errors }: { errors: AppErrorItem[] }) {
                 )}
                 {e.route && <span className="truncate text-[11.5px] text-ink-400">{e.route}</span>}
               </div>
-              <p className="mt-1 break-words text-[13px] font-medium text-ink-900">{e.message}</p>
+              {/*
+                * The HEADLINE is a sentence; the raw exception is behind the disclosure.
+                *
+                * This line used to print `e.message`, which for a Prisma fault is the entire
+                * invocation dump with internal ids and every argument. Support cannot triage a
+                * Prisma invocation — they can triage "a rate price was saved with a value that
+                * isn't a number, on /calendar". The console's job is to route a fault to a person.
+                */}
+              <p className="mt-1 break-words text-[13px] font-medium text-ink-900">{summariseFault(e.message, e.route).headline}</p>
+              {summariseFault(e.message, e.route).ourBug && (
+                <span className="mt-0.5 inline-block rounded bg-danger-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-danger-600">
+                  our defect
+                </span>
+              )}
               <p className="mt-0.5 text-[11px] text-ink-400">
                 first {ago(e.firstSeen)} · last {ago(e.lastSeen)}
               </p>

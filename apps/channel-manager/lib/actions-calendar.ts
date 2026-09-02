@@ -98,7 +98,23 @@ export async function saveCell(input: { roomTypeId: string; date: string; field:
   if (!rt) return;
 
   if (input.field === "price") {
-    const priceMinor = Math.max(0, Math.round(parseFloat(input.value) * 100));
+    /*
+     * ⚠️ `Math.max(0, NaN)` is **NaN**, not 0.
+     *
+     * This line read `Math.max(0, Math.round(parseFloat(input.value) * 100))`. An empty or
+     * non-numeric cell gives `parseFloat("") === NaN`, every operation after it stays NaN, and
+     * `Math.max` does NOT clamp it — so `priceMinor: NaN` went to Prisma, which rejected the write
+     * with an exception that reached the operator console as a raw stack trace. Found there
+     * 2026-09-02, on a real property.
+     *
+     * Guarded explicitly rather than clamped, because a price nobody can read is not zero — zero is
+     * a real price meaning "free", and silently writing it would be worse than the crash.
+     */
+    const parsed = parseFloat(input.value);
+    if (!Number.isFinite(parsed)) {
+      return flashError("That price isn’t a number we can read. Enter an amount, or clear the cell to leave it unpriced.");
+    }
+    const priceMinor = Math.max(0, Math.round(parsed * 100));
     const ratePlanId = await standardPlanId(propertyId);
     if (!ratePlanId) return; // no base rate plan to price against
     // A calendar cell edits "the" price, which since OBP H1 is a real occupancy row — the primary.
@@ -294,6 +310,8 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
           const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: rpId, date, occupancy } } });
           const base = existing?.priceMinor ?? 0;
           let next = base;
+          // Same guard as the single-cell path above: a non-finite value must never reach the write.
+          if (!Number.isFinite(value)) continue;
           if (mode === "set") next = Math.round(value * 100);
           else if (mode === "inc_pct") next = Math.round(base * (1 + value / 100));
           else if (mode === "dec_pct") next = Math.round(base * (1 - value / 100));

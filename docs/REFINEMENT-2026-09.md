@@ -36,7 +36,9 @@ from these documents into the codebase, it should be that one.
 | ☑ | Operator Platform Health | 100% beside open errors is now qualified on the card; a rate over zero attempts is null, not 100% | 7 §10.1, bug 5 |
 | ☑ | Operator Platform Health | Negative numerator fixed **at source** in `sync.ts` (rejections can exceed the update count) | 7 §10.3, bug 4 |
 | ☑ | Operator Platform Health | The panel had **no time filter at all** — bounded to 7 days and the window is now in the heading | 7 §10.2 |
-| ☐ | Operator Clients | `active` / green regardless of 65 days of no activity | 7 bug 6 |
+| ☐ | Operator Clients | `active` / green regardless of 65 days of no activity — `syncRecencyHealth` now exists to derive it | 7 bug 6, §10.5 |
+| ☑ | Operator Platform Health | Unhandled errors dumped as raw stack traces — now a sentence, with the trace behind a disclosure | 7 §10.4, bug 1 |
+| ☑ | **RevioLink calendar** | ⚠️ **Live defect found inside that trace**: `Math.max(0, NaN)` is `NaN`, so an unreadable price wrote `priceMinor: NaN` | found 2026-09-02 |
 | ☐ | Operator Connectivity | Client shown live on Channex with no production key — **resolved** key not displayed | 7 bug 7 |
 | ☐ | RevioCRS Inventory | Rate row shows **"—" for dates that DO have prices** (per-person mode) | 5 §2.4 |
 
@@ -84,6 +86,27 @@ The Billing screen now names them and what each is missing. **Still needs a pers
 
 Still open from §8.4: **plan tier derived from room count** with an explicit, reasoned override
 (today a dropdown, so the console manufactures the drift it then measures).
+
+### Shipped 2026-09-02 — the stack trace, and the live defect inside it
+
+⚠️ **The fault buried in that trace was real and is now fixed.** The console was rendering a raw
+Prisma dump; reading it found `priceMinor: NaN` reaching the database from the RevioLink calendar.
+
+The cause is one line, and it is worth remembering: **`Math.max(0, NaN)` is `NaN`, not `0`.**
+
+```ts
+Math.max(0, Math.round(parseFloat(input.value) * 100))   // ← "" gives NaN all the way through
+```
+
+An empty or non-numeric cell produced `NaN`, `Math.max` did **not** clamp it, and the write reached
+Prisma. Guarded explicitly rather than clamped: a price nobody can read is **not zero** — zero is a
+real price meaning "free", and silently writing it would be worse than the crash. The bulk path had
+the same hole.
+
+`summariseFault` (11 tests) turns the dump into "A rate price was saved with a value that isn't a
+number, on /calendar", badges whether it is **our defect** or the environment's, and keeps the raw
+trace behind the existing disclosure. Support can triage a client and a screen; nobody can triage a
+Prisma invocation.
 
 ## P2 — OBP completion (the largest single body of work)
 
