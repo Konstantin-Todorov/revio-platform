@@ -24,6 +24,10 @@ pattern is not a coincidence and should be treated as one class of bug, not elev
 ⚠️ **A zero from success and a zero from silence must never render the same.** If one line survives
 from these documents into the codebase, it should be that one.
 
+**Every class found while working through these documents is recorded in
+[`docs/GAP-REGISTER.md`](GAP-REGISTER.md), with the guard that now holds it shut.** A gap without a
+guard is a gap that comes back.
+
 ---
 
 ## P0 — screens that actively mislead (build first)

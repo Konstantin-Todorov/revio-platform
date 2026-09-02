@@ -8,7 +8,7 @@ import { releaseExpiredHolds } from "./holds";
 import { getSession } from "./session";
 import { stayScope } from "@revio/connectivity";
 import { claimHold } from "@revio/db";
-import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
+import { logAudit, recordPush, str, int, money, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
 import { hasChanges, planMerge, planGuestErasure } from "@revio/core";
 import { withTenantTransaction } from "@revio/db";
@@ -168,7 +168,19 @@ export async function confirmReservation(fd: FormData): Promise<void> {
   const ratePlanId = str(fd, "ratePlanId");
   const bookingSourceId = str(fd, "bookingSourceId");
   const guarantee = PAYMENT_GUARANTEES.some((g) => g.value === str(fd, "paymentGuarantee")) ? str(fd, "paymentGuarantee") : "none";
-  const priceMinor = Math.max(0, Math.round(Number(str(fd, "price") || "0") * 100));
+  /*
+   * ⚠️ `Math.max(0, NaN)` is **NaN**, not 0 — the same class fixed in the RevioLink calendar on
+   * 2026-09-02, still live here. This hand-rolled `Math.round(Number(...) * 100)`, so a price that
+   * is not a number — letters, or the comma decimal a European guest types — became `NaN` and went
+   * to Prisma as `priceMinor`. Read it explicitly, then convert with the shared `money` helper,
+   * which is string-based and cannot drift a cent. A price nobody can read is not zero: zero is a
+   * real price meaning free, and writing it silently is worse than refusing.
+   */
+  const priceRaw = str(fd, "price");
+  if (priceRaw !== "" && !Number.isFinite(Number(priceRaw))) {
+    redirect(`/reservations/new?hold=${holdId}&error=${encodeURIComponent("That price isn’t a number we can read. Enter an amount like 129.50.")}`);
+  }
+  const priceMinor = money(fd, "price", 0);
   const guestsCount = Math.max(1, int(fd, "guests", 1));
   if (!firstName || !lastName || !ratePlanId) {
     redirect(`/reservations/new?hold=${holdId}&guests=${guestsCount}&error=${encodeURIComponent("Guest name and rate plan are required.")}`);
@@ -270,7 +282,12 @@ export async function modifyReservation(fd: FormData): Promise<void> {
   const checkIn = DATE_RE.test(str(fd, "checkIn")) ? str(fd, "checkIn") : line!.checkIn.toISOString().slice(0, 10);
   const checkOut = DATE_RE.test(str(fd, "checkOut")) ? str(fd, "checkOut") : line!.checkOut.toISOString().slice(0, 10);
   const quantity = Math.max(1, int(fd, "quantity", line!.quantity));
-  const priceMinor = Math.max(0, Math.round(Number(str(fd, "price") || String(reservation!.totalMinor / 100)) * 100));
+  // Same NaN class as `confirmHold` above. Empty keeps the reservation's current total.
+  const priceRaw = str(fd, "price");
+  if (priceRaw !== "" && !Number.isFinite(Number(priceRaw))) {
+    redirect(`/reservations/${id}?error=${encodeURIComponent("That price isn’t a number we can read. Enter an amount like 129.50.")}`);
+  }
+  const priceMinor = money(fd, "price", reservation!.totalMinor);
   if (checkOut <= checkIn) {
     redirect(`/reservations/${id}?error=${encodeURIComponent("Departure must be after arrival.")}`);
   }

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { logAudit, str } from "./mutation-helpers";
+import { logAudit, str, decimal, money } from "./mutation-helpers";
 import { PERMISSION_GROUPS } from "./permissions";
 import { requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
@@ -69,11 +69,26 @@ export async function saveTaxFee(fd: FormData): Promise<void> {
   if (!name) return;
 
   const type = str(fd, "type") === "percent" ? "percent" : "fixed";
+
+  /*
+   * ⚠️ Same `Math.max(0, NaN)` class as the calendar. A tax or fee reaches the guest's all-in
+   * price, the folio and the OTA disclosure, so an unreadable one is a MONEY bug rather than a
+   * display bug — refuse it rather than quietly storing zero, which reads as "no tax".
+   */
+  const pctRaw = str(fd, "pct");
+  const amountRaw = str(fd, "amount");
+  if (type === "percent" && pctRaw !== "" && !Number.isFinite(Number(pctRaw))) {
+    return flashError("That percentage isn’t a number we can read. Enter a value like 9 or 20.");
+  }
+  if (type === "fixed" && amountRaw !== "" && !Number.isFinite(Number(amountRaw))) {
+    return flashError("That amount isn’t a number we can read. Enter a value like 2.50.");
+  }
+
   const data = {
     name,
     type,
-    pct: type === "percent" ? Math.max(0, Number(str(fd, "pct") || "0")) : null,
-    amountMinor: type === "fixed" ? Math.max(0, Math.round(Number(str(fd, "amount") || "0") * 100)) : null,
+    pct: type === "percent" ? Math.max(0, decimal(fd, "pct", 0)) : null,
+    amountMinor: type === "fixed" ? money(fd, "amount", 0) : null,
     basis: ["per_room", "per_person", "per_night", "per_stay"].includes(str(fd, "basis")) ? str(fd, "basis") : "per_stay",
     inclusion: str(fd, "inclusion") === "included" ? "included" : "excluded",
     active: fd.get("active") != null,

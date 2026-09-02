@@ -88,6 +88,13 @@ jobs:
       # performance indexes and the birth-date column of a legal register. Nothing surfaced it —
       # typecheck, lint and the whole suite pass either way. Drift stays invisible until the day it
       # is destructive, which is exactly why it belongs in CI and not in somebody's memory.
+      # `Math.max(0, NaN)` is NaN. A server action that hand-rolls form-number parsing writes it to
+      # the database — found in production 2026-09-02 on a rate price, and three more live sites the
+      # day after, two of them on a confirmed reservation. The helpers in @revio/core/forms/parse
+      # already solve it; this checks nobody quietly stops using them.
+      - name: Money parsing
+        run: pnpm money:lint
+
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift
         env:

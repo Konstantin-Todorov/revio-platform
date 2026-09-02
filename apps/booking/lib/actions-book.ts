@@ -80,10 +80,24 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
     return { ok: false, error: "We couldn't confirm your card guarantee. Please try again, or call the hotel." };
   }
 
+  /*
+   * The party size drives occupancy pricing, so an unreadable one must be REFUSED rather than
+   * defaulted. This read `Number.parseInt(str(fd, "guests") || "2", 10)`: absent gave 2, but
+   * `guests=abc` on this — the one public, unauthenticated, inventory-touching surface we have —
+   * gave `NaN`, which survived only because `validStay` rejects it one package away. That is a
+   * guard we do not own and did not state. Defaulting instead would be worse than the NaN: a
+   * tampered post would quietly book and price a stay for two that nobody asked for.
+   */
+  const guestsRaw = str(fd, "guests");
+  const guestCount = guestsRaw === "" ? 2 : Number.parseInt(guestsRaw, 10);
+  if (!Number.isFinite(guestCount)) {
+    return { ok: false, error: "Tell us how many guests are staying." };
+  }
+
   const result = await publicCreateReservation(db, scoped, {
     checkIn: str(fd, "checkIn"),
     checkOut: str(fd, "checkOut"),
-    guests: Number.parseInt(str(fd, "guests") || "2", 10),
+    guests: guestCount,
     roomTypeId: str(fd, "roomTypeId"),
     ratePlanId: str(fd, "ratePlanId"),
     guest: { firstName, lastName, email, ...(phone ? { phone } : {}) },
