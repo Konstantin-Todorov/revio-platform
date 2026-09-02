@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUNDLE_DISCOUNT_PCT, COMBINATIONS, PLAN_BASE_MINOR, ROOM_TIERS, attributeRevenue, combinationKeyOf, directBookingFeeMinor, entitlementsFor, monthlyPriceMinor, priceBreakdown, splitProportionally,  } from "./pricing.js";
+import { BUNDLE_DISCOUNT_PCT, COMBINATIONS, PLAN_BASE_MINOR, ROOM_TIERS, attributeRevenue, combinationKeyOf, directBookingFeeMinor, entitlementsFor, monthlyPriceMinor, priceBreakdown, splitProportionally, tierForRooms, effectivePlan, describeOverride } from "./pricing.js";
 
 const ALL = entitlementsFor(["channelManager", "reservation", "pms"]);
 const CM = entitlementsFor(["channelManager"]);
@@ -168,5 +168,68 @@ describe("directBookingFeeMinor", () => {
     // The entire argument for the fee. If this ever failed, the pitch would be dishonest.
     const revenue = 250_000;
     expect(directBookingFeeMinor(revenue)).toBeLessThan((revenue * 15) / 100);
+  });
+});
+
+describe("effectivePlan — the tier is derived, and an override must justify itself", () => {
+  const OV = (plan: string) => ({ plan, reason: "group deal", by: "Ventsislav", at: new Date("2026-08-12T00:00:00Z") });
+
+  it("derives the tier from the room count when nothing overrides it", () => {
+    const e = effectivePlan(12, null);
+    expect(e.basis).toBe("derived");
+    expect(e.plan).toBe(tierForRooms(12).plan);
+  });
+
+  it("moves with the room count — the bug where a hotel that grew stayed on Starter forever", () => {
+    const small = effectivePlan(12, null).plan;
+    const large = effectivePlan(180, null).plan;
+    expect(small).not.toBe(large);
+  });
+
+  it("honours an override and reports it as overridden, not as drift", () => {
+    const e = effectivePlan(180, OV("starter"));
+    expect(e.plan).toBe("starter");
+    expect(e.basis).toBe("overridden");
+    expect(e.derivedPlan).toBe(tierForRooms(180).plan);
+  });
+
+  it("keeps the derived plan alongside — that comparison IS the exception", () => {
+    const e = effectivePlan(180, OV("starter"));
+    expect(e.derivedPlan).not.toBe(e.plan);
+    expect(e.rooms).toBe(180);
+  });
+
+  it("does NOT flag an override that agrees with the room count", () => {
+    // A coincidence, not an exception. Badging it would train people to ignore the badge.
+    const agreeing = tierForRooms(12).plan;
+    const e = effectivePlan(12, OV(agreeing));
+    expect(e.basis).toBe("derived");
+    expect(e.override).toBeNull();
+  });
+
+  it("signs the delta so over-billing reads as plainly as under-billing", () => {
+    const under = effectivePlan(180, OV("starter"));   // billed on a smaller tier than they use
+    const over = effectivePlan(5, OV("enterprise"));   // billed on a bigger one
+    expect(under.overrideDeltaMinor).toBeLessThan(0);
+    expect(over.overrideDeltaMinor).toBeGreaterThan(0);
+  });
+
+  it("treats a negative room count as zero rather than falling off the tier list", () => {
+    expect(effectivePlan(-5, null).plan).toBe(tierForRooms(0).plan);
+  });
+});
+
+describe("describeOverride — an exception with a name on it", () => {
+  it("names who, when and why", () => {
+    const s = describeOverride({ plan: "starter", reason: "group deal", by: "Ventsislav", at: new Date("2026-08-12T00:00:00Z") });
+    expect(s).toContain("Ventsislav");
+    expect(s).toContain("12 Aug");
+    expect(s).toContain("group deal");
+  });
+
+  it("degrades honestly when the attribution is missing", () => {
+    const s = describeOverride({ plan: "starter", reason: "legacy", by: null, at: null });
+    expect(s).toContain("someone");
+    expect(s).toContain("unknown date");
   });
 });

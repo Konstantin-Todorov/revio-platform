@@ -25,21 +25,21 @@ datasource db {
 // --- Tenancy ---------------------------------------------------------------
 
 model Tenant {
-  id                String    @id @default(cuid())
-  name              String
-  slug              String    @unique
+  id                 String    @id @default(cuid())
+  name               String
+  slug               String    @unique
   // Entitlements: which products this hotel account bought ("sold separately").
-  hasChannelManager Boolean   @default(true)
-  hasReservation    Boolean   @default(false)
-  hasPms            Boolean   @default(false)
+  hasChannelManager  Boolean   @default(true)
+  hasReservation     Boolean   @default(false)
+  hasPms             Boolean   @default(false)
   // Commercial profile, set by the operator. plan ≈ room-count tier / package; status gates access.
-  plan              String    @default("starter") // starter | growth | scale
-  status            String    @default("active") // active | suspended
+  plan               String    @default("starter") // starter | growth | scale
+  status             String    @default("active") // active | suspended
   // Ours, for testing — kept alongside real clients in production forever, because a staging copy of
   // a five-app platform is a second thing to keep in sync and it always drifts. A demo tenant behaves
   // EXACTLY like a real one in every product; the flag only stops the operator console counting it as
   // business. See apps/operator/lib/demo.ts for the rule.
-  isDemo            Boolean   @default(false)
+  isDemo             Boolean   @default(false)
   /// When this client became billable — the moment their first booking actually synced.
   ///
   /// The public promise is "free until your first booking syncs", and until this column existed the
@@ -52,8 +52,18 @@ model Tenant {
   ///
   /// Set once, by the first successful channel pull that imports a reservation, and never moved —
   /// re-stamping it on a later sync would restart the free period and quietly cancel the bill.
-  billingStartsAt   DateTime?
-  createdAt         DateTime  @default(now())
+  billingStartsAt    DateTime?
+  /// An EXPLICIT, reasoned exception to the tier the room count implies.
+  ///
+  /// `plan` above used to be a free dropdown, while a panel elsewhere measured the disagreement
+  /// between it and the room count — the console manufacturing the drift it then reported. The tier
+  /// is now derived; this is the escape hatch, and it is deliberately expensive to use: no reason,
+  /// no override.
+  planOverride       String?
+  planOverrideReason String?
+  planOverrideById   String?
+  planOverrideAt     DateTime?
+  createdAt          DateTime  @default(now())
 
   properties Property[]
   users      User[]

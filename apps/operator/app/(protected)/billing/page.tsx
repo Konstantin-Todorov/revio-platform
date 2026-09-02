@@ -1,7 +1,8 @@
 import { CreditCard, TrendingUp, FileText, CheckCircle2, FilePlus2 } from "lucide-react";
 import { getBilling } from "@/lib/data";
-import { setPlan } from "@/lib/actions";
 import { generateInvoices, setInvoiceStatus } from "@/lib/actions-billing";
+import { overridePlan, clearPlanOverride } from "@/lib/actions";
+import { describeOverride } from "@/lib/pricing";
 import Link from "next/link";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { IssueInvoiceButton } from "@/components/billing/IssueInvoiceButton";
@@ -115,15 +116,51 @@ export default async function BillingPage() {
                     {c.status !== "active" && <span className="ml-1.5 text-[10.5px] font-semibold uppercase text-warning-600">{c.status}</span>}
                   </td>
                   <td className="px-4 py-2.5">
-                    <form action={setPlan} className="flex items-center gap-1">
-                      <input type="hidden" name="tenantId" value={c.id} />
-                      <select name="plan" defaultValue={c.plan} className={inputCls}>
-                        <option value="starter">Starter</option>
-                        <option value="growth">Growth</option>
-                        <option value="scale">Scale</option>
-                      </select>
-                      <button type="submit" className="rounded border border-surface-border px-1.5 py-0.5 text-[11px] font-semibold text-ink-500 hover:bg-surface-muted">Save</button>
-                    </form>
+                    {/*
+                      * DERIVED from the room count, with the override as a visible exception.
+                      *
+                      * This was a free dropdown with a Save button while another panel measured the
+                      * disagreement it produced as "unbilled tier drift" — the console manufacturing
+                      * the problem it then reported. An override now needs a reason, so drift and
+                      * decision stop looking identical.
+                      */}
+                    <div className="flex flex-col gap-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="font-semibold text-ink-900">{c.effective.plan}</span>
+                        {c.effective.basis === "overridden" ? (
+                          <span
+                            title={describeOverride(c.effective.override!)}
+                            className="rounded bg-warning-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-warning-700"
+                          >
+                            override
+                          </span>
+                        ) : (
+                          <span className="text-[10.5px] text-ink-400">from {c.effective.rooms} rooms</span>
+                        )}
+                      </span>
+                      {c.effective.basis === "overridden" && (
+                        <span className="text-[10.5px] text-ink-400">
+                          rooms say {c.effective.derivedPlan} · {c.effective.override!.reason}
+                          <form action={clearPlanOverride} className="inline">
+                            <input type="hidden" name="tenantId" value={c.id} />
+                            <button type="submit" className="ml-1.5 underline hover:text-ink-700">use rooms</button>
+                          </form>
+                        </span>
+                      )}
+                      <details className="text-[10.5px] text-ink-400">
+                        <summary className="cursor-pointer hover:text-ink-700">override…</summary>
+                        <form action={overridePlan} className="mt-1 flex flex-wrap items-center gap-1">
+                          <input type="hidden" name="tenantId" value={c.id} />
+                          <select name="plan" defaultValue={c.effective.plan} className={inputCls}>
+                            <option value="starter">Starter</option>
+                            <option value="growth">Growth</option>
+                            <option value="scale">Scale</option>
+                          </select>
+                          <input name="reason" placeholder="why?" required className={inputCls} />
+                          <button type="submit" className="rounded border border-surface-border px-1.5 py-0.5 text-[11px] font-semibold text-ink-500 hover:bg-surface-muted">Save</button>
+                        </form>
+                      </details>
+                    </div>
                   </td>
                   <td className="px-4 py-2.5 text-[11.5px] text-ink-500">{c.products}</td>
                   <td className="px-4 py-2.5 tnum font-semibold text-ink-900">{money(c.priceMinor)}</td>

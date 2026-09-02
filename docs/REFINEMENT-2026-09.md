@@ -56,9 +56,9 @@ minutes has a very recent attempt and is completely broken.
 | --- | --- | --- | --- |
 | ☑ | Operator Billing | Worse than reported: **paid with no number and no `issuedAt`** — settled without ever being issued. State machine now enforced in `@revio/core` (22 tests); the row is corrected | 7 bug 2 |
 | ☑ | Operator Billing | **Not three conventions — two facts in one column.** A draft carries NET; VAT is computed at issue. Every amount now labelled `ex. VAT` / `incl. VAT` | 7 §8.2, bug 3 |
-| ☐ | Operator Settings | One global VAT rate cannot express reverse charge or non-EU — likely cause of the above | 7 §12.2b, bug 10 |
-| ☐ | Operator Billing | Plan tier is a dropdown — that IS the tier drift | 7 §8.1 |
-| ☐ | Operator Billing | Revio issues real fiscal documents — changes what this screen is | 7 §8.4 |
+| ☑ | Operator Settings | **Already per client** — `decideVat` reads the buyer's country and VAT id and returns domestic / EU reverse charge / EU B2C / outside-EU, refusing to issue when a human must decide. The global rate is the domestic default | 7 §12.2b, bug 10 |
+| ☑ | Operator Billing | Tier now **derived from physical rooms** (`Unit`, never `RoomType`). An override needs a **reason** and records who and when — so drift and decision stop looking identical | 7 §8.1 |
+| ◐ | Operator Billing | Fiscal requirements: immutability ☑, demo series ☑ (already separate), payment attribution ☑, VAT per client ☑ (engine existed). **Remaining: due dates / aging / dunning, and a generate-invoices preview** | 7 §8.4 |
 | ☐ | RevioLink / CRS | The two products **disagree about the same room** | 6 §3.0 |
 | ☐ | RevioLink / CRS | Bulk copy contradicts the screen; the two disagree on the data model | 6 §4.2 |
 

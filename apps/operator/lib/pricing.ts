@@ -246,3 +246,74 @@ export function attributeRevenue(plan: string, ent: Entitlements): RevenueAttrib
 export function directBookingFeeMinor(directRevenueMinor: number): number {
   return Math.round((directRevenueMinor * DIRECT_BOOKING_FEE_PCT) / 100);
 }
+
+
+// --- The plan a client is actually on ------------------------------------------------
+
+export interface PlanOverride {
+  plan: string;
+  reason: string;
+  by: string | null;
+  at: Date | null;
+}
+
+export type PlanBasis = "derived" | "overridden";
+
+export interface EffectivePlan {
+  /** The plan to bill on. */
+  plan: string;
+  basis: PlanBasis;
+  /** What the room count says it should be. Present even when overridden — that IS the comparison. */
+  derivedPlan: string;
+  rooms: number;
+  /** Set only when an override is in force AND it disagrees with the room count. */
+  override: PlanOverride | null;
+  /** Positive = the override bills MORE than the room count implies; negative = less. */
+  overrideDeltaMinor: number;
+}
+
+/**
+ * Which plan a client is on, and why.
+ *
+ * ## The problem this replaces
+ *
+ * `plan` was a free dropdown with a Save button, while a whole panel elsewhere detected that the
+ * billed tier disagreed with the room count. **The console was manufacturing the problem it then
+ * measured.** A hotel that opened a second building stayed on Starter forever, because nothing moved
+ * the value and nobody was told.
+ *
+ * So the tier is now DERIVED from rooms, always. An override still exists — a negotiated deal or a
+ * group ramping up are real — but it is an explicit, attributed, reasoned exception rather than a
+ * value somebody typed once in 2025. That turns "unbilled tier drift" from a number an operator has
+ * to remember to look at into an exception with a name, a date and a reason attached.
+ */
+export function effectivePlan(
+  rooms: number,
+  override: PlanOverride | null | undefined,
+): EffectivePlan {
+  const derivedPlan = tierForRooms(Math.max(0, rooms)).plan;
+
+  // An override that AGREES with the room count is not an override — it is a coincidence, and
+  // showing it as an exception would train people to ignore the badge that matters.
+  if (!override || override.plan === derivedPlan) {
+    return { plan: derivedPlan, basis: "derived", derivedPlan, rooms, override: null, overrideDeltaMinor: 0 };
+  }
+
+  return {
+    plan: override.plan,
+    basis: "overridden",
+    derivedPlan,
+    rooms,
+    override,
+    overrideDeltaMinor: (PLAN_BASE_MINOR[override.plan] ?? 0) - (PLAN_BASE_MINOR[derivedPlan] ?? 0),
+  };
+}
+
+/** "overridden by Ventsislav · 12 Aug · group deal" — an exception with a name on it. */
+export function describeOverride(o: PlanOverride): string {
+  const who = o.by ?? "someone";
+  const when = o.at
+    ? o.at.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })
+    : "an unknown date";
+  return `overridden by ${who} · ${when} · ${o.reason}`;
+}

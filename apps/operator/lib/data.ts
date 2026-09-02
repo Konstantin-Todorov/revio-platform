@@ -3,8 +3,7 @@ import { forSystem, decryptSecret, keyHint } from "@revio/db";
 import {
   BOOKING_ENGINE_SOURCE_NAME, COMBINATIONS, PLAN_BASE_MINOR, PRODUCT_KEYS, ROOM_TIERS,
   TYPICAL_OTA_COMMISSION_PCT, attributeRevenue, billedProducts, combinationKeyOf, directBookingFeeMinor,
-  entitlementsFor, monthlyPriceMinor, priceBreakdown, tierForRooms, type Entitlements, type ProductKey,
-} from "./pricing";
+  entitlementsFor, monthlyPriceMinor, priceBreakdown, tierForRooms, type Entitlements, type ProductKey, effectivePlan } from "./pricing";
 import { clientAttention, sortBySeverity, worstSeverity } from "./attention";
 import { clientSetup, daysSince, setupStalled } from "./onboarding";
 import { provisioningState, soldButNotProvisioned } from "./provisioning";
@@ -771,7 +770,7 @@ export async function getPlatformHealth() {
 /** Billing overview: each client's plan + computed monthly price + this month's invoice, plus MRR. */
 export async function getBilling() {
   const period = new Date().toISOString().slice(0, 7); // YYYY-MM
-  const [tenants, invoices] = await Promise.all([
+  const [tenants, invoices, unitCounts] = await Promise.all([
     /*
      * Billing details come along, because a client without them CANNOT BE INVOICED — `issueInvoice`
      * refuses without a legal name, country and address.
@@ -782,8 +781,17 @@ export async function getBilling() {
      */
     prisma.tenant.findMany({ orderBy: { createdAt: "asc" }, include: { crmBilling: true } }),
     prisma.invoice.findMany({ orderBy: { createdAt: "desc" } }),
+    /*
+     * PHYSICAL rooms, per tenant — `Unit`, never `RoomType`.
+     *
+     * A room type is a catalogue entry (six of them for a twelve-room villa); a unit is a room you
+     * can put somebody in. Using the wrong one put the same client in two different tiers on two
+     * different screens once already, which is why the distinction is written down here.
+     */
+    prisma.unit.groupBy({ by: ["tenantId"], _count: { _all: true } }),
   ]);
   const byKey = new Map(invoices.map((i) => [`${i.tenantId}:${i.period}`, i]));
+  const roomsByTenant = new Map(unitCounts.map((u) => [u.tenantId, u._count._all]));
   const tenantName = new Map(tenants.map((t) => [t.id, t.name]));
 
   const clients = tenants.map((t) => {
@@ -804,6 +812,11 @@ export async function getBilling() {
         : null,
       // What is MISSING, not merely whether something exists — an operator needs to know what to go
       // and type. Country drives the VAT treatment, so its absence is not a cosmetic gap.
+      // The tier the rooms imply, plus the override if one is in force. Both travel, because the
+      // comparison between them IS the exception the screen has to show.
+      effective: effectivePlan(roomsByTenant.get(t.id) ?? 0, t.planOverride
+        ? { plan: t.planOverride, reason: t.planOverrideReason ?? "no reason recorded", by: t.planOverrideById, at: t.planOverrideAt }
+        : null),
       billingGaps: [
         !t.crmBilling?.legalName ? "legal name" : null,
         !t.crmBilling?.country ? "country" : null,
