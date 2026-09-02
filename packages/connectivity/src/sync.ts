@@ -12,8 +12,7 @@ import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
   type RestrictionType, type ChannelAdapter,
-  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
-} from "@revio/core";
+  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan, pushedOf } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { decidePull, type Stay } from "./pull-merge.js";
 import { indexRateMappings, resolveExternalRateId } from "./rate-mapping.js";
@@ -542,7 +541,11 @@ export async function syncChannel(
       // The window is part of the record. "2000 updates" says nothing about WHICH nights were
       // refreshed, and a push that quietly covers one day fewer than the property's horizon reads
       // exactly like a push that covers all of them.
-      summary: `Pushed ${updates.length - result.rejected.length}/${updates.length} updates to ${channel.name} (${channel.connectivityMode}) · ${dateKeys[0]} → ${dateKeys[dateKeys.length - 1]} (${dateKeys.length} days)`,
+      // `pushedOf`, not raw subtraction: rejections can exceed the update count (one update can be
+      // rejected by more than one product), and `sent - rejected` then printed "Pushed -56/56".
+      // A count of things that happened cannot be negative, and one that is destroys confidence in
+      // every other number on the screen.
+      summary: `Pushed ${pushedOf(updates.length, result.rejected.length).text} updates to ${channel.name} (${channel.connectivityMode}) · ${dateKeys[0]} → ${dateKeys[dateKeys.length - 1]} (${dateKeys.length} days)`,
       // Both ids, each labelled. Storing only channelResponseId lost the availability task
       // entirely, and an unlabelled pair is what gets pasted into the wrong form field.
       detail: result.tasks?.length

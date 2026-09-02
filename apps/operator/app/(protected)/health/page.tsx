@@ -3,6 +3,7 @@ import { getPlatformHealth } from "@/lib/data";
 import { listAppErrors } from "@revio/db";
 import { AppErrorList } from "@/components/health/AppErrorList";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { successRate, failureVerdict } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +16,35 @@ function relative(d: Date): string {
 
 export default async function HealthPage() {
   const [h, appErrors] = await Promise.all([getPlatformHealth(), listAppErrors(30)]);
-  const rate = h.window24h.successRate;
+  /*
+   * `100% · 25 open errors` was on this screen, and both numbers were right.
+   *
+   * They measure different things — the rate counts ATTEMPTS IN A WINDOW, the errors count
+   * UNRESOLVED ITEMS OF ANY AGE — so a clean 24 hours after a bad week reads as a perfect platform.
+   * `successRate` in core qualifies that pair instead of letting the green stand alone, and returns
+   * null rather than 100% when nothing was attempted, because a rate over zero attempts is not
+   * perfect, it is undefined.
+   */
+  const sr = successRate(h.window24h.total, h.window24h.failed, h.openErrors);
+  const failures = failureVerdict(h.window24h.total, h.window24h.failed);
+  const HEALTH_TONE = {
+    healthy: "success", stale: "warning", dead: "danger", idle: "neutral", unknown: "warning",
+  } as const;
 
   const cards = [
-    { icon: CheckCircle2, tone: rate == null ? "neutral" : rate >= 99 ? "success" : rate >= 90 ? "warning" : "danger", value: rate == null ? "—" : `${rate}%`, label: "Sync success", sub: "last 24h" },
+    {
+      icon: CheckCircle2,
+      tone: sr.pct == null ? "neutral" : sr.qualified ? "warning" : sr.pct >= 99 ? "success" : sr.pct >= 90 ? "warning" : "danger",
+      value: sr.pct == null ? "—" : `${sr.pct}%`, label: "Sync success",
+      sub: sr.detail ?? "last 24h",
+    },
     { icon: ArrowUpDown, tone: "info", value: h.window24h.total, label: "Sync events", sub: `${h.window24h.pushes} push · ${h.window24h.pulls} pull` },
-    { icon: XCircle, tone: h.window24h.failed ? "danger" : "neutral", value: h.window24h.failed, label: "Failed syncs", sub: "last 24h" },
+    {
+      icon: XCircle, tone: HEALTH_TONE[failures.health],
+      // "—" not "0" when nothing ran: a zero implies something was measured and came back clean.
+      value: failures.health === "unknown" ? "—" : h.window24h.failed,
+      label: "Failed syncs", sub: failures.detail ?? "last 24h",
+    },
     { icon: AlertTriangle, tone: h.openErrors ? "danger" : "neutral", value: h.openErrors, label: "Open errors", sub: `${h.bySeverity.critical} critical · ${h.bySeverity.warning} warn` },
   ];
   const TONE_BG: Record<string, string> = {
@@ -74,7 +98,7 @@ export default async function HealthPage() {
       </Card>
 
       <Card className="mt-4">
-        <CardHeader title="Recent sync failures" />
+        <CardHeader title="Sync failures · last 7 days" />
         {h.failedRecent.length === 0 ? (
           <div className="px-4 py-6 text-center text-[12.5px] text-ink-400">No sync failures recorded. 🎉</div>
         ) : (

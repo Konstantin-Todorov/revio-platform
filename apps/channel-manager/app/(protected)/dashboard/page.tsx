@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { syncRecencyHealth, failureVerdict, pendingSubtitle } from "@revio/core";
 import { hasFinishedSetup } from "@revio/core";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
 import { getDashboard, getReservationSummary } from "@/lib/data";
@@ -45,9 +46,23 @@ export default async function DashboardPage() {
   const allConnected = hasChannels && stats.connectedChannels === stats.totalChannels;
   const everSynced = stats.lastSync != null;
 
-  const pendingSub = pendingAgeMs != null
-    ? `Oldest waiting ${relativeTime(stats.oldestPendingAt)}`
-    : everSynced ? "Queue empty — all delivered" : "Nothing queued yet";
+  /*
+   * Health from what HAPPENED, not from what is configured — `@revio/core/sync-health`.
+   *
+   * Three cards below used to report green over a dead channel: "Last Successful Sync: 29d ago"
+   * badged Live, "Queue empty — all delivered" printed above a queue of 10, and "0 Failed Syncs ·
+   * Clear" on a property where nothing was attempted. All three asked the wrong question, and the
+   * answers are now derived by one tested module the Operator console shares.
+   */
+  const now = new Date();
+  const recency = syncRecencyHealth(stats.lastSync, now);
+  const failures = failureVerdict(stats.syncAttempts24h, stats.failedSyncs);
+  const pendingSub = pendingSubtitle(stats.pendingUpdates, stats.oldestPendingAt, now);
+
+  /** A health verdict → the pill tone this shell uses. `unknown`/`idle` must never read as success. */
+  const HEALTH_TONE = {
+    healthy: "success", stale: "warning", dead: "danger", idle: "neutral", unknown: "warning",
+  } as const;
 
   // Every KPI clicks through to its filtered destination (spec §3.1).
   const cards = [
@@ -70,21 +85,26 @@ export default async function DashboardPage() {
       pill: stats.unmappedProducts > 0 ? { tone: "warning" as const, text: "Action" } : { tone: "neutral" as const, text: "Clear" },
     },
     {
-      icon: ArrowUpDown, tone: pendingStuck ? "danger" : "info", href: "/sync?tab=activity",
+      icon: ArrowUpDown, tone: pendingStuck ? "danger" : stats.pendingUpdates > 0 ? "info" : "neutral", href: "/sync?tab=activity",
       value: String(stats.pendingUpdates), label: "Pending Updates", sub: pendingSub,
-      pill: pendingStuck ? { tone: "danger" as const, text: "Stuck?" } : { tone: "info" as const, text: "Queued" },
+      pill: pendingStuck
+        ? { tone: "danger" as const, text: "Stuck?" }
+        : stats.pendingUpdates > 0 ? { tone: "info" as const, text: "Queued" } : { tone: "neutral" as const, text: "Clear" },
     },
     {
-      icon: AlertCircle, tone: stats.failedSyncs > 0 ? "danger" : "success", href: "/sync?tab=errors",
-      value: String(stats.failedSyncs), label: "Failed Syncs",
-      sub: "Real failures · 24h (limitations excluded)",
-      pill: stats.failedSyncs > 0 ? { tone: "danger" as const, text: "Review" } : { tone: "success" as const, text: "Clear" },
+      icon: AlertCircle, tone: HEALTH_TONE[failures.health], href: "/sync?tab=errors",
+      // "—" rather than "0" when nothing ran: a zero implies something was measured.
+      value: failures.health === "unknown" ? "—" : String(stats.failedSyncs), label: "Failed Syncs",
+      sub: failures.detail ?? "Real failures · 24h (limitations excluded)",
+      pill: { tone: HEALTH_TONE[failures.health], text: failures.label },
     },
     {
-      icon: CheckCircle2, tone: everSynced ? "success" : "neutral", href: "/sync",
+      icon: CheckCircle2, tone: HEALTH_TONE[recency.health], href: "/sync",
       value: everSynced ? relativeTime(stats.lastSync) : "—", label: "Last Successful Sync",
-      sub: everSynced ? "Across all channels" : "No sync has run yet",
-      pill: everSynced ? { tone: "success" as const, text: "Live" } : { tone: "neutral" as const, text: "Idle" },
+      // This is THE card that must never be green while stale. It is the one number answering
+      // "is this thing working", and it used to reassure while saying it had not worked in a month.
+      sub: recency.detail ?? "Across all channels",
+      pill: { tone: HEALTH_TONE[recency.health], text: recency.label },
     },
   ];
 
@@ -185,9 +205,25 @@ export default async function DashboardPage() {
                     </div>
                   </td>
                   <td className="px-4 py-2.5">
-                    <StatusPill tone={ch.status === "connected" ? "success" : ch.status === "paused" ? "warning" : "neutral"}>
-                      {ch.status === "connected" ? "Connected" : ch.status === "paused" ? "Paused" : ch.status}
-                    </StatusPill>
+                    {/*
+                      * TWO pills, because they answer two different questions and only the second
+                      * one matters. "Connected" is the socket; the health pill is whether anything
+                      * has actually arrived. A channel that last synced 65 days ago used to show a
+                      * single green Connected and nothing else — the user reads that as delivery.
+                      */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <StatusPill tone={ch.status === "connected" ? "success" : ch.status === "paused" ? "warning" : "neutral"}>
+                        {ch.status === "connected" ? "Connected" : ch.status === "paused" ? "Paused" : ch.status}
+                      </StatusPill>
+                      {ch.status === "connected" && (() => {
+                        const h = syncRecencyHealth(ch.lastSyncAt, now);
+                        return h.health === "healthy" ? null : (
+                          <span title={h.detail ?? undefined}>
+                            <StatusPill tone={HEALTH_TONE[h.health]}>{h.label}</StatusPill>
+                          </span>
+                        );
+                      })()}
+                    </div>
                   </td>
                   <td className="px-4 py-2.5 text-ink-500">{relativeTime(ch.lastSyncAt)}</td>
                   <td className="tnum px-4 py-2.5 text-right text-ink-700">{ch.pendingCount}</td>

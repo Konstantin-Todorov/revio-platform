@@ -30,15 +30,25 @@ from these documents into the codebase, it should be that one.
 
 | | Where | What | Doc |
 | --- | --- | --- | --- |
-| ☐ | RevioLink Dashboard | "Last Successful Sync: 29d ago" badged **Live**, green. Status must derive from **recency**, not socket state — green ≤24h · amber 1–7d · red >7d | 6 §2.2 |
-| ☐ | RevioLink Dashboard | "10 Pending Updates" subtitled "Queue empty — all delivered". Subtitle must be **derived from the number**, plus age of oldest pending | 6 §2.3 |
-| ☐ | RevioLink Dashboard | `0 Failed Syncs · Clear` when **nothing was attempted**. Must say "No syncs attempted in 24h", neutral/amber, never green | 6 §2.4 |
-| ☐ | Operator Platform Health | 100% sync success shown beside 25 open errors | 7 §10.1, bug 5 |
-| ☐ | Operator Platform Health | `Pushed -56/56 updates` — negative numerator | 7 §10.3, bug 4 |
-| ☐ | Operator Platform Health | "Recent sync failures" is mostly not failures | 7 §10.2 |
+| ☑ | RevioLink Dashboard | "Last Successful Sync: 29d ago" badged **Live** — now derives from recency. Per-channel rows carry a second pill too: "Connected" is the socket, the health pill is whether anything arrived | 6 §2.2 |
+| ☑ | RevioLink Dashboard | Subtitle is now derived from the count, with the age of the oldest item | 6 §2.3 |
+| ☑ | RevioLink Dashboard | Counts **attempts**, not just failures. Nothing attempted renders "—" and amber, never a green zero | 6 §2.4 |
+| ☑ | Operator Platform Health | 100% beside open errors is now qualified on the card; a rate over zero attempts is null, not 100% | 7 §10.1, bug 5 |
+| ☑ | Operator Platform Health | Negative numerator fixed **at source** in `sync.ts` (rejections can exceed the update count) | 7 §10.3, bug 4 |
+| ☑ | Operator Platform Health | The panel had **no time filter at all** — bounded to 7 days and the window is now in the heading | 7 §10.2 |
 | ☐ | Operator Clients | `active` / green regardless of 65 days of no activity | 7 bug 6 |
 | ☐ | Operator Connectivity | Client shown live on Channex with no production key — **resolved** key not displayed | 7 bug 7 |
 | ☐ | RevioCRS Inventory | Rate row shows **"—" for dates that DO have prices** (per-person mode) | 5 §2.4 |
+
+### Shipped 2026-09-02 — `@revio/core/metrics/sync-health.ts` (25 tests)
+
+One tested module now answers "is this working", shared by RevioLink and the Operator console so the
+two cannot disagree. Five states, and the two that matter are the ones screens kept collapsing into
+green: **`idle`** (never ran — not a fault, and not health) and **`unknown`** (nothing attempted in
+the window, so there is nothing to report).
+
+`Last Successful Sync` reads the last **success**, not the last attempt: a channel failing every five
+minutes has a very recent attempt and is completely broken.
 
 ## P1 — correctness of money and data
 

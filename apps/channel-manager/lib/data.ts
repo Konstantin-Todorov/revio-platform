@@ -129,9 +129,18 @@ export async function getDashboard() {
   // Failed = REAL failures in the last 24h (spec §3.1/§5.2): failed pushes/pulls plus real open
   // errors — capability mismatches never count (they aren't even sent since the capability map).
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [failed24h, oldestPending] = await Promise.all([
+  const [failed24h, oldestPending, attempts24h, lastSuccessEvent] = await Promise.all([
     prisma.syncEvent.count({ where: { propertyId, status: "failed", createdAt: { gte: since24h } } }),
     prisma.syncEvent.findFirst({ where: { propertyId, status: "pending" }, orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+    // ATTEMPTS, not just failures. "0 failed" is only good news if something was tried — without
+    // this the card cannot tell a clean 24 hours from a silent one, and renders both green.
+    prisma.syncEvent.count({ where: { propertyId, kind: { in: ["push", "pull"] }, createdAt: { gte: since24h } } }),
+    // The last SUCCESS, not the last attempt: a channel failing every five minutes has a very recent
+    // attempt and is completely broken. `Channel.lastSyncAt` could not tell the two apart.
+    prisma.syncEvent.findFirst({
+      where: { propertyId, status: "success", kind: { in: ["push", "pull"] } },
+      orderBy: { createdAt: "desc" }, select: { createdAt: true },
+    }),
   ]);
   const failed = failed24h + errorItems.filter((e) => e.severity === "critical" && e.code !== "restriction_not_supported").length;
   // Real errors per channel for the Channel Status table (limitations excluded).
@@ -140,7 +149,9 @@ export async function getDashboard() {
     if (e.code === "restriction_not_supported" || !e.channelId) continue;
     realErrorsByChannel.set(e.channelId, (realErrorsByChannel.get(e.channelId) ?? 0) + 1);
   }
-  const lastSync = channels.map((c) => c.lastSyncAt).filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0] ?? null;
+  const lastSync = lastSuccessEvent?.createdAt
+    ?? channels.map((c) => c.lastSyncAt).filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0]
+    ?? null;
   const currencyWarnings = channels.filter((c) => c.currency !== property.baseCurrency).length;
 
   return {
@@ -154,6 +165,8 @@ export async function getDashboard() {
       // Age of the oldest queued item (spec §5.3) — a growing age means the queue is stuck.
       oldestPendingAt: oldestPending?.createdAt ?? null,
       failedSyncs: failed,
+      /** Pushes + pulls tried in the last 24h. Zero attempts and zero failures are different facts. */
+      syncAttempts24h: attempts24h,
       lastSync,
       stopSold: dailyStopSells,
       currencyWarnings,

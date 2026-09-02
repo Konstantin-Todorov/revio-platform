@@ -723,7 +723,16 @@ export async function getPlatformHealth() {
   const [events, openErrors, failedRecent, tenants] = await Promise.all([
     prisma.syncEvent.findMany({ where: { createdAt: { gte: since } }, select: { tenantId: true, status: true, kind: true } }),
     prisma.errorItem.findMany({ where: { resolved: false }, select: { tenantId: true, severity: true } }),
-    prisma.syncEvent.findMany({ where: { status: "failed" }, orderBy: { createdAt: "desc" }, take: 10, include: { property: { select: { name: true } }, channel: { select: { name: true } } } }),
+    /*
+     * BOUNDED TO THE LAST 7 DAYS. This read had no time filter at all, so a panel headed "Recent
+     * sync failures" cheerfully listed failures from June and read as a live incident every time
+     * the page was opened. "Recent" has to mean something or the panel is decoration.
+     */
+    prisma.syncEvent.findMany({
+      where: { status: "failed", createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      orderBy: { createdAt: "desc" }, take: 10,
+      include: { property: { select: { name: true } }, channel: { select: { name: true } } },
+    }),
     prisma.tenant.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, name: true, status: true } }),
   ]);
 
