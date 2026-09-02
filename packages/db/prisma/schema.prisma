@@ -1041,6 +1041,9 @@ model ChannelRatePlanMapping {
 
   @@unique([channelId, ratePlanId, roomTypeId])
   @@index([channelId])
+  /// Mapping completeness is asked per ROOM TYPE (a per-person plan short of one row per occupancy
+  /// counts as unmapped), so this is read on every mapping and dashboard check.
+  @@index([roomTypeId])
 }
 
 // --- Calendar data ---------------------------------------------------------
@@ -1224,6 +1227,9 @@ model Reservation {
 
   @@index([propertyId])
   @@index([channelId])
+  /// Front Desk asks "is this stay still in the house?" on every load. `departedAt` is the stay's
+  /// ending — deliberately NOT a status value — so it is the column that question filters on.
+  @@index([propertyId, departedAt])
 }
 
 model ReservationLine {
@@ -1750,6 +1756,8 @@ model Folio {
 
   @@index([reservationId])
   @@index([propertyId, status])
+  /// The receivables view reads exactly this: closed folios that still owe money.
+  @@index([propertyId, outcome])
 }
 
 // One posting on a folio. Charges are positive amounts; a `payment` line reduces the balance.
@@ -2145,7 +2153,9 @@ model StayGuest {
   /// ЕГН / ЛЧН / персонален идентификационен номер. Required of a Bulgarian citizen; a foreign
   /// tourist may genuinely have none.
   personalId      String?
-  dateOfBirth     DateTime?
+  /// Дата на раждане. A calendar date, not an instant — stored DATE so it cannot drift a day
+  /// across timezones, which for a legal register is a wrong record rather than a display bug.
+  dateOfBirth     DateTime? @db.Date
   /// Пол — "m" | "f".
   sex             String?
   /// Гражданство, ISO 3166-1 alpha-2. Decides which half of the order applies (т. 1.1 vs т. 1.2).
@@ -2171,7 +2181,7 @@ model StayGuest {
   cancelledNote String?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @default(now())
 
   property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)

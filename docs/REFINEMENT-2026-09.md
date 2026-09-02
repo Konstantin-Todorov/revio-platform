@@ -183,6 +183,16 @@ Not from the documents. Found while verifying the live platform.
   what `ONBOARDING-A-HOTEL.md` tells people to run. Both are now guarded, but one should probably go.
 - **A per-tenant Channex key is still stored for `Ventsi Group`**, byte-identical to the platform key,
   created by the old provisioning copy-bug. Harmless today, a trap the day the platform key rotates.
+- ☑ **`schema.prisma` had drifted from the migrations — fixed 2026-09-02.** Four things the database
+  had and the schema did not describe: three deliberate performance indexes
+  (`ChannelRatePlanMapping(roomTypeId)`, `Folio(propertyId, outcome)` — the receivables view,
+  `Reservation(propertyId, departedAt)` — Front Desk's "still in the house?") plus
+  `StayGuest.dateOfBirth` as `DATE` and `updatedAt`'s database default.
+  ⚠️ **This was a loaded gun:** the next `prisma migrate dev` would have generated a migration that
+  **drops all three indexes** and rewrites the birth-date column, because Prisma believed the schema.
+  Fixed in the safe direction — the schema now *describes* the database (annotations only, no
+  migration, no data touched). `migrate diff` against a shadow database now returns an empty
+  migration. **Add that diff to CI**: drift is invisible until something destructive is generated.
 - **105 silent early-returns** remain behind the `silent-lint` ratchet.
 - **Hotel Sofia — Plovdiv has 25 unresolved `update_rejected` errors** (demo tenant, mock channels) —
   worth confirming they are demo noise and not a real mapping fault before the next onboarding.
