@@ -772,7 +772,15 @@ export async function getPlatformHealth() {
 export async function getBilling() {
   const period = new Date().toISOString().slice(0, 7); // YYYY-MM
   const [tenants, invoices] = await Promise.all([
-    prisma.tenant.findMany({ orderBy: { createdAt: "asc" } }),
+    /*
+     * Billing details come along, because a client without them CANNOT BE INVOICED — `issueInvoice`
+     * refuses without a legal name, country and address.
+     *
+     * Until now that was only discovered at the moment somebody tried to issue, which is the worst
+     * time to learn it. Both real clients on the platform are in exactly that state today: no legal
+     * name, no country, no VAT id. The screen has to say so before an invoice is due, not after.
+     */
+    prisma.tenant.findMany({ orderBy: { createdAt: "asc" }, include: { crmBilling: true } }),
     prisma.invoice.findMany({ orderBy: { createdAt: "desc" } }),
   ]);
   const byKey = new Map(invoices.map((i) => [`${i.tenantId}:${i.period}`, i]));
@@ -794,6 +802,13 @@ export async function getBilling() {
       currentInvoice: current
         ? { id: current.id, status: current.status, amountMinor: current.amountMinor, number: current.number, grossMinor: current.grossMinor }
         : null,
+      // What is MISSING, not merely whether something exists — an operator needs to know what to go
+      // and type. Country drives the VAT treatment, so its absence is not a cosmetic gap.
+      billingGaps: [
+        !t.crmBilling?.legalName ? "legal name" : null,
+        !t.crmBilling?.country ? "country" : null,
+        !t.crmBilling?.addressLine ? "address" : null,
+      ].filter((x): x is string => x != null),
     };
   });
 

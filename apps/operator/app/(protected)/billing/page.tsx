@@ -53,6 +53,29 @@ export default async function BillingPage() {
         </div>
       )}
 
+      {/*
+        * The mirror of the company-details warning above: that one says WE cannot issue, this one
+        * says we cannot issue TO these clients. Both were only discoverable at the moment of issuing.
+        */}
+      {(() => {
+        const blocked = clients.filter((c) => !c.isDemo && c.billingGaps.length > 0);
+        return blocked.length === 0 ? null : (
+          <div className="mb-3 rounded-md border border-danger-600/30 bg-danger-50 px-3 py-2.5 text-[12.5px] text-danger-700">
+            <strong className="font-semibold">
+              {blocked.length} real client{blocked.length === 1 ? "" : "s"} cannot be invoiced.
+            </strong>{" "}
+            Issuing needs a legal name, country and address — the country also decides the VAT treatment.{" "}
+            {blocked.map((c, i) => (
+              <span key={c.id}>
+                {i > 0 && " · "}
+                <Link href={`/clients/${c.id}`} className="font-semibold underline">{c.name}</Link>
+                <span className="opacity-80"> (needs {c.billingGaps.join(", ")})</span>
+              </span>
+            ))}
+          </div>
+        );
+      })()}
+
       <div className="grid grid-cols-3 gap-3">
         {cards.map((c) => {
           const Icon = c.icon;

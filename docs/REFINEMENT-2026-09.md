@@ -69,10 +69,21 @@ document is immutable**, **only an issued document can be paid**, and **nothing 
 `setInvoiceStatus` accepted any status from any status with no attribution; it now asks the same
 pure function the screen asks, and records **who** settled an invoice, **when**, and **against what**.
 
-Still open from §8.4, and worth doing before the first production number is drawn: **demo invoices
-must be structurally incapable of drawing a production number** (the `DEMO-` prefix exists but is not
-a separate sequence), **VAT treatment must be per client** (`decideVat` supports it; nothing sets it),
-and **plan tier must be derived from room count** with an explicit, reasoned override.
+**Two of §8.4's three concerns were already built** — checked rather than assumed:
+
+- **Demo numbering is already structurally separate.** `OperatorInvoiceSeries` is keyed by `kind`
+  (`demo` | `real`) with independent counters and independent formatters. Live proof: only the
+  `demo` counter exists, at 4 — **no production number has ever been drawn.**
+- **VAT is already per client.** `decideVat` takes the buyer's country and VAT id and returns
+  domestic / EU reverse charge / EU B2C / outside-EU, refusing to issue when it needs a human. The
+  global rate is the domestic default, not the answer.
+
+⚠️ **The real gap was data, not code: both real clients have NO billing details at all** — no legal
+name, no country, no VAT id — so neither can be invoiced, and nothing said so until somebody tried.
+The Billing screen now names them and what each is missing. **Still needs a person to type them.**
+
+Still open from §8.4: **plan tier derived from room count** with an explicit, reasoned override
+(today a dropdown, so the console manufactures the drift it then measures).
 
 ## P2 — OBP completion (the largest single body of work)
 
