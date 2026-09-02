@@ -113,13 +113,23 @@ failure between the two leaves it created and unmapped. Creating it again is exa
 `Ethno Villa Cherry` came to exist twice: a duplicate gets its own uuid, is silent, is permanent, and
 is indistinguishable from the real one afterwards.
 
-☐ **Still to do — the executor and its button.** The decision is tested; sending it is not, and a
-Channex write is the one operation here we cannot undo. It should be rehearsed against the sandbox
-the way every other Channex change in this repo has been, then wired to a preview → confirm screen
-that shows `describeStructurePlan` before anything is sent.
+**The executor.** `applyStructurePlan` (`structure-apply.ts`, **9 tests**) sends it, with three rules
+each learned from a real incident: the mapping is written **immediately** after each create (persisting
+at the end is how a property came to exist twice); **one refusal does not abandon the rest**; and a
+room type that failed **skips its own rate plans** rather than attaching a price to the wrong room.
 
-⚠️ **Do not let this become another `unmappedPairs`** — correct, tested, and never called. It has no
-caller today; that is a deliberate one-step stage, not a finished state.
+**Wired to two server actions** in `actions-connect.ts`, both gated (`manageDistribution`):
+`previewChannexStructure` is read-only, and `syncChannexStructure` **recomputes the plan** rather than
+accepting one from the browser — a plan is a list of things to create in a hotel's Channex account,
+and taking it from a client would be a create-anything endpoint.
+
+☐ **Remaining: a screen, and a sandbox rehearsal before one exists.** The write path is tested against
+a fake API but has never run against Channex. It must be rehearsed on the sandbox the way every other
+Channex change in this repo has been, and only then put behind preview → confirm.
+
+⚠️ **Hold the button until `Ethno Villa Cherry` is resolved.** That property is *already* duplicated in
+Channex and awaiting a human decision. Shipping an auto-create button while a property is in that state
+risks making a bad state worse, which is the opposite of the point.
 
 ## ☑ 6. A state machine enforced by the screen instead of the model
 

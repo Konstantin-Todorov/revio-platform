@@ -53,6 +53,10 @@ export {
   type StructurePlan, type StructureAction, type PlanRoomType, type PlanRatePlan, type ChannexExisting,
 } from "./structure-plan.js";
 export {
+  applyStructurePlan, describeStructureOutcome,
+  type StructureApplyOutcome, type StructureApplyContext, type StructureWrites, type ChannexApi,
+} from "./structure-apply.js";
+export {
   CHANNEL_CODES, parseAdapter, toField, visibleFields, visibleFieldsFor, defaultSettings, missingRequired,
   type ChannelAdapterDescriptor, type ChannelField, type ChannelFieldType, type FieldRule,
 } from "./channex-channels.js";

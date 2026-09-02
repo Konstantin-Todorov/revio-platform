@@ -53,7 +53,8 @@ export type StructureAction =
   | { kind: "adopt-room"; localId: string; name: string; channexId: string }
   | { kind: "create-room"; localId: string; name: string; totalRooms: number; maxGuests: number }
   | { kind: "adopt-rate"; localRoomId: string; localPlanId: string; label: string; channexId: string }
-  | { kind: "create-rate"; localRoomId: string; localPlanId: string; label: string };
+  /** `occupancy` is the room's ceiling — the primary option Channex needs at creation. */
+  | { kind: "create-rate"; localRoomId: string; localPlanId: string; label: string; occupancy: number };
 
 export interface StructurePlan {
   actions: StructureAction[];
@@ -134,7 +135,7 @@ export function planStructureSync(args: {
       actions.push(
         theirs
           ? { kind: "adopt-rate", localRoomId: rt.id, localPlanId: rp.id, label, channexId: theirs.id }
-          : { kind: "create-rate", localRoomId: rt.id, localPlanId: rp.id, label },
+          : { kind: "create-rate", localRoomId: rt.id, localPlanId: rp.id, label, occupancy: rt.maxGuests },
       );
     }
   }

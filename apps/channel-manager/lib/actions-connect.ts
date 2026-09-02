@@ -11,6 +11,10 @@ import {
   testChannelConnection,
   createChannexChannel,
   provisionChannexProperty,
+  planStructureSync,
+  describeStructurePlan,
+  applyStructurePlan,
+  describeStructureOutcome,
   type ChannelField,
 } from "@revio/connectivity";
 import { prisma } from "./db";
@@ -326,6 +330,168 @@ export async function provisionChannex(): Promise<ProvisionOutcome> {
   } catch (e) {
     // ChannexProvisionError messages are written for a hotelier and name the fix; anything else is
     // reported as-is rather than flattened into "something went wrong".
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/* -------------------------------------------------------------------------------------------
+ * Sending products that provisioning never sent (gap register #10).
+ *
+ * Provisioning is one-shot. A room type or rate plan added afterwards is sellable locally and has
+ * no Channex counterpart and no mapping row — so every `status != complete` counter reports zero
+ * and the hotel is shown "all mapped" while an OTA cannot see the room at all.
+ *
+ * Two actions, on purpose. The preview is read-only and the confirm RECOMPUTES the plan rather than
+ * accepting one from the browser: a plan is a list of things to create on a third party, and taking
+ * that from a client would let a crafted post create products in a hotel's Channex account.
+ * ---------------------------------------------------------------------------------------------- */
+
+export type StructurePreview =
+  | { ok: true; sentence: string; actions: number; empty: boolean }
+  | { ok: false; error: string };
+
+/** Everything both actions need, loaded once so the preview and the send cannot disagree. */
+async function loadStructureContext() {
+  const property = await getProperty();
+  const channel = await prisma.channel.findFirst({
+    where: { propertyId: property.id, code: "channex" },
+    select: { id: true, externalPropertyId: true, connectivityMode: true },
+  });
+  if (!channel?.externalPropertyId) {
+    return { ok: false as const, error: "This hotel is not on Channex yet — run setup on the Channels screen first." };
+  }
+  const mode = channel.connectivityMode || (process.env.CHANNEX_MODE === "sandbox" ? "channex_sandbox" : "channex_prod");
+  const cfg = await channexApiConfig(property.tenantId, mode);
+  if (!cfg.apiKey.trim()) {
+    return { ok: false as const, error: "No Channex API key for this hotel. Add it in the Operator console under Connectivity." };
+  }
+
+  const [roomTypes, ratePlans, roomRows, rateRows] = await Promise.all([
+    prisma.roomType.findMany({
+      where: { propertyId: property.id },
+      select: { id: true, name: true, active: true, totalRooms: true, maxGuests: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.ratePlan.findMany({
+      where: { propertyId: property.id },
+      select: { id: true, name: true, active: true, priceLogic: true, roomTypeLinks: { select: { roomTypeId: true } } },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.channelRoomTypeMapping.findMany({ where: { channelId: channel.id }, select: { roomTypeId: true } }),
+    prisma.channelRatePlanMapping.findMany({ where: { channelId: channel.id }, select: { ratePlanId: true, roomTypeId: true } }),
+  ]);
+
+  const api = async (method: string, path: string, body?: unknown) => {
+    const res = await fetch(`${cfg.baseUrl}${path}`, {
+      method,
+      headers: { "user-api-key": cfg.apiKey, "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const text = await res.text();
+    let json: unknown = null;
+    try { json = text ? JSON.parse(text) : null; } catch { /* Channex returns HTML on some 5xx. */ }
+    // ⚠️ Status, never array length — a 401 has no `data` key and reads as "zero rows" exactly like
+    // an empty account. That mistake caused 411 consecutive false "success" events on a real hotel.
+    if (!res.ok) throw new Error(`Channex refused ${method} ${path} (${res.status}): ${text.slice(0, 200)}`);
+    return json;
+  };
+
+  const [theirRooms, theirRates] = await Promise.all([
+    api("GET", `/room_types?filter[property_id]=${channel.externalPropertyId}`),
+    api("GET", `/rate_plans?filter[property_id]=${channel.externalPropertyId}`),
+  ]);
+
+  /** Channex's JSON:API rows, read defensively — a shape we cannot read is an empty list, not a crash. */
+  type CxRow = { id?: unknown; attributes?: { title?: unknown; room_type_id?: unknown } };
+  const rows = (res: unknown): CxRow[] => {
+    const data = (res as { data?: unknown } | null | undefined)?.data;
+    return Array.isArray(data) ? (data as CxRow[]) : [];
+  };
+  const text = (v: unknown): string => (typeof v === "string" ? v : "");
+
+  const plan = planStructureSync({
+    roomTypes,
+    ratePlans: ratePlans.map((r) => ({
+      id: r.id, name: r.name, active: r.active, priceLogic: r.priceLogic,
+      roomTypeIds: r.roomTypeLinks.map((l) => l.roomTypeId),
+    })),
+    mappedRoomTypeIds: roomRows.map((r) => r.roomTypeId),
+    mappedPairKeys: rateRows.map((r) => `${r.roomTypeId}|${r.ratePlanId}`),
+    channexRoomTypes: rows(theirRooms)
+      .filter((r) => typeof r.id === "string")
+      .map((r) => ({ id: r.id as string, title: text(r.attributes?.title) })),
+    channexRatePlans: rows(theirRates)
+      .filter((r) => typeof r.id === "string")
+      .map((r) => ({
+        id: r.id as string,
+        title: text(r.attributes?.title),
+        roomTypeChannexId: typeof r.attributes?.room_type_id === "string" ? r.attributes.room_type_id : null,
+      })),
+  });
+
+  return { ok: true as const, property, channel, plan, api, currency: property.baseCurrency, channexPropertyId: channel.externalPropertyId };
+}
+
+/** Read-only: what WOULD be sent. Nothing reaches Channex from here beyond two GETs. */
+export async function previewChannexStructure(): Promise<StructurePreview> {
+  const g = await guard("manageDistribution");
+  if (!g.ok) return { ok: false, error: g.error };
+  try {
+    const ctx = await loadStructureContext();
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    return {
+      ok: true,
+      sentence: describeStructurePlan(ctx.plan),
+      actions: ctx.plan.actions.length,
+      empty: ctx.plan.isEmpty,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+export type StructureSyncResult = { ok: true; sentence: string } | { ok: false; error: string };
+
+/** Send it. Recomputes the plan — the browser never says what to create on a third party. */
+export async function syncChannexStructure(): Promise<StructureSyncResult> {
+  const g = await guard("manageDistribution");
+  if (!g.ok) return { ok: false, error: g.error };
+  try {
+    const ctx = await loadStructureContext();
+    if (!ctx.ok) return { ok: false, error: ctx.error };
+    if (ctx.plan.isEmpty) return { ok: true, sentence: describeStructurePlan(ctx.plan) };
+
+    const outcome = await applyStructurePlan(
+      ctx.plan,
+      {
+        tenantId: ctx.property.tenantId,
+        channelId: ctx.channel.id,
+        channexPropertyId: ctx.channexPropertyId,
+        currency: ctx.currency,
+      },
+      ctx.api,
+      {
+        writeRoomMapping: async (channelId, tenantId, roomTypeId, externalRoomId) => {
+          await prisma.channelRoomTypeMapping.upsert({
+            where: { channelId_roomTypeId: { channelId, roomTypeId } },
+            create: { tenantId, channelId, roomTypeId, externalRoomId, status: "complete" },
+            update: { externalRoomId, status: "complete" },
+          });
+        },
+        writeRateMapping: async (channelId, tenantId, ratePlanId, roomTypeId, externalRateId) => {
+          await prisma.channelRatePlanMapping.upsert({
+            where: { channelId_ratePlanId_roomTypeId: { channelId, ratePlanId, roomTypeId } },
+            create: { tenantId, channelId, ratePlanId, roomTypeId, externalRateId, status: "complete" },
+            update: { externalRateId, status: "complete" },
+          });
+        },
+      },
+    );
+
+    revalidatePath("/channels");
+    revalidatePath("/mapping");
+    return { ok: true, sentence: describeStructureOutcome(outcome) };
+  } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
