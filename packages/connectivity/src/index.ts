@@ -49,6 +49,10 @@ export {
   type StructureGapResult, type MissingProduct, type StructureRoomType, type StructureRatePlan,
 } from "./structure-gap.js";
 export {
+  planStructureSync, describeStructurePlan, planCoversRoom,
+  type StructurePlan, type StructureAction, type PlanRoomType, type PlanRatePlan, type ChannexExisting,
+} from "./structure-plan.js";
+export {
   CHANNEL_CODES, parseAdapter, toField, visibleFields, visibleFieldsFor, defaultSettings, missingRequired,
   type ChannelAdapterDescriptor, type ChannelField, type ChannelFieldType, type FieldRule,
 } from "./channex-channels.js";

@@ -103,8 +103,23 @@ while selling a room no OTA can see.
 | **Guard** | `structure-gap.test.ts` — **11 tests**, one pinning the added-after-provisioning case |
 | **Why ◐** | the gap is now **visible** but not yet **repairable from the product**. Creating the missing room type or rate plan on Channex is still a re-provision, and re-provisioning refuses (correctly) because the property already exists. |
 
-⚠️ **Next**: a repair path that creates only the missing products against the existing Channex
-property, matching by title first so it cannot duplicate — the same guard provisioning already uses.
+**The repair, staged deliberately.** `planStructureSync` (`structure-plan.ts`, **13 tests**) decides
+what to send: it walks the missing products and returns *adopt* or *create* for each, one rate plan
+per (room type × manual plan) PAIR.
+
+⚠️ **Adopt before you create** is the rule that matters. A missing mapping row does NOT mean Channex
+has never heard of the product — provisioning writes the room type and *then* the mapping, so a
+failure between the two leaves it created and unmapped. Creating it again is exactly how
+`Ethno Villa Cherry` came to exist twice: a duplicate gets its own uuid, is silent, is permanent, and
+is indistinguishable from the real one afterwards.
+
+☐ **Still to do — the executor and its button.** The decision is tested; sending it is not, and a
+Channex write is the one operation here we cannot undo. It should be rehearsed against the sandbox
+the way every other Channex change in this repo has been, then wired to a preview → confirm screen
+that shows `describeStructurePlan` before anything is sent.
+
+⚠️ **Do not let this become another `unmappedPairs`** — correct, tested, and never called. It has no
+caller today; that is a deliberate one-step stage, not a finished state.
 
 ## ☑ 6. A state machine enforced by the screen instead of the model
 
