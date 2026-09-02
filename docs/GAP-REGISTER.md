@@ -84,6 +84,28 @@ a green pill over a channel that last synced 65 days ago, "Queue empty" above a 
 | **Guard** | **25 tests**, shared by RevioLink and Operator so the two cannot disagree |
 | **Why ◐** | the module exists and is used, but nothing *stops* a new screen inventing its own green. See "Wanted" below. |
 
+## ◐ 10. A product that never reached the channel, counted by asking for rows
+
+`provisionChannexProperty` is the **only** code that creates a room type or rate plan on Channex, and
+it is one-shot — it sends what exists the moment it runs. A room type added the week after is created
+locally, linked to every plan, made sellable on the booking engine, and never mentioned to Channex.
+
+What makes it dangerous is how it reports. Every "unmapped products" counter asks the mapping tables
+for rows whose `status` is not `complete`. A product that was never sent has **no mapping row at
+all**, so it matches nothing and adds nothing to the count — the hotel is shown *all mapped*, green,
+while selling a room no OTA can see.
+
+| | |
+| --- | --- |
+| **Found** | the first real hotel hit it; named in the September tracker, in none of the three founder documents |
+| **Compounded by** | `unmappedPairs` — the correct, tested function written for exactly this — having **zero callers** |
+| **Fix so far** | `structureGap` in `@revio/connectivity`: what is *absent*, not what is *incomplete*. Wired into the notification bell, guarded so a hotel with no channel yet is not warned |
+| **Guard** | `structure-gap.test.ts` — **11 tests**, one pinning the added-after-provisioning case |
+| **Why ◐** | the gap is now **visible** but not yet **repairable from the product**. Creating the missing room type or rate plan on Channex is still a re-provision, and re-provisioning refuses (correctly) because the property already exists. |
+
+⚠️ **Next**: a repair path that creates only the missing products against the existing Channex
+property, matching by title first so it cannot duplicate — the same guard provisioning already uses.
+
 ## ☑ 6. A state machine enforced by the screen instead of the model
 
 An invoice could be **paid without ever having been issued** — settled with no number and no
@@ -118,10 +140,6 @@ A screen hidden from a role while the write behind it stayed open to a crafted P
 - **☐ Health invented per screen (class 5).** `sync-health.ts` is correct and shared, but nothing
   fails when a new screen hardcodes a green pill. A lint for status/health literals rendered without
   going through the module would close it.
-- **☐ One-shot provisioning.** A room type or rate plan added *after* onboarding never reaches
-  Channex, because `provisionChannexProperty` is the only code that creates them and it sends what
-  existed at that moment. This is what the first real hotel actually hit. No guard, and no document
-  mentions it.
 - **☐ Two onboarding paths.** The in-app button and `scripts/channex-onboard.ts` both exist; both are
   guarded now, but one should probably go — two paths is two places for the next gap.
 

@@ -2,6 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { deriveRate, isAdvancePurchaseClosed, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
+import { structureGap, describeStructureGap } from "@revio/connectivity";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -44,6 +45,36 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
   if (openErrors > 0) items.push({ text: `${openErrors} open error${openErrors === 1 ? "" : "s"}`, href: "/sync", tone: "danger" });
   if (failed > 0) items.push({ text: `${failed} sync failure${failed === 1 ? "" : "s"} (24h)`, href: "/sync", tone: "danger" });
   if (unmapped > 0) items.push({ text: `${unmapped} unmapped product${unmapped === 1 ? "" : "s"}`, href: "/mapping", tone: "warning" });
+
+  /*
+   * Products that never reached the channel manager AT ALL — a different question from the two
+   * counts above, and the reason they cannot answer it.
+   *
+   * Provisioning is one-shot, so a room type or rate plan added afterwards is created locally, made
+   * sellable, and never sent. It therefore has no mapping row, and `status != complete` counts rows:
+   * no row, no count, and the hotel is shown green while it sells a room no OTA can see.
+   *
+   * Only asked when a channel actually exists. A hotel that has not connected one yet is not
+   * failing to sync anything, and warning it would be the same false signal in the other direction.
+   */
+  const channelCount = await prisma.channel.count({ where: { propertyId: property.id } });
+  if (channelCount > 0) {
+    const [roomTypes, ratePlans, roomRows, rateRows] = await Promise.all([
+      prisma.roomType.findMany({ where: { propertyId: property.id }, select: { id: true, name: true, active: true } }),
+      prisma.ratePlan.findMany({ where: { propertyId: property.id }, select: { id: true, name: true, active: true, priceLogic: true } }),
+      prisma.channelRoomTypeMapping.findMany({ where: { channel: { propertyId: property.id } }, select: { roomTypeId: true } }),
+      prisma.channelRatePlanMapping.findMany({ where: { channel: { propertyId: property.id } }, select: { ratePlanId: true } }),
+    ]);
+    const gap = structureGap({
+      roomTypes,
+      ratePlans,
+      mappedRoomTypeIds: roomRows.map((r) => r.roomTypeId),
+      mappedRatePlanIds: rateRows.map((r) => r.ratePlanId),
+    });
+    const sentence = describeStructureGap(gap);
+    if (sentence) items.push({ text: sentence, href: "/mapping", tone: "danger" });
+  }
+
   return { items, count: items.length };
 }
 
