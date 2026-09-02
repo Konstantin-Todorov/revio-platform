@@ -4,10 +4,14 @@ name: CI
 # Railway's build, which deploys first and tells you second. A typecheck error reached production
 # and was found by whoever opened the page.
 #
-# Runs on every push and every PR. Nothing here needs a database or a secret, which is deliberate:
-# a pipeline that cannot run on a fork, or that fails for want of a credential, gets ignored within
-# a month. The checks that DO need a database (`rls-verify`, `claim-verify`, `engine-race`) are
-# release gates run by hand against a real one — see DEPLOY.md.
+# Runs on every push and every PR. Nothing here needs a secret, which is deliberate: a pipeline that
+# cannot run on a fork, or that fails for want of a credential, gets ignored within a month. The
+# checks that need a REAL database (`rls-verify`, `claim-verify`, `engine-race`) are release gates
+# run by hand against one — see DEPLOY.md.
+#
+# The one exception is `Schema drift`, which uses a throwaway postgres SERVICE CONTAINER. That keeps
+# both properties the rule is protecting — no secret, and it still runs on a fork — while catching a
+# class nothing else here can see.
 
 on:
   push:
@@ -24,6 +28,22 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    services:
+      # Throwaway, and only for `Schema drift` below: `migrate diff --from-migrations` replays every
+      # migration into a shadow database to learn what the migrations actually build. No secret, no
+      # persistence, works on a fork.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +81,17 @@ jobs:
       # the check that stops X2 quietly coming back the next time somebody adds an action.
       - name: Authorization coverage
         run: pnpm authz:lint
+
+      # Prisma generates migrations FROM the schema, so a schema that has drifted from the
+      # migrations is a loaded gun rather than an untidiness: the next `migrate dev` anybody runs
+      # emits DROP INDEX for whatever the schema forgot. On 2026-09-02 that was three live
+      # performance indexes and the birth-date column of a legal register. Nothing surfaced it —
+      # typecheck, lint and the whole suite pass either way. Drift stays invisible until the day it
+      # is destructive, which is exactly why it belongs in CI and not in somebody's memory.
+      - name: Schema drift
+        run: pnpm --filter @revio/db db:drift
+        env:
+          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
 
       - name: Test
         run: pnpm test

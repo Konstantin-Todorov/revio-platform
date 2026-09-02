@@ -25,7 +25,8 @@
     "state-audit": "psql \"$DATABASE_URL\" -f scripts/state-audit.sql",
     "rotate-connectivity-key": "tsx scripts/rotate-connectivity-key.ts",
     "demo-billing": "tsx scripts/demo-billing.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "db:drift": "prisma migrate diff --from-migrations ./prisma/migrations --to-schema-datamodel ./prisma/schema.prisma --shadow-database-url \"${SHADOW_DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/revio_drift_shadow}\" --exit-code"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
