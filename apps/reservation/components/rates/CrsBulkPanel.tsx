@@ -26,7 +26,7 @@ const RATE_MODES: [CrsBulkRateMode, string][] = [
  * `compact` + `onApplied` drive the Inventory Calendar bulk modal (H2).
  */
 export function CrsBulkPanel({
-  roomTypes, ratePlans, today, preselectRoomTypeIds, perPerson = false, primaryOccupancy = 2, compact, onApplied,
+  roomTypes, ratePlans, today, preselectRoomTypeIds, perPerson = false, primaryOccupancy = 2, primaryOccupancyNote, compact, onApplied,
 }: {
   roomTypes: Opt[];
   ratePlans: PlanOpt[];
@@ -35,6 +35,7 @@ export function CrsBulkPanel({
   /** True when the property (or the selected plans) price per person — OBP §6.4. */
   perPerson?: boolean;
   primaryOccupancy?: number;
+  primaryOccupancyNote?: string | null;
   compact?: boolean;
   onApplied?: (r: CrsBulkResult) => void;
 }) {
@@ -315,6 +316,7 @@ export function CrsBulkPanel({
                 <OccupancyMatrix
                   rooms={selectedRooms()}
                   primaryOccupancy={primaryOccupancy}
+                  primaryOccupancyNote={primaryOccupancyNote}
                   mode={matrixMode}
                   onModeChange={setMatrixMode}
                   entries={entries}

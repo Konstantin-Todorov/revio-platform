@@ -922,7 +922,7 @@ export async function getRatesData() {
     prisma.roomType.findMany({
       where: { propertyId: property.id, active: true },
       orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true, code: true, maxGuests: true, defaultOccupancy: true },
+      select: { id: true, name: true, code: true, maxGuests: true, defaultOccupancy: true, totalRooms: true },
     }),
     prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" }, select: { code: true, name: true } }),
   ]);

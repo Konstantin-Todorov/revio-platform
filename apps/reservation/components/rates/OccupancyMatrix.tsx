@@ -37,6 +37,7 @@ export type MatrixEntry = { op: BulkOp | ""; value: string };
 export function OccupancyMatrix({
   rooms,
   primaryOccupancy,
+  primaryOccupancyNote,
   mode,
   onModeChange,
   entries,
@@ -48,6 +49,8 @@ export function OccupancyMatrix({
 }: {
   rooms: BulkTargetRoom[];
   primaryOccupancy: number;
+  /** Set when the main guest count was derived rather than chosen, so the label can say so. */
+  primaryOccupancyNote?: string | null;
   mode: "offsets" | "manual";
   onModeChange: (m: "offsets" | "manual") => void;
   entries: Record<number, MatrixEntry>;
@@ -83,7 +86,13 @@ export function OccupancyMatrix({
       {mode === "offsets" ? (
         <div className="space-y-2.5">
           <div className="grid grid-cols-[auto,1fr] items-center gap-2">
-            <span className="text-[12px] text-ink-600">{primaryOccupancy} guests</span>
+            <span
+              className="text-[12px] text-ink-600"
+              {...(primaryOccupancyNote ? { title: primaryOccupancyNote } : {})}
+            >
+              {primaryOccupancy} guests
+              {primaryOccupancyNote ? <span className="text-ink-400"> · assumed</span> : null}
+            </span>
             <input
               type="number" step="0.01" value={primaryValue}
               onChange={(e) => onPrimaryValueChange(e.target.value)}

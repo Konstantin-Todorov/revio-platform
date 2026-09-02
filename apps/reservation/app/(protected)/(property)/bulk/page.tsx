@@ -5,7 +5,7 @@ import { CrsBulkPanel } from "@/components/rates/CrsBulkPanel";
 import { RestrictionDialog } from "@/components/rates/RestrictionDialog";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
-import { PRECEDENCE_LINE } from "@revio/core";
+import { PRECEDENCE_LINE, resolveMainGuestCount } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +26,11 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
   const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
   const rtName = new Map(roomTypes.map((r) => [r.id, r.name]));
   const today = new Date().toISOString().slice(0, 10);
+  // The party size the headline price is for. Derived from the rooms — weighted by how many of
+  // each exist — rather than read off whichever room sorted first, which anchored a hotel of
+  // forty doubles on a single. `null` because nobody can configure it yet; when the settings
+  // field lands it passes the stored value here and the basis becomes "configured".
+  const mainGuests = resolveMainGuestCount(null, roomTypes);
 
   return (
     <div className="space-y-5">
@@ -46,7 +51,8 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
           {...(preselect && preselect.length > 0 ? { preselectRoomTypeIds: preselect } : {})}
           roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, maxGuests: r.maxGuests }))}
           perPerson={perPerson}
-          primaryOccupancy={roomTypes[0]?.defaultOccupancy ?? 2}
+          primaryOccupancy={mainGuests.value}
+          primaryOccupancyNote={mainGuests.note}
           ratePlans={ratePlans.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
           today={today}
         />
