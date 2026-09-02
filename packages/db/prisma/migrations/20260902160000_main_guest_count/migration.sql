@@ -1,0 +1,12 @@
+-- The party size the headline price is for, which nothing could state until now.
+--
+-- The occupancy ladder ("each extra guest +€20") adds to an anchor, and that anchor had no home.
+-- The bulk editor read `roomTypes[0]?.defaultOccupancy ?? 2` — whichever room sorted first — so a
+-- hotel of forty doubles whose single sorted first was told its main guest count was one, and every
+-- price built on the ladder inherited that.
+--
+-- NULLABLE deliberately. Unset means "nobody has said": `resolveMainGuestCount` then derives it from
+-- the most common room weighted by how many exist, and the screens mark the number as assumed. A NOT
+-- NULL column with a default would invent a decision for every existing property and destroy the one
+-- distinction that matters here — a chosen 2 versus a defaulted one.
+ALTER TABLE "PropertyDefaults" ADD COLUMN "mainGuestCount" INTEGER;

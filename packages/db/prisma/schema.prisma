@@ -1434,6 +1434,14 @@ model PropertyDefaults {
   /// per_room | per_person. Per-room is not a different model — it is the one-row special case at
   /// max occupancy, which is what lets switching be a row expand/collapse rather than a fork.
   pricingModel             String  @default("per_room")
+  /// The party size the headline price is FOR — the anchor the occupancy ladder adds to, the number
+  /// the calendar headline shows and the one ADR reconciles to. "€80 for one, €100 for two" only
+  /// means something once you know which of those is *the* price.
+  /// NULLABLE ON PURPOSE: unset means "nobody has said", which is a real state a settings screen can
+  /// show and ask about. Making it required would mean inventing a value for every existing property
+  /// at migration time with no way to tell a chosen 2 from a defaulted one. When unset,
+  /// `resolveMainGuestCount` derives it from the rooms and every screen marks the number as assumed.
+  mainGuestCount           Int?
   /// How rows are seeded when a plan first becomes per-person: copy | derive.
   /// `copy` puts the existing price on every occupancy; `derive` applies the seed offset downward
   /// from the primary. Neither loses the rate that was already there.

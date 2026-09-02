@@ -4,7 +4,7 @@ import { getProperty } from "@/lib/data";
 import { getSession } from "@/lib/session";
 import { deletePermissionRole, deleteTaxFee, savePermissionRole, saveTaxFee } from "@/lib/actions-settings";
 import { savePropertyDefaults } from "@/lib/actions-rates";
-import { PRECEDENCE_LINE } from "@revio/core";
+import { PRECEDENCE_LINE, MAX_MAIN_GUESTS, resolveMainGuestCount } from "@revio/core";
 import { PERMISSION_GROUPS } from "@/lib/permissions";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
@@ -39,7 +39,7 @@ export default async function SettingsPage() {
     ...(session?.entitlements.reservation ? ["RevioCRS"] : []),
     ...(session?.entitlements.pms ? ["RevioPMS"] : []),
   ];
-  const [roles, users, taxes, defaults] = await Promise.all([
+  const [roles, users, taxes, defaults, mainGuestRooms] = await Promise.all([
     prisma.permissionRole.findMany({
       where: { tenantId: property.tenantId },
       include: { access: true },
@@ -48,7 +48,14 @@ export default async function SettingsPage() {
     prisma.user.findMany({ where: { tenantId: property.tenantId }, orderBy: { name: "asc" } }),
     prisma.taxFee.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } }),
     prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
+    // Only to show what the main guest count would be if left unset — the placeholder states the
+    // number actually in effect rather than a generic example.
+    prisma.roomType.findMany({
+      where: { propertyId: property.id, active: true },
+      select: { defaultOccupancy: true, totalRooms: true, maxGuests: true },
+    }),
   ]);
+  const derivedMainGuests = resolveMainGuestCount(null, mainGuestRooms);
 
   const levelOf = (role: (typeof roles)[number], group: string) =>
     role.access.find((a) => a.group === group)?.level ?? "none";
@@ -75,6 +82,13 @@ export default async function SettingsPage() {
           <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
             <input type="checkbox" name="defCtd" defaultChecked={defaults?.defCtd ?? false} className="h-4 w-4 rounded border-surface-border text-brand-600" /> Closed to departure
           </label>
+          {/* The anchor the occupancy ladder adds to (§2.2). Left empty it is derived from the
+              rooms and every screen marks it "assumed" — so an unanswered question never reads as
+              a decision. */}
+          <div>
+            <label className={labelCls}>Main guest count</label>
+            <input type="number" name="mainGuestCount" min={1} max={MAX_MAIN_GUESTS} defaultValue={defaults?.mainGuestCount ?? ""} placeholder={`${derivedMainGuests.value} (assumed)`} className={inputCls} />
+          </div>
           <div><label className={labelCls}>Hold TTL (minutes)</label><input type="number" name="holdTtlMinutes" min={5} max={240} defaultValue={defaults?.holdTtlMinutes ?? 30} className={inputCls} /></div>
           <div><label className={labelCls}>Low-availability alert ≤</label><input type="number" name="lowAvailabilityThreshold" min={0} defaultValue={defaults?.lowAvailabilityThreshold ?? 2} className={inputCls} /></div>
           <div><label className={labelCls}>Pickup compares vs (days ago)</label><input type="number" name="pickupOffsetDays" min={1} max={90} defaultValue={defaults?.pickupOffsetDays ?? 7} className={inputCls} /></div>

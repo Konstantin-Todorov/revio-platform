@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BED_SETUPS, ROOM_AMENITY_BY_KEY, planBulkOccupancy, type Capability } from "@revio/core";
+import { BED_SETUPS, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, planBulkOccupancy, type Capability } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
@@ -214,7 +214,16 @@ export async function savePropertyDefaults(fd: FormData): Promise<void> {
     const n = Math.trunc(Number(v));
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
+  // The anchor the occupancy ladder adds to. Empty stays NULL — "nobody has said" is a real state,
+  // and it is what lets the screens mark a derived number as assumed instead of claiming it.
+  const mainGuestCountRaw = str(fd, "mainGuestCount");
+  const mainGuestCountNum = Math.trunc(Number(mainGuestCountRaw));
+  const mainGuestCount =
+    mainGuestCountRaw === "" || !Number.isFinite(mainGuestCountNum) || mainGuestCountNum < 1
+      ? null
+      : Math.min(mainGuestCountNum, MAX_MAIN_GUESTS);
   const data = {
+    mainGuestCount,
     defStopSell: fd.get("defStopSell") != null,
     defMinLos: optInt("defMinLos"),
     defMaxLos: optInt("defMaxLos"),

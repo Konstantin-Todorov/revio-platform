@@ -26,11 +26,11 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
   const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
   const rtName = new Map(roomTypes.map((r) => [r.id, r.name]));
   const today = new Date().toISOString().slice(0, 10);
-  // The party size the headline price is for. Derived from the rooms — weighted by how many of
-  // each exist — rather than read off whichever room sorted first, which anchored a hotel of
-  // forty doubles on a single. `null` because nobody can configure it yet; when the settings
-  // field lands it passes the stored value here and the basis becomes "configured".
-  const mainGuests = resolveMainGuestCount(null, roomTypes);
+  // The party size the headline price is for. Set in Settings; when nobody has set it, derived from
+  // the rooms — weighted by how many of each exist — rather than read off whichever room sorted
+  // first, which anchored a hotel of forty doubles on a single. A derived number is labelled
+  // "assumed" downstream, so an unanswered question never reads as a decision.
+  const mainGuests = resolveMainGuestCount(defaults?.mainGuestCount ?? null, roomTypes);
 
   return (
     <div className="space-y-5">

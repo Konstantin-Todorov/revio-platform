@@ -119,7 +119,7 @@ ladder** that is always materialised into explicit per-occupancy prices.
 
 | | What | Doc |
 | --- | --- | --- |
-| ☐ | **Main guest count is a core schema addition and does not exist yet** — everything else depends on it, build first | 5 §2.2 |
+| ☑ | **Main guest count** — `PropertyDefaults.mainGuestCount`, nullable, set in Settings and **derived from the rooms when unset**. The ladder now has the anchor it adds to | 5 §2.2 |
 | ☐ | Ladder as a persistent room-type rule, re-applied and re-pushed when the main price changes | 5 §2.1 |
 | ☐ | Off-ladder overrides marked, never silently recomputed | 5 §2.1 |
 | ☐ | Calendar: **one Rate sub-row per guest count, always visible** — no hover, no expand (rate-checking is a scanning task) | 5 §2.4.1 |
@@ -128,6 +128,28 @@ ladder** that is always materialised into explicit per-occupancy prices.
 | ☐ | Compress the availability block; row-visibility control; sticky labels | 5 §2.4.4 |
 | ☐ | "See what will change" is a placeholder — must state counts, and warn that it is a **distribution event** | 5 §2.3 |
 | ☐ | **OTAs derive occupancy on their side** — model their ladder rather than fight it | 6 §0 |
+
+### Shipped 2026-09-02 — `@revio/core/rates/main-guest-count.ts` (18 tests)
+
+The anchor everything in the ladder adds to, and it had no home. The bulk editor used
+`roomTypes[0]?.defaultOccupancy ?? 2` — **whichever room sorted first** — so a hotel of forty doubles
+whose single sorted first was told its main guest count was one, and every laddered price inherited
+it. `getRatesData` did not even select `totalRooms`, without which the weighting is the bug itself.
+
+`resolveMainGuestCount` derives it from the **most common room's standard occupancy, weighted by how
+many of that room exist**. Ties break toward the SMALLER occupancy deliberately: under-anchoring makes
+the ladder *add* money, which is visible and correctable, while over-anchoring makes it subtract and
+quietly undersells every booking.
+
+It lives in the shared core, not the CRS, because RevioLink is sold on its own — a property may price
+per person having bought no CRS at all.
+
+⚠️ **`mainGuestCount` is nullable on purpose.** Unset means *nobody has said*, which is a real state
+a settings screen can show and ask about; a NOT NULL default would invent a decision for every
+existing property and destroy the only distinction that matters — a chosen 2 versus a defaulted one.
+While unset the number is derived and every screen marks it **"· assumed"**, so an unanswered
+question never renders as a decision. That is the same rule as the P0 theme, applied to a price
+instead of a sync.
 
 ## P3 — structure and features
 
