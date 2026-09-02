@@ -810,7 +810,10 @@ export async function getBilling() {
   }));
   return {
     period, clients, mrr,
-    unpaidCount: realInvoices.filter((i) => i.status !== "paid").length,
+    // AWAITING PAYMENT — issued and sent, not yet settled. An unsent draft is not an unpaid
+    // invoice: nobody has been asked for the money, so counting it here makes the number unusable
+    // for the one question finance asks of it.
+    unpaidCount: realInvoices.filter((i) => i.status === "sent").length,
     recent,
     demoCount: demo.length,
   };

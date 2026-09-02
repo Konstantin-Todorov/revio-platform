@@ -5,6 +5,7 @@ import { forSystem, isBillablePeriod } from "@revio/db";
 import { getOperatorSession } from "./session";
 import { monthlyPriceMinor, billedProducts, priceBreakdown, type Entitlements } from "./pricing";
 import { flashError } from "@revio/ui/flash";
+import { canTransition, type InvoiceStatus } from "@revio/core";
 
 const prisma = forSystem();
 
@@ -72,11 +73,50 @@ export async function generateInvoices(): Promise<void> {
  * Move an invoice draft → sent → paid. Marking "paid" is a MOCK settlement (no gateway, no card) —
  * a real payment integration is future work.
  */
+/**
+ * Move an invoice through its lifecycle — and refuse the moves a ledger must not permit.
+ *
+ * This used to accept ANY status from ANY status with no checks and no attribution. It produced a
+ * real row: `Hotel Sofia · 2026-07`, **paid, with no number and no issuedAt** — a document settled
+ * without ever having been issued, and nothing recording who settled it.
+ *
+ * Revio is the legal issuer with its own gapless series, so the rules in `@revio/core`
+ * (`canTransition`) are not presentation: an issued document is immutable, only an issued document
+ * can be paid, and nothing returns to draft.
+ */
 export async function setInvoiceStatus(fd: FormData): Promise<void> {
-  if (!(await getOperatorSession())) return;
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again to change an invoice.");
   const id = str(fd, "id");
   const status = str(fd, "status");
-  if (!["draft", "sent", "paid"].includes(status)) return flashError("That isn’t a status an invoice can be in. Reload the page and try again.");
-  await prisma.invoice.update({ where: { id }, data: { status, paidAt: status === "paid" ? new Date() : null } });
+  if (!["sent", "paid", "void"].includes(status)) {
+    return flashError("That isn’t a status an invoice can be moved to. Reload the page and try again.");
+  }
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    select: { id: true, status: true, number: true, issuedAt: true },
+  });
+  if (!invoice) return flashError("That invoice no longer exists.");
+
+  const verdict = canTransition(invoice, status as InvoiceStatus);
+  if (!verdict.ok) return flashError(verdict.reason ?? "That change isn’t allowed on this invoice.");
+
+  await prisma.invoice.update({
+    where: { id },
+    data: {
+      status,
+      // Attribution is part of the transition, not a separate step somebody might skip. A payment
+      // with nobody's name on it is not a ledger entry.
+      ...(status === "paid"
+        ? { paidAt: new Date(), paidById: session.userId, paidReference: optionalText(fd, "reference") }
+        : {}),
+    },
+  });
   revalidatePath("/billing");
+}
+
+function optionalText(fd: FormData, key: string): string | null {
+  const v = String(fd.get(key) ?? "").trim();
+  return v === "" ? null : v.slice(0, 200);
 }

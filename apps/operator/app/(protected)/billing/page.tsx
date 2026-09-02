@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { IssueInvoiceButton } from "@/components/billing/IssueInvoiceButton";
 import { getCompany } from "@/lib/invoice-doc";
+import { allowedTransitions, amountBasis } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ function money(minor: number, currency = "EUR"): string {
   const sym = currency === "EUR" ? "€" : currency === "USD" ? "$" : currency + " ";
   return `${sym}${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: minor % 100 ? 2 : 0 })}`;
 }
-const STATUS_TONE: Record<string, Tone> = { draft: "neutral", sent: "warning", paid: "success" };
+const STATUS_TONE: Record<string, Tone> = { draft: "neutral", sent: "warning", paid: "success", void: "neutral" };
 const inputCls = "h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-900 outline-none focus:border-brand-600";
 
 export default async function BillingPage() {
@@ -25,7 +26,9 @@ export default async function BillingPage() {
     // Real, active clients — this sits beside MRR and reads as a business count, so it has to be
     // filtered the same way MRR is. A "2 active clients" next to a "€0 MRR" would be nonsense.
     { icon: CreditCard, tone: "info", value: clients.filter((c) => c.status === "active" && !c.isDemo).length, label: "Active clients", sub: "billed monthly" },
-    { icon: FileText, tone: unpaidCount ? "warning" : "neutral", value: unpaidCount, label: "Unpaid invoices", sub: "draft or sent" },
+    // An unsent draft is NOT an unpaid invoice — nobody has been asked for the money yet. Counting
+    // the two together makes the number useless for the only question it is asked: who owes us.
+    { icon: FileText, tone: unpaidCount ? "warning" : "neutral", value: unpaidCount, label: "Awaiting payment", sub: "issued and sent, not yet paid" },
   ];
   const TONE_BG: Record<string, string> = { success: "bg-success-50 text-success-600", info: "bg-accent-50 text-accent-600", warning: "bg-warning-50 text-warning-600", neutral: "bg-surface-sunken text-ink-500" };
 
@@ -131,7 +134,7 @@ export default async function BillingPage() {
                             <IssueInvoiceButton invoiceId={c.currentInvoice.id} />
                           </>
                         )}
-                        {c.currentInvoice.status === "sent" && (
+                        {allowedTransitions(c.currentInvoice).includes("paid") && (
                           <form action={setInvoiceStatus}><input type="hidden" name="id" value={c.currentInvoice.id} /><input type="hidden" name="status" value="paid" />
                             <button type="submit" className="inline-flex items-center gap-1 rounded border border-success-500 px-1.5 py-0.5 text-[11px] font-semibold text-success-600 hover:bg-success-50"><CheckCircle2 className="h-3 w-3" />Mark paid</button></form>
                         )}
@@ -162,7 +165,16 @@ export default async function BillingPage() {
                   >
                     {i.number ?? "draft"}
                   </Link>
+                  {/*
+                    * NET or GROSS, said out loud. A draft carries the net price and VAT is computed
+                    * at issue, so this column was showing net for some rows and gross for others
+                    * with nothing marking which — read from outside, that looks like three different
+                    * pricing conventions across four invoices. It was two facts in one column.
+                    */}
                   <span className="tnum font-semibold text-ink-900">{money(i.grossMinor ?? i.amountMinor, i.currency)}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+                    {amountBasis(i) === "gross" ? "incl. VAT" : "ex. VAT"}
+                  </span>
                   <StatusPill tone={STATUS_TONE[i.status]}>{i.status}</StatusPill>
                 </span>
               </li>

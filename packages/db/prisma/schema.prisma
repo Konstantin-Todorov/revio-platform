@@ -279,6 +279,11 @@ model Invoice {
   /// The billed lines as they read at issue, so a later price change cannot rewrite history.
   lineSnapshot    Json?
 
+  /// WHO settled it, WHEN, and against WHAT. Manual payment recording is fine; unattributable
+  /// manual payment recording is not — "paid" with nobody's name on it is not a ledger entry.
+  paidById      String?
+  paidReference String?
+
   @@unique([tenantId, period])
   @@index([tenantId])
 }

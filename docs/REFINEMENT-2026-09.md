@@ -54,13 +54,25 @@ minutes has a very recent attempt and is completely broken.
 
 | | Where | What | Doc |
 | --- | --- | --- | --- |
-| ☐ | Operator Billing | DRAFT invoice marked paid (Hotel Sofia 2026-07) | 7 bug 2 |
-| ☐ | Operator Billing | Three invoices, three pricing conventions — VAT applied inconsistently | 7 §8.2, bug 3 |
+| ☑ | Operator Billing | Worse than reported: **paid with no number and no `issuedAt`** — settled without ever being issued. State machine now enforced in `@revio/core` (22 tests); the row is corrected | 7 bug 2 |
+| ☑ | Operator Billing | **Not three conventions — two facts in one column.** A draft carries NET; VAT is computed at issue. Every amount now labelled `ex. VAT` / `incl. VAT` | 7 §8.2, bug 3 |
 | ☐ | Operator Settings | One global VAT rate cannot express reverse charge or non-EU — likely cause of the above | 7 §12.2b, bug 10 |
 | ☐ | Operator Billing | Plan tier is a dropdown — that IS the tier drift | 7 §8.1 |
 | ☐ | Operator Billing | Revio issues real fiscal documents — changes what this screen is | 7 §8.4 |
 | ☐ | RevioLink / CRS | The two products **disagree about the same room** | 6 §3.0 |
 | ☐ | RevioLink / CRS | Bulk copy contradicts the screen; the two disagree on the data model | 6 §4.2 |
+
+### Shipped 2026-09-02 — `@revio/core/invoicing/invoice-state.ts` (22 tests)
+
+Revio is the legal issuer with a gapless series, so these are rules and not presentation: **an issued
+document is immutable**, **only an issued document can be paid**, and **nothing returns to draft**.
+`setInvoiceStatus` accepted any status from any status with no attribution; it now asks the same
+pure function the screen asks, and records **who** settled an invoice, **when**, and **against what**.
+
+Still open from §8.4, and worth doing before the first production number is drawn: **demo invoices
+must be structurally incapable of drawing a production number** (the `DEMO-` prefix exists but is not
+a separate sequence), **VAT treatment must be per client** (`decideVat` supports it; nothing sets it),
+and **plan tier must be derived from room count** with an explicit, reasoned override.
 
 ## P2 — OBP completion (the largest single body of work)
 
