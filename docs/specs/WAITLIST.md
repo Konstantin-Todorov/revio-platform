@@ -151,8 +151,14 @@ read the **same** function — the rule that already keeps the quote and the pus
 
 ## Build order
 
-1. **`packages/core/src/waitlist/`** — pure: `matchesEntry`, `nextOfferable`, `offerExpiry`,
-   `describePosition`. Tested first, because the matching rules are where the judgement lives.
+1. ☑ **`packages/core/src/waitlist/`** — pure, **26 tests**, shipped 2026-09-03. `matchesEntry`,
+   `nextOfferable`, `canJoinWaitlist`, `offerDeadline`, `isOfferExpired`, `isStale`, `describeJoin`.
+   Tested first, because the matching rules are where the judgement lives.
+   Two decisions the tests pin: **every night or none** (a partial match is a disappointment with a
+   link on it), and **stop sell is respected** (a withdrawal is a decision, and ignoring it would sell
+   rooms the hotel deliberately pulled — the one way this feature could harm the person who enabled it).
+   The offer TTL defaults to **4 hours, not the checkout hold's 30 minutes**: an offer arrives by
+   email and the guest may be asleep, so 30 minutes optimises for the wrong failure.
 2. Migration: `WaitlistEntry` + `tenant_isolation` RLS + indexes on `(propertyId, status)` and
    `(propertyId, checkIn)`.
 3. The three email templates (EN + BG).

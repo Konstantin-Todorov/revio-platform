@@ -50,6 +50,7 @@ export * from "./rates/bulk-occupancy.js";
 export * from "./rates/stay-rate.js";
 export * from "./rates/authorship.js";
 export * from "./rates/main-guest-count.js";
+export * from "./waitlist/waitlist.js";
 export * from "./registry/tourist-register.js";
 export * from "./registry/countries.js";
 export * from "./registry/tourist-tax.js";
