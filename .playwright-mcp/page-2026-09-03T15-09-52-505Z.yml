@@ -1,0 +1,130 @@
+- generic [ref=f19e6]:
+  - generic [ref=f19e8]:
+    - generic [ref=f19e10] [cursor=pointer]:
+      - img "1club sign" [ref=f19e12]
+      - generic [ref=f19e13]:
+        - paragraph [ref=f19e14]: Club El Olivar - Tennis & Padel Club
+        - generic [ref=f19e15]: Demo
+    - generic [ref=f19e16]:
+      - link "Home" [ref=f19e18] [cursor=pointer]:
+        - /url: /home
+      - link "Members" [ref=f19e24] [cursor=pointer]:
+        - /url: /members
+      - link "Schedule" [ref=f19e32] [cursor=pointer]:
+        - /url: /schedule
+      - link "Point of Sale" [ref=f19e37] [cursor=pointer]:
+        - /url: /pos
+      - separator [ref=f19e43]
+      - link "Inbox" [ref=f19e45] [cursor=pointer]:
+        - /url: /messages
+      - separator [ref=f19e50]
+      - link "Staff" [ref=f19e52] [cursor=pointer]:
+        - /url: /staff/instructors
+      - link "Resources" [ref=f19e59] [cursor=pointer]:
+        - /url: /resources/areas
+      - generic [ref=f19e65]: Revenue
+      - generic [ref=f19e73]: Marketing
+      - link "Analytics" [ref=f19e83] [cursor=pointer]:
+        - /url: /analytics
+      - separator [ref=f19e87]
+      - link "Settings" [ref=f19e89] [cursor=pointer]:
+        - /url: /settings
+      - generic [ref=f19e94]:
+        - generic [ref=f19e95]: Help & updates
+        - link "Notifications" [ref=f19e107] [cursor=pointer]:
+          - /url: /notifications
+        - separator [ref=f19e112]
+    - generic [ref=f19e115] [cursor=pointer]:
+      - generic [ref=f19e116]: BS
+      - paragraph [ref=f19e118]: Bisk Sirakov
+  - separator "Resize sidebar" [ref=f19e124]:
+    - button "Collapse sidebar" [ref=f19e125] [cursor=pointer]
+  - generic [ref=f19e128]:
+    - generic [ref=f19e131]:
+      - generic [ref=f19e132]:
+        - generic [ref=f19e133]:
+          - button "Back" [ref=f19e134] [cursor=pointer]
+          - paragraph [ref=f19e137]: Settings
+          - button "Search" [ref=f19e138] [cursor=pointer]
+        - list [ref=f19e142]:
+          - link "Personal" [ref=f19e143] [cursor=pointer]:
+            - /url: /settings/me/profile
+          - link "Organization" [ref=f19e146] [cursor=pointer]:
+            - /url: /settings/organization/details
+          - link "Clubs" [ref=f19e149] [cursor=pointer]:
+            - /url: /settings/clubs/list
+          - link "Access Control" [ref=f19e152] [cursor=pointer]:
+            - /url: /settings/access/settings
+          - link "CRM" [ref=f19e155] [cursor=pointer]:
+            - /url: /settings/crm/contacts
+          - link "Operations" [ref=f19e158] [cursor=pointer]:
+            - /url: /settings/operations/booking-policies
+          - link "Billing" [ref=f19e161] [cursor=pointer]:
+            - /url: /settings/billing/general
+          - link "Member Apps" [ref=f19e164] [cursor=pointer]:
+            - /url: /settings/member-experience/branding
+          - link "Communication" [ref=f19e167] [cursor=pointer]:
+            - /url: /settings/communication/templates
+          - link "Artificial Intelligence" [ref=f19e170] [cursor=pointer]:
+            - /url: /settings/ai/agents
+          - link "Integrations" [ref=f19e173] [cursor=pointer]:
+            - /url: /settings/integrations
+          - link "Data Tools" [ref=f19e176] [cursor=pointer]:
+            - /url: /settings/data/import
+      - generic [ref=f19e179]:
+        - heading "Artificial Intelligence" [level=5] [ref=f19e181]
+        - tablist [ref=f19e185]:
+          - tab "Agents" [ref=f19e186] [cursor=pointer]
+          - tab "Conversation History" [ref=f19e187] [cursor=pointer]
+          - tab "AI assistants (MCP)" [active] [selected] [ref=f19e188] [cursor=pointer]
+        - generic [ref=f19e190]:
+          - alert [ref=f19e191]:
+            - generic [ref=f19e195]:
+              - paragraph [ref=f19e196]: Connect AI assistants (MCP)
+              - paragraph [ref=f19e197]: Add the endpoint below as a custom connector in Claude, ChatGPT, or another MCP client. Sign in to 1club when prompted, choose your organization, and authorize the connection. You do not need to create or copy an API token.
+              - generic [ref=f19e198]:
+                - paragraph [ref=f19e199]: "MCP endpoint:"
+                - code [ref=f19e200]: https://mcp.1club.ai/admin
+                - button "Copy" [ref=f19e201] [cursor=pointer]
+              - link "How to connect an assistant" [ref=f19e204] [cursor=pointer]:
+                - /url: https://docs.1club.ai/mcp/connect
+          - heading "Connected assistants" [level=6] [ref=f19e207]
+          - alert [ref=f19e208]:
+            - paragraph [ref=f19e213]: These are assistants connected to your MCP server. They are authorized by whoever connects them, not created here, so this is where you see what has access and revoke it.
+          - generic [ref=f19e215]:
+            - grid [ref=f19e216]:
+              - row [ref=f19e217]:
+                - columnheader "Assistant" [ref=f19e218] [cursor=pointer]
+                - columnheader "Authorized by" [ref=f19e222] [cursor=pointer]
+                - columnheader "Scopes" [ref=f19e226] [cursor=pointer]
+                - columnheader "Last Used" [ref=f19e230] [cursor=pointer]
+                - columnheader [ref=f19e234]
+              - rowgroup [ref=f19e236]:
+                - row [ref=f19e237]:
+                  - gridcell [ref=f19e238]:
+                    - paragraph [ref=f19e240]: Claude
+                  - gridcell [ref=f19e241]:
+                    - paragraph [ref=f19e242]: Vesko Hlebarov
+                  - gridcell "classes:read checkins:read content:read +25" [ref=f19e243]:
+                    - generic [ref=f19e244]:
+                      - generic [ref=f19e245]: classes:read
+                      - generic [ref=f19e247]: checkins:read
+                      - generic [ref=f19e249]: content:read
+                      - generic [ref=f19e251]: "+25"
+                  - gridcell [ref=f19e253]:
+                    - paragraph [ref=f19e254]: Aug 18, 2026
+                  - gridcell [ref=f19e255]:
+                    - button [ref=f19e256] [cursor=pointer]
+            - generic [ref=f19e265]:
+              - paragraph [ref=f19e266]: "Rows per page:"
+              - generic [ref=f19e267]:
+                - combobox "Rows per page:" [ref=f19e268] [cursor=pointer]: "25"
+                - textbox [aria-hidden]: "25"
+              - paragraph [ref=f19e269]: 1–1 of 1
+              - generic [ref=f19e270]:
+                - button "Go to previous page" [disabled]
+                - button "Go to next page" [disabled]
+    - generic [ref=f19e272]:
+      - textbox "What can I help with?" [ref=f19e277]
+      - generic [ref=f19e278]: ⌘K
+      - button [ref=f19e279] [cursor=pointer]

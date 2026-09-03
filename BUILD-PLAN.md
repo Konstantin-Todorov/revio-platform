@@ -169,6 +169,24 @@ that back, behind a text box accepting arbitrary input — including free text w
 
 ---
 
+## 🔭 COMPETITIVE IDEAS — 1club (2026-09-03)
+
+A read of **1club.ai**, an AI-native club/gym platform: different domain, same shape (multi-tenant
+bookings against finite resources). Tracker with what we take, what we reject and why:
+**[`docs/IDEAS-1CLUB-2026-09.md`](docs/IDEAS-1CLUB-2026-09.md)**.
+
+Two specs written, both buildable on primitives we already have:
+- **[`docs/specs/WAITLIST.md`](docs/specs/WAITLIST.md)** — a sold-out date currently throws the demand
+  away; a later cancellation tells nobody. Reuses the waterfall, `Hold`, the expiry job and the email
+  engine.
+- **[`docs/specs/REVIEW-REQUESTS.md`](docs/specs/REVIEW-REQUESTS.md)** — feedback + public review asks,
+  ⚠️ **without** the sentiment gating 1club uses, which Google's review policies prohibit.
+
+Also queued there: Settings IA (sections → tabs), scoped AI agents refining **P3**, a hosted **MCP
+server** (read-only scopes in V1), and PostHog product analytics.
+
+---
+
 ## 🗺️ REMAINING PLATFORM WORK (roadmap, 2026-07-05)
 
 All four products (RevioLink · RevioCRS · RevioPMS · Operator) are **built and live**, on one shared DB.
