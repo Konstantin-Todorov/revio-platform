@@ -173,8 +173,29 @@ A screen hidden from a role while the write behind it stayed open to a crafted P
 
 ## Wanted — classes known but not yet guarded
 
-- **☐ Two onboarding paths.** The in-app button and `scripts/channex-onboard.ts` both exist; both are
-  guarded now, but one should probably go — two paths is two places for the next gap.
+
+## ☑ 11. Two implementations of an irreversible operation
+
+`channex-provision.ts` stated in its own header that provisioning "moved here, behind an interface
+both the CLI and a server action can call." **The button called it; the CLI did not.**
+`packages/connectivity/scripts/channex-onboard.ts` — the path `ONBOARDING-A-HOTEL.md` actually tells
+people to run — carried its own copy of all of it: the duplicate-title check, `POST /properties`,
+the room types, the per-pair rate plans, the channel row and both mapping tables.
+
+The cost was not theoretical. Removing the per-tenant key copy, adding the duplicate guard, and
+moving the channel write earlier were each done **twice**, one of them a day apart. Commit `88e3676`
+is called *"The CLI onboarder had every bug the button had"*.
+
+| | |
+| --- | --- |
+| **Fix** | 167 lines of duplicated provisioning deleted; the CLI now calls `provisionChannexProperty` with its own `writes`. One implementation of an operation whose mistakes are permanent |
+| **Kept** | `--dry-run` was documented (*"always `--dry-run` first"*) so it moved INTO the shared function — both paths get it now, including the in-app button, which never had a preview |
+| **Guard** | `channex-provision.test.ts` — **14 tests** on the function that had none, covering every refusal, the duplicate check, the early channel write, one rate plan per pair, and that a dry run creates nothing |
+
+⚠️ Note the ordering: the tests were written **before** the consolidation, not after. Merging two
+implementations of an irreversible operation with no cover would have been the riskier half done blind.
+
+---
 
 ---
 

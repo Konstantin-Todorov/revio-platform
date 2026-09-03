@@ -69,6 +69,17 @@ export interface ProvisionInput {
   apiKey: string;
   /** Called with each step as it completes, so a CLI can log and a screen can show progress. */
   onStep?: (step: string, detail?: string) => void;
+  /**
+   * Validate and report without creating anything.
+   *
+   * Every refusal still runs — including the GET that checks whether Channex already holds a
+   * property with this title, which is the one check worth having before a real run. Only the
+   * writes are skipped: no POST, no channel row, no mappings.
+   *
+   * The runbook says "always --dry-run first", so this is a documented safety feature rather than a
+   * convenience, and it lives here rather than in the caller precisely so both paths get it.
+   */
+  dryRun?: boolean;
 }
 
 export interface ProvisionResult {
@@ -149,7 +160,11 @@ export async function provisionChannexProperty(
   const base = HOSTS[mode];
   if (!base) throw new ChannexProvisionError(`Unknown connectivity mode "${mode}".`);
 
+  const dry = input.dryRun === true;
+
   const api = async (method: string, path: string, body?: unknown): Promise<any> => {
+    // Reads still happen on a dry run — the duplicate-title check is the point of rehearsing.
+    if (dry && method !== "GET") return { data: { id: `DRY-RUN-${path.replace(/\W+/g, "")}` } };
     const init: RequestInit = {
       method,
       headers: { "user-api-key": apiKey, "content-type": "application/json" },
@@ -253,13 +268,15 @@ export async function provisionChannexProperty(
    * from our own data; this is not. So it is written first, and a partial failure now leaves a
    * visible, fixable channel row instead of an invisible orphan.
    */
-  const channel = await writes.writeChannel({
-    tenantId: input.tenantId,
-    propertyId: property.id,
-    mode,
-    channexPropertyId,
-    currency: property.baseCurrency,
-  });
+  const channel = dry
+    ? { id: "DRY-RUN-CHANNEL" }
+    : await writes.writeChannel({
+        tenantId: input.tenantId,
+        propertyId: property.id,
+        mode,
+        channexPropertyId,
+        currency: property.baseCurrency,
+      });
 
   // 3 + 4 — room types, then a rate plan per (room type × manual plan) pair.
   const roomMap: ProvisionResult["roomMap"] = [];
@@ -304,9 +321,11 @@ export async function provisionChannexProperty(
 
   // 5 — the mapping tables. The Channel row itself was written the moment Channex returned the
   //     property id, so a failure above leaves a repairable record rather than an orphan.
-  for (const m of roomMap) await writes.writeRoomMapping(channel.id, input.tenantId, m.ours, m.theirs);
-  for (const m of rateMap) {
-    await writes.writeRateMapping(channel.id, input.tenantId, m.ourPlan, m.ourRoom, m.theirs);
+  if (!dry) {
+    for (const m of roomMap) await writes.writeRoomMapping(channel.id, input.tenantId, m.ours, m.theirs);
+    for (const m of rateMap) {
+      await writes.writeRateMapping(channel.id, input.tenantId, m.ourPlan, m.ourRoom, m.theirs);
+    }
   }
   say("Mapped every room and rate", `${roomMap.length} rooms · ${rateMap.length} rates`);
 

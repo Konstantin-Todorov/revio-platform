@@ -31,6 +31,7 @@
  * leaving a billable property behind. It refuses to touch a property that has a channel attached.
  */
 import { forSystem } from "@revio/db";
+import { provisionChannexProperty } from "../src/channex-provision.js";
 
 
 const SANDBOX = process.argv.includes("--sandbox");
@@ -127,7 +128,7 @@ async function main() {
       tenantId: tenant.id,
       ...(propertyRef ? { OR: [{ id: propertyRef }, { name: propertyRef }] } : {}),
     },
-    select: { id: true, name: true, baseCurrency: true, timezone: true, address: true },
+    select: { id: true, name: true, baseCurrency: true, timezone: true, address: true, contactEmail: true, phone: true },
   });
   if (!property) throw new Error(`No property found for ${tenant.name}${propertyRef ? ` matching "${propertyRef}"` : ""}.`);
 
@@ -169,172 +170,84 @@ async function main() {
   say("using the platform key", "no per-tenant copy is stored — see docs/CHANNEX-CONNECTION.md");
 
   /*
-   * 2a — refuse to create a SECOND property with this name.
+   * ONE implementation, called from both paths.
    *
-   * There are two onboarding paths — this script and the in-app button — and neither used to know
-   * the other had run. Channex accepts any number of properties with the same title and gives each
-   * a new uuid, so a duplicate is silent and afterwards indistinguishable: nobody can tell which of
-   * two identically-named properties the OTAs were mapped against.
+   * This script used to carry its own copy of everything below — the duplicate-title check, the
+   * property POST, the room types, the per-pair rate plans, the channel row and both mapping
+   * tables. `channex-provision.ts` said in its own header that the work "moved here, behind an
+   * interface both the CLI and a server action can call", and that was simply not true: the button
+   * called it and this script did not.
    *
-   * That is how one villa came to exist twice. One GET prevents it, and it doubles as a live check
-   * that the key works before anything is written.
+   * The cost was not theoretical. Every fix had to be made twice, and the commit that removed the
+   * per-tenant key copy, the one that added the duplicate guard, and the one that moved the channel
+   * write earlier were each applied here separately — one of them a day later than the button. A
+   * second implementation of an irreversible operation is a second set of bugs waiting their turn.
    */
-  if (!DRY) {
-    const existing = await api("GET", "/properties");
-    const clash = (existing?.data ?? []).find(
-      (x: { id: string; attributes?: { title?: string } }) =>
-        (x.attributes?.title ?? "").trim().toLowerCase() === property.name.trim().toLowerCase(),
-    );
-    if (clash) {
-      throw new Error(
-        `Channex already has a property called "${property.name}" (${clash.id}). ` +
-        "Creating another would make two nobody can tell apart. If it is this hotel, map it instead; " +
-        "if it is an orphan from a failed run, delete it in Channex first.",
-      );
-    }
-  }
-
-  // 2 — the Channex property.
-  let channexPropertyId = "DRY-RUN";
-  if (!DRY) {
-    const created = await api("POST", "/properties", {
+  const result = await provisionChannexProperty(
+    {
+      tenantId: tenant.id,
+      tenantName: tenant.name,
       property: {
-        title: property.name,
-        currency: property.baseCurrency,
-        // Channex requires these; ours are the truthful values we already hold.
-        email: "office@reviosoft.app",
-        phone: "+359894306704",
-        country: "BG",
-        state: "Ruse",
-        city: "Ruse",
-        address: property.address ?? "—",
-        zip_code: "7002",
+        id: property.id,
+        name: property.name,
+        baseCurrency: property.baseCurrency,
         timezone: property.timezone,
-        property_type: "hotel",
+        address: property.address ?? null,
+        contactEmail: property.contactEmail ?? null,
+        phone: property.phone ?? null,
       },
-    });
-    channexPropertyId = created.data.id;
-
-    /*
-     * PERSIST IT NOW, before a room type or rate plan can fail.
-     *
-     * The channel row used to be written at the very end. Any failure in between left a property in
-     * Channex that our database had never heard of — an invisible orphan, and the next run created
-     * another one beside it. The uuid is the only thing here that cannot be recreated or looked up
-     * afterwards, so it is written first and everything else is repaired from our own data.
-     */
-    const early = await db.channel.findFirst({ where: { propertyId: property.id, code: "channex" }, select: { id: true } });
-    if (early) {
-      await db.channel.update({
-        where: { id: early.id },
-        data: { connectivityMode: MODE, externalPropertyId: channexPropertyId, status: "connected" },
-      });
-    } else {
-      await db.channel.create({
-        data: {
-          tenantId: tenant.id, propertyId: property.id, name: "Channex", code: "channex",
-          connectivityMode: MODE, externalPropertyId: channexPropertyId,
-          status: "connected", currency: property.baseCurrency,
-        },
-      });
-    }
-  }
-  say("created the Channex property", channexPropertyId);
-
-  // 3 + 4 — room types and their rate plans.
-  const roomMap: { ours: string; theirs: string; name: string }[] = [];
-  const rateMap: { ourRoom: string; ourPlan: string; theirs: string; label: string }[] = [];
-
-  for (const rt of roomTypes) {
-    let theirRoom = "DRY-RUN";
-    if (!DRY) {
-      const r = await api("POST", "/room_types", {
-        room_type: {
-          property_id: channexPropertyId,
-          title: rt.name,
-          count_of_rooms: rt.totalRooms,
-          occ_adults: rt.maxGuests,
-          occ_children: 0,
-          occ_infants: 0,
-          default_occupancy: rt.maxGuests,
-        },
-      });
-      theirRoom = r.data.id;
-    }
-    roomMap.push({ ours: rt.id, theirs: theirRoom, name: rt.name });
-    say(`room type "${rt.name}"`, `${rt.totalRooms} rooms · ${theirRoom}`);
-
-    for (const rp of ratePlans) {
-      // Derived plans follow their parent locally; Channex only needs the plans we actually author.
-      if (rp.priceLogic !== "manual") continue;
-      // A plan that names its room types applies only to those. A plan that names none applies to
-      // all of them — the same "unscoped means everything" convention used across the platform.
-      const scoped = rp.roomTypeLinks.map((x) => x.roomTypeId);
-      if (scoped.length > 0 && !scoped.includes(rt.id)) continue;
-      let theirRate = "DRY-RUN";
-      if (!DRY) {
-        const p = await api("POST", "/rate_plans", {
-          rate_plan: {
-            title: rp.name,
-            property_id: channexPropertyId,
-            room_type_id: theirRoom,
-            currency: property.baseCurrency,
-            sell_mode: "per_room",
-            rate_mode: "manual",
-            options: [{ occupancy: rt.maxGuests, is_primary: true, rate: 10000 }],
-          },
-        });
-        theirRate = p.data.id;
-      }
-      rateMap.push({ ourRoom: rt.id, ourPlan: rp.id, theirs: theirRate, label: `${rt.name} · ${rp.name}` });
-      say(`  rate plan "${rp.name}"`, theirRate);
-    }
-  }
-
-  // 5 — our Channel row, in production mode, fully mapped.
-  if (!DRY) {
-    const existing = await db.channel.findFirst({
-      where: { propertyId: property.id, code: "channex" },
-      select: { id: true },
-    });
-    const channel = existing
-      ? await db.channel.update({
-          where: { id: existing.id },
-          data: { connectivityMode: MODE, externalPropertyId: channexPropertyId, status: "connected" },
-          select: { id: true },
-        })
-      : await db.channel.create({
-          data: {
-            tenantId: tenant.id, propertyId: property.id, name: "Channex", code: "channex",
-            connectivityMode: MODE, externalPropertyId: channexPropertyId,
-            status: "connected", currency: property.baseCurrency,
-          },
+      roomTypes,
+      ratePlans: ratePlans.map((r) => ({
+        id: r.id,
+        name: r.name,
+        priceLogic: r.priceLogic,
+        roomTypeIds: r.roomTypeLinks.map((l) => l.roomTypeId),
+      })),
+      mode: MODE,
+      apiKey: KEY,
+      dryRun: DRY,
+      onStep: (step, detail) => say(step, detail ?? ""),
+    },
+    {
+      writeChannel: async (i) => {
+        const existing = await db.channel.findFirst({
+          where: { propertyId: i.propertyId, code: "channex" },
           select: { id: true },
         });
-    for (const m of roomMap) {
-      await db.channelRoomTypeMapping.upsert({
-        where: { channelId_roomTypeId: { channelId: channel.id, roomTypeId: m.ours } },
-        create: { tenantId: tenant.id, channelId: channel.id, roomTypeId: m.ours, externalRoomId: m.theirs, status: "complete" },
-        update: { externalRoomId: m.theirs, status: "complete" },
-      });
-    }
-    for (const m of rateMap) {
-      // Keyed by room type as well as plan — the whole point of the mapping fix.
-      await db.channelRatePlanMapping.upsert({
-        where: {
-          channelId_ratePlanId_roomTypeId: {
-            channelId: channel.id, ratePlanId: m.ourPlan, roomTypeId: m.ourRoom,
-          },
-        },
-        create: {
-          tenantId: tenant.id, channelId: channel.id, ratePlanId: m.ourPlan,
-          roomTypeId: m.ourRoom, externalRateId: m.theirs, status: "complete",
-        },
-        update: { externalRateId: m.theirs, status: "complete" },
-      });
-    }
-  }
-  say("wrote the channel + every mapping", `${roomMap.length} rooms, ${rateMap.length} rates`);
+        return existing
+          ? db.channel.update({
+              where: { id: existing.id },
+              data: { connectivityMode: i.mode, externalPropertyId: i.channexPropertyId, status: "connected" },
+              select: { id: true },
+            })
+          : db.channel.create({
+              data: {
+                tenantId: i.tenantId, propertyId: i.propertyId, name: "Channex", code: "channex",
+                connectivityMode: i.mode, externalPropertyId: i.channexPropertyId,
+                status: "connected", currency: i.currency,
+              },
+              select: { id: true },
+            });
+      },
+      writeRoomMapping: async (channelId, tenantId, roomTypeId, externalRoomId) => {
+        await db.channelRoomTypeMapping.upsert({
+          where: { channelId_roomTypeId: { channelId, roomTypeId } },
+          create: { tenantId, channelId, roomTypeId, externalRoomId, status: "complete" },
+          update: { externalRoomId, status: "complete" },
+        });
+      },
+      writeRateMapping: async (channelId, tenantId, ratePlanId, roomTypeId, externalRateId) => {
+        // Keyed by room type as well as plan — the whole point of the mapping fix.
+        await db.channelRatePlanMapping.upsert({
+          where: { channelId_ratePlanId_roomTypeId: { channelId, ratePlanId, roomTypeId } },
+          create: { tenantId, channelId, ratePlanId, roomTypeId, externalRateId, status: "complete" },
+          update: { externalRateId, status: "complete" },
+        });
+      },
+    },
+  );
+  const channexPropertyId = result.channexPropertyId;
+  say("wrote the channel + every mapping", `${result.roomMap.length} rooms, ${result.rateMap.length} rates`);
 
   console.log(`\n${DRY ? "Dry run — nothing was created." : `Done. Channex property ${channexPropertyId}.`}`);
   if (!DRY) {
