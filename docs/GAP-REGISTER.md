@@ -70,7 +70,7 @@ The counterpart to class 5. `mainGuestCount` is nullable so that *unset* stays d
 | **Principle** | a `NOT NULL` default invents a decision for every existing row and destroys the only distinction that matters |
 | **Guard** | covered by the same 18 tests (`basis: configured \| derived \| fallback`) |
 
-## ◐ 5. Health reported without being verified
+## ☑ 5. Health reported without being verified
 
 The theme of all three September founder documents, and the same shape as the Channex 401 incidents:
 a green pill over a channel that last synced 65 days ago, "Queue empty" above a queue of ten,
@@ -82,7 +82,9 @@ a green pill over a channel that last synced 65 days ago, "Queue empty" above a 
 | --- | --- |
 | **Fix** | `@revio/core/metrics/sync-health.ts` — five states, including `idle` (never ran) and `unknown` (nothing attempted), which are the two screens kept collapsing into green |
 | **Guard** | **25 tests**, shared by RevioLink and Operator so the two cannot disagree |
-| **Why ◐** | the module exists and is used, but nothing *stops* a new screen inventing its own green. See "Wanted" below. |
+| **Guard** | **`pnpm health:lint`** (budget **0**, in `verify` and CI) — a health CLAIM hardcoded in a success pill must be derived, or carry a stated reason |
+| **Also fixed** | Operator **Clients** rendered a green `active` from the CONTRACT status alone, so a client silent for 65 days still read green (7 bug 6 / §10.5). Now a second pill, derived from the last **successful** sync |
+| **Also fixed** | RevioLink **Mapping** rendered "All mapped" from a row count, so a product that never reached the channel made it green — see #10 |
 
 ## ◐ 10. A product that never reached the channel, counted by asking for rows
 
@@ -131,6 +133,15 @@ Channex change in this repo has been, and only then put behind preview → confi
 Channex and awaiting a human decision. Shipping an auto-create button while a property is in that state
 risks making a bad state worse, which is the opposite of the point.
 
+### ⚠️ The trap inside class 5: `lastSyncAt` is an ATTEMPT
+
+`Channel.lastSyncAt` is stamped when a push finishes, **before its `ok` is read**. So a channel
+failing every five minutes has a very recent one. Asking it "has this client synced lately?" gets a
+cheerful yes from a dead integration — the same green, arriving through the fix meant to remove it.
+
+Derive recency from a **successful `SyncEvent`** instead. The RevioLink dashboard already did; the
+Operator console was still reading the attempt field when this was written.
+
 ## ☑ 6. A state machine enforced by the screen instead of the model
 
 An invoice could be **paid without ever having been issued** — settled with no number and no
@@ -162,9 +173,6 @@ A screen hidden from a role while the write behind it stayed open to a crafted P
 
 ## Wanted — classes known but not yet guarded
 
-- **☐ Health invented per screen (class 5).** `sync-health.ts` is correct and shared, but nothing
-  fails when a new screen hardcodes a green pill. A lint for status/health literals rendered without
-  going through the module would close it.
 - **☐ Two onboarding paths.** The in-app button and `scripts/channex-onboard.ts` both exist; both are
   guarded now, but one should probably go — two paths is two places for the next gap.
 

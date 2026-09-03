@@ -5,6 +5,7 @@ import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { CreateClientDialog } from "@/components/clients/CreateClientDialog";
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
 import { STAGE_LABEL, renewalStatus, type Stage } from "@/lib/account";
+import { syncRecencyHealth } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,8 @@ const STAGE_TONE: Record<Stage, "success" | "info" | "warning" | "danger" | "neu
 
 export default async function ClientsPage() {
   const clients = await getClients();
+  // One clock for the whole table, so two rows cannot disagree about what "today" is.
+  const now = new Date();
   const demoCount = clients.filter((c) => c.isDemo).length;
 
   return (
@@ -126,7 +129,35 @@ export default async function ClientsPage() {
                       <EntitlementToggle tenantId={c.id} product="pms" enabled={c.entitlements.pms} />
                     </div>
                   </td>
-                  <td className="px-4 py-3">{c.status === "active" ? <StatusPill tone="success">active</StatusPill> : <StatusPill tone="warning">suspended</StatusPill>}</td>
+                  {/*
+                    * Two facts, two pills, on purpose.
+                    *
+                    * `active` is a CONTRACT state — it says we have not suspended them. It was the
+                    * only thing here, so a client whose channels had not synced in 65 days still
+                    * rendered a plain green "active", which is the false green the September
+                    * documents describe: truthful about the account, wrong about the client.
+                    *
+                    * Health is derived from the last SUCCESSFUL sync, never `Channel.lastSyncAt`
+                    * (stamped before its own `ok` is read, so a channel failing every five minutes
+                    * has a very recent one). Shown only for an active client that actually has a
+                    * connected channel: a client with none is `idle`, which is not a fault, and
+                    * painting it red would be the same invented signal pointing the other way.
+                    */}
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {c.status === "active" ? <StatusPill tone="success">active</StatusPill> : <StatusPill tone="warning">suspended</StatusPill>}
+                      {(() => {
+                        if (c.status !== "active" || c.counts.channelsConnected === 0) return null;
+                        const v = syncRecencyHealth(c.lastSuccessAt, now);
+                        if (v.health === "healthy") return null;
+                        return (
+                          <span {...(v.detail ? { title: v.detail } : {})}>
+                            <StatusPill tone={v.health === "dead" ? "danger" : "warning"}>{v.label}</StatusPill>
+                          </span>
+                        );
+                      })()}
+                    </div>
+                  </td>
                   <td className="px-2 py-3">
                     <form action={setStatus}>
                       <input type="hidden" name="tenantId" value={c.id} />

@@ -96,7 +96,7 @@ export async function getClients() {
 
   return Promise.all(
     tenants.map(async (t) => {
-      const [roomTypes, channels, channelsConnected, reservations, openErrors, lastSync,
+      const [roomTypes, channels, channelsConnected, reservations, openErrors, lastSync, lastSuccess,
              units, lastReservation, reservationsLast30d, bookingEngineProperties, directLast30d, unpaidInvoices] = await Promise.all([
         prisma.roomType.count({ where: { tenantId: t.id } }),
         prisma.channel.count({ where: { tenantId: t.id } }),
@@ -104,6 +104,19 @@ export async function getClients() {
         prisma.reservation.count({ where: { tenantId: t.id } }),
         prisma.errorItem.count({ where: { tenantId: t.id, resolved: false } }),
         prisma.channel.findFirst({ where: { tenantId: t.id, lastSyncAt: { not: null } }, orderBy: { lastSyncAt: "desc" }, select: { lastSyncAt: true } }),
+        /*
+         * The last SUCCESS, which is a different question from `Channel.lastSyncAt`.
+         *
+         * `lastSyncAt` is stamped whenever a push finishes, before its `ok` is even read — so a
+         * channel failing every five minutes has a very recent one and is completely broken. Asking
+         * it "has this client synced lately?" gets a cheerful yes from a dead integration, which is
+         * exactly the green the September documents are about. The CM dashboard already derives it
+         * this way; this is the same question asked on our side.
+         */
+        prisma.syncEvent.findFirst({
+          where: { tenantId: t.id, status: "success", kind: { in: ["push", "pull"] } },
+          orderBy: { createdAt: "desc" }, select: { createdAt: true },
+        }),
         // Signals for `clientAttention` — each one exists to answer a question the counts cannot:
         // is a product they pay for actually set up, and are they still using the thing at all.
         prisma.unit.count({ where: { tenantId: t.id } }),
@@ -173,6 +186,8 @@ export async function getClients() {
         properties: t.properties,
         counts: { roomTypes, units, channels, channelsConnected, reservations, openErrors },
         lastSyncAt: lastSync?.lastSyncAt ?? null,
+        /** Last successful push or pull. Null with channels connected is a fault; null with none is not. */
+        lastSuccessAt: lastSuccess?.createdAt ?? null,
         account: {
           stage: (t.crmAccount?.stage ?? "onboarding") as Stage,
           observed,

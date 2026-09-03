@@ -13,7 +13,7 @@ const STATUS_TONE: Record<string, Tone> = { complete: "success", incomplete: "wa
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ ch?: string }> }) {
   const sp = await searchParams;
-  const { channels, channel, roomTypeMappings, ratePlanMappings } = await getMapping(sp.ch);
+  const { channels, channel, roomTypeMappings, ratePlanMappings, neverSent } = await getMapping(sp.ch);
 
   if (!channel) {
     return (
@@ -88,7 +88,22 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
               Auto-fix {incomplete} unmapped
             </button>
           </form>
+        ) : neverSent.length > 0 ? (
+          /*
+            "All mapped" counted mapping ROWS that are not `complete`. A product that never reached
+            this channel has no row, so it made the count zero and this pill green — the hotel was
+            told everything was mapped while selling a room no OTA can see. Absence and
+            incompleteness are different questions and only one of them can be counted in rows.
+          */
+          <span title={neverSent.map((p) => p.name).join(", ")}>
+            <StatusPill tone="danger">
+              {neverSent.length} never sent
+            </StatusPill>
+          </span>
         ) : (
+          /* health-lint: proven above — this branch is reached only when BOTH `incomplete` (rows
+             not finished) and `neverSent` (products with no row at all) are zero. Those are two
+             different questions and the second is the one a row count cannot answer. */
           <StatusPill tone="success">All mapped</StatusPill>
         )}
       </div>

@@ -683,14 +683,34 @@ export async function getMapping(channelCode?: string) {
       property, channels, channel: null,
       roomTypeMappings: [] as Awaited<ReturnType<typeof loadRoomTypeMappings>>,
       ratePlanMappings: [] as Awaited<ReturnType<typeof loadRatePlanMappings>>,
+      neverSent: [] as ReturnType<typeof structureGap>["neverSent"],
     };
   }
   const channel = channels.find((c) => c.code === channelCode) ?? channels[0]!;
-  const [roomTypeMappings, ratePlanMappings] = await Promise.all([
+  const [roomTypeMappings, ratePlanMappings, roomTypes, ratePlans] = await Promise.all([
     loadRoomTypeMappings(channel.id),
     loadRatePlanMappings(channel.id),
+    prisma.roomType.findMany({ where: { propertyId: property.id }, select: { id: true, name: true, active: true } }),
+    prisma.ratePlan.findMany({
+      where: { propertyId: property.id },
+      select: { id: true, name: true, active: true, priceLogic: true },
+    }),
   ]);
-  return { property, channels, channel, roomTypeMappings, ratePlanMappings };
+
+  /*
+   * "All mapped" was counting ROWS whose status is not `complete`, so a product that never reached
+   * the channel at all — no row — made the count zero and the pill green. Provisioning is one-shot,
+   * so that is every room type and rate plan added after setup. Asked separately here because it is
+   * a different question: absence, not incompleteness.
+   */
+  const { neverSent } = structureGap({
+    roomTypes,
+    ratePlans,
+    mappedRoomTypeIds: roomTypeMappings.map((m) => m.roomTypeId),
+    mappedRatePlanIds: ratePlanMappings.map((m) => m.ratePlanId),
+  });
+
+  return { property, channels, channel, roomTypeMappings, ratePlanMappings, neverSent };
 }
 
 export async function getSettings() {

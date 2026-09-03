@@ -95,6 +95,12 @@ jobs:
       - name: Money parsing
         run: pnpm money:lint
 
+      # All three September founder documents describe one fault: screens reporting health they
+      # have not verified. Every instance was a LITERAL — copy written for the good case, rendered
+      # whenever the bad case failed to be counted. A green pill over a channel dead for 65 days.
+      - name: Invented health
+        run: pnpm health:lint
+
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift
         env:

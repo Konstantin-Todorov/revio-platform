@@ -15,10 +15,11 @@
     "test": "pnpm -r test",
     "copy:lint": "node scripts/copy-lint.mjs",
     "db:seed": "pnpm --filter @revio/channel-manager db:seed",
-    "verify": "pnpm typecheck && pnpm lint && pnpm copy:lint && pnpm authz:lint && pnpm silent:lint && pnpm money:lint && pnpm test",
+    "verify": "pnpm typecheck && pnpm lint && pnpm copy:lint && pnpm authz:lint && pnpm silent:lint && pnpm money:lint && pnpm health:lint && pnpm test",
     "authz:lint": "node scripts/authz-lint.mjs",
     "silent:lint": "node scripts/silent-lint.mjs",
-    "money:lint": "node scripts/money-lint.mjs"
+    "money:lint": "node scripts/money-lint.mjs",
+    "health:lint": "node scripts/health-lint.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
