@@ -30,7 +30,7 @@ export default async function MinibarPage() {
           </p>
         </Card>
       ) : (
-        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((r) => (
             <Link key={r.reservationId} href={`/minibar/${r.reservationId}`} className="flex items-center justify-between gap-3 rounded-lg border border-surface-border bg-white p-3.5 shadow-card transition-colors hover:bg-surface-muted">
               <div className="flex min-w-0 items-center gap-3">

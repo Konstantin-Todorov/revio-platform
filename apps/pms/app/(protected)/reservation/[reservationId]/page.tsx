@@ -96,7 +96,7 @@ export default async function ReservationViewPage({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Commercial zone — read-only, from the CRS */}
         <Card>
           <CardHeader title="Commercial" subtitle="From RevioCRS / channel · read-only" />

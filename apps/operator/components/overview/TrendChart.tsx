@@ -91,7 +91,14 @@ export function TrendChart({
               onMouseLeave={() => setHover(null)}
               onFocus={() => setHover(i)}
               onBlur={() => setHover(null)}
-              className="group relative flex h-full flex-1 flex-col justify-end outline-none"
+              /*
+               * A chart bar is a real tab stop — it already moves the tooltip on focus, which is the
+               * only way a keyboard reads these values. It killed the outline and drew nothing in its
+               * place, so that focus went where nobody could see it. A rounded ring rather than the
+               * global outline because the bar is a full-height flex column: an outline traces the
+               * whole track, while the ring reads as belonging to the bar.
+               */
+              className="group relative flex h-full flex-1 flex-col justify-end rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-brand-600 focus-visible:ring-offset-1"
               aria-label={`${d.label}: ${format(d.value)}`}
             >
               <span

@@ -35,3 +35,6 @@ _intake/
 
 # Local backup output (database dumps + mirrored bucket objects — never commit these).
 backups/
+
+# Playwright MCP scratch output (page snapshots, screenshots)
+.playwright-mcp/

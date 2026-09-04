@@ -85,14 +85,14 @@ export default async function DashboardPage({
     ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp ${basisLabel}`, dir: now > then ? "up" : now < then ? "down" : "flat" });
 
   const cards: KpiCard[] = [
-    { key: "occupancy", label: otb ? "Committed occupancy" : "Occupancy", value: pct(c.occupancyPct), sub: `${c.roomsSoldNights} of ${c.availableRoomNights} room-nights`, href: "/inventory", yoy: ppYoy(c.occupancyPct, s.occupancyPct) },
-    { key: "sold", label: otb ? "Rooms on the books" : "Rooms sold", value: String(c.roomsSoldNights), sub: "room-nights in range", href: "/reservations", yoy: relYoy(c.roomsSoldNights, s.roomsSoldNights) },
-    { key: "available", label: "Rooms available", value: String(c.availableRoomNights), sub: "physical − OOO − closed", href: "/rooms-rates", yoy: relYoy(c.availableRoomNights, s.availableRoomNights) },
-    { key: "revenue", label: otb ? `Revenue on the books (${c.revenueDisplay})` : `Room revenue (${c.revenueDisplay})`, value: money(c.revenueMinor, currency), sub: "accommodation only", href: "/reports?report=performance", yoy: relYoy(c.revenueMinor, s.revenueMinor) },
-    { key: "adr", label: "ADR", value: money(c.adrMinor, currency), sub: "revenue ÷ rooms sold", href: "/reports?report=performance", yoy: relYoy(c.adrMinor, s.adrMinor) },
-    { key: "revpar", label: "RevPAR", value: money(c.revparMinor, currency), sub: "the #1 hotel KPI", href: "/reports?report=performance", yoy: relYoy(c.revparMinor, s.revparMinor) },
-    { key: "cancellation", label: "Cancellation rate", value: pct(c.cancellationRatePct), sub: `${c.cancelledCount} of ${c.createdCount} created`, href: "/reservations?status=cancelled", yoy: ppYoy(c.cancellationRatePct, s.cancellationRatePct) },
-    { key: "pickup", label: "Pickup · 30d", value: (c.pickup.value >= 0 ? "+" : "") + c.pickup.value, sub: c.pickup.vsDate ? `room-nights vs ${c.pickup.vsDate}` : "baseline recorded today", href: "/reports?report=pickup", yoy: null },
+    { key: "occupancy", tone: "brand", label: otb ? "Committed occupancy" : "Occupancy", value: pct(c.occupancyPct), sub: `${c.roomsSoldNights} of ${c.availableRoomNights} room-nights`, href: "/inventory", yoy: ppYoy(c.occupancyPct, s.occupancyPct) },
+    { key: "sold", tone: "brand", label: otb ? "Rooms on the books" : "Rooms sold", value: String(c.roomsSoldNights), sub: "room-nights in range", href: "/reservations", yoy: relYoy(c.roomsSoldNights, s.roomsSoldNights) },
+    { key: "available", tone: "neutral", label: "Rooms available", value: String(c.availableRoomNights), sub: "physical − OOO − closed", href: "/rooms-rates", yoy: relYoy(c.availableRoomNights, s.availableRoomNights) },
+    { key: "revenue", tone: "success", label: otb ? `Revenue on the books (${c.revenueDisplay})` : `Room revenue (${c.revenueDisplay})`, value: money(c.revenueMinor, currency), sub: "accommodation only", href: "/reports?report=performance", yoy: relYoy(c.revenueMinor, s.revenueMinor) },
+    { key: "adr", tone: "success", label: "ADR", value: money(c.adrMinor, currency), sub: "revenue ÷ rooms sold", href: "/reports?report=performance", yoy: relYoy(c.adrMinor, s.adrMinor) },
+    { key: "revpar", tone: "accent", label: "RevPAR", value: money(c.revparMinor, currency), sub: "the #1 hotel KPI", href: "/reports?report=performance", yoy: relYoy(c.revparMinor, s.revparMinor) },
+    { key: "cancellation", tone: "danger", goodDirection: "down", label: "Cancellation rate", value: pct(c.cancellationRatePct), sub: `${c.cancelledCount} of ${c.createdCount} created`, href: "/reservations?status=cancelled", yoy: ppYoy(c.cancellationRatePct, s.cancellationRatePct) },
+    { key: "pickup", tone: "warning", label: "Pickup · 30d", value: (c.pickup.value >= 0 ? "+" : "") + c.pickup.value, sub: c.pickup.vsDate ? `room-nights vs ${c.pickup.vsDate}` : "baseline recorded today", href: "/reports?report=pickup", yoy: null },
   ];
 
   /*
@@ -112,6 +112,23 @@ export default async function DashboardPage({
     ? await getRangeMetrics(resolveRange(ops.todayIso, "l28d"))
     : metrics;
   const series = trendMetrics.perDay.slice(0, 62);
+
+  /*
+   * Sparklines on the cards whose shape the trend already holds — occupancy and money.
+   *
+   * Deliberately only these. A trend line under a number that has no series behind it would have to
+   * be invented, and an invented sparkline is a lie told in the most glanceable place on the page.
+   * The rest of the cards render without one, which is why `spark` is optional.
+   */
+  if (series.length > 1) {
+    const occ = series.map((d) => d.occupancyPct);
+    const rev = series.map((d) => d.revenueMinor);
+    const SPARKS: Record<string, number[]> = { occupancy: occ, revenue: rev, adr: rev, revpar: rev };
+    for (const card of cards) {
+      const s = SPARKS[card.key];
+      if (s) card.spark = s;
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -146,7 +163,7 @@ export default async function DashboardPage({
         customEnd={range.preset === "custom" ? range.endExcl.slice(0, 10) : ""}
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Occupancy + revenue per day */}
         <Card>
           <CardHeader
@@ -206,7 +223,7 @@ export default async function DashboardPage({
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Action Center */}
         <Card>
           <CardHeader title="Action Center" />
@@ -264,7 +281,7 @@ export default async function DashboardPage({
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title={`Arrivals today (${ops.arrivals.length}) · Departures today (${ops.departures.length})`} />
           {ops.arrivals.length === 0 && ops.departures.length === 0 ? (

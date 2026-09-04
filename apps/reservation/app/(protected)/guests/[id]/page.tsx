@@ -99,7 +99,7 @@ export default async function GuestDetailPage({
       </Card>
 
       {/* Preference layer (spec §3.4) — the edge of "not a CRM": a light, derived layer only. */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           {/* §4.4 — the labels now match the evidence.
               "Average stay 3.0 nights" and "Usual room 404" from a single visit were correct numbers

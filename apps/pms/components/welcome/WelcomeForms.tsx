@@ -43,7 +43,7 @@ export function RoomTypeForm() {
 
   return (
     <form action={action} className="space-y-4 rounded-lg border border-surface-border bg-white p-4">
-      <div className="grid gap-4 sm:grid-cols-[1fr_7rem_7rem]">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_7rem_7rem]">
         <label className="block">
           <span className={welcomeLabel}>Room type</span>
           <input name="name" required placeholder="Double Room" className={welcomeInput} />
@@ -81,7 +81,7 @@ export function UnitsForm({ roomTypes }: { roomTypes: { id: string; name: string
 
   return (
     <form action={action} className="space-y-4 rounded-lg border border-surface-border bg-white p-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
           <span className={welcomeLabel}>Room type</span>
           <select name="roomTypeId" required className={welcomeInput}>
@@ -98,7 +98,7 @@ export function UnitsForm({ roomTypes }: { roomTypes: { id: string; name: string
         </label>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
           <span className={welcomeLabel}>Numbers start at</span>
           <input name="from" type="number" min={0} required placeholder="101" className={welcomeInput} />

@@ -42,7 +42,7 @@ export function Sidebar() {
         aria-hidden="true"
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] shrink-0 transform flex-col bg-brand-900 text-white/90 transition-transform duration-200 lg:static lg:translate-x-0 lg:transition-none ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] transform flex-col bg-brand-900 text-white/90 transition-transform duration-200 lg:translate-x-0 lg:transition-none ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -76,12 +76,23 @@ export function Sidebar() {
                   key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
-                  className={`group relative mb-0.5 flex items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium transition-colors duration-150 ${
-                    active ? "bg-white/[0.13] text-white" : "text-white/65 hover:bg-white/[0.07] hover:text-white"
+                  aria-current={active ? "page" : undefined}
+                  className={`group relative mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
+                    active ? "bg-product-mark/[0.14] text-white" : "text-white/65 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
                   }`}
                 >
-                  {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-product-mark" />}
-                  <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+                  <span
+                    aria-hidden="true"
+                    className={`absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 origin-center rounded-r bg-product-mark transition-transform duration-base ease-out ${
+                      active ? "scale-y-100" : "scale-y-0"
+                    }`}
+                  />
+                  <Icon
+                    className={`h-[18px] w-[18px] shrink-0 transition-colors duration-fast ease-standard ${
+                      active ? "text-product-mark" : "text-white/55 group-hover:text-white/85"
+                    }`}
+                    strokeWidth={2}
+                  />
                   <span className="flex-1">{item.label}</span>
                 </Link>
               );

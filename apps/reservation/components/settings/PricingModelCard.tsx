@@ -40,7 +40,7 @@ export function PricingModelCard({
 
   return (
     <div className="space-y-4 p-5">
-      <fieldset className="grid gap-3 sm:grid-cols-2">
+      <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <legend className="sr-only">Pricing model</legend>
         <Choice
           checked={target === "per_room"}

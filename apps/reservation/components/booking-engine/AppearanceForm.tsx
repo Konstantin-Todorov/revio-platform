@@ -59,7 +59,7 @@ export function AppearanceForm({
   };
 
   return (
-    <form action={formAction} className="grid gap-5 p-4 lg:grid-cols-[1fr_20rem]">
+    <form action={formAction} className="grid grid-cols-1 gap-5 p-4 lg:grid-cols-[1fr_20rem]">
       <div className="space-y-5">
         <Field label="Base" hint="Sets the neutrals and the shape. Your colour sits on top of whichever you choose.">
           <input type="hidden" name="bookingPreset" value={preset} />

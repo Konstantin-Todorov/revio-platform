@@ -39,8 +39,8 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
         subtitle={`${property.name} · date-scoped rate, restriction and open/close edits in one operation`}
       />
 
-      <Card>
-        <CardHeader title="Bulk update" subtitle="One run, one entry in the audit log, sent once to your channel manager" />
+      <Card surface="flat">
+        <CardHeader surface="flat" title="Bulk update" subtitle="One run, one entry in the audit log, sent once to your channel manager" />
         {roomTypes.length === 0 ? (
           <p className="px-4 py-8 text-center text-[13px] text-ink-400">
             A bulk update changes rates and restrictions across your room types — so you need at least one first.{" "}
@@ -59,8 +59,8 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
         )}
       </Card>
 
-      <Card>
-        <CardHeader
+      <Card surface="flat">
+        <CardHeader surface="flat"
           title="Your active restriction rules"
           subtitle="Standing rules for a date range, optionally aimed at one booking source — for example, closed to travel agents during a trade fair"
           action={<RestrictionDialog roomTypes={roomTypes} channels={channels} />}

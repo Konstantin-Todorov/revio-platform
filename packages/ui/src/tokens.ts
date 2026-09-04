@@ -17,6 +17,8 @@ export const colors = {
   },
   surface: {
     DEFAULT: "#ffffff",
+    /** The ground a card floats on. White-on-white makes a borderless card invisible. */
+    page: "#f7f8fa",
     muted: "#f1f3f6",
     sunken: "#e7eaef",
     border: "#dde4ee",
@@ -62,7 +64,28 @@ export const fontFamily = {
   sans: '"Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
 } as const;
 
-export const radius = { sm: "6px", md: "10px", lg: "14px" } as const;
+export const radius = { sm: "6px", md: "10px", lg: "14px", xl: "16px" } as const;
+
+/**
+ * Elevation, as three named jobs rather than a blur ramp.
+ *
+ * `card` was a 1px-and-3px pair sitting under a 1px border — the border did the work and the shadow
+ * was invisible, which is why every surface read as a boxed table cell. `float` is the replacement:
+ * a wide, low-opacity blur that separates a card from the page **without** an outline. The two are
+ * alternatives, not layers — a floated card drops its border, or the outline wins and the blur is
+ * wasted paint.
+ *
+ * Every value is a double: a tight near-black contact shadow for the edge, and a wide soft one for
+ * the lift. One blur alone reads as either a hard box or a grey smudge.
+ */
+export const shadow = {
+  /** The default for content cards. Replaces border + `card` together. */
+  float: "0 1px 2px 0 rgba(16,31,58,0.04), 0 8px 24px -6px rgba(16,31,58,0.10)",
+  /** Hover, and anything that has been picked up: same shape, more lift. */
+  raised: "0 2px 6px 0 rgba(16,31,58,0.05), 0 16px 40px -8px rgba(16,31,58,0.14)",
+  /** Menus, popovers, dialogs — above the page rather than part of it. */
+  overlay: "0 12px 48px -8px rgba(16,31,58,0.20), 0 4px 12px -2px rgba(16,31,58,0.08)",
+} as const;
 
 export const space = {
   1: "4px",

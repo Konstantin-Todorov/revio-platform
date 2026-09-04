@@ -128,7 +128,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
       {/* 2. Who they are and when this renews. The relationship comes before the arithmetic, because
           the arithmetic is useless if nobody knows who to phone about it. */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <AccountPanel
           tenantId={tenant.id}
           account={{
@@ -146,7 +146,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         <ContactsPanel tenantId={tenant.id} contacts={c.contacts} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* 3. What they are worth today. */}
         <Card>
           <CardHeader title="Billing" />
@@ -283,7 +283,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         }))}
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Products — click to grant or revoke" />
           <div className="flex flex-wrap gap-2 px-4 py-4">
@@ -331,7 +331,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title={`Staff (${tenant.users.length}) — one shared identity across every product`} />
           <ul className="divide-y divide-surface-border">

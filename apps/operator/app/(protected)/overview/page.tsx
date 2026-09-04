@@ -118,7 +118,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       </div>
 
       {/* 2. Last 12 months and next 6, side by side, because the pair is the story. */}
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader title="Billed — last 12 months" action={<Link href="/billing" className="text-[12px] font-semibold text-brand-600 hover:underline">Billing</Link>} />
           <TrendChart
@@ -154,7 +154,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
 
       {/* 3. Who needs you today — every client's flags in one feed, most urgent first — beside our
           own forward book, which is the only thing on this page with a deadline attached. */}
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader
             title={d.feed.length === 0 ? "Needs attention — all clear" : `Needs attention (${d.feed.length})`}

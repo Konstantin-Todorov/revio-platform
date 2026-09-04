@@ -14,6 +14,8 @@
  * hard enough to justify it.
  */
 
+import { smoothPath, type Pt } from "@revio/ui/chart-path";
+
 const PALETTE = ["#2f5bd8", "#14b8a6", "#f59e0b", "#a855f7", "#ef4444", "#0ea5e9", "#84cc16", "#f43f5e"];
 
 export function seriesColour(i: number): string {
@@ -171,12 +173,21 @@ export function PaceCurve({ points, height = 200 }: { points: PacePoint[]; heigh
   const x = (i: number) => padL + (plotW * i) / (points.length - 1);
   const y = (v: number) => padT + plotH - (v / top) * plotH;
 
-  const path = (pick: (p: PacePoint) => number) => points.map((p, i) => `${x(i)},${y(pick(p))}`).join(" ");
-  // The band between the two lines, drawn as one polygon: forward along "now", back along "then".
-  const band = [
-    ...points.map((p, i) => `${x(i)},${y(p.soldNow)}`),
-    ...[...points].reverse().map((p, i) => `${x(points.length - 1 - i)},${y(p.soldThen)}`),
-  ].join(" ");
+  /*
+   * Both lines and the band share ONE curve function.
+   *
+   * The band is the shape between the two lines, so its top edge must be the "now" line exactly and
+   * its bottom edge the "then" line exactly. Smoothing the lines while leaving the band as straight
+   * segments — or smoothing the two independently — produces a fill that visibly parts company with
+   * its own borders. So the band walks the smoothed "now" curve forward and the smoothed "then"
+   * curve backward, with the return leg's `M` rewritten to `L` so the two join into one closed path
+   * instead of starting a second subpath.
+   */
+  const nowPts: Pt[] = points.map((p, i) => [x(i), y(p.soldNow)]);
+  const thenPts: Pt[] = points.map((p, i) => [x(i), y(p.soldThen)]);
+  const nowLine = smoothPath(nowPts);
+  const thenLine = smoothPath(thenPts);
+  const band = `${nowLine} ${smoothPath([...thenPts].reverse()).replace(/^M/, "L")} Z`;
 
   const netPickup = points.reduce((s, p) => s + (p.soldNow - p.soldThen), 0);
   const bandColour = netPickup >= 0 ? "#16a34a" : "#ef4444";
@@ -184,7 +195,7 @@ export function PaceCurve({ points, height = 200 }: { points: PacePoint[]; heigh
   return (
     <div className="px-4 py-4">
       <div className="mb-2 flex flex-wrap items-center gap-4 text-[11.5px]">
-        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-[#2f5bd8]" /> Sold now</span>
+        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-[#2563c9]" /> Sold now</span>
         <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 border-t-2 border-dashed border-ink-300" /> At snapshot</span>
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-4 rounded-sm" style={{ background: bandColour, opacity: 0.18 }} />
@@ -198,17 +209,17 @@ export function PaceCurve({ points, height = 200 }: { points: PacePoint[]; heigh
       <svg viewBox={`0 0 ${W} ${height}`} className="w-full" style={{ height: "auto" }} preserveAspectRatio="xMidYMid meet">
         {[0, 0.5, 1].map((g) => (
           <g key={g}>
-            <line x1={padL} x2={W - padR} y1={padT + plotH * g} y2={padT + plotH * g} stroke="#e4e7ec" strokeWidth={1} />
+            <line x1={padL} x2={W - padR} y1={padT + plotH * g} y2={padT + plotH * g} stroke="#e7eaef" strokeWidth={1} strokeDasharray={g === 1 ? undefined : "3 4"} />
             <text x={padL - 6} y={padT + plotH * g + 4} textAnchor="end" className="fill-ink-400 text-[10px]">
               {Math.round(top * (1 - g))}
             </text>
           </g>
         ))}
-        <polygon points={band} fill={bandColour} opacity={0.16} />
-        <polyline points={path((p) => p.soldThen)} fill="none" stroke="#98a2b3" strokeWidth={1.5} strokeDasharray="4 3" />
-        <polyline points={path((p) => p.soldNow)} fill="none" stroke="#2f5bd8" strokeWidth={2.5} />
+        <path d={band} fill={bandColour} opacity={0.16} />
+        <path d={thenLine} fill="none" stroke="#98a2b3" strokeWidth={1.5} strokeDasharray="4 3" strokeLinecap="round" />
+        <path d={nowLine} fill="none" stroke="#2563c9" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
         {points.map((p, i) => (
-          <circle key={p.date} cx={x(i)} cy={y(p.soldNow)} r={2.5} fill="#2f5bd8" />
+          <circle key={p.date} cx={x(i)} cy={y(p.soldNow)} r={2.5} fill="#2563c9" />
         ))}
         {points.map((p, i) =>
           // Label every few points only — one label per day is unreadable across a 30-day horizon.
@@ -257,7 +268,7 @@ export function ForwardCurve({ points, height = 170, unitLabel }: { points: Forw
       <svg viewBox={`0 0 ${W} ${height}`} className="w-full" style={{ height: "auto" }} preserveAspectRatio="xMidYMid meet">
         {[0, 0.5, 1].map((g) => (
           <g key={g}>
-            <line x1={padL} x2={W - padR} y1={padT + plotH * g} y2={padT + plotH * g} stroke="#e4e7ec" strokeWidth={1} />
+            <line x1={padL} x2={W - padR} y1={padT + plotH * g} y2={padT + plotH * g} stroke="#e7eaef" strokeWidth={1} strokeDasharray={g === 1 ? undefined : "3 4"} />
             <text x={padL - 5} y={padT + plotH * g + 4} textAnchor="end" className="fill-ink-400 text-[10px]">
               {Math.round(top * (1 - g))}
             </text>
@@ -267,7 +278,7 @@ export function ForwardCurve({ points, height = 170, unitLabel }: { points: Forw
           <g key={p.date}>
             <rect
               x={x(i) - barW / 2} y={y(p.value)} width={barW} height={Math.max(0, padT + plotH - y(p.value))}
-              rx={1.5} fill="#2f5bd8" opacity={p.value > 0 ? 0.85 : 0.15}
+              rx={3} fill="#2563c9" opacity={p.value > 0 ? 0.85 : 0.15}
             />
             {/* Label only the peaks — labelling 30 bars is unreadable, labelling none breaks §2.0. */}
             {p.value > 0 && p.value >= top * 0.6 && (

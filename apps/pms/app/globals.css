@@ -20,6 +20,45 @@
   }
 }
 
+@layer base {
+  /*
+   * A visible focus ring on everything focusable, once, for the whole product.
+   *
+   * A count across the five apps found **two** `focus-visible` treatments against **1,203**
+   * interactive elements. That is not a polish gap — a keyboard user could not see where they were
+   * anywhere in the software, which is an accessibility defect in a product sold to hotels whose
+   * front-desk staff work at speed and often without a mouse.
+   *
+   * Done here rather than by editing 1,203 call sites, and with two rules because one does not reach
+   * everything:
+   *
+   * 1. `outline` (not `box-shadow`) is the default, because a modern outline follows `border-radius`
+   *    and — unlike a shadow — it cannot silently replace an elevation a component already paints.
+   * 2. Fields get a `box-shadow` ring **as well**. 71 elements in the apps set Tailwind's
+   *    `outline-none`, almost all of them inputs relying on a focus *border colour* alone; a utility
+   *    always beats this base layer, so the outline never lands on them. A shadow survives
+   *    `outline-none`, so the ring shows up regardless.
+   *
+   * `:focus-visible` rather than `:focus` throughout: keyboard navigation gets the ring, a mouse
+   * click does not.
+   */
+  :focus-visible {
+    outline: 2px solid theme("colors.brand.600");
+    outline-offset: 2px;
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    box-shadow: 0 0 0 3px rgb(37 99 201 / 0.18);
+  }
+
+  /* Destructive controls ring in their own tone, so the cue never reads as the primary action. */
+  [data-tone="danger"]:focus-visible {
+    outline-color: theme("colors.danger.600");
+  }
+}
+
 @layer utilities {
   .hairline {
     @apply border border-surface-border;
@@ -129,5 +168,24 @@
 
   @page {
     margin: 16mm;
+  }
+}
+
+@layer base {
+  /*
+   * Disclosure widgets need the ring painted on the <summary>, not the <details>.
+   *
+   * Chrome reports the <details> as the focused element when its <summary> carries `list-none`, so
+   * the generic :focus-visible rule lands on a wrapper with no visible box of its own — while the
+   * row the user is actually looking at stays unmarked. Found by tabbing the PMS dashboard: focus
+   * reached "In-house roster" and drew nothing at all.
+   *
+   * `outline-offset: -2px` draws the ring inside the summary's own box, which spans the full card
+   * width; a positive offset would trace a rectangle around the whole card instead.
+   */
+  summary:focus-visible,
+  details:focus-visible > summary {
+    outline: 2px solid theme("colors.brand.600");
+    outline-offset: -2px;
   }
 }

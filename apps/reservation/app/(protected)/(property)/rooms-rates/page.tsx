@@ -75,8 +75,8 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
         </div>
       )}
 
-      <Card>
-        <CardHeader
+      <Card surface="flat">
+        <CardHeader surface="flat"
           title="Room types & physical counts"
           subtitle="Physical count is the cap & safety net — rooms-to-sell is managed per date on the calendar"
           action={<RoomTypeDialog />}
@@ -134,8 +134,8 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
         not to the page that displays them — the same photograph will feed the OTA push and the
         confirmation email later, and moving it then would be a migration.
       */}
-      <Card>
-        <CardHeader
+      <Card surface="flat">
+        <CardHeader surface="flat"
           title="Room photos"
           subtitle="Shown to guests on your own booking page. The first photo of each room is its cover."
         />
@@ -170,8 +170,8 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
         </div>
       </Card>
 
-      <Card>
-        <CardHeader title="Rate Plans" subtitle="Each plan's own defaults — minimum stay and advance purchase — used when a date has no rule of its own" action={<RatePlanDialog parents={parents} />} />
+      <Card surface="flat">
+        <CardHeader surface="flat" title="Rate Plans" subtitle="Each plan's own defaults — minimum stay and advance purchase — used when a date has no rule of its own" action={<RatePlanDialog parents={parents} />} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
@@ -213,8 +213,8 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
         </p>
       </Card>
 
-      <Card>
-        <CardHeader
+      <Card surface="flat">
+        <CardHeader surface="flat"
           title="How each plan prices"
           subtitle="Per room or per person, plan by plan — a half-board rate can price per guest while a room-only rate prices per room"
         />
@@ -222,13 +222,13 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
       </Card>
 
       {/* Editable Rate Plan Linkage (CRS-REFINEMENT-R2 §6). */}
-      <Card>
-        <CardHeader title="Rate Plan Linkage" subtitle="Plans priced from another plan — change the parent or the offset, or switch a plan back to its own prices" />
+      <Card surface="flat">
+        <CardHeader surface="flat" title="Rate Plan Linkage" subtitle="Plans priced from another plan — change the parent or the offset, or switch a plan back to its own prices" />
         <RatePlanLinkageBoard plans={linkPlans} />
       </Card>
 
-      <Card>
-        <CardHeader
+      <Card surface="flat">
+        <CardHeader surface="flat"
           title="Out-of-order & closure periods"
           subtitle="Close rooms for sale here. Rooms taken out of order come from RevioPMS."
           action={<PeriodDialog roomTypes={roomTypes.filter((r) => r.active).map((r) => ({ id: r.id, name: r.name, totalRooms: r.totalRooms }))} todayIso={todayIso} />}

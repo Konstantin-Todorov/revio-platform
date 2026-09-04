@@ -53,7 +53,7 @@ export default async function PlansPage() {
       )}
 
       {/* 1. The model, before any number. Each part is priced on a different thing on purpose. */}
-      <div className="grid gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
         {[
           {
             icon: Building2, title: "Platform fee", figure: "by room count",
@@ -144,7 +144,7 @@ export default async function PlansPage() {
       </Card>
 
       {/* 3. One bill, shown as arithmetic. A price a customer cannot reconstruct is one they argue with. */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="How a bill is built — 40-room hotel, all three products" />
           <dl className="px-4 py-3.5 text-[13px]">
@@ -256,7 +256,7 @@ export default async function PlansPage() {
       </Card>
 
       {/* 6. What each product earns. A convention, and the page says so. */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="What each product earns" action={<span className="tnum text-[12px] font-semibold text-ink-600">{money(p.mrrMinor)} MRR</span>} />
           <div className="space-y-3 px-4 py-4">

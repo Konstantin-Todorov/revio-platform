@@ -99,7 +99,7 @@ export default function PlatformHistoryPage() {
       <section className="relative overflow-hidden rounded-xl border border-brand-800 bg-brand-900 px-5 py-5 text-white shadow-card lg:px-6">
         <div className="absolute -right-16 -top-20 h-64 w-64 rounded-full border border-white/10 bg-white/[0.035]" />
         <div className="absolute -bottom-24 right-24 h-48 w-48 rounded-full border border-product-mark/20" />
-        <div className="relative grid gap-6 lg:grid-cols-[1.15fr_1fr] lg:items-end">
+        <div className="relative grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_1fr] lg:items-end">
           <div>
             <div className="flex items-center gap-2 text-[10.5px] font-semibold uppercase tracking-[0.15em] text-white/45">
               <GitCommitHorizontal className="h-4 w-4 text-product-mark" /> Operating record
@@ -126,7 +126,7 @@ export default function PlatformHistoryPage() {
         </div>
       </section>
 
-      <section className="mt-4 grid gap-3 md:grid-cols-3">
+      <section className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
         {[
           { icon: Blocks, title: "One core", text: "Availability, rates and reservations remain platform facts — never app-owned copies." },
           { icon: LockKeyhole, title: "Proof before promise", text: "A release is recorded here only when code, tests or a live control can support the claim." },
@@ -205,7 +205,7 @@ export default function PlatformHistoryPage() {
         </div>
       </div>
 
-      <section className="mt-4 grid items-start gap-4 xl:grid-cols-3">
+      <section className="mt-4 grid grid-cols-1 items-start gap-4 xl:grid-cols-3">
         {(["now", "next", "later"] as const).map((horizon) => {
           const meta = HORIZON[horizon];
           const items = initiativesFor(horizon);

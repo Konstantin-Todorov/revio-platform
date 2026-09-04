@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { DateField } from "@revio/ui/date-field";
+import { StatCard, type StatTone } from "@revio/ui/stat-card";
 
 /**
  * The dashboard's preset row + KPI grid, customizable PER USER (spec §3.1: "let the customer
@@ -25,6 +26,21 @@ export interface KpiCard {
   href: string;
   /** Year-over-year vs STLY (364 days back): display string + direction. Null = no baseline. */
   yoy: { text: string; dir: "up" | "down" | "flat" } | null;
+  /**
+   * The card's tint. Chosen by what the metric IS — not by whether today's value is good, because a
+   * card that changes colour with its own value makes the row unlearnable.
+   */
+  tone?: StatTone;
+  /**
+   * Which direction of movement is the good one. Defaults to "up".
+   *
+   * This is a correctness fix, not decoration: the previous card coloured every `dir === "up"`
+   * green, so a **rising cancellation rate rendered in success green**. A metric where up is bad
+   * must say so or the delta actively misleads.
+   */
+  goodDirection?: "up" | "down";
+  /** Real series behind the number, oldest first — shape only, no scale. Optional. */
+  spark?: number[];
 }
 
 const STORE = "crs-dash-view";
@@ -155,38 +171,30 @@ export function DashboardView({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {shownCards.map((card) => (
           <Link key={card.key} href={card.href} className="block">
-            <Card605 label={card.label} value={card.value} sub={card.sub} yoy={card.yoy} basis={basis} />
+            <StatCard
+              label={card.label}
+              value={card.value}
+              sub={card.sub}
+              tone={card.tone}
+              spark={card.spark}
+              delta={
+                card.yoy && {
+                  text: card.yoy.text,
+                  dir: card.yoy.dir,
+                  goodDirection: card.goodDirection,
+                  hint:
+                    basis === "lw"
+                      ? "vs last week (7 days back — same weekday)"
+                      : "vs same time last year (364 days back — same weekday)",
+                }
+              }
+            />
           </Link>
         ))}
       </div>
     </>
-  );
-}
-
-function Card605({ label, value, sub, yoy, basis }: Pick<KpiCard, "label" | "value" | "sub" | "yoy"> & { basis: "yoy" | "lw" }) {
-  return (
-    <div className="rounded-lg border border-surface-border bg-white px-4 py-3.5 shadow-card transition-shadow hover:shadow-md">
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{label}</div>
-        {/* Delta vs the chosen basis (§1.2): gain = green ▲, drop = red ▼. */}
-        {yoy && (
-          <span
-            title={basis === "lw" ? "vs last week (7 days back — same weekday)" : "vs same time last year (364 days back — same weekday)"}
-            className={`flex items-center gap-0.5 rounded px-1 py-0.5 text-[10.5px] font-bold tabular-nums ${
-              yoy.dir === "up" ? "bg-success-50 text-success-600" : yoy.dir === "down" ? "bg-danger-50 text-danger-600" : "bg-surface-sunken text-ink-400"
-            }`}
-          >
-            {yoy.dir === "up" && <ArrowUp className="h-3 w-3" />}
-            {yoy.dir === "down" && <ArrowDown className="h-3 w-3" />}
-            {yoy.text}
-          </span>
-        )}
-      </div>
-      <div className="tnum mt-1 text-[24px] font-bold leading-none text-ink-900">{value}</div>
-      <div className="mt-1.5 text-[11.5px] text-ink-400">{sub}</div>
-    </div>
   );
 }

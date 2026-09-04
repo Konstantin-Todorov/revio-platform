@@ -111,7 +111,7 @@ export default async function BookPage({
           {guests} {guests === 1 ? "guest" : "guests"}
         </p>
 
-        <div className="mt-7 grid gap-5 lg:grid-cols-[1fr_21rem] lg:items-start">
+        <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_21rem] lg:items-start">
           <BookingForm
             stay={{ slug, checkIn, checkOut, guests, roomTypeId, ratePlanId, holdId: hold.id }}
             cancellationPolicy={plan.cancellationPolicy}
