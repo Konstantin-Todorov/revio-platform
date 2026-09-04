@@ -9,3 +9,5 @@
 export * from "./public-engine.js";
 export * from "./slug.js";
 export * from "./rate-limit.js";
+
+export { waitlistSweep, type SweepResult } from "./waitlist-sweep.js";

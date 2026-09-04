@@ -152,6 +152,65 @@ With warm regards,
 {{propertyName}}`,
   },
   {
+    key: "waitlist_joined",
+    label: "Waitlist — joined",
+    description: "Confirms we have their dates when we were full, and says what happens next.",
+    audience: "guest",
+    canDisable: true,
+    variables: { ...GUEST_COMMON, holdWindow: "4 hours" },
+    defaultSubject: "You are on the list for {{propertyName}}",
+    defaultBody: `Dear {{guestName}},
+
+Thank you for thinking of us. We are fully booked for the dates you asked about, so we have put you on our waiting list.
+
+{{details}}
+
+If a room opens up we will email you straight away and hold it for {{holdWindow}}, so you have time to book it without rushing. There is nothing you need to do until then.
+
+With warm regards,
+{{propertyName}}`,
+  },
+  {
+    key: "waitlist_offer",
+    label: "Waitlist — a room opened",
+    description: "The one email that matters: a room is free, held, and theirs until a stated time.",
+    audience: "guest",
+    // ⚠️ NOT disableable. The hold takes a real room off sale for a real guest; switching off the
+    // only message that tells them would withdraw a room on behalf of nobody.
+    canDisable: false,
+    variables: { ...GUEST_COMMON, offerDeadline: "today at 18:00" },
+    defaultSubject: "A room has opened up at {{propertyName}}",
+    defaultBody: `Dear {{guestName}},
+
+Good news — a room has become free for the dates you were waiting for, and we are holding it for you.
+
+{{details}}
+
+We will keep it until {{offerDeadline}}. After that we have to offer it to the next guest on the list, so do book before then if you would still like it.
+
+With warm regards,
+{{propertyName}}`,
+  },
+  {
+    key: "waitlist_expired",
+    label: "Waitlist — the held room was released",
+    description: "Says plainly that the room went, and that they are still on the list.",
+    audience: "guest",
+    canDisable: true,
+    variables: { ...GUEST_COMMON },
+    defaultSubject: "That room has gone — you are still on the list for {{propertyName}}",
+    defaultBody: `Dear {{guestName}},
+
+The room we were holding for you has been released, so it is no longer reserved in your name.
+
+You are still on our waiting list for these dates, and we will write again if something else opens up.
+
+{{details}}
+
+With warm regards,
+{{propertyName}}`,
+  },
+  {
     key: "reservation_delivery",
     label: "New booking (to the hotel)",
     // Second person: the hotel reading this list IS the hotel. It used to describe them in the
@@ -535,6 +594,45 @@ export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string
 Ако разполагате с момент, ще се радваме на Вашето мнение — а ако резервирате директно при нас следващия път, винаги ще се постараем да се погрижим за Вас.
 
 Приятен път,
+{{propertyName}}`,
+    },
+    waitlist_joined: {
+      subject: "Вие сте в списъка на чакащите за {{propertyName}}",
+      body: `Уважаеми {{guestName}},
+
+Благодарим Ви, че се обърнахте към нас. За посочените дати сме напълно резервирани, затова Ви добавихме в списъка на чакащите.
+
+{{details}}
+
+Ако се освободи стая, веднага ще Ви пишем и ще я запазим за Вас за {{holdWindow}}, за да имате време да резервирате спокойно. Дотогава не е необходимо да предприемате нищо.
+
+С уважение,
+{{propertyName}}`,
+    },
+    waitlist_offer: {
+      subject: "Освободи се стая в {{propertyName}}",
+      body: `Уважаеми {{guestName}},
+
+Добра новина — освободи се стая за датите, които чакахте, и я запазихме за Вас.
+
+{{details}}
+
+Ще я задържим до {{offerDeadline}}. След това сме длъжни да я предложим на следващия гост в списъка, така че резервирайте дотогава, ако все още желаете.
+
+С уважение,
+{{propertyName}}`,
+    },
+    waitlist_expired: {
+      subject: "Стаята вече е заета — оставате в списъка за {{propertyName}}",
+      body: `Уважаеми {{guestName}},
+
+Стаята, която задържахме за Вас, беше освободена и вече не е запазена на Ваше име.
+
+Оставате в списъка на чакащите за тези дати и ще Ви пишем отново, ако се освободи друга.
+
+{{details}}
+
+С уважение,
 {{propertyName}}`,
     },
     folio_receipt: {

@@ -640,6 +640,8 @@ model Property {
   brandAssets          BrandAsset[]
   stayGuests           StayGuest[]
 
+  waitlistEntries WaitlistEntry[]
+
   @@index([tenantId])
 }
 
@@ -712,6 +714,8 @@ model RoomType {
   units            Unit[]
   photos           RoomTypePhoto[]
   ratePlanMappings ChannelRatePlanMapping[]
+
+  waitlistEntries WaitlistEntry[]
 
   @@index([propertyId])
 }
@@ -1224,6 +1228,8 @@ model Reservation {
   assignments   RoomAssignment[]
   folios        Folio[]
   stayExtras    StayExtra[]
+
+  waitlistEntries WaitlistEntry[]
 
   @@index([propertyId])
   @@index([channelId])
@@ -2181,7 +2187,7 @@ model StayGuest {
   cancelledNote String?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
@@ -2191,4 +2197,53 @@ model StayGuest {
   @@index([reservationId])
   @@index([propertyId, registeredAt])
   @@index([guestId])
+}
+
+/// A guest who wanted dates we could not sell.
+///
+/// A sold-out date is demand the hotel already paid to attract. Without this row it is answered with
+/// alternative stays and then forgotten, so a cancellation an hour later tells nobody.
+/// Rules for who gets offered a freed room live in `@revio/core/waitlist` — see docs/specs/WAITLIST.md.
+model WaitlistEntry {
+  id             String    @id @default(cuid())
+  tenantId       String
+  propertyId     String
+  /// NULL means "any room that sleeps my party" — the unscoped-means-everything convention.
+  roomTypeId     String?
+  checkIn        DateTime  @db.Date
+  checkOut       DateTime  @db.Date
+  guests         Int       @default(2)
+  guestName      String
+  guestEmail     String
+  guestPhone     String?
+  /// The language they searched in, so the offer does not arrive in the wrong one.
+  locale         String?
+  /// waiting | offered | converted | expired | cancelled
+  status         String    @default("waiting")
+  /// ⚠️ Queue position IS this, ascending. Never a stored integer: a stored position has to be
+  /// renumbered on every insert, cancellation and conversion, and the first time that is wrong
+  /// somebody is told they are second when they are fourth.
+  createdAt      DateTime  @default(now())
+  offeredAt      DateTime?
+  /// The real `Hold` backing the current offer. Deliberately NOT a relation: a hold is ephemeral and
+  /// is released or expired by the hold job, and we only need its id in order to release it.
+  offerHoldId    String?
+  offerExpiresAt DateTime?
+  /// How many offers this entry has let lapse. Capped in core, so we stop being a nuisance.
+  offerCount     Int       @default(0)
+  /// The stay that closed this entry, when one did — this is what "revenue recovered" is computed from.
+  reservationId  String?
+  /// booking_engine | staff
+  source         String    @default("booking_engine")
+  /// Single-use claim link for the offer email.
+  claimToken     String?   @unique
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  roomType    RoomType?    @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
+  reservation Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, status])
+  @@index([propertyId, checkIn])
+  @@index([roomTypeId, checkIn])
 }

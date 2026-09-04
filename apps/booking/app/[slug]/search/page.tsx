@@ -12,6 +12,7 @@ import { PropertyFooter } from "@/components/PropertyFooter";
 import { RoomOption } from "@/components/RoomOption";
 import { SearchBar } from "@/components/SearchBar";
 import { StepBar } from "@/components/StepBar";
+import { WaitlistJoin } from "@/components/WaitlistJoin";
 
 export const dynamic = "force-dynamic";
 
@@ -156,6 +157,17 @@ async function Results({
             those nights may not be open for booking yet.
           </>
         )}
+        {/*
+          Beside the alternatives, never instead of them — an alternative converts today, a waitlist
+          converts maybe, and swapping a bookable room for a mailing list trades revenue for a list.
+        */}
+        <WaitlistJoin
+          slug={property.slug}
+          checkIn={q.checkIn}
+          checkOut={q.checkOut}
+          guests={q.guests}
+          nights={nights}
+        />
       </Notice>
     );
   }

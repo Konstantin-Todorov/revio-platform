@@ -122,6 +122,15 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
    * query could disagree with what the guest was shown.
    */
   details?: { label: string; value: string; emphasis?: boolean }[];
+  /**
+   * One button, when the email exists to make the guest do something.
+   *
+   * `renderEmail` has always supported this and nothing passed it, so every template that needed an
+   * action had to inline a bare URL — which renders as unclickable text in the HTML part. The
+   * waitlist offer is the first email whose whole purpose is a deadline and a link, so it is the
+   * first that cannot do without it.
+   */
+  cta?: { label: string; url: string } | null;
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const def = EMAIL_TEMPLATE_BY_KEY[args.key];
   if (!def) return { ok: false, error: `Unknown email template "${args.key}"` };
@@ -151,6 +160,7 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
     brand,
     vars: args.vars,
     ...(args.details?.length ? { details: args.details } : {}),
+    ...(args.cta ? { cta: args.cta } : {}),
   });
 
   // The guest reads the hotel's name in From and replies to the hotel — not to Revio. The mail is
