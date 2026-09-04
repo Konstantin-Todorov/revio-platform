@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { hasFinishedSetup } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
+import { StatCard, type StatTone } from "@revio/ui/stat-card";
 import { prisma } from "@/lib/db";
 import { activeProperty, getFrontDeskOverview, type StayRow } from "@/lib/data";
 import { getSetup } from "@/lib/setup";
@@ -48,19 +49,25 @@ function overdueText(r: StayRow): string {
   return `Past checkout by ${h > 0 ? `${h}h ` : ""}${m}m`;
 }
 
-function KpiCard({ icon: Icon, label, value, tint }: { icon: typeof BedDouble; label: string; value: number; tint: string }) {
+/**
+ * The front-desk KPI row, on the shared `StatCard`.
+ *
+ * It was a third hand-rolled copy of the same object — the CRS dashboard and CRS Analytics had the
+ * other two, differing from each other by a font size and two pixels of padding. `StatCard` already
+ * takes an icon and a tone, so this is a mapping rather than a rewrite.
+ *
+ * The tone says what the metric IS, never whether today's number is good: "Out of order" is danger
+ * because rooms out of order are a fault condition, not because five is worse than three. A card
+ * that changed colour with its own value would make the row unlearnable.
+ *
+ * `animate-rise` moves to a wrapper rather than becoming a `StatCard` prop — the stagger is this
+ * screen's entrance, not something every stat card in the platform should inherit.
+ */
+function KpiCard({ icon: Icon, label, value, tone }: { icon: typeof BedDouble; label: string; value: number; tone: StatTone }) {
   return (
-    <Card className="animate-rise p-4">
-      <div className="flex items-center gap-3">
-        <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${tint}`}>
-          <Icon className="h-5 w-5" strokeWidth={2.1} />
-        </div>
-        <div>
-          <div className="tnum text-[22px] font-bold leading-none tracking-tight text-ink-900">{value}</div>
-          <div className="mt-1 text-[12px] font-medium text-ink-500">{label}</div>
-        </div>
-      </div>
-    </Card>
+    <div className="animate-rise">
+      <StatCard label={label} value={String(value)} tone={tone} icon={<Icon className="h-4 w-4" strokeWidth={2.1} />} />
+    </div>
   );
 }
 
@@ -136,11 +143,11 @@ export default async function DashboardPage() {
 
       {/* Front-desk KPI row (§1.1) — desk-relevant metrics, not housekeeping counts. */}
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <KpiCard icon={LogIn} label="Arrivals today" value={kpis.arrivals} tint="bg-brand-50 text-brand-600" />
-        <KpiCard icon={LogOut} label="Departures today" value={kpis.departures} tint="bg-warning-50 text-warning-600" />
-        <KpiCard icon={Users} label="In-house" value={kpis.inHouse} tint="bg-accent-50 text-accent-600" />
-        <KpiCard icon={CircleCheck} label="Rooms ready to assign" value={kpis.roomsReady} tint="bg-success-50 text-success-600" />
-        <KpiCard icon={Wrench} label="Out of order" value={kpis.outOfOrder} tint="bg-danger-50 text-danger-600" />
+        <KpiCard icon={LogIn} label="Arrivals today" value={kpis.arrivals} tone="brand" />
+        <KpiCard icon={LogOut} label="Departures today" value={kpis.departures} tone="warning" />
+        <KpiCard icon={Users} label="In-house" value={kpis.inHouse} tone="accent" />
+        <KpiCard icon={CircleCheck} label="Rooms ready to assign" value={kpis.roomsReady} tone="success" />
+        <KpiCard icon={Wrench} label="Out of order" value={kpis.outOfOrder} tone="danger" />
       </div>
 
       {/* Two co-equal action columns (§1.2): To check in · Due out today. */}
