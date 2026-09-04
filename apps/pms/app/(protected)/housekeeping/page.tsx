@@ -103,7 +103,7 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
 
       {/* Clock-in / active workforce (§6.7): only clocked-in cleaners receive assignments; the active
           count feeds feasibility (rooms-to-clean vs cleaners). Availability + light KPI, not payroll. */}
-      <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3">
+      <Card surface="flat" className="mb-4 flex flex-wrap items-center justify-between gap-3 p-3">
         <div className="flex items-center gap-2 text-[12.5px]">
           <Clock className="h-4 w-4 text-ink-400" />
           {openShift ? (
@@ -125,7 +125,7 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
       </Card>
 
       {blocked && (
-        <Card className="mb-4 border-danger-500/50 bg-danger-50 p-3.5">
+        <Card surface="flat" className="mb-4 border-danger-500/50 bg-danger-50 p-3.5">
           <div className="flex items-start gap-2.5 text-[13px] text-ink-700">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
             <span><span className="font-semibold text-danger-700">One room at a time.</span> Finish or release room {blocked} before starting another — the only exception is connecting rooms.</span>
@@ -134,7 +134,7 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
       )}
 
       {units.length === 0 ? (
-        <Card className="p-8 text-center">
+        <Card surface="flat" className="p-8 text-center">
           <p className="text-[14px] font-semibold text-ink-900">No rooms to clean yet</p>
           <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-ink-500">
             Add your physical rooms in <Link href="/rooms" className="font-semibold text-accent-600 underline">Rooms</Link> and they’ll appear here for the housekeeping team.
@@ -164,7 +164,7 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
                   <ListOrdered className="h-3.5 w-3.5" /> Cleaning queue ({queue.length}) — recommended order
                 </h2>
                 {queue.length === 0 ? (
-                  <Card className="p-5 text-center text-[13px] text-ink-400">Nothing waiting to be cleaned — all rooms are clean, inspected or occupied.</Card>
+                  <Card surface="flat" className="p-5 text-center text-[13px] text-ink-400">Nothing waiting to be cleaned — all rooms are clean, inspected or occupied.</Card>
                 ) : (
                   <div className={GRID}>{queue.map((u) => <RoomTile key={u.id} u={u} />)}</div>
                 )}

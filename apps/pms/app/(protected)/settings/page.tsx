@@ -36,7 +36,7 @@ export default async function SettingsPage() {
       {/* Property profile */}
       <Card className="p-4">
         <div className="mb-3 flex items-center gap-2 text-[13px] font-bold text-ink-900"><Building2 className="h-4 w-4 text-accent-600" /> Property</div>
-        <div className="grid gap-2 text-[12.5px] text-ink-600 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 text-[12.5px] text-ink-600 sm:grid-cols-2">
           <div>Name: <span className="font-semibold text-ink-900">{property.name}</span></div>
           <div>Time zone: <span className="font-semibold text-ink-900">{property.timezone}</span></div>
           <div>Currency: <span className="font-semibold text-ink-900">{property.baseCurrency}</span></div>
@@ -47,7 +47,7 @@ export default async function SettingsPage() {
       </Card>
 
       {/* Operations quick links */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {links.map((l) => {
           const Icon = l.icon;
           return (

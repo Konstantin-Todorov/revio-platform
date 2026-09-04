@@ -5,6 +5,7 @@ import { getInventoryBoard } from "@/lib/data";
 import { getCancellationReport, getPickupReport, getProductPerformance, getProductionByDay, getRangeMetrics, resolveRange, comparisonRange, type CompareBasis, type RangePreset } from "@/lib/metrics";
 import { getProperty, getScope, todayInTz } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { StatCard, type StatTone } from "@revio/ui/stat-card";
 import { EvolutionChart, type EvoBucket } from "@/components/reports/EvolutionChart";
 import { money, FORECAST_DISCLAIMER } from "@/lib/format";
 import { isCommissionFreeCategory, availabilityPressure, LOW_AVAILABILITY_SHARE } from "@revio/core";
@@ -171,21 +172,26 @@ function bucket(perDay: { date: string; available: number; soldNights: number; r
   return [...map.values()];
 }
 
-/** A period summary card (§2.3): value + basis-labelled delta (green up / red down) + the prior value. */
-function SummaryCard({ label, value, delta, prior, hint }: { label: string; value: string; delta: { text: string; up: boolean } | null; prior: string; hint?: string }) {
+/**
+ * A period summary card (§2.3), on the shared `StatCard`.
+ *
+ * It was a local copy of the dashboard's KPI card, drifting from it by two pixels of padding and a
+ * font size. The formula hint (§2.3 requires it) rides along as the card's `sub`, which keeps the
+ * `title` tooltip a hover away without needing a second element.
+ */
+function SummaryCard({ label, value, delta, prior, hint, tone }: {
+  label: string; value: string; delta: { text: string; up: boolean } | null;
+  prior: string; hint?: string; tone?: StatTone;
+}) {
   return (
-    <div className="rounded-lg border border-surface-border bg-white px-4 py-3.5 shadow-card transition-shadow hover:shadow-md">
-      <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-        <span>{label}</span>
-        {hint && <span title={hint} className="cursor-help select-none text-ink-300 hover:text-ink-500">ⓘ</span>}
-      </div>
-      <div className="tnum mt-1 text-[22px] font-bold leading-none text-ink-900">{value}</div>
-      <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
-        {delta ? (
-          <span className={`rounded px-1 py-0.5 font-bold tabular-nums ${delta.up ? "bg-success-50 text-success-600" : "bg-danger-50 text-danger-600"}`}>{delta.up ? "▲" : "▼"} {delta.text}</span>
-        ) : <span className="text-ink-300">no baseline</span>}
-        <span className="text-ink-400">{prior}</span>
-      </div>
+    <div title={hint}>
+      <StatCard
+        label={label}
+        value={value}
+        sub={prior}
+        tone={tone}
+        delta={delta ? { text: delta.text, dir: delta.up ? "up" : "down" } : null}
+      />
     </div>
   );
 }
@@ -223,18 +229,18 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
   const ppDelta = (now: number, then: number) => ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp ${basisLabel}`, up: now >= then });
 
   const summary = [
-    { label: "Occupancy", value: pct(m.cards.occupancyPct), delta: ppDelta(m.cards.occupancyPct, cmp.cards.occupancyPct), prior: `${cmp.cards.occupancyPct.toFixed(1)}% prior`, hint: "Room-nights sold ÷ room-nights available, for the period. Δ shown in percentage points vs the comparison basis." },
-    { label: "ADR", value: money(m.cards.adrMinor, currency), delta: relDelta(m.cards.adrMinor, cmp.cards.adrMinor), prior: `${money(cmp.cards.adrMinor, currency)} prior`, hint: "Average Daily Rate = room revenue ÷ room-nights sold. Recomputed Σ/Σ across the period, not an average of daily ADRs." },
-    { label: "RevPAR", value: money(m.cards.revparMinor, currency), delta: relDelta(m.cards.revparMinor, cmp.cards.revparMinor), prior: `${money(cmp.cards.revparMinor, currency)} prior`, hint: "Revenue Per Available Room = room revenue ÷ room-nights available (= ADR × occupancy). The truest single yield metric." },
-    { label: `Revenue (${m.cards.revenueDisplay})`, value: money(m.cards.revenueMinor, currency), delta: relDelta(m.cards.revenueMinor, cmp.cards.revenueMinor), prior: `${money(cmp.cards.revenueMinor, currency)} prior`, hint: `Room revenue for the period (${m.cards.revenueDisplay}). Gross = as sold; Net subtracts channel commission — toggled in Settings.` },
-    { label: "Room-nights", value: String(m.cards.roomsSoldNights), delta: relDelta(m.cards.roomsSoldNights, cmp.cards.roomsSoldNights), prior: `${cmp.cards.roomsSoldNights} prior`, hint: "Total room-nights sold in the period — the volume behind ADR and occupancy." },
+    { tone: "brand" as StatTone, label: "Occupancy", value: pct(m.cards.occupancyPct), delta: ppDelta(m.cards.occupancyPct, cmp.cards.occupancyPct), prior: `${cmp.cards.occupancyPct.toFixed(1)}% prior`, hint: "Room-nights sold ÷ room-nights available, for the period. Δ shown in percentage points vs the comparison basis." },
+    { tone: "success" as StatTone, label: "ADR", value: money(m.cards.adrMinor, currency), delta: relDelta(m.cards.adrMinor, cmp.cards.adrMinor), prior: `${money(cmp.cards.adrMinor, currency)} prior`, hint: "Average Daily Rate = room revenue ÷ room-nights sold. Recomputed Σ/Σ across the period, not an average of daily ADRs." },
+    { tone: "accent" as StatTone, label: "RevPAR", value: money(m.cards.revparMinor, currency), delta: relDelta(m.cards.revparMinor, cmp.cards.revparMinor), prior: `${money(cmp.cards.revparMinor, currency)} prior`, hint: "Revenue Per Available Room = room revenue ÷ room-nights available (= ADR × occupancy). The truest single yield metric." },
+    { tone: "success" as StatTone, label: `Revenue (${m.cards.revenueDisplay})`, value: money(m.cards.revenueMinor, currency), delta: relDelta(m.cards.revenueMinor, cmp.cards.revenueMinor), prior: `${money(cmp.cards.revenueMinor, currency)} prior`, hint: `Room revenue for the period (${m.cards.revenueDisplay}). Gross = as sold; Net subtracts channel commission — toggled in Settings.` },
+    { tone: "neutral" as StatTone, label: "Room-nights", value: String(m.cards.roomsSoldNights), delta: relDelta(m.cards.roomsSoldNights, cmp.cards.roomsSoldNights), prior: `${cmp.cards.roomsSoldNights} prior`, hint: "Total room-nights sold in the period — the volume behind ADR and occupancy." },
   ];
 
   return (
     <div className="space-y-4">
       {/* Metric summary cards for the period (§2.3) — each with a hover ⓘ explaining its formula. */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-        {summary.map((c) => <SummaryCard key={c.label} label={c.label} value={c.value} delta={c.delta} prior={c.prior} hint={c.hint} />)}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+        {summary.map((c) => <SummaryCard key={c.label} label={c.label} value={c.value} delta={c.delta} prior={c.prior} hint={c.hint} tone={c.tone} />)}
       </div>
 
       {/* Combined bar + line evolution chart at the selected granularity (§2.4, matches the reference). */}
@@ -346,7 +352,7 @@ async function ProductsReport({ range, lens }: { range: ReturnType<typeof resolv
     }));
 
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       <Card>
         <CardHeader title={`By room type · ${range.label}`} subtitle={basis} />
         <BarList data={bars(r.roomTypes)} emptyMessage="No sold nights in this range." />
@@ -417,7 +423,7 @@ async function OtbReport({ todayIso }: { todayIso: string }) {
         <ForwardCurve points={committed} unitLabel="Room-nights committed" />
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">{block(f7)}{block(f30)}</div>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{block(f7)}{block(f30)}</div>
 
       {/* §2.2 — word-for-word identical to the Dashboard's Forecast disclaimer. Same concept surfaced
           twice; aligned wording lets a user connect the two views instead of reading them as
@@ -637,7 +643,7 @@ async function CancellationReport({ range, lens }: { range: ReturnType<typeof re
         title={`Cancellations · ${range.label}`}
         subtitle={`Counted ${lens === "book" ? "by booking date" : "by stay date"} — ${r.basisLabel}`}
       />
-      <div className="grid gap-6 px-4 py-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 px-4 py-5 md:grid-cols-2">
         {/* Both framings, side by side. The headline rate and the room-night rate answer different
             questions and a hotel that shows only one is usually showing the flattering one. */}
         <div>

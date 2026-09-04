@@ -285,7 +285,7 @@ function ResultsSkeleton() {
     <div className="space-y-4" aria-busy="true" aria-label="Checking availability">
       {[0, 1].map((i) => (
         <div key={i} className="card-raised overflow-hidden">
-          <div className="grid sm:grid-cols-[minmax(0,13.5rem)_1fr]">
+          <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,13.5rem)_1fr]">
             <div className="skel hidden min-h-[11rem] rounded-none sm:block" />
             <div className="p-5">
               <div className="skel h-6 w-2/5" />

@@ -399,3 +399,22 @@
     left: 0;
   }
 }
+
+@layer base {
+  /*
+   * Disclosure widgets need the ring painted on the <summary>, not the <details>.
+   *
+   * Chrome reports the <details> as the focused element when its <summary> carries `list-none`, so
+   * the generic :focus-visible rule lands on a wrapper with no visible box of its own — while the
+   * row the user is actually looking at stays unmarked. Found by tabbing the PMS dashboard: focus
+   * reached "In-house roster" and drew nothing at all.
+   *
+   * `outline-offset: -2px` draws the ring inside the summary's own box, which spans the full card
+   * width; a positive offset would trace a rectangle around the whole card instead.
+   */
+  summary:focus-visible,
+  details:focus-visible > summary {
+    outline: 2px solid theme("colors.brand.600");
+    outline-offset: -2px;
+  }
+}

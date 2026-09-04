@@ -56,7 +56,7 @@ export default async function UsersPage() {
             Maintenance), or you can do it for them below.
           </p>
         ) : (
-          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
             {workforce.groups.map((g) => (
               <div key={g.role} className="rounded-lg border border-surface-border bg-surface-muted/40 p-3">
                 <div className="mb-1.5 flex items-center justify-between">

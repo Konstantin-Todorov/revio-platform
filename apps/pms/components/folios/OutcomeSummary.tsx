@@ -33,8 +33,8 @@ export function OutcomeSummary({
   const nothingYet = totals.every((t) => t.count === 0);
 
   return (
-    <Card className="mb-4">
-      <CardHeader
+    <Card surface="flat" className="mb-4">
+      <CardHeader surface="flat"
         title="How closed folios ended"
         subtitle={`Last ${sinceDays} days · collected, owed and lost are three separate numbers`}
       />
@@ -43,7 +43,7 @@ export function OutcomeSummary({
         <p className="px-4 py-4 text-[12.5px] text-ink-400">No folios have been closed in this period.</p>
       ) : (
         <>
-          <div className="grid gap-3 border-b border-surface-border p-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 border-b border-surface-border p-4 sm:grid-cols-3">
             <Headline label="Collected" amount={money(headline.collectedMinor, currency)} cls="text-ink-900" />
             <Headline label="Still owed" amount={money(headline.owedMinor, currency)} cls="text-warning-700" />
             {/* Never beside "collected" in the same colour, and never summed with it. */}

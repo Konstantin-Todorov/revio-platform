@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { smoothPath, type Pt } from "@revio/ui/chart-path";
 
 export type EvoBucket = { label: string; rnNow: number; rnThen: number; adrNow: number; adrThen: number };
 
@@ -26,7 +27,8 @@ export function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket
   const yRn = (v: number) => padT + plotH - (v / rnTop) * plotH;
   const yAdr = (v: number) => padT + plotH - (v / adrTop) * plotH;
   const cx = (i: number) => padL + step * i + step / 2;
-  const line = (pick: (d: EvoBucket) => number) => data.map((d, i) => `${cx(i)},${yAdr(pick(d))}`).join(" ");
+  const line = (pick: (d: EvoBucket) => number) =>
+    smoothPath(data.map((d, i) => [cx(i), yAdr(pick(d))] as Pt));
   const gridVals = [0, 0.25, 0.5, 0.75, 1];
 
   const money = (v: number) => `${currency === "EUR" ? "€" : currency === "USD" ? "$" : currency === "GBP" ? "£" : currency + " "}${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -42,9 +44,19 @@ export function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket
         <span>Room-nights</span><span>ADR ({currency})</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={{ height: "auto" }} preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="evoNow" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={BLUE} stopOpacity={1} />
+            <stop offset="100%" stopColor={BLUE} stopOpacity={0.55} />
+          </linearGradient>
+          <linearGradient id="evoThen" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={TEAL} stopOpacity={0.85} />
+            <stop offset="100%" stopColor={TEAL} stopOpacity={0.4} />
+          </linearGradient>
+        </defs>
         {gridVals.map((g) => (
           <g key={g}>
-            <line x1={padL} x2={W - padR} y1={padT + plotH * (1 - g)} y2={padT + plotH * (1 - g)} stroke="#e9edf3" strokeWidth={1} />
+            <line x1={padL} x2={W - padR} y1={padT + plotH * (1 - g)} y2={padT + plotH * (1 - g)} stroke="#e7eaef" strokeWidth={1} strokeDasharray={g === 0 ? undefined : "3 4"} />
             <text x={padL - 6} y={padT + plotH * (1 - g) + 3} textAnchor="end" className="fill-[#98a2b3]" fontSize={10}>{Math.round(rnTop * g)}</text>
             <text x={W - padR + 6} y={padT + plotH * (1 - g) + 3} textAnchor="start" className="fill-[#98a2b3]" fontSize={10}>{Math.round(adrTop * g)}</text>
           </g>
@@ -54,14 +66,14 @@ export function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket
         {/* grouped room-night bars: comparison (teal) + current (blue) */}
         {data.map((d, i) => (
           <g key={i} opacity={hover == null || hover === i ? 1 : 0.55}>
-            <rect x={cx(i) - barW - 1} y={yRn(d.rnThen)} width={barW} height={Math.max(0, padT + plotH - yRn(d.rnThen))} rx={2} fill={TEAL} opacity={0.85} />
-            <rect x={cx(i) + 1} y={yRn(d.rnNow)} width={barW} height={Math.max(0, padT + plotH - yRn(d.rnNow))} rx={2} fill={BLUE} />
+            <rect x={cx(i) - barW - 1} y={yRn(d.rnThen)} width={barW} height={Math.max(0, padT + plotH - yRn(d.rnThen))} rx={3} fill="url(#evoThen)" />
+            <rect x={cx(i) + 1} y={yRn(d.rnNow)} width={barW} height={Math.max(0, padT + plotH - yRn(d.rnNow))} rx={3} fill="url(#evoNow)" />
             <text x={cx(i)} y={H - padB + 16} textAnchor="middle" className="fill-[#98a2b3]" fontSize={9.5}>{d.label.replace("wk ", "")}</text>
           </g>
         ))}
         {/* ADR lines: comparison (red) + current (amber) */}
-        <polyline points={line((d) => d.adrThen)} fill="none" stroke={RED} strokeWidth={2} strokeLinejoin="round" opacity={0.85} />
-        <polyline points={line((d) => d.adrNow)} fill="none" stroke={AMBER} strokeWidth={2.5} strokeLinejoin="round" />
+        <path d={line((d) => d.adrThen)} fill="none" stroke={RED} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} />
+        <path d={line((d) => d.adrNow)} fill="none" stroke={AMBER} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
         {data.map((d, i) => <circle key={`m-${i}`} cx={cx(i)} cy={yAdr(d.adrNow)} r={hover === i ? 4.5 : 3} className="fill-white" stroke={AMBER} strokeWidth={2} />)}
         {/* invisible hover bands — one per bucket — drive the tooltip */}
         {data.map((_, i) => (

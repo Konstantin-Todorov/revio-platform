@@ -144,7 +144,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Two co-equal action columns (§1.2): To check in · Due out today. */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Arrivals — to check in */}
         <Card>
           <CardHeader
@@ -238,9 +238,17 @@ export default async function DashboardPage() {
 
       {/* In-house roster (§1.2): a collapsible section beneath the action columns. Auto-open when there's no
           check-in/out work; collapsed otherwise. Rows keep folio · move · open reservation — NOT check out (§1.3). */}
-      <details className="group mt-4" open={arrivals.length === 0 && departures.length === 0}>
-        <Card>
-          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 hover:bg-surface-muted">
+      {/*
+        The <summary> must be the FIRST CHILD of <details>, and it was nested inside the <Card>.
+        With a <section> between them the browser treats the <details> as having no summary at all:
+        the whole <details> becomes the focus target, no focus ring can land on the row a user is
+        actually looking at, and the disclosure only toggles because Chrome is lenient about it.
+        Found by tabbing this page — focus reached "In-house roster" and drew nothing.
+        The Card now wraps the details instead, which keeps the surface identical.
+      */}
+      <Card surface="flat" className="mt-4 overflow-hidden">
+        <details className="group" open={arrivals.length === 0 && departures.length === 0}>
+          <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 transition-colors duration-fast ease-standard hover:bg-surface-muted">
             <span className="flex items-center gap-2 text-[13px] font-semibold text-ink-800"><Users className="h-4 w-4 text-ink-400" /> In-house roster</span>
             <span className="flex items-center gap-2 text-[12px] font-semibold text-ink-400">{inHouse.length} in house<span className="text-ink-300 transition-transform group-open:rotate-90">›</span></span>
           </summary>
@@ -278,8 +286,8 @@ export default async function DashboardPage() {
               ))}
             </ul>
           )}
-        </Card>
-      </details>
+        </details>
+      </Card>
 
       {/* Departed today */}
       {departedToday.length > 0 && (

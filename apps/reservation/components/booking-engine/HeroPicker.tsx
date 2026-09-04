@@ -109,7 +109,7 @@ export function HeroPicker({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-3">
           <form action={uploadAction} className="space-y-2">
             <input
@@ -188,7 +188,7 @@ export function HeroPicker({
                   measure your picture and apply the least that works — these choices go darker than
                   that, never lighter.
                 </p>
-                <div className="grid max-w-[520px] gap-1.5 sm:grid-cols-3">
+                <div className="grid grid-cols-1 max-w-[520px] gap-1.5 sm:grid-cols-3">
                   {HERO_OVERLAY_LEVELS.map((level) => (
                     <label
                       key={level.key}

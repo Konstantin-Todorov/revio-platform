@@ -94,7 +94,7 @@ export default async function GuestProfilePage({ params }: { params: Promise<{ i
         <Stat label="Ancillary lifetime" value={money(stats.ancillaryMinor, cur)} hint="POS consumption" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Preferences derived from operational history */}
         <Card>
           <CardHeader title="Preferences" subtitle="From the rooms they've had and what they've bought" />

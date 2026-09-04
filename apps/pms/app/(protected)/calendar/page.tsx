@@ -91,7 +91,7 @@ export default async function CalendarPage({
       </div>
 
       {rows.length === 0 ? (
-        <Card className="p-8 text-center">
+        <Card surface="flat" className="p-8 text-center">
           <CalendarRange className="mx-auto mb-2 h-6 w-6 text-ink-300" />
           <p className="text-[14px] font-semibold text-ink-900">No rooms yet</p>
           <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-ink-500">
@@ -100,7 +100,7 @@ export default async function CalendarPage({
           </p>
         </Card>
       ) : (
-        <Card className="overflow-hidden">
+        <Card surface="flat" className="overflow-hidden">
           <TapeGrid
             rows={rows}
             dates={dates}

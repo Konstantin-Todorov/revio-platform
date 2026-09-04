@@ -35,7 +35,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
     <div>
       <PageHeader title="Bulk Rates & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
       {roomTypes.length === 0 ? (
-        <Card className="p-8 text-center text-[13px] text-ink-400">
+        <Card surface="flat" className="p-8 text-center text-[13px] text-ink-400">
           A bulk update changes rates and restrictions across your room types — so you need at least one first.{" "}
           <a href="/rooms-rates" className="font-semibold text-brand-600 hover:underline">Add a room type</a>.
         </Card>
@@ -48,8 +48,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
       />
       )}
 
-      <Card className="mt-4">
-        <CardHeader title="Your active restriction rules" action={<RestrictionDialog roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />} />
+      <Card surface="flat" className="mt-4">
+        <CardHeader surface="flat" title="Your active restriction rules" action={<RestrictionDialog roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>

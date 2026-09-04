@@ -18,6 +18,7 @@
 
   /* Surfaces */
   --revio-surface: #ffffff;
+  --revio-surface-page: #f7f8fa;
   --revio-surface-muted: #f1f3f6;
   --revio-surface-sunken: #e7eaef;
   --revio-border: #dde4ee;
@@ -49,6 +50,12 @@
   --revio-radius-sm: 6px;
   --revio-radius-md: 10px;
   --revio-radius-lg: 14px;
+  --revio-radius-xl: 16px;
+
+  /* Elevation — see `shadow` in tokens.ts. A floated card drops its border; the two do not layer. */
+  --revio-shadow-float: 0 1px 2px 0 rgba(16, 31, 58, 0.04), 0 8px 24px -6px rgba(16, 31, 58, 0.1);
+  --revio-shadow-raised: 0 2px 6px 0 rgba(16, 31, 58, 0.05), 0 16px 40px -8px rgba(16, 31, 58, 0.14);
+  --revio-shadow-overlay: 0 12px 48px -8px rgba(16, 31, 58, 0.2), 0 4px 12px -2px rgba(16, 31, 58, 0.08);
   --revio-space-1: 4px;
   --revio-space-2: 8px;
   --revio-space-3: 12px;

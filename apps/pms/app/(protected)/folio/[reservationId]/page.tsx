@@ -157,7 +157,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
           sell it, or set an amount. Nothing is posted until somebody chooses, because a difference
           posted automatically is one nobody agreed to. */}
       {move && move.kind === "rate_affecting" && (
-        <Card className="mb-4 p-4">
+        <Card surface="flat" className="mb-4 p-4">
           <h3 className="text-[13px] font-bold text-ink-900">
             {move.direction === "upgrade" ? "Upgraded" : move.direction === "downgrade" ? "Downgraded" : "Moved"} to a different room type
           </h3>
@@ -232,8 +232,8 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
 
       {/* One bill card per folio (primary + split/company). Lines can move between them. */}
       {folios.map((folio) => (
-        <Card key={folio.id} className="mb-4">
-          <CardHeader
+        <Card surface="flat" key={folio.id} className="mb-4">
+          <CardHeader surface="flat"
             title={`${folio.label}${folio.isPrimary ? "" : " folio"}`}
             action={
               <div className="flex items-center gap-2.5">
@@ -310,7 +310,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
       ))}
 
       {/* Combined total across every folio + add a split/company folio. */}
-      <Card className="mb-4">
+      <Card surface="flat" className="mb-4">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="space-y-1 text-[13px]">
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-ink-500">
@@ -337,9 +337,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
       </Card>
 
       {open ? (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Post a charge */}
-          <Card className="p-4">
+          <Card surface="flat" className="p-4">
             <h3 className="mb-3 text-[13px] font-bold text-ink-900">Post a charge</h3>
             <form action={postCharge} className="space-y-2.5">
               <input type="hidden" name="reservationId" value={reservationId} />
@@ -361,7 +361,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
           </Card>
 
           {/* Record a payment */}
-          <Card className="p-4">
+          <Card surface="flat" className="p-4">
             <h3 className="mb-3 text-[13px] font-bold text-ink-900">Record a payment</h3>
             <form action={postPayment} className="space-y-2.5">
               <input type="hidden" name="reservationId" value={reservationId} />
@@ -388,7 +388,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
           </Card>
 
           {/* Stay extras — recurring, accrue per night at the audit (spec §3.6) */}
-          <Card className="p-4 lg:col-span-2">
+          <Card surface="flat" className="p-4 lg:col-span-2">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-[13px] font-bold text-ink-900">Stay extras</h3>
               <span className="text-[11px] text-ink-400">Recurring per night — posts at each night audit. Doesn’t change the booked rate plan; the folio reflects reality.</span>
@@ -423,7 +423,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
           </Card>
 
           {/* Invoicing — render a folio (or the split's chosen folio) as a numbered tax document (§4.3) */}
-          <Card className="p-4 lg:col-span-2">
+          <Card surface="flat" className="p-4 lg:col-span-2">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-[13px] font-bold text-ink-900">Invoicing</h3>
               <span className="text-[11px] text-ink-400">Charges live on folios; an invoice renders them as a numbered tax document — gapless series, tax per rate, accommodation broken out.</span>
@@ -474,7 +474,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
           </Card>
 
           {/* Deposits — a liability, not revenue (spec §4.4) */}
-          <Card className="p-4 lg:col-span-2">
+          <Card surface="flat" className="p-4 lg:col-span-2">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-[13px] font-bold text-ink-900">Deposits</h3>
               <span className="text-[12px] text-ink-500">
@@ -548,7 +548,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
           </Card>
 
           {/* Check out */}
-          <Card className="p-4 lg:col-span-2">
+          <Card surface="flat" className="p-4 lg:col-span-2">
             <h3 className="mb-3 text-[13px] font-bold text-ink-900">Check out</h3>
             {combined.depositsHeld > 0 && (
               <p className="mb-2.5 flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-2 text-[12px] text-brand-800">
@@ -583,7 +583,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
         </div>
       ) : (
         settled ? (
-          <Card className="p-4 text-center text-[13px] text-ink-500">
+          <Card surface="flat" className="p-4 text-center text-[13px] text-ink-500">
             This folio is closed and settled. Final balance {money(combined.balance, currency)}.
           </Card>
         ) : (
@@ -591,7 +591,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
              to say "closed · final balance €513" and stop, which is a record in a state with no
              available action. The money is still owed, so it says so, and it offers the four ways
              out. Every one is logged with who and why. */
-          <Card className="p-4">
+          <Card surface="flat" className="p-4">
             <div className="mb-3 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2.5">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
               <div className="text-[12.5px] text-danger-700">

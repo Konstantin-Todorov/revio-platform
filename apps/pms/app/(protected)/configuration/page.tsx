@@ -83,7 +83,7 @@ export default async function ConfigurationPage() {
           </div>
         </Card>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title="Housekeeping & assignment" subtitle="Whether cleaned rooms need inspecting, and how rooms get assigned" />
             <div className="divide-y divide-surface-border/60">
@@ -108,7 +108,7 @@ export default async function ConfigurationPage() {
           <Card>
             <CardHeader title="End of day" subtitle="When an unclosed day is chased, and when it closes itself" />
             <div className="space-y-2.5 p-4">
-              <div className="grid gap-2.5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <div>
                   <label className={labelCls}>Remind after (minutes past midnight)</label>
                   <input
@@ -205,7 +205,7 @@ export default async function ConfigurationPage() {
       </Card>
 
       {/* Read-only: invoice series + outlets */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Invoice series" subtitle="Gapless numbering — invoices and credit notes share one range" />
           <div className="p-4 text-[13px]">

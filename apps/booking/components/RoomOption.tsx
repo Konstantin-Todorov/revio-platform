@@ -50,7 +50,7 @@ export function RoomOption({
 
   return (
     <article className="card-raised overflow-hidden">
-      <div className="grid sm:grid-cols-[minmax(0,13.5rem)_1fr]">
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,13.5rem)_1fr]">
         {cover ? (
           /*
             The photo FILLS its column, and the column is now height-bounded.
@@ -238,7 +238,7 @@ function RateRow({
   highlight?: boolean;
 }) {
   return (
-    <div className="grid gap-4 px-5 pb-5 pt-1 sm:grid-cols-[1fr_auto] sm:gap-8">
+    <div className="grid grid-cols-1 gap-4 px-5 pb-5 pt-1 sm:grid-cols-[1fr_auto] sm:gap-8">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-[14.5px] font-bold">{plan.name}</h3>

@@ -48,7 +48,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
 
       {tab === "open" ? (
         openRows.length === 0 ? (
-          <Card className="p-8 text-center">
+          <Card surface="flat" className="p-8 text-center">
             <p className="text-[14px] font-semibold text-ink-900">No one in house</p>
             <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-ink-500">
               Folios open automatically when a guest checks in. Check someone in from the{" "}
@@ -56,7 +56,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
             </p>
           </Card>
         ) : (
-          <Card>
+          <Card surface="flat">
             <OpenFoliosTable rows={openRows.map<OpenFolioRow>((r) => ({ reservationId: r.reservationId, guestName: r.guestName, units: r.units, balance: r.balance, currency: r.currency }))} />
           </Card>
         )
@@ -65,14 +65,14 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
            with a balance appeared in OPEN (it was derived from assignment rows, not folio status),
            so the debt was both invisible as a receivable and misleading as a live bill. */
         receivables.rows.length === 0 ? (
-          <Card className="p-8 text-center">
+          <Card surface="flat" className="p-8 text-center">
             <p className="text-[14px] font-semibold text-ink-900">Nothing outstanding</p>
             <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-ink-500">
               Every departed guest has settled. A stay checked out with an unpaid balance lands here until a manager resolves it.
             </p>
           </Card>
         ) : (
-          <Card>
+          <Card surface="flat">
             <div className="flex items-baseline justify-between border-b border-surface-border px-4 py-3">
               <span className="text-[12.5px] font-semibold text-ink-700">
                 {receivables.rows.length} unpaid folio{receivables.rows.length === 1 ? "" : "s"} · oldest first
@@ -122,7 +122,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
             currency={receivables.property.baseCurrency}
           />
         )}
-        <Card>
+        <Card surface="flat">
           {/* History search (§4.2) — read-only archive; find a guest's folio, its invoices reachable. */}
           <form method="GET" className="flex items-center gap-2 border-b border-surface-border px-4 py-2.5">
             <input type="hidden" name="tab" value="history" />

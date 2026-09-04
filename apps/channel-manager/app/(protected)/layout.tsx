@@ -30,16 +30,19 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   return (
     <ShellProvider>
-      <div className="flex h-screen overflow-hidden">
+      {/* The document scrolls. The sidebar is fixed and the topbar is sticky, so the chrome
+            still stays put — but wheel, keyboard, scrollbar and scroll restoration are all native
+            browser behaviour instead of something we reimplement. */}
+        <div className="min-h-screen">
         <Sidebar connectivityLabel={connectivityLabel} />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
           <Topbar properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} notifItems={notifItems} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate
               documentElement.scrollHeight past the viewport — the window then scrolls into that empty
               region and drags the fixed-height shell up ("dead space / the page looks broken"). */}
-          <main className="relative flex-1 overflow-y-auto px-4 py-4 lg:px-6 lg:py-6">
+          <main className="relative flex-1 bg-surface-page px-4 py-4 lg:px-6 lg:py-6">
             {/* Keyed by the property in view — switching hotels re-renders the server components but
                 leaves CLIENT components mounted, holding the previous hotel's form values. A form
                 pre-filled from hotel A and submitted under hotel B writes A's values onto B. */}

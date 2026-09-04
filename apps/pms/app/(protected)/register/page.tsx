@@ -99,7 +99,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
             each council sets its own, by settlement and by category.
           </p>
         ) : (
-          <div className="grid gap-px bg-surface-border sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-px bg-surface-border sm:grid-cols-3">
             <div className="bg-surface px-4 py-3.5">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">This month</div>
               <div className="tnum mt-1 text-[20px] font-bold text-ink-900">{money(tax.monthTaxMinor, property.baseCurrency)}</div>

@@ -26,7 +26,12 @@
     "./date-picker-affordance": "./src/date-picker-affordance.tsx",
     "./flash": "./src/flash.ts",
     "./flash-toast": "./src/flash-toast.tsx",
-    "./activity-table": "./src/activity-table.tsx"
+    "./activity-table": "./src/activity-table.tsx",
+    "./primitives": "./src/primitives.tsx",
+    "./stat-card": "./src/stat-card.tsx",
+    "./sparkline": "./src/sparkline.tsx",
+    "./motion": "./src/motion.ts",
+    "./chart-path": "./src/chart-path.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

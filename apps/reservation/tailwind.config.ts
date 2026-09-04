@@ -15,7 +15,7 @@ const config: Config = {
       colors: {
         brand: { 900: "#0e1f3a", 800: "#15366a", 700: "#1d4ea0", 600: "#2563c9", 50: "#e7eefb" },
         ink: { 900: "#1c2733", 700: "#3f4753", 500: "#5b6675", 400: "#7d8aa3", 300: "#9aa3b1" },
-        surface: { DEFAULT: "#ffffff", muted: "#f1f3f6", sunken: "#e7eaef", border: "#dde4ee" },
+        surface: { DEFAULT: "#ffffff", page: "#f7f8fa", muted: "#f1f3f6", sunken: "#e7eaef", border: "#dde4ee" },
         success: { 600: "#0f7a52", 500: "#1f9d6b", 50: "#e3f4ec" },
         warning: { 600: "#e0822b", 500: "#e0a23b", 50: "#fbf1e0" },
         danger: { 600: "#b53528", 500: "#d6493b", 50: "#fbe9e7" },
@@ -38,10 +38,28 @@ const config: Config = {
          */
         product: { mark: "#818cf8", ink: "#4f46e5", wash: "#eef2ff" },
       },
-      borderRadius: { sm: "6px", md: "10px", lg: "14px" },
+      borderRadius: { sm: "6px", md: "10px", lg: "14px", xl: "16px" },
       boxShadow: {
         card: "0 1px 2px rgba(16,31,58,0.04), 0 1px 3px rgba(16,31,58,0.06)",
         pop: "0 8px 24px rgba(16,31,58,0.12)",
+        /* Mirrors `shadow` in @revio/ui tokens. A `float` card drops its border — the two
+           do not layer, or the outline wins and the blur is wasted paint. */
+        float: "0 1px 2px 0 rgba(16,31,58,0.04), 0 8px 24px -6px rgba(16,31,58,0.10)",
+        raised: "0 2px 6px 0 rgba(16,31,58,0.05), 0 16px 40px -8px rgba(16,31,58,0.14)",
+        overlay: "0 12px 48px -8px rgba(16,31,58,0.20), 0 4px 12px -2px rgba(16,31,58,0.08)",
+        /* The focus ring, as a shadow so it follows border-radius everywhere.
+           Pair with `focus-visible:outline-none`. Mirrors `focusRing` in @revio/ui/motion. */
+        focus: "0 0 0 3px rgba(37,99,201,0.32)",
+        "focus-danger": "0 0 0 3px rgba(181,53,40,0.32)",
+      },
+      /* Motion — mirrors @revio/ui/motion. Two rules: never transition colour alone, and
+         every interactive element gets a focus ring. Exit is faster than enter on purpose. */
+      transitionDuration: { fast: "150ms", base: "200ms", enter: "225ms", exit: "195ms" },
+      transitionTimingFunction: {
+        standard: "cubic-bezier(0.4, 0, 0.2, 1)",
+        out: "cubic-bezier(0.0, 0, 0.2, 1)",
+        in: "cubic-bezier(0.4, 0, 1, 1)",
+        sharp: "cubic-bezier(0.4, 0, 0.6, 1)",
       },
     },
   },
