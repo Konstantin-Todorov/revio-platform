@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { forTenant } from "@revio/db";
+import { sendTemplatedEmail } from "@revio/email";
 import { canJoinWaitlist, describeJoin, DEFAULT_OFFER_TTL_MINUTES } from "@revio/core";
 import { clientIp, hit, type RateLimitRule } from "@revio/booking";
 import { getPublicProperty } from "./property";
@@ -123,6 +124,23 @@ export async function joinWaitlist(_prev: JoinResult | null, fd: FormData): Prom
       },
     });
   }
+
+  /*
+   * Confirm in writing, but never let the mail decide the outcome.
+   *
+   * The guest is on the list the moment the row exists; a provider having a bad minute must not turn
+   * that into an error page and push them into joining twice. Same rule as the booking confirmation.
+   */
+  await sendTemplatedEmail(db, {
+    propertyId: property.id,
+    key: "waitlist_joined",
+    to: [email.toLowerCase()],
+    vars: {
+      guestName: name,
+      holdWindow: `${Math.round(DEFAULT_OFFER_TTL_MINUTES / 60)} hours`,
+    },
+    details: [{ label: "Dates", value: `${checkIn} → ${checkOut}`, emphasis: true }],
+  }).catch(() => {});
 
   return { ok: true, message: describeJoin(DEFAULT_OFFER_TTL_MINUTES) };
 }

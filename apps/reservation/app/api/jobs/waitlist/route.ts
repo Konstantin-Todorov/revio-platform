@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { JOB, acquireJobLease, forSystem, forTenant, releaseJobLease } from "@revio/db";
 import { waitlistSweep } from "@revio/booking";
+import { sendSweepEmails } from "@/lib/waitlist-emails";
 
 /**
  * Scheduled entry point for the waitlist sweep, across every tenant.
@@ -37,12 +38,16 @@ export async function POST(req: NextRequest) {
   for (const { propertyId } of pending) {
     const property = await system.property.findUnique({
       where: { id: propertyId },
-      select: { id: true, tenantId: true, name: true, baseCurrency: true, timezone: true },
+      select: { id: true, tenantId: true, name: true, baseCurrency: true, timezone: true, publicSlug: true },
     });
     if (!property) continue;
     // Scoped per tenant even inside a system job: the sweep reads and writes hotel-owned rows, and
     // the RLS perimeter is the thing that makes "one property at a time" true rather than hoped for.
-    const result = await waitlistSweep(forTenant(property.tenantId), property);
+    const db = forTenant(property.tenantId);
+    const result = await waitlistSweep(db, property);
+    // A scheduled sweep that holds rooms and sends nothing takes inventory off sale silently —
+    // the one way this feature could harm the hotel that switched it on.
+    await sendSweepEmails(db, property.id, property.publicSlug, result);
     offered += result.offered;
     lapsed += result.lapsed;
     staled += result.staled;

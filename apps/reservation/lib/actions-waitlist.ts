@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { forTenant } from "@revio/db";
 import { waitlistSweep } from "@revio/booking";
+import { sendSweepEmails } from "./waitlist-emails";
 import { requireCapability } from "./authz";
 import { getProperty } from "./data";
 import { prisma } from "./db";
@@ -44,6 +45,8 @@ export async function runWaitlistSweep(): Promise<{ offered: number; lapsed: num
     baseCurrency: property.baseCurrency,
     timezone: property.timezone,
   });
+
+  await sendSweepEmails(db, property.id, property.publicSlug, result);
 
   revalidatePath("/waitlist");
   return { offered: result.offered, lapsed: result.lapsed, staled: result.staled };
