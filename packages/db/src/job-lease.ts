@@ -145,4 +145,12 @@ export const JOB = {
   autoCloseDay: "auto-close-day",
   /** Round-2 §2.3: places every booking in a room so there is no unassigned state. */
   autoAssign: "auto-assign",
+  /**
+   * Offers a freed room to the next entry on the waitlist.
+   *
+   * Leased for a stronger reason than the jobs above: this one sends email and holds rooms, so
+   * two runners racing could offer the same room to two guests — the exact failure the
+   * sequential-offer design exists to prevent.
+   */
+  waitlistSweep: "waitlist-sweep",
 } as const;

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, CalendarRange, Wrench, CalendarCheck, Tags, BarChart3,
-  Share2, Users, Settings, Globe, X, type LucideIcon, History,
+  Share2, Users, Settings, Globe, X, type LucideIcon, History, Clock,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
@@ -23,6 +23,8 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   ] },
   { title: "Bookings", items: [
     { href: "/reservations", label: "Reservations", icon: CalendarCheck },
+    // Next to Reservations, because a waitlist entry is a reservation that has not happened yet.
+    { href: "/waitlist", label: "Waitlist", icon: Clock },
     { href: "/guests", label: "Guests", icon: Users },
   ] },
   { title: "Inventory & Rates", items: [

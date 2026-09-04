@@ -188,6 +188,20 @@ export async function waitlistSweep(
 
       const claimToken = randomUUID();
       const expiresAt = offerDeadline(now, ttl);
+
+      /*
+       * Stretch the hold to match the offer.
+       *
+       * `publicCreateHold` stamps the BOOKING ENGINE's TTL — tuned for somebody with the checkout
+       * open in front of them. An offer is an email and the guest may be asleep, which is exactly
+       * why core defaults to four hours instead. Left alone the two disagree, and the room goes back
+       * on sale while the guest still holds a message saying it is theirs: they click a valid link
+       * and find it gone, which is the disappointment this whole design exists to avoid.
+       *
+       * The hold must therefore outlive the offer, never the other way round.
+       */
+      await db.hold.update({ where: { id: hold.id }, data: { expiresAt } });
+
       await db.waitlistEntry.update({
         where: { id: winner.id },
         data: {
