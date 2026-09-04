@@ -14,7 +14,12 @@
 # request and change how the repo is worked in day to day. This changes nothing about pushing and
 # costs one CI cycle of delay before a deploy — which is a delay we want.
 #
-# ⚠️ Inert until each Railway service is pointed at `production` instead of `main`.
+# ✅ LIVE, verified 2026-09-04: channel-manager · reservation · pms · operator · booking ·
+# revio-websites all deploy from `production`. This comment said "inert" for ten days after the
+# switch, which is the more dangerous direction of stale — it tells the next reader the gate does
+# nothing, and invites pushing past a held deploy.
+#
+# ⚠️ ONE EXCEPTION: the `jobs` cron service still watches `main`. See DEPLOY.md.
 
 name: Promote to production
 

@@ -197,6 +197,57 @@ implementations of an irreversible operation with no cover would have been the r
 
 ---
 
+## ☑ 12. A queue that hands the freed resource back to whoever just released it
+
+`waitlistSweep` releases a lapsed offer's hold and sets the entry back to `waiting`, then — in the
+same run, in a second transaction — reads every `waiting` entry and offers the freed room to the
+oldest. That is the guest who just let it lapse. They are the oldest by construction, because being
+oldest is why they were offered it first.
+
+So the room they ignored went straight back to them, the person behind them heard nothing, and the
+three offers `MAX_OFFERS_PER_ENTRY` allows were spent in three sweeps a few minutes apart rather than
+over three real chances. The module's own docstring says "the next person only hears anything if that
+offer lapses", which is the behaviour that did not happen.
+
+It was invisible for the usual reason: the file had **no test**, while both its siblings in the same
+package did.
+
+| | |
+| --- | --- |
+| **Fix** | Entries lapsed in this run are excluded from this run's offers. They keep their place — position is derived from `createdAt` and never renumbered — they are simply not eligible for inventory their own lapse released |
+| **Guard** | `packages/booking/src/waitlist-sweep.test.ts` — **26 tests** on a 255-line file that had none, pinning the four rules its docstring states: expiries before offers, hold before mark, one offer per freed room, silence when the room went in the gap |
+
+⚠️ The general shape: **a release and a re-allocation in the same pass, where the releaser is still
+a candidate.** Worth checking anywhere else a resource returns to a pool that is then drained by
+seniority.
+
+---
+
+## ☑ 13. A monitor that enumerates what happened instead of what should exist
+
+`/api/health/jobs` is the dead-man's switch for the cron — the thing that catches a scheduler whose
+failure is otherwise silent. It read `JobLease` rows and mapped over them.
+
+A lease row is created by `acquireJobLease` on a job's **first run**. So a job declared in `JOB` and
+never once scheduled has no row, and a list built from rows cannot contain it: the endpoint answered
+`200 ok` with the job simply missing from the body. Adding a job to the code and forgetting its cron
+entry is the single most likely way a job never runs, and it was the one case the monitor could not
+see. Its docstring even claimed absence was "reported as `never`, visible in the body" — true only of
+a row that exists with a null `lastRunAt`, which is a different and rarer thing.
+
+Found by asking whether the switch knew about `waitlist-sweep`, which had just been declared. It did
+not.
+
+| | |
+| --- | --- |
+| **Fix** | The list starts from the `JOB` registry and joins the leases onto it. A declared job with no row is `never`; an orphan row for a name no longer declared still appears, because a half-finished rename is worth seeing |
+| **Kept** | `never` still does not return 503. A monitor that screams on every deploy gets muted, and "not finished" and "broke" deserve different volumes |
+| **Guard** | `apps/operator/lib/job-health.test.ts` — **16 tests**; the logic moved out of the route handler into a pure module, because the previous version was neither pure nor tested |
+
+⚠️ Same family as class 5 and class 10: **a health signal derived from rows that exist rather than
+from the thing being asserted.** Three now. Ask of any green indicator: what row's absence would make
+this say ok?
+
 ---
 
 ## How to add to this file

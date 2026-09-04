@@ -27,7 +27,9 @@ sharing that database.
 - **No root `railway.json`** — it applied to every service. Each app service sets its **own** build/start
   via Railway config (`railway environment edit --json` with `build.buildCommand` + `deploy.startCommand`
   using that app's `--filter`). Both target `prisma migrate deploy` → `next start` on `$PORT`.
-- **Auto-deploy is ON:** both services track `main`; every `git push origin main` builds + deploys both.
+- **Auto-deploy is ON, through a gate:** the six user-facing services track **`production`**, which is
+  fast-forwarded to `main` only after CI passes on that exact commit. A `git push origin main` therefore
+  deploys nothing directly — it starts a CI run, and a green one promotes. See *The CI gate* below.
   No manual `railway up` needed. Migrations run on each deploy; the DB is never reset.
 - **Seed/inspect the remote DB from local** with Postgres's public URL (internal `DATABASE_URL` isn't
   reachable off-Railway):
@@ -328,7 +330,26 @@ All six user-facing services now watch `production`, verified one by one:
 | --- | --- |
 | channel-manager · reservation · pms · operator · booking | `production` |
 | revio-websites | `production` |
-| jobs | `main` — runs no user-facing code, so the gate matters least here |
+| jobs | `main` — ⚠️ **the one service still ungated. That justification has expired: see below.** |
+
+#### ⚠️ The `jobs` exception, re-examined 2026-09-04
+
+`jobs` was left on `main` because it "runs no user-facing code". It serves no pages, which is what
+that sentence meant, but it is the **cron that triggers every scheduled job** — and since the waitlist
+landed, one of those jobs sends guests email and places `Hold`s that take real rooms off sale. A thing
+that emails guests and withdraws inventory is user-facing in the only sense that matters here.
+
+Two consequences, both verified on 2026-09-04:
+
+- **The gate does not cover it.** A commit that fails CI still deploys `jobs`, while every other
+  service correctly holds. That is precisely the hole `promote.yml` exists to close.
+- **It runs ahead of the apps it calls.** `jobs` was on `ad2c7ac` while all six others were on
+  `492fee8`. The cron calls job routes *on the apps*, so a cron that knows about a route the deployed
+  app does not have yet gets a 404 on a schedule — silently, because nothing reads a cron's replies.
+
+**Fix:** point `jobs` at `production` like the rest. Do it immediately after a promotion, when the two
+branches are level, so the repoint changes no running code. Left for the founder because it is a
+change to live deploy configuration, not a code change.
 
 **`revio-websites` is a separate repository** and needed its own `production` branch, its own promote
 workflow, and CI — which it had never had at all. A broken build went straight to reviosoft.app, the

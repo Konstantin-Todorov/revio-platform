@@ -218,7 +218,9 @@ nobody redoes it. Read it before promising a customer a date.
 
 ## Working agreement
 
-- Edit here, commit, push to `main`; Railway auto-deploys all six services. No staging yet.
+- Edit here, commit, push to `main`. That does **not** deploy: CI runs on `main`, and only a green run
+  fast-forwards `production`, which is the branch the services actually watch. Roughly one CI cycle of
+  delay before anything goes live, which is the point of it. See DEPLOY.md, *The CI gate*.
 - **Before pushing:** `pnpm typecheck && pnpm lint && pnpm test && pnpm build` (what CI runs), plus
   `pnpm --filter @revio/db rls-verify` against a restricted role when touching data access.
 - The pre-push hook backs production up automatically when a push carries migrations, and **fails
