@@ -55,6 +55,22 @@ const config: Config = {
       },
       /* Motion — mirrors @revio/ui/motion. Two rules: never transition colour alone, and
          every interactive element gets a focus ring. Exit is faster than enter on purpose. */
+      /*
+       * `transition-colors` is extended, not merely themed.
+       *
+       * House motion rule 1 is "never transition colour alone": if a control responds to the
+       * pointer, at least one of elevation or transform responds with it. 433 elements already say
+       * `transition-colors` and would each need editing to obey that — a diff nobody could review.
+       * Adding box-shadow and transform to what the utility transitions reaches all of them at once.
+       *
+       * The name now under-describes what it does, which is the trade: it only ever matters where a
+       * state change ALSO moves shadow or transform, so it can never animate something that was not
+       * already meant to move. `transition-none` still opts out, per element.
+       */
+      transitionProperty: {
+        colors:
+          "color, background-color, border-color, text-decoration-color, fill, stroke, box-shadow, transform",
+      },
       transitionDuration: { fast: "150ms", base: "200ms", enter: "225ms", exit: "195ms" },
       transitionTimingFunction: {
         standard: "cubic-bezier(0.4, 0, 0.2, 1)",
