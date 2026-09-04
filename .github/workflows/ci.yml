@@ -92,6 +92,11 @@ jobs:
       # the database — found in production 2026-09-02 on a rate price, and three more live sites the
       # day after, two of them on a confirmed reservation. The helpers in @revio/core/forms/parse
       # already solve it; this checks nobody quietly stops using them.
+      # A void action that bails early tells the user nothing — the screen comes back unchanged and
+      # they press the button again. A ratchet, not a gate: the number may fall, never rise.
+      - name: Silent failures
+        run: pnpm silent:lint
+
       - name: Money parsing
         run: pnpm money:lint
 
@@ -100,6 +105,12 @@ jobs:
       # whenever the bad case failed to be counted. A green pill over a channel dead for 65 days.
       - name: Invented health
         run: pnpm health:lint
+
+      # `outline-none` silently removes the global focus ring, so a keyboard user loses their place
+      # with no visual error anywhere. This ran in `pnpm verify` but NOT here, so main could be red
+      # locally and green in CI at the same time — a gate that only half exists.
+      - name: Invisible focus
+        run: pnpm a11y:lint
 
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift

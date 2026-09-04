@@ -28,6 +28,10 @@ import type { ReactNode, ButtonHTMLAttributes, InputHTMLAttributes, SelectHTMLAt
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "sm" | "md";
 
+// The ring lives in BTN_VARIANT rather than here, and `Button` always composes
+// BASE + SIZE + VARIANT, so no button can render without one. Kept as a stated reason rather than a
+// widened lint window: a ring in a *different* constant is exactly the case worth justifying.
+// a11y-lint: focus shown by BTN_VARIANT — all four variants carry focus-visible:shadow-focus
 const BTN_BASE =
   "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold " +
   "outline-none transition-colors duration-fast ease-standard " +

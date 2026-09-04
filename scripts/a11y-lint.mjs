@@ -122,6 +122,27 @@ function nearestTag(src, index) {
 /** Their ring is a box-shadow, which `outline-none` does not touch. */
 const FIELDS = new Set(["input", "select", "textarea"]);
 
+/**
+ * The whole string-concatenation the match belongs to.
+ *
+ * JS concatenation continues while a line ends in `+`, so walking outward on that gives exactly the
+ * expression the author wrote — no more. It deliberately does NOT cross into the next statement: a
+ * `focus-visible:` in a *different* constant is a real question about where the ring comes from, and
+ * the answer belongs in a stated reason rather than in a window wide enough to swallow it.
+ */
+function concatRegion(lines, index, src) {
+  const line = src.slice(0, index).split("\n").length - 1;
+  // A comment between two concatenated strings is common — these class lists are long enough that
+  // people explain them mid-expression — and it does not end the expression, so step over it.
+  const isComment = (l) => l.trim().startsWith("//");
+  const continues = (l) => l.trimEnd().endsWith("+") || isComment(l);
+
+  let start = line, end = line;
+  while (start > 0 && continues(lines[start - 1])) start--;
+  while (end < lines.length - 1 && continues(lines[end])) end++;
+  return lines.slice(start, end + 1).join("\n");
+}
+
 const found = [];
 for (const file of files) {
   const src = readFileSync(file, "utf8");
@@ -132,6 +153,12 @@ for (const file of files) {
     const cls = enclosingString(src, m.index);
     if (!cls) continue;
     if (ACCEPTABLE.some((r) => r.test(cls))) continue;
+    // ...and again across the whole `+`-joined expression, because a class list long enough to need
+    // `outline-none` is nearly always split over several lines, and the ring that answers it usually
+    // sits on the NEXT one. Checking one string literal reported `menu.tsx` and `tabs.tsx` as
+    // ringless when both paint `focus-visible:shadow-focus` a line below. A lint that flags correct
+    // code is one people learn to switch off, which costs more than the rule earns.
+    if (ACCEPTABLE.some((r) => r.test(concatRegion(lines, m.index, src)))) continue;
     if (FIELDS.has(nearestTag(src, m.index))) continue;
 
     const line = src.slice(0, m.index).split("\n").length;
