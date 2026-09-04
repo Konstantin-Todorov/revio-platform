@@ -119,6 +119,22 @@ export async function waitlistSweep(
     });
   }
 
+  /*
+   * Whose offer lapsed in THIS run — and who therefore does not get another one in it.
+   *
+   * The two queries are separate transactions, so the `waiting` read below sees the rows step 1 just
+   * wrote. Without this set the sweep hands the freed room straight back to the guest who ignored it:
+   * they are the oldest waiting entry, so `nextOfferable` picks them again, and the room they let go
+   * never reaches the person behind them. It also burns their three offers in three sweeps of a few
+   * minutes rather than over three real chances, which is the nuisance MAX_OFFERS_PER_ENTRY exists to
+   * prevent.
+   *
+   * They keep their place — position is derived from `createdAt` and is never renumbered — they are
+   * simply not eligible for the inventory their own lapse released. The next sweep considers them
+   * normally.
+   */
+  const lapsedNow = new Set(lapsedRows.map((r) => r.id));
+
   // ── 2. Entries that can never be filled. ─────────────────────────────────────────────────
   const waiting = await db.waitlistEntry.findMany({
     where: { propertyId: property.id, status: "waiting" },
@@ -138,6 +154,8 @@ export async function waitlistSweep(
       result.staled++;
       continue;
     }
+    // Still on the list, still counted, just not offered again this run.
+    if (lapsedNow.has(row.id)) continue;
     live.push(row);
   }
   if (live.length === 0) return result;

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { flashError } from "@revio/ui/flash";
 import { forTenant } from "@revio/db";
 import { waitlistSweep } from "@revio/booking";
 import { sendSweepEmails } from "./waitlist-emails";
@@ -62,7 +63,10 @@ export async function runWaitlistSweep(): Promise<{ offered: number; lapsed: num
 export async function removeWaitlistEntry(fd: FormData): Promise<void> {
   await requireCapability("manageReservations");
   const id = typeof fd.get("id") === "string" ? (fd.get("id") as string) : "";
-  if (!id) return;
+  // Not a silent bail-out. This can only happen to a POST that did not come from our own form, but
+  // a void action that returns nothing leaves the page looking untouched — so whoever is looking at
+  // it presses the button again, and the second press is as silent as the first.
+  if (!id) return flashError("Nothing was selected to remove. Reload the page and try again.");
 
   const property = await getProperty();
   // Scoped by property as well as by RLS: the tenant may run several hotels, and an id from another
