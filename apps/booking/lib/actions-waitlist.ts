@@ -53,7 +53,17 @@ export async function joinWaitlist(_prev: JoinResult | null, fd: FormData): Prom
   const email = str(fd, "email");
   const checkIn = str(fd, "checkIn");
   const checkOut = str(fd, "checkOut");
-  const guests = Number(str(fd, "guests") || "2");
+  /*
+   * `Number("abc")` is NaN, and `|| "2"` only catches an EMPTY field — letters and the comma decimal
+   * a European guest types go straight through. `canJoinWaitlist` does refuse a non-finite party
+   * size, but leaning on a guard one call away is exactly what money-lint exists to stop: this is
+   * the one public, unauthenticated surface we have, so it is read and refused here.
+   */
+  const guestsRaw = str(fd, "guests");
+  const guests = guestsRaw === "" ? 2 : Number(guestsRaw);
+  if (!Number.isFinite(guests)) {
+    return { ok: false, error: "Tell us how many guests are staying." };
+  }
 
   if (!name) return { ok: false, error: "Please give a name we can use in the email." };
   if (!/.+@.+\..+/.test(email)) return { ok: false, error: "That email address doesn't look right." };
