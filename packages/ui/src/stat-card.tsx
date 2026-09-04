@@ -73,6 +73,7 @@ export function StatCard({
   delta,
   spark,
   icon,
+  badge,
 }: {
   label: string;
   /** Pre-formatted for display — money arrives here as a string, never as minor units. */
@@ -83,6 +84,15 @@ export function StatCard({
   /** Raw series for the trend line, oldest first. Fewer than two points renders no line. */
   spark?: number[];
   icon?: ReactNode;
+  /**
+   * Anything that belongs where the delta sits — a `StatusPill`, usually.
+   *
+   * Added because the channel manager's KPI row carries a **health** pill ("Live", "3 failed"),
+   * which is not a delta and must not be squeezed into one: a delta says which way a number moved,
+   * a health pill says whether a system is working, and rendering one as the other is how a screen
+   * ends up claiming health it never measured. Ignored when `delta` is also given.
+   */
+  badge?: ReactNode;
 }) {
   const good = delta?.goodDirection ?? "up";
   const deltaTone =
@@ -105,13 +115,15 @@ export function StatCard({
           )}
           <span className="text-[13px] font-semibold text-ink-700">{label}</span>
         </div>
-        {delta && (
+        {delta ? (
           <span
             title={delta.hint}
             className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${deltaTone}`}
           >
             {delta.dir === "up" ? "↑" : delta.dir === "down" ? "↓" : "→"} {delta.text}
           </span>
+        ) : (
+          badge && <span className="shrink-0">{badge}</span>
         )}
       </div>
 

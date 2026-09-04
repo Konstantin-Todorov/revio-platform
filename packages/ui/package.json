@@ -31,7 +31,10 @@
     "./stat-card": "./src/stat-card.tsx",
     "./sparkline": "./src/sparkline.tsx",
     "./motion": "./src/motion.ts",
-    "./chart-path": "./src/chart-path.ts"
+    "./chart-path": "./src/chart-path.ts",
+    "./controls": "./src/controls.tsx",
+    "./menu": "./src/menu.tsx",
+    "./tabs": "./src/tabs.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

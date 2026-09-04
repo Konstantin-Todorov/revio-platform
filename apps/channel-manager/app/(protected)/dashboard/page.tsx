@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { syncRecencyHealth, failureVerdict, pendingSubtitle } from "@revio/core";
 import { hasFinishedSetup } from "@revio/core";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
+import { StatCard, type StatTone } from "@revio/ui/stat-card";
 import { getDashboard, getReservationSummary } from "@/lib/data";
 import { getSetup } from "@/lib/setup";
 import { prisma } from "@/lib/db";
@@ -108,10 +109,12 @@ export default async function DashboardPage() {
     },
   ];
 
-  const TONE_BG: Record<string, string> = {
-    success: "bg-success-50 text-success-600", info: "bg-accent-50 text-accent-600",
-    warning: "bg-warning-50 text-warning-600", danger: "bg-danger-50 text-danger-600",
-    neutral: "bg-surface-sunken text-ink-400",
+  /*
+   * The card's own tone vocabulary maps onto StatCard's. Only `info` differs by name — it was the
+   * accent tint here and stays the accent tint there, so nothing changes on screen.
+   */
+  const STAT_TONE: Record<string, StatTone> = {
+    success: "success", info: "accent", warning: "warning", danger: "danger", neutral: "neutral",
   };
 
   return (
@@ -150,19 +153,22 @@ export default async function DashboardPage() {
           const Icon = c.icon;
           return (
             <Link key={c.label} href={c.href} className="block">
-            <Card className="h-full p-4 transition-shadow hover:shadow-md">
-              <div style={{ animationDelay: `${i * 45}ms` }} className="animate-rise">
-                <div className="mb-3 flex items-start justify-between">
-                  <div className={`flex h-9 w-9 items-center justify-center rounded-md ${TONE_BG[c.tone]}`}>
-                    <Icon className="h-[18px] w-[18px]" />
-                  </div>
-                  <StatusPill tone={c.pill.tone}>{c.pill.text}</StatusPill>
-                </div>
-                <div className="tnum text-[26px] font-bold leading-none tracking-tight text-ink-900">{c.value}</div>
-                <div className="mt-1.5 text-[12.5px] font-semibold text-ink-700">{c.label}</div>
-                <div className="text-[11.5px] text-ink-400">{c.sub}</div>
-              </div>
-            </Card>
+            {/*
+              The health pill goes in StatCard's `badge` slot rather than its `delta` slot. They
+              render in the same corner and it would have compiled either way — but a delta says
+              which way a number moved and a pill says whether a system is working, and rendering
+              one as the other is exactly how a screen ends up claiming health nobody measured.
+            */}
+            <div style={{ animationDelay: `${i * 45}ms` }} className="animate-rise h-full">
+              <StatCard
+                tone={STAT_TONE[c.tone]}
+                label={c.label}
+                value={c.value}
+                sub={c.sub}
+                icon={<Icon className="h-4 w-4" />}
+                badge={<StatusPill tone={c.pill.tone}>{c.pill.text}</StatusPill>}
+              />
+            </div>
             </Link>
           );
         })}

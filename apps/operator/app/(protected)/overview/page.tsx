@@ -3,6 +3,7 @@ import { Building2, Boxes, Radio, CalendarCheck, AlertCircle, Hotel } from "luci
 import { getOverviewStats, getOperatorDashboard } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { TrendChart } from "@/components/overview/TrendChart";
+import { StatCard } from "@revio/ui/stat-card";
 
 export const dynamic = "force-dynamic";
 
@@ -82,39 +83,40 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         )
       )}
 
-      {/* 1. The money, in the order it matters: what we earn, what we have earned and not billed. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card className="p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Monthly recurring</div>
-          <div className="tnum mt-1 text-[28px] font-bold leading-none text-ink-900">{money(d.money.mrrMinor)}</div>
-          <div className="mt-1.5 text-[11.5px] text-ink-400">{d.money.active} active client{d.money.active === 1 ? "" : "s"}</div>
-        </Card>
+      {/*
+        1. The money, in the order it matters: what we earn, what we have earned and not billed.
 
-        {/* Revenue already earned and never invoiced. It reads as an alert because that is what it is. */}
-        <Card className="p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Unbilled tier drift</div>
-          <div className={`tnum mt-1 text-[28px] font-bold leading-none ${d.money.unbilledDriftMinor > 0 ? "text-warning-600" : "text-ink-900"}`}>
-            {money(d.money.unbilledDriftMinor)}
-          </div>
-          <div className="mt-1.5 text-[11.5px] text-ink-400">
-            {d.money.unbilledDriftMinor > 0 ? "per month, already earned" : "every plan matches its room count"}
-          </div>
-        </Card>
-
-        {/* The forward view — our clients' bookings, which is our leading indicator, not a lagging one. */}
-        <Card className="p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Clients&rsquo; next 6 months</div>
-          <div className="tnum mt-1 text-[28px] font-bold leading-none text-ink-900">{money(forwardTotal)}</div>
-          <div className="mt-1.5 text-[11.5px] text-ink-400">{forwardNights.toLocaleString()} room-nights on the books</div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Needs attention</div>
-          <div className={`tnum mt-1 text-[28px] font-bold leading-none ${acts > 0 ? "text-danger-600" : "text-ink-900"}`}>{acts}</div>
-          <div className="mt-1.5 text-[11.5px] text-ink-400">
-            {acts === 0 && soons === 0 ? "nothing outstanding" : `now · ${soons} drifting`}
-          </div>
-        </Card>
+        On the shared StatCard, with one deliberate departure from its rule that tone says what a
+        metric IS rather than how it is doing. Two of these four are **alerts, not metrics**: unbilled
+        drift and needs-attention exist to be quiet when there is nothing wrong. An alert is defined
+        by whether it is firing; a metric is not — so those two go neutral at zero and take their
+        tone when they fire, while MRR and the forward book keep a fixed tone whatever they read.
+      */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard
+          tone="brand"
+          label="Monthly recurring"
+          value={money(d.money.mrrMinor)}
+          sub={`${d.money.active} active client${d.money.active === 1 ? "" : "s"}`}
+        />
+        <StatCard
+          tone={d.money.unbilledDriftMinor > 0 ? "warning" : "neutral"}
+          label="Unbilled tier drift"
+          value={money(d.money.unbilledDriftMinor)}
+          sub={d.money.unbilledDriftMinor > 0 ? "per month, already earned" : "every plan matches its room count"}
+        />
+        <StatCard
+          tone="success"
+          label="Clients&rsquo; next 6 months"
+          value={money(forwardTotal)}
+          sub={`${forwardNights.toLocaleString()} room-nights on the books`}
+        />
+        <StatCard
+          tone={acts > 0 ? "danger" : "neutral"}
+          label="Needs attention"
+          value={String(acts)}
+          sub={acts === 0 && soons === 0 ? "nothing outstanding" : `now · ${soons} drifting`}
+        />
       </div>
 
       {/* 2. Last 12 months and next 6, side by side, because the pair is the story. */}
