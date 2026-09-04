@@ -112,6 +112,12 @@ jobs:
       - name: Invisible focus
         run: pnpm a11y:lint
 
+      # `<html>` must keep overflow: visible, or `useScrollLock` locks nothing and every dialog in
+      # every app stops holding the page behind it — silently. The two halves live in different
+      # files (a CSS rule and a React hook) and nothing else connects them.
+      - name: Modal scroll locking
+        run: pnpm scrolllock:lint
+
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift
         env:

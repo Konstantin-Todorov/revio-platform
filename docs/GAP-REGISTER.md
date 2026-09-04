@@ -250,6 +250,38 @@ this say ok?
 
 ---
 
+## ☑ 14. A guarantee whose two halves live in different files
+
+Found while auditing an architecture change rather than a bug, and nothing was broken — which is the
+point of the entry.
+
+The shell moved from scrolling an inner `<main>` to scrolling the document natively. `useScrollLock`
+survived that, because it always locked `<body>` as well as the nearest scrolling ancestor. But the
+reason body-locking works at all is a CSS rule in a different file that nobody has to read: the UA
+propagates overflow from `<html>` to the viewport and falls back to `<body>` **only while `<html>`'s
+own overflow is `visible`**.
+
+So `html { overflow-x: hidden }` — the most common fix there is for a horizontal-scroll bug on
+mobile, and mobile overflow was being worked on in the same round — would have stopped every dialog
+in all five apps from holding the page behind it. No error, and the symptom reads as a layout bug:
+scroll to the bottom of a long dialog, the wheel chains through to the page underneath, and closing
+it drops you somewhere else.
+
+The live defect was the **docstring**, which still described the `<main>` scroller as current and
+called body-locking a no-op. On code this load-bearing, a comment describing the previous
+architecture is worse than no comment: it invites a "simplification" in either direction.
+
+| | |
+| --- | --- |
+| **Fix** | The docstring now describes both architectures, says which one does the work today, and names the CSS dependency explicitly |
+| **Guard** | **`pnpm scrolllock:lint`** — refuses any `overflow` declaration on an `html` selector in an app's `globals.css`, exempting `@media print`. In `verify` and in CI |
+
+⚠️ The class: **an invariant maintained in one file and depended on in another, with no link between
+them.** The lint is the link. Worth asking wherever a fix is "obvious" in one file and load-bearing
+in a second.
+
+---
+
 ## How to add to this file
 
 When you fix something and it turns out to be a class rather than an incident:
