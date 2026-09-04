@@ -137,13 +137,16 @@ appeared — never speculatively.
   `reservation` (which writes photos; this one reads them), so room photographs survive a container
   restart. Still on the Railway subdomain: `book.revio.app` is a DNS change, not a build change, and
   the CRS's `BOOKING_ENGINE_ORIGIN` is the single place that has to follow it.
-- **Auto-deploy:** every service tracks `main`, so one `git push` builds and deploys all five.
+- **Deploy is gated on CI — services watch `production`, NOT `main`.** A push to `main` runs CI;
+  `.github/workflows/promote.yml` fast-forwards `production` to that exact commit **only when CI
+  passed**, and the fast-forward is what Railway builds. So a green push deploys, a red one stops
+  at `main` and production keeps serving the last good commit. See `DEPLOY.md` §"The CI gate".
 - **Railway project:** `revio-platform` — one Postgres shared by all services; each app is its own web
   service. **Each service defines its own build/start via Railway config** (NOT a root `railway.json` —
   that applied to every service and was removed): build = Nixpacks `pnpm install → db:generate → next
   build` for its own `--filter`; start = `prisma migrate deploy` → `next start` on `$PORT`.
-- **Auto-deploy:** both services track `main` — **every `git push` builds and deploys both
-  automatically.** Migrations run on each deploy; the DB is never reset.
+- Migrations run on each deploy; the DB is never reset. Rollback is a push, because `production`
+  is a plain branch: `git push --force origin <last-good-sha>:refs/heads/production`.
 - **Adding an app** (CRS/PMS): `railway add --service <name>`, set `DATABASE_URL=${{Postgres.DATABASE_URL}}`,
   patch its build/start to its own `--filter`, set source repo. See `DEPLOY.md`.
 - Local: `pnpm --filter @revio/<app> dev`. Seed/inspect the remote DB from this machine via
