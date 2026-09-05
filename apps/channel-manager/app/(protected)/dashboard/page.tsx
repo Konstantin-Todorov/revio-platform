@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 const CHANNEL_INITIALS: Record<string, string> = { booking: "B", expedia: "E", trip: "T", agoda: "A" };
 
 export default async function DashboardPage() {
-  const { property, stats, channels, realErrorsByChannel, reservations, syncEvents, errorItems } = await getDashboard();
+  const { property, stats, channels, successByChannel, realErrorsByChannel, reservations, syncEvents, errorItems } = await getDashboard();
 
   /**
    * A hotel that has never configured anything goes into the guided flow instead of a dashboard of
@@ -185,7 +185,7 @@ export default async function DashboardPage() {
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
                 <th className="px-4 py-2 font-semibold">Channel</th>
                 <th className="px-4 py-2 font-semibold">Status</th>
-                <th className="px-4 py-2 font-semibold">Last Sync</th>
+                <th className="px-4 py-2 font-semibold">Last Successful Sync</th>
                 <th className="px-4 py-2 text-right font-semibold">Pending</th>
                 <th className="px-4 py-2 text-right font-semibold">Errors</th>
                 <th className="px-4 py-2" />
@@ -222,7 +222,17 @@ export default async function DashboardPage() {
                         {ch.status === "connected" ? "Connected" : ch.status === "paused" ? "Paused" : ch.status}
                       </StatusPill>
                       {ch.status === "connected" && (() => {
-                        const h = syncRecencyHealth(ch.lastSyncAt, now);
+                        /*
+                         * The channel's last SUCCESS, not `ch.lastSyncAt`.
+                         *
+                         * `Channel.lastSyncAt` is stamped before the result is read, so it is an
+                         * attempt. Feeding it to a function whose parameter is named `lastSuccessAt`
+                         * painted a channel failing every five minutes as Live — the same mistake
+                         * the three cards above this table were fixed for, still live down here.
+                         * Absent from the map means it has never succeeded, which is `null`, which
+                         * reads as "Never synced" rather than as health.
+                         */
+                        const h = syncRecencyHealth(successByChannel.get(ch.id) ?? null, now);
                         return h.health === "healthy" ? null : (
                           <span title={h.detail ?? undefined}>
                             <StatusPill tone={HEALTH_TONE[h.health]}>{h.label}</StatusPill>
@@ -231,7 +241,10 @@ export default async function DashboardPage() {
                       })()}
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-ink-500">{relativeTime(ch.lastSyncAt)}</td>
+                  {/* Success, to match the column header. An attempt belongs in the Sync Center. */}
+                  <td className="px-4 py-2.5 text-ink-500">
+                    {successByChannel.has(ch.id) ? relativeTime(successByChannel.get(ch.id)!) : "Never"}
+                  </td>
                   <td className="tnum px-4 py-2.5 text-right text-ink-700">{ch.pendingCount}</td>
                   <td className="tnum px-4 py-2.5 text-right">
                     {/* Real errors only — capability limitations never show red (spec §5.2). */}

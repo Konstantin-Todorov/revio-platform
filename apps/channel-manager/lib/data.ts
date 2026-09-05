@@ -180,9 +180,40 @@ export async function getDashboard() {
     if (e.code === "restriction_not_supported" || !e.channelId) continue;
     realErrorsByChannel.set(e.channelId, (realErrorsByChannel.get(e.channelId) ?? 0) + 1);
   }
-  const lastSync = lastSuccessEvent?.createdAt
-    ?? channels.map((c) => c.lastSyncAt).filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0]
-    ?? null;
+  /*
+   * The last SUCCESS, and nothing else.
+   *
+   * This used to fall back to `max(Channel.lastSyncAt)` when no success event existed — which
+   * quietly reinstated the exact bug the query above was written to fix. `Channel.lastSyncAt` is
+   * stamped BEFORE the result is read, so it is an ATTEMPT. A channel that has failed every five
+   * minutes since it was connected and has never once succeeded has a very recent attempt, and the
+   * fallback handed that to `syncRecencyHealth` — whose parameter is literally named
+   * `lastSuccessAt` — which read it as "Live".
+   *
+   * Worse, the dashboard prints this value under the label **"Last Successful Sync"**, so the screen
+   * stated something untrue rather than merely being optimistic.
+   *
+   * `null` is the honest answer, and it is a good one: `syncRecencyHealth(null)` returns
+   * `idle`/"Never synced", which is what has actually happened. Safe to drop because SyncEvent rows
+   * are never pruned — there is no retention job anywhere in the repo — so a property that has ever
+   * succeeded still has the row proving it.
+   */
+  const lastSync = lastSuccessEvent?.createdAt ?? null;
+
+  /*
+   * Per-channel last success, for the Channel Status table, for the same reason.
+   *
+   * One grouped query rather than one per channel: a property with a dozen channels should not cost
+   * a dozen round trips to answer a question the database can answer once.
+   */
+  const successByChannel = new Map<string, Date>();
+  for (const g of await prisma.syncEvent.groupBy({
+    by: ["channelId"],
+    where: { propertyId, status: "success", kind: { in: ["push", "pull"] }, channelId: { not: null } },
+    _max: { createdAt: true },
+  })) {
+    if (g.channelId && g._max.createdAt) successByChannel.set(g.channelId, g._max.createdAt);
+  }
   const currencyWarnings = channels.filter((c) => c.currency !== property.baseCurrency).length;
 
   return {
@@ -203,6 +234,8 @@ export async function getDashboard() {
       currencyWarnings,
     },
     channels,
+    /** channelId → when that channel last SUCCEEDED. Absent means never, never means not healthy. */
+    successByChannel,
     realErrorsByChannel,
     reservations,
     syncEvents,

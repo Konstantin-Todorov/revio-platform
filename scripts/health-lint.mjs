@@ -49,13 +49,14 @@ const CLAIMS = [
   "synced", "no errors", "all good", "nothing to sync", "operational", "all clear",
 ];
 
-function walk(dir, out = []) {
+function walk(dir, out = [], ext = /\.tsx$/) {
   if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules" || entry === ".next") continue;
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, out);
-    else if (/\.tsx$/.test(full)) out.push(full);
+    if (statSync(full).isDirectory()) walk(full, out, ext);
+    // Rule 2 has to read data loaders, which are `.ts` — the fallback it exists to catch was in one.
+    else if (ext.test(full)) out.push(full);
   }
   return out;
 }
@@ -84,6 +85,52 @@ for (const file of files) {
     if (/health-lint:\s*\S+/.test(near)) continue;
     found.push(`${file}:${line}  ${m[1].trim().slice(0, 50)}`);
   }
+}
+
+/*
+ * Rule 2: an ATTEMPT timestamp passed where a SUCCESS is expected.
+ *
+ * `Channel.lastSyncAt` is stamped before the response is read, so it records that we tried, not
+ * that it worked. `syncRecencyHealth`'s parameter is named `lastSuccessAt` precisely because the
+ * distinction is the whole point — a channel failing every five minutes has a very recent attempt.
+ *
+ * Both known instances were live at once and neither was caught by rule 1, because neither wrote a
+ * literal: one passed the column straight in, the other reached it through a `?? max(lastSyncAt)`
+ * fallback that had been added back under the very query written to remove it. A name-level rule
+ * catches the shape wherever it reappears.
+ *
+ * Scans lib/ too — the fallback that caused this lived in a data loader, not in a screen.
+ */
+const SUCCESS_ARG = /syncRecencyHealth\(([^),]*)/g;
+const attemptIntoSuccess = [];
+const libFiles = APPS.flatMap((a) => walk(`apps/${a}/lib`, [], /\.tsx?$/));
+for (const file of [...files, ...libFiles]) {
+  const src = readFileSync(file, "utf8");
+  let m;
+  SUCCESS_ARG.lastIndex = 0;
+  while ((m = SUCCESS_ARG.exec(src)) !== null) {
+    if (!/lastSyncAt/.test(m[1])) continue;
+    const line = src.slice(0, m.index).split("\n").length;
+    attemptIntoSuccess.push(`${file}:${line}  syncRecencyHealth(${m[1].trim().slice(0, 40)}…`);
+  }
+  // The fallback shape, wherever it is assembled rather than passed inline.
+  for (const [i, l] of src.split("\n").entries()) {
+    if (/\?\?[^\n]*lastSyncAt/.test(l) && /lastSuccess|lastSync\b/.test(src)) {
+      attemptIntoSuccess.push(`${file}:${i + 1}  ${l.trim().slice(0, 60)}`);
+    }
+  }
+}
+
+if (attemptIntoSuccess.length > 0) {
+  console.error("health-lint FAILED: an ATTEMPT timestamp is being read as a SUCCESS.\n");
+  for (const f of attemptIntoSuccess) console.error(`  ${f}`);
+  console.error(
+    "\n`Channel.lastSyncAt` is stamped before the result is read. A channel that fails every five" +
+      "\nminutes has a recent one, and `syncRecencyHealth` would call it Live." +
+      "\n\nDerive from a SyncEvent with status \"success\", and pass null when there is none —" +
+      "\n\"Never synced\" is the true answer and reads correctly.",
+  );
+  process.exit(1);
 }
 
 for (const f of found) console.log(`  ${f}`);

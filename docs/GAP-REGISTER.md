@@ -282,6 +282,39 @@ in a second.
 
 ---
 
+## ☑ 15. A fix reinstated by its own fallback
+
+Class 5 was "health reported without being verified", and one of its fixes replaced
+`max(Channel.lastSyncAt)` with a query for the last **successful** `SyncEvent` — because
+`Channel.lastSyncAt` is stamped *before* the response is read, so it records that we tried, not that
+it worked. A channel failing every five minutes has a very recent one.
+
+The fix shipped with a fallback under it:
+
+```ts
+const lastSync = lastSuccessEvent?.createdAt
+  ?? channels.map((c) => c.lastSyncAt)...   // ← the exact value the query above removed
+```
+
+So for the case that matters most — a channel that has **never once succeeded** — the code fell
+straight back to the attempt timestamp and handed it to `syncRecencyHealth`, whose parameter is
+named `lastSuccessAt`. It read "Live". The dashboard printed that value under the label **"Last
+Successful Sync"**, so the screen asserted something untrue rather than merely being optimistic.
+
+A second instance was live at the same time and had never been fixed at all: the Channel Status
+table passed `ch.lastSyncAt` straight in, per channel, and its column header said "Last Sync".
+
+| | |
+| --- | --- |
+| **Fix** | The fallback is gone — `null` is the honest answer, and `syncRecencyHealth(null)` already returns "Never synced", which is exactly what happened. Safe because `SyncEvent` rows are never pruned; there is no retention job in the repo. The per-channel table now reads a grouped `max(createdAt) where status = success`, one query for all channels, and its column is renamed to match what it shows |
+| **Guard** | **`pnpm health:lint` rule 2** — fails on `lastSyncAt` reaching `syncRecencyHealth`, by either shape: passed inline, or assembled through a `??` fallback. It scans `lib/` as well as screens, because the fallback lived in a data loader and rule 1 only ever read `.tsx` |
+
+⚠️ The class: **a correction that leaves the wrong value reachable through a fallback.** The fallback
+looks defensive and is the opposite — it restores the old behaviour precisely in the case the fix was
+written for. When removing a bad source, check that nothing still falls back to it.
+
+---
+
 ## How to add to this file
 
 When you fix something and it turns out to be a class rather than an incident:
