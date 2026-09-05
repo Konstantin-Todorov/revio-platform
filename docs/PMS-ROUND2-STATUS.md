@@ -139,22 +139,55 @@ booked-vs-accommodated model. **Still open:**
 
 ## Blocked — needs a human
 
-- [ ] **Repair the stuck production record.** `packages/db/scripts/repair-stuck-stays.sql` is
-      committed, idempotent, and dry-run verified (selects exactly one row with the correct 14:18
-      departure). It deliberately touches **no money line** — whether the post-departure charges are
+- [ ] **Repair the stuck stays.** `packages/db/scripts/repair-stuck-stays.sql` is committed,
+      idempotent, transactional, and touches **no money line** — whether post-departure charges are
       owed, waived or written off is a manager's decision, which §1.4 now supports. Production writes
       are blocked in the agent sandbox, so run it by hand:
       ```
       psql "$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)" \
         -f packages/db/scripts/repair-stuck-stays.sql
       ```
-- [ ] **Ventsi's post-departure charges** then need resolving through the §1.4 UI, which now exists:
-      open the folio and choose one of the four resolutions.
+      Back up first — `PG_DUMP=/opt/homebrew/opt/postgresql@18/bin/pg_dump ./packages/db/scripts/backup.sh`.
+      The server is Postgres 18 and the default client here is 16, which the backup script correctly
+      refuses rather than writing an empty dump.
 
-**Until the repair runs, production still shows the old symptom for that one record** — verified
-2026-08-23: Ventsi still appears in Folios → Open at €513, because `departedAt` is still null there.
-The code fix is live; the row is what is stale. Its folios also have `outcome = NULL` (they closed
-before the column existed), which is why Receivables reads empty rather than showing the debt.
+### ⚠️ Re-verified against production 2026-09-05 — the entry above was wrong in two ways
+
+This section previously said the script was "dry-run verified (selects exactly one row)" and that the
+one row was Ventsi. A dry run against production says otherwise, and the difference matters before
+anybody runs it:
+
+**It selects five rows, not one** — all in **Hotel Sofia Group**, which is a demo tenant:
+
+| Guest | Stay | Recorded departure |
+| --- | --- | --- |
+| Julia Tan | 23–27 Jun | 2026-07-24 18:16 |
+| Sofia Almeida | 25–27 Jun | 2026-07-24 18:16 |
+| Emma Hughes | 26–27 Jun | 2026-07-24 18:16 |
+| Walin | 2–4 Jul | 2026-07-24 18:17 |
+| Antoaneta Dimitrova | 21–24 Jul | 2026-07-24 18:13 |
+
+They are the real symptom — a departure stamped a month after the stay ended is what a re-check-in
+leaves behind. **No non-demo tenant has a stuck stay**, which is the reassuring half: the bug never
+reached a paying client's data.
+
+**Ventsi is NOT among them, and the script is right to skip him.** He now has **three OPEN folios**,
+and the script deliberately excludes any reservation with one — *"an open folio means the stay may
+genuinely still be in progress, and this script must never end a stay that is really happening."*
+The claim above that his folios "closed before the column existed" is no longer true; something has
+reopened them since 2026-08-23. His last check-out stamp is `2026-07-21 14:18:31`, which is the 14:18
+the old note referred to, so it was the right record — its state has moved on.
+
+His outstanding balance now reads **€733.00** across three folios (one at €733, two at zero), not the
+€513 recorded in August. Worth understanding *why* it moved before resolving it.
+
+⚠️ Also note Ventsi Mukov Mukov is in **Hotel Sofia Group (demo)**. There is a separate, unrelated
+real tenant called *Ventsi Group*; the names invite exactly the wrong conclusion, and this file
+should not be read as saying a real client is affected.
+
+- [ ] **Decide what Ventsi's three open folios should be** before resolving the charges. The §1.4 UI
+      offers four resolutions, but it answers "how does this debt end", not "why is this folio open
+      again" — and the second question comes first.
 
 ---
 
