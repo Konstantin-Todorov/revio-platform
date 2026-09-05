@@ -75,7 +75,36 @@ GuestFeedback
 mind, not left two reviews — the row is updated and the change is recorded in the audit log. Two rows
 would double-count the hotel's average, which is the number they will quote at us.
 
-## Configuration (CRS → Settings → Emails, or its own tab)
+## Configuration — ☑ shipped 2026-09-05, RevioCRS → Settings
+
+### ⚠️ The screen explains itself, and that is a requirement rather than a nicety
+
+A hotelier arriving at this card is looking for the setting every competing tool has — *"only ask
+guests who rated 4+"* — and its **absence would read as an oversight or a missing feature**. Founder's
+call, and the right one: say it out loud, so it reads as a decision they can repeat to their own
+boss. They are also the party who carries the consequence, and most have never been told that.
+
+The card leads with the rule, then the routing table, then the reasoning:
+
+> **Everyone is asked the same thing, and everyone sees the same review links.**
+> The rating decides who we tell inside your hotel, and how fast. It never decides what the guest is
+> shown.
+>
+> | 1–2 stars | Emailed to you straight away and raised in the Action Center, so someone can call them the same morning. |
+> | 3 stars | Logged, and in your weekly summary. |
+> | 4–5 stars | Logged and counted towards your average. |
+>
+> **Why there is no "only ask happy guests" option.** Choosing who to invite based on how they rated
+> is called review gating. Google's policies prohibit soliciting reviews selectively and regulators
+> treat it as deceptive — and the consequence lands on **your listing**, not on us. It also works less
+> well than it looks: most properties need more reviews rather than fewer, and asking everyone with
+> one tap produces more of them. Reaching an unhappy guest the same morning is the better version of
+> the same idea — a complaint you have already fixed is often never written down.
+>
+> **Booking.com is not on this list.** They send their own review invitation and do not allow anyone
+> else to collect reviews for their platform.
+
+### The fields
 
 - **Review destinations**: Google place URL, TripAdvisor URL, own URL. Blank = not shown.
 - **Ask after**: N days post-departure (default 1).
@@ -171,7 +200,16 @@ Asking the wrong guest is worse than not asking:
    The token is passed in by the caller, never minted here: it is single-use and tied to one
    `GuestFeedback` row, and a token invented in two places cannot be revoked in one.
 4. RevioDirect thank-you route — brand-aware, mobile-first, works with no login.
-5. CRS: settings tab, feedback list, Action Center wiring.
+5. ◐ CRS: **settings ☑ shipped 2026-09-05**; feedback list and Action Center wiring remain.
+   Seven columns on `Property` (`reviewGoogleUrl` · `reviewTripadvisorUrl` · `reviewOwnUrl` ·
+   `feedbackEnabled` · `feedbackAskAfterDays` · `feedbackAskEveryMonths` · `feedbackAlertEmail`).
+
+   **The pasted URLs are a security boundary, not a formatting preference.** They are rendered as
+   links on a public, unauthenticated page, so `normaliseReviewUrl` accepts only `http`/`https`,
+   adds `https://` to the scheme-less paste a hotelier will actually make, and returns `null` for
+   everything else — `javascript:` in an `href` is script execution against every guest who clicks.
+   A refusal is reported to the hotel rather than silently saved as "no button". Tested, including
+   that a refused scheme is never *rescued* by prefixing `https://` onto it.
 6. Metrics + the operator trend.
 
 ## Open question for the founder

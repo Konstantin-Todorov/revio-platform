@@ -541,6 +541,27 @@ model Property {
   notifyTomorrowArrivals    Boolean   @default(false)
   notifyTomorrowTime        String    @default("18:00")
   notifyTomorrowTo          String    @default("primary")
+  // ── Guest feedback & reviews (docs/specs/REVIEW-REQUESTS.md) ───────────────────────────────────
+  // Where a guest is sent to leave a PUBLIC review. Blank = that button is not shown.
+  //
+  // ⚠️ Booking.com is deliberately absent and always will be: they send their own invitation and do
+  // not permit third parties to collect reviews for their platform.
+  //
+  // ⚠️ There is NO "only ask guests who rated well" column here, and there must never be one. That is
+  // review gating: Google's policies prohibit soliciting reviews selectively, regulators treat it as
+  // deceptive, and the consequence lands on the HOTEL's listing rather than on us. The rating routes
+  // who is told internally and how fast — see `@revio/core/feedback`, where a test enforces it.
+  reviewGoogleUrl           String?
+  reviewTripadvisorUrl      String?
+  reviewOwnUrl              String?
+  feedbackEnabled           Boolean   @default(true)
+  /// Days after departure before the question is sent. 0 = the same day they leave.
+  feedbackAskAfterDays      Int       @default(1)
+  /// Never ask the same guest more often than this, so a monthly regular is not asked monthly.
+  feedbackAskEveryMonths    Int       @default(6)
+  /// Where a 1–2 star answer is sent. Null = fall back to `reservationEmailPrimary`.
+  feedbackAlertEmail        String?
+
   // Guest-facing email branding (email engine): each hotel's mail looks like THEIRS, not like Revio's.
   // The sending domain stays ours (deliverability), but the name, reply-to, logo and accent are the
   // hotel's. Null = fall back to the property name / platform default.

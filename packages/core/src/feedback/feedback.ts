@@ -245,3 +245,54 @@ export function feedbackLinks(baseUrl: string, token: string): string[] {
   const origin = baseUrl.replace(/\/+$/, "");
   return [1, 2, 3, 4, 5].map((n) => `${origin}/feedback/${encodeURIComponent(token)}/${n}`);
 }
+
+/**
+ * Clean a review destination the hotel pasted, or refuse it.
+ *
+ * ⚠️ These URLs are rendered as links on a **public, unauthenticated page**, so the scheme is a
+ * security boundary and not a formatting preference. `javascript:` and `data:` URLs in an href are
+ * script execution against every guest who clicks; `mailto:` and `tel:` are not review pages and
+ * would silently do something the hotel did not intend.
+ *
+ * Only `http` and `https` survive. A bare `example.com/place` gets `https://` rather than being
+ * rejected, because that is what a hotelier will paste and refusing it teaches them nothing.
+ *
+ * Returns `null` for anything unusable — and `null` means "no button", never a broken one.
+ */
+export function normaliseReviewUrl(input: string | null | undefined): string | null {
+  const raw = input?.trim();
+  if (!raw) return null;
+
+  // A scheme-less paste is the common case. Only assume https when there is no scheme at all —
+  // never rewrite one we have decided to refuse.
+  const candidate = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw) ? raw : `https://${raw}`;
+
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  // A URL with no host — `https:///review` — parses but links nowhere.
+  if (!url.hostname) return null;
+  return url.toString();
+}
+
+/** The public review buttons for a property, in the order a guest sees them. */
+export function reviewDestinations(p: {
+  reviewGoogleUrl?: string | null;
+  reviewTripadvisorUrl?: string | null;
+  reviewOwnUrl?: string | null;
+  propertyName?: string;
+}): { label: string; url: string }[] {
+  const out: { label: string; url: string }[] = [];
+  // Google first: for most independents it is the single biggest lever on direct demand.
+  const google = normaliseReviewUrl(p.reviewGoogleUrl);
+  if (google) out.push({ label: "Review us on Google", url: google });
+  const ta = normaliseReviewUrl(p.reviewTripadvisorUrl);
+  if (ta) out.push({ label: "Review us on TripAdvisor", url: ta });
+  const own = normaliseReviewUrl(p.reviewOwnUrl);
+  if (own) out.push({ label: `Leave a review for ${p.propertyName ?? "us"}`, url: own });
+  return out;
+}

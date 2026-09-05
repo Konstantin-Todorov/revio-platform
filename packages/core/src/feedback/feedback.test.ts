@@ -11,6 +11,8 @@ import {
   DEFAULT_ASK_AFTER_DAYS,
   DEFAULT_ASK_AT_MOST_EVERY_MONTHS,
   type FeedbackAskFacts,
+  normaliseReviewUrl,
+  reviewDestinations,
   type FeedbackAskConfig,
 } from "./feedback";
 
@@ -246,5 +248,75 @@ describe("summariseFeedback", () => {
     expect(s.answered).toBe(0);
     expect(s.responseRate).toBe(0);
     expect(s.averageRating).toBeNull();
+  });
+});
+
+describe("normaliseReviewUrl — these become links on a public page", () => {
+  it("refuses a javascript: URL", () => {
+    // Rendered in an href on an unauthenticated page, this is script execution against every guest
+    // who clicks. The scheme is a security boundary here, not a formatting preference.
+    expect(normaliseReviewUrl("javascript:alert(1)")).toBeNull();
+    expect(normaliseReviewUrl("JavaScript:alert(1)")).toBeNull();
+  });
+
+  it("refuses data:, mailto: and tel:", () => {
+    expect(normaliseReviewUrl("data:text/html,<script>alert(1)</script>")).toBeNull();
+    expect(normaliseReviewUrl("mailto:someone@example.com")).toBeNull();
+    expect(normaliseReviewUrl("tel:+35920000000")).toBeNull();
+  });
+
+  it("assumes https for the scheme-less paste a hotelier will actually make", () => {
+    expect(normaliseReviewUrl("g.page/hotel-sofia")).toBe("https://g.page/hotel-sofia");
+  });
+
+  it("never rescues a refused scheme by prefixing https", () => {
+    // The dangerous bug would be turning "javascript:alert(1)" into
+    // "https://javascript:alert(1)" and calling it safe. The payload must not survive in any form.
+    const out = normaliseReviewUrl("javascript:alert(1)");
+    expect(out).toBeNull();
+    expect(String(out)).not.toContain("alert");
+  });
+
+  it("keeps a good URL intact", () => {
+    expect(normaliseReviewUrl("https://g.page/r/abc/review")).toBe("https://g.page/r/abc/review");
+    expect(normaliseReviewUrl("http://example.com/x")).toBe("http://example.com/x");
+  });
+
+  it("treats blank and whitespace as no destination", () => {
+    expect(normaliseReviewUrl("")).toBeNull();
+    expect(normaliseReviewUrl("   ")).toBeNull();
+    expect(normaliseReviewUrl(null)).toBeNull();
+    expect(normaliseReviewUrl(undefined)).toBeNull();
+  });
+
+  it("refuses something that is not a URL at all", () => {
+    expect(normaliseReviewUrl("https://")).toBeNull();
+  });
+});
+
+describe("reviewDestinations", () => {
+  it("shows only what the hotel filled in", () => {
+    const out = reviewDestinations({ reviewGoogleUrl: "g.page/x", propertyName: "Hotel Sofia" });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.url).toBe("https://g.page/x");
+  });
+
+  it("puts Google first — the biggest lever on direct demand", () => {
+    const out = reviewDestinations({
+      reviewOwnUrl: "example.com/own",
+      reviewTripadvisorUrl: "tripadvisor.com/x",
+      reviewGoogleUrl: "g.page/x",
+    });
+    expect(out.map((d) => d.label)[0]).toContain("Google");
+  });
+
+  it("silently drops an unusable destination rather than rendering a broken button", () => {
+    const out = reviewDestinations({ reviewGoogleUrl: "javascript:alert(1)", reviewOwnUrl: "example.com" });
+    expect(out).toHaveLength(1);
+    expect(out[0]!.url).toBe("https://example.com/");
+  });
+
+  it("returns nothing when the hotel has configured nothing", () => {
+    expect(reviewDestinations({})).toEqual([]);
   });
 });

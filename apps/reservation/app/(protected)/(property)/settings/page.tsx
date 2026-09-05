@@ -4,6 +4,7 @@ import { getProperty } from "@/lib/data";
 import { getSession } from "@/lib/session";
 import { deletePermissionRole, deleteTaxFee, savePermissionRole, saveTaxFee } from "@/lib/actions-settings";
 import { savePropertyDefaults } from "@/lib/actions-rates";
+import { saveFeedbackSettings } from "@/lib/actions-feedback";
 import { PRECEDENCE_LINE, MAX_MAIN_GUESTS, resolveMainGuestCount } from "@revio/core";
 import { PERMISSION_GROUPS } from "@/lib/permissions";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -262,6 +263,119 @@ export default async function SettingsPage() {
             </label>
             <button className="h-[34px] rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Add</button>
           </div>
+        </form>
+      </Card>
+
+      {/*
+        Guest feedback.
+
+        The explanation is not decoration and is not marketing. A hotelier arriving here is looking
+        for the setting every competing tool has — "only ask guests who rated 4+" — and its absence
+        would read as an oversight or a missing feature. Said plainly, it reads as a decision, and it
+        is one they can repeat to their own boss. It also protects them: they are the ones whose
+        Google listing carries the consequence, and most have never been told that.
+      */}
+      <Card>
+        <CardHeader
+          title="Guest feedback &amp; reviews"
+          subtitle="One question in the after-departure email — and where a guest goes to review you"
+        />
+
+        <div className="border-b border-surface-border/60 bg-surface-muted/40 px-4 py-3.5">
+          <p className="text-[12.5px] font-semibold text-ink-800">
+            Everyone is asked the same thing, and everyone sees the same review links.
+          </p>
+          <p className="mt-1.5 text-[12px] leading-relaxed text-ink-600">
+            The rating decides who we tell inside your hotel, and how fast. It never decides what the
+            guest is shown.
+          </p>
+          <dl className="mt-2.5 space-y-1 text-[12px] text-ink-600">
+            <div className="flex gap-2">
+              <dt className="w-[86px] shrink-0 font-semibold text-ink-700">1–2 stars</dt>
+              <dd>Emailed to you straight away and raised in the Action Center, so someone can call them the same morning.</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-[86px] shrink-0 font-semibold text-ink-700">3 stars</dt>
+              <dd>Logged, and in your weekly summary.</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-[86px] shrink-0 font-semibold text-ink-700">4–5 stars</dt>
+              <dd>Logged and counted towards your average.</dd>
+            </div>
+          </dl>
+          <p className="mt-3 text-[11.5px] leading-relaxed text-ink-500">
+            <span className="font-semibold text-ink-600">Why there is no “only ask happy guests” option.</span>{" "}
+            Choosing who to invite based on how they rated is called review gating. Google&rsquo;s policies
+            prohibit soliciting reviews selectively and regulators treat it as deceptive — and the
+            consequence lands on <span className="font-semibold text-ink-600">your listing</span>, not on us.
+            It also works less well than it looks: most properties need more reviews rather than fewer,
+            and asking everyone with one tap produces more of them. Reaching an unhappy guest the same
+            morning is the better version of the same idea — a complaint you have already fixed is
+            often never written down.
+          </p>
+          <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink-500">
+            <span className="font-semibold text-ink-600">Booking.com is not on this list.</span> They send
+            their own review invitation and do not allow anyone else to collect reviews for their
+            platform.
+          </p>
+        </div>
+
+        <form action={saveFeedbackSettings} className="space-y-3.5 px-4 py-4">
+          <label className="flex items-center gap-2 text-[12.5px] font-medium text-ink-800">
+            <input
+              type="checkbox"
+              name="feedbackEnabled"
+              defaultChecked={property.feedbackEnabled}
+              className="h-3.5 w-3.5 rounded border-surface-border text-brand-600"
+            />
+            Ask departing guests how their stay was
+          </label>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div>
+              <label className={labelCls} htmlFor="reviewGoogleUrl">Google review link</label>
+              <input id="reviewGoogleUrl" name="reviewGoogleUrl" defaultValue={property.reviewGoogleUrl ?? ""}
+                placeholder="g.page/your-hotel/review" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="reviewTripadvisorUrl">TripAdvisor link</label>
+              <input id="reviewTripadvisorUrl" name="reviewTripadvisorUrl" defaultValue={property.reviewTripadvisorUrl ?? ""}
+                placeholder="tripadvisor.com/…" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="reviewOwnUrl">Your own review page</label>
+              <input id="reviewOwnUrl" name="reviewOwnUrl" defaultValue={property.reviewOwnUrl ?? ""}
+                placeholder="yourhotel.com/reviews" className={inputCls} />
+            </div>
+          </div>
+          <p className="text-[11px] text-ink-400">Leave one blank and that button simply is not shown.</p>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div>
+              <label className={labelCls} htmlFor="feedbackAskAfterDays">Ask this many days after departure</label>
+              <input id="feedbackAskAfterDays" name="feedbackAskAfterDays" type="number" min={0} max={30}
+                defaultValue={property.feedbackAskAfterDays} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="feedbackAskEveryMonths">Ask the same guest at most every (months)</label>
+              <input id="feedbackAskEveryMonths" name="feedbackAskEveryMonths" type="number" min={1} max={60}
+                defaultValue={property.feedbackAskEveryMonths} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="feedbackAlertEmail">Send 1–2 star alerts to</label>
+              <input id="feedbackAlertEmail" name="feedbackAlertEmail" type="email"
+                defaultValue={property.feedbackAlertEmail ?? ""}
+                placeholder={property.reservationEmailPrimary ?? "your reservations inbox"} className={inputCls} />
+            </div>
+          </div>
+          <p className="text-[11px] text-ink-400">
+            A guest who stays with you often should not be asked every time — that is what the second
+            box prevents. Leave the alert address blank to use your reservations inbox.
+          </p>
+
+          <button className="h-[34px] rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+            Save feedback settings
+          </button>
         </form>
       </Card>
 
