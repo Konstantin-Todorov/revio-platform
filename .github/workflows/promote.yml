@@ -14,12 +14,16 @@
 # request and change how the repo is worked in day to day. This changes nothing about pushing and
 # costs one CI cycle of delay before a deploy — which is a delay we want.
 #
-# ✅ LIVE, verified 2026-09-04: channel-manager · reservation · pms · operator · booking ·
-# revio-websites all deploy from `production`. This comment said "inert" for ten days after the
-# switch, which is the more dangerous direction of stale — it tells the next reader the gate does
-# nothing, and invites pushing past a held deploy.
+# ✅ LIVE AND COMPLETE, verified service by service 2026-09-05: channel-manager · reservation · pms ·
+# operator · booking · revio-websites · jobs all deploy from `production`. Postgres has no git
+# source. There is no longer an exception.
 #
-# ⚠️ ONE EXCEPTION: the `jobs` cron service still watches `main`. See DEPLOY.md.
+# This comment said "inert" for ten days after the switch, which is the more dangerous direction of
+# stale — it tells the next reader the gate does nothing, and invites pushing past a held deploy.
+#
+# `jobs` was the last hole and was open until 2026-09-05: it deployed straight from `main`, so a red
+# CI still shipped the cron that sends guest email and places holds. See DEPLOY.md for how to change
+# a service's branch — the CLI cannot, it is a GraphQL mutation.
 
 name: Promote to production
 

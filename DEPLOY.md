@@ -330,9 +330,9 @@ All six user-facing services now watch `production`, verified one by one:
 | --- | --- |
 | channel-manager · reservation · pms · operator · booking | `production` |
 | revio-websites | `production` |
-| jobs | `main` — ⚠️ **the one service still ungated. That justification has expired: see below.** |
+| jobs | `production` — ✅ **repointed 2026-09-05, see below** |
 
-#### ⚠️ The `jobs` exception, re-examined 2026-09-04
+#### ☑ The `jobs` exception, re-examined 2026-09-04 and closed 2026-09-05
 
 `jobs` was left on `main` because it "runs no user-facing code". It serves no pages, which is what
 that sentence meant, but it is the **cron that triggers every scheduled job** — and since the waitlist
@@ -347,9 +347,30 @@ Two consequences, both verified on 2026-09-04:
   `492fee8`. The cron calls job routes *on the apps*, so a cron that knows about a route the deployed
   app does not have yet gets a 404 on a schedule — silently, because nothing reads a cron's replies.
 
-**Fix:** point `jobs` at `production` like the rest. Do it immediately after a promotion, when the two
-branches are level, so the repoint changes no running code. Left for the founder because it is a
-change to live deploy configuration, not a code change.
+**Fixed 2026-09-05.** Pointed at `production` like the rest, done immediately after a promotion so
+the two branches were level and the repoint moved no running code — `jobs` was already on `4058aa7`
+and stayed there.
+
+The hole was not hypothetical, and the evidence is in the service's own deploy history: the
+`4058aa7` deployment of `jobs` is stamped **before CI finished on that commit**. The cron was
+shipping unverified code every push, exactly as designed to. It happened to be green.
+
+**Neither the Railway CLI nor the MCP can change a service's source branch** — `railway service` has
+no such subcommand and `update_service` has no branch field. It is the `deploymentTriggerUpdate`
+mutation on the GraphQL API, using the CLI's own `accessToken` from `~/.railway/config.json`, the
+same route this file already documents for `serviceConnect`:
+
+```
+mutation { deploymentTriggerUpdate(id: "<repoTrigger id>", input: { branch: "production" }) { id branch } }
+```
+
+Read the trigger id first — `{ service(id: "<serviceId>") { repoTriggers { edges { node { id branch repository } } } } }`.
+Update **only** `branch`; repository, environment and provider are already correct and passing them
+again is a chance to get one wrong. Note the token is not authorised for a project-level `services`
+query, so verify service by service.
+
+**All seven git-backed services are now on `production`** (Postgres has no git source), verified
+individually after the change.
 
 **`revio-websites` is a separate repository** and needed its own `production` branch, its own promote
 workflow, and CI — which it had never had at all. A broken build went straight to reviosoft.app, the
