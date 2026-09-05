@@ -47,7 +47,12 @@ We are unusually well placed to build it because **every primitive already exist
 availability waterfall, the `Hold` mechanism with a TTL, the hold-expiry job, and a branded email
 engine. See the spec.
 
-### ☐ 2. Guest feedback + review requests — `docs/specs/REVIEW-REQUESTS.md`
+### ⛔ 2. Guest feedback + review requests — ON HOLD (2026-09-05) — `docs/specs/REVIEW-REQUESTS.md`
+
+> **Not being built.** The gating half was always the part to reject; the OTA-contract half is what
+> stopped the whole idea. A guest introduced by Booking.com, Trip.com or Expedia arrives under that
+> OTA's contract, which restricts contacting and marketing to them. Decision record in the spec.
+> Kept below as the record of the analysis, which stands.
 
 They prompt happy members to post public Google reviews and route unhappy feedback privately to
 management. Hotels live or die on Booking.com and Google scores, and we already send `post_stay`.

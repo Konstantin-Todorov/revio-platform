@@ -110,19 +110,25 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
 - **A returning guest is recognised after they submit, never by a live email lookup** — on a public
   page that endpoint would let anyone test whether an address has stayed at the hotel.
 
-## 7. Guest feedback — asked properly
+## 7. ⛔ Guest feedback — ON HOLD, do not put on the website
 
-- **Everyone is asked the same thing, and everyone is shown the same public review links.** The
-  rating decides who is told internally and how fast; it never decides who is invited to review
-  publicly.
-- Competing tools route happy guests to Google and unhappy ones to a private form. That is review
-  gating: it breaches Google's policies, regulators treat it as deceptive, and **the risk lands on the
-  hotel, not on the vendor**. A score that has been engineered also teaches the hotel nothing.
-- We took the goal and rejected the mechanism, and the rule is enforced by a test rather than by
-  good intentions. *`core/feedback/`, 35 tests.*
+**Pulled from the sellable list on 2026-09-05, before any of it reached a guest.**
 
-> This is a competitive difference worth saying out loud on the website, and one most of the category
-> cannot say.
+Asking a guest for a review sounds like it belongs to us and does not. A guest acquired through
+Booking.com, Trip.com or Expedia arrives under that OTA's contract, and those contracts restrict
+contacting and marketing to guests they introduced. Soliciting a review from one — even a
+scrupulously ungated one — is a contractual question per OTA and per market, not a product decision.
+
+Production data made the trade obvious rather than close: **OTA reservations carry no guest email at
+all.** The feature could only ever have reached direct bookers, so its reach was small and its
+contractual surface was not.
+
+The anti-gating design was right and is kept in the code, dormant and tested. If this returns, it
+returns as **direct bookings only** — decision record in `docs/specs/REVIEW-REQUESTS.md`.
+
+> Kept here rather than deleted, as the worked example of the rule at the top of this file. It was
+> written up as a differentiator the same day it was built, and it would have gone onto the website.
+> A claim is only safe once somebody has asked what contract it sits inside.
 
 ## 8. How it is built — proof points for the "why trust you" section
 

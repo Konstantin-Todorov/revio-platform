@@ -1,5 +1,68 @@
 # Guest feedback and review requests — without gating
 
+# ⛔ ON HOLD — decided 2026-09-05. Do not build further; do not sell.
+
+**Decision.** We are not shipping guest feedback / review requests. Founder's call after review with
+a colleague. The build stops at step 3; steps 4–6 are not started.
+
+**Why.** Asking a guest for a review sounds like it belongs to us and does not. A guest acquired
+through Booking.com, Trip.com, Expedia or Agoda arrives under **that OTA's contract**, and those
+contracts restrict contacting and marketing to the guests they introduced. Soliciting a review from
+one — even the scrupulously ungated version designed here — is a contractual question **per OTA and
+per market**, and the wrong place to discover you were wrong is a client's account manager.
+
+**What the data said.** Checked before deciding rather than after: **reservations sourced from OTAs
+carry no guest email at all** in our database (Booking.com, Trip.com, Agoda, Expedia: zero of them).
+Only Booking Engine and manually-entered direct bookings hold a real address. So the feature could
+never have reached OTA guests anyway — its reach was always direct bookers, while its contractual
+surface covered every channel. That is a bad trade, and it is what made the call easy.
+
+**Blast radius: zero guests.** The sender was never built. No feedback email has ever been rendered
+for a real stay, no `GuestFeedback` row exists, and the only customer-visible surface — the RevioCRS
+settings card — was live for under three hours before removal.
+
+## How it was disabled, and why it was done this way
+
+The principle: **disable at the boundary, keep the domain code dormant, make "off" a fact in the data
+rather than an implication of missing code.**
+
+| | Action | Reasoning |
+| --- | --- | --- |
+| Settings card (RevioCRS) | **Removed** | The only thing a hotel could see. If they cannot see it, the feature does not exist to them. This *is* the disable |
+| `actions-feedback.ts` | **Deleted** | A server action is a POST endpoint. An exported action with no UI is a live endpoint nobody is looking at — small surface, zero benefit |
+| `Property.feedbackEnabled` | **Default flipped to `false`, every row set `false`** | It shipped `true`. Nothing reads it, but a column reading `true` on every property is a loaded gun pointed at the future: the day somebody wires a sender, every hotel is already opted in by a default chosen *before* the decision to hold |
+| `GuestFeedback` table + 7 `Property` columns | **Kept** | Dropping them is a destructive migration against a live database for no benefit. The table is empty; the columns are nullable or defaulted and cost nothing |
+| `packages/core/src/feedback/` (46 tests) | **Kept, marked DORMANT in its own header** | Pure, no callers, no side effects. The reasoning is the valuable part, and the breadcrumb is on the file a future engineer will actually open |
+| `renderEmail`'s `rating` block + engine passthrough | **Kept** | A generic renderer capability, tested, unused by any sender. Removing it would be deleting working code to no end |
+| `docs/FEATURES.md` §7 | **Rewritten as ⛔ ON HOLD** | It is the file the marketing site gets written from. A shipped-feature claim there is the one that turns into a public promise |
+| `POSITIONING.md` proof point | **Removed** | Same reason |
+
+### What was deliberately NOT done
+
+- **No revert of the commits.** History is the record of why the code exists; reverting would make
+  the reasoning harder to find, not easier.
+- **No table drop.** See above — a destructive migration to reclaim nothing.
+- **No feature flag in the environment.** There is nothing to switch: with no sender and no UI, an
+  env var would be a switch wired to nothing, which is worse than no switch because it implies the
+  feature works when flipped.
+
+## If this ever comes back
+
+It comes back **direct bookings only** — `Booking Engine` and staff-entered direct reservations,
+never a channel-sourced stay. That version is nearly identical in reach (see the data above) and
+sidesteps the contract question entirely, because a guest who booked on the hotel's own site was
+never introduced by anyone.
+
+Before writing a line of it: get the answer in writing for each OTA the client actually uses. The
+rule does not generalise — it is per contract and per market.
+
+The anti-gating design stands and should be kept: everyone asked the same thing, everyone shown the
+same links, rating routes only who is told internally. That part was never the problem.
+
+---
+
+*Everything below is the original spec, kept as the record of what was designed and why.*
+
 > Programme: `docs/IDEAS-1CLUB-2026-09.md` item 2. Products: **RevioCRS** (config + inbox) +
 > the existing email engine. Entitlement: `hasReservation`.
 

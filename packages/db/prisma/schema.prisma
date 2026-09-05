@@ -554,7 +554,10 @@ model Property {
   reviewGoogleUrl           String?
   reviewTripadvisorUrl      String?
   reviewOwnUrl              String?
-  feedbackEnabled           Boolean   @default(true)
+  /// ⚠️ ON HOLD — default deliberately FALSE. See docs/specs/REVIEW-REQUESTS.md.
+  /// Nothing reads this today; it is false so that wiring a sender can never silently opt in every
+  /// hotel on the strength of a default chosen before the decision to hold.
+  feedbackEnabled           Boolean   @default(false)
   /// Days after departure before the question is sent. 0 = the same day they leave.
   feedbackAskAfterDays      Int       @default(1)
   /// Never ask the same guest more often than this, so a monthly regular is not asked monthly.

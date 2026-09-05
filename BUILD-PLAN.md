@@ -179,8 +179,10 @@ Two specs written, both buildable on primitives we already have:
 - **[`docs/specs/WAITLIST.md`](docs/specs/WAITLIST.md)** — a sold-out date currently throws the demand
   away; a later cancellation tells nobody. Reuses the waterfall, `Hold`, the expiry job and the email
   engine.
-- **[`docs/specs/REVIEW-REQUESTS.md`](docs/specs/REVIEW-REQUESTS.md)** — feedback + public review asks,
-  ⚠️ **without** the sentiment gating 1club uses, which Google's review policies prohibit.
+- ⛔ **[`docs/specs/REVIEW-REQUESTS.md`](docs/specs/REVIEW-REQUESTS.md) — ON HOLD, decided 2026-09-05.**
+  Not a backlog item; do not pick it up. Asking a guest acquired through an OTA to leave a review sits
+  inside that OTA's contract, per OTA and per market. Steps 1–3 were built and are dormant; the
+  decision record and how it was disabled are at the top of that file.
 
 Also queued there: Settings IA (sections → tabs), scoped AI agents refining **P3**, a hosted **MCP
 server** (read-only scopes in V1), and PostHog product analytics.

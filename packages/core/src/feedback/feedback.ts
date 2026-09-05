@@ -1,4 +1,19 @@
 /**
+ * ⚠️ DORMANT — the feature is ON HOLD as of 2026-09-05. Nothing calls this.
+ *
+ * **Do not wire it up without reading `docs/specs/REVIEW-REQUESTS.md` first**, where the decision and
+ * its reasoning live. The short version: asking a guest acquired through an OTA to review the hotel
+ * sits inside that OTA's contract — Booking.com, Trip.com, Expedia and others each restrict
+ * contacting and marketing to guests they introduced — and the contractual surface was judged not
+ * worth the feature.
+ *
+ * It is kept rather than deleted because the reasoning below is the valuable part, the code is inert
+ * (pure functions, no callers, no side effects), and the likely return is a narrower version
+ * restricted to **direct** bookings only. Production data supports that: OTA reservations carry no
+ * guest email at all, so this could only ever have reached direct bookers anyway.
+ *
+ * ---
+ *
  * Guest feedback — who we ask, and what their answer changes.
  *
  * Pure and here because the two judgements in it are the ones a hotelier will argue with: **who we

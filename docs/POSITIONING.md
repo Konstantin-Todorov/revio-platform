@@ -228,9 +228,6 @@ fits together" → the composable story.
   commit, and a red build leaves the last good version serving.
 - **A channel is never reported as healthy when it is not** — health comes from the last *successful*
   sync, never the last attempt.
-- **Review requests are never gated by sentiment.** Everyone is asked the same thing and shown the
-  same public links; the rating only decides who is told internally. Most of the category cannot say
-  this — see `FEATURES.md` §7 for why it matters to the hotel and not just to us.
 - **Contrast is measured rather than eyeballed** on the guest-facing booking page, against the
   hotel's own colours and its own photograph.
 
