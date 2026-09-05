@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { rankUnitsForStay, suggestAssignment, canReassign, type AssignmentCandidate, type AssignmentContext } from "./assignment.js";
+import {
+  rankUnitsForStay,
+  suggestAssignment,
+  canReassign,
+  worthReoptimising,
+  REOPTIMISE_MIN_GAIN,
+  MAX_FRAGMENTATION_TIEBREAK,
+  type AssignmentCandidate,
+  type AssignmentContext,
+} from "./assignment.js";
 
 const unit = (over: Partial<AssignmentCandidate> = {}): AssignmentCandidate => ({
   unitId: over.label ?? "u1",
@@ -147,5 +156,55 @@ describe("canReassign — a human's choice is final", () => {
 
   it("never moves a guest who is already in the room", () => {
     expect(canReassign({ pinned: false, checkedInAt: new Date("2026-08-23T14:00:00Z") })).toBe(false);
+  });
+});
+
+describe("worthReoptimising — moving a guest has a cost, so the gain must be real", () => {
+  it("refuses a gain the tie-break alone could produce", () => {
+    /*
+     * The reason this function exists. The anti-fragmentation nudge decides between rooms that are
+     * otherwise equal; if it could clear this bar on its own, the optimiser would relocate guests
+     * the night before arrival purely because one room number is higher than another, and the
+     * calendar would reshuffle itself every evening.
+     */
+    expect(worthReoptimising(100, 100 + MAX_FRAGMENTATION_TIEBREAK)).toBe(false);
+  });
+
+  it("keeps the threshold above the largest tie-break the scorer can award", () => {
+    // The relationship the two constants have to each other, pinned. If someone raises the
+    // tie-break, or lowers the threshold, this fails rather than quietly permitting churn.
+    expect(REOPTIMISE_MIN_GAIN).toBeGreaterThan(MAX_FRAGMENTATION_TIEBREAK);
+  });
+
+  it("moves for one genuine operational signal", () => {
+    // The smallest real reason the scorer awards is 40 (a clean room on a non-same-day arrival).
+    // One of those, on its own, is worth the move — otherwise the pass would almost never act.
+    expect(worthReoptimising(100, 140)).toBe(true);
+  });
+
+  it("treats the threshold itself as enough", () => {
+    expect(worthReoptimising(0, REOPTIMISE_MIN_GAIN)).toBe(true);
+    expect(worthReoptimising(0, REOPTIMISE_MIN_GAIN - 1)).toBe(false);
+  });
+
+  it("never moves for a worse room", () => {
+    expect(worthReoptimising(500, 100)).toBe(false);
+  });
+
+  it("never moves for an identical score", () => {
+    expect(worthReoptimising(250, 250)).toBe(false);
+  });
+
+  it("moves a guest whose current room the scorer no longer rates at all", () => {
+    // -Infinity is what the caller passes when the occupied unit is not in the ranking — it went
+    // out of order, or off the sellable list. Anything real beats nothing.
+    expect(worthReoptimising(-Infinity, 10)).toBe(true);
+  });
+
+  it("refuses to act on a comparison that cannot be made", () => {
+    // A non-finite BEST is not a reason to move; it is a reason the scoring is broken.
+    expect(worthReoptimising(100, Number.NaN)).toBe(false);
+    expect(worthReoptimising(100, Infinity)).toBe(false);
+    expect(worthReoptimising(-Infinity, Number.NaN)).toBe(false);
   });
 });

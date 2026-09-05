@@ -1,6 +1,11 @@
 import "server-only";
 import { forTenant, withTenantTransaction } from "@revio/db";
-import { rankUnitsForStay, canReassign, type AssignmentCandidate } from "@revio/core";
+import {
+  rankUnitsForStay,
+  canReassign,
+  worthReoptimising,
+  type AssignmentCandidate,
+} from "@revio/core";
 import { ymd, todayInTz, utcDay } from "./format";
 import { sellableStatuses, type HkStatus } from "./hk-meta";
 
@@ -242,15 +247,13 @@ function occupiedByFloor(
 /** Arrivals within this many hours are close enough that the house's picture is reliable. */
 const REOPTIMISE_WINDOW_HOURS = 12;
 
-/**
- * How much better a room must score before anybody is moved.
- *
- * Set above the anti-fragmentation tie-break (max 9) on purpose: that nudge decides between rooms
- * that are otherwise equal, and it must never on its own be a reason to relocate a guest. Only a
- * real operational gain — a ready room instead of a dirty one, a clustered turnover, a staffed
- * floor — clears this bar.
+/*
+ * How much better a room must score before anybody is moved now lives in `@revio/core` beside the
+ * scoring weights it is calibrated against — `REOPTIMISE_MIN_GAIN`, and `worthReoptimising` which
+ * applies it. It was a bare constant here and a `<` comparison in the loop below, one file away from
+ * the tie-break bound it has to exceed. A test now pins that relationship instead of a comment
+ * asserting it.
  */
-const REOPTIMISE_MIN_GAIN = 40;
 
 export async function reoptimiseImminentArrivals(
   tenantId: string,
@@ -331,7 +334,7 @@ export async function reoptimiseImminentArrivals(
     const best = scored[0];
     if (!best || best.unitId === a.unitId) continue;
     const currentScore = scored.find((s) => s.unitId === a.unitId)?.score ?? -Infinity;
-    if (best.score - currentScore < REOPTIMISE_MIN_GAIN) continue;
+    if (!worthReoptimising(currentScore, best.score)) continue;
 
     // Same claim-inside-a-transaction discipline as the first placement: the scan is a snapshot, and
     // a check-in or another sweep may have taken the room since.

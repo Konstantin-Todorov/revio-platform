@@ -129,10 +129,21 @@ booked-vs-accommodated model. **Still open:**
 - [x] **Click-to-manage modal (§2.6) — DONE** (`7e3f0d8`). Opens over the grid, no navigation.
       Deep folio work still opens the folio, deliberately — a second place to post a charge is how
       two screens drift apart.
-- [ ] **The 0–12h re-optimisation pass (§2.3).** The only piece of §2 still missing. Auto-assignment
-      places a booking once and then leaves it; the spec wants unpinned placements re-examined close
-      to arrival, when the house's picture is most accurate. `canReassign` already encodes who may
-      be moved.
+- [x] **The 0–12h re-optimisation pass (§2.3) — DONE** (`96f57ae`, 2026-08-23; the box was never
+      ticked, and this file went on calling it "the only piece of §2 still missing" for two weeks).
+      `reoptimiseImminentArrivals` in `apps/pms/lib/auto-assign.ts` re-scores unpinned, unarrived
+      placements whose arrival is within 12 hours, and it is **live** — reached through
+      `autoAssignAllProperties` → `/api/jobs/assign` → the cron, confirmed running by
+      `operator /api/health/jobs`.
+
+      It refuses to touch a pinned assignment, a guest who has arrived, or a marginal gain, and it
+      re-reads the row inside the transaction in case somebody pinned or checked in while it scored.
+
+      Hardened 2026-09-05: the move threshold moved into `@revio/core` beside the scoring weights it
+      is calibrated against (`REOPTIMISE_MIN_GAIN`, `worthReoptimising`, `MAX_FRAGMENTATION_TIEBREAK`).
+      It had been a bare constant in the PMS and a `<` in a database loop, one file away from the
+      tie-break bound it must exceed — with only a comment asserting the relationship. A test now
+      pins it, and fails whether someone lowers the threshold or raises the tie-break.
 - [ ] Drag-edge-to-extend is explicitly a fast-follow, NOT this round.
 
 ---

@@ -130,12 +130,49 @@ export function rankUnitsForStay(
       //    stays open for a walk-in or a group that needs adjacent rooms. Deliberately small — it
       //    decides between equals and never outweighs a real reason.
       const num = Number.parseInt(c.label.replace(/\D/g, ""), 10);
-      if (Number.isFinite(num)) score += Math.min(9, num / 100);
+      if (Number.isFinite(num)) score += Math.min(MAX_FRAGMENTATION_TIEBREAK, num / 100);
 
       if (reasons.length === 0) reasons.push("next available room");
       return { unitId: c.unitId, label: c.label, score, reasons };
     })
     .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
+}
+
+/**
+ * The most the anti-fragmentation tie-break can ever contribute.
+ *
+ * Named because a second decision depends on it: `REOPTIMISE_MIN_GAIN` has to sit above it, or the
+ * optimiser would relocate a guest the night before arrival purely because one room number is
+ * higher than another. The two numbers live in one file so that relationship can be tested rather
+ * than remembered.
+ */
+export const MAX_FRAGMENTATION_TIEBREAK = 9;
+
+/**
+ * How much better a room must score before an unarrived guest is moved into it.
+ *
+ * Above the tie-break on purpose (see above): that nudge decides between rooms that are otherwise
+ * equal and must never on its own be a reason to relocate anybody. Only a real operational gain — a
+ * ready room instead of a dirty one, a clustered turnover, a staffed floor — clears this bar.
+ *
+ * The cost of moving is not zero even before arrival: somebody may already have written the room
+ * number on a card at reception, and a calendar that reshuffles itself every night before every
+ * arrival is one nobody trusts.
+ */
+export const REOPTIMISE_MIN_GAIN = 40;
+
+/**
+ * Is this improvement worth moving somebody for?
+ *
+ * Pure, so the judgement can be tested against the scoring weights it is calibrated to instead of
+ * living as a bare `<` inside a database loop.
+ */
+export function worthReoptimising(currentScore: number, bestScore: number): boolean {
+  // A non-finite score means the guest is in a room the scorer no longer rates at all — which is a
+  // reason to look, not a licence to move on a comparison that cannot be made.
+  if (!Number.isFinite(bestScore)) return false;
+  if (!Number.isFinite(currentScore)) return true;
+  return bestScore - currentScore >= REOPTIMISE_MIN_GAIN;
 }
 
 /** The single best room, or null when nothing in the booked type is free for the whole stay. */
