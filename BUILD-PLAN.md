@@ -60,7 +60,7 @@ plus one security item that outranks all of them.
 **N0 — first.** `SHOW_DEMO_LOGINS` shipped 2026-08-11: all four staff sign-in pages had printed working
 credentials unconditionally, the operator console among them. **N1 login rate limiting is now DONE**
 (`packages/core/src/auth/login-gate.ts`) — the other half of that hole is closed. (N2 · N3 also
-shipped; N4 · N5 remain — see the reconciliation note at the top and `CLAUDE.md`.)
+shipped; N4 · N5 verified built and live 2026-09-05 — see `CLAUDE.md`, Phase N.)
 
 ### P1 — Production copy pass
 

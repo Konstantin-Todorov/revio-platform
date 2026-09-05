@@ -273,7 +273,7 @@ RevioDirect slug (permanent once issued; the brand step already reaches the book
 `bookingBrandColor` null-inherits-email) and a cancellation-policy screen (the model is a label with no
 terms). See task #182 for room photos + cancellation terms.
 
-**→ 🟡 PHASE N (accounts & auth) — N1 · N2 · N3 SHIPPED; N4 · N5 remain.** N1 closed the brute-force
+**→ ✅ PHASE N (accounts & auth) — N1–N5 ALL SHIPPED.** N1 closed the brute-force
 hole (per-scope login gate, fail-**closed** `AUTH_SECRET` in production) and N2 shipped password reset
 + set-by-invite, so nobody at Revio ever knows a customer's password.
 
@@ -293,8 +293,28 @@ so it ends sessions in every product the hotel runs. **"Remember me" is now a ch
 runtime, not inferred: the same token returned 200, then 307 after revocation, then 200 again on a
 fresh one — and the same three steps for an operator account via the new `active` flag.
 
-**N4 · N5 remain:** TOTP 2FA (operator console first) and password policy + auth audit trail + key
-rotation. Marketing/positioning copy for the future product websites is drafted
+**N4 · N5 — verified built and live 2026-09-05.** This file said they "remain" long after they
+landed; read the code before planning work against this paragraph.
+
+**N4 — TOTP 2FA is built AND enforced in all four apps**, not just the operator console as originally
+scoped. Each app's `actions-auth.ts` redirects to its own `/login/2fa` after the password step, and
+that second step has its own rate-limit gate keyed `2fa:<accountId>` — so a correct password does not
+buy unlimited code guesses. `totpSecret` is encrypted at rest and `totpLastStep` makes each
+30-second step single-use, which is what stops a code being replayed inside its own window.
+
+**N5 — password policy, breach check and auth audit trail are all live.** `validatePassword`
+(`core/auth/tokens.ts`) holds the local rules, and `isBreachedPassword` checks Have I Been Pwned's
+**k-anonymous range API** — the password never leaves the process, only the first five hex characters
+of its SHA-1 do. It **fails open** on purpose: an outage at a third party must not stop a hotel's new
+manager finishing their invitation. Both run in `completePasswordSet`, which is the **single** path
+that ever writes a `passwordHash` (reset and invite both funnel through it, and nothing else in the
+codebase writes that column outside the seed) — so there is no second, unvalidated way to set a
+password. `AuthEvent` records the trail, deliberately keeping attempts that matched **no** account,
+which is exactly when a run of them is worth seeing.
+
+**Key rotation** is a runbook rather than code — DEPLOY.md, *When to rotate*.
+
+Marketing/positioning copy for the future product websites is drafted
 in `docs/POSITIONING.md`; the forward roadmap is at the top of `BUILD-PLAN.md`. See `BUILD-PLAN.md` for
 the phased order, `ARCHITECTURE.md` for rationale,
 `ACCESS-MODEL.md` for the access model, `DEPLOY.md` for the deploy runbook, and **`docs/RESTORE.md`** for
