@@ -77,3 +77,80 @@ describe("email typeface setting", () => {
     expect(render("", "classic")).toEqual(render("serif", "classic"));
   });
 });
+
+describe("renderEmail — the rating ask", () => {
+  const brand = { propertyName: "Hotel Sofia", senderName: null, replyTo: null, logoUrl: null, brandColor: "#2b5cff", footerText: null, theme: "classic", font: "sans" };
+  const urls = [1, 2, 3, 4, 5].map((n) => `https://book.example.com/feedback/tok/${n}`);
+
+  const render = (over = {}) =>
+    renderEmail({
+      subject: "Thank you",
+      body: "Dear guest,\n\nThank you for staying.",
+      brand: brand as never,
+      vars: {},
+      rating: { question: "How was your stay at Hotel Sofia?", urls, hint: "One tap.", ...over },
+    });
+
+  it("puts all five links in the HTML", () => {
+    const html = render().html;
+    for (const url of urls) expect(html).toContain(url);
+  });
+
+  it("puts all five links in the plain text too", () => {
+    // A text part that omits the ask makes the email unanswerable for anyone reading text-only.
+    const text = render().text;
+    for (const url of urls) expect(text).toContain(url);
+  });
+
+  it("numbers the stars, so a guest can tell which one they are pressing", () => {
+    const html = render().html;
+    // Five glyphs alone give no way to aim, and a client that cannot render ★ shows five boxes.
+    for (const n of ["1", "2", "3", "4", "5"]) expect(html).toContain(`>${n}</span>`);
+  });
+
+  it("labels each text row with n/5 rather than relying on the glyphs", () => {
+    const text = render().text;
+    expect(text).toContain("1/5");
+    expect(text).toContain("5/5");
+    expect(text).toContain("★★★★★");
+  });
+
+  it("asks the question in both parts", () => {
+    const out = render();
+    expect(out.text).toContain("How was your stay at Hotel Sofia?");
+    expect(out.html).toContain("How was your stay at Hotel Sofia?");
+  });
+
+  it("carries the hint when given and omits it when not", () => {
+    expect(render().text).toContain("One tap.");
+    const noHint = renderEmail({
+      subject: "T", body: "B", brand: brand as never, vars: {},
+      rating: { question: "Q", urls },
+    });
+    expect(noHint.text).not.toContain("undefined");
+  });
+
+  it("refuses a scale that is not five points", () => {
+    // A four-star row silently changes what the average means. Better to fail loudly at render.
+    expect(() =>
+      renderEmail({
+        subject: "T", body: "B", brand: brand as never, vars: {},
+        rating: { question: "Q", urls: urls.slice(0, 4) },
+      }),
+    ).toThrow();
+  });
+
+  it("escapes a hostile question rather than injecting it", () => {
+    const out = renderEmail({
+      subject: "T", body: "B", brand: brand as never, vars: {},
+      rating: { question: '<script>alert(1)</script>', urls },
+    });
+    expect(out.html).not.toContain("<script>");
+  });
+
+  it("changes nothing when no rating is asked", () => {
+    const plain = renderEmail({ subject: "T", body: "Body here.", brand: brand as never, vars: {} });
+    expect(plain.html).not.toContain("★");
+    expect(plain.text).not.toContain("★");
+  });
+});

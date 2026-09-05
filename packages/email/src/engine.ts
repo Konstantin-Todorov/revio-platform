@@ -1,4 +1,11 @@
-import { EMAIL_TEMPLATES, EMAIL_TEMPLATE_BY_KEY, renderEmail, defaultsFor, type EmailBrand } from "@revio/core";
+import {
+  EMAIL_TEMPLATES,
+  EMAIL_TEMPLATE_BY_KEY,
+  renderEmail,
+  defaultsFor,
+  type EmailBrand,
+  type EmailRatingAsk,
+} from "@revio/core";
 
 /**
  * A stored template row — the hotel's own wording for one email in one language.
@@ -131,6 +138,14 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
    * first that cannot do without it.
    */
   cta?: { label: string; url: string } | null;
+  /**
+   * A five-point rating ask, rendered as five one-click links.
+   *
+   * Passed by the caller rather than derived here, because the links carry a **single-use token tied
+   * to one `GuestFeedback` row**. This engine has no business minting one — and a token invented in
+   * two places is a token that cannot be revoked in one.
+   */
+  rating?: EmailRatingAsk | null;
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const def = EMAIL_TEMPLATE_BY_KEY[args.key];
   if (!def) return { ok: false, error: `Unknown email template "${args.key}"` };
@@ -161,6 +176,7 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
     vars: args.vars,
     ...(args.details?.length ? { details: args.details } : {}),
     ...(args.cta ? { cta: args.cta } : {}),
+    ...(args.rating ? { rating: args.rating } : {}),
   });
 
   // The guest reads the hotel's name in From and replies to the hotel — not to Revio. The mail is

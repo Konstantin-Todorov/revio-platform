@@ -145,7 +145,31 @@ Asking the wrong guest is worse than not asking:
    - **`guestId` is `SET NULL`, `reservationId` cascades.** A guest profile merged away must not
      delete the rating; a stay that no longer exists cannot have feedback about it. Erasure
      anonymises in place and never deletes, so the null path is the merge case, not the GDPR one.
-3. Extend the `post_stay` template with the five signed links (EN + BG).
+3. ☑ **The five one-click links in `post_stay` (EN + BG) — shipped 2026-09-05.**
+
+   Built as a **`rating` block on `renderEmail`**, beside `details` and `cta`, rather than as markup
+   inside the template body. Two reasons: presentation has to survive every theme, every font choice
+   and Outlook (which renders through Word, so the row is a table — no flexbox, no grid); and the
+   question stays **out of the hotel's editable body**. A hotel rewriting it as "Did we exceed your
+   expectations?" would quietly change what the number means while the dashboard kept calling it the
+   same average. `feedbackQuestion` / `feedbackHint` hold the wording, EN + BG.
+
+   - **Every star is its own link with a 44px+ touch target.** A guest tapping between two stars and
+     sending the wrong rating is a corrupted number nobody can detect afterwards.
+   - **Each star carries its numeral.** Five identical glyphs give no way to aim, and a client that
+     cannot render ★ shows five boxes.
+   - **The plain-text part carries all five links**, as `★★★☆☆  3/5 — <url>`. Filled and empty stars
+     need no translation and cannot disagree with the HTML about the scale; the `n/5` is there for
+     screen readers and for clients that mangle the glyph. A text part that omitted the ask would
+     make the email unanswerable for anyone reading text-only.
+   - **The rating is in the URL path, not a query string** — some clients and link scanners rewrite
+     or strip query parameters, and a five-star answer arriving unrated is worse than no answer: it
+     counts as a response with no rating.
+   - **A scale that is not five points throws at render.** Silently drawing four stars would change
+     what the average means.
+
+   The token is passed in by the caller, never minted here: it is single-use and tied to one
+   `GuestFeedback` row, and a token invented in two places cannot be revoked in one.
 4. RevioDirect thank-you route — brand-aware, mobile-first, works with no login.
 5. CRS: settings tab, feedback list, Action Center wiring.
 6. Metrics + the operator trend.

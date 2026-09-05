@@ -322,6 +322,15 @@ export const SAMPLE_DETAILS: EmailDetail[] = [
  * `{{details}}` in the body is replaced by the structured panel (HTML) or aligned lines (text). If a
  * hotel deletes the marker, the details are appended after the prose rather than lost.
  */
+export interface EmailRatingAsk {
+  /** Already in the guest's language — see `feedbackQuestion` in core/feedback. */
+  question: string;
+  /** Exactly five, lowest first. Index 0 is one star. */
+  urls: readonly string[];
+  /** Small print under the stars. */
+  hint?: string;
+}
+
 export function renderEmail(args: {
   subject: string;
   body: string;
@@ -329,6 +338,15 @@ export function renderEmail(args: {
   vars: Record<string, string>;
   details?: EmailDetail[];
   cta?: { label: string; url: string } | null;
+  /**
+   * A five-point rating ask — one question, five one-click answers.
+   *
+   * Its own block rather than markup inside the body, for the same reason `details` and `cta` are:
+   * the hotel edits the *words* of a template, and this is presentation that has to survive every
+   * theme, every font choice and Outlook. It also keeps the question out of the editable body, where
+   * a hotel rewriting it would quietly change what the average means.
+   */
+  rating?: EmailRatingAsk | null;
   preheader?: string;
 }): RenderedEmail {
   const vars = { propertyName: args.brand.propertyName, ...args.vars };
@@ -365,6 +383,19 @@ export function renderEmail(args: {
       ? `${text}\n\n${textDetails}`
       : text;
   if (args.cta) text += `\n\n${args.cta.label}: ${args.cta.url}`;
+  if (args.rating) {
+    /*
+     * Filled and empty stars rather than the words "one star", so the plain-text part needs no
+     * translation and cannot disagree with the HTML about what the scale means. The `n/5` is there
+     * because a run of glyphs is unreadable to a screen reader and to anyone whose client renders
+     * ★ as a box.
+     */
+    const rows = args.rating.urls
+      .map((url, i) => `${"★".repeat(i + 1)}${"☆".repeat(4 - i)}  ${i + 1}/5 — ${url}`)
+      .join("\n");
+    text += `\n\n${args.rating.question}\n\n${rows}`;
+    if (args.rating.hint) text += `\n\n${args.rating.hint}`;
+  }
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
   // ---- per-theme visual treatment -----------------------------------------
@@ -442,6 +473,41 @@ ${details.map((d, i) => `<tr>
 </td></tr></table>`
     : "";
 
+  /*
+   * The star row.
+   *
+   * A table of five cells, because email clients have no flexbox and no grid — Outlook renders this
+   * through Word. Each cell is its OWN link with 14px of padding around a 26px glyph, which puts the
+   * touch target comfortably over the 44px mobile minimum: a guest tapping between two stars and
+   * sending the wrong rating is a corrupted number we can never detect afterwards.
+   *
+   * The numeral under each star is not decoration. A row of five identical glyphs gives no way to
+   * tell which one you are about to press, and clients that cannot render ★ show five boxes.
+   */
+  const ratingBlock = args.rating
+    ? (() => {
+        if (args.rating.urls.length !== 5) {
+          throw new Error(`A rating ask needs exactly 5 links, got ${args.rating.urls.length}.`);
+        }
+        const cells = args.rating.urls
+          .map(
+            (url, i) => `<td align="center" style="padding:0 2px">
+<a href="${escapeHtml(url)}" style="display:block;padding:14px 12px;text-decoration:none;color:${color};font-family:${bodyFont}">
+<span style="font-size:26px;line-height:1">★</span>
+<span style="display:block;margin-top:4px;font-size:11px;color:#8A93A0;font-family:${SANS}">${i + 1}</span>
+</a></td>`,
+          )
+          .join("\n");
+        return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 24px${T.mastheadAlign === "center" ? ";margin-left:auto;margin-right:auto" : ""}">
+<tr><td style="padding-bottom:6px;font-size:15px;line-height:1.5;color:#313B4A;font-family:${bodyFont}" colspan="5">${escapeHtml(args.rating.question)}</td></tr>
+<tr>
+${cells}
+</tr>
+${args.rating.hint ? `<tr><td colspan="5" style="padding-top:6px;font-size:11.5px;color:#8A93A0;font-family:${SANS}">${escapeHtml(args.rating.hint)}</td></tr>` : ""}
+</table>`;
+      })()
+    : "";
+
   const nameStyle =
     theme === "boutique"
       ? `font-family:${displayFont};font-size:20px;letter-spacing:.22em;text-transform:uppercase;color:#2A2520`
@@ -491,6 +557,7 @@ ${pre ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esca
     ${mastheadRow}
     <tr><td style="padding:0 ${T.pad}">
       ${htmlBody}
+      ${ratingBlock}
       ${ctaBlock}
     </td></tr>
     ${footer}

@@ -203,3 +203,45 @@ export function summariseFeedback(
     alerts: ratings.filter((r) => routeFeedback(r).urgency === "alert").length,
   };
 }
+
+/**
+ * The question, in the guest's language.
+ *
+ * Here rather than in the email template because it is **not the hotel's wording to edit**. The
+ * template body is theirs; this one line is attached to a five-point scale whose answers are counted,
+ * averaged and compared across properties. A hotel rewriting it as "Did we exceed your
+ * expectations?" would quietly change what the number means while the dashboard kept calling it the
+ * same average.
+ */
+export function feedbackQuestion(locale: string | null | undefined, propertyName: string): string {
+  return normaliseLocale(locale) === "bg"
+    ? `Как беше престоят Ви в ${propertyName}?`
+    : `How was your stay at ${propertyName}?`;
+}
+
+/** The small print under the stars: why answering is cheap. */
+export function feedbackHint(locale: string | null | undefined): string {
+  return normaliseLocale(locale) === "bg"
+    ? "Едно докосване — без регистрация и без формуляри."
+    : "One tap — no login, no forms.";
+}
+
+/** Bulgarian or English. An unknown locale gets English, never silence. */
+function normaliseLocale(locale: string | null | undefined): "en" | "bg" {
+  return locale?.trim().toLowerCase().startsWith("bg") ? "bg" : "en";
+}
+
+/**
+ * The five star links for the post-stay email, lowest first.
+ *
+ * `baseUrl` is the booking engine's public origin — the guest has no login and no session, so the
+ * page they land on is RevioDirect's, wearing the hotel's brand.
+ *
+ * The rating is in the path rather than a query string because some mail clients and link scanners
+ * rewrite or strip query parameters, and a five-star answer arriving as an unrated click is worse
+ * than no answer: it counts as a response with no rating.
+ */
+export function feedbackLinks(baseUrl: string, token: string): string[] {
+  const origin = baseUrl.replace(/\/+$/, "");
+  return [1, 2, 3, 4, 5].map((n) => `${origin}/feedback/${encodeURIComponent(token)}/${n}`);
+}
