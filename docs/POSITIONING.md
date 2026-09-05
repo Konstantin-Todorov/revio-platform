@@ -4,6 +4,13 @@
 > platform is + routes to each product) and three **product** sites (RevioLink, RevioCRS, RevioPMS).
 > **Every product site carries a small "the rest of the platform" section** that upsells the other two.
 > All copy below is grounded in what is actually built and live — no vaporware.
+>
+> 📋 **The feature inventory is [`FEATURES.md`](FEATURES.md)** — every shipped capability in customer
+> language, each naming where it lives so the claim can be re-checked. This file is the *story*; that
+> one is the *list*. **Write website copy from that file, not from memory**: on 2026-09-05 an audit
+> found six documents — this one included — claiming work remained that had shipped, or claiming
+> something shipped that had never run. A stale checkbox is recoverable; a stale promise on a public
+> site is not.
 
 ---
 
@@ -128,13 +135,17 @@ existing reservation platform.
 
 ---
 
-## 3.5 RevioDirect — the hotel's own booking page ⏳ *built, not yet live*
+## 3.5 RevioDirect — the hotel's own booking page ✅ *live*
 
-> ⚠️ **Do not put this on a website yet.** The rule at the top of this file is that every claim is
-> grounded in something live; RevioDirect runs locally only until phase K9. It is here so the copy is
-> ready and nobody writes a fourth product site by accident — **it is not a fourth site.** It is a
-> feature of RevioCRS: configured from the CRS, switched on per property, no separate login and no
-> separate price yet.
+> **Status corrected 2026-09-05.** This section said "built, not yet live · do not put this on a
+> website yet" for a month after K9 shipped. It is live at `booking.reviosoft.app/<slug>`, and the
+> cross-system claim has been demonstrated on production: one booking made as a guest appeared in
+> RevioCRS, on the RevioPMS front desk and on the folio — reconciling to the exact figure the guest
+> was quoted — with no integration step.
+>
+> Still true and still worth keeping: **it is not a fourth site.** It is a feature of RevioCRS —
+> configured from the CRS, switched on per property, with no separate login. It is priced as usage
+> (2% on bookings our engine produced) rather than as a fourth product.
 
 **One line:** *Take direct bookings on the same rooms you sell everywhere else — and keep the commission.*
 
@@ -211,7 +222,19 @@ fits together" → the composable story.
 - Real OTA connectivity via Channex (certification-ready), behind a swappable adapter.
 - Multi-tenant with Postgres Row-Level Security — a hotel physically cannot see another's data.
 - Money handled as integer minor units; **no card data stored anywhere** in the platform.
-- Live today: all three products + the operator console, each on its own service, one shared database.
+- Live today: all three products + RevioDirect + the operator console, each on its own service, one
+  shared database.
+- **A failing build never reaches a hotel** — releases are gated on the tests passing for that exact
+  commit, and a red build leaves the last good version serving.
+- **A channel is never reported as healthy when it is not** — health comes from the last *successful*
+  sync, never the last attempt.
+- **Review requests are never gated by sentiment.** Everyone is asked the same thing and shown the
+  same public links; the rating only decides who is told internally. Most of the category cannot say
+  this — see `FEATURES.md` §7 for why it matters to the hotel and not just to us.
+- **Contrast is measured rather than eyeballed** on the guest-facing booking page, against the
+  hotel's own colours and its own photograph.
+
+**More, with anchors:** [`FEATURES.md`](FEATURES.md).
 
 > **Tone:** confident, concrete, founder-honest. Lead with the anti-overbooking / one-truth story and the
 > land-and-expand economics. Avoid buzzwords; every claim above maps to a shipped feature.
