@@ -108,8 +108,29 @@ Asking the wrong guest is worse than not asking:
 
 ## Build order
 
-1. `packages/core/src/feedback/` — pure: rating buckets, suppression rules, ask-window arithmetic.
-   Tested first; the suppression list is the part that will be argued with.
+1. ☑ **`packages/core/src/feedback/` — shipped 2026-09-05, 35 tests.** `routeFeedback`,
+   `canAskForFeedback`, `isPermanentRefusal`, `askDueAt`, `addMonths`, `averageRating`,
+   `summariseFeedback`.
+
+   **The anti-gating rule is executable, not just written down.** `routeFeedback` returns
+   `showPublicLinks` as a field that is always `true`, and a test asserts it across all five ratings
+   — so introducing gating means deleting a passing test that says why it exists, rather than quietly
+   adding a condition. Proven: making the links conditional on `rating >= 4` turns that test red.
+
+   Three decisions the tests pin beyond the spec:
+   - **Refusals are ordered by permanence, not by convenience.** A guest who opted out *and* owes
+     money *and* has not departed is reported as `opted-out` — the reason still true next week, and
+     the only one a person can act on. `isPermanentRefusal` then lets a sweep stop reconsidering a
+     stay it will never ask about, instead of re-evaluating it nightly forever.
+   - **A credit balance is not a reason to go quiet.** The unpaid-balance rule is about not chasing
+     money and a review in the same week; money owed *to* the guest is the hotel's problem, not a
+     reason to skip them.
+   - **`addMonths` clamps.** 31 January plus one month is 28 February, not 3 March. The naive
+     `setMonth` rolls over, which would ask a regular guest *earlier* than the hotel's configured
+     minimum — quietly breaking the one setting that exists to stop us pestering them.
+
+   A rating outside 1–5 throws rather than clamping: clamping would turn an upstream bug into a
+   silent 1-star alert or a silent 5-star average.
 2. Migration: `GuestFeedback` + `tenant_isolation` RLS + unique on `reservationId`.
 3. Extend the `post_stay` template with the five signed links (EN + BG).
 4. RevioDirect thank-you route — brand-aware, mobile-first, works with no login.
