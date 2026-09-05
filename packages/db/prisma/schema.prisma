@@ -641,6 +641,7 @@ model Property {
   stayGuests           StayGuest[]
 
   waitlistEntries WaitlistEntry[]
+  guestFeedback   GuestFeedback[]
 
   @@index([tenantId])
 }
@@ -1230,6 +1231,7 @@ model Reservation {
   stayExtras    StayExtra[]
 
   waitlistEntries WaitlistEntry[]
+  guestFeedback   GuestFeedback?
 
   @@index([propertyId])
   @@index([channelId])
@@ -1349,12 +1351,13 @@ model Guest {
   /// what stops a second erasure and what tells a screen this is not merely an incomplete record.
   erasedAt          DateTime?
 
-  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property     Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   reservations Reservation[]
   notes        GuestNote[]
   stayGuests   StayGuest[]
-  mergedInto   Guest?        @relation("GuestMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
-  mergedFrom   Guest[]       @relation("GuestMerge")
+  feedback     GuestFeedback[]
+  mergedInto   Guest?          @relation("GuestMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom   Guest[]         @relation("GuestMerge")
 
   @@index([propertyId, lastName])
   @@index([mergedIntoId])
@@ -2204,6 +2207,59 @@ model StayGuest {
 /// A sold-out date is demand the hotel already paid to attract. Without this row it is answered with
 /// alternative stays and then forgotten, so a cancellation an hour later tells nobody.
 /// Rules for who gets offered a freed room live in `@revio/core/waitlist` — see docs/specs/WAITLIST.md.
+/// Guest feedback after a stay (docs/specs/REVIEW-REQUESTS.md).
+///
+/// ⚠️ ONE ROW PER RESERVATION, enforced by a unique constraint. A guest who clicks two stars and then
+/// five has changed their mind, not left two reviews — the row is updated and the change is audited.
+/// Two rows would double-count the hotel's average, which is the number they will quote back at us.
+///
+/// The rating decides who is told internally and how fast. It NEVER decides who is shown the public
+/// review links — that is review gating, it breaches Google's policies, and the risk lands on the
+/// hotel. `publicPromptShown` is the audit trail proving we showed them, not a switch for hiding them.
+model GuestFeedback {
+  id            String  @id @default(cuid())
+  tenantId      String
+  propertyId    String
+  /// The stay it is about. Feedback with no stay is not feedback, so this is required.
+  reservationId String  @unique
+  /// Null when the stay had no guest profile — we still want the rating.
+  guestId       String?
+
+  /// 1–5, null until they answer. The row exists from the moment we ask, so "asked but silent" is a
+  /// fact we can count rather than an absence we have to infer.
+  rating  Int?
+  comment String?
+
+  askedAt     DateTime  @default(now())
+  respondedAt DateTime?
+  /// Set when a person has dealt with a low rating. Drives the CRS Action Center count.
+  resolvedAt  DateTime?
+
+  /// Single-use link carried by the post-stay email; answering needs no login and no typing.
+  token          String   @unique
+  tokenExpiresAt DateTime
+
+  /// Did we show the public review links? Always true today — kept as an audit trail, so that if
+  /// anyone ever ships gating there is a record of when it started.
+  publicPromptShown Boolean @default(true)
+
+  /// post_stay | manual
+  source String @default("post_stay")
+
+  updatedAt DateTime @default(now()) @updatedAt
+
+  property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  guest       Guest?      @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  /// The inbox and the average, both scoped to a property and a period.
+  @@index([propertyId, respondedAt])
+  /// "How many unresolved one- and two-star answers are there?" — the Action Center's question.
+  @@index([propertyId, rating, resolvedAt])
+  /// "When did we last ask THIS guest?" — the suppression window.
+  @@index([guestId, askedAt])
+}
+
 model WaitlistEntry {
   id             String    @id @default(cuid())
   tenantId       String

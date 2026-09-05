@@ -131,7 +131,20 @@ Asking the wrong guest is worse than not asking:
 
    A rating outside 1–5 throws rather than clamping: clamping would turn an upstream bug into a
    silent 1-star alert or a silent 5-star average.
-2. Migration: `GuestFeedback` + `tenant_isolation` RLS + unique on `reservationId`.
+2. ☑ **Migration — shipped 2026-09-05.** `GuestFeedback` + `tenant_isolation` RLS + the unique on
+   `reservationId`. `prisma migrate diff` reports no difference between the hand-written SQL and the
+   schema, and `rls-verify` enumerates models carrying a `tenantId` rather than a hard-coded list, so
+   the new table is covered without a second file to keep in sync.
+
+   Three shape decisions worth keeping:
+   - **The row is created when we ASK, not when they answer**, with `rating` nullable. That makes
+     "asked and stayed silent" a fact we can count rather than an absence inferred from a missing row
+     — which is what makes a response *rate* possible at all.
+   - **`resolvedAt`** was not in the spec's model but the spec asks for "unresolved 1–2 star
+     responses" in the Action Center. Without it that count cannot exist.
+   - **`guestId` is `SET NULL`, `reservationId` cascades.** A guest profile merged away must not
+     delete the rating; a stay that no longer exists cannot have feedback about it. Erasure
+     anonymises in place and never deletes, so the null path is the merge case, not the GDPR one.
 3. Extend the `post_stay` template with the five signed links (EN + BG).
 4. RevioDirect thank-you route — brand-aware, mobile-first, works with no login.
 5. CRS: settings tab, feedback list, Action Center wiring.
