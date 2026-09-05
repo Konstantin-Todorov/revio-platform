@@ -369,6 +369,35 @@ hazard explicit for one of them.
 
 ---
 
+## ☑ 17. A job that was declared, leased, tested, deployed — and never once run
+
+Found by class 13's guard on its first real use, which is the best argument for that guard I could
+have asked for. The live dead-man's switch reported:
+
+```json
+{ "name": "waitlist-sweep", "ageSeconds": null, "state": "never", "declared": true }
+```
+
+`waitlist-sweep` had shipped two days earlier. It had a route, a lease, 26 tests, and a place in the
+`JOB` registry. It was simply **absent from `scripts/run-jobs.mjs`** — the one file that actually
+calls the job endpoints — so nothing ever invoked it. The waitlist feature was live and the only
+thing that turns a freed room into an offer had never executed in production.
+
+Under the old row-driven health endpoint this was invisible: no run means no `JobLease` row, and a
+list built from rows cannot contain it. The endpoint would have said `ok` with six jobs.
+
+| | |
+| --- | --- |
+| **Fix** | Added to the runner, **last in the sequence** — every other job in the list can free inventory (hold expiry releases holds, the Channex pull brings cancellations, the night audit marks no-shows), and the sweep exists to notice exactly that. Anywhere earlier and it answers with the world as it was ten minutes ago |
+| **Guard** | **`pnpm jobs:lint`** — every name in `JOB` must appear in `run-jobs.mjs`, and every name in the runner must be declared in `JOB`. Both directions: the second catches a typo or half-finished rename, which would call an endpoint whose lease name nobody holds |
+
+⚠️ The class: **two files that must agree, with nothing checking that they do.** Same shape as class
+14 (a CSS rule and a React hook) and class 15 (a query and its fallback). Three now, which is enough
+to make it the first thing to look for: when a change has a second half somewhere else, what makes
+the second half happen?
+
+---
+
 ## How to add to this file
 
 When you fix something and it turns out to be a class rather than an incident:

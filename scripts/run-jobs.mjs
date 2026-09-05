@@ -7,6 +7,12 @@
  * the routes shipped and nothing invoked them, so the automatic Close Day and auto-assignment were
  * written, tested, deployed — and inert. This is the caller, run by Railway cron.
  *
+ * ⚠️ **A route added to an app is not scheduled until it is added HERE.** That happened again with
+ * the waitlist sweep: shipped, deployed, and never once run, because nothing called it. The
+ * dead-man's switch at `operator /api/health/jobs` now reports a declared-but-never-run job as
+ * `never` precisely so this list and `JOB` in @revio/db cannot silently disagree again — it is what
+ * caught this. If you add a job, add it here in the same commit.
+ *
  * Deliberately dependency-free and deliberately dumb. A scheduler that needs a build, a lockfile or
  * a framework is a scheduler that can fail for reasons unrelated to the jobs it runs.
  *
@@ -36,6 +42,19 @@ const JOBS = [
   { name: "arrivals-digest", url: process.env.CM_URL && `${process.env.CM_URL}/api/jobs/arrivals` },
   { name: "auto-assign", url: process.env.PMS_URL && `${process.env.PMS_URL}/api/jobs/assign` },
   { name: "auto-close-day", url: process.env.PMS_URL && `${process.env.PMS_URL}/api/jobs/closeday` },
+  /*
+   * LAST, deliberately.
+   *
+   * Every other job in this list can free inventory: hold expiry releases holds, the Channex pull
+   * brings in cancellations, and the night audit marks no-shows. The waitlist sweep exists to notice
+   * exactly that — "one sweep instead of six hooks", asking the availability engine what is
+   * genuinely sellable rather than hooking each route that might have freed something.
+   *
+   * Running it last means it sees everything this tick produced. Anywhere earlier and it answers
+   * with the world as it was ten minutes ago, and a guest waits a full cycle longer for a room that
+   * was already free.
+   */
+  { name: "waitlist-sweep", url: process.env.CRS_URL && `${process.env.CRS_URL}/api/jobs/waitlist` },
 ];
 
 /** Long enough for a night audit across many properties; short enough that a hung job ends the run. */
@@ -75,9 +94,9 @@ async function run({ name, url }) {
 
 /**
  * Sequential, not parallel. These jobs write to one shared database and several take row locks;
- * firing six at once to save a few seconds buys nothing and makes lock contention a scheduling
+ * firing them all at once to save a few seconds buys nothing and makes lock contention a scheduling
  * problem. Ordered so inventory is tidied before anything reads it: expire stale holds, pull new
- * bookings, then place rooms and close the day.
+ * bookings, place rooms, close the day — and only then offer what all of that freed.
  */
 const results = [];
 for (const job of JOBS) results.push(await run(job));

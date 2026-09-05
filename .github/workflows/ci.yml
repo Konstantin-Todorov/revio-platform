@@ -118,6 +118,11 @@ jobs:
       - name: Modal scroll locking
         run: pnpm scrolllock:lint
 
+      # A job declared in `JOB` that the cron runner never calls is inert, however well it is written
+      # and tested. `waitlist-sweep` shipped that way and had never executed once in production.
+      - name: Every job is scheduled
+        run: pnpm jobs:lint
+
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift
         env:
