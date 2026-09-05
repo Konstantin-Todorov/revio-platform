@@ -173,6 +173,25 @@ A screen hidden from a role while the write behind it stayed open to a crafted P
 
 ## Wanted — classes known but not yet guarded
 
+### A concurrency guard applied to the scheduled path and not to the manual one
+
+**Fixed for the waitlist (class 16 below); open for PMS Close Day.**
+
+`/api/jobs/closeday` takes `JOB.autoCloseDay` and says why: *"two closes would roll the business
+date twice and skip a day entirely."* The manual **Close Day** button reaches the same
+`runCloseDay` with no lease.
+
+Read carefully, a day **cannot** be skipped by two *concurrent* runs: both read `businessDate = D`
+outside the transaction and both compute `next` from that read, so both write `D+1` and the value is
+idempotent. What a concurrent pair does produce is a **duplicated close record** — the no-show scan
+re-reads candidates from before the first run, so the same reservations are counted twice and two
+audit entries claim the same close.
+
+Not fixed here on purpose: `close-day-run.ts` is inside PMS Round 2 §3, which is in build and whose
+tracker says to read it before touching PMS state. The fix is small and should be made there — an
+optimistic condition on the roll (`where: { id, businessDate: <the value read> }`) is better than a
+lease, because it also protects the sequential double-close a lease's TTL would not.
+
 
 ## ☑ 11. Two implementations of an irreversible operation
 
@@ -312,6 +331,30 @@ table passed `ch.lastSyncAt` straight in, per channel, and its column header sai
 ⚠️ The class: **a correction that leaves the wrong value reachable through a fallback.** The fallback
 looks defensive and is the opposite — it restores the old behaviour precisely in the case the fix was
 written for. When removing a bad source, check that nothing still falls back to it.
+
+---
+
+## ☑ 16. A guard on the scheduled path, absent from the manual one
+
+The waitlist cron leases `JOB.waitlistSweep` and states the reason plainly: the sweep **sends email
+and places holds**, so two runners could act on the same freed room. The CRS's *Check for openings*
+button ran the identical `waitlistSweep` with **no lease at all**.
+
+`publicCreateHold` is atomic, so the same room could never be given away twice — the damage sat one
+level up. Two concurrent sweeps can pick the same waiting entry for two *different* rooms, hold both,
+and email the guest twice; only the second `claimToken` survives the write, so one of those emails
+links to nothing while its room stays off sale for the whole offer window.
+
+Found by asking which operations are reachable **two ways**, after the cron's own comment made the
+hazard explicit for one of them.
+
+| | |
+| --- | --- |
+| **Fix** | The button takes the same lease through `withJobLease`. Global rather than per-property, because the cron sweeps every property under one lease and a per-property lease would not serialise against it. Released on completion, so the TTL is only a crash ceiling |
+| **Also fixed** | The button reported **nothing at all** on success. Most sweeps legitimately do nothing, so the screen came back identical and an agent could not tell "checked, nothing free" from "the button is broken" — class 7 arriving through a *successful* path rather than an early return. It now says what happened, including that a check was already running |
+| **Guard** | `authz-lint` caught the refactor immediately (the wrapper stopped matching its delegation pattern), which is why `sweepWaitlistForm` now states its own `requireCapability` rather than inheriting one a reader cannot see |
+
+⚠️ Still open, same class: **PMS Close Day** — see *Wanted*, above.
 
 ---
 

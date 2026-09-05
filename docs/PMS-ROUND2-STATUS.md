@@ -227,3 +227,31 @@ nobody redoes it. Read it before promising a customer a date.
   closed** if the backup fails.
 - Standing constraints: payments stay mocked / Stripe **test-mode only**; never store a card number;
   never call `forSystem()` in a user-facing request path; demo tenants stay out of money metrics.
+
+---
+
+## ⚠️ Found 2026-09-05 while auditing concurrency — for §3
+
+**The manual Close Day button takes no job lease; the auto-close cron does.**
+
+`/api/jobs/closeday` leases `JOB.autoCloseDay` and explains why: *"two closes would roll the business
+date twice and skip a day entirely."* `closeDay()` in `apps/pms/lib/actions-closeday.ts` reaches the
+same `runCloseDay` with nothing.
+
+Verified rather than assumed: two **concurrent** runs cannot skip a day. Both read `businessDate = D`
+before the transaction and both compute `next` from that read, so both write `D+1`. What they do
+produce is a duplicated close — `candidates` was read before either transaction, so the same
+reservations are marked no-show twice and counted twice, and two audit entries claim the same close.
+
+**Suggested fix, when §3 is picked up:** make the roll optimistic rather than adding a lease —
+
+```ts
+await tx.property.updateMany({
+  where: { id: propertyId, businessDate: property.businessDate },  // still what we read
+  data: { businessDate: utcDay(next), ... },
+});
+```
+
+A lease only serialises runs that overlap in time; the condition also refuses the *sequential*
+double-close, which is the one that actually could skip a day. Left for §3 deliberately — this file
+says to read it before touching PMS state, and that applies to the person who found it too.
