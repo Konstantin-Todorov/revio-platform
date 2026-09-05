@@ -30,6 +30,19 @@ function money(minor: number, currency: string) {
   return `${sym}${(minor / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** A rate as a whole percent. Rates arrive as 0–1, never pre-multiplied. */
+function pct(rate: number): string {
+  return `${Math.round(rate * 100)}%`;
+}
+
+/** Minutes in the units a person would actually say them in. */
+function waitDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? "" : "s"}`;
+  return `${Math.round(hours / 24)} days`;
+}
+
 function waitingSince(d: Date): string {
   const h = Math.floor((Date.now() - d.getTime()) / 3_600_000);
   if (h < 1) return "just now";
@@ -44,7 +57,7 @@ export default async function WaitlistPage({
 }) {
   const sp = await searchParams;
   const active = (TABS.find((t) => t.key === sp.status)?.key ?? "waiting") as WaitlistStatus | "all";
-  const { rows, counts, recovered } = await getWaitlist(active === "all" ? undefined : active);
+  const { rows, counts, recovered, metrics } = await getWaitlist(active === "all" ? undefined : active);
 
   return (
     <div className="space-y-5">
@@ -82,9 +95,49 @@ export default async function WaitlistPage({
           tone="neutral"
           label="Converted"
           value={String(counts.converted)}
-          sub="all time"
+          /*
+           * The rate, not the word "all time".
+           *
+           * `offerConversionRate` is converted ÷ **offered**, which measures the offer itself — the
+           * wording, the four-hour window, the claim link. Dividing by every entry instead would
+           * mostly measure how often the hotel gets a cancellation, and would read as a failure of
+           * this feature on a month when nothing came free.
+           */
+          sub={
+            metrics.offerConversionRate == null
+              ? "no offers made yet"
+              : `${pct(metrics.offerConversionRate)} of offers taken`
+          }
         />
       </div>
+
+      {/*
+        The second rate, and the wait, deliberately below the cards rather than in them.
+
+        `demandRecoveryRate` is converted ÷ every entry, and it is mostly a statement about how often
+        rooms come free — not about how well this works. It belongs on the page, because "how much
+        demand did we fail to serve" is a real question, but it does not belong beside a number a
+        reader will take as a scorecard.
+      */}
+      {metrics.entries > 0 && (
+        <p className="text-[12px] text-ink-500">
+          {metrics.offersMade} offer{metrics.offersMade === 1 ? "" : "s"} made to {metrics.offered} of{" "}
+          {metrics.entries} {metrics.entries === 1 ? "entry" : "entries"}
+          {metrics.demandRecoveryRate != null && (
+            <> · {pct(metrics.demandRecoveryRate)} of everyone who joined ended up with a room</>
+          )}
+          {metrics.medianMinutesToOffer != null && (
+            <> · typically {waitDuration(metrics.medianMinutesToOffer)} from joining to an offer</>
+          )}
+          {metrics.convertedWithoutValue > 0 && (
+            <>
+              {" "}· {metrics.convertedWithoutValue} converted{" "}
+              {metrics.convertedWithoutValue === 1 ? "stay is" : "stays are"} no longer on file, so
+              recovered revenue excludes {metrics.convertedWithoutValue === 1 ? "it" : "them"}
+            </>
+          )}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {TABS.map((t) => {

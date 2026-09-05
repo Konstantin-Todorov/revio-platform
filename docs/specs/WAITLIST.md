@@ -166,7 +166,30 @@ read the **same** function — the rule that already keeps the quote and the pus
    proxy — the same shape as `@revio/connectivity`'s `sync.ts`, so the caller owns the perimeter.
 5. RevioDirect capture + the magic-link claim route.
 6. CRS Waitlist screen.
-7. Metrics + the operator's recovered-revenue line.
+7. ☑ **Metrics + the operator's recovered-revenue line** — shipped 2026-09-05.
+   `packages/core/src/metrics/waitlist.ts` (**23 tests**), read by BOTH the CRS Waitlist screen and
+   the Operator's client detail, so the figure quoted on a renewal call is the one the hotel can open
+   and check. Three judgements the tests pin:
+   - **Two rates, never one.** `offerConversionRate` (converted ÷ offered) measures the offer — our
+     wording, the four-hour window, the claim link. `demandRecoveryRate` (converted ÷ entries) mostly
+     measures how often the hotel gets a cancellation. One number alone flatters or damns the feature
+     depending which you picked, so the screen leads with the first and states the second below it.
+   - **"Offered" is `offeredAt != null`, not `status === "offered"`.** Status is where the entry is
+     NOW: a converted entry no longer reads "offered", so counting the status would exclude, by
+     construction, every offer that actually worked.
+   - **`null` on a zero denominator, never 0%.** "No offers have been made" and "every offer failed"
+     are different facts, and rendering both as 0% tells a hotel the feature does not work when it has
+     not yet been asked.
+
+   Revenue is the accommodation value **passed in from the reservation**, never re-derived here — a
+   second computation could disagree with the folio the hotel is looking at. A converted entry whose
+   stay has since been removed (`reservationId` is `SET NULL`) is counted in `convertedWithoutValue`
+   rather than silently as €0, so recovered revenue is never quietly understated.
+
+   ⚠️ Known limit: `medianMinutesToOffer` measures join → the **most recent** offer, because
+   `offeredAt` is overwritten on each one. For an entry offered once — the great majority — that is
+   the first offer. A `firstOfferedAt` column would sharpen it, and is the obvious follow-up if that
+   number is ever used to make a decision.
 
 ## Open questions for the founder
 

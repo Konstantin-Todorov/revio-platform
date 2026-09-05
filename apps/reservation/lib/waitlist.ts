@@ -1,7 +1,12 @@
 import "server-only";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { MAX_OFFERS_PER_ENTRY, type WaitlistStatus } from "@revio/core";
+import {
+  MAX_OFFERS_PER_ENTRY,
+  waitlistMetrics,
+  type WaitlistMetrics,
+  type WaitlistStatus,
+} from "@revio/core";
 
 /**
  * The staff view of the waitlist.
@@ -44,6 +49,14 @@ export async function getWaitlist(status?: WaitlistStatus): Promise<{
   rows: WaitlistRow[];
   counts: WaitlistCounts;
   recovered: { count: number; valueMinor: number; currency: string };
+  /**
+   * The same `waitlistMetrics` the Operator console reads.
+   *
+   * Shared rather than recomputed per screen, for the reason that already governs the quote and the
+   * push: a number we put in front of a hotel on a renewal call has to be one they can open their
+   * own screen and verify. Two implementations of "conversion rate" would disagree within a month.
+   */
+  metrics: WaitlistMetrics;
 }> {
   const property = await getProperty();
 
@@ -76,19 +89,40 @@ export async function getWaitlist(status?: WaitlistStatus): Promise<{
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
 
-  const convertedThisMonth = all.filter(
-    (e) => e.status === "converted" && e.reservationId && e.updatedAt >= monthStart,
-  );
-  let valueMinor = 0;
-  if (convertedThisMonth.length > 0) {
+  // Every converted entry's stay, not just this month's — the month card and the all-time metrics
+  // are then two readings of ONE set of numbers rather than two queries that can drift apart.
+  const convertedAll = all.filter((e) => e.status === "converted" && e.reservationId);
+  const valueByReservation = new Map<string, number>();
+  if (convertedAll.length > 0) {
     const res = await prisma.reservation.findMany({
-      where: { id: { in: convertedThisMonth.map((e) => e.reservationId!) } },
-      select: { totalMinor: true, propertyTotalMinor: true },
+      where: { id: { in: convertedAll.map((e) => e.reservationId!) } },
+      select: { id: true, totalMinor: true, propertyTotalMinor: true },
     });
     // `propertyTotalMinor` is the base-currency snapshot; it is null for a hotel that only ever
     // sells in its own currency, and falling through to `totalMinor` keeps those from reading €0.
-    valueMinor = res.reduce((sum, r) => sum + (r.propertyTotalMinor ?? r.totalMinor), 0);
+    for (const r of res) valueByReservation.set(r.id, r.propertyTotalMinor ?? r.totalMinor);
   }
+
+  const convertedThisMonth = convertedAll.filter((e) => e.updatedAt >= monthStart);
+  const valueMinor = convertedThisMonth.reduce(
+    (sum, e) => sum + (valueByReservation.get(e.reservationId!) ?? 0),
+    0,
+  );
+
+  const metrics = waitlistMetrics(
+    all.map((e) => ({
+      status: e.status as WaitlistStatus,
+      createdAt: e.createdAt,
+      offeredAt: e.offeredAt,
+      offerCount: e.offerCount,
+      // Null rather than 0 when the stay is gone: `reservationId` is SET NULL, and the metrics
+      // count that apart so recovered revenue is never quietly understated.
+      recoveredMinor:
+        e.status === "converted" && e.reservationId
+          ? (valueByReservation.get(e.reservationId) ?? null)
+          : null,
+    })),
+  );
 
   const filtered = status
     ? all.filter((e) =>
@@ -122,5 +156,6 @@ export async function getWaitlist(status?: WaitlistStatus): Promise<{
       valueMinor,
       currency: property.baseCurrency,
     },
+    metrics,
   };
 }

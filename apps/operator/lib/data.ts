@@ -9,7 +9,7 @@ import { clientSetup, daysSince, setupStalled } from "./onboarding";
 import { provisioningState, soldButNotProvisioned } from "./provisioning";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
-import { channelEconomics, SOLD_STATUSES } from "@revio/core";
+import { channelEconomics, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
 import { partitionDemo } from "./demo";
 import {
@@ -575,6 +575,49 @@ export async function getClientDetail(id: string) {
   );
   const ageDays = daysSince(tenant.createdAt);
 
+  /*
+   * What the waitlist gave back, over the SAME 30 days as the card that shows it.
+   *
+   * Computed by `waitlistMetrics` from @revio/core — the identical function behind the hotel's own
+   * Waitlist screen, so a figure quoted on a renewal call is one they can open and check. That is
+   * the same rule that governs the RevioDirect pitch, and it is the whole reason the metric lives in
+   * core rather than in each screen.
+   *
+   * Scoped by `createdAt`, so this reads "demand that arrived in the last 30 days, and what became
+   * of it". Scoping by conversion date instead would leave every rate with only conversions in its
+   * denominator, which is a 100% that means nothing.
+   */
+  const waitlistEntries = await prisma.waitlistEntry.findMany({
+    where: { tenantId: id, createdAt: { gte: thirtyDaysAgo } },
+    select: { status: true, createdAt: true, offeredAt: true, offerCount: true, reservationId: true },
+  });
+  const waitlistStayValue = new Map<string, number>();
+  const convertedStayIds = waitlistEntries
+    .filter((e) => e.status === "converted" && e.reservationId)
+    .map((e) => e.reservationId!);
+  if (convertedStayIds.length > 0) {
+    for (const r of await prisma.reservation.findMany({
+      where: { id: { in: convertedStayIds } },
+      select: { id: true, totalMinor: true, propertyTotalMinor: true },
+    })) {
+      // Base-currency snapshot where there is one; a hotel selling only in its own currency has
+      // `propertyTotalMinor` null and would otherwise read as zero recovered.
+      waitlistStayValue.set(r.id, r.propertyTotalMinor ?? r.totalMinor);
+    }
+  }
+  const waitlist = waitlistMetrics(
+    waitlistEntries.map((e) => ({
+      status: e.status as WaitlistStatus,
+      createdAt: e.createdAt,
+      offeredAt: e.offeredAt,
+      offerCount: e.offerCount,
+      recoveredMinor:
+        e.status === "converted" && e.reservationId
+          ? (waitlistStayValue.get(e.reservationId) ?? null)
+          : null,
+    })),
+  );
+
   return {
     tenant, entitlements, attention, opportunities,
     setup, ageDays, setupStalled: setupStalled(setup, ageDays),
@@ -583,7 +626,7 @@ export async function getClientDetail(id: string) {
     drift: tierDrift(tenant.plan, units),
     billing: { monthlyMinor: monthly, products: billedProducts(entitlements), invoices },
     counts: { roomTypes, units, channels: channels.length, channelsConnected, reservations, openErrors, reservationsLast30d },
-    channels, recentFailures, economics,
+    channels, recentFailures, economics, waitlist,
     lastSyncAt: lastSync?.lastSyncAt ?? null,
     lastReservationAt: lastReservation?.importedAt ?? null,
     // The CRM half.

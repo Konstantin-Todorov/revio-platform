@@ -178,6 +178,35 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             <div><dt className="text-[11px] uppercase tracking-wide text-ink-400">Commission paid</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(economics.commissionPaidMinor)}</dd></div>
             <div><dt className="text-[11px] uppercase tracking-wide text-ink-400">Last booking</dt><dd className="mt-0.5 font-semibold text-ink-900">{ago(c.lastReservationAt)}</dd></div>
           </dl>
+
+          {/*
+            Recovered by the waitlist — value we DELIVERED, which is the half of a renewal call that
+            usually has to be asserted. Shown only when there is demand to report: a hotel with an
+            empty waitlist gets no row, rather than a confident €0 that reads as a product failing.
+
+            The figures come from `waitlistMetrics` in @revio/core, the same function behind the
+            hotel's own Waitlist screen, so this is checkable rather than claimed.
+          */}
+          {c.waitlist.entries > 0 && (
+            <div className="border-t border-surface-border px-4 py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-[11px] uppercase tracking-wide text-ink-400">
+                  Recovered by the waitlist
+                </span>
+                <span className="tnum text-[15px] font-bold text-success-600">
+                  {money(c.waitlist.recoveredMinor)}
+                </span>
+              </div>
+              <p className="mt-1 text-[11.5px] text-ink-500">
+                {c.waitlist.converted} of {c.waitlist.entries} sold-out{" "}
+                {c.waitlist.entries === 1 ? "enquiry" : "enquiries"} turned into a stay
+                {c.waitlist.offerConversionRate != null && (
+                  <> · {Math.round(c.waitlist.offerConversionRate * 100)}% of offers taken</>
+                )}
+                {c.waitlist.stillWaiting > 0 && <> · {c.waitlist.stillWaiting} still waiting</>}
+              </p>
+            </div>
+          )}
         </Card>
 
         <Card>
