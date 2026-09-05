@@ -34,7 +34,30 @@ import { todayInTz, addDaysYmd, utcDay, ymd } from "./format";
  * (§3.5). A manual close warns and lets a human decide; an automatic one has no human to read the
  * warning, and leaving the day open waiting for someone who is not there is the failure this exists
  * to prevent. They are carried forward and named on the record instead.
+ *
+ * Throws `DayAlreadyClosedError` when someone else closed this day first. Both callers treat that as
+ * a normal outcome rather than a fault — because it is one.
  */
+/**
+ * Thrown when the business date moved between reading it and rolling it.
+ *
+ * Two paths reach `runCloseDay` — the manual button and the §3 cron — and only the cron takes a job
+ * lease. A click landing while the automatic run is mid-property is therefore not exotic; 03:00 is
+ * exactly when both want to act.
+ *
+ * A lease on the button would not have been enough on its own. A lease only serialises runs that
+ * overlap in TIME, and the dangerous case here is SEQUENTIAL: close, roll D → D+1, and a second
+ * close moments later reads D+1 and rolls to D+2. A day is skipped and nothing objects. The
+ * condition on the roll refuses both, because it asks the only question that matters — is the
+ * business date still the one I read?
+ */
+export class DayAlreadyClosedError extends Error {
+  constructor(readonly businessDate: string) {
+    super(`Business day ${businessDate} was already closed by another run.`);
+    this.name = "DayAlreadyClosedError";
+  }
+}
+
 export interface CloseDayOutcome {
   businessDate: string;
   next: string;
@@ -99,14 +122,27 @@ export async function runCloseDay(
         noShows++;
       }
     }
-    await tx.property.update({
-      where: { id: propertyId },
+    /*
+     * The roll is CONDITIONAL on the date still being what we read.
+     *
+     * `updateMany` rather than `update`, because only `updateMany` takes a `where` beyond the id —
+     * and that extra clause is the whole guard. `businessDate: property.businessDate` also covers
+     * the null case correctly: Prisma compiles `null` to `IS NULL`, which is right for a property
+     * that has never been closed.
+     *
+     * Throwing rather than returning aborts the transaction, so the no-show updates above roll back
+     * with it. Marking half a day's no-shows and then declining to close is the split state this
+     * function's own docstring promises never to leave behind.
+     */
+    const { count } = await tx.property.updateMany({
+      where: { id: propertyId, businessDate: property.businessDate },
       data: {
         businessDate: utcDay(next),
         lastClosedAt: new Date(),
         lastCloseWasAutomatic: actor.kind === "system",
       },
     });
+    if (count !== 1) throw new DayAlreadyClosedError(businessDate);
   });
 
   // Recurring stay extras accrue for the night just closed (spec §3.6). Outside the transaction

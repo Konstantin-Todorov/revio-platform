@@ -173,9 +173,9 @@ A screen hidden from a role while the write behind it stayed open to a crafted P
 
 ## Wanted — classes known but not yet guarded
 
-### A concurrency guard applied to the scheduled path and not to the manual one
+### ☑ Closed 2026-09-05 — both instances fixed. Kept here for the reasoning.
 
-**Fixed for the waitlist (class 16 below); open for PMS Close Day.**
+**A concurrency guard applied to the scheduled path and not to the manual one.**
 
 `/api/jobs/closeday` takes `JOB.autoCloseDay` and says why: *"two closes would roll the business
 date twice and skip a day entirely."* The manual **Close Day** button reaches the same
@@ -187,10 +187,21 @@ idempotent. What a concurrent pair does produce is a **duplicated close record**
 re-reads candidates from before the first run, so the same reservations are counted twice and two
 audit entries claim the same close.
 
-Not fixed here on purpose: `close-day-run.ts` is inside PMS Round 2 §3, which is in build and whose
-tracker says to read it before touching PMS state. The fix is small and should be made there — an
-optimistic condition on the roll (`where: { id, businessDate: <the value read> }`) is better than a
-lease, because it also protects the sequential double-close a lease's TTL would not.
+**Fixed by making the roll optimistic rather than by adding a lease** — `where: { id, businessDate:
+<the value read> }` — because a lease only serialises runs that overlap in TIME, and the dangerous
+case here is *sequential*: close, roll D → D+1, and a second close moments later reads D+1 and rolls
+to D+2, skipping a day with nothing objecting. The condition refuses both, because it asks the only
+question that matters: is the business date still the one I read?
+
+The refusal **throws**, which aborts the transaction, so the no-show updates roll back with it —
+marking half a day's no-shows and then declining to close is the split state `runCloseDay`'s own
+docstring promises never to leave behind. Both callers treat it as a normal outcome: the button says
+so out loud (the day IS closed; a silent redirect reads as "my click did nothing"), and the cron
+counts it skipped and carries on with the rest of the sweep.
+
+The mechanism is not novel here: `acquireJobLease` claims its lease with the identical conditional
+`updateMany`, and its own comment records that two processes racing it produce exactly one updated
+row.
 
 
 ## ☑ 11. Two implementations of an irreversible operation

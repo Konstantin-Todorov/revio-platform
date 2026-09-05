@@ -1,7 +1,7 @@
 import "server-only";
 import { forSystem } from "@revio/db";
 import { closeDayEscalation } from "@revio/core";
-import { runCloseDay } from "./close-day-run";
+import { DayAlreadyClosedError, runCloseDay } from "./close-day-run";
 import { ymd, todayInTz, minutesOfDayInTz } from "./format";
 
 /**
@@ -69,7 +69,20 @@ export async function autoCloseOverdueDays(
      * — a lot of money written on an assumption. Draining it one day at a time keeps every close a
      * close, and the backlog still disappears without anyone touching it.
      */
-    const outcome = await runCloseDay(p.tenantId, p.id, { kind: "system" });
+    let outcome;
+    try {
+      outcome = await runCloseDay(p.tenantId, p.id, { kind: "system" });
+    } catch (err) {
+      // Somebody pressed Close Day while we were working through the list. Their close is a real
+      // close; ours would have been a second one. Counted as skipped, and one property's race must
+      // never abandon the rest of the sweep.
+      if (err instanceof DayAlreadyClosedError) {
+        skipped++;
+        details.push(`${p.name}: already closed by staff during this run`);
+        continue;
+      }
+      throw err;
+    }
     if (outcome) {
       closed++;
       details.push(

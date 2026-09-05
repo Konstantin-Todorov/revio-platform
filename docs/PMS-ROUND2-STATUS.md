@@ -230,7 +230,7 @@ nobody redoes it. Read it before promising a customer a date.
 
 ---
 
-## ⚠️ Found 2026-09-05 while auditing concurrency — for §3
+## ☑ Fixed 2026-09-05 — found while auditing concurrency
 
 **The manual Close Day button takes no job lease; the auto-close cron does.**
 
@@ -243,7 +243,7 @@ before the transaction and both compute `next` from that read, so both write `D+
 produce is a duplicated close — `candidates` was read before either transaction, so the same
 reservations are marked no-show twice and counted twice, and two audit entries claim the same close.
 
-**Suggested fix, when §3 is picked up:** make the roll optimistic rather than adding a lease —
+**Fixed** by making the roll optimistic rather than adding a lease —
 
 ```ts
 await tx.property.updateMany({
@@ -253,5 +253,8 @@ await tx.property.updateMany({
 ```
 
 A lease only serialises runs that overlap in time; the condition also refuses the *sequential*
-double-close, which is the one that actually could skip a day. Left for §3 deliberately — this file
-says to read it before touching PMS state, and that applies to the person who found it too.
+double-close, which is the one that actually could skip a day.
+
+The refusal throws `DayAlreadyClosedError`, which aborts the transaction so the no-show updates roll
+back with it. The manual button says "that day had just been closed automatically" rather than
+redirecting silently, and the cron counts it as skipped and continues the sweep.
