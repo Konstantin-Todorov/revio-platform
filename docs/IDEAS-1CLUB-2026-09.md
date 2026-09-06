@@ -34,10 +34,14 @@ What is worth taking is **product surface and interaction design**, which is wha
 
 ## P0 — build these, in this order
 
-### ☐ 1. Waitlist — `docs/specs/WAITLIST.md`
+### ☑ 1. Waitlist — SHIPPED 2026-09-05 — `docs/specs/WAITLIST.md`
 
-They have three transactional templates: *Waitlist Joined*, *Waitlist Spot Available*, *Waitlist
-Expired*. **We have no waitlist at all.**
+All seven build-order steps are done and live: the pure core (26 tests), the table + RLS, three
+emails EN/BG, the sweep (26 tests), the RevioDirect capture + claim link, the CRS screen, and the
+metrics read by both the CRS and the Operator console. The sweep runs on the cron every 10 minutes.
+
+*Original note, kept as the record of what prompted it:* they have three transactional templates —
+*Waitlist Joined*, *Waitlist Spot Available*, *Waitlist Expired*. **We have no waitlist at all.**
 
 For a hotel this is not a nicety, it is recovered revenue: a sold-out date is demand we currently
 answer with alternative stays and then forget. A cancellation later re-opens the room and nobody is

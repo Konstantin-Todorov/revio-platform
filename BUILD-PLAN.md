@@ -42,13 +42,25 @@ accurate; this file had drifted. Corrections (the Phase K table lower down is al
 - **Marketing site:** the plan below says "build 4 sites"; the decision changed to **ONE unified site**,
   now live at `reviosoft.app` (separate `revio-websites` repo). Treat the 4-site bullet as superseded.
 
-**Still genuinely open** (unchanged): **P3 in-app AI assistant** (not started); Channex production
-certification (form + live screenshare); scheduler/cron + worker for background jobs; scheduled
-auto-pull; **PMS automated nightly Close Day (J10 — manual today, blocked on the founder's §11)**; real
-**Stripe billing** in Operator (mocked today); an operator audit-log screen; drop the unused
-`ProductMapping` table; per-product cosmetic polish; **N4 · N5**; and `book.revio.app` DNS. **P1
-production copy pass** — commits since 2026-08-11 did copy work, but full completion was not verified
-in this reconciliation; treat as in-progress rather than confirmed done.
+**Still genuinely open — re-verified against the code 2026-09-06.** The 2026-08-23 version of this
+list had gone stale in both directions; six of its items had shipped. Verified state:
+
+| Item | State |
+| --- | --- |
+| **P3 in-app AI assistant** | ☐ Not started — confirmed, nothing in any app |
+| **Real Stripe billing** in Operator | ☐ Open. `connectMode()` is `mock \| stripe_test` only; there is no live path, deliberately |
+| **Channex production certification** | ☐ Open, external — form + live screenshare with Channex |
+| **`book.revio.app` DNS** | ☐ Open, external — a DNS change, not a build |
+| **P1 production copy pass** | ◐ `copy-lint` is clean across 491 files; treat the *lint* as done and the editorial pass as ongoing |
+| ~~scheduler/cron + worker~~ | ☑ **Done** — the `jobs` service runs 7 jobs; verified live on the health endpoint |
+| ~~scheduled auto-pull~~ | ☑ **Done** — `channex-pull` is on that cron |
+| ~~PMS nightly Close Day (J10)~~ | ☑ **Done** — `auto-close-day` runs on the cron (and its double-close race was fixed 2026-09-05) |
+| ~~operator audit-log screen~~ | ☑ **Done** — `/auth-log` and `/platform-history` |
+| ~~drop the unused `ProductMapping` table~~ | ☑ **Done** — zero references in the schema |
+| ~~**N4 · N5**~~ | ☑ **Done** — see `CLAUDE.md`, Phase N |
+
+Added since: **guest feedback / review requests is ⛔ ON HOLD**, not a backlog item — see
+`docs/specs/REVIEW-REQUESTS.md`.
 
 ---
 
