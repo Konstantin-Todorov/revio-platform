@@ -68,6 +68,13 @@ railway up --service channel-manager
 # 4. Seed the remote DB ONCE (runs locally against Railway's DATABASE_URL)
 railway run --service channel-manager pnpm --filter @revio/db db:seed
 
+# 4b. A database that is NOT seeded needs the first operator account, which no screen can create:
+#     Settings needs an operator session to reach, and db:seed TRUNCATEs every tenant table.
+#     Creates it with no password and prints a one-time invitation link, exactly as a hotel owner
+#     gets. Refuses once any operator account exists.
+railway run --service operator pnpm --filter @revio/db bootstrap-operator \
+  --email you@revio.app --name "Your Name" 
+
 # 5. Public URL
 railway domain --service channel-manager
 ```
@@ -167,6 +174,24 @@ to swap with four known-good services behind you.
 **Local dev does the same split:** each app's `.env` connects as `revio_app` (RLS enforced), while
 `packages/db/.env` (owner) is used by `prisma migrate` and `db:seed`. Create the local role once with:
 `psql -d revio_dev -v app_password="'revio_app_dev'" -f packages/db/prisma/rls-role.sql`.
+
+### ⚠️ Migrations follow `DIRECT_DATABASE_URL`, not `DATABASE_URL`
+
+`schema.prisma` sets `directUrl = env("DIRECT_DATABASE_URL")`, and **that** is the connection
+`prisma migrate deploy` uses. Exporting `DATABASE_URL` alone and running a migration therefore
+migrates whatever `DIRECT_DATABASE_URL` happens to point at — silently, reporting success, naming the
+migrations it applied but never the database it applied them to.
+
+It is harmless in production, where both point at the same Railway Postgres. It matters exactly when
+you are being careful: a restore drill, a staging copy, or standing a clean database up beside
+`revio_dev`. Set **both**, or the migrations land in the database you were trying to leave alone.
+
+```bash
+DATABASE_URL="postgresql://…/target" DIRECT_DATABASE_URL="postgresql://…/target" \
+  pnpm --filter @revio/db db:deploy
+```
+
+Found 2026-09-07 doing exactly that, on the first fresh-database walk-through of onboarding.
 
 Until 2026-08-05 only `channel-manager` and `operator` had that `.env`, so **RevioCRS, RevioPMS and
 RevioDirect had never once run under an enforcing role** — the three newest and largest apps, and the

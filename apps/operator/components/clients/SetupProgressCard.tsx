@@ -129,7 +129,7 @@ export function SetupProgressCard({
                         </span>
                       )}
                       {s.providedForYou && !s.sharedWith && (
-                        <span className="ml-1.5 text-[11px] text-ink-400">set up at onboarding</span>
+                        <span className="ml-1.5 text-[11px] text-ink-400">done at onboarding</span>
                       )}
                     </span>
                   </li>

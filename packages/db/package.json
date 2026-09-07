@@ -18,6 +18,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
     "typecheck": "tsc --noEmit",
+    "bootstrap-operator": "tsx scripts/bootstrap-operator.ts",
     "cert-property": "tsx scripts/cert-property.ts",
     "rls-verify": "tsx scripts/rls-verify.ts",
     "claim-verify": "tsx scripts/claim-verify.ts",

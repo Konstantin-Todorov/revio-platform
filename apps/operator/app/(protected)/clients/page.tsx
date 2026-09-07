@@ -38,6 +38,17 @@ export default async function ClientsPage() {
               </tr>
             </thead>
             <tbody>
+              {/* The console's first hour: one operator account and no hotels. Bare column headings
+                  over nothing read as a screen that failed to load rather than one with no rows. */}
+              {clients.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-[13px] text-ink-400">
+                    No clients yet. <span className="font-semibold text-ink-500">New client</span> creates the
+                    organisation, its first property and the owner&rsquo;s login — they set their own password
+                    from the invitation.
+                  </td>
+                </tr>
+              )}
               {clients.map((c) => (
                 <tr key={c.id} className="border-b border-surface-border/60 align-top transition-colors last:border-0 hover:bg-surface-muted/60">
                   <td className="px-4 py-3">

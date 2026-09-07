@@ -243,6 +243,14 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
               </tr>
             </thead>
             <tbody>
+              {d.rows.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-[13px] text-ink-400">
+                    No clients to rank yet — every other block on this page says so in words, and a bare
+                    header row should too.
+                  </td>
+                </tr>
+              )}
               {d.rows.map((r) => (
                 <tr key={r.id} className="border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
                   <td className="px-4 py-2.5">
