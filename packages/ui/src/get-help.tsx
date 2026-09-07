@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { SUPPORT_KINDS, type SupportKind } from "@revio/core";
 
@@ -22,6 +23,18 @@ import { SUPPORT_KINDS, type SupportKind } from "@revio/core";
  *
  * ⚠️ There is no 24/7 anything here, deliberately. The windows in `SUPPORT_KINDS` are modest and
  * keepable; a response time nobody can meet costs more trust than no promise at all.
+ *
+ * ## Why the dialog is portalled to `<body>`
+ *
+ * The trigger belongs in the account menu; the dialog cannot. That menu is an `absolute`,
+ * `overflow-hidden`, 248px-wide dropdown, and a modal rendered inside it is clipped by the overflow
+ * and trapped in the menu's stacking context — the first version shipped that way and the backdrop
+ * never covered the page, the panel sat under the menu and the top of the form was cut off above the
+ * viewport.
+ *
+ * `createPortal` moves the dialog to the document body, so it is laid out against the viewport
+ * rather than against a 248px box. Opening it also closes the menu (`onOpen`), because two open
+ * surfaces stacked on each other is confusing even once the geometry is right.
  */
 
 export type GetHelpResult = { ok: boolean; error?: string; reference?: string } | null;
@@ -29,10 +42,13 @@ export type GetHelpResult = { ok: boolean; error?: string; reference?: string } 
 export function GetHelp({
   action,
   productName,
+  onOpen,
   onDone,
 }: {
   action: (prev: GetHelpResult, fd: FormData) => Promise<GetHelpResult>;
   productName: string;
+  /** Called when the dialog opens, so the menu that holds the trigger can close itself. */
+  onOpen?: () => void;
   onDone?: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -40,11 +56,23 @@ export function GetHelp({
   const [state, formAction, pending] = useActionState<GetHelpResult, FormData>(action, null);
   const pathname = usePathname();
 
-  if (!open) {
+  // The portal target only exists in the browser; on the server there is no document to render into.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  // Escape closes it, which every dialog should honour and a keyboard user will try first.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  if (!open || !mounted) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => { setOpen(true); onOpen?.(); }}
         className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-700 transition-colors hover:bg-surface-muted"
       >
         <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-400" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -56,9 +84,15 @@ export function GetHelp({
     );
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink-900/40 p-0 sm:items-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-xl bg-white p-5 shadow-pop sm:max-w-[480px] sm:rounded-xl">
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Get help"
+      className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto bg-ink-900/50 p-0 sm:items-center sm:p-4"
+      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+    >
+      <div className="my-auto max-h-[92dvh] w-full overflow-y-auto rounded-t-xl bg-white p-5 text-left shadow-pop sm:w-[480px] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl">
         {state?.ok ? (
           <>
             <h2 className="text-[16px] font-semibold text-ink-900">We have it</h2>
@@ -150,6 +184,7 @@ export function GetHelp({
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

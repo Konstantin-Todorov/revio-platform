@@ -44,6 +44,7 @@ export function UserMenu({ userName, roleLabel, products, upsells }: { userName:
           </Link>
           <GetHelp
             action={submitSupportRequest}
+          onOpen={() => setOpen(false)}
             productName="RevioCRS"
             onDone={() => setOpen(false)}
           />
