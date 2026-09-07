@@ -39,19 +39,43 @@ import { SUPPORT_KINDS, type SupportKind } from "@revio/core";
 
 export type GetHelpResult = { ok: boolean; error?: string; reference?: string } | null;
 
+/**
+ * The button that opens it. Lives in the menu; the dialog does not.
+ *
+ * Separate from `GetHelp` for a reason that cost a release: the menu is rendered conditionally, so
+ * closing it UNMOUNTS everything inside — including a dialog whose open state lives there, which
+ * vanished the instant it was asked to appear. The menu's click-outside handler did the same, since
+ * a portalled dialog is outside the menu's ref by definition.
+ *
+ * So the trigger sits in the menu and the dialog sits beside it, at a level that is always mounted.
+ */
+export function GetHelpTrigger({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-700 transition-colors hover:bg-surface-muted"
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-400" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.7.2-1.2.9-1.2 1.6v.5M12 17h.01" strokeLinecap="round" />
+      </svg>
+      Get help
+    </button>
+  );
+}
+
 export function GetHelp({
+  open,
+  onClose,
   action,
   productName,
-  onOpen,
-  onDone,
 }: {
+  open: boolean;
+  onClose: () => void;
   action: (prev: GetHelpResult, fd: FormData) => Promise<GetHelpResult>;
   productName: string;
-  /** Called when the dialog opens, so the menu that holds the trigger can close itself. */
-  onOpen?: () => void;
-  onDone?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<SupportKind>("problem");
   const [state, formAction, pending] = useActionState<GetHelpResult, FormData>(action, null);
   const pathname = usePathname();
@@ -63,26 +87,12 @@ export function GetHelp({
   // Escape closes it, which every dialog should honour and a keyboard user will try first.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, onClose]);
 
-  if (!open || !mounted) {
-    return (
-      <button
-        type="button"
-        onClick={() => { setOpen(true); onOpen?.(); }}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-700 transition-colors hover:bg-surface-muted"
-      >
-        <svg viewBox="0 0 24 24" className="h-4 w-4 text-ink-400" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.7.2-1.2.9-1.2 1.6v.5M12 17h.01" strokeLinecap="round" />
-        </svg>
-        Get help
-      </button>
-    );
-  }
+  if (!open || !mounted) return null;
 
   return createPortal(
     <div
@@ -90,7 +100,7 @@ export function GetHelp({
       aria-modal="true"
       aria-label="Get help"
       className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto bg-ink-900/50 p-0 sm:items-center sm:p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="my-auto max-h-[92dvh] w-full overflow-y-auto rounded-t-xl bg-white p-5 text-left shadow-pop sm:w-[480px] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl">
         {state?.ok ? (
@@ -103,7 +113,7 @@ export function GetHelp({
             </p>
             <button
               type="button"
-              onClick={() => { setOpen(false); onDone?.(); }}
+              onClick={onClose}
               className="mt-4 h-10 rounded-md bg-brand-800 px-4 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700"
             >
               Close
@@ -174,7 +184,7 @@ export function GetHelp({
               </button>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={onClose}
                 className="h-10 rounded-md px-3 text-[13.5px] font-medium text-ink-600 transition-colors hover:bg-surface-muted"
               >
                 Cancel
