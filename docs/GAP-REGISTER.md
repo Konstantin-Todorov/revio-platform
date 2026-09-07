@@ -494,6 +494,43 @@ the thing to be suspicious of, not the pass.
 
 ---
 
+## ☑ 21. A flow that recomputes its own step list can delete the step you are standing on
+
+**`welcomeFlow` is pure and derives the screens from live facts, on every request. Answering a screen
+changes those facts. So an answer could remove the screen that collected it.**
+
+A step is dropped from first-run setup when it is satisfied **and** shared with another product the
+hotel runs. "Another product they run" was read from **entitlements**, on reasoning that is written
+down and is correct for the standing checklist: a hotel that has paid for RevioCRS shares the same
+records whether or not it has opened it.
+
+During first-run setup it is false, because the records said to be carrying over are the ones being
+typed on the current screen. For a hotel that bought two products **at once**, every answer became
+"shared with the other one" the instant it was saved — the step vanished from the flow, the route
+could not find the page the owner was on, and `page.tsx` redirected to `steps[0]`, which is the
+never-satisfiable inherited screen. One bounce backwards per step, all the way to go-live, each one
+crediting a product they had never opened with the work they had just done.
+
+| | |
+| --- | --- |
+| **Found** | 2026-09-07, walking a brand-new tenant on an empty database — create client → invitation → password → setup, as the owner experiences it |
+| **Invisible because** | a hotel buying one product has nothing to inherit and never sees it, and both demo tenants were seeded already set up, so the flow never ran on them at all |
+| **Who it hit** | only the bundled sale — the one `/plans` discounts 10% and 20% to encourage |
+| **Fix** | `otherProducts` counts a product only once `hasFinishedSetup` says its own flow ended. That value moves only when a *different* product's flow ends, so it cannot change underneath the flow currently running |
+| **Guard** | `packages/db/src/welcome-facts.test.ts` — 7 tests, one of which asserts the flow is **identical before and after** answering a step. Four go red against the old body |
+
+⚠️ The class: **derived state that is recomputed from data the user is in the middle of changing.**
+Purity is not the protection here — `welcomeFlow` is pure and correct for every input it is given; the
+defect is that the *input* moved while the user stood on it. Anywhere a position, an index or a
+current page is derived from mutable facts, answer the question "what happens if the user's own
+answer changes this list?" — and prefer a signal that only a *different* actor can move.
+
+Related: class 13 (a monitor reading rows instead of the registry) and class 20 (a scan whose scope
+excluded its subject) are both about deriving from the wrong source. This one is about deriving from
+a source that is still moving.
+
+---
+
 ## How to add to this file
 
 When you fix something and it turns out to be a class rather than an incident:
