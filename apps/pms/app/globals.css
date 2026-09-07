@@ -7,6 +7,15 @@
     --font-hanken: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
   }
   html {
+    /*
+     * Chrome on Android "boosts" text in some layouts — it silently inflates font sizes to make a
+     * column readable, which breaks a designed type scale and reads to a user as the page having
+     * zoomed itself. Pinning it to 100% turns that off without preventing anyone from zooming
+     * deliberately. Different mechanism from the iOS focus-zoom handled at the foot of this file;
+     * both had to be fixed for "it zooms on my phone" to be actually gone.
+     */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }

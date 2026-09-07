@@ -15,6 +15,24 @@ export const metadata: Metadata = {
   description: "Revio · central reservation system · the record of every booking",
 };
 
+
+/**
+ * Stated rather than inherited.
+ *
+ * Next.js supplies `width=device-width, initial-scale=1` by default, which is correct — but a
+ * default is not a decision, and the one thing that must never appear here is a `maximumScale: 1`
+ * added by somebody trying to stop a phone zooming on focus. Writing it out makes the intent
+ * reviewable and lets `zoom:lint` check it.
+ *
+ * `maximumScale: 5` keeps magnification available: WCAG 1.4.4, and a housekeeper reading a room
+ * number on a cracked phone screen.
+ */
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={hanken.variable}>

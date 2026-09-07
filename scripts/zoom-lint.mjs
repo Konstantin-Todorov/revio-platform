@@ -25,7 +25,15 @@ for (const app of APPS) {
   for (const file of ["app/layout.tsx", "app/viewport.ts"]) {
     const path = join("apps", app, file);
     if (!existsSync(path)) continue;
-    const src = readFileSync(path, "utf8");
+    /*
+     * Comments stripped first. The block that documents WHY the viewport must not be locked
+     * naturally contains the string it is warning about, and the first run of this check flagged
+     * all four apps for their own explanation. Same trap `a11y-lint` hit: a linter that reads prose
+     * as code reports the documentation as the defect.
+     */
+    const src = readFileSync(path, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
     const locked =
       /maximumScale\s*:\s*1\b/.test(src) ||
       /userScalable\s*:\s*(false|"no")/.test(src) ||
@@ -39,7 +47,17 @@ for (const app of APPS) {
     }
   }
 
-  // --- 2. the real fix must still be there ---
+  // --- 2. Chrome on Android must not boost text ---
+  const cssPath = join("apps", app, "app", "globals.css");
+  if (existsSync(cssPath) && !/text-size-adjust:\s*100%/.test(readFileSync(cssPath, "utf8"))) {
+    problems.push(
+      `${cssPath}\n    \`text-size-adjust: 100%\` is missing on <html>.\n` +
+        `    Chrome on Android inflates font sizes in some layouts, which breaks the type scale and\n` +
+        `    reads to a user as the page having zoomed itself.`,
+    );
+  }
+
+  // --- 3. the iOS focus fix must still be there ---
   const css = join("apps", app, "app", "globals.css");
   if (!existsSync(css)) continue;
   const src = readFileSync(css, "utf8");
