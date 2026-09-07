@@ -108,6 +108,33 @@ async function run({ name, url }) {
       console.error(`FAIL  ${name} — HTTP ${res.status} in ${ms}ms · ${body.slice(0, 300)}`);
       return { name, ok: false };
     }
+
+    /**
+     * A 200 is not the evidence. `fetch` follows redirects, so an endpoint the app's middleware
+     * sends to /login answers **200 with an HTML page** — and this check read that as success for
+     * every tick of `trial-sweep`'s life, printing `ok` and `8/8 succeeded` over a login form.
+     *
+     * Every job route returns JSON and always sets `ok`. So require it: parse the body, and treat
+     * anything that is not JSON — or that says `ok: false` — as the failure it is. HTML here always
+     * means we reached a page instead of a job.
+     */
+    let parsed;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      const looksLikePage = /^\s*<(!doctype|html)/i.test(body);
+      console.error(
+        `FAIL  ${name} — HTTP ${res.status} but the body is not JSON in ${ms}ms` +
+          `${looksLikePage ? " (an HTML page — the request reached a screen, not the job; check the app's middleware matcher)" : ""}` +
+          ` · ${body.slice(0, 200)}`,
+      );
+      return { name, ok: false };
+    }
+    if (parsed?.ok === false) {
+      console.error(`FAIL  ${name} — the job reported failure in ${ms}ms · ${body.slice(0, 300)}`);
+      return { name, ok: false };
+    }
+
     console.info(`ok    ${name} — ${ms}ms · ${body.slice(0, 300)}`);
     return { name, ok: true };
   } catch (err) {

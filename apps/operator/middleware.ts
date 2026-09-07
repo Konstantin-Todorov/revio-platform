@@ -34,7 +34,7 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   /*
-   * Two machine endpoints are exempt, for the same reason: the caller is a server with no cookie,
+   * Three machine endpoints are exempt, for the same reason: the caller is a server with no cookie,
    * and a redirect to /login is not an error it can report — it is a 307 that looks like a success.
    *
    *   api/health  — polled by an EXTERNAL uptime monitor. Following the redirect would report the
@@ -43,9 +43,13 @@ export const config = {
    *                 endpoint rather than trusting it: it answered 307 to both a missing secret and
    *                 a wrong one, so every lead would have been silently swallowed by the login page
    *                 while the website's own error handling stayed quiet by design.
+   *   api/jobs    — the cron runner POSTs here. Missing until 2026-09-07, because the operator had
+   *                 never had a scheduled job: `trial-sweep` was the first, and it spent its whole
+   *                 life POSTing into the login page. Every other app already exempted `api/jobs`;
+   *                 this file described the exact failure above and did not list it.
    *
-   * Neither is unguarded. Health returns only up/down; leads requires a shared secret and refuses
-   * outright when one is not configured.
+   * None is unguarded. Health returns only up/down; leads and jobs each require a shared secret and
+   * refuse outright when one is not configured.
    */
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/leads|.*\\.[a-zA-Z0-9]+$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/leads|api/jobs|.*\\.[a-zA-Z0-9]+$).*)"],
 };

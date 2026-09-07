@@ -16,7 +16,7 @@
  * The reverse direction is checked too: a name in the runner that `JOB` does not declare is a typo
  * or a rename half-done, and it would call an endpoint whose lease nobody holds.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 
 /**
  * Jobs deliberately not on the cron, each with the reason. Empty, and it should stay that way — a
@@ -47,12 +47,50 @@ if (scheduled.length === 0) {
   process.exit(1);
 }
 
+/**
+ * Third invariant: an app that serves a job route must let the cron runner reach it.
+ *
+ * A Next middleware matcher is a negative lookahead of the paths it does NOT gate. An app whose
+ * matcher omits `api/jobs` sends the cron POST to /login, and because `fetch` follows redirects the
+ * runner receives **200 with an HTML page**. Nothing is down, nothing 500s, and the job never runs.
+ *
+ * That is not hypothetical either. `trial-sweep` was the operator console's first scheduled job. The
+ * other three apps had exempted `api/jobs` when they got theirs; the operator's matcher listed
+ * `api/health` and `api/leads` and — in a comment describing this exact failure mode — not `api/jobs`.
+ * It POSTed into the login page from the day it shipped, and the runner logged `ok` every time.
+ *
+ * Every job route gates itself on `CRON_SECRET`, so the exemption is not a hole: it is the same
+ * pattern the working apps already use.
+ */
+const unreachable = [];
+for (const app of readdirSync("apps")) {
+  const routes = `apps/${app}/app/api/jobs`;
+  const middleware = `apps/${app}/middleware.ts`;
+  if (!existsSync(routes) || !existsSync(middleware)) continue;
+  const matcher = readFileSync(middleware, "utf8").match(/matcher:\s*\[([\s\S]*?)\]/);
+  if (!matcher) {
+    unreachable.push(`${app} — no \`matcher\` found in middleware.ts, so the check cannot see what is gated`);
+    continue;
+  }
+  if (!matcher[1].includes("api/jobs")) unreachable.push(`${app} — serves apps/${app}/app/api/jobs but its middleware matcher does not exempt it`);
+}
+
 const unscheduled = declared.filter((n) => !scheduled.includes(n) && !NOT_SCHEDULED.has(n));
 const unknown = scheduled.filter((n) => !declared.includes(n));
 
-if (unscheduled.length === 0 && unknown.length === 0) {
-  console.log(`jobs-lint: ${declared.length} declared job(s), all scheduled.`);
+if (unscheduled.length === 0 && unknown.length === 0 && unreachable.length === 0) {
+  console.log(`jobs-lint: ${declared.length} declared job(s), all scheduled and reachable by the runner.`);
   process.exit(0);
+}
+
+if (unreachable.length > 0) {
+  console.error("jobs-lint FAILED: a job route the cron runner cannot reach.\n");
+  for (const n of unreachable) console.error(`  ${n}`);
+  console.error(
+    "\nThe middleware would redirect the cron POST to /login. `fetch` follows redirects, so the" +
+      "\nrunner sees 200 and an HTML page and calls it a success while the job never runs. Add" +
+      "\n`api/jobs` to the matcher's exclusion list — the route already requires CRON_SECRET.",
+  );
 }
 
 if (unscheduled.length > 0) {
