@@ -133,7 +133,7 @@ clients; decide deliberately rather than drifting into it.
 | ~~`book.revio.app` DNS~~ | ☑ live on `booking.reviosoft.app` | **Dropped 2026-09-07** — `revio.app` is not ours (it resolves to a third party) and `book.revio.app` is NXDOMAIN. The brand domain is **reviosoft.app**; the booking engine is live and correct at `booking.reviosoft.app/<slug>` and `BOOKING_ENGINE_ORIGIN` already points there. There was never anything to do. |
 | **Per-hotel sending domains** | guest email goes out as Revio | A hotel's confirmation should carry the hotel's brand, not its vendor's. |
 | **Server-rendered PDFs** | HTML download + browser print | Only needed when an invoice must be *attached* to an email. Headless Chromium on a platform already taken down once by a compute limit. |
-| **Support and incident basics** | undefined | Who a hotel calls at 23:00 when check-in fails. |
+| ~~Support and incident basics~~ | ☑ **built 2026-09-08** | "Get help" in every product's account menu → a recorded `SupportRequest` + an email to the support inbox; an operator queue at `/support` sorted by how late against the promise. ⚠️ **The promise is `SUPPORT_KINDS` in `@revio/core` — 2h urgent / 1 working day / 2 working days, 08:00–22:00 EET. Change it there if the answer changes: the same constants are shown to the hotel and used to decide what is overdue.** There is deliberately no 24/7 claim. |
 
 ---
 

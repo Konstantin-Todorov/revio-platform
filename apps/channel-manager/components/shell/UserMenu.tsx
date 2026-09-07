@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Settings, LogOut, ChevronDown } from "lucide-react";
 import { AccountMenuBody } from "@revio/ui/account-menu-body";
+import { GetHelp } from "@revio/ui/get-help";
+import { submitSupportRequest } from "@/lib/actions-support";
 import type { ProductLink, ProductUpsell } from "@revio/ui/product-links";
 import { logout } from "@/lib/actions-auth";
 
@@ -37,6 +39,11 @@ export function UserMenu({ userName, roleLabel, products, upsells }: { userName:
           <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-700 transition-colors hover:bg-surface-muted">
             <Settings className="h-4 w-4 text-ink-400" /> Settings
           </Link>
+          <GetHelp
+            action={submitSupportRequest}
+            productName="RevioLink"
+            onDone={() => setOpen(false)}
+          />
           <form action={logout} className="border-t border-surface-border">
             <button type="submit" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-700 transition-colors hover:bg-danger-50 hover:text-danger-600">
               <LogOut className="h-4 w-4 text-ink-400" /> Log out

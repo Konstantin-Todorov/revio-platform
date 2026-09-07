@@ -91,3 +91,4 @@ export * from "@prisma/client";
 export { occupancyKeysFor, occupancyKeyFor } from "./occupancy-key.js";
 
 export { claimRegisterNo } from "./register-number.js";
+export { recordSupportRequest, type SupportRequestInput, type SupportResult } from "./support.js";

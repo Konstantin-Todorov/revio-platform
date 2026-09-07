@@ -84,6 +84,12 @@ constraint is a hotel that uses it, not a feature.
 ### In progress
 Nothing is half-built. No feature is sitting broken or partly wired.
 
+**Shipped 2026-09-08 — support.** Every product's account menu has *Get help*: it captures the hotel, the
+product, the screen and the person automatically, records the request, and emails it. The operator queue is
+at `/support`, sorted by **how late against the window we promised** rather than by how loudly it was
+reported. The promise itself is 2 hours for *guests affected now*, one working day for a problem, two for a
+question — modest and keepable, with no 24/7 claim anywhere.
+
 ### Ready to build, in the order I would do them
 
 | | Why | Effort |

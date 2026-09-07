@@ -666,6 +666,7 @@ model Property {
 
   waitlistEntries WaitlistEntry[]
   guestFeedback   GuestFeedback[]
+  supportRequests SupportRequest[]
 
   @@index([tenantId])
 }
@@ -2240,6 +2241,44 @@ model StayGuest {
 /// The rating decides who is told internally and how fast. It NEVER decides who is shown the public
 /// review links — that is review gating, it breaches Google's policies, and the risk lands on the
 /// hotel. `publicPromptShown` is the audit trail proving we showed them, not a switch for hiding them.
+/// A hotel asking for help (docs/ACTION-REQUIRED.md — "support and incident basics").
+///
+/// ⚠️ The CONTEXT is captured automatically and is the whole point. A generic contact form produces
+/// "it doesn't work"; this arrives as "Hotel Sofia · RevioPMS · /housekeeping · Maria, manager", so
+/// triage starts from something reproducible. Nobody mid-incident should be asked to fill that in.
+model SupportRequest {
+  id           String    @id @default(cuid())
+  tenantId     String
+  /// Which hotel of a group, when the session had one in view.
+  propertyId   String?
+  /// Who asked. Nullable so deactivating a leaver never deletes their reports.
+  userId       String?
+
+  /// cm | crs | pms — the product they were in when they asked.
+  product      String
+  /// The screen they were on. Usually the fastest route to reproducing it.
+  route        String?
+  /// urgent | problem | question — see SUPPORT_KINDS in @revio/core, which also holds the promise.
+  kind         String    @default("problem")
+  message      String
+
+  /// Copied at the time of asking, so a reply still works after the account changes or is closed.
+  contactName  String
+  contactEmail String
+
+  /// Null is the working queue — same convention as Lead.
+  handledAt    DateTime?
+  handledById  String?
+  createdAt    DateTime  @default(now())
+
+  property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  /// The operator's queue: everything unanswered, oldest first.
+  @@index([handledAt, createdAt])
+  /// One hotel's own history.
+  @@index([tenantId, createdAt])
+}
+
 model GuestFeedback {
   id            String  @id @default(cuid())
   tenantId      String

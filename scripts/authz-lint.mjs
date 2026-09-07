@@ -51,6 +51,11 @@ const EXEMPT = {
   // Authentication itself. Gating these on a capability would require a session to sign in.
   "actions-auth.ts:login": "signing in — there is no session to check yet",
   "actions-auth.ts:logout": "ending your own session is always allowed",
+  // Authenticated (it resolves a session and refuses without one) but deliberately NOT gated on a
+  // capability. Anybody signed in may ask for help, including the roles that can change nothing — a
+  // housekeeper who cannot open Settings is exactly the person most likely to be standing in front
+  // of a broken screen, and a support form that refuses them loses the report we most need.
+  "actions-support.ts:submitSupportRequest": "anybody signed in may ask for help, whatever their role",
   "actions-auth.ts:signOutEverywhere": "revoking your OWN sessions; a locked-out user must be able to do this",
   "actions-auth.ts:verifyTwoFactor": "step two of signing in — gated by the pending-2FA token, which is issued only by a correct password",
 

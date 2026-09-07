@@ -62,5 +62,6 @@ export * from "./metrics/waitlist.js";
 export * from "./feedback/feedback.js";
 export * from "./runtime/stale-deployment.js";
 export * from "./products/products.js";
+export * from "./support/support.js";
 export * from "./invoicing/invoice-state.js";
 export * from "./metrics/fault-summary.js";
