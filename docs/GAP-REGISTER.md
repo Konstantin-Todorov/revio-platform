@@ -426,6 +426,35 @@ would have found it.
 
 ---
 
+## ☑ 19. A log that records non-events until the real ones cannot be found
+
+Found while checking the founder's dry run — not by a monitor, and not by anything failing.
+
+The scheduled Channex pull wrote an `AuditEntry` for **every channel on every tick**, including the
+overwhelming majority that imported nothing and updated nothing. Three connected channels on a
+few-minute cron is roughly **860 rows a day**, and by 2026-09-07 the audit trail stood at **20,249
+"Channel sync" rows out of ~20,700** — 98% of a hotel's record of who-changed-what was the poller
+saying nothing had happened.
+
+The dry run's real events — a check-in, five POS charges, two housekeeping transitions, a hold and a
+reservation — were in there, buried under a wall of `0 new · 0 updated`. Which is the actual harm: a
+log nobody can read is a log nobody reads, and this one exists for the moment somebody asks *"what
+happened to this booking?"*
+
+| | |
+| --- | --- |
+| **Fix** | The pull writes an audit entry only when it imported or updated something — **or failed**, because a channel that could not be pulled is a change in the hotel's world even though no data moved |
+| **Not weakened** | Proof that the poller is alive was never this row's job. `SyncEvent` still records every attempt including the no-ops, the Sync Center reads those, and the job dead-man's switch reports a job that has stopped. Health lives there; the audit trail is for changes |
+
+⚠️ The class: **a record whose volume is driven by the clock rather than by events.** Anything written
+per tick rather than per change will eventually bury what it sits beside. Worth asking of any table a
+cron writes to: if nothing happened, does a row still appear?
+
+Historical rows are deliberately **not** deleted — an audit trail is not something to quietly prune,
+and the demo tenants are where they accumulated.
+
+---
+
 ## How to add to this file
 
 When you fix something and it turns out to be a class rather than an incident:

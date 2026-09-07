@@ -62,15 +62,37 @@ export async function POST(req: NextRequest) {
     }
     if (outcome.ok) { imported += outcome.imported; updated += outcome.updated; } else { failed++; }
 
-    await db.auditEntry.create({
-      data: {
-        tenantId: channel.tenantId, propertyId: channel.propertyId,
-        entity: "Channel sync", field: "scheduled pull",
-        newValue: outcome.ok ? `${outcome.imported} new · ${outcome.updated} updated (${outcome.mode})` : `failed: ${outcome.error ?? "unknown"}`,
-        source: "api", channelCode: channel.code,
-        syncResult: outcome.ok ? "success" : "failed",
-      },
-    });
+    /*
+     * Only write to the audit trail when something actually happened.
+     *
+     * This used to record every tick of every channel. The cron runs every few minutes against three
+     * connected channels, so it wrote roughly 860 rows a day saying "0 new · 0 updated" — and by
+     * 2026-09-07 the audit log was **20,249 of ~20,700 rows** of exactly that. 98% noise.
+     *
+     * The audit trail is the HOTEL's record of who changed what. A pull that changed nothing changed
+     * nothing, and burying a price edit or a check-in under nine hundred daily non-events makes the
+     * screen useless precisely when somebody is trying to answer "what happened to this booking?".
+     *
+     * ⚠️ This does NOT weaken the proof that the poller is alive — that was never this row's job.
+     * `SyncEvent` still records every attempt (including the successful no-ops), the Sync Center
+     * reads those, and `operator /api/health/jobs` reports a job that has stopped running. Health
+     * lives there; the audit trail is for changes.
+     *
+     * A FAILURE is always recorded, because a channel that could not be pulled is a change in the
+     * hotel's world even though no data moved.
+     */
+    const changedSomething = outcome.ok && (outcome.imported > 0 || outcome.updated > 0);
+    if (changedSomething || !outcome.ok) {
+      await db.auditEntry.create({
+        data: {
+          tenantId: channel.tenantId, propertyId: channel.propertyId,
+          entity: "Channel sync", field: "scheduled pull",
+          newValue: outcome.ok ? `${outcome.imported} new · ${outcome.updated} updated (${outcome.mode})` : `failed: ${outcome.error ?? "unknown"}`,
+          source: "api", channelCode: channel.code,
+          syncResult: outcome.ok ? "success" : "failed",
+        },
+      });
+    }
 
     // Reservation delivery: when the hotel runs neither CRS nor PMS, nothing else would surface the
     // booking — email it to the configured address(es), same rule as the manual pull.
