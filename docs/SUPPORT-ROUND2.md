@@ -1,5 +1,9 @@
 # Support round 2 — founder review, 2026-09-07
 
+> **✅ Items 1–4 BUILT and live 2026-09-08, commit `d42e3d6`.** Item 5 (more help content) is still
+> deliberately open. What follows is the record of what was asked for and what was found in the code;
+> read it as requirements that were met, not as a backlog.
+
 Recorded from the founder's review of the shipped ticket centre. **Nothing here is built.** Each item
 was checked against the code before being written down, so the next session starts from what is
 actually there rather than from the report.
