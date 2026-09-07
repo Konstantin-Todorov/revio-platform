@@ -1,0 +1,14 @@
+-- Did our automatic "thanks, we have your request" actually reach the person?
+--
+-- The website sends two emails per submission: the office notification, then the acknowledgement.
+-- The second one's result was thrown away — `await sendResend(...)` with no check — so when somebody
+-- said they never received it, there was nothing anywhere to look at. The office had been notified
+-- and the lead was on file, and whether the prospect was ever answered was simply unknown.
+--
+-- FALSE is a more urgent state than an unhandled lead: that person is sitting there having heard
+-- nothing at all and does not know we received anything.
+--
+-- Defaults to TRUE so the rows filed before this existed are not all reported as failures — they
+-- were sent under the old code and most will have arrived. Only rows written from now carry a
+-- measured value.
+ALTER TABLE "Lead" ADD COLUMN "acknowledged" BOOLEAN NOT NULL DEFAULT true;

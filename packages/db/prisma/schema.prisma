@@ -216,6 +216,13 @@ model Lead {
   utmMedium     String?
   utmCampaign   String?
   referrer      String?
+  /// Did OUR automatic acknowledgement actually reach them?
+  ///
+  /// False means the "thanks, we have your request" email failed to send — the person is sitting
+  /// there having heard nothing, and does not know we exist yet. That is a different and more urgent
+  /// state than "not yet replied to by a human", and it was previously unknowable: the send was
+  /// best-effort and its result was discarded.
+  acknowledged  Boolean   @default(true)
   /// Set when somebody has dealt with it. Null is the working queue.
   handledAt     DateTime?
   handledById   String?

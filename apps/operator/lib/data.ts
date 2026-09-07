@@ -982,6 +982,8 @@ export interface LeadRow {
   quote: string | null;
   page: string | null;
   source: string | null;
+  /** Did OUR automatic "thanks, we have your request" reach them? False is more urgent than unhandled. */
+  acknowledged: boolean;
   handledAt: Date | null;
   createdAt: Date;
 }
@@ -1008,6 +1010,7 @@ export async function listLeads(limit = 200): Promise<{ rows: LeadRow[]; openCou
       currentSystem: l.currentSystem,
       channels: l.channels,
       interestedIn: l.interestedIn,
+      acknowledged: l.acknowledged,
       message: l.message,
       quote: l.quote,
       page: l.page,

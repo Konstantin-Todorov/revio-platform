@@ -75,6 +75,14 @@ export async function POST(req: NextRequest) {
       utmMedium: str(body.utmMedium, 200),
       utmCampaign: str(body.utmCampaign, 200),
       referrer: str(body.referrer, 500),
+      /*
+       * Whether the site's own acknowledgement reached them.
+       *
+       * Absent means an older website build that could not report it — treated as true, because
+       * assuming failure would flag every historical lead as owed an apology it does not need.
+       * `=== false` rather than falsy: only an explicit false is a measured failure.
+       */
+      acknowledged: body.acknowledged !== false,
     },
     select: { id: true },
   });

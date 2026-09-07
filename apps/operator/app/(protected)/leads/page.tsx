@@ -67,6 +67,14 @@ export default async function LeadsPage() {
                           {l.email}
                         </a>
                         {l.handledAt && <StatusPill tone="success">Replied</StatusPill>}
+                        {/*
+                          Our own automatic acknowledgement never reached them. More urgent than an
+                          unhandled lead: this person is sitting there having heard nothing at all
+                          and does not know we received anything.
+                        */}
+                        {!l.acknowledged && (
+                          <StatusPill tone="danger">Never acknowledged</StatusPill>
+                        )}
                       </div>
 
                       {facts.length > 0 && (
@@ -83,6 +91,19 @@ export default async function LeadsPage() {
                         {l.source ? ` · ${l.source}` : ""}
                       </p>
                     </div>
+
+                    {/*
+                      A reply that is already written.
+                      The bare mailto above opens an empty message and leaves the operator to
+                      remember what this person asked for. This one carries their own words back,
+                      which is the difference between answering in a minute and answering later.
+                    */}
+                    <a
+                      href={replyHref(l)}
+                      className="shrink-0 self-start rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
+                    >
+                      Reply
+                    </a>
 
                     <form action={setLeadHandled} className="shrink-0">
                       <input type="hidden" name="id" value={l.id} />
@@ -111,4 +132,33 @@ export default async function LeadsPage() {
       </Card>
     </div>
   );
+}
+
+/**
+ * A reply with the subject and the quote already in it.
+ *
+ * Deliberately a `mailto:` and not a compose screen we build: the operator answers from their own
+ * inbox, where the thread lives and where the customer's later replies arrive. Building a sending
+ * surface here would split one conversation across two places.
+ */
+function replyHref(l: {
+  name: string;
+  email: string;
+  message: string | null;
+  quote: string | null;
+  page: string | null;
+}): string {
+  const subject = l.quote ? "Your Revio pricing enquiry" : "Your Revio demo request";
+  const first = l.name.split(/\s+/)[0] ?? "";
+  const body = [
+    `Hi${first && first !== "—" ? " " + first : ""},`,
+    "",
+    "Thanks for getting in touch with Revio.",
+    "",
+    ...(l.message ? ["You wrote:", `> ${l.message}`, ""] : []),
+    ...(l.quote ? [`The figure you were looking at was ${l.quote}.`, ""] : []),
+    "",
+    "— Revio",
+  ].join("\n");
+  return `mailto:${l.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
