@@ -39,7 +39,8 @@
     "./product-links": "./src/product-links.tsx",
     "./account-menu-body": "./src/account-menu-body.tsx",
     "./get-help": "./src/get-help.tsx",
-    "./help-centre": "./src/help-centre.tsx"
+    "./help-centre": "./src/help-centre.tsx",
+    "./report-client-error": "./src/report-client-error.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

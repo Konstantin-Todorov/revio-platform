@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X, Inbox, LifeBuoy } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X, Inbox, LifeBuoy, TriangleAlert } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 
@@ -21,6 +21,7 @@ const SECTIONS: { title?: string; items: { href: string; label: string; icon: ty
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/connectivity", label: "Connectivity", icon: KeyRound },
     { href: "/health", label: "Platform Health", icon: Activity },
+    { href: "/errors", label: "Error log", icon: TriangleAlert },
     { href: "/platform-history", label: "Platform history", icon: History },
     // Next to Settings rather than under it: it is read when something has gone wrong, and a
     // screen you have to remember lives inside another one is a screen nobody finds in a hurry.

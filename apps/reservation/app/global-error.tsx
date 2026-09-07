@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { reportClientError } from "@revio/ui/report-client-error";
+
 import { StatusPage, statusPrimaryCls } from "@revio/ui/status-page";
 import { useStaleDeployment } from "@revio/ui/stale-deployment-boundary";
 import "./globals.css";
@@ -22,6 +25,10 @@ export default function GlobalError({
    * which re-renders the same stale bundle and fails again.
    */
   const stale = useStaleDeployment(error);
+
+  // File it, unless it is a stale deployment — that is the product working, and recording it
+  // would make every release look like an incident.
+  useEffect(() => { reportClientError(error, error.digest); }, [error]);
   if (stale.stale) {
     return (
       <html lang="en">
