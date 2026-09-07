@@ -66,7 +66,22 @@ management. Hotels live or die on Booking.com and Google scores, and we already 
 consumer-protection regulators. The spec describes a version that gets the same commercial benefit
 **without** gating, and says plainly why.
 
-### ☐ 3. Settings information architecture — sections → tabs
+### ☑ 3. Settings information architecture — SHIPPED 2026-09-07 (RevioCRS)
+
+Eight cards on one scrolling page became five deep-linkable sections behind a shell:
+`/settings/property` · `/policies` · `/taxes` · `/users` · `/account`. `/settings` redirects to the
+first, so every existing bookmark and support answer still works.
+
+**Booking engine, Rates and Distribution were linked, not moved** — each already owns a URL that
+bookmarks and support answers point at, and breaking those to tidy a menu is a poor trade. The nav's
+job is that a setting can be *found*, not that everything renders inside one route.
+
+**It fixed a live 404 nobody had reported.** The first-run setup screen's primary button — *"Invite
+your team"* — already pointed at `/settings/users`, a route that did not exist. A brand-new hotel's
+main call to action was a not-found page.
+
+Verified by diffing every `action=`, form field `name=` and component in the old page against the
+five new ones: nothing was lost in the move.
 
 Their Settings is **12 sections down the left, tabs across the right**, deep-linkable
 (`/settings/organization/details`). Organization alone carries Details · Subscription · Users ·

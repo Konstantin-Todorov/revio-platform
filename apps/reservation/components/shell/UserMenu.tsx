@@ -31,8 +31,11 @@ export function UserMenu({ userName, roleLabel }: { userName: string; roleLabel:
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-44 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
-          <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-700 transition-colors hover:bg-surface-muted">
-            <Settings className="h-4 w-4 text-ink-400" /> Settings
+          {/* Your account, not the property's settings. This menu hangs off the avatar and sits above
+              "Sign out", so "Settings" here means the signed-in person — the sidebar already covers
+              the property. Before the sections existed both links went to the same long page. */}
+          <Link href="/settings/account" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-700 transition-colors hover:bg-surface-muted">
+            <Settings className="h-4 w-4 text-ink-400" /> Your account
           </Link>
           <form action={logout} className="border-t border-surface-border">
             <button type="submit" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-700 transition-colors hover:bg-danger-50 hover:text-danger-600">
