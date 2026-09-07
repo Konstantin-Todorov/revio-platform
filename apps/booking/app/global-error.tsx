@@ -1,5 +1,7 @@
 "use client";
 
+import { useStaleDeployment } from "@revio/ui/stale-deployment-boundary";
+
 /**
  * Last resort on the public booking page: the root layout itself failed.
  *
@@ -21,6 +23,47 @@ export default function BookingGlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  /*
+   * A deploy replaced the bundle this tab is running, so something it fetched no longer exists. The
+   * app is fine; this tab is stale, and a reload is the entire fix.
+   *
+   * Inline styles like the rest of this file: the layout that would have provided the stylesheet is
+   * exactly what failed. Neutral colours, no hotel brand — a brand rendered half-applied looks more
+   * broken than no brand at all.
+   *
+   * The guest gets no apology and no mention of their booking, because nothing has gone wrong with
+   * it. `reset()` is deliberately not offered: it re-renders the same stale bundle.
+   */
+  const stale = useStaleDeployment(error);
+  if (stale.stale) {
+    return (
+      <html lang="en">
+        <body style={{ margin: 0, fontFamily: "system-ui, -apple-system, sans-serif", background: "#F4F5F7" }}>
+          <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <div style={{ maxWidth: 420, textAlign: "center" }}>
+              <h1 style={{ margin: "0 0 10px", fontSize: 19, fontWeight: 600, color: "#1C2430" }}>
+                This page was just updated
+              </h1>
+              <p style={{ margin: "0 0 20px", fontSize: 14.5, lineHeight: 1.6, color: "#5A6473" }}>
+                It was open while a new version went out. Reloading picks it up — nothing you entered
+                has been lost.
+              </p>
+              <button
+                onClick={stale.reload}
+                style={{
+                  padding: "11px 22px", fontSize: 14, fontWeight: 600, color: "#fff",
+                  background: "#1C2430", border: 0, borderRadius: 8, cursor: "pointer",
+                }}
+              >
+                Reload the page
+              </button>
+            </div>
+          </main>
+        </body>
+      </html>
+    );
+  }
+
   return (
     <html lang="en">
       <body style={{ margin: 0, background: "#f6f7f9" }}>

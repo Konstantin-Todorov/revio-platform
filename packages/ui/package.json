@@ -34,7 +34,8 @@
     "./chart-path": "./src/chart-path.ts",
     "./controls": "./src/controls.tsx",
     "./menu": "./src/menu.tsx",
-    "./tabs": "./src/tabs.tsx"
+    "./tabs": "./src/tabs.tsx",
+    "./stale-deployment-boundary": "./src/stale-deployment-boundary.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

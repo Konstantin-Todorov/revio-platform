@@ -9,7 +9,12 @@ import type { ReactNode } from "react";
  * to us. Nothing here reveals what went wrong internally: the digest is an opaque id, not a message.
  */
 
-export type StatusTone = "error" | "notFound" | "blocked";
+/**
+ * `updated` is deliberately not an error tone. A deploy replacing the bundle under an open tab is
+ * the product working, not failing, and dressing it in danger red tells the user we broke something
+ * when all that is needed is a reload.
+ */
+export type StatusTone = "error" | "notFound" | "blocked" | "updated";
 
 const TONE: Record<StatusTone, { chip: string; icon: ReactNode }> = {
   error: {
@@ -26,6 +31,15 @@ const TONE: Record<StatusTone, { chip: string; icon: ReactNode }> = {
       <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
         <circle cx="11" cy="11" r="7" />
         <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  updated: {
+    chip: "bg-success-50 text-success-600",
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M21 12a9 9 0 1 1-2.64-6.36" strokeLinecap="round" />
+        <path d="M21 4v5h-5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
