@@ -3,6 +3,14 @@ import { notFound } from "next/navigation";
 import { getClientDetail } from "@/lib/data";
 import { SetupProgressCard } from "@/components/clients/SetupProgressCard";
 import { setDemo } from "@/lib/actions";
+import { endTrial, startTrial } from "@/lib/actions-trials";
+import {
+  PRODUCT_BY_KEY,
+  PRODUCTS,
+  TRIAL_DAYS,
+  daysRemaining,
+  trialOutcomeLabel,
+} from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
 import { AccountPanel } from "@/components/clients/AccountPanel";
@@ -35,6 +43,22 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const c = await getClientDetail(id);
   const [billing, session] = await Promise.all([getClientBilling(id), getOperatorSession()]);
   if (!c) notFound();
+
+  const now = new Date();
+  const running = c.trials.filter((t) => !t.endedAt);
+  const past = c.trials.filter((t) => t.endedAt);
+  /*
+   * Only products they do NOT have. A trial of something they already own would take it away when it
+   * ended, which is why `startTrial` refuses it — offering the button would be offering a mistake.
+   */
+  const owned = new Set(
+    [
+      c.entitlements.channelManager ? "cm" : null,
+      c.entitlements.reservation ? "crs" : null,
+      c.entitlements.pms ? "pms" : null,
+    ].filter(Boolean) as string[],
+  );
+  const trialable = PRODUCTS.filter((p) => !owned.has(p.key));
 
   const { tenant, economics } = c;
 
@@ -320,6 +344,76 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               <EntitlementToggle key={k} tenantId={tenant.id} product={k} enabled={c.entitlements[k]} />
             ))}
           </div>
+          {/*
+            Trials sit with the products because they are the same decision seen from a different
+            angle: what this hotel can open, and until when.
+          */}
+          <div className="border-t border-surface-border px-4 py-3">
+            {running.length > 0 ? (
+              <ul className="space-y-2">
+                {running.map((t) => {
+                  const info = PRODUCT_BY_KEY[t.product as "cm" | "crs" | "pms"];
+                  const left = daysRemaining(
+                    { product: t.product as "cm" | "crs" | "pms", endsAt: t.endsAt, endedAt: t.endedAt, remindedDays: [] },
+                    now,
+                  );
+                  return (
+                    <li key={t.id} className="flex flex-wrap items-center gap-2">
+                      <StatusPill tone={left <= 1 ? "danger" : left <= 7 ? "warning" : "info"}>
+                        {info?.name ?? t.product} trial · {left} day{left === 1 ? "" : "s"} left
+                      </StatusPill>
+                      <span className="text-[11.5px] text-ink-400">
+                        ends {t.endsAt.toISOString().slice(0, 10)}
+                      </span>
+                      {/* Keeping it is the ONLY path from trial to paid, and it is this button. No
+                          clock and no email can do it. */}
+                      <form action={endTrial} className="ml-auto flex gap-2">
+                        <input type="hidden" name="id" value={t.id} />
+                        <button
+                          name="outcome"
+                          value="converted"
+                          className="rounded-md bg-brand-800 px-2.5 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-brand-700"
+                        >
+                          They kept it
+                        </button>
+                        <button
+                          name="outcome"
+                          value="cancelled"
+                          className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted"
+                        >
+                          Stop it
+                        </button>
+                      </form>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+
+            {trialable.length > 0 && (
+              <form action={startTrial} className="mt-2 flex flex-wrap items-center gap-2">
+                <input type="hidden" name="tenantId" value={tenant.id} />
+                <span className="text-[11.5px] text-ink-500">Start a {TRIAL_DAYS}-day trial:</span>
+                {trialable.map((p) => (
+                  <button
+                    key={p.key}
+                    name="product"
+                    value={p.key}
+                    className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </form>
+            )}
+
+            {past.length > 0 && (
+              <p className="mt-2 text-[11px] text-ink-400">
+                Before: {past.map((t) => `${PRODUCT_BY_KEY[t.product as "cm" | "crs" | "pms"]?.name ?? t.product} — ${trialOutcomeLabel(t.outcome)}`).join(" · ")}
+              </p>
+            )}
+          </div>
+
           {!tenant.isDemo && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-surface-border px-4 py-2.5">
               <span className="text-[11.5px] text-ink-400">

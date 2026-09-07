@@ -84,6 +84,9 @@ export async function getClients() {
       // believe, whether anyone is recorded as the person to call, and the last time we spoke.
       crmAccount: { select: { stage: true, renewalDate: true, ownerOperator: { select: { name: true } } } },
       crmContacts: { where: { isPrimary: true }, take: 1, select: { name: true, email: true, phone: true } },
+      // Running trials only. A client on trial is a different commercial state from one who bought,
+      // and the list is where you see it without opening anybody.
+      productTrials: { where: { endedAt: null }, select: { product: true, endsAt: true } },
       crmNotes: {
         where: { kind: { in: [...CONTACT_KINDS] } },
         orderBy: { occurredAt: "desc" },
@@ -181,6 +184,7 @@ export async function getClients() {
         plan: t.plan,
         status: t.status,
         isDemo: t.isDemo,
+        productTrials: t.productTrials,
         entitlements,
         owner: t.users[0] ? { name: t.users[0].name, email: t.users[0].email } : null,
         properties: t.properties,
@@ -618,8 +622,20 @@ export async function getClientDetail(id: string) {
     })),
   );
 
+  /*
+   * Trials, running and past.
+   *
+   * The history is deliberately loaded too: "they tried RevioPMS in March and did not keep it" is
+   * exactly what a renewal call needs, and it is the reason a trial is a row rather than a date.
+   */
+  const trials = await prisma.productTrial.findMany({
+    where: { tenantId: id },
+    orderBy: [{ endedAt: "asc" }, { startedAt: "desc" }],
+    take: 20,
+  });
+
   return {
-    tenant, entitlements, attention, opportunities,
+    tenant, entitlements, attention, opportunities, trials,
     setup, ageDays, setupStalled: setupStalled(setup, ageDays),
     provisioning, provisioningAlarm,
     pipelineMinor: pipelineMinor(opportunities),

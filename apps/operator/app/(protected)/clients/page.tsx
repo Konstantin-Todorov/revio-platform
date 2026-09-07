@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getClients } from "@/lib/data";
 import { setStatus } from "@/lib/actions";
 import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { PRODUCT_BY_KEY } from "@revio/core";
 import { CreateClientDialog } from "@/components/clients/CreateClientDialog";
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
 import { STAGE_LABEL, renewalStatus, type Stage } from "@/lib/account";
@@ -59,6 +60,22 @@ export default async function ClientsPage() {
                       {c.isDemo && (
                         <span className="rounded bg-ink-100 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-ink-500">demo</span>
                       )}
+                      {/* On trial is a different commercial state from bought, and the number of days
+                          is the part that decides whether today is the day to ring them. */}
+                      {c.productTrials.map((t) => {
+                        const left = Math.max(0, Math.ceil((t.endsAt.getTime() - Date.now()) / 86_400_000));
+                        return (
+                          <span
+                            key={t.product}
+                            title={`Trial ends ${t.endsAt.toISOString().slice(0, 10)}`}
+                            className={`rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider ${
+                              left <= 7 ? "bg-warning-50 text-warning-600" : "bg-brand-50 text-brand-700"
+                            }`}
+                          >
+                            {PRODUCT_BY_KEY[t.product as "cm" | "crs" | "pms"]?.name ?? t.product} trial · {left}d
+                          </span>
+                        );
+                      })}
                     </div>
                     <div className="text-[11px] text-ink-400">/{c.slug}</div>
                     {/* The reason, in words. A row that says only "something is wrong" makes you open

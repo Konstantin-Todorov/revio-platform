@@ -68,7 +68,19 @@ and commission avoided. All four numbers already exist; none is displayed.
 
 ---
 
-## 🟡 4. Nothing for a trial, and nothing for support
+## ☑ 4. Nothing for a trial, and nothing for support — BOTH BUILT 2026-09-08
+
+**Support** — "Get help" in every product, a queue at `/support` sorted by how late against the
+promise, replies from the console that are recorded *and* emailed, a thread both sides read, and
+call/email logging so the queue is not blind to the half of a hotel that telephones.
+
+**Trials** — 30 days, warnings at 7 and 1, automatic stop, granted and kept only by an operator.
+`ProductTrial` is a row rather than a date so the history survives a renewal call, and a partial
+unique index allows one running trial per product. Expiry is the only thing a machine may do.
+
+*Original note kept below as the record of the gap.*
+
+## 🟡 4 (original). Nothing for a trial, and nothing for support
 
 Both are agreed work rather than review findings, recorded here so the gap list is complete:
 
