@@ -455,6 +455,45 @@ and the demo tenants are where they accumulated.
 
 ---
 
+## ☑ 20. The authorization scan had never opened two of the files
+
+⚠️ **The most serious finding in this register, and it hid inside a passing check.**
+
+`authz-lint` collected action files with `/^actions-.*\.ts$/`. The hyphen was load-bearing by
+accident: `apps/operator/lib/actions.ts` and `apps/channel-manager/lib/actions.ts` have no hyphen and
+had therefore **never been scanned since the check was written**. It reported "240 server actions ·
+224 gated" while never opening the file containing the most consequential action in the platform.
+
+Nine ungated server actions were behind it:
+
+| File | Actions |
+| --- | --- |
+| `operator/lib/actions.ts` | `createClient` · **`setEntitlement`** · `setStatus` · `setDemo` |
+| `channel-manager/lib/actions.ts` | `saveRoomType` · `deleteRoomType` · `saveRatePlan` · **`deleteRatePlan`** · `saveRatePlanLinkage` |
+
+Not remotely exploitable — `middleware.ts` redirects a POST with no session cookie, so an anonymous
+request never reaches them. The exposure is **inside an authenticated session**: any signed-in user of
+any role could delete a hotel's rate plans, which is precisely the hole the codebase's own docstring
+describes ("a crafted POST from a housekeeper or outlet account would commit before the guard ever
+fired"). On the operator side there was no check that a session existed at all.
+
+It also had a visible cost. Hotel Sofia Group lost RevioLink and RevioCRS during a dry run and
+nothing recorded who, when or why — the demo hotel stopped opening and it read as a connectivity
+fault.
+
+| | |
+| --- | --- |
+| **Fix** | The glob is `actions*.ts`. All nine gated: inventory and rates by capability in RevioLink, operator session in the console |
+| **`setEntitlement` beyond the gate** | It decides whether a hotel can open a product, so it now also refuses to record a no-op, writes the change to the **hotel's own** audit log naming the operator, and emails the owner — granting says where to go, withdrawing says plainly that their data is untouched |
+| **Guard** | The widened scan, which now sees 251 actions instead of 240 |
+
+⚠️ The class: **a check whose scope silently excludes the thing it exists to check.** Same family as
+class 13 (a monitor enumerating rows instead of the registry) and class 17 (a job declared but never
+scheduled). A passing gate is worth nothing until you know what it looked at — the count it prints is
+the thing to be suspicious of, not the pass.
+
+---
+
 ## How to add to this file
 
 When you fix something and it turns out to be a class rather than an incident:

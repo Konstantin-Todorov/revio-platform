@@ -114,7 +114,18 @@ const staleExemptions = new Set(Object.keys(EXEMPT));
 
 for (const app of APPS) {
   const dir = join(ROOT, app, "lib");
-  const files = readdirSync(dir).filter((f) => /^actions-.*\.ts$/.test(f));
+  /*
+   * `actions*.ts`, not `actions-*.ts`.
+   *
+   * The hyphen was load-bearing by accident and hid two whole files for as long as this check has
+   * existed: `apps/operator/lib/actions.ts` and `apps/channel-manager/lib/actions.ts`. Between them
+   * they hold nine ungated server actions — including `setEntitlement`, which decides whether a
+   * hotel can open a product at all, and `deleteRatePlan`, which removes a hotel's pricing.
+   *
+   * A scan that reports "224 gated" while never opening the file with the most consequential action
+   * in the console is worse than no scan: it is a green light aimed at the wrong room.
+   */
+  const files = readdirSync(dir).filter((f) => /^actions.*\.ts$/.test(f));
   if (files.length === 0) {
     console.error(`authz-lint: no action files found in ${app}/lib — the scan is broken, not the code.`);
     process.exit(2);

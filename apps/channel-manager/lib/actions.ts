@@ -5,12 +5,15 @@ import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { logAudit, recordPush, str, int } from "./mutation-helpers";
+import { guard, requireCapability } from "./authz";
 
 export type ActionResult = { ok: boolean; error?: string };
 
 // --- Room Types ------------------------------------------------------------
 
 export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const g = await guard("manageInventory");
+  if (!g.ok) return { ok: false, error: g.error };
   const property = await getProperty();
   const { id, tenantId } = property;
   const propertyId = id;
@@ -66,6 +69,7 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
 }
 
 export async function deleteRoomType(fd: FormData): Promise<void> {
+  await requireCapability("manageInventory");
   const property = await getProperty();
   const id = str(fd, "id");
   if (!id) return;
@@ -98,6 +102,8 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
 // --- Rate Plans ------------------------------------------------------------
 
 export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const g = await guard("manageRates");
+  if (!g.ok) return { ok: false, error: g.error };
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
 
@@ -168,6 +174,7 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
 }
 
 export async function deleteRatePlan(fd: FormData): Promise<void> {
+  await requireCapability("manageRates");
   const property = await getProperty();
   const id = str(fd, "id");
   if (!id) return;
@@ -215,6 +222,8 @@ export interface LinkagePayload {
 }
 
 export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<ActionResult> {
+  const g = await guard("manageRates");
+  if (!g.ok) return { ok: false, error: g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const plan = await prisma.ratePlan.findFirst({ where: { id: payload.ratePlanId, propertyId } });
   if (!plan) return { ok: false, error: "Rate plan not found." };
