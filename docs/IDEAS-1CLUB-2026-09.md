@@ -90,6 +90,11 @@ Permissions · Notifications · Domains · APIs & webhooks.
 Our CRS Settings is **one long scrolling page**: standing policy defaults, permission matrix, taxes
 and fees, property profile, pricing model card, 2FA. It has outgrown a single page.
 
+**Applied to RevioCRS only, and deliberately.** RevioPMS's settings is three cards and RevioLink's
+is six; splitting three cards into sections adds clicks and removes nothing. The pattern is worth
+applying when a page has outgrown itself, not as a house style. RevioLink is the next candidate if it
+keeps growing.
+
 **This is an IA change, not a feature** — no new capability, a large jump in perceived quality, and
 it makes every future setting have an obvious home. Proposed sections:
 

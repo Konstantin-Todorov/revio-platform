@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Settings, LogOut, ChevronDown } from "lucide-react";
+import { AccountMenuBody } from "@revio/ui/account-menu-body";
+import type { ProductLink } from "@revio/ui/product-links";
 import { logout } from "@/lib/actions-auth";
 
 function initials(name: string): string {
@@ -10,7 +12,7 @@ function initials(name: string): string {
 }
 
 /** Top-right account menu: the avatar opens a dropdown → Settings + Log out. */
-export function UserMenu({ userName, roleLabel }: { userName: string; roleLabel: string }) {
+export function UserMenu({ userName, roleLabel, products }: { userName: string; roleLabel: string; products: ProductLink[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -30,7 +32,8 @@ export function UserMenu({ userName, roleLabel }: { userName: string; roleLabel:
         <ChevronDown className="hidden h-4 w-4 text-ink-400 sm:block" />
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1.5 w-44 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
+        <div className="absolute right-0 z-30 mt-1.5 w-[248px] overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
+          <AccountMenuBody userName={userName} roleLabel={roleLabel} products={products} />
           {/* Your account, not the property's settings. This menu hangs off the avatar and sits above
               "Sign out", so "Settings" here means the signed-in person — the sidebar already covers
               the property. Before the sections existed both links went to the same long page. */}

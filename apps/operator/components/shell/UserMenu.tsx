@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Settings, LogOut, ChevronDown } from "lucide-react";
+import { AccountMenuBody } from "@revio/ui/account-menu-body";
 import { logout } from "@/lib/actions-auth";
 
 function initials(name: string): string {
@@ -30,7 +31,10 @@ export function UserMenu({ userName, roleLabel }: { userName: string; roleLabel:
         <ChevronDown className="hidden h-4 w-4 text-ink-400 sm:block" />
       </button>
       {open && (
-        <div className="absolute right-0 z-30 mt-1.5 w-44 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
+        <div className="absolute right-0 z-30 mt-1.5 w-[248px] overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
+          {/* No product switcher here: this is OUR console, not a hotel's. An operator holds no
+              entitlements and has nowhere else to switch to. */}
+          <AccountMenuBody userName={userName} roleLabel={roleLabel} products={[]} />
           <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-700 transition-colors hover:bg-surface-muted">
             <Settings className="h-4 w-4 text-ink-400" /> Settings
           </Link>

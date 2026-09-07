@@ -1,45 +1,31 @@
 import "server-only";
+import { primaryProduct as corePrimaryProduct, type ProductEntitlements } from "@revio/core";
+import { productOrigin, type ProductLink } from "@revio/ui/product-links";
 
 /**
- * Where each hotel-facing product lives.
+ * Where each hotel-facing product lives — now a thin delegation, not a second implementation.
  *
- * The operator console has to build links into apps it is not part of — an owner's invitation must
- * land on the product they actually bought, not on our console, which they can never sign into.
+ * This file used to carry its own product list, its own ordering rule and its own environment
+ * lookup. When the account menu needed the same three facts, that would have become two copies of a
+ * decision that must never disagree: an invitation email sending an owner to one address while the
+ * switcher sends them to another is a support call nobody can reproduce.
  *
- * Environment-overridable with the current Railway hostnames as defaults, so a rename is one
- * variable rather than a deploy. Same pattern as the CRS's `BOOKING_ENGINE_ORIGIN`.
+ * The list and the ordering now live in `@revio/core` (pure, tested) and the addresses in
+ * `@revio/ui/product-links` (server-side, because origins are deployment configuration). Same
+ * exports as before, so callers are unchanged.
  */
-const DEFAULTS = {
-  cm: "https://cm.reviosoft.app",
-  crs: "https://crs.reviosoft.app",
-  pms: "https://pms.reviosoft.app",
-} as const;
 
-export interface Entitlements {
-  hasChannelManager: boolean;
-  hasReservation: boolean;
-  hasPms: boolean;
-}
+export type Entitlements = ProductEntitlements;
+export type { ProductLink };
 
-export function originFor(product: keyof typeof DEFAULTS): string {
-  const env =
-    product === "cm"
-      ? process.env.REVIOLINK_ORIGIN
-      : product === "crs"
-        ? process.env.REVIOCRS_ORIGIN
-        : process.env.REVIOPMS_ORIGIN;
-  return (env ?? DEFAULTS[product]).replace(/\/$/, "");
-}
+export const originFor = productOrigin;
 
 /**
- * The product an invited owner should be sent to first.
+ * The product an invited owner should be sent to first — RevioLink, then RevioCRS, then RevioPMS.
  *
- * RevioLink before RevioCRS before RevioPMS — not arbitrary: it matches the order the platform sells
- * in, so a hotel that bought distribution lands on distribution. The account works on every product
- * they own regardless; this only decides which door the email opens.
+ * Their account works on every product they own; this only decides which door the email opens.
  */
-export function primaryProduct(e: Entitlements): { key: keyof typeof DEFAULTS; name: string; origin: string } {
-  if (e.hasChannelManager) return { key: "cm", name: "RevioLink", origin: originFor("cm") };
-  if (e.hasReservation) return { key: "crs", name: "RevioCRS", origin: originFor("crs") };
-  return { key: "pms", name: "RevioPMS", origin: originFor("pms") };
+export function primaryProduct(e: Entitlements): { key: "cm" | "crs" | "pms"; name: string; origin: string } {
+  const p = corePrimaryProduct(e);
+  return { key: p.key, name: p.name, origin: productOrigin(p.key) };
 }
