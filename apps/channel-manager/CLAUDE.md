@@ -3,6 +3,8 @@
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. This file narrows scope to CM.
 > The UI brands this app as **RevioLink**; the codebase calls it channel-manager.
 
+> **Any screen you build here is held to `docs/UI-STANDARD.md`** — borrow the familiar shape, say it before it is read, one component per concept, and look at the rendered page.
+
 > **V2 overhaul in flight (founder specs 2026-07-09: `docs/specs/CM-GUIDE-V2.md` +
 > `docs/specs/CM-UPDATES-V1.md` — read BOTH before changing any CM screen).** Every screen is split
 > into **Keep** (binding — must survive refactors) and **Change**. Headlines: nav regroup (Rates &

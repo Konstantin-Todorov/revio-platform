@@ -8,6 +8,8 @@
 > entitlement. Gotcha: the RLS proxy (`lib/db.ts`) forwards `prisma.<model>.<op>` ONLY — no
 > `$transaction`.
 
+> **Any screen you build here is held to `docs/UI-STANDARD.md`** — borrow the familiar shape, say it before it is read, one component per concept, and look at the rendered page.
+
 > **V2 overhaul in flight (founder spec 2026-07-09: `docs/specs/CRS-GUIDE-V1.md` — read it before
 > changing any CRS screen; Keep sections are binding).** Headlines: **the 4-level priority is replaced
 > by the two-tier precedence model** (date-scoped edits carry lastModified+source, calendar/bulk are

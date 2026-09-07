@@ -7,6 +7,7 @@ import {
   supportReference,
   supportSourceLabel,
 } from "@revio/core";
+import { SupportThread } from "@revio/ui/support-thread";
 import { StatusPill } from "@/components/ui/primitives";
 import { markSupportHandled, replyToSupportRequest } from "@/lib/actions-support";
 
@@ -115,28 +116,14 @@ export function SupportCase({
         </span>
       </div>
 
-      <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-700">{r.message}</p>
-
-      {r.messages.length > 0 && (
-        <ul className="mt-2 space-y-1.5 border-l-2 border-surface-border pl-3">
-          {r.messages.map((m) => (
-            <li key={m.id} className="text-[12.5px]">
-              <span className="font-semibold text-ink-700">
-                {m.side === "revio" ? m.authorName : r.contactName}
-              </span>
-              <span className="ml-1.5 text-[11px] text-ink-400">{when(m.createdAt)}</span>
-              {/* An undelivered reply is indistinguishable from being ignored, so it is said out
-                  loud rather than left to look sent. Only ours are delivered by us. */}
-              {m.side === "revio" && !m.emailedAt && (
-                <span className="ml-1.5 text-[11px] font-semibold text-danger-600">
-                  email did not send
-                </span>
-              )}
-              <p className="whitespace-pre-wrap text-ink-600">{m.body}</p>
-            </li>
-          ))}
-        </ul>
-      )}
+      {/* The same component the hotel reads, from our side of it — so neither view can drift into
+          showing a different conversation from the other. */}
+      <SupportThread
+        perspective="revio"
+        opening={{ authorName: r.contactName, body: r.message, createdAt: r.createdAt }}
+        messages={r.messages}
+        now={now}
+      />
 
       {/* Answering from here, rather than from an inbox: the thread is the record both sides can
           read, and the hotel still receives it as email. Offered on an answered case too — a

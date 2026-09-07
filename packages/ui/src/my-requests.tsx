@@ -1,5 +1,6 @@
 import { supportKind, supportReference, supportSourceLabel } from "@revio/core";
 import { SupportReply, type SupportReplyResult } from "./support-reply.js";
+import { SupportThread } from "./support-thread.js";
 
 /**
  * A hotel's own support history, in their own product.
@@ -16,6 +17,8 @@ export interface MyRequestRow {
   id: string;
   kind: string;
   message: string;
+  /** Who asked, copied onto the request when it was made — often a colleague, not the reader. */
+  contactName: string;
   source: string;
   createdAt: Date;
   handledAt: Date | null;
@@ -82,25 +85,12 @@ export function MyRequests({
                 </span>
               </div>
 
-              <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-800">
-                {r.message}
-              </p>
-
-              {r.messages.length > 0 && (
-                <ul className="mt-2 space-y-2 border-l-2 border-surface-border pl-3">
-                  {r.messages.map((m) => (
-                    <li key={m.id}>
-                      <span className="text-[11.5px] font-semibold text-ink-700">
-                        {m.side === "revio" ? `${m.authorName} · Revio` : m.authorName}
-                      </span>
-                      <span className="ml-1.5 text-[11px] text-ink-400">{when(m.createdAt)}</span>
-                      <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-ink-700">
-                        {m.body}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {/* Read from the hotel's side, so their own words sit where a messenger puts them. */}
+              <SupportThread
+                perspective="hotel"
+                opening={{ authorName: r.contactName, body: r.message, createdAt: r.createdAt }}
+                messages={r.messages}
+              />
 
               {awaitingUs && r.messages.length > 0 && (
                 <p className="mt-2 text-[11.5px] italic text-ink-400">

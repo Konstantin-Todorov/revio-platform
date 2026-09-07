@@ -15,6 +15,26 @@ red status colours.
 Keep all colour usage going through tokens — no hardcoded hex in app code — so a palette swap is one
 file.
 
+⚠️ **The Tailwind class is `-50`, not `-050`.** `tokens.ts` writes the lightest shade as `"050"` (a
+string, so the key order stays readable) while every app's `tailwind.config.ts` registers it as `50`.
+`bg-brand-050` is therefore not a class, and Tailwind says nothing — the element simply renders with
+no background. It shipped exactly once, in the support thread's own bubbles, and was caught by
+looking at the page rather than by any check.
+
+## ⚠️ This package is where the UI bar is held — `docs/UI-STANDARD.md`
+
+Every shared component here is used by three or four products at once, so a shortcut taken here is a
+shortcut taken everywhere. Before adding or changing one:
+
+- **Borrow the shape people already know.** `support-thread.tsx` looks like WhatsApp because a
+  support case *is* a conversation and everybody already reads one of those. It did not, once, and
+  the feedback was *"super hard to get track of it"* — from a screen with no bugs in it.
+- **One component per concept, shared by every surface.** `SupportThread` takes a `perspective` so
+  the hotel and the operator read the *same* conversation from their own side. Two implementations of
+  one concept diverge, and the second always loses something — that has happened here twice.
+- **Look at the rendered page** before calling it done. Tests and lints pass on screens nobody can
+  read.
+
 ## Brand: one platform, four identities
 
 The founder's marks live in `design/brand/` (source PNGs). Each app serves its own resized copies:

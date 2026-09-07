@@ -125,6 +125,29 @@ appeared — never speculatively.
 - Domain logic is **pure and tested** in `packages/core`; apps stay thin (UI + wiring).
 - Don't widen a product's scope past what its `CLAUDE.md` says is in V1.
 
+## ⚠️ The UI bar — read `docs/UI-STANDARD.md` before building any screen
+
+**This applies to every feature, in every product, without exception.** The people using this
+software are a receptionist with a queue in front of them, a housekeeper holding a phone, an owner
+checking last night's revenue. None of them will read a manual. **If a screen has to be explained,
+it is not finished** — and "it passes every test" is not the same as "a person can use it".
+
+The four that come up most, in full at `docs/UI-STANDARD.md`:
+
+1. **Borrow the shape people already know.** A conversation looks like WhatsApp — sides, bubbles,
+   grouping, day dividers. A folio looks like a bill. Departing from the familiar shape has to buy
+   something specific, and be written down.
+2. **Say it before it is read.** Position, colour, size and grouping carry the meaning; the words
+   confirm it. Never make somebody parse a log to work out who spoke.
+3. **One component per concept.** A thing rendered twice diverges, and the second copy is the one
+   that loses something — that has already happened here twice.
+4. **Look at the rendered page.** Typecheck, tests and eleven lints all pass on a screen nobody can
+   read. That is exactly how the unreadable support thread shipped.
+
+This bar was set by the founder on 2026-09-08 and is not a preference: *"the UI is super important
+everywhere and in every new feature we build … it needs to be like the best in the niche … so it is
+easy to understand to every human."*
+
 ## Deployment
 
 - **Repo:** https://github.com/Konstantin-Todorov/revio-platform (branch `main`).

@@ -2,6 +2,8 @@
 
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. This is **our** internal admin panel.
 
+> **Any screen you build here is held to `docs/UI-STANDARD.md`** — borrow the familiar shape, say it before it is read, one component per concept, and look at the rendered page.
+
 The "one admin panel for us, all hotels below." It is the **Operator perimeter**: it sees across all
 tenants. A hotel can never reach this app or its data.
 

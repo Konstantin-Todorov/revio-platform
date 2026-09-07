@@ -3,7 +3,9 @@
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. Design + locked decisions:
 > `docs/specs/BOOKING-ENGINE-DESIGN.md`. Port **3004**. **No auth — this is the public surface.**
 
-The hotel's own booking page at `book.revio.app/<publicSlug>`. A guest arrives from the hotel's
+> **Any screen you build here is held to `docs/UI-STANDARD.md`** — borrow the familiar shape, say it before it is read, one component per concept, and look at the rendered page.
+
+The hotel's own booking page at `booking.reviosoft.app/<publicSlug>`. A guest arrives from the hotel's
 "Book now" button, an Instagram bio or a QR code at reception, and books without an account.
 
 ## What makes this different from the other three apps

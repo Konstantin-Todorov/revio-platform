@@ -11,6 +11,8 @@
 > minted-cookie curl — GET link-clicks keep it); after a migration RESTART `next dev` + `rm -rf .next` so it
 > loads the regenerated Prisma client; re-mint the session cookie after any re-seed (User ids change).
 
+> **Any screen you build here is held to `docs/UI-STANDARD.md`** — borrow the familiar shape, say it before it is read, one component per concept, and look at the rendered page.
+
 > **V2 overhaul in flight (founder spec 2026-07-09: `docs/specs/PMS-GUIDE-V1.md` — read it before
 > changing any PMS screen; Keep sections are binding).** Headlines: nav regroups into Front Office /
 > Rooms & Housekeeping / Setup / End of Day; new screens — unified **Reservation view**, operational
