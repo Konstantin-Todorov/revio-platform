@@ -121,6 +121,7 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 | | Why | Effort |
 | --- | --- | --- |
 | **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
+| **Support round 2** | The ticket centre records a conversation and shows it badly, and **only one side can speak** — a hotel cannot reply to our reply. Four items, checked against the code, in `docs/SUPPORT-ROUND2.md` | Medium |
 | **Jobs on Platform Health** | `trial-sweep` sat at `never` in a JSON body nobody reads. The console should say it. `docs/OPERATOR-REVIEW-2026-09.md` item 2 | Small |
 | **RevioDirect visibility in the operator** | Bookings, revenue, usage fee and commission avoided all exist and appear nowhere. Item 3 | Small |
 | **Settings tidy-up in the other products** | Done for RevioCRS (a hub with five sub-pages); RevioLink still has ~8 sections on one page. RevioPMS is short enough to leave | Small |
@@ -152,7 +153,14 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 
 ## Known issues
 
-**None open that affect a user.** The three faults recorded this week were all the same thing — a
+**One, found by the founder on 2026-09-07: a hotel cannot reply to our reply on a support ticket.**
+`MyRequests` renders the thread with no input, so a customer can read what we said and cannot answer
+it — their only route back is a new request carrying none of the history. The data model already
+supports it (`SupportMessage.side` takes `hotel`) and the UI already renders a *"We have your reply"*
+line that nothing can currently trigger. Written up with three related presentation problems in
+`docs/SUPPORT-ROUND2.md`; not yet built.
+
+Otherwise none. The three faults recorded this week were all the same thing — a
 browser tab left open across a deploy — and the cause was fixed on 2026-09-07: the app now detects it
 and reloads itself instead of showing an error that could not be dismissed.
 
