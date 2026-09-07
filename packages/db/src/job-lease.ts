@@ -153,4 +153,13 @@ export const JOB = {
    * sequential-offer design exists to prevent.
    */
   waitlistSweep: "waitlist-sweep",
+  /**
+   * Warns a hotel that a trial is ending, then stops access when it does.
+   *
+   * Leased because it sends email and revokes access: two runners could warn twice or revoke the
+   * same entitlement from two directions. The sweep is idempotent regardless — a sent reminder is
+   * never resent and expiry only touches a trial with no `endedAt` — but the lease keeps the log
+   * readable.
+   */
+  trialSweep: "trial-sweep",
 } as const;

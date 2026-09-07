@@ -31,17 +31,38 @@ if (!SECRET) {
 }
 
 /**
- * Each job's URL comes from an env var so this file holds no hostnames. Railway reference variables
- * point them at the sibling services; nothing here needs to know the domains, and a renamed service
- * is a variable change rather than a code change.
+ * Where each service lives.
+ *
+ * An explicit variable wins — `CRS_URL` and friends, so a custom domain is one setting. Failing that
+ * we use `RAILWAY_SERVICE_<NAME>_URL`, which **Railway injects into every service for every sibling**
+ * with no configuration at all.
+ *
+ * ⚠️ The fallback is not a convenience. Without it a new job is scheduled, deployed, and silently
+ * skipped for want of a variable nobody knew to set — which is precisely how `waitlist-sweep` came
+ * to be declared, tested and never once run. A job that cannot find its service should be a loud
+ * failure, not a quiet `skip` line nobody reads; the fallback means the case barely arises, and the
+ * skip below still says so when it does.
  */
+function serviceUrl(explicit, railwayVar) {
+  const direct = process.env[explicit]?.trim();
+  if (direct) return direct.replace(/\/+$/, "");
+  const host = process.env[railwayVar]?.trim();
+  if (!host) return undefined;
+  return `https://${host.replace(/^https?:\/\//, "").replace(/\/+$/, "")}`;
+}
+
+const CRS = serviceUrl("CRS_URL", "RAILWAY_SERVICE_RESERVATION_URL");
+const CM = serviceUrl("CM_URL", "RAILWAY_SERVICE_CHANNEL_MANAGER_URL");
+const PMS = serviceUrl("PMS_URL", "RAILWAY_SERVICE_PMS_URL");
+const OPERATOR = serviceUrl("OPERATOR_URL", "RAILWAY_SERVICE_OPERATOR_URL");
+
 const JOBS = [
-  { name: "hold-expiry", url: process.env.CRS_URL && `${process.env.CRS_URL}/api/jobs/holds` },
-  { name: "pickup-snapshot", url: process.env.CRS_URL && `${process.env.CRS_URL}/api/jobs/pickup` },
-  { name: "channex-pull", url: process.env.CM_URL && `${process.env.CM_URL}/api/jobs/pull` },
-  { name: "arrivals-digest", url: process.env.CM_URL && `${process.env.CM_URL}/api/jobs/arrivals` },
-  { name: "auto-assign", url: process.env.PMS_URL && `${process.env.PMS_URL}/api/jobs/assign` },
-  { name: "auto-close-day", url: process.env.PMS_URL && `${process.env.PMS_URL}/api/jobs/closeday` },
+  { name: "hold-expiry", url: CRS && `${CRS}/api/jobs/holds` },
+  { name: "pickup-snapshot", url: CRS && `${CRS}/api/jobs/pickup` },
+  { name: "channex-pull", url: CM && `${CM}/api/jobs/pull` },
+  { name: "arrivals-digest", url: CM && `${CM}/api/jobs/arrivals` },
+  { name: "auto-assign", url: PMS && `${PMS}/api/jobs/assign` },
+  { name: "auto-close-day", url: PMS && `${PMS}/api/jobs/closeday` },
   /*
    * LAST, deliberately.
    *
@@ -54,7 +75,14 @@ const JOBS = [
    * with the world as it was ten minutes ago, and a guest waits a full cycle longer for a room that
    * was already free.
    */
-  { name: "waitlist-sweep", url: process.env.CRS_URL && `${process.env.CRS_URL}/api/jobs/waitlist` },
+  { name: "waitlist-sweep", url: CRS && `${CRS}/api/jobs/waitlist` },
+  /*
+   * Last, and on the operator rather than a hotel app: a trial is our commercial arrangement, and
+   * the row that decides when access stops is operator-perimeter. Placed after everything else for
+   * the same reason as the waitlist — nothing here depends on it, and it is the one job that can
+   * remove a hotel's access, so it runs when the rest of the tick has already succeeded.
+   */
+  { name: "trial-sweep", url: OPERATOR && `${OPERATOR}/api/jobs/trials` },
 ];
 
 /** Long enough for a night audit across many properties; short enough that a hung job ends the run. */

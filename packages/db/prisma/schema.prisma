@@ -74,6 +74,7 @@ model Tenant {
   crmContacts ClientContact[]
   crmNotes    ClientNote[]
   crmBilling  ClientBilling?
+  productTrials ProductTrial[]
 }
 
 model User {
@@ -2319,6 +2320,46 @@ model SupportMessage {
   request SupportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([requestId, createdAt])
+}
+
+/// A hotel trying a product before buying it (docs/specs — trials, 2026-09-08).
+///
+/// ⚠️ **A trial never becomes a charge on its own.** It expires and access stops; converting is a
+/// separate, deliberate act by an operator. A customer who finds a subscription they did not agree
+/// to will not stay one, and "we warned you by email" is not consent.
+///
+/// A row per trial rather than a date on the tenant, so the history survives: "they tried RevioPMS
+/// in March and did not keep it" is exactly what a renewal call needs, and a nullable date column
+/// would have been overwritten by the next trial.
+model ProductTrial {
+  id          String    @id @default(cuid())
+  tenantId    String
+  /// cm | crs | pms
+  product     String
+  startedAt   DateTime  @default(now())
+  endsAt      DateTime
+  /// Set when it stopped, whichever way. Null means running — and only a running trial is swept.
+  endedAt     DateTime?
+  /// converted | cancelled | expired. Only `expired` is ever written by a machine.
+  outcome     String?
+  /// Which operator granted it. Nobody self-serves a trial.
+  grantedById String?
+  /// Which warnings have gone out, so none is ever sent twice however often the sweep runs.
+  remindedAt7 DateTime?
+  remindedAt1 DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// ⚠️ A PARTIAL UNIQUE INDEX exists in SQL that this schema cannot express:
+  /// `("tenantId","product") WHERE "endedAt" IS NULL` — one RUNNING trial per product per tenant.
+  /// Prisma has no syntax for a partial index, so it lives in the migration only and `migrate diff`
+  /// cannot see it. **Do not "tidy" it away**: two overlapping trials would double the reminders and
+  /// race to revoke the same entitlement, and the database refusing the second is the only place
+  /// that cannot be forgotten.
+  @@index([tenantId, product])
+  /// The sweep: everything still running, soonest to end first.
+  @@index([endedAt, endsAt])
 }
 
 model GuestFeedback {
