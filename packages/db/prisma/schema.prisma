@@ -2263,6 +2263,13 @@ model SupportRequest {
 
   /// cm | crs | pms — the product they were in when they asked.
   product      String
+  /// app | phone | email | meeting — how the question reached us.
+  ///
+  /// ⚠️ Without this the queue only ever records the half of a hotel that types. Somebody who rings
+  /// up asks the SAME questions, and those are the ones worth writing help for — but they leave no
+  /// trace, so the help gets written for the wrong audience. An operator can log a call here and it
+  /// joins the same queue and the same evidence.
+  source       String    @default("app")
   /// The screen they were on. Usually the fastest route to reproducing it.
   route        String?
   /// urgent | problem | question — see SUPPORT_KINDS in @revio/core, which also holds the promise.

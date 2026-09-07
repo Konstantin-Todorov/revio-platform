@@ -33,6 +33,8 @@ export interface SupportRequestInput {
   message: string;
   contactName: string;
   contactEmail: string;
+  /** app | phone | email | meeting. Defaults to the in-app form. */
+  source?: string;
 }
 
 export type SupportResult =
@@ -61,6 +63,7 @@ export async function recordSupportRequest(input: SupportRequestInput): Promise<
       message: input.message.trim(),
       contactName: input.contactName.trim() || "Unknown",
       contactEmail: input.contactEmail.trim(),
+      source: input.source ?? "app",
     },
     select: { id: true },
   });

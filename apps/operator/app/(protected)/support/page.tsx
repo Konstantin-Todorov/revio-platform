@@ -1,11 +1,24 @@
 import { forSystem } from "@revio/db";
-import { hoursOverdue, isOverdue, supportKind, supportReference, PRODUCT_BY_KEY } from "@revio/core";
+import {
+  PRODUCT_BY_KEY,
+  SUPPORT_KINDS,
+  SUPPORT_SOURCES,
+  hoursOverdue,
+  isOverdue,
+  supportKind,
+  supportReference,
+  supportSourceLabel,
+} from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { markSupportHandled } from "@/lib/actions-support";
+import { logSupportRequest, markSupportHandled } from "@/lib/actions-support";
 
 export const dynamic = "force-dynamic";
 
 const prisma = forSystem();
+
+const inputCls =
+  "w-full rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] text-ink-900 outline-none transition-colors focus:border-brand-600";
+const labelCls = "mb-1 block text-[10.5px] font-semibold uppercase tracking-wide text-ink-400";
 
 /**
  * The support queue — what hotels have asked, and what is late.
@@ -42,6 +55,78 @@ export default async function SupportPage() {
         }
       />
 
+      {/*
+        Log what arrived some other way.
+
+        The queue only recorded the in-app form, so it only knew about the half of a hotel that
+        types. Somebody who telephones asks the same questions — often the more urgent ones, because
+        they picked up the phone — and those left no trace at all, which would have meant writing the
+        help for the wrong audience.
+      */}
+      <Card>
+        <CardHeader
+          title="Log a call, an email or a conversation"
+          subtitle="So a question asked on the phone counts the same as one typed into the app"
+        />
+        <form action={logSupportRequest} className="grid gap-3 px-4 py-4 lg:grid-cols-2">
+          <label className="block">
+            <span className={labelCls}>Client</span>
+            <select name="tenantId" required className={inputCls} defaultValue="">
+              <option value="" disabled>Choose…</option>
+              {tenants
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}{t.isDemo ? " (demo)" : ""}</option>
+                ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelCls}>How it reached us</span>
+            <select name="source" className={inputCls} defaultValue="phone">
+              {SUPPORT_SOURCES.filter((s) => s.key !== "app").map((s) => (
+                <option key={s.key} value={s.key}>{s.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelCls}>Product</span>
+            <select name="product" className={inputCls} defaultValue="crs">
+              <option value="cm">RevioLink</option>
+              <option value="crs">RevioCRS</option>
+              <option value="pms">RevioPMS</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelCls}>Urgency</span>
+            <select name="kind" className={inputCls} defaultValue="problem">
+              {SUPPORT_KINDS.map((k) => (
+                <option key={k.key} value={k.key}>{k.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block lg:col-span-2">
+            <span className={labelCls}>What did they ask?</span>
+            <textarea
+              name="message"
+              rows={3}
+              required
+              placeholder="Rang to ask where they change the check-in time. Told them Settings → Property."
+              className={inputCls}
+            />
+          </label>
+          <p className="text-[11.5px] text-ink-400 lg:col-span-2">
+            Their own words if you have them — this is what the help gets written from. No email is
+            sent: you already have them on the phone.
+          </p>
+          <div className="lg:col-span-2">
+            <button className="h-[34px] rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+              Log it
+            </button>
+          </div>
+        </form>
+      </Card>
+
       <Card>
         <CardHeader title={`Waiting (${open.length})`} subtitle="Sorted by how late, not by how it was labelled" />
         {open.length === 0 ? (
@@ -68,6 +153,7 @@ export default async function SupportPage() {
                     <span className="text-[11.5px] text-ink-400">
                       {PRODUCT_BY_KEY[r.product as "cm" | "crs" | "pms"]?.name ?? r.product}
                       {r.route ? ` · ${r.route}` : ""}
+                      {r.source !== "app" ? ` · ${supportSourceLabel(r.source)}` : ""}
                     </span>
                     <span className="ml-auto text-[11.5px] text-ink-400">
                       {r.contactName} · {r.contactEmail}

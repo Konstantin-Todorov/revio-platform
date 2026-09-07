@@ -1,0 +1,12 @@
+-- How the question actually reached us.
+--
+-- The support queue only recorded what came through the in-app form, so it only ever knew about the
+-- half of a hotel that types. Somebody who telephones asks the SAME questions — often the more
+-- urgent ones, because they picked up the phone — and those left no trace anywhere. Writing help
+-- from that queue would have meant writing it for the wrong audience.
+--
+-- An operator can now log a call, an email or a conversation into the same queue: the same
+-- reference, the same lateness clock, the same evidence for what the help should say next.
+--
+-- Defaults to 'app' because every row written before this arrived through the form.
+ALTER TABLE "SupportRequest" ADD COLUMN "source" TEXT NOT NULL DEFAULT 'app';

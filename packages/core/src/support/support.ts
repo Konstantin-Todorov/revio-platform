@@ -143,3 +143,27 @@ export function hoursOverdue(
   const target = supportKind(request.kind).targetHours * 3_600_000;
   return (now.getTime() - request.createdAt.getTime() - target) / 3_600_000;
 }
+
+/**
+ * How a question reached us.
+ *
+ * The queue began by recording only the in-app form, which meant it only knew about the half of a
+ * hotel that types. Somebody who telephones asks the same questions — often the more urgent ones,
+ * because they picked up the phone — and those left no trace at all. Help written from that queue
+ * would have been written for the wrong audience.
+ *
+ * `app` is the guest of honour and the rest are logged by an operator after the fact, which is why
+ * they are labelled from OUR side ("Logged from a call") rather than the hotel's.
+ */
+export type SupportSource = "app" | "phone" | "email" | "meeting";
+
+export const SUPPORT_SOURCES: { key: SupportSource; label: string }[] = [
+  { key: "app", label: "Asked in the app" },
+  { key: "phone", label: "Logged from a call" },
+  { key: "email", label: "Logged from an email" },
+  { key: "meeting", label: "Logged from a conversation" },
+];
+
+export function supportSourceLabel(value: string | null | undefined): string {
+  return SUPPORT_SOURCES.find((s) => s.key === value)?.label ?? "Asked in the app";
+}
