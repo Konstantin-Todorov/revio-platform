@@ -390,6 +390,31 @@ mutation { deploymentTriggerUpdate(id: "<repoTrigger id>", input: { branch: "pro
 ```
 
 Read the trigger id first — `{ service(id: "<serviceId>") { repoTriggers { edges { node { id branch repository } } } } }`.
+
+#### ⚠️ An app that gains its first scheduled job needs two things nobody remembers
+
+`jobs` POSTs to `<app>/api/jobs/<name>` with a bearer token. Three things have to line up, and only
+one of them lives in code:
+
+| | Where | Caught by |
+| --- | --- | --- |
+| the job is declared and scheduled | `JOB` + `scripts/run-jobs.mjs` | `jobs-lint` |
+| the app's middleware exempts `api/jobs` | `apps/<app>/middleware.ts` matcher | `jobs-lint` |
+| **the app has `CRON_SECRET`** | Railway variable on that service | **nothing — check it by hand** |
+
+The route compares the bearer against its **own** `CRON_SECRET`, so the value must match the one on
+`jobs`. Set it as a reference rather than pasting the secret twice:
+
+```bash
+railway variables --service <app> --set 'CRON_SECRET=${{jobs.CRON_SECRET}}'
+```
+
+Both of the last two bit `trial-sweep` on 2026-09-07, in sequence: it was the operator console's
+first scheduled job, and the console had never needed either. Missing the matcher, the cron POST
+reached the login page and answered `200` with HTML, which the runner read as success. With the
+matcher fixed it reached the route and answered `401`, which the runner now reports as a failure —
+the visible, honest version of the same problem, and the reason the runner stopped trusting status
+codes.
 Update **only** `branch`; repository, environment and provider are already correct and passing them
 again is a chance to get one wrong. Note the token is not authorised for a project-level `services`
 query, so verify service by service.
