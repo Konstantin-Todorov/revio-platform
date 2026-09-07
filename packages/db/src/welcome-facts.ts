@@ -2,7 +2,7 @@
 // `@revio/db`'s barrel, which non-Next consumers (the connectivity package and its tests) import —
 // and `server-only` has no resolution outside a Next build, so it would break them. The server
 // boundary is enforced where it belongs: each app's `lib/welcome.ts`.
-import { totalRooms, type ProductName, type WelcomeFacts } from "@revio/core";
+import { hasFinishedSetup, totalRooms, type ProductName, type WelcomeFacts } from "@revio/core";
 import type { forTenant } from "./rls.js";
 
 /**
@@ -53,6 +53,7 @@ export async function getWelcomeFacts(
     prisma.property.findUniqueOrThrow({
       where: { id: propertyId },
       select: {
+        setupCompleted: true,
         address: true,
         contactEmail: true,
         emailSenderName: true,
@@ -86,23 +87,49 @@ export async function getWelcomeFacts(
     hasInvoiceIdentity: invoiceIdentityComplete(config),
     hasReservationDelivery: Boolean(property.reservationEmailPrimary?.trim()),
     hasStaff: staff > 1,
-    alsoRuns: otherProducts(entitlements, self),
+    alsoRuns: otherProducts(entitlements, self, property.setupCompleted),
   };
 }
 
 /**
- * The products this hotel runs *besides* the one it is being onboarded into.
+ * The products this hotel runs *besides* the one it is being onboarded into — **and has finished
+ * setting up**.
  *
- * Entitlements, not usage: a hotel that has paid for RevioCRS and never opened it still shares the
- * same records, and telling them their rooms carry over is true before they look.
+ * ## Why "finished", not "owns"
+ *
+ * This once read entitlements alone, reasoning that a hotel which has paid for RevioCRS and never
+ * opened it still shares the same records, so telling them their rooms carry over is true before
+ * they look. That holds for the standing checklist. It is false for the first-run flow, and the way
+ * it fails is not cosmetic.
+ *
+ * `welcomeFlow` drops a step that is satisfied **and** shared with a product in this list, and
+ * `SHARED` — which can never be satisfied — then sits at position 0. So for a hotel that bought two
+ * products **at the same time**, every answer it typed immediately became "shared with the other
+ * one": the step vanished from the flow mid-flow, the route could no longer find the page the user
+ * was on, and it bounced them back to *"Most of this is already done"* — crediting a product they
+ * had never opened with the work they had just done themselves. One bounce per step, all the way to
+ * go-live.
+ *
+ * A hotel buying one product never saw it (nothing to inherit from), and the demo tenants were
+ * seeded already set up, so the flow never ran on them. It was reachable only by the bundled sale —
+ * the one the pricing page discounts 10% and 20% to encourage.
+ *
+ * `setupCompleted` is the honest signal, and it is already the one both dashboards redirect on. It
+ * changes only when a product's *own* flow ends, so it cannot move underneath the flow currently
+ * running and a step can no longer be inherited halfway through being asked.
+ *
+ * The screen keeps the meaning it was built for: a genuine second onboarding — RevioCRS bought after
+ * RevioLink was finished — still opens on the list of what carried over, which is the platform's
+ * whole argument.
  */
 export function otherProducts(
   entitlements: { hasChannelManager: boolean; hasReservation: boolean; hasPms: boolean },
   self: ProductName,
+  setupCompleted: string[],
 ): ProductName[] {
   const owned: ProductName[] = [];
   if (entitlements.hasChannelManager) owned.push("RevioLink");
   if (entitlements.hasReservation) owned.push("RevioCRS");
   if (entitlements.hasPms) owned.push("RevioPMS");
-  return owned.filter((p) => p !== self);
+  return owned.filter((p) => p !== self && hasFinishedSetup(setupCompleted, p));
 }
