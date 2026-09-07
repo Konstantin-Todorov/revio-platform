@@ -130,7 +130,7 @@ clients; decide deliberately rather than drifting into it.
 | Decision | Current state | Note |
 | --- | --- | --- |
 | **Guest card payments** | mocked; Stripe locked to `sk_test_` | Deferred 2026-08-24: hotels pay by bank transfer. Going live needs Stripe Elements and Connect onboarding per hotel. |
-| **`book.revio.app` DNS** | on `booking.reviosoft.app` | The only page a *guest* sees; it should not sit on a vendor-shaped URL. DNS + `BOOKING_ENGINE_ORIGIN`. |
+| ~~`book.revio.app` DNS~~ | ☑ live on `booking.reviosoft.app` | **Dropped 2026-09-07** — `revio.app` is not ours (it resolves to a third party) and `book.revio.app` is NXDOMAIN. The brand domain is **reviosoft.app**; the booking engine is live and correct at `booking.reviosoft.app/<slug>` and `BOOKING_ENGINE_ORIGIN` already points there. There was never anything to do. |
 | **Per-hotel sending domains** | guest email goes out as Revio | A hotel's confirmation should carry the hotel's brand, not its vendor's. |
 | **Server-rendered PDFs** | HTML download + browser print | Only needed when an invoice must be *attached* to an email. Headless Chromium on a platform already taken down once by a compute limit. |
 | **Support and incident basics** | undefined | Who a hotel calls at 23:00 when check-in fails. |

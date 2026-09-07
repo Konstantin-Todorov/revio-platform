@@ -178,7 +178,9 @@ check in, post a charge, check out, close the day. Every screen, once, as a cust
 demo tenants exist in production precisely so this can be rehearsed against real migrations and real
 RLS.
 
-### 17. `book.revio.app` DNS
+### ~~17. `book.revio.app` DNS~~ ☑ dropped
+
+> **Dropped 2026-09-07** — `revio.app` is not ours (it resolves to a third party) and `book.revio.app` is NXDOMAIN. The brand domain is **reviosoft.app**; the booking engine is live and correct at `booking.reviosoft.app/<slug>` and `BOOKING_ENGINE_ORIGIN` already points there. There was never anything to do.
 RevioDirect is live on `booking.reviosoft.app`. It is the only page a *guest* sees, so it should not
 sit on a vendor-shaped URL. DNS change plus `BOOKING_ENGINE_ORIGIN` on the `reservation` service.
 

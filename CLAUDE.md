@@ -135,8 +135,8 @@ appeared — never speculatively.
 - **Live — RevioDirect:** https://booking.reviosoft.app/&lt;slug&gt; — e.g.
   `/hotel-sofia`. **All five apps are deployed.** The object-storage bucket is live and shared with
   `reservation` (which writes photos; this one reads them), so room photographs survive a container
-  restart. Still on the Railway subdomain: `book.revio.app` is a DNS change, not a build change, and
-  the CRS's `BOOKING_ENGINE_ORIGIN` is the single place that has to follow it.
+  restart. The booking engine's public home is `booking.reviosoft.app/<slug>` and that is final —
+  see the note on the retired `book.revio.app` idea below.
 - **Deploy is gated on CI — services watch `production`, NOT `main`.** A push to `main` runs CI;
   `.github/workflows/promote.yml` fast-forwards `production` to that exact commit **only when CI
   passed**, and the fast-forward is what Railway builds. So a green push deploys, a red one stops
@@ -393,7 +393,7 @@ channel's own rate × the revenue it brought) visually and structurally apart fr
 `channelEconomics` in `@revio/core`. **K6** recognises a returning guest **server-side after submit**,
 never through a live email lookup: on an unauthenticated page that endpoint is a guest-enumeration
 oracle. `Guest.recognitionOptOut` silences it guest- *and* staff-facing, and is deliberately narrower
-than erasure. **Still open:** `book.revio.app` DNS.
+than erasure. **Nothing open here.** ⚠️ `book.revio.app` was a vanity domain from an early plan on **revio.app, which we do not own** (it resolves to a third party; `book.revio.app` itself is NXDOMAIN). The brand domain is **reviosoft.app**, the booking engine is live and correct at `booking.reviosoft.app/<slug>`, and `BOOKING_ENGINE_ORIGIN` in production already points there. Dropped 2026-09-07 — there was never anything to do.
 **Not built
 and deliberately so:** real card collection (needs Stripe Elements + a live-mode decision), extras/upsell
 (the step-3 slot exists and is empty), and any Operator visibility into the booking engine.

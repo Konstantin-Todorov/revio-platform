@@ -28,7 +28,7 @@ accurate; this file had drifted. Corrections (the Phase K table lower down is al
   and the request-to-book fallback = **K5**; `packages/core/src/guests/recognition.ts` = **K6**;
   `packages/core/src/metrics/channel-economics.ts` + CRS Cost-of-distribution = **K8**; the live
   `booking` service + object-store bucket = **K9**; `ExtrasPicker`/`ExtrasEditor` + `saveBookingExtra`
-  = **K10**. Only the `book.revio.app` vanity-DNS rename remains.
+  = **K10**. Complete; the `book.revio.app` vanity rename was dropped (see below).
 - **RLS is ENFORCED in production since 2026-08-05** — all five services run as the restricted
   `revio_app` role (`DEPLOY.md` §RLS). The roadmap's "RLS Phase 2 (prod enforcement) — LAST" is DONE.
 - **Email is live** — `@revio/email` sends through **Resend** (per-hotel branded HTML templates,
@@ -49,8 +49,8 @@ list had gone stale in both directions; six of its items had shipped. Verified s
 | --- | --- |
 | **P3 in-app AI assistant** | ☐ Not started — confirmed, nothing in any app |
 | **Real Stripe billing** in Operator | ☐ Open. `connectMode()` is `mock \| stripe_test` only; there is no live path, deliberately |
-| **Channex production certification** | ☐ Open, external — form + live screenshare with Channex |
-| **`book.revio.app` DNS** | ☐ Open, external — a DNS change, not a build |
+| ~~Channex production certification~~ | ☑ **Done 2026-08-24** — `docs/CHANNEX-CERTIFICATION.md` says *CERTIFIED, production account live*; the key landed 08-26. Two `channex_prod` channels are connected in production right now. This sat on the open list for two weeks |
+| ~~`book.revio.app` DNS~~ | ☑ **Dropped 2026-09-07.** `book.revio.app` was a vanity domain from an early plan on **revio.app, which we do not own** (it resolves to a third party; `book.revio.app` itself is NXDOMAIN). The brand domain is **reviosoft.app**, the booking engine is live and correct at `booking.reviosoft.app/<slug>`, and `BOOKING_ENGINE_ORIGIN` in production already points there. Dropped 2026-09-07 — there was never anything to do. |
 | **P1 production copy pass** | ◐ `copy-lint` is clean across 491 files; treat the *lint* as done and the editorial pass as ongoing |
 | ~~scheduler/cron + worker~~ | ☑ **Done** — the `jobs` service runs 7 jobs; verified live on the health endpoint |
 | ~~scheduled auto-pull~~ | ☑ **Done** — `channex-pull` is on that cron |
@@ -293,7 +293,7 @@ Cross-product Channex auto-push works (a CRS/PMS change pushes immediately). Wha
 **Future products**
 - ~~Direct **Booking Engine** (consumer-facing) — parked as a future product.~~ **Built and live —
   Phase K COMPLETE (K1–K10), at `booking.reviosoft.app`.** See the Phase K table at the bottom of this
-  file. Only the `book.revio.app` vanity DNS rename remains.
+  file. Complete; the `book.revio.app` vanity rename was dropped — we do not own revio.app.
 
 ---
 
@@ -613,7 +613,7 @@ internet-facing, inventory-touching surface we have, and its rules are different
 | K5 | ✅ | **Stripe Connect onboarding** in CRS → Booking Engine (`PaymentsCard`, `startStripeOnboarding`, `property.stripeAccountId`, `@revio/payments/connect`) + request-to-book fallback when unconnected (`RequestQueue`, `acceptBookingRequest`). Test-mode. |
 | K6 | ✅ | Returning-guest recognition — server-side after submit (never a live lookup), `Guest.recognitionOptOut` respected, GDPR-clean (`packages/core/src/guests/recognition.ts`). Verified live: "Welcome back — this is your 2nd stay". |
 | K8 | ✅ | Direct-vs-OTA **Cost of distribution** in CRS — commission paid vs. avoided kept apart, `null` not a guess (`packages/core/src/metrics/channel-economics.ts`). |
-| K9 | ✅ | Deployed — `booking` Railway service, **live at `booking.reviosoft.app`**, shared object-storage bucket. Only the `book.revio.app` vanity DNS rename is still pending. |
+| K9 | ✅ | Deployed — `booking` Railway service, **live at `booking.reviosoft.app`**, shared object-storage bucket. The `book.revio.app` vanity rename was dropped 2026-09-07 — we do not own revio.app. |
 | K10 | ✅ | Extras the booking page sells (`ExtrasPicker` / CRS `ExtrasEditor` / `saveBookingExtra`) — the PMS's own `PosItem` catalogue, re-derived server-side. |
 
 **Two deviations from the spec worth knowing.** K4 planned the guarantee "via Stripe Connect"; it
