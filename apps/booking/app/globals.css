@@ -418,3 +418,33 @@
     outline-offset: -2px;
   }
 }
+
+/*
+ * ── iOS Safari: stop the page zooming when a field takes focus ──────────────────────────────────
+ *
+ * Safari on iPhone zooms the whole page in when a form control whose font-size is under **16px**
+ * receives focus. Our controls are 12.5–14px, which is right on a desktop and is exactly the
+ * trigger on a phone. The result is what the founder reported: tap the email box on the sign-in
+ * screen — with a saved password or without — and the browser zooms; you are then left zoomed in
+ * afterwards, inside the app, until you pinch back out. It reads as the software being broken.
+ *
+ * ⚠️ The usual "fix" for this is `maximum-scale=1` or `user-scalable=no` in the viewport meta.
+ * **Never do that.** It disables pinch-zoom for everyone, which fails WCAG 1.4.4, and newer iOS
+ * ignores it anyway. `apps/booking` already refuses it in so many words. The real fix is to give the
+ * control the 16px Safari is asking for, and only where it matters.
+ *
+ * `(hover: none) and (pointer: coarse)` targets a touch device rather than a narrow window: a small
+ * desktop window keeps the compact type, and an iPad in landscape — wide, but still touch — gets the
+ * fix. Checkboxes and radios are excluded because they carry no text to zoom toward.
+ *
+ * `!important` is deliberate and is the narrow exception, not a habit: Tailwind sizes these with
+ * single-class utilities like `text-[12.5px]`, which outrank any element selector on specificity.
+ * Scoped to this media query, it cannot affect a desktop.
+ */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

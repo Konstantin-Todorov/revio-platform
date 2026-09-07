@@ -123,6 +123,12 @@ jobs:
       - name: Every job is scheduled
         run: pnpm jobs:lint
 
+      # Pinch-zoom must stay unlocked (WCAG 1.4.4) AND form controls must stay 16px on touch — the
+      # two halves of one fix. Lock the viewport and you break magnification for everyone; delete the
+      # 16px rule and iOS zooms the page on every focus, which is what makes people lock the viewport.
+      - name: Mobile zoom
+        run: pnpm zoom:lint
+
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift
         env:

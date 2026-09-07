@@ -398,6 +398,34 @@ the second half happen?
 
 ---
 
+## ☑ 18. A platform bug that reads as our software being broken
+
+Reported by the founder, not by any monitor: on a phone, tapping the email field on any sign-in
+screen zooms the whole page in — with a saved password or without — and leaves you zoomed in
+afterwards, inside the app, until you pinch back out.
+
+Not a bug in our code exactly, which is why nothing caught it. **iOS Safari zooms whenever a focused
+form control has a font-size under 16px.** Ours are 12.5–14px, which is correct on a desktop and is
+precisely the trigger on a phone. Every input in every app, including the guest-facing booking page.
+
+⚠️ **The obvious fix is the wrong one.** `maximum-scale=1` / `user-scalable=no` stops the zoom and
+fails **WCAG 1.4.4** — a guest who needs to magnify a price, or a housekeeper reading a room number,
+no longer can. Newer iOS ignores it anyway, so it breaks accessibility without fixing anything.
+`apps/booking` already refused it in a comment: *"Never lock zoom on a page someone might need to
+magnify to read a price."*
+
+| | |
+| --- | --- |
+| **Fix** | Form controls render at 16px under `(hover: none) and (pointer: coarse)` — a touch device, not merely a narrow window, so a small desktop window keeps compact type and a landscape iPad still gets the fix. Checkboxes and radios excluded; they carry no text to zoom toward |
+| **Guard** | **`pnpm zoom:lint`** — fails if any app locks pinch-zoom **or** if the 16px rule goes missing. Both halves, because they undo each other: delete the rule and the zoom returns, and the next person reaches for the viewport lock |
+
+⚠️ The class: **a defect that lives in the gap between correct code and a platform's behaviour.**
+Nothing here was wrong by our own rules — the type scale is deliberate and the viewport was already
+right. It took somebody using the product on a phone. Worth remembering that no lint in this file
+would have found it.
+
+---
+
 ## How to add to this file
 
 When you fix something and it turns out to be a class rather than an incident:
