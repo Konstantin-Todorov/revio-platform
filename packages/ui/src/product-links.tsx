@@ -1,5 +1,11 @@
 import "server-only";
-import { entitledProducts, type ProductEntitlements, type ProductKey } from "@revio/core";
+import {
+  entitledProducts,
+  unownedProducts,
+  type ProductEntitlements,
+  type ProductKey,
+  type ProductUpsell,
+} from "@revio/core";
 
 /**
  * Where each product lives, resolved on the SERVER.
@@ -72,4 +78,17 @@ export function productLinks(e: ProductEntitlements, current: ProductKey): Produ
     href: productOrigin(p.key),
     current: p.key === current,
   }));
+}
+
+export type { ProductUpsell };
+
+/**
+ * The products this hotel does not have, for the "also available" part of the account menu.
+ *
+ * No `href`, deliberately. A hotel cannot switch a product on themselves — an entitlement is flipped
+ * by the operator — so there is nowhere for a link to go that would complete the action. A button
+ * that cannot finish what it offers is worse than no button.
+ */
+export function productUpsells(e: ProductEntitlements): ProductUpsell[] {
+  return unownedProducts(e);
 }

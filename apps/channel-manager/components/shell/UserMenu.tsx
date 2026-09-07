@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Settings, LogOut, ChevronDown } from "lucide-react";
 import { AccountMenuBody } from "@revio/ui/account-menu-body";
-import type { ProductLink } from "@revio/ui/product-links";
+import type { ProductLink, ProductUpsell } from "@revio/ui/product-links";
 import { logout } from "@/lib/actions-auth";
 
 function initials(name: string): string {
@@ -12,7 +12,7 @@ function initials(name: string): string {
 }
 
 /** Top-right account menu: the avatar opens a dropdown → Settings + Log out. */
-export function UserMenu({ userName, roleLabel, products }: { userName: string; roleLabel: string; products: ProductLink[] }) {
+export function UserMenu({ userName, roleLabel, products, upsells }: { userName: string; roleLabel: string; products: ProductLink[]; upsells: ProductUpsell[] }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -33,7 +33,7 @@ export function UserMenu({ userName, roleLabel, products }: { userName: string; 
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-[248px] overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
-          <AccountMenuBody userName={userName} roleLabel={roleLabel} products={products} />
+          <AccountMenuBody userName={userName} roleLabel={roleLabel} products={products} upsells={upsells} />
           <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-700 transition-colors hover:bg-surface-muted">
             <Settings className="h-4 w-4 text-ink-400" /> Settings
           </Link>

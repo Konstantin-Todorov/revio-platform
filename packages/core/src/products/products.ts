@@ -71,3 +71,55 @@ export function primaryProduct(e: ProductEntitlements): ProductInfo {
 export function hasOtherProducts(e: ProductEntitlements, current: ProductKey): boolean {
   return entitledProducts(e).some((p) => p.key !== current);
 }
+
+/**
+ * The products this hotel has NOT bought, with a reason drawn from what they already run.
+ *
+ * ## Why the reason is specific rather than a slogan
+ *
+ * "Try RevioPMS!" is an advert and gets ignored. What makes an argument is naming the thing they
+ * already do and what the missing product would do with it — a hotel on RevioLink already has
+ * channel bookings arriving, so the case for RevioCRS is *those bookings*, not a feature list. The
+ * shared core is what makes that true rather than a sales line: the data is already there.
+ *
+ * Differentiated by **entitlement**, which costs no query. Usage-based wording — their actual
+ * commission last month, their real direct share — is a better argument still, and needs numbers a
+ * layout cannot afford to fetch on every page load. That belongs on a screen someone opens
+ * deliberately.
+ *
+ * ## Why there is no "Buy now"
+ *
+ * A hotel cannot switch a product on themselves; an entitlement is flipped by the operator. Offering
+ * a button that cannot complete is worse than offering none, so the honest call to action is to ask
+ * us — and that is what the UI says.
+ */
+export interface ProductUpsell extends ProductInfo {
+  /** One sentence, in the hotel's terms, about what they already have. */
+  reason: string;
+}
+
+export function unownedProducts(e: ProductEntitlements): ProductUpsell[] {
+  const owned = new Set(entitledProducts(e).map((p) => p.key));
+  if (owned.size === 0) return [];
+
+  return PRODUCTS.filter((p) => !owned.has(p.key)).map((p) => ({
+    ...p,
+    reason: upsellReason(p.key, owned),
+  }));
+}
+
+function upsellReason(key: ProductKey, owned: ReadonlySet<ProductKey>): string {
+  if (key === "cm") {
+    return owned.has("crs")
+      ? "Send the rates you already keep here straight to Booking.com and Expedia."
+      : "Keep your rooms and prices in step across every booking site.";
+  }
+  if (key === "crs") {
+    return owned.has("cm")
+      ? "Your channel bookings already arrive — this is where they become a record you can report on."
+      : "One reservation record, with occupancy, ADR and RevPAR computed from it.";
+  }
+  return owned.has("crs")
+    ? "Run the arrival day on the same bookings: front desk, housekeeping and the guest's bill."
+    : "Front desk, housekeeping and folios on the rooms you already have here.";
+}

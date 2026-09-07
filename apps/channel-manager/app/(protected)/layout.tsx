@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { productLinks } from "@revio/ui/product-links";
+import { productLinks, productUpsells } from "@revio/ui/product-links";
 import { Lock } from "lucide-react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
@@ -32,14 +32,13 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   /* One login, every product the hotel bought — resolved here because the account menu is a
      client component and only the server can read the sibling hostnames. */
-  const products = productLinks(
-    {
-      hasChannelManager: session.entitlements.channelManager,
-      hasReservation: session.entitlements.reservation,
-      hasPms: session.entitlements.pms,
-    },
-    "cm",
-  );
+  const entitlements = {
+    hasChannelManager: session.entitlements.channelManager,
+    hasReservation: session.entitlements.reservation,
+    hasPms: session.entitlements.pms,
+  };
+  const products = productLinks(entitlements, "cm");
+  const upsells = productUpsells(entitlements);
 
   return (
     <ShellProvider>
@@ -49,7 +48,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar connectivityLabel={connectivityLabel} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
-          <Topbar products={products} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} notifItems={notifItems} />
+          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} notifItems={notifItems} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate

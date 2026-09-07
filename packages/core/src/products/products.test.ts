@@ -4,6 +4,7 @@ import {
   entitledProducts,
   primaryProduct,
   hasOtherProducts,
+  unownedProducts,
   type ProductEntitlements,
 } from "./products";
 
@@ -56,5 +57,47 @@ describe("hasOtherProducts — a switcher with one destination is noise", () => 
 
   it("is false for a tenant with nothing", () => {
     expect(hasOtherProducts(none, "crs")).toBe(false);
+  });
+});
+
+describe("unownedProducts — an argument, not an advert", () => {
+  it("offers nothing to a hotel that already has everything", () => {
+    expect(unownedProducts(all)).toEqual([]);
+  });
+
+  it("offers nothing to a tenant entitled to nothing", () => {
+    // They cannot sign in anywhere; a sales pitch is not the fix for a provisioning fault.
+    expect(unownedProducts(none)).toEqual([]);
+  });
+
+  it("names what they already run, rather than listing features", () => {
+    const forLinkOnly = unownedProducts({ ...none, hasChannelManager: true });
+    const crs = forLinkOnly.find((p) => p.key === "crs")!;
+    // A RevioLink hotel already has channel bookings arriving; that is the case for RevioCRS.
+    expect(crs.reason).toContain("already arrive");
+  });
+
+  it("changes the wording with what they own", () => {
+    const toCrsOnly = unownedProducts({ ...none, hasReservation: true }).find((p) => p.key === "cm")!;
+    const toPmsOnly = unownedProducts({ ...none, hasPms: true }).find((p) => p.key === "cm")!;
+    expect(toCrsOnly.reason).not.toBe(toPmsOnly.reason);
+  });
+
+  it("gives every offered product a reason", () => {
+    for (const e of [
+      { ...none, hasChannelManager: true },
+      { ...none, hasReservation: true },
+      { ...none, hasPms: true },
+      { ...none, hasChannelManager: true, hasPms: true },
+    ]) {
+      for (const p of unownedProducts(e)) {
+        expect(p.reason.length).toBeGreaterThan(20);
+      }
+    }
+  });
+
+  it("never offers a product the hotel already owns", () => {
+    const offered = unownedProducts({ ...none, hasChannelManager: true, hasReservation: true });
+    expect(offered.map((p) => p.key)).toEqual(["pms"]);
   });
 });

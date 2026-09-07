@@ -1,6 +1,6 @@
 "use client";
 
-import type { ProductLink } from "./product-links";
+import type { ProductLink, ProductUpsell } from "./product-links";
 
 /**
  * The inside of the account menu, shared by all four staff apps.
@@ -30,11 +30,14 @@ export function AccountMenuBody({
   userEmail,
   roleLabel,
   products,
+  upsells = [],
 }: {
   userName: string;
   userEmail?: string | null;
   roleLabel: string;
   products: ProductLink[];
+  /** Products the hotel does not have. Shown quietly; never a link, because we flip the entitlement. */
+  upsells?: ProductUpsell[];
 }) {
   return (
     <>
@@ -77,6 +80,26 @@ export function AccountMenuBody({
               </a>
             ),
           )}
+        </div>
+      )}
+
+      {upsells.length > 0 && (
+        <div className="border-b border-surface-border py-1">
+          <p className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
+            Also available
+          </p>
+          {upsells.map((p) => (
+            <div key={p.key} className="px-3 py-1.5">
+              <span className="block text-[13px] text-ink-500">{p.name}</span>
+              <span className="block text-[11px] leading-snug text-ink-400">{p.reason}</span>
+            </div>
+          ))}
+          {/* No button: a hotel cannot switch a product on themselves — we flip the entitlement — so
+              the honest call to action is to ask, and anything else would be a control that cannot
+              finish what it offers. */}
+          <p className="px-3 pb-1.5 pt-1 text-[10.5px] italic text-ink-400">
+            Ask your Revio contact to switch one on.
+          </p>
         </div>
       )}
     </>

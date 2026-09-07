@@ -2,7 +2,7 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { MobileMenuButton } from "./MobileMenuButton";
 import { NotificationBell } from "./NotificationBell";
 import { UserMenu } from "./UserMenu";
-import type { ProductLink } from "@revio/ui/product-links";
+import type { ProductLink, ProductUpsell } from "@revio/ui/product-links";
 import { TopbarSearch } from "./TopbarSearch";
 
 type Property = { id: string; name: string; tenantName: string };
@@ -14,7 +14,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export function Topbar({
-  properties, activeId, activeName, role, userName, notifItems, products,
+  properties, activeId, activeName, role, userName, notifItems, products, upsells,
 }: {
   properties: Property[];
   activeId: string;
@@ -22,6 +22,7 @@ export function Topbar({
   role: string;
   userName: string;
   products: ProductLink[];
+  upsells: ProductUpsell[];
   notifItems: NotifItem[];
 }) {
   return (
@@ -35,7 +36,7 @@ export function Topbar({
       </div>
 
       <NotificationBell items={notifItems} />
-      <UserMenu products={products} userName={userName} roleLabel={ROLE_LABEL[role] ?? role} />
+      <UserMenu products={products} upsells={upsells} userName={userName} roleLabel={ROLE_LABEL[role] ?? role} />
     </header>
   );
 }
