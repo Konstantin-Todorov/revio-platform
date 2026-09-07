@@ -56,6 +56,11 @@ const EXEMPT = {
   // housekeeper who cannot open Settings is exactly the person most likely to be standing in front
   // of a broken screen, and a support form that refuses them loses the report we most need.
   "actions-support.ts:submitSupportRequest": "anybody signed in may ask for help, whatever their role",
+  // Same rule, the other direction. Answering our reply is part of the same conversation, and the
+  // person who reported the fault is often the one with the fewest permissions — gating the reply
+  // would let us ask a question the reporter is not allowed to answer. `recordHotelReply` scopes the
+  // write to the caller's own tenant, so the case still cannot be another hotel's.
+  "actions-support.ts:replyToSupport": "answering support is part of asking; scoped to the caller's own tenant",
   "actions-auth.ts:signOutEverywhere": "revoking your OWN sessions; a locked-out user must be able to do this",
   "actions-auth.ts:verifyTwoFactor": "step two of signing in — gated by the pending-2FA token, which is issued only by a correct password",
 

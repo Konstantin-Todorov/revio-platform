@@ -1,16 +1,9 @@
+import Link from "next/link";
 import { forSystem } from "@revio/db";
-import {
-  PRODUCT_BY_KEY,
-  SUPPORT_KINDS,
-  SUPPORT_SOURCES,
-  hoursOverdue,
-  isOverdue,
-  supportKind,
-  supportReference,
-  supportSourceLabel,
-} from "@revio/core";
-import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { logSupportRequest, markSupportHandled, replyToSupportRequest } from "@/lib/actions-support";
+import { SUPPORT_KINDS, SUPPORT_SOURCES, hoursOverdue, isOverdue } from "@revio/core";
+import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
+import { SupportCase, type SupportCaseRow } from "@/components/support/SupportCase";
+import { logSupportRequest } from "@/lib/actions-support";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +20,46 @@ const labelCls = "mb-1 block text-[10.5px] font-semibold uppercase tracking-wide
  * asked four days ago is more overdue than an urgent raised ten minutes ago, and sorting by severity
  * would bury it forever. The promise and the clock come from the same constants the hotel was shown.
  *
- * Answered requests stay visible below, because "have we heard from this client before?" is a
- * question a renewal call asks and a queue that empties itself cannot answer.
+ * Answered requests stay visible, because "have we heard from this client before?" is a question a
+ * renewal call asks and a queue that empties itself cannot answer. They are shown by the **same**
+ * card as a waiting one — see `SupportCase` — because when they were separate markup the answered
+ * half lost the source, the thread and the reply box, which is most of what a renewal call wants.
+ *
+ * Three tabs rather than three stacked lists. Everything used to be on one screen at once: the
+ * log-a-call form, every open case with its thread expanded, and the answered list underneath. Past
+ * a handful of cases that is unreadable, and the thing being looked for is never the thing at the
+ * top.
  */
-export default async function SupportPage() {
+
+type Tab = "open" | "answered" | "all";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "open", label: "Waiting" },
+  { key: "answered", label: "Answered" },
+  { key: "all", label: "All" },
+];
+
+/** Said on the tab rather than in a heading, so the list underneath is what it describes. */
+const TAB_NOTE: Record<Tab, string> = {
+  open: "Sorted by how late, not by how it was labelled",
+  answered: "Kept — a renewal call asks what they have reported before",
+  all: "Newest first",
+};
+
+const EMPTY: Record<Tab, string> = {
+  open: "Nothing is waiting. Requests arrive here the moment a hotel presses “Get help”, and are emailed at the same time — the queue reads this table rather than an inbox, so a mail provider having a bad minute cannot lose one.",
+  answered: "Nothing answered yet.",
+  all: "No requests yet.",
+};
+
+export default async function SupportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const requested = (await searchParams).tab;
+  const tab: Tab = requested === "answered" || requested === "all" ? requested : "open";
+
   const now = new Date();
   const [requests, tenants] = await Promise.all([
     prisma.supportRequest.findMany({
@@ -45,8 +74,11 @@ export default async function SupportPage() {
   const open = requests
     .filter((r) => !r.handledAt)
     .sort((a, b) => hoursOverdue(b, now) - hoursOverdue(a, now) || a.createdAt.getTime() - b.createdAt.getTime());
-  const handled = requests.filter((r) => r.handledAt).slice(0, 25);
+  const answered = requests.filter((r) => r.handledAt);
   const overdue = open.filter((r) => isOverdue(r, now)).length;
+
+  const shown = tab === "open" ? open : tab === "answered" ? answered : requests;
+  const counts: Record<Tab, number> = { open: open.length, answered: answered.length, all: requests.length };
 
   return (
     <div className="space-y-5">
@@ -59,14 +91,6 @@ export default async function SupportPage() {
         }
       />
 
-      {/*
-        Log what arrived some other way.
-
-        The queue only recorded the in-app form, so it only knew about the half of a hotel that
-        types. Somebody who telephones asks the same questions — often the more urgent ones, because
-        they picked up the phone — and those left no trace at all, which would have meant writing the
-        help for the wrong audience.
-      */}
       <Card>
         <CardHeader
           title="Log a call, an email or a conversation"
@@ -132,114 +156,32 @@ export default async function SupportPage() {
       </Card>
 
       <Card>
-        <CardHeader title={`Waiting (${open.length})`} subtitle="Sorted by how late, not by how it was labelled" />
-        {open.length === 0 ? (
-          <p className="px-4 py-6 text-[13px] text-ink-500">
-            Nothing is waiting. Requests arrive here the moment a hotel presses “Get help”, and are
-            emailed at the same time — the queue reads this table rather than an inbox, so a mail
-            provider having a bad minute cannot lose one.
-          </p>
+        <div className="flex flex-wrap items-center gap-1 border-b border-surface-border px-3 py-2">
+          {TABS.map((t) => (
+            <Link
+              key={t.key}
+              href={t.key === "open" ? "/support" : `/support?tab=${t.key}`}
+              className={`rounded-md px-2.5 py-1 text-[12.5px] font-semibold transition-colors ${
+                tab === t.key ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted hover:text-ink-900"
+              }`}
+            >
+              {t.label} ({counts[t.key]})
+            </Link>
+          ))}
+          <span className="ml-auto pr-1 text-[11.5px] text-ink-400">{TAB_NOTE[tab]}</span>
+        </div>
+
+        {shown.length === 0 ? (
+          <p className="px-4 py-6 text-[13px] text-ink-500">{EMPTY[tab]}</p>
         ) : (
           <ul className="divide-y divide-surface-border">
-            {open.map((r) => {
-              const k = supportKind(r.kind);
-              const late = isOverdue(r, now);
-              const t = tenantById.get(r.tenantId);
-              return (
-                <li key={r.id} className="px-4 py-3.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="tnum text-[12px] font-semibold text-ink-900">{supportReference(r.id)}</span>
-                    <StatusPill tone={late ? "danger" : k.key === "urgent" ? "warning" : "neutral"}>
-                      {late ? `${Math.round(hoursOverdue(r, now))}h late` : k.key}
-                    </StatusPill>
-                    <span className="text-[13px] font-semibold text-ink-900">{t?.name ?? "Unknown client"}</span>
-                    {t?.isDemo ? <StatusPill tone="neutral">demo</StatusPill> : null}
-                    <span className="text-[11.5px] text-ink-400">
-                      {PRODUCT_BY_KEY[r.product as "cm" | "crs" | "pms"]?.name ?? r.product}
-                      {r.route ? ` · ${r.route}` : ""}
-                      {r.source !== "app" ? ` · ${supportSourceLabel(r.source)}` : ""}
-                    </span>
-                    <span className="ml-auto text-[11.5px] text-ink-400">
-                      {r.contactName} · {r.contactEmail}
-                    </span>
-                  </div>
-                  <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-700">{r.message}</p>
-                  {r.messages.length > 0 && (
-                    <ul className="mt-2 space-y-1.5 border-l-2 border-surface-border pl-3">
-                      {r.messages.map((m) => (
-                        <li key={m.id} className="text-[12.5px]">
-                          <span className="font-semibold text-ink-700">
-                            {m.side === "revio" ? m.authorName : r.contactName}
-                          </span>
-                          <span className="ml-1.5 text-[11px] text-ink-400">
-                            {m.createdAt.toISOString().slice(0, 16).replace("T", " ")}
-                          </span>
-                          {/* An undelivered reply is indistinguishable from being ignored, so it is
-                              said out loud rather than left to look sent. */}
-                          {m.side === "revio" && !m.emailedAt && (
-                            <span className="ml-1.5 text-[11px] font-semibold text-danger-600">
-                              email did not send
-                            </span>
-                          )}
-                          <p className="whitespace-pre-wrap text-ink-600">{m.body}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  {/* Answering from here, rather than from an inbox: the thread is the record both
-                      sides can read, and the hotel still receives it as email. */}
-                  <form action={replyToSupportRequest} className="mt-2.5">
-                    <input type="hidden" name="id" value={r.id} />
-                    <textarea
-                      name="body"
-                      required
-                      rows={2}
-                      placeholder={`Reply to ${r.contactName}…`}
-                      className={inputCls}
-                    />
-                    <div className="mt-1.5 flex items-center gap-3">
-                      <button className="h-[30px] rounded-md bg-brand-800 px-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700">
-                        Send reply
-                      </button>
-                      <span className="text-[11px] text-ink-400">
-                        Emailed to {r.contactEmail} and kept in the thread. Replying marks it answered.
-                      </span>
-                    </div>
-                  </form>
-
-                  <div className="mt-2 flex items-center gap-3">
-                    <form action={markSupportHandled}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <button className="text-[12px] font-semibold text-ink-500 transition-colors hover:text-ink-900">
-                        Mark answered
-                      </button>
-                    </form>
-                    <span className="text-[11.5px] text-ink-400">
-                      asked {r.createdAt.toISOString().slice(0, 16).replace("T", " ")} · promised {k.targetHours}h
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader title="Answered" subtitle="Kept, because a renewal call asks what they have reported before" />
-        {handled.length === 0 ? (
-          <p className="px-4 py-5 text-[13px] text-ink-500">Nothing answered yet.</p>
-        ) : (
-          <ul className="divide-y divide-surface-border">
-            {handled.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-baseline gap-2 px-4 py-2.5 text-[12.5px]">
-                <span className="tnum font-semibold text-ink-700">{supportReference(r.id)}</span>
-                <span className="text-ink-900">{tenantById.get(r.tenantId)?.name ?? "Unknown"}</span>
-                <span className="truncate text-ink-500">{r.message.slice(0, 90)}</span>
-                <span className="ml-auto text-[11.5px] text-ink-400">
-                  answered {r.handledAt?.toISOString().slice(0, 10)}
-                </span>
+            {shown.map((r) => (
+              <li key={r.id} className="px-4 py-3.5">
+                <SupportCase
+                  request={r as unknown as SupportCaseRow}
+                  tenant={tenantById.get(r.tenantId)}
+                  now={now}
+                />
               </li>
             ))}
           </ul>

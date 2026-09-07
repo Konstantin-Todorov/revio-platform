@@ -94,6 +94,7 @@ export { claimRegisterNo } from "./register-number.js";
 export {
   recordSupportRequest,
   addSupportMessage,
+  recordHotelReply,
   getSupportThreadForTenant,
   listSupportForTenant,
   type SupportRequestInput,

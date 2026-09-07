@@ -41,7 +41,8 @@
     "./get-help": "./src/get-help.tsx",
     "./help-centre": "./src/help-centre.tsx",
     "./report-client-error": "./src/report-client-error.ts",
-    "./my-requests": "./src/my-requests.tsx"
+    "./my-requests": "./src/my-requests.tsx",
+    "./support-reply": "./src/support-reply.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

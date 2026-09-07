@@ -7,6 +7,7 @@ import {
   validateSupportMessage,
   supportRefusalMessage,
   isOverdue,
+  waitingSince,
   hoursOverdue,
 } from "./support";
 
@@ -81,6 +82,73 @@ describe("validateSupportMessage — the floor is low on purpose", () => {
     for (const r of ["no-message", "too-short", "too-long"] as const) {
       expect(supportRefusalMessage(r).length).toBeGreaterThan(20);
     }
+  });
+});
+
+describe("waitingSince — whose turn it is, and since when", () => {
+  const base = { kind: "problem", createdAt: hoursAgo(500), handledAt: null };
+
+  it("is the request itself when nothing has been said yet", () => {
+    expect(waitingSince(base).getTime()).toBe(hoursAgo(500).getTime());
+  });
+
+  it("ignores our own replies — answering stops our clock, it does not restart it", () => {
+    const t = waitingSince({ ...base, messages: [{ side: "revio", createdAt: hoursAgo(400) }] });
+    expect(t.getTime()).toBe(hoursAgo(500).getTime());
+  });
+
+  it("moves to the hotel's newest reply", () => {
+    const t = waitingSince({
+      ...base,
+      messages: [
+        { side: "hotel", createdAt: hoursAgo(300) },
+        { side: "revio", createdAt: hoursAgo(200) },
+        { side: "hotel", createdAt: hoursAgo(1) },
+      ],
+    });
+    expect(t.getTime()).toBe(hoursAgo(1).getTime());
+  });
+
+  it("does not go backwards on an out-of-order thread", () => {
+    const t = waitingSince({
+      ...base,
+      messages: [{ side: "hotel", createdAt: hoursAgo(2) }, { side: "hotel", createdAt: hoursAgo(9) }],
+    });
+    expect(t.getTime()).toBe(hoursAgo(2).getTime());
+  });
+});
+
+/**
+ * The reason `waitingSince` exists: a hotel replying to an answer reopens the case, and the clock
+ * has to run from their reply. Measured from `createdAt` a three-week-old thread would be reported
+ * as three weeks late the instant they wrote back, and would out-shout every genuine urgent.
+ */
+describe("a reopened request is judged on the reply, not the age of the conversation", () => {
+  const reopened = (repliedHoursAgo: number) => ({
+    kind: "problem" as const,
+    createdAt: hoursAgo(500),
+    handledAt: null,
+    messages: [
+      { side: "hotel", createdAt: hoursAgo(500) },
+      { side: "revio", createdAt: hoursAgo(480) },
+      { side: "hotel", createdAt: hoursAgo(repliedHoursAgo) },
+    ],
+  });
+
+  it("is not late a minute after they write back", () => {
+    expect(isOverdue(reopened(0.01), NOW)).toBe(false);
+    expect(hoursOverdue(reopened(0.01), NOW)).toBe(0);
+  });
+
+  it("becomes late one working day after their reply, like any other", () => {
+    expect(isOverdue(reopened(25), NOW)).toBe(true);
+    expect(hoursOverdue(reopened(25), NOW)).toBeCloseTo(1, 5);
+  });
+
+  it("never lets a reopened case out-shout a truly urgent one", () => {
+    const barelyReopened = hoursOverdue(reopened(0.5), NOW);
+    const urgentLate = hoursOverdue({ kind: "urgent", createdAt: hoursAgo(6), handledAt: null }, NOW);
+    expect(urgentLate).toBeGreaterThan(barelyReopened);
   });
 });
 

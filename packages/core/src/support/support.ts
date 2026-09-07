@@ -119,29 +119,53 @@ export function supportRefusalMessage(refusal: SupportRefusal): string {
   }
 }
 
+/** Enough of a request to say how long they have been waiting. `messages` may be absent. */
+export interface SupportTiming {
+  kind: string;
+  createdAt: Date;
+  handledAt: Date | null;
+  messages?: readonly { side: string; createdAt: Date }[];
+}
+
+/**
+ * When the ball last came to us — the moment the clock we promised against started running.
+ *
+ * Not `createdAt`, once a thread exists. A hotel that replies to an answer reopens the case, and
+ * measuring from the original question would report a reply received a minute ago as three weeks
+ * late. The queue would sort by the age of the subject instead of by who has been kept waiting, and
+ * every reopened case would out-shout a genuinely urgent new one.
+ *
+ * So: the newest message from the hotel, and the request's own creation when there is none. Our own
+ * replies never move it — answering does not restart our own clock, it stops it.
+ */
+export function waitingSince(request: SupportTiming): Date {
+  let latest = request.createdAt;
+  for (const m of request.messages ?? []) {
+    if (m.side === "hotel" && m.createdAt.getTime() > latest.getTime()) latest = m.createdAt;
+  }
+  return latest;
+}
+
 /**
  * Is an unanswered request past what we promised?
  *
  * Used by the operator's queue to sort by *how late*, not by how loudly it was reported. A question
  * asked three days ago is overdue; an urgent raised ten minutes ago is not, however it feels.
+ *
+ * Measured from `waitingSince`, so a reopened case is judged on the reply we have not answered
+ * rather than on the age of the conversation.
  */
-export function isOverdue(
-  request: { kind: string; createdAt: Date; handledAt: Date | null },
-  now: Date,
-): boolean {
+export function isOverdue(request: SupportTiming, now: Date): boolean {
   if (request.handledAt) return false;
   const target = supportKind(request.kind).targetHours * 3_600_000;
-  return now.getTime() - request.createdAt.getTime() > target;
+  return now.getTime() - waitingSince(request).getTime() > target;
 }
 
 /** How late, in hours, or 0 when it is not. For ordering the queue. */
-export function hoursOverdue(
-  request: { kind: string; createdAt: Date; handledAt: Date | null },
-  now: Date,
-): number {
+export function hoursOverdue(request: SupportTiming, now: Date): number {
   if (!isOverdue(request, now)) return 0;
   const target = supportKind(request.kind).targetHours * 3_600_000;
-  return (now.getTime() - request.createdAt.getTime() - target) / 3_600_000;
+  return (now.getTime() - waitingSince(request).getTime() - target) / 3_600_000;
 }
 
 /**

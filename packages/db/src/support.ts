@@ -130,3 +130,60 @@ export async function listSupportForTenant(tenantId: string, limit = 50) {
     include: { messages: { orderBy: { createdAt: "asc" } } },
   });
 }
+
+/**
+ * A hotel answers us, and the case comes back into the queue.
+ *
+ * Shared for the same reason `recordSupportRequest` is: three products need the identical rules, and
+ * a reply that reopens a case in RevioCRS and quietly does not in RevioPMS is the kind of difference
+ * nobody finds until a customer is ignored. Each app keeps its own gated action and its own email —
+ * that is the perimeter, and it cannot be shared.
+ *
+ * ## Why it clears `handledAt`
+ *
+ * `handledAt IS NULL` is the operator's queue, and answering sets it — "replying IS answering it".
+ * If a hotel's reply left it set, their answer would land on a case nobody is looking at any more,
+ * which is precisely the failure this whole feature exists to prevent. So a reply reopens it, and
+ * `handledById` goes with it: whoever answered last time did answer, and the thread still says so.
+ *
+ * The lateness clock stays honest because it is measured from `waitingSince`, not `createdAt` — see
+ * `@revio/core`. Without that, reopening a three-week-old thread would report it as three weeks late
+ * the instant they wrote back.
+ *
+ * ## Why the tenant is checked here and not only by RLS
+ *
+ * This writes on the system perimeter, like every other support write, so that a hotel whose session
+ * or entitlements are in a bad state can still reach us — that is the whole point of a support form.
+ * That means the tenant check is ours to make, and it is made against the request row itself: a
+ * `requestId` from another hotel finds nothing and is refused.
+ */
+export async function recordHotelReply(input: {
+  requestId: string;
+  tenantId: string;
+  authorName: string;
+  body: string;
+}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const db = forSystem();
+  const request = await db.supportRequest.findFirst({
+    where: { id: input.requestId, tenantId: input.tenantId },
+    select: { id: true },
+  });
+  if (!request) return { ok: false, error: "That request no longer exists." };
+
+  const added = await addSupportMessage({
+    requestId: request.id,
+    side: "hotel",
+    authorName: input.authorName,
+    body: input.body,
+    // A hotel's own message is not something we deliver to them, so there is nothing to record.
+    emailedAt: null,
+  });
+  if (!added.ok) return added;
+
+  await db.supportRequest.updateMany({
+    where: { id: request.id, handledAt: { not: null } },
+    data: { handledAt: null, handledById: null },
+  });
+
+  return { ok: true, id: added.id };
+}

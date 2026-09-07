@@ -30,7 +30,9 @@ export async function markSupportHandled(fd: FormData): Promise<void> {
     data: { handledAt: new Date(), handledById: session.userId },
   });
 
+  // The case has its own page as well as the queue, and a stale one there is the same lie.
   revalidatePath("/support");
+  revalidatePath(`/support/${id}`);
   return setFlash(count > 0 ? "success" : "info", count > 0 ? "Marked as answered." : "Somebody had already answered that one.");
 }
 
@@ -165,6 +167,7 @@ export async function replyToSupportRequest(fd: FormData): Promise<void> {
   });
 
   revalidatePath("/support");
+  revalidatePath(`/support/${id}`);
   return setFlash(
     emailedAt ? "success" : "error",
     emailedAt

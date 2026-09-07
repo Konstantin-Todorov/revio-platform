@@ -1,4 +1,5 @@
 import { supportKind, supportReference, supportSourceLabel } from "@revio/core";
+import { SupportReply, type SupportReplyResult } from "./support-reply.js";
 
 /**
  * A hotel's own support history, in their own product.
@@ -23,7 +24,18 @@ export interface MyRequestRow {
 
 const when = (d: Date) => d.toISOString().slice(0, 16).replace("T", " ");
 
-export function MyRequests({ requests }: { requests: MyRequestRow[] }) {
+export function MyRequests({
+  requests,
+  replyAction,
+}: {
+  requests: MyRequestRow[];
+  /**
+   * Supplied by the app, because the perimeter belongs to the app. Optional so a surface that only
+   * wants to show the history — the operator's own help page, say — can render without one, and
+   * gets a thread with no input rather than a broken form.
+   */
+  replyAction?: (prev: SupportReplyResult, fd: FormData) => Promise<SupportReplyResult>;
+}) {
   if (requests.length === 0) {
     return (
       <section className="rounded-lg border border-surface-border bg-white p-5">
@@ -95,6 +107,14 @@ export function MyRequests({ requests }: { requests: MyRequestRow[] }) {
                   We have your reply — {k.promise.toLowerCase()}
                 </p>
               )}
+
+              {/*
+                Offered on every request, answered or not. A hotel reading an answer that did not
+                solve it should say so where the question already is, rather than opening a second
+                case carrying none of the history — which was their only option until now. Sending
+                reopens it; `recordHotelReply` clears `handledAt` so it returns to our queue.
+              */}
+              {replyAction && <SupportReply requestId={r.id} action={replyAction} />}
             </li>
           );
         })}

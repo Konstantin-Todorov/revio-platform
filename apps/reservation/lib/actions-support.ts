@@ -1,9 +1,11 @@
 "use server";
 
-import { forSystem, recordSupportRequest } from "@revio/db";
+import { revalidatePath } from "next/cache";
+import { forSystem, recordHotelReply, recordSupportRequest } from "@revio/db";
 import { sendEmail } from "@revio/email";
-import { renderSystemEmail, renderSystemEmailText, supportKind } from "@revio/core";
+import { renderSystemEmail, renderSystemEmailText, supportKind, supportReference } from "@revio/core";
 import type { GetHelpResult } from "@revio/ui/get-help";
+import type { SupportReplyResult } from "@revio/ui/support-reply";
 import { getSession } from "./session";
 
 /**
@@ -85,4 +87,67 @@ export async function submitSupportRequest(_prev: GetHelpResult, fd: FormData): 
   }
 
   return { ok: true, reference: result.reference };
+}
+
+/**
+ * Answer us back, from inside RevioCRS.
+ *
+ * The half that was missing. Until now a hotel could read our reply and had no way to respond to it:
+ * their only route back was a new request, which arrived as a separate case carrying none of the
+ * history — so the thread both sides were supposed to share only ever had one author.
+ *
+ * The perimeter is here, as it is for every write: this action resolves RevioCRS's own session and
+ * hands the tenant to `recordHotelReply`, which does the identical work for all three products.
+ *
+ * ⚠️ **No capability gate**, for the same reason `submitSupportRequest` has none: anybody signed in
+ * may talk to support. The person watching a screen fail is often the person with the fewest
+ * permissions.
+ *
+ * Sending reopens the case — see `recordHotelReply`. We email ourselves rather than relying on
+ * somebody noticing the queue, and a mail failure never loses the message: the row is already
+ * written and the queue reads the row.
+ */
+export async function replyToSupport(
+  _prev: SupportReplyResult,
+  fd: FormData,
+): Promise<SupportReplyResult> {
+  const session = await getSession();
+  if (!session) return { ok: false, error: "Your session has expired. Sign in again and send it once more." };
+
+  const requestId = String(fd.get("requestId") ?? "");
+  const body = String(fd.get("body") ?? "");
+  if (!requestId) return { ok: false, error: "That request could not be identified. Reload the page." };
+
+  const result = await recordHotelReply({
+    requestId,
+    tenantId: session.tenantId,
+    authorName: session.userName,
+    body,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+
+  const reference = supportReference(requestId);
+  const mail = {
+    preview: `${session.tenantName} replied — ${reference}`,
+    heading: `Reply on ${reference}`,
+    product: "RevioCRS",
+    blocks: [
+      { list: [`Hotel — ${session.tenantName}`, `From — ${session.userName} (${session.role})`, `Product — RevioCRS`] },
+      { p: body },
+      { note: "This request is open again in the support queue." },
+    ],
+  };
+  try {
+    await sendEmail({
+      to: [process.env.SUPPORT_INBOX?.trim() || "office@reviosoft.app"],
+      subject: `Re: ${reference} · ${session.tenantName} · RevioCRS`,
+      text: renderSystemEmailText(mail),
+      html: renderSystemEmail(mail),
+    });
+  } catch {
+    /* the row is the record; the queue reads the row, not an inbox */
+  }
+
+  revalidatePath("/help");
+  return { ok: true };
 }

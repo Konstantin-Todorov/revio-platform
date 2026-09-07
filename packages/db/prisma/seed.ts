@@ -42,7 +42,12 @@ async function main() {
     "PickupSnapshot", "Hold", "RoomInventoryPeriod", "Guest", "RoleAccess", "PermissionRole",
     "TaxFee", "PropertyDefaults", "BookingSource",
     "AuditEntry", "ErrorItem", "SyncEvent", "ReservationLine", "Reservation",
-    "RestrictionRule", "DailyCell", "RatePrice", "ChannelRoomTypeMapping", "ChannelRatePlanMapping", "OccupancyAdjustment",
+    // `OccupancyAdjustment` was listed here until 2026-09-08, long after the model it named was
+    // replaced by `RatePlanOccupancy` (see the note further down). TRUNCATE names a real table or
+    // fails, so `db:seed` had stopped working on every database — including a fresh one, which is
+    // the one case where seeding is the whole point. RatePlanOccupancy needs no entry: it CASCADEs
+    // from RatePlan, which is already in this list.
+    "RestrictionRule", "DailyCell", "RatePrice", "ChannelRoomTypeMapping", "ChannelRatePlanMapping",
     "RatePlanRoomType", "RatePlan", "MealPlan", "CancellationPolicy", "RoomType",
     "Channel", "Property", "User", "Tenant",
   ];
