@@ -8,7 +8,7 @@ Answer: **mostly yes, with one hole that costs money and two that cost time.**
 
 ---
 
-## 🔴 1. The 2% RevioDirect fee is computed, shown, and never invoiced
+## ☑ 1. The 2% RevioDirect fee is computed, shown, and never invoiced — FIXED 2026-09-07
 
 The pricing model has four components. Invoicing implements three.
 
@@ -25,10 +25,16 @@ and silently under-billing from the day the first live hotel switches its bookin
 This is the same shape as the finding phase L was built to catch, running the other way: the console
 measures something it does not charge for.
 
-**Fix:** `invoiceLines` and `generateInvoices` take the period's direct revenue, and the invoice
-carries a usage line. It must be a *line*, not folded into the total — a finance team reconciles what
-they think they bought, and "2% on €4,120 of direct bookings" is checkable where a larger number is a
-thing to query by email.
+**Fixed.** `directUsageByTenant` in `direct-usage.ts` is now the single definition of "a booking our
+engine produced" — one query, read by both the Overview panel and `generateInvoices`, so the number a
+client is charged is the number the console shows. The invoice carries it as its own line:
+*"RevioDirect — 2% of €4,120.00 across 18 direct bookings"*, checkable against the hotel's own Cost of
+distribution screen.
+
+Three decisions the tests pin: usage is dated by **when the booking was made**, not when the guest
+stays (a March booking for August is March's usage, or every month becomes impossible to reconcile);
+**cancelled bookings earn nothing**, because they earned the hotel nothing; and `periodRange` is
+**half-open**, so a booking at 23:59:59.999 on 31 August cannot also fall into September.
 
 ---
 

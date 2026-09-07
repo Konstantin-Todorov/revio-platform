@@ -1,4 +1,9 @@
-import { priceBreakdown, type Entitlements } from "./pricing";
+import {
+  DIRECT_BOOKING_FEE_PCT,
+  directBookingFeeMinor,
+  priceBreakdown,
+  type Entitlements,
+} from "./pricing";
 import { type VatDecision } from "./vat";
 
 /**
@@ -24,7 +29,19 @@ export interface InvoiceLine {
  * finance team reconciles an invoice against what they think they bought. "Platform + RevioLink +
  * RevioCRS, less a bundle discount" is checkable; a single number is a thing to query by email.
  */
-export function invoiceLines(plan: string, ent: Entitlements): InvoiceLine[] {
+export function invoiceLines(
+  plan: string,
+  ent: Entitlements,
+  /**
+   * What RevioDirect produced this period. Omitted means none.
+   *
+   * The pricing model has always had four parts and this function implemented three: the 2% usage
+   * fee was computed, shown on the Overview, and never billed. It costs nothing while direct revenue
+   * is all on demo tenants and under-bills silently from the first live hotel that switches its
+   * booking page on.
+   */
+  usage?: { revenueMinor: number; bookings: number },
+): InvoiceLine[] {
   const b = priceBreakdown(plan, ent);
   const lines: InvoiceLine[] = [];
   if (b.platformMinor > 0) lines.push({ description: `Platform fee — ${plan}`, netMinor: b.platformMinor });
@@ -32,7 +49,33 @@ export function invoiceLines(plan: string, ent: Entitlements): InvoiceLine[] {
   if (b.discountMinor > 0) {
     lines.push({ description: `Bundle discount — ${b.discountPct}%`, netMinor: -b.discountMinor });
   }
+
+  /*
+   * A LINE, never folded into the total.
+   *
+   * A finance team reconciles an invoice against what they think they bought, and this is the one
+   * component that changes every month. "RevioDirect — 2% of €4,120 across 18 bookings" is checkable
+   * against their own Cost of distribution screen; the same money inside a larger number is a thing
+   * to query by email. The bundle discount is written out for exactly the same reason.
+   */
+  if (usage && usage.revenueMinor > 0) {
+    const fee = directBookingFeeMinor(usage.revenueMinor);
+    if (fee > 0) {
+      lines.push({
+        description:
+          `RevioDirect — ${DIRECT_BOOKING_FEE_PCT}% of ${money(usage.revenueMinor)} ` +
+          `across ${usage.bookings} direct booking${usage.bookings === 1 ? "" : "s"}`,
+        netMinor: fee,
+      });
+    }
+  }
+
   return lines.filter((l) => l.netMinor !== 0);
+}
+
+/** Euro, for an invoice line a person reads. Minor units everywhere else. */
+function money(minor: number): string {
+  return `€${(minor / 100).toLocaleString("en-IE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** One address string from its parts, skipping whatever is missing. */

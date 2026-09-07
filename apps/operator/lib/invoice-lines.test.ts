@@ -161,3 +161,49 @@ describe("chooseIdentity — which rendering of our name goes on the invoice", (
     expect(chooseIdentity(company, " bg ").script).toBe("cyrillic");
   });
 });
+
+describe("invoiceLines — the RevioDirect usage fee", () => {
+  const ent = { channelManager: true, reservation: true, pms: false };
+
+  it("bills nothing when the hotel took no direct bookings", () => {
+    const without = invoiceLines("starter", ent);
+    const withZero = invoiceLines("starter", ent, { revenueMinor: 0, bookings: 0 });
+    expect(withZero).toEqual(without);
+  });
+
+  it("adds a line for direct bookings, at 2%", () => {
+    const lines = invoiceLines("starter", ent, { revenueMinor: 412_000, bookings: 18 });
+    const usage = lines.find((l) => l.description.startsWith("RevioDirect"));
+    expect(usage?.netMinor).toBe(8_240);
+  });
+
+  it("states the revenue and the count, so a hotel can check it", () => {
+    // They can open their own Cost of distribution screen and reconcile. A single larger number
+    // is a thing to query by email.
+    const lines = invoiceLines("starter", ent, { revenueMinor: 412_000, bookings: 18 });
+    const usage = lines.find((l) => l.description.startsWith("RevioDirect"))!;
+    expect(usage.description).toContain("2%");
+    expect(usage.description).toContain("4,120.00");
+    expect(usage.description).toContain("18 direct bookings");
+  });
+
+  it("says booking, not bookings, for one", () => {
+    const lines = invoiceLines("starter", ent, { revenueMinor: 20_000, bookings: 1 });
+    const d = lines.find((l) => l.description.startsWith("RevioDirect"))!.description;
+    expect(d).toContain("1 direct booking");
+    expect(d).not.toContain("bookings");
+  });
+
+  it("keeps the usage separate from the subscription lines", () => {
+    // "growth" rather than "starter": the starter platform fee is €0, so it renders no line at all.
+    const lines = invoiceLines("growth", ent, { revenueMinor: 100_000, bookings: 4 });
+    expect(lines.filter((l) => l.description.startsWith("RevioDirect"))).toHaveLength(1);
+    expect(lines.some((l) => l.description.startsWith("Platform fee"))).toBe(true);
+  });
+
+  it("does not add a line when 2% rounds to nothing", () => {
+    // A single €0.10 booking is not worth a line on a document somebody reads.
+    const lines = invoiceLines("starter", ent, { revenueMinor: 10, bookings: 1 });
+    expect(lines.some((l) => l.description.startsWith("RevioDirect"))).toBe(false);
+  });
+});

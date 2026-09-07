@@ -317,3 +317,18 @@ export function describeOverride(o: PlanOverride): string {
     : "an unknown date";
   return `overridden by ${who} · ${when} · ${o.reason}`;
 }
+
+/**
+ * The calendar month a `YYYY-MM` invoice period covers, as a half-open UTC range.
+ *
+ * UTC rather than a property timezone on purpose: an invoice period is an accounting month for *us*,
+ * one per client across every timezone they operate in, and a boundary that moved per hotel would
+ * make two clients' Augusts different lengths.
+ */
+export function periodRange(period: string): { from: Date; to: Date } {
+  const [y, m] = period.split("-").map(Number);
+  if (!y || !m || m < 1 || m > 12) {
+    throw new Error(`Not a billing period: "${period}". Expected YYYY-MM.`);
+  }
+  return { from: new Date(Date.UTC(y, m - 1, 1)), to: new Date(Date.UTC(y, m, 1)) };
+}

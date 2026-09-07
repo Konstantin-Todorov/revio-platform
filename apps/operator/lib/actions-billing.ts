@@ -3,7 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { forSystem, isBillablePeriod } from "@revio/db";
 import { getOperatorSession } from "./session";
-import { monthlyPriceMinor, billedProducts, priceBreakdown, type Entitlements } from "./pricing";
+import {
+  DIRECT_BOOKING_FEE_PCT,
+  billedProducts,
+  directBookingFeeMinor,
+  monthlyPriceMinor,
+  priceBreakdown,
+  type Entitlements,
+} from "./pricing";
+import { directUsageByTenant, periodRange } from "./direct-usage";
 import { flashError } from "@revio/ui/flash";
 import { canTransition, type InvoiceStatus } from "@revio/core";
 
@@ -14,10 +22,18 @@ function str(fd: FormData, key: string): string {
 }
 
 /** What the invoice says it is for — plan, products, and the discount if one applied. */
-function describe(plan: string, ent: Entitlements): string {
+function describe(
+  plan: string,
+  ent: Entitlements,
+  usage?: { revenueMinor: number; bookings: number },
+): string {
   const b = priceBreakdown(plan, ent);
   const parts = [plan, billedProducts(ent) || "no products"];
   if (b.discountMinor > 0) parts.push(`bundle −${b.discountPct}%`);
+  // Named in the summary too, so a draft that changed because of usage says why it changed.
+  if (usage && usage.revenueMinor > 0) {
+    parts.push(`RevioDirect ${DIRECT_BOOKING_FEE_PCT}% on ${usage.bookings} booking${usage.bookings === 1 ? "" : "s"}`);
+  }
   return parts.join(" · ");
 }
 
@@ -38,6 +54,19 @@ export async function generateInvoices(): Promise<void> {
   if (!(await getOperatorSession())) return;
   const period = new Date().toISOString().slice(0, 7);
   const tenants = await prisma.tenant.findMany({ where: { status: "active" } });
+
+  /*
+   * What RevioDirect produced this period, for every client at once.
+   *
+   * The 2% usage fee is the fourth component of the pricing model, and until now it was the only one
+   * this loop did not bill: `directBookingFeeMinor` was computed for the Overview panel and never
+   * reached an invoice. One query outside the loop rather than one per tenant, and — more
+   * importantly — the SAME definition the Overview reads, so the number a client is charged is the
+   * number the console shows.
+   */
+  const { from, to } = periodRange(period);
+  const usageByTenant = await directUsageByTenant(from, to);
+
   for (const t of tenants) {
     /*
      * "Free until your first booking syncs" — honoured here, where the money is.
@@ -52,9 +81,16 @@ export async function generateInvoices(): Promise<void> {
     if (!isBillablePeriod(period, t.billingStartsAt)) continue;
 
     const ent: Entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
-    const amountMinor = monthlyPriceMinor(t.plan, ent);
+    const usage = usageByTenant.get(t.id);
+    const usageFeeMinor = usage ? directBookingFeeMinor(usage.revenueMinor) : 0;
+    const amountMinor = monthlyPriceMinor(t.plan, ent) + usageFeeMinor;
+
+    /*
+     * `<= 0` and not `=== 0`: a client on no products who nonetheless took direct bookings still
+     * owes the usage fee, and the old guard would have skipped them entirely.
+     */
     if (amountMinor <= 0) continue;
-    const lineItems = describe(t.plan, ent);
+    const lineItems = describe(t.plan, ent, usage);
     const exists = await prisma.invoice.findUnique({ where: { tenantId_period: { tenantId: t.id, period } } });
 
     if (!exists) {
