@@ -2286,11 +2286,39 @@ model SupportRequest {
   createdAt    DateTime  @default(now())
 
   property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  messages SupportMessage[]
 
   /// The operator's queue: everything unanswered, oldest first.
   @@index([handledAt, createdAt])
   /// One hotel's own history.
   @@index([tenantId, createdAt])
+}
+
+/// One message in a support conversation.
+///
+/// The request is the subject; these are the exchange. Both sides can read the whole thread — the
+/// hotel in their own product, us in the console — so "what did we tell them last time" stops being
+/// a search through somebody's sent folder.
+///
+/// ⚠️ **The system is the record; email is the delivery.** Nobody logs into a portal to check
+/// whether support replied, so every message from us is also emailed. `emailedAt` records whether
+/// that actually happened, because a reply the hotel never received is indistinguishable from being
+/// ignored — and that is the failure this whole feature exists to prevent.
+model SupportMessage {
+  id        String   @id @default(cuid())
+  requestId String
+  /// hotel | revio — which side wrote it.
+  side      String
+  /// Copied at the time of writing, so the thread still reads correctly after an account changes.
+  authorName String
+  body      String
+  /// Null means the email did not go out. Only meaningful for `side = "revio"`.
+  emailedAt DateTime?
+  createdAt DateTime @default(now())
+
+  request SupportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
 }
 
 model GuestFeedback {

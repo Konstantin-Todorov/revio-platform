@@ -40,7 +40,8 @@
     "./account-menu-body": "./src/account-menu-body.tsx",
     "./get-help": "./src/get-help.tsx",
     "./help-centre": "./src/help-centre.tsx",
-    "./report-client-error": "./src/report-client-error.ts"
+    "./report-client-error": "./src/report-client-error.ts",
+    "./my-requests": "./src/my-requests.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

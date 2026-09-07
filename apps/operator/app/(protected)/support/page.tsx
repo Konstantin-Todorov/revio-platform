@@ -10,7 +10,7 @@ import {
   supportSourceLabel,
 } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { logSupportRequest, markSupportHandled } from "@/lib/actions-support";
+import { logSupportRequest, markSupportHandled, replyToSupportRequest } from "@/lib/actions-support";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,11 @@ const labelCls = "mb-1 block text-[10.5px] font-semibold uppercase tracking-wide
 export default async function SupportPage() {
   const now = new Date();
   const [requests, tenants] = await Promise.all([
-    prisma.supportRequest.findMany({ orderBy: { createdAt: "desc" }, take: 200 }),
+    prisma.supportRequest.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      include: { messages: { orderBy: { createdAt: "asc" } } },
+    }),
     prisma.tenant.findMany({ select: { id: true, name: true, isDemo: true } }),
   ]);
   const tenantById = new Map(tenants.map((t) => [t.id, t]));
@@ -160,13 +164,51 @@ export default async function SupportPage() {
                     </span>
                   </div>
                   <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink-700">{r.message}</p>
+                  {r.messages.length > 0 && (
+                    <ul className="mt-2 space-y-1.5 border-l-2 border-surface-border pl-3">
+                      {r.messages.map((m) => (
+                        <li key={m.id} className="text-[12.5px]">
+                          <span className="font-semibold text-ink-700">
+                            {m.side === "revio" ? m.authorName : r.contactName}
+                          </span>
+                          <span className="ml-1.5 text-[11px] text-ink-400">
+                            {m.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                          </span>
+                          {/* An undelivered reply is indistinguishable from being ignored, so it is
+                              said out loud rather than left to look sent. */}
+                          {m.side === "revio" && !m.emailedAt && (
+                            <span className="ml-1.5 text-[11px] font-semibold text-danger-600">
+                              email did not send
+                            </span>
+                          )}
+                          <p className="whitespace-pre-wrap text-ink-600">{m.body}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {/* Answering from here, rather than from an inbox: the thread is the record both
+                      sides can read, and the hotel still receives it as email. */}
+                  <form action={replyToSupportRequest} className="mt-2.5">
+                    <input type="hidden" name="id" value={r.id} />
+                    <textarea
+                      name="body"
+                      required
+                      rows={2}
+                      placeholder={`Reply to ${r.contactName}…`}
+                      className={inputCls}
+                    />
+                    <div className="mt-1.5 flex items-center gap-3">
+                      <button className="h-[30px] rounded-md bg-brand-800 px-2.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700">
+                        Send reply
+                      </button>
+                      <span className="text-[11px] text-ink-400">
+                        Emailed to {r.contactEmail} and kept in the thread. Replying marks it answered.
+                      </span>
+                    </div>
+                  </form>
+
                   <div className="mt-2 flex items-center gap-3">
-                    <a
-                      href={`mailto:${r.contactEmail}?subject=${encodeURIComponent(`Re: ${supportReference(r.id)}`)}`}
-                      className="text-[12px] font-semibold text-brand-700 hover:underline"
-                    >
-                      Reply by email
-                    </a>
                     <form action={markSupportHandled}>
                       <input type="hidden" name="id" value={r.id} />
                       <button className="text-[12px] font-semibold text-ink-500 transition-colors hover:text-ink-900">

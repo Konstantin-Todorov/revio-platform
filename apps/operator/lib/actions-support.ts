@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { forSystem, recordSupportRequest } from "@revio/db";
+import { addSupportMessage, forSystem, recordSupportRequest } from "@revio/db";
 import { flashError, setFlash } from "@revio/ui/flash";
+import { sendEmail } from "@revio/email";
+import { renderSystemEmail, renderSystemEmailText, supportReference } from "@revio/core";
 import { getOperatorSession } from "./session";
 
 /**
@@ -81,4 +83,92 @@ export async function logSupportRequest(fd: FormData): Promise<void> {
 
   revalidatePath("/support");
   return setFlash("success", `Logged as ${result.reference}.`);
+}
+
+/**
+ * Answer a hotel, from here.
+ *
+ * ## The system is the record; email is the delivery
+ *
+ * Both, always. Nobody logs into a portal to check whether support replied, so a reply that lives
+ * only in the console would be missed and the hotel would conclude they were ignored — worse than
+ * the inbox we are replacing. And an emailed reply that lives only in a sent folder is how "what did
+ * we tell them last time" became unanswerable in the first place.
+ *
+ * `emailedAt` is null when the send failed. That is deliberately visible in the thread: a reply the
+ * hotel never received is indistinguishable from being ignored, and the person who wrote it is the
+ * only one who can notice and pick up the phone.
+ *
+ * Replying marks the request answered. It is the act that answers it, and asking somebody to reply
+ * and then also tick a box is how queues end up lying about what is outstanding.
+ */
+export async function replyToSupportRequest(fd: FormData): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again to reply.");
+
+  const id = String(fd.get("id") ?? "");
+  const body = String(fd.get("body") ?? "");
+  if (!id) return flashError("Nothing was selected. Reload the page and try again.");
+
+  const db = forSystem();
+  const request = await db.supportRequest.findUnique({
+    where: { id },
+    select: { id: true, contactEmail: true, contactName: true, kind: true, message: true, product: true },
+  });
+  if (!request) return flashError("That request no longer exists.");
+
+  /*
+   * Send FIRST, then record with the result.
+   *
+   * The other order would have to write the row and then update it, and a failure between the two
+   * leaves a message claiming it was delivered when it was not. Recording once, with the answer
+   * already known, cannot produce that.
+   */
+  let emailedAt: Date | null = null;
+  if (request.contactEmail) {
+    const reference = supportReference(request.id);
+    const mail = {
+      preview: body.slice(0, 120),
+      heading: `Re: ${reference}`,
+      blocks: [
+        { p: body },
+        { note: `You asked: “${request.message.slice(0, 300)}”` },
+        { note: "Reply to this email and it reaches us — or open Get help in your Revio account." },
+      ],
+    };
+    try {
+      const res = await sendEmail({
+        to: [request.contactEmail],
+        subject: `Re: ${reference} · Revio support`,
+        text: renderSystemEmailText(mail),
+        html: renderSystemEmail(mail),
+      });
+      if (res.ok) emailedAt = new Date();
+    } catch {
+      /* recorded as undelivered below, which is the honest state */
+    }
+  }
+
+  const added = await addSupportMessage({
+    requestId: id,
+    side: "revio",
+    authorName: session.name,
+    body,
+    emailedAt,
+  });
+  if (!added.ok) return flashError(added.error);
+
+  // Replying IS answering it.
+  await db.supportRequest.updateMany({
+    where: { id, handledAt: null },
+    data: { handledAt: new Date(), handledById: session.userId },
+  });
+
+  revalidatePath("/support");
+  return setFlash(
+    emailedAt ? "success" : "error",
+    emailedAt
+      ? "Replied, and the email is on its way."
+      : "Saved to the thread, but the email did not go out — tell them another way.",
+  );
 }

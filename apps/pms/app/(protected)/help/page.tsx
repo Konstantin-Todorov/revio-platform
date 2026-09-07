@@ -1,12 +1,25 @@
+import { listSupportForTenant } from "@revio/db";
 import { HelpCentre } from "@revio/ui/help-centre";
+import { MyRequests, type MyRequestRow } from "@revio/ui/my-requests";
+import { getSession } from "@/lib/session";
+
+export const dynamic = "force-dynamic";
 
 /**
- * Help lives behind the login, on purpose.
+ * Help, and everything you have asked us.
  *
- * The answers name real screens in this product and assume the reader is signed in. A public help
- * site would have to hedge every one of them into uselessness, and nobody arrives here without an
- * account anyway.
+ * One page rather than two: somebody who cannot find an answer is about to ask, and somebody
+ * checking on a question they asked yesterday looks in the same place. Splitting them would put the
+ * thing they want behind a guess about which door to use.
  */
-export default function HelpPage() {
-  return <HelpCentre product="pms" productName="RevioPMS" />;
+export default async function HelpPage() {
+  const session = await getSession();
+  const requests = session ? await listSupportForTenant(session.tenantId, 25) : [];
+
+  return (
+    <div className="space-y-6">
+      <HelpCentre product="pms" productName="RevioPMS" />
+      <MyRequests requests={requests as unknown as MyRequestRow[]} />
+    </div>
+  );
 }

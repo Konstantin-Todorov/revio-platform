@@ -70,3 +70,63 @@ export async function recordSupportRequest(input: SupportRequestInput): Promise<
 
   return { ok: true, id: row.id, reference: supportReference(row.id) };
 }
+
+/**
+ * Add a message to a thread.
+ *
+ * Shared, because both sides write one and the rules must be identical: the same emptiness check,
+ * the same trimming, the same shape of row. The CALLER decides the side and does the emailing —
+ * only it knows who is speaking and whether the mail went out.
+ */
+export interface SupportMessageInput {
+  requestId: string;
+  side: "hotel" | "revio";
+  authorName: string;
+  body: string;
+  /** Set by the caller after a successful send. Null means it stayed in the system only. */
+  emailedAt?: Date | null;
+}
+
+export async function addSupportMessage(
+  input: SupportMessageInput,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const body = input.body.trim();
+  if (!body) return { ok: false, error: "Write something first." };
+  if (body.length > 8000) return { ok: false, error: "That is too long to send in one message." };
+
+  const row = await forSystem().supportMessage.create({
+    data: {
+      requestId: input.requestId,
+      side: input.side,
+      authorName: input.authorName.trim() || "Unknown",
+      body,
+      emailedAt: input.emailedAt ?? null,
+    },
+    select: { id: true },
+  });
+  return { ok: true, id: row.id };
+}
+
+/**
+ * One request with its whole thread, for a hotel.
+ *
+ * Scoped by `tenantId` in the query as well as by row-level security. The database would refuse a
+ * foreign row anyway; asking for the right one is how the code says what it meant, and it means a
+ * missing row reads as "not found" rather than as an empty page.
+ */
+export async function getSupportThreadForTenant(tenantId: string, requestId: string) {
+  return forSystem().supportRequest.findFirst({
+    where: { id: requestId, tenantId },
+    include: { messages: { orderBy: { createdAt: "asc" } } },
+  });
+}
+
+/** Every request a hotel has raised, newest first, with its messages. */
+export async function listSupportForTenant(tenantId: string, limit = 50) {
+  return forSystem().supportRequest.findMany({
+    where: { tenantId },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: { messages: { orderBy: { createdAt: "asc" } } },
+  });
+}
