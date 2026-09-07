@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon, CalendarRange, BookUser, History,} from "lucide-react";
+  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon, CalendarRange, BookUser, History, LifeBuoy,
+} from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 import { roleAllowsPath } from "@/lib/roles";
@@ -34,6 +35,7 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   { title: "Setup", items: [
     { href: "/users", label: "Staff & Access", icon: UserCog },
     { href: "/configuration", label: "Configuration", icon: SlidersHorizontal },
+    { href: "/help", label: "Help", icon: LifeBuoy },
     // Under Setup rather than Front office: it is what a manager checks after the fact, not
     // something anybody uses during a shift.
     { href: "/activity", label: "Activity", icon: History },

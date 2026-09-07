@@ -57,6 +57,7 @@ export function UserMenu({ userName, roleLabel, products, upsells }: { userName:
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
         action={submitSupportRequest}
+        product="crs"
         productName="RevioCRS"
       />
     </div>

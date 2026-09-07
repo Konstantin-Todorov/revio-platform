@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, SlidersHorizontal, BedDouble, Radio,
-  Link2, CalendarCheck, RefreshCw, Users, Settings, Mail, X,
+  Link2, CalendarCheck, RefreshCw, Users, Settings, Mail, X, LifeBuoy,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
@@ -40,6 +40,7 @@ const ACCOUNT_SECTION: { title: string; items: Item[] } = {
     { href: "/users", label: "User Management", icon: Users },
     { href: "/settings/emails", label: "Guest Emails", icon: Mail },
     { href: "/settings", label: "Settings", icon: Settings },
+    { href: "/help", label: "Help", icon: LifeBuoy },
   ],
 };
 

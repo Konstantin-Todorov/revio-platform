@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { SUPPORT_KINDS, type SupportKind } from "@revio/core";
+import { SUPPORT_KINDS, searchHelp, type ProductKey, type SupportKind } from "@revio/core";
 
 /**
  * "Get help" — one dialog, shared by all three hotel products.
@@ -70,15 +70,21 @@ export function GetHelp({
   onClose,
   action,
   productName,
+  product,
 }: {
   open: boolean;
   onClose: () => void;
   action: (prev: GetHelpResult, fd: FormData) => Promise<GetHelpResult>;
   productName: string;
+  /** Which product this is, so the suggestions never offer an answer that is wrong here. */
+  product: ProductKey;
 }) {
   const [kind, setKind] = useState<SupportKind>("problem");
   const [state, formAction, pending] = useActionState<GetHelpResult, FormData>(action, null);
   const pathname = usePathname();
+  // Route-led, so the answers fit the screen they are stuck on rather than a search they have
+  // not written yet. Two at most — see the note where they are rendered.
+  const suggestions = searchHelp({ product, route: pathname }, 2);
 
   // The portal target only exists in the browser; on the server there is no document to render into.
   const [mounted, setMounted] = useState(false);
@@ -125,6 +131,37 @@ export function GetHelp({
             <p className="mt-1 text-[12.5px] text-ink-500">
               We can see which hotel and which screen you are on, so start with what went wrong.
             </p>
+
+            {/*
+              Answers for THIS screen, before they type.
+              Shown because most requests are not faults — they are "where do I change that", and an
+              answer now is better for the hotel than a reply tomorrow. Never more than two: a wall
+              of suggestions reads as a wall put up to avoid answering.
+            */}
+            {suggestions.length > 0 && (
+              <div className="mt-3 rounded-lg border border-surface-border bg-surface-muted/50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">
+                  This might be it
+                </p>
+                <ul className="mt-1.5 space-y-1.5">
+                  {suggestions.map((a) => (
+                    <li key={a.id}>
+                      <details className="group">
+                        <summary className="cursor-pointer list-none text-[12.5px] font-medium text-brand-700 hover:underline">
+                          {a.question}
+                        </summary>
+                        <p className="mt-1 whitespace-pre-line text-[12px] leading-relaxed text-ink-600">
+                          {a.answer}
+                        </p>
+                      </details>
+                    </li>
+                  ))}
+                </ul>
+                <a href="/help" className="mt-2 inline-block text-[11.5px] font-semibold text-ink-500 hover:text-ink-900">
+                  All help →
+                </a>
+              </div>
+            )}
 
             <input type="hidden" name="route" value={pathname} />
             <input type="hidden" name="kind" value={kind} />

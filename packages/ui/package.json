@@ -38,7 +38,8 @@
     "./stale-deployment-boundary": "./src/stale-deployment-boundary.tsx",
     "./product-links": "./src/product-links.tsx",
     "./account-menu-body": "./src/account-menu-body.tsx",
-    "./get-help": "./src/get-help.tsx"
+    "./get-help": "./src/get-help.tsx",
+    "./help-centre": "./src/help-centre.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
