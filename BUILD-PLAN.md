@@ -1,5 +1,10 @@
 # Revio — Build Plan
 
+> 📍 **For current state, read [`docs/STATUS.md`](docs/STATUS.md), not this file.** This one is
+> append-heavy and historical: it records what was planned and why. `STATUS.md` records what is
+> actually true, checked against production.
+
+
 Order of work toward the Channel Manager demo. Each phase ends in something runnable.
 
 ---

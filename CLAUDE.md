@@ -167,6 +167,13 @@ until a slug resolves. That inversion is why it gets its own app and its own rul
 
 ## Status
 
+> 📍 **[`docs/STATUS.md`](docs/STATUS.md) is the single source of truth for what is done, in progress
+> and next** — verified against production, with every claim naming how it was checked. **Read that
+> before planning any work.** Everything below this line is the *history and reasoning*: why things
+> were built the way they were. It is append-only and parts of it go stale; nine claims across these
+> documents were found wrong in the first week of September, in both directions.
+
+
 RevioLink + Operator Console are **built, tested, live, and behind login** with GitHub auto-deploy.
 **RevioCRS V1 is COMPLETE — all 5 phases shipped 2026-07-03**: availability waterfall + metrics formula
 sheet + ChannelManagerConnector in `@revio/core` (CM pushes subtract OOO/closures/holds and apply
