@@ -18,6 +18,25 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · DONE · Plan: payments, integrations, VAT research, console shape
+**Four founder questions answered; `docs/PLAN-2026-09-09.md`.**
+Files: `docs/PLAN-2026-09-09.md`, `docs/ACTION-REQUIRED.md`
+Notes: **Codex — two proposed for you, confirm or push back here before either of us starts.**
+(1) **VAT city-tax defect.** Researched rather than guessed: НАП's position is that туристическият
+данък е в данъчната основа, so it should carry 9%, not the 0% `rateFor` gives it in
+`apps/pms/lib/invoice.ts`. You have just been inside PMS invoicing for R3/R4 and I have not.
+Acceptance: a stay with a city tax yields ONE 9% base including it, the line keeps its own label on
+the invoice, and `exempt`/`null` still return 0. Zero real invoices exist, so this is a change now
+and a correction after the first one.
+(2) **Operator sidebar grouping** — your own §4, existing routes only, no route/action/revalidation
+change. Auth log stays one click away and Plans stays above Billing; both reasons are in the code.
+Everything else in the VAT area is already correct and needs no change — accommodation 9%, breakfast
+inside one announced price 9%, sold separately 20%, our own SaaS invoice 20%. Verified in
+`defaultTaxCategory`, not assumed.
+Mine next, unchanged: **R5, then R1.** No overlap — `packages/db/two-factor*` and
+`packages/booking/src/public-engine.ts` against `apps/pms/lib/invoice.ts` and
+`apps/operator/components/shell/`.
+
 ### 2026-09-08 · Claude · DONE · Reviewed and committed Codex's R3/R4
 **Read the Close Day change, ran AGENTS.md §4 in full, committed and confirmed the deploy.**
 Files: the R3/R4 paths only, staged individually — `c1a6cf2`.

@@ -75,9 +75,13 @@ seed carries `VAT 9%` on accommodation. **Checked on 2026-09-08, nothing to chan
    behind it.
 2. **Breakfast included in a room rate.** 9% or 20%? A bundled supply is a classic split-rate trap
    and the answer decides how `computeStayCharges` should tag the line.
-3. **City tax (туристически данък)** is a municipal tax, not VAT. We model it as a fixed fee outside
-   the VAT base — confirm that is right, because if it is inside the base every folio is a little
-   wrong.
+3. ⚠️ **City tax IS inside the VAT base, and we charge 0% on it — a defect.** Researched
+   2026-09-09: НАП's position is that туристическият данък се включва в данъчната основа, so a
+   night's base is the room charge **plus** the tourist tax, taxed at 9%. It is shown as its own
+   line on the document, which is presumably why it was modelled as a separate zero-rated fee.
+   `rateFor` returns 0 for `city_tax`, understating VAT by about €0.25 on a €195 stay — small per
+   booking, wrong on every tax document. **Zero real invoices exist, so fixing it now costs
+   nothing; after the first one it is a correction.** See `docs/PLAN-2026-09-09.md` §3.
 4. **The euro changeover.** The threshold above is already quoted in euro. Invoices spanning the
    transition, and whether dual display is required, is a compliance question we have not answered.
 5. **Fiscalization** is adjacent and separate — a Bulgarian hotel taking cash has НАП device
