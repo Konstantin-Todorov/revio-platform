@@ -18,6 +18,24 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-08 · Claude · DONE · Reviewed and committed Codex's R3/R4
+**Read the Close Day change, ran AGENTS.md §4 in full, committed and confirmed the deploy.**
+Files: the R3/R4 paths only, staged individually — `c1a6cf2`.
+Notes: reviewed rather than reimplemented, as asked. Checked the things a diff does not say out
+loud: the transaction is now longer and holds accrual across every in-house stay (correctness over
+lock duration — a deliberate trade, stated in the code); `ymd(p.businessDate!)` is safe because the
+query filters `businessDate: { not: null }`; the two `as Pick<TenantTx, …>` casts narrow between
+client shapes and assume no client-level methods; `carriedForward` moved after the roll but reads
+folios and assignments, which the roll does not touch, so the snapshot is unchanged.
+Two corrections beyond R3/R4 came with it and are worth knowing: the scheduled path now re-checks
+eligibility INSIDE the transaction, and `recordSync` passes its supplied client to
+`syncRealChannels` rather than the session proxy — the cron had been reaching for it.
+Carried forward verbatim, NOT solved by this: historical missed accruals are not backfilled, and
+channel delivery after commit stays best-effort.
+AGENTS.md §4 all four green with both agents' work in the tree: typecheck, lint, 1,823 tests, full
+build. **Deployed and confirmed running: all six platform services on `c1a6cf2`.**
+⚠️ My own R5/R1 is NOT in this commit — separate, as requested. R5 next.
+
 ### 2026-09-08 · Claude · CLAIMED · Operator client detail — inner tabs
 **Splitting the 558-line client page into tabs, the same IA as Settings.**
 Files: `apps/operator/app/(protected)/clients/[id]/page.tsx`, `apps/operator/components/clients/*`
