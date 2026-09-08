@@ -42,8 +42,15 @@ const BCRYPT_COST = 10;
 /** What this module needs from a table, and nothing more. */
 export interface TwoFactorStore {
   /** Null when the account does not exist. */
-  read(id: string): Promise<{ email: string; totpSecret: string | null; totpEnabledAt: Date | null; totpLastStep: number | null } | null>;
-  write(id: string, data: { totpSecret?: string | null; totpEnabledAt?: Date | null; totpLastStep?: number | null }): Promise<void>;
+  read(id: string): Promise<{
+    email: string;
+    totpSecret: string | null;
+    /** A setup in progress. Never used to authenticate — only promoted once a code proves it. */
+    totpPendingSecret: string | null;
+    totpEnabledAt: Date | null;
+    totpLastStep: number | null;
+  } | null>;
+  write(id: string, data: { totpSecret?: string | null; totpPendingSecret?: string | null; totpEnabledAt?: Date | null; totpLastStep?: number | null }): Promise<void>;
   listRecoveryCodes(id: string): Promise<{ id: string; codeHash: string; usedAt: Date | null }[]>;
   replaceRecoveryCodes(id: string, hashes: string[]): Promise<void>;
   markRecoveryCodeUsed(codeId: string, at: Date): Promise<void>;
@@ -63,6 +70,16 @@ export interface EnrolmentOffer {
  * The secret is stored immediately but 2FA stays **off** until a code is confirmed. Storing it later
  * would mean holding it in a form field or a session across the round trip; enabling it now would
  * lock the person out if they mistyped the setup or scanned nothing. So: stored, encrypted, inert.
+ *
+ * ⚠️ **It is written to `totpPendingSecret` and touches nothing else.** This used to overwrite
+ * `totpSecret` and clear `totpEnabledAt`, on the reasoning that an interrupted second attempt must
+ * not leave the old app working against a new secret. True, but the cure was worse: starting setup
+ * disabled the existing factor, from a session alone, while `disable` demands the password exactly
+ * because an unattended laptop must not be enough. Abandoning the setup left the account with no
+ * second factor and nobody told. Found by an external review, 2026-09-08.
+ *
+ * Keeping the two apart answers the original worry as well: the old app keeps working until the new
+ * one is proven, so there is no window in which neither does.
  */
 export async function beginEnrolment(
   store: TwoFactorStore,
@@ -73,9 +90,9 @@ export async function beginEnrolment(
   if (!account) throw new Error("beginEnrolment: no such account");
 
   const secret = generateTotpSecret();
-  // Re-enrolling replaces the pending secret AND clears any previous enablement, so an interrupted
-  // second attempt can never leave the old app working against a new secret.
-  await store.write(id, { totpSecret: encryptSecret(secret), totpEnabledAt: null, totpLastStep: null });
+  // Only the pending slot. A second attempt replaces the pending secret and leaves a working factor
+  // alone — the account is never, at any point, without the protection it already had.
+  await store.write(id, { totpPendingSecret: encryptSecret(secret) });
 
   return { secret, uri: totpUri({ secret, account: account.email, issuer }) };
 }
@@ -101,14 +118,14 @@ export async function confirmEnrolment(
   now = Date.now(),
 ): Promise<ConfirmResult> {
   const account = await store.read(id);
-  if (!account?.totpSecret) {
+  if (!account?.totpPendingSecret) {
     return { ok: false, error: "Start again — there is no pending setup for this account." };
   }
-  if (account.totpEnabledAt) {
-    return { ok: false, error: "Two-factor authentication is already on for this account." };
-  }
 
-  const secret = decryptSecret(account.totpSecret);
+  // Verified against the PENDING secret, never the live one: this step exists to prove the new app
+  // works. An account that already has 2FA on is allowed here — replacing a phone is a real thing
+  // people do — and the live factor keeps working right up until this succeeds.
+  const secret = decryptSecret(account.totpPendingSecret);
   if (!verifyTotp(secret, code, now)) {
     return { ok: false, error: "That code didn't match. Check your authenticator app and try the current code." };
   }
@@ -116,7 +133,14 @@ export async function confirmEnrolment(
   const codes = generateRecoveryCodes();
   const hashes = await Promise.all(codes.map((c) => bcrypt.hash(normaliseRecoveryCode(c), BCRYPT_COST)));
 
-  await store.write(id, { totpEnabledAt: new Date(now), totpLastStep: stepFor(now) });
+  // Promote in one write: the pending secret becomes the live one and the pending slot is emptied,
+  // so there is no moment where both are set and a reader could pick the wrong one.
+  await store.write(id, {
+    totpSecret: account.totpPendingSecret,
+    totpPendingSecret: null,
+    totpEnabledAt: new Date(now),
+    totpLastStep: stepFor(now),
+  });
   // Replace rather than append: re-enrolling must invalidate the codes printed last time, or an old
   // sheet of paper keeps working against a new secret.
   await store.replaceRecoveryCodes(id, hashes);
@@ -180,7 +204,9 @@ export async function verifySecond(
 
 /** Turn 2FA off, clearing every trace so a later re-enrolment starts clean. */
 export async function disable(store: TwoFactorStore, id: string): Promise<void> {
-  await store.write(id, { totpSecret: null, totpEnabledAt: null, totpLastStep: null });
+  // The pending slot goes too: turning it off means off, and a half-finished setup left behind is a
+  // secret somebody could later confirm against an account the owner believes is unprotected.
+  await store.write(id, { totpSecret: null, totpPendingSecret: null, totpEnabledAt: null, totpLastStep: null });
   await store.replaceRecoveryCodes(id, []);
 }
 

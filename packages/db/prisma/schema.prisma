@@ -101,6 +101,16 @@ model User {
   /// `totpSecret` is encrypted at rest. `totpLastStep` makes each 30-second step single-use, which
   /// is what people already assume a one-time password means.
   totpSecret        String?
+  /// A setup in progress, kept APART from `totpSecret` so that starting one cannot disable the
+  /// factor that already works.
+  ///
+  /// ⚠️ Until 2026-09-08 there was one column for both, and `beginEnrolment` wrote
+  /// `totpEnabledAt: null` to make room — so merely *starting* setup turned 2FA off, from a session
+  /// alone, while the dedicated disable action demands the password precisely because an unattended
+  /// laptop must not be enough. Found by an external review. The pending secret is promoted to
+  /// `totpSecret` only when a code proves the new app works; an abandoned setup leaves the account
+  /// exactly as it was.
+  totpPendingSecret String?
   totpEnabledAt     DateTime?
   totpLastStep      Int?
 
@@ -131,6 +141,16 @@ model OperatorUser {
   /// credentials use. A plaintext secret in this column is a second factor that the database
   /// hands to anyone who can read it, which is no second factor at all.
   totpSecret    String?
+  /// A setup in progress, kept APART from `totpSecret` so that starting one cannot disable the
+  /// factor that already works.
+  ///
+  /// ⚠️ Until 2026-09-08 there was one column for both, and `beginEnrolment` wrote
+  /// `totpEnabledAt: null` to make room — so merely *starting* setup turned 2FA off, from a session
+  /// alone, while the dedicated disable action demands the password precisely because an unattended
+  /// laptop must not be enough. Found by an external review. The pending secret is promoted to
+  /// `totpSecret` only when a code proves the new app works; an abandoned setup leaves the account
+  /// exactly as it was.
+  totpPendingSecret String?
   /// Null until a code has actually been verified. Enrolment stores the secret first and only
   /// switches 2FA ON once the person proves their app generates matching codes — otherwise a
   /// mistyped setup locks them out of the console with no way back in.

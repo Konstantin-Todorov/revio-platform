@@ -20,7 +20,7 @@ export function operatorTwoFactorStore(): TwoFactorStore {
     async read(id) {
       return db.operatorUser.findUnique({
         where: { id },
-        select: { email: true, totpSecret: true, totpEnabledAt: true, totpLastStep: true },
+        select: { email: true, totpSecret: true, totpPendingSecret: true, totpEnabledAt: true, totpLastStep: true },
       });
     },
     async write(id, data) {
@@ -67,7 +67,7 @@ export function userTwoFactorStore(): TwoFactorStore {
     async read(id) {
       return db.user.findUnique({
         where: { id },
-        select: { email: true, totpSecret: true, totpEnabledAt: true, totpLastStep: true },
+        select: { email: true, totpSecret: true, totpPendingSecret: true, totpEnabledAt: true, totpLastStep: true },
       });
     },
     async write(id, data) {
@@ -108,7 +108,7 @@ export function tenantUserTwoFactorStore(tenantId: string): TwoFactorStore {
     async read(id) {
       return db.user.findFirst({
         where: { id, tenantId },
-        select: { email: true, totpSecret: true, totpEnabledAt: true, totpLastStep: true },
+        select: { email: true, totpSecret: true, totpPendingSecret: true, totpEnabledAt: true, totpLastStep: true },
       });
     },
     async write(id, data) {

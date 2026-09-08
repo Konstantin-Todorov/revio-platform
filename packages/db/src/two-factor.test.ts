@@ -18,13 +18,14 @@ import {
 interface Row {
   email: string;
   totpSecret: string | null;
+  totpPendingSecret: string | null;
   totpEnabledAt: Date | null;
   totpLastStep: number | null;
 }
 
 function fakeStore(): TwoFactorStore & { row: Row; codes: { id: string; codeHash: string; usedAt: Date | null }[] } {
   const state = {
-    row: { email: "maria@hotel.test", totpSecret: null, totpEnabledAt: null, totpLastStep: null } as Row,
+    row: { email: "maria@hotel.test", totpSecret: null, totpPendingSecret: null, totpEnabledAt: null, totpLastStep: null } as Row,
     codes: [] as { id: string; codeHash: string; usedAt: Date | null }[],
   };
   return {
@@ -63,11 +64,13 @@ async function enrol(at = AT): Promise<string> {
 describe("enrolment", () => {
   it("stores the secret ENCRYPTED and leaves 2FA off until a code is proven", async () => {
     const offer = await beginEnrolment(store, "u1", "Revio");
-    expect(store.row.totpSecret).not.toBeNull();
+    // The PENDING slot — the live one is only written once a code proves the app works.
+    expect(store.row.totpPendingSecret).not.toBeNull();
     // Never the raw base32 — a leaked row must not be a working authenticator.
-    expect(store.row.totpSecret).not.toBe(offer.secret);
-    expect(decryptSecret(store.row.totpSecret!)).toBe(offer.secret);
+    expect(store.row.totpPendingSecret).not.toBe(offer.secret);
+    expect(decryptSecret(store.row.totpPendingSecret!)).toBe(offer.secret);
     // Stored, encrypted, inert.
+    expect(store.row.totpSecret).toBeNull();
     expect(store.row.totpEnabledAt).toBeNull();
     expect(await isEnabled(store, "u1")).toBe(false);
   });
@@ -93,16 +96,85 @@ describe("enrolment", () => {
     await enrol();
     const first = [...store.codes];
     const offer = await beginEnrolment(store, "u1", "Revio");
-    // …and turns 2FA back off until the new secret is proven.
-    expect(store.row.totpEnabledAt).toBeNull();
     await confirmEnrolment(store, "u1", codeAt(offer.secret, AT), AT);
     expect(store.codes.map((c) => c.codeHash)).not.toEqual(first.map((c) => c.codeHash));
   });
 
-  it("refuses a second enrolment while one is already active", async () => {
-    const secret = await enrol();
-    const r = await confirmEnrolment(store, "u1", codeAt(secret, AT), AT);
-    expect(r).toMatchObject({ ok: false });
+  /**
+   * R2, found by an external review on 2026-09-08 — and the two tests it broke had asserted the
+   * vulnerability as if it were the design ("…and turns 2FA back off until the new secret is
+   * proven"). The test was written to match the code and both were wrong, which is the reason a
+   * second reader is worth more than another test written by the same hand.
+   *
+   * `beginEnrolment` used to write `totpEnabledAt: null`. So a session alone — an unattended laptop,
+   * a stolen cookie — could turn a second factor off by pressing "set up" and walking away, while
+   * the dedicated disable action demands the password for exactly that reason.
+   */
+  describe("starting a setup cannot take away the factor that already works", () => {
+    it("leaves 2FA on, and the live secret untouched", async () => {
+      const original = await enrol();
+      expect(await isEnabled(store, "u1")).toBe(true);
+
+      await beginEnrolment(store, "u1", "Revio");
+
+      expect(store.row.totpEnabledAt).not.toBeNull();
+      expect(decryptSecret(store.row.totpSecret!)).toBe(original);
+    });
+
+    it("leaves the old app still able to sign in", async () => {
+      const original = await enrol();
+      await beginEnrolment(store, "u1", "Revio");
+
+      // The step after the one enrolment consumed, so this is not a replay.
+      const later = AT + TOTP_PERIOD_SECONDS * 1000;
+      const r = await verifySecond(store, "u1", codeAt(original, later), later);
+      expect(r).toMatchObject({ ok: true });
+    });
+
+    it("an abandoned setup leaves the account exactly as it was", async () => {
+      const original = await enrol();
+      const before = { ...store.row };
+      await beginEnrolment(store, "u1", "Revio"); // …and never confirmed.
+
+      expect(store.row.totpSecret).toBe(before.totpSecret);
+      expect(store.row.totpEnabledAt).toEqual(before.totpEnabledAt);
+      expect(decryptSecret(store.row.totpSecret!)).toBe(original);
+    });
+  });
+
+  describe("replacing a factor — a new phone", () => {
+    it("is allowed, and needs a code from the NEW secret", async () => {
+      await enrol();
+      const offer = await beginEnrolment(store, "u1", "Revio");
+      const later = AT + TOTP_PERIOD_SECONDS * 1000;
+
+      const r = await confirmEnrolment(store, "u1", codeAt(offer.secret, later), later);
+      expect(r.ok).toBe(true);
+      expect(decryptSecret(store.row.totpSecret!)).toBe(offer.secret);
+      expect(store.row.totpPendingSecret).toBeNull();
+    });
+
+    it("refuses a code from the old app, which is the point of proving the new one", async () => {
+      const original = await enrol();
+      await beginEnrolment(store, "u1", "Revio");
+      const later = AT + TOTP_PERIOD_SECONDS * 1000;
+
+      const r = await confirmEnrolment(store, "u1", codeAt(original, later), later);
+      expect(r.ok).toBe(false);
+      // …and the live factor is still the old one, untouched by the failed attempt.
+      expect(decryptSecret(store.row.totpSecret!)).toBe(original);
+      expect(store.row.totpEnabledAt).not.toBeNull();
+    });
+
+    it("turning 2FA off discards a half-finished setup too", async () => {
+      await enrol();
+      await beginEnrolment(store, "u1", "Revio");
+      await disable(store, "u1");
+
+      expect(store.row.totpPendingSecret).toBeNull();
+      expect(store.row.totpSecret).toBeNull();
+      expect(store.row.totpEnabledAt).toBeNull();
+    });
   });
 });
 
