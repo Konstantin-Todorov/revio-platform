@@ -135,6 +135,16 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 | **In-app AI assistant** | The biggest differentiator and the least urgent. Waiting for a real support queue to learn from | Large |
 | **Card payments (Stripe live)** | Deliberately deferred — hotels pay by bank transfer, and there is nothing to collect yet | Medium |
 
+### Known gaps against competitors
+
+`docs/COMPETITIVE-GAPS-2026-09.md` — RevioDirect measured against what SiteMinder, Cloudbeds and Mews
+actually ship, plus the platform read as a hotel owner rather than as a feature list. Checked against
+the code, not the documents. The four that matter most: **no analytics on the booking page at all**
+(so an owner cannot see or advertise their own funnel), **no abandoned-booking recovery** (the data is
+already captured and thrown away), **one language and one currency**, and **we still cannot take
+money**. Nothing on that list should start before a hotel is using the product — it exists so the
+answer is ready when they say which gap they hit.
+
 ### Deliberately not being built
 
 - **Guest review requests** — on hold since 2026-09-05. Asking a guest introduced by Booking.com or
