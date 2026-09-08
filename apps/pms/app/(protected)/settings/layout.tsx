@@ -1,18 +1,18 @@
 import type { ReactNode } from "react";
-import { getProperty } from "@/lib/data";
-import { PageHeader } from "@/components/ui/primitives";
 import { SettingsNav } from "@revio/ui/settings-nav";
+import { PageHeader } from "@/components/ui/primitives";
+import { getPmsSettings } from "@/lib/data";
 import { SETTINGS_SECTIONS, SETTINGS_ELSEWHERE } from "./sections";
 
 /**
  * The Settings shell: one header, the section nav, and whichever section is open.
  *
- * The header lives here rather than in each page so the five sections cannot drift apart in title,
- * spacing or property name — the failure that made the single page feel assembled rather than
- * designed in the first place.
+ * The same component and the same shape as RevioLink and RevioCRS. A hotel running two products
+ * should not have to learn Settings twice — which is most of the argument for sharing the nav
+ * rather than building a third one here.
  */
 export default async function SettingsLayout({ children }: { children: ReactNode }) {
-  const property = await getProperty();
+  const { property } = await getPmsSettings();
 
   return (
     <div className="space-y-5">

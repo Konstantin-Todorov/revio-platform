@@ -283,7 +283,7 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
     await prisma.taxFee.update({ where: { id: existing.id }, data: { active: false } });
   }
 
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return advance("taxes");
 }
 
@@ -315,7 +315,7 @@ export async function saveWelcomeBrand(_prev: WelcomeResult | null, fd: FormData
     },
   });
 
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return advance("brand");
 }
 

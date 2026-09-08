@@ -44,7 +44,7 @@ export async function inviteOperator(fd: FormData): Promise<void> {
   });
   await sendEmail({ to: [email], subject: mail.subject, text: mail.text, html: mail.html });
 
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 /** Change an operator's role — never leave the console without a super_admin. */
@@ -61,7 +61,7 @@ export async function updateOperatorRole(fd: FormData): Promise<void> {
     if (admins <= 1) return flashError("This is the last super admin. Promote somebody else first, or there would be nobody who can manage accounts.");
   }
   await prisma.operatorUser.update({ where: { id }, data: { role } });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 /** Remove an operator — can't remove yourself or the last super admin. */
@@ -77,5 +77,5 @@ export async function removeOperator(fd: FormData): Promise<void> {
     if (admins <= 1) return flashError("This is the last super admin. Promote somebody else first, or there would be nobody who can manage accounts.");
   }
   await prisma.operatorUser.delete({ where: { id } });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }

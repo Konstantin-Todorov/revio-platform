@@ -43,7 +43,8 @@
     "./report-client-error": "./src/report-client-error.ts",
     "./my-requests": "./src/my-requests.tsx",
     "./support-reply": "./src/support-reply.tsx",
-    "./support-thread": "./src/support-thread.tsx"
+    "./support-thread": "./src/support-thread.tsx",
+    "./settings-nav": "./src/settings-nav.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

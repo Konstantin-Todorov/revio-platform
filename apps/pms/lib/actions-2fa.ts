@@ -64,7 +64,7 @@ export async function confirmTwoFactor(_prev: TwoFactorState | null, fd: FormDat
     // whole setup again for no reason.
     return { step: "enrolling", secret, uri, qrDataUrl: await qrFor(uri), error: result.error };
   }
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { step: "done", recoveryCodes: result.recoveryCodes ?? [] };
 }
 
@@ -94,6 +94,6 @@ export async function turnOffTwoFactor(
   }
 
   await disableUserTotp({ tenantId: session.tenantId, userId: session.userId, scope: "pms" });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return {};
 }

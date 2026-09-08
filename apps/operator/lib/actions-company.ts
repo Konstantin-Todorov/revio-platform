@@ -86,7 +86,7 @@ export async function saveCompany(_prev: ActionResult | null, fd: FormData): Pro
 
   const full = invoiceNumberStart === undefined ? data : { ...data, invoiceNumberStart };
   await prisma.operatorCompany.upsert({ where: { id: "singleton" }, create: { id: "singleton", ...full }, update: full });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   revalidatePath("/billing");
   return { ok: true, message: "Company details saved." };
 }

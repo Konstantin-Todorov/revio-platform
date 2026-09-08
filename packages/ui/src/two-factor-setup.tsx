@@ -74,10 +74,21 @@ export function TwoFactorSetup({
   actions,
   /** "Revio Operator" or the hotel product name — used in the recovery-code file header. */
   productName = "Revio",
+  reason = "A password on its own can be guessed, reused or stolen. Two-factor adds a code from your phone, so knowing the password is not enough.",
 }: {
   enabled: boolean;
   actions: TwoFactorActions;
   productName?: string;
+  /**
+   * Why this account in particular is worth protecting.
+   *
+   * A prop because the answer differs and the wrong one is alarming. This component began life in
+   * the operator console and its copy said so — "this console can read every hotel on the platform"
+   * — and when 2FA was extended to all four apps that sentence went with it. Every hotel enabling
+   * 2FA in RevioLink was told their login reads every hotel on the platform, which is untrue and
+   * reads like a breach notice. The default is true of any account; the operator passes its own.
+   */
+  reason?: string;
 }) {
   const { start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor } = actions;
   const [state, formAction, pending] = useActionState<TwoFactorState | null, FormData>(confirmTwoFactor, null);
@@ -153,8 +164,7 @@ export function TwoFactorSetup({
     return (
       <div>
         <p className="text-[12.5px] text-ink-600">
-          This console can read every hotel on the platform, so a password on its own is a single point of failure.
-          Two-factor adds a code from your phone.
+          {reason}
         </p>
         <button
           type="button"

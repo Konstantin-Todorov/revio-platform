@@ -59,7 +59,7 @@ export async function confirmTwoFactor(_prev: TwoFactorState | null, fd: FormDat
     // round the setup again for no reason.
     return { step: "enrolling", secret, uri, qrDataUrl: await qrFor(uri), error: result.error };
   }
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { step: "done", recoveryCodes: result.recoveryCodes ?? [] };
 }
 
@@ -86,6 +86,6 @@ export async function turnOffTwoFactor(_prev: { error?: string } | null, fd: For
   }
 
   await disableTotp(session.userId);
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return {};
 }

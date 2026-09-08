@@ -46,7 +46,7 @@ export async function savePermissionRole(fd: FormData): Promise<void> {
     });
     await logAudit(property.id, tenantId, { entity: `Permission role · ${name}`, field: "created" });
   }
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 export async function deletePermissionRole(fd: FormData): Promise<void> {
@@ -57,7 +57,7 @@ export async function deletePermissionRole(fd: FormData): Promise<void> {
   if (!role || role.builtin) return; // the V1 roles are fixed
   await prisma.permissionRole.delete({ where: { id } });
   await logAudit(property.id, property.tenantId, { entity: `Permission role · ${role.name}`, field: "deleted" });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 /** Taxes & Fees — type (percent|fixed), basis, inclusion (feeds Room Revenue display rules). */
@@ -106,7 +106,7 @@ export async function saveTaxFee(fd: FormData): Promise<void> {
     field: rowId ? "updated" : "created",
     newValue: `${type === "percent" ? `${data.pct}%` : `€${((data.amountMinor ?? 0) / 100).toFixed(2)}`} ${data.basis.replace("_", " ")} · ${data.inclusion}`,
   });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 export async function deleteTaxFee(fd: FormData): Promise<void> {
@@ -117,7 +117,7 @@ export async function deleteTaxFee(fd: FormData): Promise<void> {
   if (!tax) return;
   await prisma.taxFee.delete({ where: { id } });
   await logAudit(property.id, property.tenantId, { entity: `Tax/Fee · ${tax.name}`, field: "deleted" });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 

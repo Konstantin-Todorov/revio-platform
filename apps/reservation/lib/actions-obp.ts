@@ -192,7 +192,7 @@ export async function applyPricingModel(fd: FormData): Promise<void> {
     // Reported by the Sync Center, not by throwing away a completed model change.
   }
 
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   revalidatePath("/rates");
   revalidatePath("/inventory");
 }

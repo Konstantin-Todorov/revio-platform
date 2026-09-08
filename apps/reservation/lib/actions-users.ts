@@ -61,7 +61,7 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
     }
     throw e;
   }
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { ok: true };
 }
 
@@ -88,7 +88,7 @@ export async function updateUser(_prev: ActionResult | null, fd: FormData): Prom
     }
     throw e;
   }
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { ok: true };
 }
 
@@ -108,7 +108,7 @@ export async function updateUserRole(fd: FormData): Promise<void> {
     if (owners <= 1) return flashError("This is the last owner. Make somebody else an owner first — an account with no owner cannot be managed.");
   }
   await prisma.user.update({ where: { id }, data: { role } });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 /** Deactivate / reactivate — preferred over hard-delete. A deactivated user keeps their identity and
@@ -127,7 +127,7 @@ export async function setUserActive(fd: FormData): Promise<void> {
     if (owners <= 1) return flashError("This is the last active owner. Activate or promote somebody else first — an account with no active owner cannot be managed.");
   }
   await prisma.user.update({ where: { id }, data: { active } });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 /** Reset a user's password on the SHARED credential. Demo: resets to the shared demo password.
@@ -144,7 +144,7 @@ export async function resetUserPassword(fd: FormData): Promise<void> {
   // staff member chooses their own and nobody else ever holds it.
   await prisma.user.update({ where: { id }, data: { passwordHash: null } });
   await sendInvite({ email: u.email, name: u.name ?? u.email, userId: u.id, hotel: s.tenantName });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 /**

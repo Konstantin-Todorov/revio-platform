@@ -39,7 +39,7 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
   // No password. The account is unusable until the invitee sets one from the emailed link.
   const user = await prisma.user.create({ data: { tenantId: s.tenantId, name, email, role } });
   await sendInvite({ email, name, userId: user.id, hotel: s.tenantName, ...(s.userName ? { invitedBy: s.userName } : {}) });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { ok: true };
 }
 
@@ -59,7 +59,7 @@ export async function updateUserRole(fd: FormData): Promise<void> {
     if (owners <= 1) return flashError("This is the last owner. Make somebody else an owner first — an account with no owner cannot be managed.");
   }
   await prisma.user.update({ where: { id }, data: { role } });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 export async function removeUser(fd: FormData): Promise<void> {
@@ -74,7 +74,7 @@ export async function removeUser(fd: FormData): Promise<void> {
     if (owners <= 1) return flashError("This is the last owner. Make somebody else an owner first — an account with no owner cannot be managed.");
   }
   await prisma.user.delete({ where: { id } });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
 
 export async function addProperty(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
@@ -87,7 +87,7 @@ export async function addProperty(_prev: ActionResult | null, fd: FormData): Pro
   await prisma.property.create({
     data: { tenantId: s.tenantId, name, baseCurrency: str(fd, "baseCurrency") || "EUR", timezone: str(fd, "timezone") || "Europe/Sofia" },
   });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { ok: true };
 }
 

@@ -5,12 +5,7 @@
  * section is a one-line change in a file whose whole job is that list, rather than an edit inside
  * JSX. Every future setting now has an obvious home, which was the point of splitting the page.
  */
-export interface SettingsSection {
-  href: string;
-  label: string;
-  /** What a person is looking for when they land here. Shown under the heading. */
-  blurb: string;
-}
+import type { SettingsSection } from "@revio/ui/settings-nav";
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { href: "/settings/property", label: "Property", blurb: "Name, timezone, currency, check-in and check-out" },
@@ -27,8 +22,9 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
  * breaking those to tidy a menu is a poor trade. The nav's job is that somebody looking for a
  * setting finds it — not that every setting is rendered inside this route.
  */
-export const SETTINGS_ELSEWHERE = [
+export const SETTINGS_ELSEWHERE: SettingsSection[] = [
   { href: "/booking-engine", label: "Booking engine", blurb: "Branding, hero image and the direct-booking page" },
   { href: "/rates", label: "Rates & restrictions", blurb: "Prices, rate plans and restriction rules" },
   { href: "/distribution", label: "Distribution", blurb: "Channels and cost of distribution" },
+  { href: "/help", label: "Help & support", blurb: "Answers, and every request you have sent us" },
 ];

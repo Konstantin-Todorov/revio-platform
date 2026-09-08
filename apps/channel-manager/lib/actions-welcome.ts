@@ -299,7 +299,7 @@ export async function saveWelcomeDelivery(_prev: WelcomeResult | null, fd: FormD
     },
   });
 
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return advance("delivery");
 }
 

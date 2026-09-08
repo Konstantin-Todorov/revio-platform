@@ -437,7 +437,7 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
     entity: `Property · ${name}`, field: "settings",
     newValue: currencyChanged ? `currency → ${newCurrency}${convertRates ? ` · ${converted} rates × ${conversionRate}` : " (display only)"}` : name,
   });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   revalidatePath("/dashboard");
   revalidatePath("/calendar");
   revalidatePath("/channels");
@@ -501,7 +501,7 @@ export async function saveDeliverySettings(_prev: ActionResult | null, fd: FormD
     entity: "Property · delivery settings", field: "reservation_delivery",
     newValue: `primary ${primary ?? "—"} · today ${fd.get("notifyTodayArrivals") === "on" ? todayTime : "off"} · tomorrow ${fd.get("notifyTomorrowArrivals") === "on" ? tomorrowTime : "off"}`,
   });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
   return { ok: true };
 }
 
@@ -530,5 +530,5 @@ export async function sendTestEmail(): Promise<void> {
     entity: "Property · delivery settings", field: "test_email",
     newValue: res.ok ? `sent to ${to} (${res.mode})` : `failed: ${res.error}`,
   });
-  revalidatePath("/settings");
+  revalidatePath("/settings", "layout");
 }
