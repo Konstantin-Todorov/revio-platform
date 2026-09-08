@@ -60,7 +60,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   );
   const trialable = PRODUCTS.filter((p) => !owned.has(p.key));
 
-  const { tenant, economics } = c;
+  const { tenant, economics, direct } = c;
 
   return (
     <div className="space-y-5">
@@ -211,6 +211,65 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             The figures come from `waitlistMetrics` in @revio/core, the same function behind the
             hotel's own Waitlist screen, so this is checkable rather than claimed.
           */}
+          {/*
+            RevioDirect, which the console could not see at all.
+            `CLAUDE.md` recorded operator visibility into the booking engine as deliberately not
+            built — correct while the engine was local-only. It is live, taking real bookings and
+            billed on, and the client page showed a link and nothing else: not whether anyone books
+            through it, what it earned, or what it saved them.
+
+            Shown only when a property has it switched on. A €0 block on a hotel that never bought
+            it reads as a product failing rather than one absent.
+          */}
+          {direct.enabledProperties > 0 && (
+            <div className="border-t border-surface-border px-4 py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="text-[11px] uppercase tracking-wide text-ink-400">
+                  Booked on their own page (RevioDirect)
+                </span>
+                {direct.slug && (
+                  <a
+                    href={`https://booking.reviosoft.app/${direct.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11.5px] font-semibold text-brand-700 hover:underline"
+                  >
+                    open their page ↗
+                  </a>
+                )}
+              </div>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-ink-400">Bookings</dt>
+                  <dd className="tnum mt-0.5 font-semibold text-ink-900">{direct.bookings}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-ink-400">Revenue</dt>
+                  <dd className="tnum mt-0.5 font-semibold text-ink-900">{money(direct.revenueMinor)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-ink-400">Our 2% on it</dt>
+                  <dd className="tnum mt-0.5 font-semibold text-ink-900">{money(direct.feeMinor)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] uppercase tracking-wide text-ink-400">Commission avoided</dt>
+                  <dd className="tnum mt-0.5 font-semibold text-success-600">
+                    {/* An estimate, and null when there is no OTA rate to reason from. The
+                        assumption travels with the number rather than being left implied. */}
+                    {direct.commissionAvoidedMinor === null
+                      ? "—"
+                      : money(direct.commissionAvoidedMinor)}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-1.5 text-[11px] text-ink-400">
+                {direct.commissionAvoidedMinor === null
+                  ? "No OTA revenue in the period, so there is no rate to estimate what these bookings would have cost them."
+                  : `Estimated at their own blended OTA rate of ${direct.blendedOtaRatePct?.toFixed(1)}% — the same figure they see on Cost of distribution.`}
+              </p>
+            </div>
+          )}
+
           {c.waitlist.entries > 0 && (
             <div className="border-t border-surface-border px-4 py-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">

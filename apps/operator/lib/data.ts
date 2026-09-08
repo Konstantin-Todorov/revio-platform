@@ -9,6 +9,7 @@ import { clientSetup, daysSince, setupStalled } from "./onboarding";
 import { provisioningState, soldButNotProvisioned } from "./provisioning";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
+import { directUsageByTenant } from "./direct-usage";
 import { channelEconomics, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
 import { partitionDemo } from "./demo";
@@ -499,6 +500,24 @@ export async function getClientDetail(id: string) {
 
   const unpaidInvoices = invoices.filter((i) => i.status !== "paid").map((i) => ({ period: i.period, amountMinor: i.amountMinor, status: i.status }));
   const bookingEngineProperties = tenant.properties.filter((p) => p.bookingEngineEnabled).length;
+
+  /*
+   * What RevioDirect itself produced, over the same 30 days as `economics`.
+   *
+   * ⚠️ NOT `economics.directRevenueMinor`. That counts every direct booking, including the ones the
+   * hotel took on the telephone — and the 2% is charged only on bookings **our engine** produced,
+   * which is the whole reason it is defensible against an OTA's 15%. Billing from the wider number
+   * would invoice a hotel for its own phone calls.
+   *
+   * So this uses `directUsageByTenant`, the single definition that also produces the invoice. Two
+   * definitions of "a booking our engine made" is the bug that module exists to prevent, and a
+   * console showing a fee different from the one charged is exactly how it would come back.
+   */
+  const engineWindowFrom = new Date(Date.now() - 30 * 86_400_000);
+  const engineUsage = (await directUsageByTenant(engineWindowFrom, new Date())).get(tenant.id) ?? {
+    revenueMinor: 0,
+    bookings: 0,
+  };
   const monthly = monthlyPriceMinor(tenant.plan, entitlements);
 
   const observed = observedStage({
@@ -643,6 +662,31 @@ export async function getClientDetail(id: string) {
     billing: { monthlyMinor: monthly, products: billedProducts(entitlements), invoices },
     counts: { roomTypes, units, channels: channels.length, channelsConnected, reservations, openErrors, reservationsLast30d },
     channels, recentFailures, economics, waitlist,
+    direct: {
+      enabledProperties: bookingEngineProperties,
+      bookings: engineUsage.bookings,
+      revenueMinor: engineUsage.revenueMinor,
+      /** Our 2%, computed by the same function `generateInvoices` bills with. */
+      feeMinor: directBookingFeeMinor(engineUsage.revenueMinor),
+      /*
+       * What OUR engine saved them — engine revenue at their own blended OTA rate.
+       *
+       * NOT `economics.commissionAvoidedMinor`, which is the same estimate over ALL direct revenue,
+       * the hotel's own telephone bookings included. Putting that beside these engine-only figures
+       * printed "0 bookings · €0.00 revenue · €54.00 commission avoided" on the first client page I
+       * looked at — four numbers in one block answering two different questions, which is precisely
+       * the confusion `direct-usage.ts` exists to prevent.
+       *
+       * An ESTIMATE either way, and `null` when there is no OTA revenue to derive a rate from,
+       * because then there is nothing to reason from. Never shown without the assumption attached.
+       */
+      commissionAvoidedMinor:
+        economics.blendedOtaRatePct === null
+          ? null
+          : Math.round((engineUsage.revenueMinor * economics.blendedOtaRatePct) / 100),
+      blendedOtaRatePct: economics.blendedOtaRatePct,
+      slug: tenant.properties.find((p) => p.bookingEngineEnabled)?.publicSlug ?? null,
+    },
     lastSyncAt: lastSync?.lastSyncAt ?? null,
     lastReservationAt: lastReservation?.importedAt ?? null,
     // The CRM half.

@@ -38,7 +38,7 @@ stays (a March booking for August is March's usage, or every month becomes impos
 
 ---
 
-## 🟠 2. Platform Health cannot tell you whether the scheduled jobs ran
+## ☑ 2. Platform Health cannot tell you whether the scheduled jobs ran — FIXED 2026-09-08
 
 The dead-man's switch exists at `operator /api/health/jobs` and is polled by a GitHub workflow. The
 **screen** shows sync health and application faults, and about the jobs it says only that a workflow
@@ -53,7 +53,7 @@ connects to, and it is the difference between the check existing and somebody no
 
 ---
 
-## 🟠 3. No visibility into RevioDirect at all
+## ☑ 3. No visibility into RevioDirect at all — FIXED 2026-09-08
 
 `CLAUDE.md` still records "any Operator visibility into the booking engine" as deliberately not
 built. That decision was correct when the engine was local-only. It is now live, taking real
