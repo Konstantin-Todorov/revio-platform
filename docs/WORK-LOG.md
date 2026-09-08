@@ -18,6 +18,26 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · DONE · R1 — one hold, two reservations
+**The last release blocker: a hold can convert twice and the losing reservation is never undone.**
+Files: `packages/booking/src/public-engine.ts`, its tests, possibly `apps/booking/lib/actions-book.ts`
+Notes: with a LIVE hold no atomic claim is taken — `claimHold` runs only on the no-hold path — the
+reservation is a separate write, and the conversion's `updateMany` count is discarded. Two
+confirmations sharing one hold therefore both create a reservation and only one conversion matches.
+Gap class 20 again: a check whose result is thrown away.
+**Fixed.** The conversion IS the claim now: guest → reservation → extras → conversion run inside one
+`withTenantTransaction`, the conversion's count is checked, and `count !== 1` throws so the losing
+reservation rolls back. ⚠️ For whoever reads this next: an intermediate `"claiming"` hold status
+does NOT work — both places that count a hold against inventory (`loadStayContext` and `claimHold`'s
+SQL) require `status = 'active'`, so it would release the room and open a wider window.
+**Raced on a real database**, not reasoned about: `packages/booking/scripts/confirm-race.ts`, one
+room, one hold, 12 concurrent confirms. On the old line **all 12 won and 12 reservations existed**.
+On the fixed line: 1 winner, 11 told in words, 1 row, hold converted and pointing at it.
+`engine-race` still green. Release blockers are now all closed.
+⚠️ Not touching Codex's in-flight `apps/pms/lib/invoice.ts` or
+`apps/operator/components/shell/Sidebar.tsx` — both uncommitted in the shared tree, so staging by
+path and no `git add -A`.
+
 ### 2026-09-09 · Codex · CLAIMED · City-tax VAT + operator sidebar grouping
 **Both assignments accepted; Claude retains R5 then R1.**
 Files: `apps/pms/lib/invoice.ts`, `apps/pms/lib/invoice.test.ts`,

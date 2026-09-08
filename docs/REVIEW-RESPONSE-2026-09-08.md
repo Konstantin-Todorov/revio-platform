@@ -14,7 +14,7 @@ is stated rather than quietly resolved.
 
 | | Verdict | Evidence |
 | --- | --- | --- |
-| **R1** one hold → two reservations | **Confirmed** (code shape; DB-concurrency repro still owed) | Read below |
+| **R1** one hold → two reservations | **Confirmed, fixed, shipped** | Raced on a real database: 12 concurrent confirms of one hold produced **12 reservations** for **1 room** before the fix, 1 after — `pnpm --filter @revio/booking confirm-race` |
 | **R2** enrolment disables existing 2FA | **Confirmed, fixed, shipped** `fb5bf8a` | 4 tests go red on the old line |
 | **R3** stale Close Day closes the next day | **Confirmed** | `runCloseDay` takes no expected date |
 | **R4** accrual failure strands the night | **Confirmed** | Roll commits before accrual/audit/sync |
@@ -38,9 +38,10 @@ conversion, and the reservation is created inside it.
 stop two guests booking the same room"* — failing on the one surface a guest touches unattended. It
 is also the same shape as gap class 20: **a check whose result is thrown away.**
 
-**Not yet done:** a real two-connection database reproduction. `engine-race` races hold *creation*,
-not confirmation. I did not write that harness; the code path is unambiguous but the register's own
-rule is that a guard is not trusted until it has been seen to fail.
+**Now done, and it was worse than described.** `packages/booking/scripts/confirm-race.ts` races the
+confirm end on a real database — one room, one hold, twelve concurrent confirms. This was not a rare
+interleaving: **all twelve won, and twelve reservations existed for one room.** Fixed, and the same
+harness is green: one winner, eleven told in words, one row, hold converted and pointing at it.
 
 ### R2 — confirmed, fixed, shipped
 
@@ -108,7 +109,7 @@ every case it is the more careful one — noted individually.
 
 | ID | Work | Effort | Owner | Acceptance |
 | --- | --- | --- | --- | --- |
-| **R1** | One hold converts once | M | Claude | Concurrent confirms yield one reservation or a clear refusal; conversion count checked; creation+conversion cannot partially commit; DB-level race harness added beside `engine-race` |
+| ~~**R1**~~ ✅ | One hold converts once | M | Claude | **Done.** All four met: one winner, every loser told in words, exactly one row in the database, and the hold points at it. `scripts/confirm-race.ts` sits beside `engine-race` and goes red on the old line |
 | **R3** | Close the day the caller meant | S–M | Codex | Caller passes the intended date; a stale intent is refused with a readable message; deliberate catch-up close of an overdue day still works; scheduled path rechecks eligibility |
 | **R4** | A close cannot strand a night | M | Codex | Failure after any write boundary leaves a recoverable state; no duplicated or missing charges; the audit record cannot be lost while the date moves |
 | **R5** | Consume the step that matched | S | Claude | Same code refused across a boundary; concurrent submissions in one step admit one; recovery codes reviewed for the same shape; both account types tested |
@@ -226,7 +227,9 @@ starting.
 6. **Who commits Codex's work** — see below.
 
 **What I did NOT check, stated plainly**
-- No database-level concurrency reproduction for R1 or R5 sequence B; both are read-level verdicts.
+- ~~No database-level concurrency reproduction for R1~~ — done, and it made the finding worse than
+  reported: not a rare interleaving but **every** concurrent confirm winning. R5 sequence B remains a
+  read-level verdict backed by unit-level race tests rather than a live database.
 - Recovery-code consumption inspected, not reproduced.
 - The scheduled auto-close interleaving in R3 was not separately traced; I confirmed the manual path.
 - I did not verify the handoff's competitive citations against the vendor pages; mine are cited

@@ -26,7 +26,9 @@ if (remaining < qty) return "sold out"
 await prisma.hold.create(...)
 ```
 Use `claimHold()` in `@revio/db`. Compute the waterfall for the *message*, claim for the *room*.
-`pnpm --filter @revio/db claim-verify` proves the primitive; `engine-race` proves the booking path.
+`pnpm --filter @revio/db claim-verify` proves the primitive; `engine-race` proves the booking path;
+`confirm-race` proves the *confirm* end, where the claim is the hold's conversion and not `claimHold`
+— that one is not optional either, and it is where twelve confirms once produced twelve reservations.
 
 **Money is integer minor units + an ISO currency code.** Never a float, anywhere.
 

@@ -11,7 +11,7 @@
  * Engine (category "direct"); bypasses RevioLink/Channex on the way in; only rate plans flagged
  * `directChannelEnabled` are exposed (selection, not mapping).
  */
-import { claimHold, type forTenant } from "@revio/db";
+import { claimHold, withTenantTransaction, type forTenant } from "@revio/db";
 import {
   computeStayCharges, computeWaterfall, expandInventoryPeriods, extrasTotalMinor,
   hasChanges, hydrateGuestContact, isAdvancePurchaseClosed, isOtaAliasEmail, recogniseGuest,
@@ -23,6 +23,21 @@ import { syncRealChannels, stayScope } from "@revio/connectivity";
 
 type Db = ReturnType<typeof forTenant>;
 type PropertyRow = { id: string; tenantId: string; name: string; baseCurrency: string; timezone: string };
+
+/**
+ * A concurrent confirm converted the hold first (R1).
+ *
+ * Thrown rather than returned because throwing is what rolls the transaction back — returning a
+ * value would commit the reservation this call had already written, which is the exact bug. It is a
+ * named class so the caller can tell "somebody else booked it", which is a normal outcome a guest
+ * must be told about plainly, from a database failure, which is not.
+ */
+class HoldAlreadyTaken extends Error {
+  constructor() {
+    super("hold already converted by a concurrent booking");
+    this.name = "HoldAlreadyTaken";
+  }
+}
 
 const DAY_MS = 86_400_000;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
@@ -506,165 +521,215 @@ export async function publicCreateReservation(
   const totalMinor = accommodationMinor;
 
   const email = p.guest.email.trim().toLowerCase();
+
   /*
-   * Resolve the guest to the record the hotel actually uses (K6).
+   * R1 — ONE transaction, and the hold's conversion is the claim that decides who won.
    *
-   * Matching on email alone is not enough once the front desk starts merging duplicates: a merged
-   * record keeps its email but carries `mergedIntoId`, and it has deliberately dropped out of every
-   * list and metric. Attaching a new booking to it files the reservation under a person the PMS no
-   * longer shows — the returning guest we are trying to recognise becomes invisible instead.
-   * So follow the merge pointer to the survivor.
+   * The bug this closes: on the live-hold path there was no atomic claim anywhere. `claimHold` runs
+   * only when the guest arrives WITHOUT a hold; the reservation was a write of its own; and the
+   * conversion below threw away its affected count. So two confirms of the same hold — a
+   * double-clicked button, a retried request, two tabs — each read the hold as active, each created
+   * a reservation, and the second conversion matched zero rows and was ignored. One hold, two
+   * reservations, one room. The thing the whole platform exists to prevent, on our own page.
+   *
+   * ⚠️ The obvious fix is wrong here, and it is worth writing down so nobody tries it again:
+   * flipping the hold to an intermediate "claiming" status before creating the reservation would
+   * RELEASE the room. Both places that count a hold against inventory — `loadStayContext` above and
+   * `claimHold`'s SQL — require `status = 'active'`, so an in-between status opens a wider window
+   * than the one being closed. The hold must stay active right up to the instant it becomes a
+   * reservation.
+   *
+   * So the conversion IS the claim. `UPDATE … WHERE status = 'active'` takes the row lock; under
+   * READ COMMITTED the loser waits, re-reads the committed row, sees `converted` and matches
+   * nothing. `count !== 1` therefore means somebody else booked this hold — and throwing rolls back
+   * the reservation this transaction had already written, which is the half that was missing.
+   *
+   * `property.tenantId` is the same value every row below is stamped with and the same one
+   * `claimHold` is already handed. The perimeter is still the caller's; this only names it in the
+   * one place a transaction has to.
    */
-  const matched = await db.guest.findFirst({ where: { propertyId: property.id, email } });
-  const survivor = matched?.mergedIntoId
-    ? await db.guest.findUnique({ where: { id: matched.mergedIntoId } })
-    : matched;
-  const guest =
-    survivor ??
-    (await db.guest.create({
+  const written = await withTenantTransaction(property.tenantId, async (tx) => {
+    /*
+     * Resolve the guest to the record the hotel actually uses (K6).
+     *
+     * Matching on email alone is not enough once the front desk starts merging duplicates: a merged
+     * record keeps its email but carries `mergedIntoId`, and it has deliberately dropped out of every
+     * list and metric. Attaching a new booking to it files the reservation under a person the PMS no
+     * longer shows — the returning guest we are trying to recognise becomes invisible instead.
+     * So follow the merge pointer to the survivor.
+     */
+    const matched = await tx.guest.findFirst({ where: { propertyId: property.id, email } });
+    const survivor = matched?.mergedIntoId
+      ? await tx.guest.findUnique({ where: { id: matched.mergedIntoId } })
+      : matched;
+    const guest =
+      survivor ??
+      (await tx.guest.create({
+        data: {
+          tenantId: property.tenantId, propertyId: property.id,
+          firstName: p.guest.firstName.trim(), lastName: p.guest.lastName.trim(),
+          email, phone: p.guest.phone?.trim() || null,
+          emailIsOtaAlias: isOtaAliasEmail(email),
+        },
+      }));
+
+    /*
+     * F4 (§4.5) — fill in what the profile is missing from what this booking supplied.
+     *
+     * Matching by email short-circuited to the existing row, so everything else the guest typed was
+     * discarded: someone who has stayed twice could have entered their phone number both times and
+     * still have a blank phone on file. Enrich empty, never overwrite — a value already there was
+     * confirmed by a person and outranks anything derived, which is what makes this safe to run on
+     * every booking without a human deciding.
+     *
+     * Skipped entirely when nothing moved, so a fourth stay with identical details produces no write.
+     */
+    if (survivor) {
+      const patch = hydrateGuestContact(
+        { email: survivor.email, phone: survivor.phone, company: survivor.company },
+        { email, phone: p.guest.phone ?? null },
+      );
+      if (hasChanges(patch)) {
+        await tx.guest.update({ where: { id: survivor.id }, data: patch });
+      }
+    }
+
+    /*
+     * Prior stays, counted BEFORE this booking is written so the current one cannot count itself.
+     *
+     * Statuses are the sold set rather than "anything with this guestId": a cancelled booking is not a
+     * stay, and greeting someone as a returning guest because they once cancelled is the kind of small
+     * wrongness that makes a hotel distrust the whole feature.
+     */
+    const priorStays = await tx.reservation.findMany({
+      where: { propertyId: property.id, guestId: guest.id, status: { in: [...SOLD_STATUSES] } },
+      select: { lines: { select: { checkIn: true }, orderBy: { checkIn: "desc" }, take: 1 } },
+    });
+    const lastStay = priorStays
+      .map((r) => r.lines[0]?.checkIn)
+      .filter((d): d is Date => d != null)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    const recognition = recogniseGuest({
+      priorStayCount: priorStays.length,
+      lastStayDate: lastStay ? lastStay.toISOString().slice(0, 10) : null,
+      optedOut: guest.recognitionOptOut,
+    });
+
+    // source = Booking Engine (category "direct") — first-class in the source/channel mix from day one.
+    const source =
+      (await tx.bookingSource.findFirst({ where: { propertyId: property.id, name: "Booking Engine" } })) ??
+      (await tx.bookingSource.create({ data: { tenantId: property.tenantId, propertyId: property.id, name: "Booking Engine", category: "direct" } }));
+
+    const checkIn = utcDay(p.checkIn);
+    const checkOut = utcDay(p.checkOut);
+    const reservation = await tx.reservation.create({
       data: {
         tenantId: property.tenantId, propertyId: property.id,
-        firstName: p.guest.firstName.trim(), lastName: p.guest.lastName.trim(),
-        email, phone: p.guest.phone?.trim() || null,
-        emailIsOtaAlias: isOtaAliasEmail(email),
+        channelId: null, externalId: null, // direct channel — never touches RevioLink/Channex inbound
+        guestName: `${guest.firstName} ${guest.lastName}`,
+        // `requested` occupies the room (ROOM_OCCUPYING_STATUSES) but is not a sale until the hotel
+        // accepts. Holding inventory from the moment the request lands is the whole point: otherwise
+        // the same night stays on sale on an OTA and the hotel accepts a room that is already gone.
+        status: p.requestOnly ? "requested" : "confirmed",
+        totalMinor, currency: property.baseCurrency,
+        propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
+        guestId: guest.id, bookingSourceId: source.id,
+        // A LABEL plus a gateway token — never a card number. `card_on_file` is what the front desk
+        // reads as "we can charge a no-show"; the ref is what actually lets them.
+        paymentGuarantee: p.guarantee?.ref ? "card_on_file" : "none",
+        guaranteeRef: p.guarantee?.ref ?? null,
+        guaranteeBrand: p.guarantee?.brand ?? null,
+        guaranteeLast4: p.guarantee?.last4 ?? null,
+        // Recognition reaches staff through the notes the front desk already reads, rather than through
+        // a new field every screen would have to learn. It is prepended so it is visible before the
+        // agent scrolls, and it is absent entirely when the guest opted out — a receptionist cannot
+        // honour a preference they were never shown.
+        notes: [
+          recognition.staffSummary,
+          p.guestNote?.trim() ? `Guest note: ${p.guestNote.trim().slice(0, 500)}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n") || null,
+        lines: {
+          create: [{
+            roomTypeId: rt.id, ratePlanId: rp.id, quantity: 1, checkIn, checkOut,
+            priceMinor: totalMinor, guestsCount: p.guests,
+            // The per-night snapshot, written with the line so a stay can never exist without the
+            // rates it was sold at.
+            nightRates: {
+              create: quotedNights.map((n) => ({
+                tenantId: property.tenantId,
+                date: new Date(`${n.date}T00:00:00Z`),
+                occupancy: n.occupancy,
+                rateMinor: n.rateMinor,
+                source: "booking",
+              })),
+            },
+          }],
+        },
       },
-    }));
-
-  /*
-   * F4 (§4.5) — fill in what the profile is missing from what this booking supplied.
-   *
-   * Matching by email short-circuited to the existing row, so everything else the guest typed was
-   * discarded: someone who has stayed twice could have entered their phone number both times and
-   * still have a blank phone on file. Enrich empty, never overwrite — a value already there was
-   * confirmed by a person and outranks anything derived, which is what makes this safe to run on
-   * every booking without a human deciding.
-   *
-   * Skipped entirely when nothing moved, so a fourth stay with identical details produces no write.
-   */
-  if (survivor) {
-    const patch = hydrateGuestContact(
-      { email: survivor.email, phone: survivor.phone, company: survivor.company },
-      { email, phone: p.guest.phone ?? null },
-    );
-    if (hasChanges(patch)) {
-      await db.guest.update({ where: { id: survivor.id }, data: patch });
-    }
-  }
-
-  /*
-   * Prior stays, counted BEFORE this booking is written so the current one cannot count itself.
-   *
-   * Statuses are the sold set rather than "anything with this guestId": a cancelled booking is not a
-   * stay, and greeting someone as a returning guest because they once cancelled is the kind of small
-   * wrongness that makes a hotel distrust the whole feature.
-   */
-  const priorStays = await db.reservation.findMany({
-    where: { propertyId: property.id, guestId: guest.id, status: { in: [...SOLD_STATUSES] } },
-    select: { lines: { select: { checkIn: true }, orderBy: { checkIn: "desc" }, take: 1 } },
-  });
-  const lastStay = priorStays
-    .map((r) => r.lines[0]?.checkIn)
-    .filter((d): d is Date => d != null)
-    .sort((a, b) => b.getTime() - a.getTime())[0];
-  const recognition = recogniseGuest({
-    priorStayCount: priorStays.length,
-    lastStayDate: lastStay ? lastStay.toISOString().slice(0, 10) : null,
-    optedOut: guest.recognitionOptOut,
-  });
-
-  // source = Booking Engine (category "direct") — first-class in the source/channel mix from day one.
-  const source =
-    (await db.bookingSource.findFirst({ where: { propertyId: property.id, name: "Booking Engine" } })) ??
-    (await db.bookingSource.create({ data: { tenantId: property.tenantId, propertyId: property.id, name: "Booking Engine", category: "direct" } }));
-
-  const checkIn = utcDay(p.checkIn);
-  const checkOut = utcDay(p.checkOut);
-  const reservation = await db.reservation.create({
-    data: {
-      tenantId: property.tenantId, propertyId: property.id,
-      channelId: null, externalId: null, // direct channel — never touches RevioLink/Channex inbound
-      guestName: `${guest.firstName} ${guest.lastName}`,
-      // `requested` occupies the room (ROOM_OCCUPYING_STATUSES) but is not a sale until the hotel
-      // accepts. Holding inventory from the moment the request lands is the whole point: otherwise
-      // the same night stays on sale on an OTA and the hotel accepts a room that is already gone.
-      status: p.requestOnly ? "requested" : "confirmed",
-      totalMinor, currency: property.baseCurrency,
-      propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
-      guestId: guest.id, bookingSourceId: source.id,
-      // A LABEL plus a gateway token — never a card number. `card_on_file` is what the front desk
-      // reads as "we can charge a no-show"; the ref is what actually lets them.
-      paymentGuarantee: p.guarantee?.ref ? "card_on_file" : "none",
-      guaranteeRef: p.guarantee?.ref ?? null,
-      guaranteeBrand: p.guarantee?.brand ?? null,
-      guaranteeLast4: p.guarantee?.last4 ?? null,
-      // Recognition reaches staff through the notes the front desk already reads, rather than through
-      // a new field every screen would have to learn. It is prepended so it is visible before the
-      // agent scrolls, and it is absent entirely when the guest opted out — a receptionist cannot
-      // honour a preference they were never shown.
-      notes: [
-        recognition.staffSummary,
-        p.guestNote?.trim() ? `Guest note: ${p.guestNote.trim().slice(0, 500)}` : null,
-      ]
-        .filter(Boolean)
-        .join("\n") || null,
-      lines: {
-        create: [{
-          roomTypeId: rt.id, ratePlanId: rp.id, quantity: 1, checkIn, checkOut,
-          priceMinor: totalMinor, guestsCount: p.guests,
-          // The per-night snapshot, written with the line so a stay can never exist without the
-          // rates it was sold at.
-          nightRates: {
-            create: quotedNights.map((n) => ({
-              tenantId: property.tenantId,
-              date: new Date(`${n.date}T00:00:00Z`),
-              occupancy: n.occupancy,
-              rateMinor: n.rateMinor,
-              source: "booking",
-            })),
-          },
-        }],
-      },
-    },
-  });
-
-  /*
-   * The chosen extras become `StayExtra` rows — the SAME record the PMS already accrues onto the
-   * folio each night audit. Nothing new posts them, and nothing new has to be taught about them:
-   * a guest ticking "Breakfast" at 11pm produces the row a front-desk agent would have typed.
-   *
-   * The name and price are COPIED, not referenced. A hotel that re-prices breakfast next month must
-   * not silently re-price a stay somebody already booked at the old number — that is the all-in
-   * promise again, held past the moment of sale.
-   */
-  if (chosenExtras.length > 0) {
-    await db.stayExtra.createMany({
-      data: chosenExtras.map((e) => ({
-        tenantId: property.tenantId,
-        propertyId: property.id,
-        reservationId: reservation.id,
-        name: e.name,
-        priceMinor: e.priceMinor,
-        basis: e.basis,
-        active: true,
-      })),
     });
-  }
 
-  // The hold becomes the reservation. Marked converted rather than released, so the inventory it was
-  // protecting is handed straight to the booking with no window in between.
-  //
-  // `claimedHoldId` rather than `p.holdId`: it is the guest's own hold when they had a live one, and
-  // otherwise the one claimed a few lines above. Either way there is always exactly one, so a
-  // reservation can never exist without the claim that reserved the room for it.
-  await db.hold.updateMany({
-    where: { id: claimedHoldId, propertyId: property.id, status: "active" },
-    data: { status: "converted", reservationId: reservation.id },
+    /*
+     * The chosen extras become `StayExtra` rows — the SAME record the PMS already accrues onto the
+     * folio each night audit. Nothing new posts them, and nothing new has to be taught about them:
+     * a guest ticking "Breakfast" at 11pm produces the row a front-desk agent would have typed.
+     *
+     * The name and price are COPIED, not referenced. A hotel that re-prices breakfast next month must
+     * not silently re-price a stay somebody already booked at the old number — that is the all-in
+     * promise again, held past the moment of sale.
+     */
+    if (chosenExtras.length > 0) {
+      await tx.stayExtra.createMany({
+        data: chosenExtras.map((e) => ({
+          tenantId: property.tenantId,
+          propertyId: property.id,
+          reservationId: reservation.id,
+          name: e.name,
+          priceMinor: e.priceMinor,
+          basis: e.basis,
+          active: true,
+        })),
+      });
+    }
+
+    // The hold becomes the reservation. Marked converted rather than released, so the inventory it was
+    // protecting is handed straight to the booking with no window in between.
+    //
+    // `claimedHoldId` rather than `p.holdId`: it is the guest's own hold when they had a live one, and
+    // otherwise the one claimed a few lines above. Either way there is always exactly one, so a
+    // reservation can never exist without the claim that reserved the room for it.
+    const converted = await tx.hold.updateMany({
+      where: { id: claimedHoldId, propertyId: property.id, status: "active" },
+      data: { status: "converted", reservationId: reservation.id },
+    });
+    if (converted.count !== 1) throw new HoldAlreadyTaken();
+
+    return {
+      id: reservation.id,
+      status: reservation.status,
+      guestName: reservation.guestName,
+      isReturning: recognition.isReturning,
+      priorStayCount: recognition.priorStayCount,
+    };
+  }).catch((err: unknown) => {
+    if (err instanceof HoldAlreadyTaken) return null;
+    throw err;
   });
+
+  /*
+   * The honest refusal. The guest lost a race they never knew they were in, so the message has to
+   * say what happened and what is true — nothing was booked and nothing was charged — rather than
+   * "something went wrong", which reads as our fault and invites a retry into the same wall.
+   */
+  if (!written) {
+    return { error: "Sorry — that room was booked moments ago. Nothing has been charged. Please search again." };
+  }
 
   await db.auditEntry.create({
     data: {
       tenantId: property.tenantId, propertyId: property.id,
-      entity: `Reservation #${reservation.id.slice(-6)} · ${reservation.guestName}`,
+      entity: `Reservation #${written.id.slice(-6)} · ${written.guestName}`,
       field: "booking_engine", newValue: `${rt.name} · ${nights.length}n · €${(charged.totalMinor / 100).toFixed(2)} all-in`,
       source: "api",
     },
@@ -686,8 +751,8 @@ export async function publicCreateReservation(
   } catch { /* channel push must never fail the booking */ }
 
   return {
-    reservationId: reservation.id,
-    status: reservation.status,
+    reservationId: written.id,
+    status: written.status,
     roomTypeName: rt.name,
     accommodationMinor,
     totalMinor: charged.totalMinor,
@@ -702,8 +767,8 @@ export async function publicCreateReservation(
      * Only the booleans and counts cross this boundary — no name, no history, nothing the guest did
      * not just supply themselves.
      */
-    returningGuest: recognition.isReturning,
-    priorStayCount: recognition.isReturning ? recognition.priorStayCount : 0,
+    returningGuest: written.isReturning,
+    priorStayCount: written.isReturning ? written.priorStayCount : 0,
   };
 }
 

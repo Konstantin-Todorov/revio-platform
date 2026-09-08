@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "engine-race": "tsx scripts/engine-race.ts"
+    "engine-race": "tsx scripts/engine-race.ts",
+    "confirm-race": "tsx scripts/confirm-race.ts"
   },
   "dependencies": {
     "@revio/connectivity": "workspace:*",

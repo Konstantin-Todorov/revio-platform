@@ -26,11 +26,27 @@ booked*, not *what is paid*, and a tab left open overnight books today's price.
 holding the last room would otherwise be told there is no availability — at the exact moment they
 press Confirm. This is the single least obvious thing in the package.
 
-**A room is claimed, never checked-then-taken.** `remainingFor(...) < 1` produces the honest message;
-`claimHold()` from `@revio/db` is what actually protects the room. Both `publicCreateHold` and
-`publicCreateReservation` go through it — the latter takes a claim of its own when the caller has no
-live hold, so a reservation can never exist without one. `pnpm --filter @revio/booking engine-race`
-races the real path and asserts it never oversells.
+**A room is claimed, never checked-then-taken — at BOTH ends.** `remainingFor(...) < 1` produces the
+honest message; `claimHold()` from `@revio/db` is what actually protects the room while a guest is
+deciding. Both `publicCreateHold` and `publicCreateReservation` go through it — the latter takes a
+claim of its own when the caller has no live hold, so a reservation can never exist without one.
+`pnpm --filter @revio/booking engine-race` races that end and asserts it never oversells.
+
+⚠️ **The confirm end needed its own claim, and for weeks did not have one (R1).** A guest who arrives
+holding a room skips `claimHold` entirely — correctly, they already own the inventory — so nothing
+atomic stood between reading the hold and writing the reservation. Every concurrent confirm read the
+hold as active, wrote its own reservation, and the conversion's affected count was discarded. Raced
+on a real database, **twelve confirms of one hold produced twelve reservations for one room.**
+
+So **the conversion is the claim**: guest, reservation, extras and the hold's conversion run inside
+one `withTenantTransaction`, and `count !== 1` on that `UPDATE … WHERE status = 'active'` throws, so
+the losing reservation rolls back instead of surviving as a second booking.
+`pnpm --filter @revio/booking confirm-race` races this end.
+
+**Do not "fix" it with an intermediate hold status.** Flipping the hold to `claiming` before writing
+the reservation looks like the obvious atomic claim and it *releases the room*: both places that
+count a hold against inventory — `loadStayContext` and `claimHold`'s SQL — require
+`status = 'active'`. The hold has to stay active right up to the instant it becomes a reservation.
 
 **Hold exhaustion is the real threat, not scraping.** A hold takes a room off sale for its TTL, so an
 unthrottled create-hold endpoint is a denial-of-*revenue* attack that looks exactly like a sold-out

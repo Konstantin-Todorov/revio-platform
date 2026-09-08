@@ -41,7 +41,9 @@ header; read it before changing this.
 Two verification scripts, and **both matter**: `pnpm --filter @revio/db claim-verify` races the
 primitive (and first asserts the *old* shape still oversells, so a pass means something), and
 `pnpm --filter @revio/booking engine-race` races the real booking-engine path — an atomic claim
-called with the wrong sellable base oversells just as happily as no claim at all.
+called with the wrong sellable base oversells just as happily as no claim at all. **A third now:**
+`pnpm --filter @revio/booking confirm-race` races the confirm end, because a guest who already holds
+a room never reaches `claimHold` — there the claim is the hold's *conversion*, and it was missing.
 
 ## Two things that must never end up in a column
 
