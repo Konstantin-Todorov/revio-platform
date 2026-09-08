@@ -1,8 +1,14 @@
 # Revio — where the project actually is
 
-**Verified against production on 2026-09-07**, at commit `37effde`. Every line below was checked
-against the database, the deployments or the code on that date. Nothing here is copied forward from
-another document.
+**Updated 2026-09-08**, at commit `c024455` — which CI passed and `promote.yml` fast-forwarded onto
+`production`, *checked with `git ls-remote --heads origin production`*. Every line below names how it
+was checked. Nothing here is copied forward from another document.
+
+⚠️ **What was re-checked on 2026-09-08 and what was not.** Re-checked: the deployed commit, the nine
+scheduled jobs (`/api/health/jobs`), the booking engine responding, the full test and lint gate, and
+the three database race harnesses. **Not re-queried today:** the commercial figures under *The honest
+commercial position* — those are as at 2026-09-07 and are labelled there. Saying which is which is
+the whole point of this file.
 
 ---
 
@@ -57,16 +63,29 @@ Three that show the shape of it:
 `production` branch at the **same commit**; the marketing site is on `production` of its own repo;
 Postgres is an image.
 
-**1,797 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
+**1,840 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
 change — typecheck, lint, and ten ratchets that each exist because something specific went wrong
 once: copy · authz · silent · money · health · a11y · scroll-lock · jobs · zoom · tokens. CI additionally applies every migration into an empty database and runs the seed.
+
+⚠️ **Three checks are deliberately NOT in that number, because they need a live database**, and each
+is the only real proof of something the platform promises. Run them by hand against a scratch or
+demo database before a release:
+
+```
+pnpm --filter @revio/db claim-verify        # the claim primitive is atomic
+pnpm --filter @revio/booking engine-race    # the booking path never oversells a hold
+pnpm --filter @revio/booking confirm-race   # one hold becomes exactly one reservation
+```
+
+The last of those is new on 2026-09-08 and found the worst defect of the week — see *Known issues*.
 
 **Channex is certified and connected** — certified 2026-08-24, key in place 08-26. *Checked by query:*
 two channels in `channex_prod` mode, both `connected`. That is the real OTA connection, not the mock.
 
-**All eight scheduled jobs run.** *Checked at `/api/health/jobs`:* `hold-expiry` · `pickup-snapshot` ·
-`channex-pull` · `arrivals-digest` · `auto-assign` · `auto-close-day` · `waitlist-sweep` ·
-`trial-sweep`. The last of those was fixed today — see *Why this file exists*.
+**All NINE scheduled jobs run.** *Checked at `/api/health/jobs` on 2026-09-08, every one `ok` and
+under a minute old:* `hold-expiry` · `pickup-snapshot` · `channex-pull` · `arrivals-digest` ·
+`auto-assign` · `auto-close-day` · `waitlist-sweep` · `trial-sweep` · **`support-inbox`**. The last
+is new and is the proof the support mailbox credentials are in place — it was inert until they were.
 
 ---
 
@@ -85,7 +104,9 @@ This is the part most likely to be misread from the engineering documents, so it
 | Invoices ever issued to a real client | **0** |
 | Monthly recurring revenue | **€0** |
 
-*Checked by query against production.* There are **three** demo tenants — Hotel Sofia Group, Black Sea
+*Checked by query against production on 2026-09-07; not re-queried on 09-08, and nothing has
+happened since that would move them — there is still no real client using the platform.* There are
+**three** demo tenants — Hotel Sofia Group, Black Sea
 Resort and Belmar Boutique Hotel — and all five invoices in the system belong to them (three paid, two
 draft). They are real invoices against real pricing, which is how the billing flow stays tested, but
 they are not income.
@@ -102,7 +123,31 @@ constraint is a hotel that uses it, not a feature.
 ## What is being worked on
 
 ### In progress
-Nothing is half-built. No feature is sitting broken or partly wired.
+Nothing of ours is half-built. **Codex has two items uncommitted in the shared tree** (claimed in
+`docs/WORK-LOG.md`, both currently green under `pnpm verify`): the city-tax VAT base in
+`apps/pms/lib/invoice.ts`, and the operator sidebar's seven-group navigation in
+`apps/operator/components/shell/Sidebar.tsx`. They are local only; nothing is deployed. Stage by path
+if you commit anything nearby.
+
+### Shipped 2026-09-08 — an external review, and all four release blockers closed
+
+An outside reviewer (Codex) read the codebase and filed five findings. **All five were confirmed by
+reading the code; all five are now fixed and deployed.** The register of verdicts, effort and division
+of work is `docs/REVIEW-RESPONSE-2026-09-08.md`.
+
+| | What was wrong | Now |
+| --- | --- | --- |
+| **R1** | **One hold could become many reservations.** A guest who reaches Confirm already holding a room skips `claimHold` — correctly, they own the room — so nothing atomic stood between reading the hold and writing the reservation, and the conversion's affected count was thrown away | The conversion **is** the claim: reservation and conversion in one transaction, count checked, loser rolled back. Raced on a real database: **twelve concurrent confirms of one hold produced twelve reservations before the fix, one after** |
+| **R2** | Starting a 2FA setup turned off the factor you already had, so a half-finished enrolment left an account less protected than before it began | The pending secret is held separately; the live factor is untouched until the new one is proven |
+| **R3** | Close Day could close a different day than the one the operator was looking at | The caller states the date it meant; a stale intent is refused in words |
+| **R4** | A failure part-way through Close Day could strand a night — date moved, charges not posted | One transaction; a failure leaves a recoverable state |
+| **R5** | A one-time code could be replayed inside its own step | The step that actually matched is the one consumed, atomically |
+
+Also shipped that day: the **client page as three tabs** (Overview · Products & setup · Billing, with
+what needs attention pinned above them), the **support queue as scannable rows** rather than a stack
+of full conversations — *"it's hard to know when there are many hotels asking"* — and two documents
+that are assessments rather than code: `docs/COMPETITIVE-GAPS-2026-09.md` and
+`docs/PLAN-2026-09-09.md` (Stripe model, integration centre, Bulgarian VAT with sources).
 
 ### Shipped since this file was last written (13 commits, 2026-09-07)
 
@@ -132,8 +177,11 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 | | Why | Effort |
 | --- | --- | --- |
 | **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
-| **In-app AI assistant** | The biggest differentiator and the least urgent. Waiting for a real support queue to learn from | Large |
-| **Card payments (Stripe live)** | Deliberately deferred — hotels pay by bank transfer, and there is nothing to collect yet | Medium |
+| **Stripe for OUR billing first** | Founder's call on 2026-09-08: before hotels paste their own keys, *we* need to be able to collect. Today `/billing` issues real invoices and moves no money — a hotel that says yes has no way to pay us but a bank transfer somebody has to chase. TEST keys only until the founder switches it | Medium |
+| **A VAT-registered toggle** | We are not registered today and will be. The invoice issuer's VAT number is already what decides the rate, so this is a switch and a label, not a rewrite — and it has to exist *before* the first invoice, not after | Small |
+| **Client analytics** | Every number on the client page is today's value. A twelve-month sparkline, one health score with its parts visible, and MRR movement — the three things every mature console leads with, and all four inputs already exist | Medium |
+| **Hotel's own Stripe keys** | The model is settled (their account, not Connect — we never touch the money) and designed in `docs/PLAN-2026-09-09.md` §1. It follows ours rather than leading it | Medium |
+| **In-app AI assistant** | The biggest differentiator and the least urgent. Founder's framing: future context, not a task. Waiting for a real support queue to learn from | Large |
 
 ### Known gaps against competitors
 
@@ -157,23 +205,40 @@ answer is ready when they say which gap they hit.
 
 ## Things that need a person, not code
 
+**Done since this table was last written**, so they are off it: the resolved faults and 39 stale
+warnings are cleared, the 3 stuck stays are repaired, and the support mailbox password is set — the
+inbound-email job now reads `support@reviosoft.app`.
+
 | | Who | Why it matters |
 | --- | --- | --- |
-| **Confirm the VAT treatment with an accountant** | Founder | Three readings are implemented and reversible now, expensive later. `docs/ACTION-REQUIRED.md` §2 |
+| **Are we VAT-registered, and against what turnover?** | Founder | Answered in part on 2026-09-08: *not registered now, probably soon*, and you want a toggle. But `OperatorCompany.vatId` is currently **set to `BG205090014`**, which is what makes our invoices carry 20%. Either that number is right and we are registered, or it should come off. It cannot be both, and it decides what every invoice says. Research and sources: `docs/PLAN-2026-09-09.md` §3 |
+| **Sandbox or live for our own Stripe** | Founder | Decides whether the first build can take a real payment or only rehearse one. I will build against TEST keys either way; going live is your action, not mine |
 | **Decide what to do about *Ventsi Group*** | Founder | A real account, currently suspended |
-| **Clear the resolved faults** | Founder | 4 faults and 39 warnings, all from causes fixed days ago — verified against production, and the script is bounded so it cannot clear anything new. `psql "$DATABASE_PUBLIC_URL" -f packages/db/scripts/clear-resolved-faults.sql` |
-| **Run the stuck-stay repair** | Founder | **3** demo reservations (all Hotel Sofia Group) with a departure recorded a month late. Script written and dry-run checked; production writes are blocked for the agent |
-| **Set the support mailbox password** | Founder | `support-inbox` is built, deployed and doing nothing until `SUPPORT_IMAP_*` exists on the operator service. The password is yours to paste — see DEPLOY.md |
-| **Clear old warnings in the operator console** | Founder | 4 faults and 39 warnings, all from resolved problems. They make the console show attention that is not needed |
+| **Euro changeover and fiscalization** | Founder | Both are dated obligations rather than features. `TaxInvoice.fiscalRef` is the seam; `docs/specs/BG-FISCALIZATION-RESEARCH.md` |
 
 ---
 
 ## Known issues
 
-**None open that affect a user.** The one found by the founder on 2026-09-07 — a hotel could not
-reply to our reply on a support ticket — was built and shipped on 2026-09-08 along with the three
-presentation problems reported with it; see `docs/SUPPORT-ROUND2.md`. Item 5 of that review, more
-help content, is deliberately still open and waiting on the queue to say what is missing.
+**None open.** But four were open for a day, and how they were found is the point of this section.
+
+⚠️ **The worst defect of the project so far was live for weeks and no test saw it.** R1 above: on
+RevioDirect, two guests confirming the same hold both got the room. It was found by an outside review
+reading the code — not by 1,800 tests, not by ten ratchet lints, not by `engine-race`, which races
+hold *creation* and was green throughout. When it was finally raced properly it was not a rare
+interleaving: **every one of twelve concurrent confirms won.**
+
+Two things follow, and both are now written into `AGENTS.md` and `packages/booking/CLAUDE.md`:
+
+1. **A guard proves only what it looks at.** `engine-race` proved the first half of a two-halved
+   promise and its green tick was read as covering both.
+2. **Concurrency defects do not show up in unit tests.** The three database race harnesses listed
+   near the top of this file are the only instruments that can see them, and none of them runs in CI.
+
+The founder-reported issue from 2026-09-07 — a hotel could not reply to our reply on a support ticket
+— shipped on 2026-09-08 with the three presentation problems reported alongside it; see
+`docs/SUPPORT-ROUND2.md`. Item 5 of that review, more help content, is deliberately still open and
+waiting on the queue to say what is missing.
 
 The three faults recorded this week were all the same thing — a
 browser tab left open across a deploy — and the cause was fixed on 2026-09-07: the app now detects it
