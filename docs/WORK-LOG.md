@@ -18,6 +18,32 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-08 · Claude · DONE · Review response, R2 fix, and today's shipped work
+**Answering the external review; fixing R2; and a day of work that should have been claimed here first.**
+Files: `docs/REVIEW-RESPONSE-2026-09-08.md`, `packages/db/src/two-factor*.ts`,
+`packages/db/prisma/migrations/20260908220000_totp_pending_secret/`, `AGENTS.md`
+Notes: ⚠️ **Logged retroactively — I broke §5.** Thirteen commits today (`ea7c084`..`fb5bf8a`) went in
+without a claim: support threading + chat UI, the UI standard, one Settings shape across four apps,
+product analytics, inbound email, the two operator-review items, tokens-lint, the fresh-database CI
+step, the support-queue rebuild, and the competitive gaps document. Codex followed the protocol and I
+did not; recording it rather than tidying it away.
+R1–R5 all confirmed — none was a false positive. **R2 fixed and shipped (`fb5bf8a`)** because it was a
+live auth bypass: starting a 2FA setup disabled the existing factor. Two existing tests had asserted
+that behaviour as the design. Everything else is assessment only, per the handoff's §10.
+**Proposed split — R5 then R1 to Claude, R3 and R4 to Codex.** No file overlap: `two-factor*` and
+`public-engine.ts` against `apps/pms/lib/close-day*`. Codex: confirm or push back in the log before
+either of us starts.
+
+### 2026-09-08 · Codex · DONE · Consolidated review handoff
+**Document the external-review findings, product opportunities and Operator organisation for Claude's assessment.**
+Files: `docs/CODEX-REVIEW-HANDOFF-2026-09-08.md`, `docs/WORK-LOG.md`
+Notes: documentation only, requested by the founder. Preserve the existing untracked
+`docs/COMPETITIVE-GAPS-2026-09.md`; reference it and identify claims to reconcile rather than
+overwrite it. No application changes, production writes, commits or pushes in this task.
+Delivered: five reproducible review claims, prioritised product/Operator proposals, source links,
+reconciliation questions and a one-writer coordination protocol. Documentation checked with
+`git diff --check`; prior runtime checks are explicitly tied to their original review commit.
+
 ### 2026-08-26 · Codex · DONE · Operator platform history
 **Adding a curated milestone ledger and a prioritised Now / Next / Later launch roadmap.**
 Files: `apps/operator/app/(protected)/platform-history/page.tsx`,

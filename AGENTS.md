@@ -98,6 +98,13 @@ other is where the real conflicts come from.
 **Stay out of a file another agent has claimed** unless the log says they are done. If you must
 touch it, say so in the log entry.
 
+**If you leave work uncommitted, say so in the log.** The other agent cannot see your session and
+cannot tell a file you are still writing from one you abandoned — and a single `git add -A` will
+sweep it into a commit about something else entirely. This nearly happened on 2026-09-08: Codex's
+review handoff sat untracked for hours while Claude committed thirteen times beside it. Nothing was
+lost, but only because the commits were staged path by path. So: **stage your own paths, never
+`git add -A`, whenever the log shows another agent has work in flight.**
+
 **Do not silently reverse a decision.** The comments in this codebase state *why* something is the
 way it is, at length and on purpose. If a comment explains a choice and you think it is wrong, say
 so in the commit message and in the log — do not just change it. Several of those comments are
