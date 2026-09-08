@@ -105,11 +105,52 @@ export function totp(
 }
 
 /**
- * Is this the code for now, or near enough?
+ * WHICH step this code belongs to, or null.
+ *
+ * The step matters and a boolean loses it. The accepted window spans three steps, so a code minted
+ * for step T is still valid at server step T+1 — and a caller that records "the step it is now"
+ * rather than "the step this code was for" believes a second submission is a different code. That
+ * was R5: one code accepted at 29 seconds and again at 31.
  *
  * Compared with `timingSafeEqual`, so the answer takes the same time whether the first digit is
  * wrong or only the last. A six-digit code is a small space — a million values — and a comparison
  * that returns early on the first mismatch leaks how much of a guess was right.
+ *
+ * ⚠️ It records the match and keeps going rather than returning on it, for the same reason: every
+ * step is checked every time, so the duration cannot reveal WHICH step matched, which would narrow
+ * a phished code's age.
+ */
+export function matchTotpStep(
+  secretBase32: string,
+  code: string,
+  atMs: number,
+  opts: { window?: number; digits?: number; period?: number; algorithm?: TotpAlgorithm } = {},
+): number | null {
+  const digits = opts.digits ?? TOTP_DIGITS;
+  const candidate = code.replace(/\s/g, "");
+  if (!new RegExp(`^\\d{${digits}}$`).test(candidate)) return null;
+
+  const window = opts.window ?? TOTP_WINDOW_STEPS;
+  const period = opts.period ?? TOTP_PERIOD_SECONDS;
+  const secret = base32Decode(secretBase32);
+  const counter = Math.floor(atMs / 1000 / period);
+
+  let matched: number | null = null;
+  for (let drift = -window; drift <= window; drift++) {
+    const step = counter + drift;
+    const expected = hotp(secret, step, digits, opts.algorithm ?? "sha1");
+    const a = Buffer.from(expected);
+    const b = Buffer.from(candidate);
+    if (a.length === b.length && timingSafeEqual(a, b)) matched = step;
+  }
+  return matched;
+}
+
+/**
+ * Is this the code for now, or near enough?
+ *
+ * One line over `matchTotpStep`, so there is a single implementation of the comparison and its
+ * constant-time property cannot drift between two copies.
  */
 export function verifyTotp(
   secretBase32: string,
@@ -117,25 +158,7 @@ export function verifyTotp(
   atMs: number,
   opts: { window?: number; digits?: number; period?: number; algorithm?: TotpAlgorithm } = {},
 ): boolean {
-  const digits = opts.digits ?? TOTP_DIGITS;
-  const candidate = code.replace(/\s/g, "");
-  if (!new RegExp(`^\\d{${digits}}$`).test(candidate)) return false;
-
-  const window = opts.window ?? TOTP_WINDOW_STEPS;
-  const period = opts.period ?? TOTP_PERIOD_SECONDS;
-  const secret = base32Decode(secretBase32);
-  const counter = Math.floor(atMs / 1000 / period);
-
-  let ok = false;
-  for (let drift = -window; drift <= window; drift++) {
-    const expected = hotp(secret, counter + drift, digits, opts.algorithm ?? "sha1");
-    // Every step is checked even after a match, so the time taken does not reveal WHICH step
-    // matched — that would narrow a phished code's age.
-    const a = Buffer.from(expected);
-    const b = Buffer.from(candidate);
-    if (a.length === b.length && timingSafeEqual(a, b)) ok = true;
-  }
-  return ok;
+  return matchTotpStep(secretBase32, code, atMs, opts) !== null;
 }
 
 /**

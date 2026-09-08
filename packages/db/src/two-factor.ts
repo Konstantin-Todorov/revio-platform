@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import {
   generateTotpSecret,
   generateRecoveryCodes,
+  matchTotpStep,
   normaliseRecoveryCode,
   totpUri,
   verifyTotp,
@@ -51,9 +52,19 @@ export interface TwoFactorStore {
     totpLastStep: number | null;
   } | null>;
   write(id: string, data: { totpSecret?: string | null; totpPendingSecret?: string | null; totpEnabledAt?: Date | null; totpLastStep?: number | null }): Promise<void>;
+  /**
+   * Take this TOTP step, atomically. False when somebody already took it.
+   *
+   * A read of `totpLastStep` followed by a write is two statements, and two requests carrying the
+   * same code inside one step both read the old value and both write — so both are let in. The
+   * decision has to be the write: one conditional statement the database serialises, whose affected
+   * count IS the answer.
+   */
+  consumeStep(id: string, step: number): Promise<boolean>;
   listRecoveryCodes(id: string): Promise<{ id: string; codeHash: string; usedAt: Date | null }[]>;
   replaceRecoveryCodes(id: string, hashes: string[]): Promise<void>;
-  markRecoveryCodeUsed(codeId: string, at: Date): Promise<void>;
+  /** Same shape, same reason: false when it had already been used. */
+  markRecoveryCodeUsed(codeId: string, at: Date): Promise<boolean>;
   countUnusedRecoveryCodes(id: string): Promise<number>;
 }
 
@@ -170,16 +181,26 @@ export async function verifySecond(
   const secret = decryptSecret(account.totpSecret);
 
   if (/^\d{6}$/.test(entered.replace(/\s/g, ""))) {
-    if (!verifyTotp(secret, entered, now)) {
+    /*
+     * The step the CODE is for, not the step it is now.
+     *
+     * R5: the window spans three steps, so a code minted for step T is still valid at server step
+     * T+1. Recording `stepFor(now)` meant the same code submitted at 29 seconds and again at 31
+     * looked like two different codes — accepted twice, which is exactly what "one-time" is supposed
+     * to prevent. Reproduced before this changed.
+     */
+    const step = matchTotpStep(secret, entered, now);
+    if (step === null) {
       return { ok: false, error: "That code didn't match. Try the current one from your app." };
     }
-    const step = stepFor(now);
-    // The accepted window spans three steps, so compare against the last step ACCEPTED rather than
-    // only the current one — otherwise the previous step's code can be reused a second time.
     if (account.totpLastStep != null && step <= account.totpLastStep) {
       return { ok: false, error: "That code has already been used. Wait for the next one." };
     }
-    await store.write(id, { totpLastStep: step });
+    // The check above is a courtesy that produces a good message; THIS is the decision. Two
+    // requests in the same step both pass the check and only one wins here.
+    if (!(await store.consumeStep(id, step))) {
+      return { ok: false, error: "That code has already been used. Wait for the next one." };
+    }
     return { ok: true, usedRecoveryCode: false };
   }
 
@@ -197,7 +218,11 @@ export async function verifySecond(
   if (!matched) return { ok: false, error: "That code didn't match. Try the current one from your app." };
   if (matched.usedAt) return { ok: false, error: "That recovery code has already been used." };
 
-  await store.markRecoveryCodeUsed(matched.id, new Date(now));
+  // Conditional for the same reason as `consumeStep`: `matched.usedAt` was read a moment ago, and
+  // two requests carrying the same recovery code would both find it unused. The write decides.
+  if (!(await store.markRecoveryCodeUsed(matched.id, new Date(now)))) {
+    return { ok: false, error: "That recovery code has already been used." };
+  }
   const remaining = await store.countUnusedRecoveryCodes(id);
   return { ok: true, usedRecoveryCode: true, recoveryCodesRemaining: remaining };
 }

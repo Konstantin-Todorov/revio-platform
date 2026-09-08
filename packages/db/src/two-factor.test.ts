@@ -23,6 +23,9 @@ interface Row {
   totpLastStep: number | null;
 }
 
+/** A real turn of the event loop, so two in-flight calls genuinely overlap. */
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
 function fakeStore(): TwoFactorStore & { row: Row; codes: { id: string; codeHash: string; usedAt: Date | null }[] } {
   const state = {
     row: { email: "maria@hotel.test", totpSecret: null, totpPendingSecret: null, totpEnabledAt: null, totpLastStep: null } as Row,
@@ -32,15 +35,38 @@ function fakeStore(): TwoFactorStore & { row: Row; codes: { id: string; codeHash
     ...state,
     get row() { return state.row; },
     get codes() { return state.codes; },
-    async read() { return state.row; },
-    async write(_id, data) { Object.assign(state.row, data); },
-    async listRecoveryCodes() { return state.codes; },
+    /*
+     * `read` and `write` YIELD before they act, and `consumeStep` below does not.
+     *
+     * That asymmetry is the whole point of the fake. In the real stores a read and a write are two
+     * round trips a second request can interleave with, while `consumeStep` is ONE conditional
+     * statement the database serialises. A fake whose write lands synchronously cannot interleave at
+     * all, so a race test against it passes whatever the code does — which is worth less than no
+     * test, because it looks like proof.
+     */
+    async read() { await tick(); return state.row; },
+    async write(_id, data) { await tick(); Object.assign(state.row, data); },
+    async listRecoveryCodes() { await tick(); return state.codes; },
     async replaceRecoveryCodes(_id, hashes) {
       state.codes = hashes.map((codeHash, i) => ({ id: `c${i}`, codeHash, usedAt: null }));
     },
+    // The real stores make this conditional; the fake has to be too, or a test that a second use
+    // loses would pass against a stub that always says yes.
     async markRecoveryCodeUsed(codeId, at) {
+      await tick();
+      // Also atomic once it runs, mirroring `updateMany({ where: { usedAt: null } })`.
       const c = state.codes.find((x) => x.id === codeId);
-      if (c) c.usedAt = at;
+      if (!c || c.usedAt) return false;
+      c.usedAt = at;
+      return true;
+    },
+    async consumeStep(_id, step) {
+      await tick();
+      // Deliberately no await between the read and the write: one atomic statement, as the SQL is.
+      const last = state.row.totpLastStep;
+      if (last != null && step <= last) return false;
+      state.row.totpLastStep = step;
+      return true;
     },
     async countUnusedRecoveryCodes() { return state.codes.filter((c) => !c.usedAt).length; },
   };
@@ -59,6 +85,14 @@ async function enrol(at = AT): Promise<string> {
   const ok = await confirmEnrolment(store, "u1", codeAt(offer.secret, at), at);
   expect(ok.ok).toBe(true);
   return offer.secret;
+}
+
+/** Enrol and hand back the recovery codes, for the tests that spend one. */
+async function enrolWithCodes(at = AT): Promise<string[]> {
+  const offer = await beginEnrolment(store, "u1", "Revio");
+  const ok = await confirmEnrolment(store, "u1", codeAt(offer.secret, at), at);
+  expect(ok.ok).toBe(true);
+  return ok.recoveryCodes!;
 }
 
 describe("enrolment", () => {
@@ -195,6 +229,62 @@ describe("verifying a TOTP code", () => {
     const second = await verifySecond(store, "u1", code, later);
     expect(second.ok).toBe(false);
     expect(second.ok === false && second.error).toMatch(/already been used/i);
+  });
+
+  /**
+   * R5, found by an external review on 2026-09-08 and reproduced before this changed.
+   *
+   * The accepted window spans three steps, so a code minted for step T is still valid at server
+   * step T+1. `verifySecond` recorded `stepFor(now)` — the step it is NOW — so the same code
+   * submitted at 29 seconds and again at 31 looked like two different codes. It returned
+   * `{ first: true, second: true }`.
+   */
+  it("REFUSES THE SAME CODE across a step boundary — R5", async () => {
+    const secret = await enrol();
+    // Land exactly on a boundary: 29s into a step, then 31s — a different server step, same code.
+    const base = AT + 4 * TOTP_PERIOD_SECONDS * 1000;
+    const stepStart = Math.floor(base / 1000 / TOTP_PERIOD_SECONDS) * TOTP_PERIOD_SECONDS * 1000;
+    const before = stepStart + (TOTP_PERIOD_SECONDS - 1) * 1000;
+    const after = stepStart + (TOTP_PERIOD_SECONDS + 1) * 1000;
+    const code = codeAt(secret, before);
+
+    expect(await verifySecond(store, "u1", code, before)).toMatchObject({ ok: true });
+    const second = await verifySecond(store, "u1", code, after);
+    expect(second.ok).toBe(false);
+    expect(second.ok === false && second.error).toMatch(/already been used/i);
+  });
+
+  it("records the step the CODE was for, not the step it is now", async () => {
+    const secret = await enrol();
+    const base = AT + 6 * TOTP_PERIOD_SECONDS * 1000;
+    const stepStart = Math.floor(base / 1000 / TOTP_PERIOD_SECONDS) * TOTP_PERIOD_SECONDS * 1000;
+    const late = stepStart + (TOTP_PERIOD_SECONDS - 1) * 1000;
+    await verifySecond(store, "u1", codeAt(secret, late), late);
+    // The code was for THIS step, so that is what must be consumed.
+    expect(store.row.totpLastStep).toBe(Math.floor(stepStart / 1000 / TOTP_PERIOD_SECONDS));
+  });
+
+  it("admits exactly one of two submissions racing inside the same step — R5 sequence B", async () => {
+    const secret = await enrol();
+    const later = AT + 8 * TOTP_PERIOD_SECONDS * 1000;
+    const code = codeAt(secret, later);
+    // Both read the old `totpLastStep` before either writes — the shape a read-then-write loses to.
+    // `consumeStep` is the decision, so exactly one may win however they interleave.
+    const [a, b] = await Promise.all([
+      verifySecond(store, "u1", code, later),
+      verifySecond(store, "u1", code, later),
+    ]);
+    expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
+  });
+
+  it("admits exactly one of two submissions racing on the same recovery code", async () => {
+    const r = await enrolWithCodes();
+    const later = AT + 10 * TOTP_PERIOD_SECONDS * 1000;
+    const [a, b] = await Promise.all([
+      verifySecond(store, "u1", r[0]!, later),
+      verifySecond(store, "u1", r[0]!, later),
+    ]);
+    expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
   });
 
   it("refuses the PREVIOUS step's code after the current one was accepted", async () => {

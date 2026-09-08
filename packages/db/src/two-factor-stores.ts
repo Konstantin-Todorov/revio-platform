@@ -26,6 +26,18 @@ export function operatorTwoFactorStore(): TwoFactorStore {
     async write(id, data) {
       await db.operatorUser.update({ where: { id }, data });
     },
+    /*
+     * One statement, and its affected count is the answer. `lt` covers a later step overtaking an
+     * earlier one; `null` covers the first use. Two requests inside one step serialise here and
+     * exactly one of them sees count 1.
+     */
+    async consumeStep(id, step) {
+      const { count } = await db.operatorUser.updateMany({
+        where: { id, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] },
+        data: { totpLastStep: step },
+      });
+      return count === 1;
+    },
     async listRecoveryCodes(id) {
       return db.operatorRecoveryCode.findMany({
         where: { operatorUserId: id },
@@ -41,7 +53,9 @@ export function operatorTwoFactorStore(): TwoFactorStore {
       }
     },
     async markRecoveryCodeUsed(codeId, at) {
-      await db.operatorRecoveryCode.update({ where: { id: codeId }, data: { usedAt: at } });
+      // `usedAt: null` in the WHERE is what makes a second use lose rather than overwrite.
+      const { count } = await db.operatorRecoveryCode.updateMany({ where: { id: codeId, usedAt: null }, data: { usedAt: at } });
+      return count === 1;
     },
     async countUnusedRecoveryCodes(id) {
       return db.operatorRecoveryCode.count({ where: { operatorUserId: id, usedAt: null } });
@@ -73,6 +87,18 @@ export function userTwoFactorStore(): TwoFactorStore {
     async write(id, data) {
       await db.user.update({ where: { id }, data });
     },
+    /*
+     * One statement, and its affected count is the answer. `lt` covers a later step overtaking an
+     * earlier one; `null` covers the first use. Two requests inside one step serialise here and
+     * exactly one of them sees count 1.
+     */
+    async consumeStep(id, step) {
+      const { count } = await db.user.updateMany({
+        where: { id, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] },
+        data: { totpLastStep: step },
+      });
+      return count === 1;
+    },
     async listRecoveryCodes(id) {
       return db.userRecoveryCode.findMany({
         where: { userId: id },
@@ -88,7 +114,9 @@ export function userTwoFactorStore(): TwoFactorStore {
       }
     },
     async markRecoveryCodeUsed(codeId, at) {
-      await db.userRecoveryCode.update({ where: { id: codeId }, data: { usedAt: at } });
+      // `usedAt: null` in the WHERE is what makes a second use lose rather than overwrite.
+      const { count } = await db.userRecoveryCode.updateMany({ where: { id: codeId, usedAt: null }, data: { usedAt: at } });
+      return count === 1;
     },
     async countUnusedRecoveryCodes(id) {
       return db.userRecoveryCode.count({ where: { userId: id, usedAt: null } });
@@ -117,6 +145,18 @@ export function tenantUserTwoFactorStore(tenantId: string): TwoFactorStore {
       // something clearer than a database error.
       await db.user.updateMany({ where: { id, tenantId }, data });
     },
+    /*
+     * One statement, and its affected count is the answer. `lt` covers a later step overtaking an
+     * earlier one; `null` covers the first use. Two requests inside one step serialise here and
+     * exactly one of them sees count 1.
+     */
+    async consumeStep(id, step) {
+      const { count } = await db.user.updateMany({
+        where: { id, tenantId, OR: [{ totpLastStep: null }, { totpLastStep: { lt: step } }] },
+        data: { totpLastStep: step },
+      });
+      return count === 1;
+    },
     async listRecoveryCodes(id) {
       return db.userRecoveryCode.findMany({
         where: { userId: id },
@@ -132,7 +172,9 @@ export function tenantUserTwoFactorStore(tenantId: string): TwoFactorStore {
       }
     },
     async markRecoveryCodeUsed(codeId, at) {
-      await db.userRecoveryCode.update({ where: { id: codeId }, data: { usedAt: at } });
+      // `usedAt: null` in the WHERE is what makes a second use lose rather than overwrite.
+      const { count } = await db.userRecoveryCode.updateMany({ where: { id: codeId, usedAt: null }, data: { usedAt: at } });
+      return count === 1;
     },
     async countUnusedRecoveryCodes(id) {
       return db.userRecoveryCode.count({ where: { userId: id, usedAt: null } });

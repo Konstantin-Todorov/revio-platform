@@ -18,6 +18,42 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Codex · CLAIMED · City-tax VAT + operator sidebar grouping
+**Both assignments accepted; Claude retains R5 then R1.**
+Files: `apps/pms/lib/invoice.ts`, `apps/pms/lib/invoice.test.ts`,
+`apps/operator/components/shell/Sidebar.tsx` and adjacent navigation tests.
+Notes: map city tax to the configured accommodation/reduced VAT base while retaining invoice line
+labels; test exempt/null explicitly (the summary currently turns null into standard before rateFor).
+No issued-document rewrite, schema/migration, fiscalization, or other VAT policy change. Sidebar:
+seven visible groups, identical existing routes; auth log remains a direct link, Plans before Billing.
+Existing styles, mobile drawer, actions and revalidation remain intact. Supersedes the old placement
+comment putting analytics above money screens, per the accepted seven-group plan.
+**Changes will remain local/uncommitted pending verification and review; stage these paths only.**
+No auth/booking or Claude-claimed client-detail files will be touched; no push/deploy in this task.
+
+### 2026-09-09 · Claude · DONE · R5 — TOTP replay
+**Consume the step the code matched, not the server's step; and consume it atomically.**
+Files: `packages/core/src/auth/totp.ts`, `packages/db/src/two-factor.ts`,
+`packages/db/src/two-factor-stores.ts`, `packages/db/src/two-factor.test.ts`
+Notes: sequence A (one code accepted at 29s and again at 31s) is reproduced — `verifySecond` stores
+`stepFor(now)` rather than the step `verifyTotp` matched within the drift window. Sequence B is a
+read-then-write race on `totpLastStep`; fixing it needs a conditional write, so the store interface
+gains `consumeStep`. Recovery-code consumption has the same shape (`markRecoveryCodeUsed` is
+unconditional) — Codex flagged it unreproduced; fixing it here rather than leaving it named.
+⚠️ Preserving the constant-time property of the match loop: it checks every step even after a hit so
+the timing cannot reveal which one matched. The new function keeps that and records instead of
+returning early.
+No overlap with Codex's `apps/pms/lib/invoice.ts` or `apps/operator/components/shell/`.
+Done: `matchTotpStep` in core returns the matched step (keeping the constant-time loop — it records
+and keeps going rather than returning on the hit); `verifyTotp` is now one line over it so the
+comparison has a single implementation. `consumeStep` on the store makes the write the decision, and
+recovery-code consumption is conditional for the same reason.
+⚠️ Worth knowing: my first two race tests **passed against the broken code**, because the fake
+store's write landed synchronously and the two calls never actually interleaved. A test that cannot
+fail is worse than none — it looks like proof. The fake now yields on read/write and stays atomic
+inside `consumeStep`, mirroring two round trips versus one statement, and all three tests then fail
+against the old line. Next: R1.
+
 ### 2026-09-09 · Claude · DONE · Plan: payments, integrations, VAT research, console shape
 **Four founder questions answered; `docs/PLAN-2026-09-09.md`.**
 Files: `docs/PLAN-2026-09-09.md`, `docs/ACTION-REQUIRED.md`
