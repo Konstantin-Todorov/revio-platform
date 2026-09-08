@@ -44,7 +44,8 @@
     "./my-requests": "./src/my-requests.tsx",
     "./support-reply": "./src/support-reply.tsx",
     "./support-thread": "./src/support-thread.tsx",
-    "./settings-nav": "./src/settings-nav.tsx"
+    "./settings-nav": "./src/settings-nav.tsx",
+    "./usage-beacon": "./src/usage-beacon.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

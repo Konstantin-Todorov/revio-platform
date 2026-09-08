@@ -8,6 +8,8 @@ import { getSession, getSwitchableProperties } from "@/lib/session";
 import { getNotifications } from "@/lib/data";
 import { FieldGuard } from "@revio/ui/field-guard";
 import { FlashToast } from "@revio/ui/flash-toast";
+import { UsageBeacon } from "@revio/ui/usage-beacon";
+import { recordScreenView } from "@/lib/actions-usage";
 import { readFlash, FLASH_COOKIE } from "@revio/ui/flash";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -79,6 +81,8 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             {/* A server action that refused says so here. Without it a form that
                 legitimately declined came back looking untouched. */}
             <FlashToast flash={await readFlash()} cookieName={FLASH_COOKIE} />
+            {/* Which screen is open. Renders nothing; see UsageBeacon. */}
+            <UsageBeacon record={recordScreenView} />
               {children}
             </div>
           </main>

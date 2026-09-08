@@ -61,6 +61,11 @@ const EXEMPT = {
   // would let us ask a question the reporter is not allowed to answer. `recordHotelReply` scopes the
   // write to the caller's own tenant, so the case still cannot be another hotel's.
   "actions-support.ts:replyToSupport": "answering support is part of asking; scoped to the caller's own tenant",
+  // Bookkeeping about which screens exist, not about a hotel's data. Every signed-in person
+  // generates usage whatever their role — that is the point of measuring it, and a housekeeper's
+  // screens are the ones we know least about. Tenant and user come from the session, never from the
+  // caller, so the worst an abuser could do is inflate our own view counts.
+  "actions-usage.ts:recordScreenView": "measuring which screens are opened; reads nothing and writes only a counter keyed by the caller's own session",
   "actions-auth.ts:signOutEverywhere": "revoking your OWN sessions; a locked-out user must be able to do this",
   "actions-auth.ts:verifyTwoFactor": "step two of signing in — gated by the pending-2FA token, which is issued only by a correct password",
 

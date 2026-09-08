@@ -68,3 +68,4 @@ export * from "./help/search.js";
 export * from "./trials/trials.js";
 export * from "./invoicing/invoice-state.js";
 export * from "./metrics/fault-summary.js";
+export * from "./analytics/routes.js";

@@ -70,11 +70,13 @@ model Tenant {
 
   // Operator-only CRM. Named `crm*` so no call site can mistake our private record of a client for
   // the client's own data — RLS blocks it from a hotel connection either way.
-  crmAccount  ClientAccount?
-  crmContacts ClientContact[]
-  crmNotes    ClientNote[]
-  crmBilling  ClientBilling?
+  crmAccount    ClientAccount?
+  crmContacts   ClientContact[]
+  crmNotes      ClientNote[]
+  crmBilling    ClientBilling?
   productTrials ProductTrial[]
+  featureUsage  FeatureUsage[]
+  activeDays    ActiveUserDay[]
 }
 
 model User {
@@ -104,6 +106,7 @@ model User {
 
   tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   recoveryCodes UserRecoveryCode[]
+  activeDays    ActiveUserDay[]
 
   @@index([tenantId])
 }
@@ -576,65 +579,65 @@ model Property {
   // Guest-facing email branding (email engine): each hotel's mail looks like THEIRS, not like Revio's.
   // The sending domain stays ours (deliverability), but the name, reply-to, logo and accent are the
   // hotel's. Null = fall back to the property name / platform default.
-  emailSenderName           String?
-  emailReplyTo              String?
-  emailLogoUrl              String? // absolute URL, if the hotel pastes one instead of uploading
+  emailSenderName      String?
+  emailReplyTo         String?
+  emailLogoUrl         String? // absolute URL, if the hotel pastes one instead of uploading
   // An uploaded logo is served from our own domain by /api/brand/[propertyId]/logo. Email clients
   // block data: URIs and won't authenticate, so the logo must be a plain public HTTPS URL — which
   // means we host it. Bumped on every upload so the cached copy in a client is replaced.
-  emailLogoVersion          Int       @default(0)
-  emailBrandColor           String? // hex, e.g. "#0E7C86" — headings + button colour
-  emailFooterText           String? // address / legal line under the signature
+  emailLogoVersion     Int       @default(0)
+  emailBrandColor      String? // hex, e.g. "#0E7C86" — headings + button colour
+  emailFooterText      String? // address / legal line under the signature
   // Visual identity of the mail itself — so two hotels on Revio never send identical-looking email.
-  emailTheme                String    @default("classic") // classic | modern | minimal | boutique
-  emailFont                 String    @default("serif") // serif | sans | mixed
+  emailTheme           String    @default("classic") // classic | modern | minimal | boutique
+  emailFont            String    @default("serif") // serif | sans | mixed
   // Booking engine (RevioDirect). `publicSlug` is the hotel's PUBLIC address —
   // book.revio.app/<slug> — so it ends up in printed QR codes and Instagram bios and is treated as
   // permanent once issued. Nullable because a property has no public presence until the engine is
   // switched on, and unique because it resolves a single property with no tenant context.
-  publicSlug                String?   @unique
-  bookingEngineEnabled      Boolean   @default(false)
+  publicSlug           String?   @unique
+  bookingEngineEnabled Boolean   @default(false)
   // The engine's OWN presentation, deliberately not shared with the email* fields above. A hotel can
   // reasonably want a quiet, traditional confirmation email and a bold booking page; one shared
   // column would force each to follow the other. NULL means "inherit from the email branding", so a
   // hotel that configures nothing still gets a coherent page from day one and only the fields they
   // actually touched diverge.
-  bookingPreset             String    @default("clean") // clean | warm | bold — see BOOKING_PRESETS
-  bookingBrandColor         String? // hex; null = inherit emailBrandColor
-  bookingFont               String? // serif | sans; null = inherit emailFont
-  bookingLogoUrl            String? // absolute URL; null = inherit the email logo
-  bookingHeadline           String? // hero headline; null = platform default
-  bookingSubheadline        String?
-  bookingShowTrust          Boolean   @default(true) // the "why book direct" row
+  bookingPreset        String    @default("clean") // clean | warm | bold — see BOOKING_PRESETS
+  bookingBrandColor    String? // hex; null = inherit emailBrandColor
+  bookingFont          String? // serif | sans; null = inherit emailFont
+  bookingLogoUrl       String? // absolute URL; null = inherit the email logo
+  bookingHeadline      String? // hero headline; null = platform default
+  bookingSubheadline   String?
+  bookingShowTrust     Boolean   @default(true) // the "why book direct" row
   // The hero background photograph (BG1). KEYS only — the bytes are in object storage via
   // @revio/storage, same rule as RoomTypePhoto and for the same arithmetic. Null throughout means
   // no photo, which is a designed state rather than a missing one: the preset's own hero still runs.
-  bookingHeroKey            String? // object key, the 2400px page image
-  bookingHeroThumbKey       String? // object key, the small one the CRS editor previews
-  bookingHeroWidth          Int?
-  bookingHeroHeight         Int?
+  bookingHeroKey       String? // object key, the 2400px page image
+  bookingHeroThumbKey  String? // object key, the small one the CRS editor previews
+  bookingHeroWidth     Int?
+  bookingHeroHeight    Int?
   // How bright the photo's brighter regions actually are, 0–1000 (see HERO_LUMINANCE_SCALE).
   // MEASURED at upload, because the darkening layer that keeps the headline readable is derived
   // from it rather than guessed — a night shot needs none and a white facade needs half.
-  bookingHeroLuminance      Int?
-  bookingHeroFocalY         Int       @default(50) // 0–100; which band survives the crop
-  bookingHeroOverlay        String    @default("balanced") // minimal | balanced | strong — never below the measured floor
+  bookingHeroLuminance Int?
+  bookingHeroFocalY    Int       @default(50) // 0–100; which band survives the crop
+  bookingHeroOverlay   String    @default("balanced") // minimal | balanced | strong — never below the measured floor
   // Stripe Connect (spec §2.5③). The hotel's OWN Stripe account — the guest's card is authorised
   // against it and funds go straight to them, so we never hold client money and never need a
   // payment-institution licence. `chargesEnabled` mirrors Stripe's own flag rather than being our
   // opinion: onboarding can be "submitted" and still not accept charges, and only Stripe knows.
   // Until it is true the booking engine runs in REQUEST-TO-BOOK mode, so a hotel is never blocked
   // from selling while its paperwork clears.
-  stripeAccountId           String?   @unique
-  stripeChargesEnabled      Boolean   @default(false)
-  stripeCheckedAt           DateTime? // last time we asked Stripe, so the screen can say how fresh it is
+  stripeAccountId      String?   @unique
+  stripeChargesEnabled Boolean   @default(false)
+  stripeCheckedAt      DateTime? // last time we asked Stripe, so the screen can say how fresh it is
   // CRS Distribution (spec §3.8): exactly ONE connected channel manager per property.
   // reviolink_internal = the platform's own CM (shared core, automatic mapping); third-party
   // kinds plug into the identical ChannelManagerConnector interface later — never a second path.
-  cmKind                    String    @default("reviolink_internal")
+  cmKind               String    @default("reviolink_internal")
   // Connection lifecycle at the CM level: pausing stops distribution reversibly; disconnecting
   // preserves the CRS↔CM mapping dormant so resuming never forces a re-map.
-  cmStatus                  String    @default("connected") // connected | paused | disconnected
+  cmStatus             String    @default("connected") // connected | paused | disconnected
 
   tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   roomTypes            RoomType[]
@@ -2255,38 +2258,38 @@ model StayGuest {
 /// "it doesn't work"; this arrives as "Hotel Sofia · RevioPMS · /housekeeping · Maria, manager", so
 /// triage starts from something reproducible. Nobody mid-incident should be asked to fill that in.
 model SupportRequest {
-  id           String    @id @default(cuid())
-  tenantId     String
+  id         String  @id @default(cuid())
+  tenantId   String
   /// Which hotel of a group, when the session had one in view.
-  propertyId   String?
+  propertyId String?
   /// Who asked. Nullable so deactivating a leaver never deletes their reports.
-  userId       String?
+  userId     String?
 
   /// cm | crs | pms — the product they were in when they asked.
-  product      String
+  product String
   /// app | phone | email | meeting — how the question reached us.
   ///
   /// ⚠️ Without this the queue only ever records the half of a hotel that types. Somebody who rings
   /// up asks the SAME questions, and those are the ones worth writing help for — but they leave no
   /// trace, so the help gets written for the wrong audience. An operator can log a call here and it
   /// joins the same queue and the same evidence.
-  source       String    @default("app")
+  source  String  @default("app")
   /// The screen they were on. Usually the fastest route to reproducing it.
-  route        String?
+  route   String?
   /// urgent | problem | question — see SUPPORT_KINDS in @revio/core, which also holds the promise.
-  kind         String    @default("problem")
-  message      String
+  kind    String  @default("problem")
+  message String
 
   /// Copied at the time of asking, so a reply still works after the account changes or is closed.
   contactName  String
   contactEmail String
 
   /// Null is the working queue — same convention as Lead.
-  handledAt    DateTime?
-  handledById  String?
-  createdAt    DateTime  @default(now())
+  handledAt   DateTime?
+  handledById String?
+  createdAt   DateTime  @default(now())
 
-  property Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  property Property?        @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   messages SupportMessage[]
 
   /// The operator's queue: everything unanswered, oldest first.
@@ -2306,20 +2309,71 @@ model SupportRequest {
 /// that actually happened, because a reply the hotel never received is indistinguishable from being
 /// ignored — and that is the failure this whole feature exists to prevent.
 model SupportMessage {
-  id        String   @id @default(cuid())
-  requestId String
+  id         String    @id @default(cuid())
+  requestId  String
   /// hotel | revio — which side wrote it.
-  side      String
+  side       String
   /// Copied at the time of writing, so the thread still reads correctly after an account changes.
   authorName String
-  body      String
+  body       String
   /// Null means the email did not go out. Only meaningful for `side = "revio"`.
-  emailedAt DateTime?
-  createdAt DateTime @default(now())
+  emailedAt  DateTime?
+  createdAt  DateTime  @default(now())
 
   request SupportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([requestId, createdAt])
+}
+
+/// How much a screen is used, one row per hotel · product · screen · day.
+///
+/// ⚠️ **Aggregated on write, never raw events.** A row per page view would grow with the customer's
+/// business rather than with ours, and would make this a record of what individual staff do all day
+/// — which is not a thing we should hold about somebody else's employees. Counting into a daily
+/// bucket answers every question we actually have ("is this screen used at all?", "did they stop?")
+/// and answers none of the ones we should not be asking.
+///
+/// The screen name comes from `normaliseRoute` in @revio/core: identifiers collapse to `:id` and
+/// everything after `?` is dropped, so no guest data can reach this table by way of a URL.
+model FeatureUsage {
+  id       String   @id @default(cuid())
+  tenantId String
+  /// cm | crs | pms — which product's screen.
+  product  String
+  /// The normalised screen, e.g. "/reservations/:id".
+  route    String
+  /// The calendar day, at midnight UTC. Days, not timestamps: the question is never "at 14:32".
+  day      DateTime
+  views    Int      @default(0)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// One row per hotel/product/screen/day — the upsert target, and what keeps the table small.
+  @@unique([tenantId, product, route, day])
+  /// "What did this hotel use lately", the operator's actual question.
+  @@index([tenantId, day])
+  /// "Which screens does anybody use", across the platform.
+  @@index([day, product])
+}
+
+/// One row per person per product per day they used it. The basis of "are they still here?".
+///
+/// Deliberately a presence row and not a session log: it records THAT somebody was active, never
+/// what they did or for how long. Distinct-user counts need a set, and this is the smallest set that
+/// produces one — bounded by staff × days, so a hotel with twelve logins costs twelve rows a day.
+model ActiveUserDay {
+  id       String   @id @default(cuid())
+  tenantId String
+  userId   String
+  /// cm | crs | pms
+  product  String
+  day      DateTime
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, product, day])
+  @@index([tenantId, day])
 }
 
 /// A hotel trying a product before buying it (docs/specs — trials, 2026-09-08).

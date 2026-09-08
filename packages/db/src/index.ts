@@ -41,6 +41,7 @@ export {
   type TokenResolution,
 } from "./auth-tokens.js";
 export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
+export { recordUsage } from "./usage.js";
 export {
   recordAuthEvent,
   requestOrigin,

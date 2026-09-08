@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X, Inbox, LifeBuoy, TriangleAlert } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X, Inbox, LifeBuoy, TriangleAlert, BarChart3 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 
@@ -17,6 +17,9 @@ const SECTIONS: { title?: string; items: { href: string; label: string; icon: ty
   ] },
   { title: "Platform", items: [
     // Plans sits above Billing: the price list is the decision, the invoices are the consequence.
+    // Above the money screens on purpose: what people actually open is the question that decides
+    // what to build, and the invoices are the consequence of having built the right thing.
+    { href: "/analytics", label: "Product analytics", icon: BarChart3 },
     { href: "/plans", label: "Plans & pricing", icon: Tags },
     { href: "/billing", label: "Billing", icon: CreditCard },
     { href: "/connectivity", label: "Connectivity", icon: KeyRound },
