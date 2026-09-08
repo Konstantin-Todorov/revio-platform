@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { addSupportMessage, forSystem, recordSupportRequest } from "@revio/db";
 import { flashError, setFlash } from "@revio/ui/flash";
 import { sendEmail } from "@revio/email";
-import { renderSystemEmail, renderSystemEmailText, supportReference } from "@revio/core";
+import { REPLY_MARKER, renderSystemEmail, renderSystemEmailText, supportReference } from "@revio/core";
 import { getOperatorSession } from "./session";
 
 /**
@@ -134,6 +134,9 @@ export async function replyToSupportRequest(fd: FormData): Promise<void> {
       heading: `Re: ${reference}`,
       blocks: [
         { p: body },
+        // The line the inbound reader cuts on. Without it a reply arrives with the whole
+        // conversation quoted under it and the thread fills with its own history.
+        { note: REPLY_MARKER },
         { note: `You asked: “${request.message.slice(0, 300)}”` },
         { note: "Reply to this email and it reaches us — or open Get help in your Revio account." },
       ],

@@ -162,4 +162,13 @@ export const JOB = {
    * readable.
    */
   trialSweep: "trial-sweep",
+  /**
+   * Reads the support mailbox and files replies into their threads.
+   *
+   * Leased because it writes a customer's words into a conversation and can reopen a case. Two
+   * runners would not duplicate a message — `InboundEmail.messageId` is unique and the second insert
+   * loses — but they would both connect to the mailbox and race on the same messages, and a lease
+   * costs nothing.
+   */
+  supportInbox: "support-inbox",
 } as const;

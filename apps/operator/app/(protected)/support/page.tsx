@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { forSystem } from "@revio/db";
 import { SUPPORT_KINDS, SUPPORT_SOURCES, hoursOverdue, isOverdue } from "@revio/core";
+import { InboundEmailCard } from "@/components/support/InboundEmailCard";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { SupportCase, type SupportCaseRow } from "@/components/support/SupportCase";
 import { logSupportRequest } from "@/lib/actions-support";
@@ -61,13 +62,20 @@ export default async function SupportPage({
   const tab: Tab = requested === "answered" || requested === "all" ? requested : "open";
 
   const now = new Date();
-  const [requests, tenants] = await Promise.all([
+  const [requests, tenants, inbound] = await Promise.all([
     prisma.supportRequest.findMany({
       orderBy: { createdAt: "desc" },
       take: 200,
       include: { messages: { orderBy: { createdAt: "asc" } } },
     }),
     prisma.tenant.findMany({ select: { id: true, name: true, isDemo: true } }),
+    // Mail the reader could not place. Filed replies need no listing — they are in their threads.
+    prisma.inboundEmail.findMany({
+      where: { outcome: { startsWith: "ignored" } },
+      orderBy: { createdAt: "desc" },
+      take: 12,
+      select: { id: true, fromEmail: true, subject: true, outcome: true, detail: true, createdAt: true },
+    }),
   ]);
   const tenantById = new Map(tenants.map((t) => [t.id, t]));
 
@@ -154,6 +162,8 @@ export default async function SupportPage({
           </div>
         </form>
       </Card>
+
+      <InboundEmailCard emails={inbound} />
 
       <Card>
         <div className="flex flex-wrap items-center gap-1 border-b border-surface-border px-3 py-2">

@@ -391,6 +391,30 @@ mutation { deploymentTriggerUpdate(id: "<repoTrigger id>", input: { branch: "pro
 
 Read the trigger id first — `{ service(id: "<serviceId>") { repoTriggers { edges { node { id branch repository } } } } }`.
 
+#### The support mailbox — `support-inbox`
+
+The job reads `support@reviosoft.app` over IMAP and files replies into their ticket threads. It is
+**inert until three variables exist on the `operator` service**, and reports `configured: false`
+rather than failing, so the cron stays green while the mailbox is unconfigured:
+
+```bash
+railway variables --service operator \
+  --set 'SUPPORT_IMAP_HOST=mail.reviosoft.app' \
+  --set 'SUPPORT_IMAP_USER=support@reviosoft.app' \
+  --set 'SUPPORT_IMAP_PASSWORD=<the mailbox password>'
+```
+
+Optional: `SUPPORT_IMAP_PORT` (default 993) and `SUPPORT_IMAP_INSECURE=1` to drop TLS, which you
+should not need and should not want.
+
+**The password is yours to paste, not the agent's** — nobody working on this repository should ever
+have typed it, and nothing in the codebase reads it except `support-inbox.ts`.
+
+⚠️ **The job never modifies the mailbox.** No message is marked read, moved, flagged or deleted, so
+the inbox stays exactly as a person keeps it — which is why an IMAP account with read access is
+enough, and why `InboundEmail.messageId` rather than the read flag is what stops a message being
+handled twice.
+
 #### ⚠️ An app that gains its first scheduled job needs two things nobody remembers
 
 `jobs` POSTs to `<app>/api/jobs/<name>` with a bearer token. Three things have to line up, and only

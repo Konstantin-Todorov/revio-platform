@@ -83,6 +83,14 @@ const JOBS = [
    * remove a hotel's access, so it runs when the rest of the tick has already succeeded.
    */
   { name: "trial-sweep", url: OPERATOR && `${OPERATOR}/api/jobs/trials` },
+
+  /*
+   * Last, and on the operator like the trial sweep: the mailbox is ours, not a hotel's.
+   *
+   * After everything else because a reply filed here can reopen a case, and reopening one is more
+   * useful once the rest of the tick has finished changing the world it refers to.
+   */
+  { name: "support-inbox", url: OPERATOR && `${OPERATOR}/api/jobs/support-inbox` },
 ];
 
 /** Long enough for a night audit across many properties; short enough that a hung job ends the run. */

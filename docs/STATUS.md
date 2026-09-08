@@ -119,6 +119,7 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 | **First-operator bootstrap** | A fresh install could not create the account needed to log in and create anything |
 | **Job reachability** | `trial-sweep` had never run; the runner now requires JSON evidence rather than a status code, and `jobs-lint` guards the middleware exemption |
 | **One Settings shape** | All four products use one `SettingsNav` from `@revio/ui` — sections down the side, `/settings` redirecting to the first, Help listed among them. It also corrected 24 `revalidatePath("/settings")` calls that had been pointing at a redirect stub, 14 of them wrong since the RevioCRS split |
+| **Inbound email** | A customer who presses reply now lands in the ticket thread, and the case reopens. Reads `support@reviosoft.app` over IMAP from the cron, never modifying the mailbox. **Inert until its three variables are set on the operator service — DEPLOY.md, "The support mailbox"** |
 | **Product analytics** | `operator.reviosoft.app/analytics` — active people week on week, which screens are used, which are barely touched, and per hotel: who has gone quiet and **which products they are billed for and have never opened**. First-party, not PostHog: no third-party processor to name in a hotel's contract, and it reconciles against the same database as everything else |
 | **Jobs on Platform Health** | Every scheduled job, its state and when it last succeeded, on the screen a person opens — `never` shown as loudly as `stale`. The last two items of `docs/OPERATOR-REVIEW-2026-09.md` are now closed |
 | **RevioDirect in the operator** | Bookings, revenue, our 2% and commission avoided on the client page, all four scoped to bookings the engine itself produced |
@@ -130,7 +131,6 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 | | Why | Effort |
 | --- | --- | --- |
 | **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
-| **Inbound email for tickets** | We can send from a thread but not receive into one; a customer replying to the email is currently invisible | Medium |
 | **In-app AI assistant** | The biggest differentiator and the least urgent. Waiting for a real support queue to learn from | Large |
 | **Card payments (Stripe live)** | Deliberately deferred — hotels pay by bank transfer, and there is nothing to collect yet | Medium |
 
@@ -151,6 +151,7 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 | **Confirm the VAT treatment with an accountant** | Founder | Three readings are implemented and reversible now, expensive later. `docs/ACTION-REQUIRED.md` §2 |
 | **Decide what to do about *Ventsi Group*** | Founder | A real account, currently suspended |
 | **Run the stuck-stay repair** | Founder | **3** demo reservations (all Hotel Sofia Group) with a departure recorded a month late. Script written and dry-run checked; production writes are blocked for the agent |
+| **Set the support mailbox password** | Founder | `support-inbox` is built, deployed and doing nothing until `SUPPORT_IMAP_*` exists on the operator service. The password is yours to paste — see DEPLOY.md |
 | **Clear old warnings in the operator console** | Founder | 4 faults and 39 warnings, all from resolved problems. They make the console show attention that is not needed |
 
 ---

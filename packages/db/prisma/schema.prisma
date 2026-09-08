@@ -2325,6 +2325,37 @@ model SupportMessage {
   @@index([requestId, createdAt])
 }
 
+/// Every email the support mailbox handed us, and what we did with it.
+///
+/// ## Why this table exists at all
+///
+/// Two jobs, and both matter. It is the **dedupe key** — the mailbox is read, never modified, so
+/// nothing is marked seen or moved and a human's inbox is left exactly as they keep it; this row is
+/// how the next run knows it has already dealt with a message. And it is the **audit trail**: mail
+/// that was ignored is the case somebody will ask about ("they swear they replied"), and without a
+/// record the honest answer would be a shrug.
+///
+/// Operator-perimeter: this is our mailbox, not a hotel's, and a hotel must never read what another
+/// customer sent us. No tenantId, and `operator_only` RLS.
+model InboundEmail {
+  id        String   @id @default(cuid())
+  /// The mail's own Message-ID. Unique, and the whole reason a re-read is harmless.
+  messageId String   @unique
+  fromEmail String
+  subject   String
+  /// filed | opened | ignored-automated | ignored-empty | ignored-unknown-sender | error
+  outcome   String
+  /// The request it was filed against or created, when there is one.
+  requestId String?
+  /// Why, in one line, for the outcomes that need explaining.
+  detail    String?
+  receivedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([outcome])
+}
+
 /// How much a screen is used, one row per hotel · product · screen · day.
 ///
 /// ⚠️ **Aggregated on write, never raw events.** A row per page view would grow with the customer's
