@@ -7,7 +7,7 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { logAudit, str } from "./mutation-helpers";
-import { DayAlreadyClosedError, runCloseDay } from "./close-day-run";
+import { DayAlreadyClosedError, InvalidCloseDayError, runCloseDay } from "./close-day-run";
 
 /**
  * Session + capability gate for every action in this file.
@@ -40,26 +40,35 @@ export async function markNoShow(fd: FormData): Promise<void> {
 }
 
 /** The manual "Close Day" button. A human is present, so they have already read the warnings. */
-export async function closeDay(): Promise<void> {
+export async function closeDay(fd: FormData): Promise<void> {
   const session = await ctx("manage");
+  // A stale tab can also belong to a property the user has since switched away from.
+  if (str(fd, "propertyId") !== session.activePropertyId) {
+    await setFlash("info", "The active property changed. Review Close Day before closing it.");
+    redirect("/closeday");
+  }
 
   let outcome;
   try {
     outcome = await runCloseDay(session.tenantId, session.activePropertyId, {
       kind: "user",
       userId: session.userId,
-    });
+    }, str(fd, "businessDate"));
   } catch (err) {
     /*
-     * The automatic close (§3) got here first — normal, not a fault.
+     * Another close got here first — normal, not a fault.
      *
      * Said out loud rather than swallowed. The day IS closed, so redirecting to a screen showing the
      * NEXT business date, with no message, reads as "my click did nothing" — and the response to
      * that is to click again. The person needs to know the work happened, just not by them.
      */
     if (err instanceof DayAlreadyClosedError) {
-      await setFlash("info", "That day had just been closed automatically. Nothing was closed twice.");
+      await setFlash("info", "The business date changed since this page was opened. No additional day was closed. Review the current date before continuing.");
       revalidatePath("/closeday");
+      redirect("/closeday");
+    }
+    if (err instanceof InvalidCloseDayError) {
+      await setFlash("info", err.message);
       redirect("/closeday");
     }
     throw err;

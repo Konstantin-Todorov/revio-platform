@@ -157,6 +157,8 @@ export default async function CloseDayPage({ searchParams }: { searchParams: Pro
               Closing will mark the {noShowCandidates.length} un-arrived reservation{noShowCandidates.length === 1 ? "" : "s"} as no-show, accrue tonight’s stay extras, and roll the business date to {pretty(businessDate)} + 1 day.</p>
           </div>
           <form action={closeDay}>
+            <input type="hidden" name="businessDate" value={businessDate} />
+            <input type="hidden" name="propertyId" value={property.id} />
             <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700">
               <Moon className="h-4 w-4" /> Close {pretty(businessDate)}
             </button>

@@ -1,4 +1,5 @@
 import "server-only";
+import type { TenantTx } from "@revio/db";
 import { prisma } from "./db";
 
 /**
@@ -72,7 +73,10 @@ export async function postFolioLine(input: PostChargeInput) {
  * posting rules — which is how the two drift until the one nobody watches is the wrong one — the
  * client becomes a parameter and both go through here.
  */
-export async function postFolioLineWith(db: typeof prisma, input: PostChargeInput) {
+export async function postFolioLineWith(client: TenantTx | typeof prisma, input: PostChargeInput) {
+  // Extended RLS clients and transactions expose the same delegates with different Prisma generic
+  // signatures. No client-level methods are assumed by this service.
+  const db = client as Pick<TenantTx, "folio" | "folioLine">;
   /*
    * A CLOSED folio takes no more charges.
    *

@@ -71,18 +71,19 @@ export async function autoCloseOverdueDays(
      */
     let outcome;
     try {
-      outcome = await runCloseDay(p.tenantId, p.id, { kind: "system" });
+      outcome = await runCloseDay(p.tenantId, p.id, { kind: "system" }, ymd(p.businessDate!));
     } catch (err) {
       // Somebody pressed Close Day while we were working through the list. Their close is a real
       // close; ours would have been a second one. Counted as skipped, and one property's race must
       // never abandon the rest of the sweep.
       if (err instanceof DayAlreadyClosedError) {
         skipped++;
-        details.push(`${p.name}: already closed by staff during this run`);
+        details.push(`${p.name}: business date changed during this run`);
         continue;
       }
       throw err;
     }
+    if (!outcome) skipped++;
     if (outcome) {
       closed++;
       details.push(

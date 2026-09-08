@@ -1,4 +1,5 @@
 import "server-only";
+import type { TenantTx } from "@revio/db";
 import { computeStayCharges, isCityTax, averageNightlyPrice } from "@revio/core";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
@@ -50,7 +51,10 @@ export { isCityTax };
  * Idempotent + race-safe via the unique reservationId. Called at check-in / walk-in and lazily on the
  * folio page (for stays checked in before Phase 3).
  */
-export async function ensureFolio(tenantId: string, propertyId: string, reservationId: string, db: typeof prisma = prisma): Promise<string | null> {
+export async function ensureFolio(tenantId: string, propertyId: string, reservationId: string, client: TenantTx | typeof prisma = prisma): Promise<string | null> {
+  // RLS extensions change Prisma's generic signatures, not these model operations. Narrow only
+  // the delegates used here; the request proxy does not support transaction/client methods.
+  const db = client as Pick<TenantTx, "folio" | "folioLine" | "reservation" | "propertyDefaults" | "taxFee">;
   // The PRIMARY (guest) folio; split/company folios (spec §3.6) are added on top and never seeded here.
   const existing = await db.folio.findFirst({ where: { reservationId, isPrimary: true }, select: { id: true } });
   if (existing) return existing.id;
@@ -123,7 +127,7 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
     const occLabel = occ.length === 1 ? ` · ${occ[0]}p` : occ.length > 1 ? ` · ${Math.min(...occ)}–${Math.max(...occ)}p` : "";
 
     // Seed accommodation via the charge-posting service too — no direct FolioLine writes (spec §1.7).
-    await postFolioLineWith(db, { ...base, kind: "accommodation", description: `${line.roomType.name}${occLabel} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price });
+    await postFolioLineWith(client, { ...base, kind: "accommodation", description: `${line.roomType.name}${occLabel} · ${ymd(line.checkIn)}→${ymd(line.checkOut)}`, amountMinor: price });
   }
 
   // CITY-TAX SUPPRESSION (spec §3.6): the CRS decides whether city tax is payable on spot or already
@@ -142,12 +146,12 @@ export async function ensureFolio(tenantId: string, propertyId: string, reservat
     cityTaxIncluded,
   });
   for (const line of charges.lines) {
-    await postFolioLineWith(db, { ...base, kind: line.kind, description: line.name, amountMinor: line.amountMinor });
+    await postFolioLineWith(client, { ...base, kind: line.kind, description: line.name, amountMinor: line.amountMinor });
   }
 
   if (reservation.paymentGuarantee === "prepaid_ota") {
     const charges = (await db.folioLine.findMany({ where: { folioId, voided: false, kind: { not: "payment" } }, select: { amountMinor: true } })).reduce((s, l) => s + l.amountMinor, 0);
-    if (charges > 0) await postFolioLineWith(db, { ...base, kind: "payment", description: "Prepaid via OTA", amountMinor: charges, method: "prepaid_ota" });
+    if (charges > 0) await postFolioLineWith(client, { ...base, kind: "payment", description: "Prepaid via OTA", amountMinor: charges, method: "prepaid_ota" });
   }
   return folioId;
 }
@@ -559,7 +563,9 @@ export async function listFolioHistory(q?: string): Promise<{ property: Awaited<
  * line carries ref `stayextra:<id>:<date>`, so re-running Close Day never double-charges a night.
  * Returns how many lines were posted.
  */
-export async function accrueStayExtras(tenantId: string, propertyId: string, businessDate: string, db: typeof prisma = prisma): Promise<number> {
+export async function accrueStayExtras(tenantId: string, propertyId: string, businessDate: string, client: TenantTx | typeof prisma = prisma): Promise<number> {
+  // Same delegate-only normalisation as ensureFolio; nested writes retain the original client.
+  const db = client as Pick<TenantTx, "roomAssignment" | "stayExtra" | "folio" | "folioLine">;
   /*
    * THIS is the accrual clock — the write, not the report.
    *
@@ -593,14 +599,14 @@ export async function accrueStayExtras(tenantId: string, propertyId: string, bus
     const perStay = e.basis === "per_stay";
     const ref = perStay ? `stayextra:${e.id}:once` : `stayextra:${e.id}:${businessDate}`;
     if (await db.folioLine.findFirst({ where: { ref }, select: { id: true } })) continue; // already accrued
-    const folioId = await ensureFolio(tenantId, propertyId, e.reservationId, db);
+    const folioId = await ensureFolio(tenantId, propertyId, e.reservationId, client);
     if (!folioId) continue;
     // A closed folio takes no more charges. `postFolioLine` throws on one, and a night audit sweeping
     // the whole house must not abort because a single stay's bill is already settled — so check and
     // skip here, and let the throw stay as the backstop for callers that should never meet one.
     const folio = await db.folio.findUnique({ where: { id: folioId }, select: { status: true } });
     if (!folio || folio.status !== "open") continue;
-    await postFolioLineWith(db, {
+    await postFolioLineWith(client, {
       tenantId, propertyId, folioId, kind: "extra", outlet: "extra",
       description: perStay ? e.name : `${e.name} · ${businessDate}`, amountMinor: e.priceMinor, ref,
     });

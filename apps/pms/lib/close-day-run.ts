@@ -1,8 +1,9 @@
 import "server-only";
 import { forTenant, withTenantTransaction } from "@revio/db";
+import { closeDayEscalation } from "@revio/core";
 import { accrueStayExtras, folioBalance } from "./folio";
 import { logAudit, recordSync } from "./mutation-helpers";
-import { todayInTz, addDaysYmd, utcDay, ymd } from "./format";
+import { todayInTz, minutesOfDayInTz, addDaysYmd, utcDay, ymd } from "./format";
 
 /*
  * DELIBERATELY NOT a "use server" module.
@@ -48,13 +49,21 @@ import { todayInTz, addDaysYmd, utcDay, ymd } from "./format";
  * A lease on the button would not have been enough on its own. A lease only serialises runs that
  * overlap in TIME, and the dangerous case here is SEQUENTIAL: close, roll D → D+1, and a second
  * close moments later reads D+1 and rolls to D+2. A day is skipped and nothing objects. The
- * condition on the roll refuses both, because it asks the only question that matters — is the
- * business date still the one I read?
+ * caller's expected date refuses sequential stale submissions. The conditional roll additionally
+ * serialises overlapping runs. Comparing only with a date read inside this invocation does NOT
+ * protect the intent of a screen rendered before another close.
  */
 export class DayAlreadyClosedError extends Error {
   constructor(readonly businessDate: string) {
     super(`Business day ${businessDate} was already closed by another run.`);
     this.name = "DayAlreadyClosedError";
+  }
+}
+
+export class InvalidCloseDayError extends Error {
+  constructor() {
+    super("Reload Close Day and review the date before closing it.");
+    this.name = "InvalidCloseDayError";
   }
 }
 
@@ -71,6 +80,7 @@ export async function runCloseDay(
   tenantId: string,
   propertyId: string,
   actor: { kind: "user"; userId: string } | { kind: "system" },
+  expectedBusinessDate: string,
 ): Promise<CloseDayOutcome | null> {
   /*
    * Its OWN tenant-scoped client, not the request proxy.
@@ -81,39 +91,67 @@ export async function runCloseDay(
    * proxy would have.
    */
   const prisma = forTenant(tenantId);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedBusinessDate) ||
+      Number.isNaN(utcDay(expectedBusinessDate).getTime()) ||
+      ymd(utcDay(expectedBusinessDate)) !== expectedBusinessDate) {
+    throw new InvalidCloseDayError();
+  }
 
-  const property = await prisma.property.findUnique({ where: { id: propertyId } });
-  if (!property) return null;
-  const today = todayInTz(property.timezone);
-  const businessDate = property.businessDate ? ymd(property.businessDate) : today;
-  const next = addDaysYmd(businessDate, 1);
+  const outcome = await withTenantTransaction(tenantId, async (tx) => {
+    const property = await tx.property.findUnique({ where: { id: propertyId } });
+    if (!property) return null;
+    const today = todayInTz(property.timezone);
+    const businessDate = property.businessDate ? ymd(property.businessDate) : today;
+    if (businessDate !== expectedBusinessDate) throw new DayAlreadyClosedError(expectedBusinessDate);
+    const next = addDaysYmd(businessDate, 1);
 
-  // Read the outstanding picture BEFORE closing, so the record says what was true at the moment the
-  // day ended rather than what is true after it rolled.
-  const carriedForward: string[] = [];
-  const openWithBalance = await prisma.folio.findMany({
-    where: { propertyId, status: "open" },
-    include: { lines: { select: { kind: true, amountMinor: true, voided: true } } },
-  });
-  const unsettled = openWithBalance.filter((f) => folioBalance(f.lines).balance !== 0).length;
-  if (unsettled > 0) carriedForward.push(`${unsettled} unsettled balance${unsettled === 1 ? "" : "s"}`);
+    if (actor.kind === "system") {
+      const defaults = await tx.propertyDefaults.findUnique({ where: { propertyId } });
+      const escalation = closeDayEscalation({
+        businessDate, today, nowMinutes: minutesOfDayInTz(property.timezone),
+        closeDeadlineMinutes: defaults?.closeDeadlineMinutes ?? 30,
+        reminderWindowHours: defaults?.closeReminderWindowHours ?? 22,
+        autoCloseEnabled: defaults?.autoCloseEnabled ?? true,
+      });
+      if (escalation.stage !== "auto_close") return null;
+    }
 
-  const stillIn = await prisma.roomAssignment.count({
-    where: {
-      propertyId, status: "active", checkedOutAt: null,
-      checkOut: { lte: utcDay(businessDate) },
-      reservation: { departedAt: null },
-    },
-  });
-  if (stillIn > 0) carriedForward.push(`${stillIn} guest${stillIn === 1 ? "" : "s"} past departure and still in house`);
+    // Claim the date before posting anything. PostgreSQL holds the property row lock until commit;
+    // an overlapping close waits, then its old-date predicate fails. This roll is not visible until
+    // accrual AND audit succeed; any failure, including a timeout, rolls all of them back.
+    const { count } = await tx.property.updateMany({
+      where: { id: propertyId, businessDate: property.businessDate },
+      data: {
+        businessDate: utcDay(next), lastClosedAt: new Date(),
+        lastCloseWasAutomatic: actor.kind === "system",
+      },
+    });
+    if (count !== 1) throw new DayAlreadyClosedError(expectedBusinessDate);
 
-  const candidates = await prisma.reservation.findMany({
-    where: { propertyId, status: { in: ["confirmed", "modified"] } },
-    include: { lines: true, assignments: true },
-  });
+    // Snapshot the outstanding items before no-shows and accrual, for the day being closed.
+    const carriedForward: string[] = [];
+    const openWithBalance = await tx.folio.findMany({
+      where: { propertyId, status: "open" },
+      include: { lines: { select: { kind: true, amountMinor: true, voided: true } } },
+    });
+    const unsettled = openWithBalance.filter((f) => folioBalance(f.lines).balance !== 0).length;
+    if (unsettled > 0) carriedForward.push(`${unsettled} unsettled balance${unsettled === 1 ? "" : "s"}`);
 
-  let noShows = 0;
-  await withTenantTransaction(tenantId, async (tx) => {
+    const stillIn = await tx.roomAssignment.count({
+      where: {
+        propertyId, status: "active", checkedOutAt: null,
+        checkOut: { lte: utcDay(businessDate) },
+        reservation: { departedAt: null },
+      },
+    });
+    if (stillIn > 0) carriedForward.push(`${stillIn} guest${stillIn === 1 ? "" : "s"} past departure and still in house`);
+
+    const candidates = await tx.reservation.findMany({
+      where: { propertyId, status: { in: ["confirmed", "modified"] } },
+      include: { lines: true, assignments: true },
+    });
+
+    let noShows = 0;
     for (const r of candidates) {
       if (r.assignments.length > 0 || r.lines.length === 0) continue; // arrived, or no stay
       const ci = ymd(r.lines.map((l) => l.checkIn).sort((a, b) => a.getTime() - b.getTime())[0]!);
@@ -122,48 +160,34 @@ export async function runCloseDay(
         noShows++;
       }
     }
-    /*
-     * The roll is CONDITIONAL on the date still being what we read.
-     *
-     * `updateMany` rather than `update`, because only `updateMany` takes a `where` beyond the id —
-     * and that extra clause is the whole guard. `businessDate: property.businessDate` also covers
-     * the null case correctly: Prisma compiles `null` to `IS NULL`, which is right for a property
-     * that has never been closed.
-     *
-     * Throwing rather than returning aborts the transaction, so the no-show updates above roll back
-     * with it. Marking half a day's no-shows and then declining to close is the split state this
-     * function's own docstring promises never to leave behind.
-     */
-    const { count } = await tx.property.updateMany({
-      where: { id: propertyId, businessDate: property.businessDate },
-      data: {
-        businessDate: utcDay(next),
-        lastClosedAt: new Date(),
-        lastCloseWasAutomatic: actor.kind === "system",
-      },
-    });
-    if (count !== 1) throw new DayAlreadyClosedError(businessDate);
+
+    // Idempotency alone cannot rescue a stranded night after its date has advanced. Every helper
+    // receives this transaction client, including initial folio seeding and the shared posting service.
+    const accrued = await accrueStayExtras(tenantId, propertyId, businessDate, tx);
+
+    const carried = carriedForward.length > 0 ? ` · carried forward: ${carriedForward.join(", ")}` : "";
+    await logAudit(propertyId, tenantId, {
+      entity: "close_day",
+      field: businessDate,
+      oldValue: actor.kind === "system" ? "closed automatically by system" : "closed by staff",
+      newValue: `${noShows} no-show(s) · ${accrued} extra(s) accrued · rolled to ${next}${carried}`,
+      ...(actor.kind === "user" ? { userId: actor.userId } : {}),
+    }, tx);
+
+    return { businessDate, next, noShows, accrued, carriedForward };
   });
-
-  // Recurring stay extras accrue for the night just closed (spec §3.6). Outside the transaction
-  // because it is idempotent per (extra, date) by design — re-running it never double-charges — and
-  // it walks every in-house stay, which is too much work to hold locks across.
-  const accrued = await accrueStayExtras(tenantId, propertyId, businessDate, prisma);
-
-  const carried = carriedForward.length > 0 ? ` · carried forward: ${carriedForward.join(", ")}` : "";
-  await logAudit(propertyId, tenantId, {
-    entity: "close_day",
-    field: businessDate,
-    oldValue: actor.kind === "system" ? "closed automatically by system" : "closed by staff",
-    newValue: `${noShows} no-show(s) · ${accrued} extra(s) accrued · rolled to ${next}${carried}`,
-    ...(actor.kind === "user" ? { userId: actor.userId } : {}),
-  }, prisma);
 
   // Boundary rule: the close itself is operational (audit above). Only its availability effect
   // (no-show rooms released back to sale) is channel-facing.
-  if (noShows > 0) {
-    await recordSync(propertyId, tenantId, "Availability restored — no-show rooms released", `${noShows} room(s) returned to sale`, undefined, prisma);
+  if (outcome && outcome.noShows > 0) {
+    // External delivery remains best-effort and outside financial locks. A delivery/event failure
+    // must not report the committed financial close as failed and invite a retry of the next day.
+    try {
+      await recordSync(propertyId, tenantId, "Availability restored — no-show rooms released", `${outcome.noShows} room(s) returned to sale`, undefined, prisma);
+    } catch (error) {
+      console.warn("Close Day committed; availability sync failed", { propertyId, businessDate: outcome.businessDate, error });
+    }
   }
 
-  return { businessDate, next, noShows, accrued, carriedForward };
+  return outcome;
 }

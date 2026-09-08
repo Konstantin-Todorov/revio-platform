@@ -173,7 +173,7 @@ A screen hidden from a role while the write behind it stayed open to a crafted P
 
 ## Wanted — classes known but not yet guarded
 
-### ☑ Closed 2026-09-05 — both instances fixed. Kept here for the reasoning.
+### Close Day — 2026-09-05 guard corrected by R3/R4 on 2026-09-08 (local, not deployed)
 
 **A concurrency guard applied to the scheduled path and not to the manual one.**
 
@@ -187,21 +187,34 @@ idempotent. What a concurrent pair does produce is a **duplicated close record**
 re-reads candidates from before the first run, so the same reservations are counted twice and two
 audit entries claim the same close.
 
-**Fixed by making the roll optimistic rather than by adding a lease** — `where: { id, businessDate:
-<the value read> }` — because a lease only serialises runs that overlap in TIME, and the dangerous
-case here is *sequential*: close, roll D → D+1, and a second close moments later reads D+1 and rolls
-to D+2, skipping a day with nothing objecting. The condition refuses both, because it asks the only
-question that matters: is the business date still the one I read?
+**The original fix only handled overlap.** `where: { id, businessDate: <the value read> }`
+does NOT refuse a sequential stale submission: it reads D+1 and happily closes D+1. This register
+previously claimed otherwise. R3 binds the request to the date shown on the manual screen (and to
+the active property), or to the scheduled sweep's date. A mismatch is refused; a deliberately
+requested next overdue date still works. The scheduled path re-reads eligibility before writing.
 
-The refusal **throws**, which aborts the transaction, so the no-show updates roll back with it —
-marking half a day's no-shows and then declining to close is the split state `runCloseDay`'s own
-docstring promises never to leave behind. Both callers treat it as a normal outcome: the button says
-so out loud (the day IS closed; a silent redirect reads as "my click did nothing"), and the cron
-counts it skipped and carries on with the rest of the sweep.
+**R4 makes the financial close atomic.** The conditional roll now claims the property row before
+posting; no-shows, recurring extras (including initial folio seeding), the audit entry, and the date
+commit in one `withTenantTransaction`. A failure rolls everything back, so the same intended night
+can be retried. The prior post-commit accrual relied on idempotency but never retried a stranded night.
+Both callers treat stale intent as normal: the button explains that no additional day was closed;
+the sweep counts it skipped and continues. Existing readiness warnings still do not block closing.
 
 The mechanism is not novel here: `acquireJobLease` claims its lease with the identical conditional
 `updateMany`, and its own comment records that two processes racing it produce exactly one updated
 row.
+
+**Evidence:** `close-day-run.test.ts` reproduced ten failures before the fix; caller tests cover the
+form/session/cron contract. `close-day-db.test.ts` uses an opt-in, disposable PostgreSQL database with
+a non-superuser, non-BYPASSRLS role: two transactions deliberately read the same date, only one
+closes it; failures after posting/accrual/audit roll back real folio writes and retry without duplicate
+nightly or per-stay charges; another tenant cannot close the property. It is skipped by the normal
+unit suite and must be run explicitly (instructions in that file).
+
+**Boundary:** channel delivery remains best-effort after commit, not a transactional outbox. Delivery
+failure does not misreport the financial close as failed; process-crash-safe external delivery is
+not claimed. Historical nights stranded before this fix are not automatically backfilled. No schema
+change or production data repair is included.
 
 
 ## ☑ 11. Two implementations of an irreversible operation

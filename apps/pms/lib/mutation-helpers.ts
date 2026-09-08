@@ -1,4 +1,5 @@
 import "server-only";
+import type { TenantTx } from "@revio/db";
 import { decimalOr, intOr, minorUnitsOr } from "@revio/core";
 import { syncRealChannels, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
@@ -34,8 +35,10 @@ export async function logAudit(
   propertyId: string,
   tenantId: string,
   entry: { entity: string; field?: string; oldValue?: string; newValue?: string; source?: string; userId?: string },
-  db: Db = prisma,
+  client: TenantTx | Db = prisma,
 ) {
+  // Normalise the extended-client signature without assuming client-level methods exist.
+  const db = client as Pick<TenantTx, "auditEntry">;
   await db.auditEntry.create({
     data: {
       tenantId, propertyId,
@@ -80,7 +83,7 @@ export async function recordSync(propertyId: string, tenantId: string, summary: 
   // A booking / OOO / walk-in changes AVAILABILITY, on the stay's own dates and room types — not
   // rates, and not the whole horizon. Callers that know the affected dates and rooms pass them;
   // an omitted scope still means a full push, which is the safe default for anything unclassified.
-    await syncRealChannels(prisma, propertyId, scope);
+    await syncRealChannels(db, propertyId, scope);
   } catch {
     /* per-channel failures are already isolated inside syncRealChannels. */
   }
