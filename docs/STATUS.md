@@ -35,6 +35,9 @@ Three that show the shape of it:
    verified — the rule was applied to the build list and not to the report.
 4. **A green check is not evidence until you know what it looked at.** `trial-sweep` passed its lint,
    held its lease and returned `200` for its entire life without ever running.
+5. **Correct is not the same as usable.** The support thread passed every test and was unreadable.
+   The bar every screen is held to is `docs/UI-STANDARD.md`, and the last step in it is "look at the
+   rendered page" — which is how both of this week's UI defects were actually found.
 
 ---
 
@@ -54,7 +57,7 @@ Three that show the shape of it:
 `production` branch at the **same commit**; the marketing site is on `production` of its own repo;
 Postgres is an image.
 
-**1,759 automated tests pass** (`pnpm verify`, ten packages), plus **eleven separate checks** on every
+**1,766 automated tests pass** (`pnpm verify`, ten packages), plus **eleven separate checks** on every
 change — typecheck, lint, and nine ratchets that each exist because something specific went wrong
 once: copy · authz · silent · money · health · a11y · scroll-lock · jobs · zoom.
 
@@ -115,6 +118,8 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 | **Onboarding fix** | A hotel buying two products at once was sent backwards one screen per step — see gap class 21 |
 | **First-operator bootstrap** | A fresh install could not create the account needed to log in and create anything |
 | **Job reachability** | `trial-sweep` had never run; the runner now requires JSON evidence rather than a status code, and `jobs-lint` guards the middleware exemption |
+| **One Settings shape** | All four products use one `SettingsNav` from `@revio/ui` — sections down the side, `/settings` redirecting to the first, Help listed among them. It also corrected 24 `revalidatePath("/settings")` calls that had been pointing at a redirect stub, 14 of them wrong since the RevioCRS split |
+| **Help tabs** | Help · Your requests, with the open count on the tab, so a waiting hotel sees it without scrolling and the page's furniture stops moving |
 | **Support round 2** | A hotel can now reply to our reply, which reopens the case; the lateness clock measures the current turn rather than the age of the thread; one card shows a case whether waiting or answered; tabs and a linkable `/support/[id]`; open requests lead the help page instead of trailing sixteen articles |
 
 ### Ready to build, in the order I would do them
@@ -124,7 +129,6 @@ Nothing is half-built. No feature is sitting broken or partly wired.
 | **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
 | **Jobs on Platform Health** | `trial-sweep` sat at `never` in a JSON body nobody reads. The console should say it. `docs/OPERATOR-REVIEW-2026-09.md` item 2 | Small |
 | **RevioDirect visibility in the operator** | Bookings, revenue, usage fee and commission avoided all exist and appear nowhere. Item 3 | Small |
-| **Settings tidy-up in the other products** | Done for RevioCRS (a hub with five sub-pages); RevioLink still has ~8 sections on one page. RevioPMS is short enough to leave | Small |
 | **Product analytics (PostHog)** | We cannot see which screens a hotel actually uses | Medium |
 | **Inbound email for tickets** | We can send from a thread but not receive into one; a customer replying to the email is currently invisible | Medium |
 | **In-app AI assistant** | The biggest differentiator and the least urgent. Waiting for a real support queue to learn from | Large |
