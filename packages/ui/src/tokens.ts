@@ -6,14 +6,26 @@ export const colors = {
     800: "#15366a",
     700: "#1d4ea0",
     600: "#2563c9",
+    /** A dot or a fill, not text — 3.95:1 on white, which is the bar for a UI element. */
+    500: "#3d7fe0",
+    200: "#bcd2f5",
+    /** Chip ground. `text-brand-700` on it is 6.2:1. */
+    100: "#d7e4fa",
     "050": "#e7eefb",
   },
   ink: {
     900: "#1c2733",
+    /** Emphasis above 700. 12.4:1 on white. */
+    800: "#2b3542",
     700: "#3f4753",
+    /** Between 700 and 500. 7.3:1 on white, 6.6:1 on the muted card ground. */
+    600: "#4d5764",
     500: "#5b6675",
     400: "#7d8aa3",
     300: "#9aa3b1",
+    200: "#c9d0da",
+    /** The neutral chip ground — `text-ink-500` on it is 4.74:1. */
+    100: "#e4e8ee",
   },
   surface: {
     DEFAULT: "#ffffff",
@@ -23,11 +35,16 @@ export const colors = {
     sunken: "#e7eaef",
     border: "#dde4ee",
   },
-  success: { 600: "#0f7a52", 500: "#1f9d6b", "050": "#e3f4ec" },
-  warning: { 600: "#e0822b", 500: "#e0a23b", "050": "#fbf1e0" },
-  danger: { 600: "#b53528", 500: "#d6493b", "050": "#fbe9e7" },
+  success: { 700: "#0b5c3e", 600: "#0f7a52", 500: "#1f9d6b", 100: "#cdebdd", "050": "#e3f4ec" },
+  /**
+   * ⚠️ `warning-600` is 2.84:1 on white — a fine ICON and pill colour, and NOT enough for text.
+   * `700` exists because several screens were already writing `text-warning-700` against a config
+   * that did not define it, which Tailwind renders as no colour at all. They were right; 5.5:1.
+   */
+  warning: { 800: "#7a4610", 700: "#9a5a14", 600: "#e0822b", 500: "#e0a23b", 200: "#f5dcb0", 100: "#f9ebd2", "050": "#fbf1e0" },
+  danger: { 700: "#8c2820", 600: "#b53528", 500: "#d6493b", 200: "#f3c4bf", 100: "#f8dcd8", "050": "#fbe9e7" },
   info: { 500: "#0d9aa8" },
-  accent: { 600: "#5b3fb0", 500: "#7c5cdb", "050": "#efe9fb" },
+  accent: { 700: "#4a3290", 600: "#5b3fb0", 500: "#7c5cdb", 100: "#e0d7f7", "050": "#efe9fb" },
 } as const;
 
 /**

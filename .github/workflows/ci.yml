@@ -129,10 +129,36 @@ jobs:
       - name: Mobile zoom
         run: pnpm zoom:lint
 
+      # Tailwind emits NOTHING for a class it does not know, and says nothing about it — so a wrong
+      # shade is an element with no background or invisible text, passing every other check here.
+      # `bg-brand-050` shipped that way in the support thread's own bubbles: tokens.ts writes the
+      # lightest shade as "050", every app's config registers it as 50.
+      - name: Colour classes resolve
+        run: pnpm tokens:lint
+
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift
         env:
           SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+      # A fresh database is the one journey nothing else here takes. Two real bugs lived in it this
+      # week, both invisible to every check above: `db:seed` truncated `OccupancyAdjustment`, a table
+      # replaced long ago — TRUNCATE names a real table or fails, so seeding was broken on EVERY
+      # database including an empty one, which is the single case where seeding is the whole point.
+      # And nothing had ever proved the 100-odd migrations still apply from nothing, because
+      # production has never been reset and never will be.
+      #
+      # It runs against the same throwaway container as the drift check, in its own database so the
+      # two cannot interfere.
+      - name: Migrations from zero, then the seed
+        run: |
+          psql "$ADMIN_URL" -c 'CREATE DATABASE revio_ci'
+          pnpm --filter @revio/db db:deploy
+          pnpm --filter @revio/db db:seed
+        env:
+          ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
 
       - name: Test
         run: pnpm test
