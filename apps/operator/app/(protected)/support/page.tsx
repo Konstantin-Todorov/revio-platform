@@ -2,8 +2,8 @@ import Link from "next/link";
 import { forSystem } from "@revio/db";
 import { SUPPORT_KINDS, SUPPORT_SOURCES, hoursOverdue, isOverdue } from "@revio/core";
 import { InboundEmailCard } from "@/components/support/InboundEmailCard";
-import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
-import { SupportCase, type SupportCaseRow } from "@/components/support/SupportCase";
+import { Card, PageHeader } from "@/components/ui/primitives";
+import { SupportQueueRow, type SupportQueueRowData } from "@/components/support/SupportQueueRow";
 import { logSupportRequest } from "@/lib/actions-support";
 
 export const dynamic = "force-dynamic";
@@ -56,10 +56,11 @@ const EMPTY: Record<Tab, string> = {
 export default async function SupportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; hotel?: string }>;
 }) {
-  const requested = (await searchParams).tab;
-  const tab: Tab = requested === "answered" || requested === "all" ? requested : "open";
+  const sp = await searchParams;
+  const tab: Tab = sp.tab === "answered" || sp.tab === "all" ? sp.tab : "open";
+  const hotel = sp.hotel ?? "";
 
   const now = new Date();
   const [requests, tenants, inbound] = await Promise.all([
@@ -85,8 +86,17 @@ export default async function SupportPage({
   const answered = requests.filter((r) => r.handledAt);
   const overdue = open.filter((r) => isOverdue(r, now)).length;
 
-  const shown = tab === "open" ? open : tab === "answered" ? answered : requests;
+  const byTab = tab === "open" ? open : tab === "answered" ? answered : requests;
+  // Filtering by hotel, because "who is waiting" and "what has this one hotel asked before" are two
+  // different questions and a renewal call asks the second.
+  const shown = hotel ? byTab.filter((r) => r.tenantId === hotel) : byTab;
   const counts: Record<Tab, number> = { open: open.length, answered: answered.length, all: requests.length };
+
+  // Only hotels that have actually asked something — a picker listing every client is a picker
+  // where the three that matter are lost among forty that never wrote in.
+  const asking = [...new Set(requests.map((r) => r.tenantId))]
+    .map((id) => ({ id, name: tenantById.get(id)?.name ?? "Unknown" }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-5">
@@ -99,11 +109,76 @@ export default async function SupportPage({
         }
       />
 
+
+      <InboundEmailCard emails={inbound} />
+
       <Card>
-        <CardHeader
-          title="Log a call, an email or a conversation"
-          subtitle="So a question asked on the phone counts the same as one typed into the app"
-        />
+        <div className="flex flex-wrap items-center gap-1 border-b border-surface-border px-3 py-2">
+          {TABS.map((t) => (
+            <Link
+              key={t.key}
+              href={`/support?tab=${t.key}${hotel ? `&hotel=${hotel}` : ""}`}
+              className={`rounded-md px-2.5 py-1 text-[12.5px] font-semibold transition-colors ${
+                tab === t.key ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted hover:text-ink-900"
+              }`}
+            >
+              {t.label} ({counts[t.key]})
+            </Link>
+          ))}
+          {asking.length > 1 && (
+            <form action="/support" className="ml-auto flex items-center gap-1.5">
+              <input type="hidden" name="tab" value={tab} />
+              <label htmlFor="hotel" className="text-[11.5px] text-ink-400">Hotel</label>
+              <select
+                id="hotel"
+                name="hotel"
+                defaultValue={hotel}
+                className="h-7 rounded-md border border-surface-border bg-white px-2 text-[16px] text-ink-800 sm:text-[12px]"
+              >
+                <option value="">All ({byTab.length})</option>
+                {asking.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <button className="h-7 rounded-md border border-surface-border px-2 text-[12px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">
+                Show
+              </button>
+            </form>
+          )}
+        </div>
+        <p className="border-b border-surface-border px-4 py-1.5 text-[11.5px] text-ink-400">
+          {TAB_NOTE[tab]} · open a row for the conversation and to reply
+        </p>
+
+        {shown.length === 0 ? (
+          <p className="px-4 py-6 text-[13px] text-ink-500">{EMPTY[tab]}</p>
+        ) : (
+          <ul className="divide-y divide-surface-border">
+            {shown.map((r) => (
+              <li key={r.id}>
+                <SupportQueueRow
+                  request={r as unknown as SupportQueueRowData}
+                  tenantName={tenantById.get(r.tenantId)?.name ?? "Unknown client"}
+                  isDemo={tenantById.get(r.tenantId)?.isDemo ?? false}
+                  now={now}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+      {/*
+        Below the queue and folded away, because the two are used at very different rates: the queue
+        is read every time this page opens, the form is filled after a phone call. It used to sit
+        above, so with several hotels waiting the first thing on screen was an empty form.
+      */}
+      <details className="rounded-lg border border-surface-border bg-white">
+        <summary className="cursor-pointer list-none px-4 py-3 text-[13px] font-semibold text-ink-800 transition-colors hover:bg-surface-muted">
+          + Log a call, an email or a conversation
+          <span className="ml-2 font-normal text-ink-400">
+            so a question asked on the phone counts the same as one typed into the app
+          </span>
+        </summary>
         <form action={logSupportRequest} className="grid gap-3 px-4 py-4 lg:grid-cols-2">
           <label className="block">
             <span className={labelCls}>Client</span>
@@ -161,42 +236,8 @@ export default async function SupportPage({
             </button>
           </div>
         </form>
-      </Card>
+      </details>
 
-      <InboundEmailCard emails={inbound} />
-
-      <Card>
-        <div className="flex flex-wrap items-center gap-1 border-b border-surface-border px-3 py-2">
-          {TABS.map((t) => (
-            <Link
-              key={t.key}
-              href={t.key === "open" ? "/support" : `/support?tab=${t.key}`}
-              className={`rounded-md px-2.5 py-1 text-[12.5px] font-semibold transition-colors ${
-                tab === t.key ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted hover:text-ink-900"
-              }`}
-            >
-              {t.label} ({counts[t.key]})
-            </Link>
-          ))}
-          <span className="ml-auto pr-1 text-[11.5px] text-ink-400">{TAB_NOTE[tab]}</span>
-        </div>
-
-        {shown.length === 0 ? (
-          <p className="px-4 py-6 text-[13px] text-ink-500">{EMPTY[tab]}</p>
-        ) : (
-          <ul className="divide-y divide-surface-border">
-            {shown.map((r) => (
-              <li key={r.id} className="px-4 py-3.5">
-                <SupportCase
-                  request={r as unknown as SupportCaseRow}
-                  tenant={tenantById.get(r.tenantId)}
-                  now={now}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
     </div>
   );
 }
