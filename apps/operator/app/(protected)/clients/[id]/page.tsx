@@ -37,9 +37,40 @@ const ago = (d: Date | null) => {
  * The order is the order of a renewal call: what is wrong, what they are worth, what to sell them,
  * then the detail to back all three up. A page that opens with a table of room types is a database
  * viewer; this one has to survive being read thirty seconds before dialling.
+ *
+ * ## Why it is tabbed, and what deliberately is not
+ *
+ * It had grown to twelve sections and 558 lines — the same problem Settings had, and the founder
+ * reported it the same way. **The renewal-call order is preserved inside Overview**, which is the
+ * thing worth protecting: it is not a menu of equal parts, it is an argument in sequence.
+ *
+ * What stays ABOVE the tabs is what a tab must never hide: the name, the demo badge, and
+ * `Needs attention` — because "nothing else on this page matters while something here is red" stops
+ * being true the moment it is one click away.
+ *
+ * Tabs are a `?tab=` search param and NOT sub-routes. One `getClientDetail` already feeds every
+ * section, so sub-routes would multiply that fetch, and every entitlement, CRM and trial action
+ * revalidates `/clients/[id]` — a path that must keep existing. The handoff's own warning: do not
+ * break actions or revalidation to tidy a menu.
  */
-export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
+type Tab = "overview" | "setup" | "billing";
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "setup", label: "Products & setup" },
+  { key: "billing", label: "Billing" },
+];
+
+export default async function ClientDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { id } = await params;
+  const requested = (await searchParams).tab;
+  const tab: Tab = requested === "setup" || requested === "billing" ? requested : "overview";
   const c = await getClientDetail(id);
   const [billing, session] = await Promise.all([getClientBilling(id), getOperatorSession()]);
   if (!c) notFound();
@@ -112,44 +143,37 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </Card>
       )}
 
-      {/* 1b. How far they have actually got. Sits directly under what is wrong, because "stalled on
-          step 2 after three weeks" IS what is wrong for a young client — and because the answer to
-          most early attention flags is the same phone call. */}
-      <SetupProgressCard setup={c.setup} ageDays={c.ageDays} stalled={c.setupStalled} />
+      {/* The three parts of the conversation. Attention stays above them on purpose — see the note
+          on this component. `?tab=` keeps `/clients/[id]` the only route, so every action's
+          revalidation still lands. */}
+      <nav aria-label="Client sections" className="flex gap-1 border-b border-surface-border">
+        {TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <Link
+              key={t.key}
+              href={`/clients/${tenant.id}?tab=${t.key}`}
+              aria-current={active ? "page" : undefined}
+              className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
+                active ? "border-brand-700 text-brand-800" : "border-transparent text-ink-500 hover:text-ink-900"
+              }`}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+        {/* Their support history lives in the queue that already filters by hotel — linked rather
+            than rebuilt here, so there is one queue and not two. */}
+        <Link
+          href={`/support?tab=all&hotel=${tenant.id}`}
+          className="ml-auto self-center text-[12.5px] font-semibold text-brand-700 hover:underline"
+        >
+          Their support history ↗
+        </Link>
+      </nav>
 
-      {/* 1c. What WE still owe them. Deliberately its own card and NOT merged into the progress bar
-          above: that one is work the hotel does and we ring them about, this one is work we do and
-          they cannot see. The alarm banner exists because "sold, switched on, nothing behind it" is
-          not a step remaining — it is a wrong state the customer can already walk into. */}
-      {(c.provisioningAlarm || c.provisioning.steps.length > 0) && (
-        <Card>
-          <h2 className="text-[13px] font-semibold text-ink-900">On our side</h2>
-          {c.provisioningAlarm && (
-            <p className="mt-2 rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-[12.5px] text-danger-700">
-              {c.provisioningAlarm}
-            </p>
-          )}
-          <ul className="mt-3 space-y-2.5">
-            {c.provisioning.steps.map((s) => (
-              <li key={s.key} className="flex gap-2.5">
-                <span
-                  className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                    s.severity === "blocking" ? "bg-danger-500" : s.severity === "soon" ? "bg-warn-500" : "bg-ink-300"
-                  }`}
-                />
-                <span>
-                  <span className="text-[13px] font-semibold text-ink-900">{s.title}</span>
-                  <span className="mt-0.5 block text-[12.5px] text-ink-500">{s.why}</span>
-                  {s.how && (
-                    <code className="mt-1 block font-mono text-[11.5px] text-ink-400">{s.how}</code>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
+      {tab === "overview" && (
+        <>
       {/* 2. Who they are and when this renews. The relationship comes before the arithmetic, because
           the arithmetic is useless if nobody knows who to phone about it. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -347,40 +371,6 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         )}
       </Card>
 
-      {/* Who to invoice. Deliberately apart from the CRM above: that records what we BELIEVE about a
-          relationship, this records what gets printed on a tax document. Its absence blocks issuing,
-          so the card says so rather than letting it be discovered when an invoice is due. */}
-      <Card className="mb-4">
-        <CardHeader
-          title="Billing details"
-          action={!billing ? <StatusPill tone="warning">Not set</StatusPill> : undefined}
-        />
-        <div className="px-4 py-4">
-          {!billing && (
-            <p className="mb-3 rounded-md bg-warning-50 px-3 py-2 text-[12px] font-medium text-warning-600">
-              This client cannot be invoiced until their legal name, country and address are recorded.
-            </p>
-          )}
-          <ClientBillingForm
-            tenantId={tenant.id}
-            tradingName={tenant.name}
-            canEdit={session?.role === "super_admin"}
-            values={{
-              legalName: billing?.legalName ?? "",
-              vatId: billing?.vatId ?? "",
-              companyId: billing?.companyId ?? "",
-              addressLine: billing?.addressLine ?? "",
-              city: billing?.city ?? "",
-              postCode: billing?.postCode ?? "",
-              country: billing?.country ?? "",
-              billingEmail: billing?.billingEmail ?? "",
-              attention: billing?.attention ?? "",
-              notes: billing?.notes ?? "",
-            }}
-          />
-        </div>
-      </Card>
-
       {/* 5. What was said last time — ours, plus the moments the platform already knew about. */}
       <RelationshipLog
         tenantId={tenant.id}
@@ -394,6 +384,48 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           pinned: i.pinned,
         }))}
       />
+        </>
+      )}
+
+      {tab === "setup" && (
+        <>
+      {/* 1b. How far they have actually got. Sits directly under what is wrong, because "stalled on
+          step 2 after three weeks" IS what is wrong for a young client — and because the answer to
+          most early attention flags is the same phone call. */}
+      <SetupProgressCard setup={c.setup} ageDays={c.ageDays} stalled={c.setupStalled} />
+
+      {/* 1c. What WE still owe them. Deliberately its own card and NOT merged into the progress bar
+          above: that one is work the hotel does and we ring them about, this one is work we do and
+          they cannot see. The alarm banner exists because "sold, switched on, nothing behind it" is
+          not a step remaining — it is a wrong state the customer can already walk into. */}
+      {(c.provisioningAlarm || c.provisioning.steps.length > 0) && (
+        <Card>
+          <h2 className="text-[13px] font-semibold text-ink-900">On our side</h2>
+          {c.provisioningAlarm && (
+            <p className="mt-2 rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-[12.5px] text-danger-700">
+              {c.provisioningAlarm}
+            </p>
+          )}
+          <ul className="mt-3 space-y-2.5">
+            {c.provisioning.steps.map((s) => (
+              <li key={s.key} className="flex gap-2.5">
+                <span
+                  className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
+                    s.severity === "blocking" ? "bg-danger-500" : s.severity === "soon" ? "bg-warn-500" : "bg-ink-300"
+                  }`}
+                />
+                <span>
+                  <span className="text-[13px] font-semibold text-ink-900">{s.title}</span>
+                  <span className="mt-0.5 block text-[12.5px] text-ink-500">{s.why}</span>
+                  {s.how && (
+                    <code className="mt-1 block font-mono text-[11.5px] text-ink-400">{s.how}</code>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
@@ -513,7 +545,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4">
         <Card>
           <CardHeader title={`Staff (${tenant.users.length}) — one shared identity across every product`} />
           <ul className="divide-y divide-surface-border">
@@ -531,7 +563,47 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ))}
           </ul>
         </Card>
+      </div>
+        </>
+      )}
 
+      {tab === "billing" && (
+        <>
+      {/* Who to invoice. Deliberately apart from the CRM above: that records what we BELIEVE about a
+          relationship, this records what gets printed on a tax document. Its absence blocks issuing,
+          so the card says so rather than letting it be discovered when an invoice is due. */}
+      <Card className="mb-4">
+        <CardHeader
+          title="Billing details"
+          action={!billing ? <StatusPill tone="warning">Not set</StatusPill> : undefined}
+        />
+        <div className="px-4 py-4">
+          {!billing && (
+            <p className="mb-3 rounded-md bg-warning-50 px-3 py-2 text-[12px] font-medium text-warning-600">
+              This client cannot be invoiced until their legal name, country and address are recorded.
+            </p>
+          )}
+          <ClientBillingForm
+            tenantId={tenant.id}
+            tradingName={tenant.name}
+            canEdit={session?.role === "super_admin"}
+            values={{
+              legalName: billing?.legalName ?? "",
+              vatId: billing?.vatId ?? "",
+              companyId: billing?.companyId ?? "",
+              addressLine: billing?.addressLine ?? "",
+              city: billing?.city ?? "",
+              postCode: billing?.postCode ?? "",
+              country: billing?.country ?? "",
+              billingEmail: billing?.billingEmail ?? "",
+              attention: billing?.attention ?? "",
+              notes: billing?.notes ?? "",
+            }}
+          />
+        </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4">
         <Card>
           {/* The fact is load-bearing and stays: no money moves anywhere in this console. Only the
               word changed — "mocked" is our vocabulary, and it reads as "pretend" to anyone else. */}
@@ -553,6 +625,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           )}
         </Card>
       </div>
+        </>
+      )}
     </div>
   );
 }

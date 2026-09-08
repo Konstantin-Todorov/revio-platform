@@ -18,6 +18,51 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-08 · Claude · CLAIMED · Operator client detail — inner tabs
+**Splitting the 558-line client page into tabs, the same IA as Settings.**
+Files: `apps/operator/app/(protected)/clients/[id]/page.tsx`, `apps/operator/components/clients/*`
+Notes: Founder asked for it; matches §4 of the handoff (Overview / Products & onboarding / Billing /
+Support / Activity). Using **searchParam tabs, not sub-routes** — one `getClientDetail` already feeds
+every section, and sub-routes would multiply the fetch and break the `revalidatePath("/clients/…")`
+calls the entitlement, CRM and trial actions depend on. The handoff's own warning: do not break
+actions or revalidation to tidy a menu.
+⚠️ Split acknowledged — **Codex has R3/R4, I have R5 then R1.** Not touching `apps/pms/**`.
+⚠️ Codex's R3/R4 is DONE but uncommitted in the shared tree, so `git pull --rebase` is blocked and
+`git add -A` would sweep it. Staging by path only. **Somebody needs to commit it** — flagged to the
+founder rather than committing work I have not reviewed.
+Also: `docs/ACTION-REQUIRED.md` §2 — BG VAT registration threshold changed 2026-01-01 to EUR 51,130
+on a calendar year (was rolling 12 months in BGN).
+
+### 2026-09-08 · Codex · DONE (local, uncommitted) · R3/R4 Close Day
+**Split confirmed: Codex takes R3/R4; Claude takes R5 then R1.**
+Files: `apps/pms/lib/close-day*`, `apps/pms/lib/actions-closeday.ts`,
+`apps/pms/lib/auto-close.ts`, `apps/pms/app/(protected)/closeday/page.tsx`.
+Supporting scope: transaction-client types in `apps/pms/lib/{folio,posting,mutation-helpers}.ts`,
+Close Day regression tests, and correction of the Close Day entry in `docs/GAP-REGISTER.md`.
+Notes: the caller files and existing accrual/posting helpers are necessary to bind the intended date
+and commit accrual/audit with the roll; these are outside the shorthand `close-day*` glob but do not
+overlap Claude's auth/booking work. No schema/core/auth/booking edits planned. Reverses the documented
+but incorrect claim that the existing optimistic roll guards stale sequential submissions, and the
+decision to accrue after commit (idempotency alone does not retry a stranded date).
+Claim above was recorded before implementation. Completed: expected-date intent from the manual form
+and cron snapshot; stale-property-tab guard; scheduled eligibility recheck; one transaction for the
+conditional date claim, no-shows, real folio seeding/accrual and audit. Existing posting rules and
+readiness/non-blocking policy are unchanged. Also corrected `recordSync` to pass its supplied client
+to `syncRealChannels` (cron had incorrectly reached for the session proxy).
+Verified: `pnpm verify` passes (existing lint warnings only); `pnpm --filter @revio/pms build` passes;
+`git diff --check` clean. 21 new unit/caller tests; initial run reproduced 10 failures before the fix.
+Five additional DB tests pass on disposable local PostgreSQL 16 after all 105 migrations, using a
+non-superuser/non-BYPASSRLS role. They exercise two connections reading the same date, rollback after
+the first actual extra / all accrual / audit, retry, per-stay vs nightly charging, and tenant isolation.
+DB tests are opt-in (`close-day-db.test.ts` documents the guarded environment); normal verify skips
+them. No production reads/writes, no migration added, no browser E2E or large-property load test.
+**All listed changes remain UNCOMMITTED, including three new `close-day-*.test.ts` files.** Ready for
+review; do not sweep them into an auth/booking commit. No commit, push or deploy performed. The full
+five-app build required before a commit was not run; only the affected PMS app was built.
+Remaining outside this fix: historical stranded-night reconciliation (inspect before any backfill),
+and durable/retryable channel delivery if required. External sync remains post-commit best-effort;
+failures cannot turn the committed financial close into a reported failure. No outbox guarantee.
+
 ### 2026-09-08 · Claude · DONE · Review response, R2 fix, and today's shipped work
 **Answering the external review; fixing R2; and a day of work that should have been claimed here first.**
 Files: `docs/REVIEW-RESPONSE-2026-09-08.md`, `packages/db/src/two-factor*.ts`,

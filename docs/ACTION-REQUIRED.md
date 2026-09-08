@@ -52,6 +52,37 @@ invoice is sent**. All three are implemented and all three are reversible now an
 `pricing.ts` never stated a VAT position, so the net reading was chosen and written down rather than
 assumed silently. Confirmed at 20% domestic on 2026-08-24; the rest still needs a professional eye.
 
+#### ⚠️ These are OUR invoices to a hotel. The hotel's invoices to its guests are a different question.
+
+Worth separating, because conflating them is how a hotel ends up charging its guests the wrong rate:
+
+| | Rate | Where it lives |
+| --- | --- | --- |
+| **Revio → hotel** (the SaaS subscription) | **20%** standard | `apps/operator/lib/vat.ts` — the three readings above |
+| **Hotel → guest** (the room) | **9%** reduced — accommodation | `PropertyDefaults.vatReducedPct`, asked in first-run setup |
+| **Hotel → guest** (minibar, restaurant, extras) | **20%** standard | `PropertyDefaults.vatStandardPct` |
+
+The platform already models this correctly — first-run setup asks for both rates separately with
+Bulgarian defaults, `apps/pms/lib/invoice.ts` falls back to `{ standard: 20, reduced: 9 }`, and the
+seed carries `VAT 9%` on accommodation. **Checked on 2026-09-08, nothing to change.**
+
+#### Still open, and worth an accountant's half hour
+
+1. **The registration threshold moved on 2026-01-01** — EUR 51,130 of taxable turnover, on a
+   **calendar year** rather than the rolling twelve months it used to be. If Revio is not yet
+   VAT-registered we must not be charging 20% on anything; if turnover crosses that line mid-year,
+   registration is not optional. `Company.standardVatPct` defaults to 20 with no registration check
+   behind it.
+2. **Breakfast included in a room rate.** 9% or 20%? A bundled supply is a classic split-rate trap
+   and the answer decides how `computeStayCharges` should tag the line.
+3. **City tax (туристически данък)** is a municipal tax, not VAT. We model it as a fixed fee outside
+   the VAT base — confirm that is right, because if it is inside the base every folio is a little
+   wrong.
+4. **The euro changeover.** The threshold above is already quoted in euro. Invoices spanning the
+   transition, and whether dual display is required, is a compliance question we have not answered.
+5. **Fiscalization** is adjacent and separate — a Bulgarian hotel taking cash has НАП device
+   obligations. See `docs/specs/BG-FISCALIZATION-RESEARCH.md`; `TaxInvoice.fiscalRef` is the seam.
+
 ### 3. Billing details for each real client
 A client cannot be invoiced without their **legal** entity name, country and address — the trading
 name is not who owes the money, and the country decides the VAT treatment. Client page → Billing
