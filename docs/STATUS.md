@@ -63,7 +63,7 @@ Three that show the shape of it:
 `production` branch at the **same commit**; the marketing site is on `production` of its own repo;
 Postgres is an image.
 
-**1,933 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
+**1,945 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
 change — typecheck, lint, and ten ratchets that each exist because something specific went wrong
 once: copy · authz · silent · money · health · a11y · scroll-lock · jobs · zoom · tokens. CI additionally applies every migration into an empty database and runs the seed.
 
@@ -76,6 +76,7 @@ pnpm --filter @revio/db claim-verify         # the claim primitive is atomic
 pnpm --filter @revio/booking engine-race     # the booking path never oversells a hold
 pnpm --filter @revio/booking confirm-race    # one hold becomes exactly one reservation
 pnpm --filter @revio/operator webhook-verify # a forged Stripe event cannot mark an invoice paid
+pnpm --filter @revio/operator stripe-mode-verify  # sandbox never becomes live on its own
 ```
 
 The last of those is new on 2026-09-08 and found the worst defect of the week — see *Known issues*.
@@ -256,7 +257,7 @@ inbound-email job now reads `support@reviosoft.app`.
 
 | | Who | Why it matters |
 | --- | --- | --- |
-| **Paste the Stripe sandbox keys** | Founder | `/integrations/stripe` → Sandbox → *Set up*. Secret (`sk_test_…`) and publishable (`pk_test_…`) from Stripe → Developers → API keys. The key is tested before it is stored and never shown again. **I do not enter keys, so this one is yours** |
+| **Paste the Stripe sandbox keys and add the webhook** | Founder | `/integrations/stripe` → Sandbox → *Set up*: `sk_test_…`, `pk_test_…`, and the `whsec_…` from Stripe → Developers → Webhooks (endpoint `https://operator.reviosoft.app/api/webhooks/stripe`, event `checkout.session.completed`). Without the signing secret the endpoint refuses everything, which is correct and means nothing settles. **I do not enter keys or change settings in a live Stripe account** |
 | **Confirm the article on the VAT certificate** | Founder | Set to **чл. 97а** on 2026-09-09 from your description — a BG number valid only outside Bulgaria. That is what the certificate should say; if it says чл. 96 instead, it is one click on Settings → Company details. It decides the tax on every invoice |
 | **Decide what to do about *Ventsi Group*** | Founder | A real account, currently suspended |
 | **Euro changeover and fiscalization** | Founder | Both are dated obligations rather than features. `TaxInvoice.fiscalRef` is the seam; `docs/specs/BG-FISCALIZATION-RESEARCH.md` |

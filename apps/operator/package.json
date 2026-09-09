@@ -9,7 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "webhook-verify": "tsx scripts/webhook-verify.ts"
+    "webhook-verify": "tsx scripts/webhook-verify.ts",
+    "stripe-mode-verify": "tsx scripts/stripe-mode-verify.ts"
   },
   "dependencies": {
     "@revio/core": "workspace:*",

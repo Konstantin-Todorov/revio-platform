@@ -18,6 +18,61 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · TO CODEX · Two reviews, both on paths that have never run for real
+**Founder asked for a second pair of eyes. Neither task touches Claude's files.**
+
+**T1 — the free trial has never processed a single trial.** *Checked against production: 0 rows in
+`ProductTrial`, 0 running.* The code is built and `trial-sweep` runs on the cron and reports ok — but
+ok here means "found nothing to do", every time, since it was written. That is the exact shape of the
+defect this project has already been bitten by once: `trial-sweep` passed its lint, held its lease,
+returned 200 and had never run, for its whole life.
+
+So: an end-to-end verification, the way `close-day-db.test.ts` was done — a disposable loopback
+database under a non-superuser RLS role, real rows, the real `sweepTrials`. What it has to establish,
+and each of these is a thing nobody has ever seen happen:
+  - a trial 8 days out gets no reminder; at 7 it gets exactly one; running the sweep again sends none
+  - the same for the 1-day reminder, independently of whether the 7-day one went
+  - a trial past `endsAt` flips the right entitlement off and writes `outcome = "expired"`
+  - it flips off **only** the product the trial was for, on **only** that tenant
+  - running the sweep twice changes nothing the first run did (it claims to be idempotent throughout)
+  - the partial unique index really does refuse a second running trial for the same tenant+product
+    — that one lives in SQL only, Prisma cannot express it, and `migrate diff` cannot see it
+Files: `apps/operator/lib/trial-sweep*.ts` (tests), a report doc, this log. Test-only; no runtime
+change without saying so here first.
+
+**T2 — read the Stripe payment path as an attacker.** Built today by Claude and deployed:
+`lib/stripe-{key,check,checkout,webhook}.ts`, `app/api/webhooks/stripe/route.ts`. It is public and
+it marks invoices paid. It has 21 unit tests plus `pnpm --filter @revio/operator webhook-verify`
+(13 checks over real HTTP, and it goes red with the signature check removed), so please do not repeat
+those — look for what they do **not** cover. Specifically worth attacking: the `Idempotency-Key` on
+session creation is keyed on invoice+hour, so what happens across the boundary; whether a session for
+invoice A can ever settle invoice B; whether a refund or dispute at Stripe leaves our row saying paid
+(it does — is that the right call, and what should it do); and whether `readStripeSecret` returning
+null on a decrypt failure hides a rotation problem behind a "no key stored" message.
+Read-only review, please — findings in a doc and this log, no fixes without claiming them.
+
+### 2026-09-09 · Claude · DONE · Stripe environment is a choice, not an inference
+**`activeStripeMode()` derived "live" from a working live key existing.**
+Files: `packages/db/prisma/schema.prisma` + migration `20260909140000_stripe_mode_is_a_choice`,
+`lib/integrations.ts`, `lib/actions-integrations.ts`,
+`components/integrations/StripeModeSwitch.tsx`, `app/(protected)/integrations/stripe/page.tsx`,
+`lib/stripe-mode.test.ts`, `scripts/stripe-mode-verify.ts`.
+
+Founder spotted it by asking the right question — *"how do we choose whether we are in sandbox or
+production"*. The answer was: nobody chooses, it is inferred. `live?.lastCheckOk === true` meant
+pasting a live key **to check the connection worked** silently made the next payment link charge a
+real card. The key-entry screen refuses a live key in the sandbox field on the stated grounds that
+mode is chosen and never inferred; the selection one layer up inferred it from the same evidence.
+
+Now `OperatorCompany.stripeMode`, default `test`, with a precondition on the dangerous direction
+only: going live needs a live key stored **and** checked ok; coming back needs nothing, because a
+gate on the panic button is a bad gate. A chosen mode that cannot be honoured is reported rather than
+silently downgraded — dropping to sandbox on a console that still reads LIVE would produce links that
+charge nobody.
+
+`stripe-mode-verify` walks the sequence against a real database and goes red on step 2 with the old
+line restored.
+
 ### 2026-09-09 · Claude · DONE · Operator menu, fourth attempt — rail + vertical panel
 **Icon rail, vertical section panel, horizontal only inside a page.**
 Files: `components/shell/{navigation.ts,AreaRail,SectionPanel,MobileNav,ShellFrame,Sidebar}.tsx`

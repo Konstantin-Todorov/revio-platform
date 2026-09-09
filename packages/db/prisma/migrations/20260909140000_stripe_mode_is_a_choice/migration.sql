@@ -1,0 +1,13 @@
+-- Which Stripe environment payments use, as a stored CHOICE.
+--
+-- It was inferred: `activeStripeMode()` returned "live" whenever a live credential existed and had
+-- last checked ok. That made adding a live key — the ordinary way to check a connection works —
+-- silently flip every future payment link to charging real cards.
+--
+-- The irony worth recording: `validateSecretKey` refuses a live key in a sandbox field precisely
+-- because "the mode must be chosen by a person, never inferred from what is present". The selection
+-- one layer up then inferred it from what was present.
+--
+-- Defaults to 'test' for the same reason every other default here is the cautious one: an
+-- environment nobody has deliberately chosen must not be the one that moves money.
+ALTER TABLE "OperatorCompany" ADD COLUMN "stripeMode" TEXT NOT NULL DEFAULT 'test';

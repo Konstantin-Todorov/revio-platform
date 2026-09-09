@@ -125,13 +125,55 @@ export async function readStripeSecret(mode: StripeMode): Promise<string | null>
   }
 }
 
-/** Which mode the operator is currently working in — live if it exists and works, else test. */
+/**
+ * Which Stripe environment payments actually use.
+ *
+ * ⚠️ **Read from a stored choice, never derived from what happens to be configured.**
+ *
+ * This used to be `live?.lastCheckOk === true ? "live" : "test"` — so the ordinary act of pasting a
+ * live key to check the connection worked silently made the next payment link charge a real card.
+ * `validateSecretKey` refuses a live key in a sandbox field for exactly that reason; the selection
+ * one layer up then inferred the same thing from the same evidence.
+ *
+ * A missing company row means nothing has been configured at all, and the safe reading of that is
+ * sandbox — never the environment that moves money.
+ */
 export async function activeStripeMode(): Promise<StripeMode> {
-  const live = await prisma.platformCredential.findUnique({
-    where: { provider_mode: { provider: "stripe", mode: "live" } },
+  const company = await prisma.operatorCompany.findUnique({
+    where: { id: "singleton" },
+    select: { stripeMode: true },
+  });
+  return company?.stripeMode === "live" ? "live" : "test";
+}
+
+/**
+ * Whether the chosen mode can actually be honoured, and what to say when it cannot.
+ *
+ * The choice and the credential are separate facts and either can move without the other — somebody
+ * removes a key, a key gets rolled at Stripe, a rotation loses a secret. A console set to live with
+ * no working live key looks entirely normal and takes no money, so the mismatch is surfaced rather
+ * than discovered by an invoice nobody could pay.
+ */
+export async function stripeModeStatus(): Promise<{
+  mode: StripeMode;
+  usable: boolean;
+  problem: string | null;
+}> {
+  const mode = await activeStripeMode();
+  const cred = await prisma.platformCredential.findUnique({
+    where: { provider_mode: { provider: "stripe", mode } },
     select: { lastCheckOk: true },
   });
-  return live?.lastCheckOk === true ? "live" : "test";
+  if (!cred) {
+    return { mode, usable: false, problem: `Payments are set to ${mode === "live" ? "LIVE" : "sandbox"}, but no ${mode} key is stored. Nothing can be charged.` };
+  }
+  if (cred.lastCheckOk === false) {
+    return { mode, usable: false, problem: `The stored ${mode} key was rejected by Stripe the last time it was checked. Payment links will fail until it is replaced.` };
+  }
+  if (cred.lastCheckOk === null) {
+    return { mode, usable: true, problem: `The ${mode} key has never been tested. Press Check now before relying on it — a key nobody has exercised is not a working key.` };
+  }
+  return { mode, usable: true, problem: null };
 }
 
 export async function getIntegrations(): Promise<IntegrationRow[]> {

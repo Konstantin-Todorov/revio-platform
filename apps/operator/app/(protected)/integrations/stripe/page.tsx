@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, CircleDashed, ExternalLink, XCircle } from "lucide-react";
 import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { getStripeConnection, type StripeConnection } from "@/lib/integrations";
+import { getStripeConnection, stripeModeStatus, type StripeConnection } from "@/lib/integrations";
+import { getOperatorSession } from "@/lib/session";
+import { StripeModeSwitch } from "@/components/integrations/StripeModeSwitch";
 import { testStripeConnection, removeStripeKey } from "@/lib/actions-integrations";
 import { StripeKeyDialog } from "@/components/integrations/StripeKeyDialog";
 import type { StripeMode } from "@/lib/stripe-key";
@@ -64,9 +66,15 @@ function Fact({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function ModePanel({ conn }: { conn: StripeConnection }) {
+function ModePanel({ conn, inUse }: { conn: StripeConnection; inUse: boolean }) {
   const live = conn.mode === "live";
   const a = conn.account;
+  /*
+   * Our invoices are priced and charged in EUR (`pricing.ts`, `Invoice.currency`). Stripe will take
+   * a EUR charge on an account of any default currency and convert on payout — so a mismatch is not
+   * a fault, it is a conversion the founder should know about rather than discover in a payout.
+   */
+  const currencyDiffers = !!a?.defaultCurrency && a.defaultCurrency !== "EUR";
 
   return (
     <Card className="p-4">
@@ -80,6 +88,7 @@ function ModePanel({ conn }: { conn: StripeConnection }) {
                 real money
               </span>
             )}
+            {inUse && <StatusPill tone={live ? "danger" : "neutral"}>in use</StatusPill>}
             {!conn.configured ? (
               <StatusPill tone="neutral">not set up</StatusPill>
             ) : conn.lastCheckOk === null ? (
@@ -165,6 +174,15 @@ function ModePanel({ conn }: { conn: StripeConnection }) {
         </dl>
       )}
 
+      {currencyDiffers && (
+        <p className="mb-3 rounded-md bg-warning-50 px-3 py-2 text-[12px] leading-relaxed text-warning-700">
+          This Stripe account settles in <strong className="font-semibold">{a!.defaultCurrency}</strong>,
+          and we invoice in EUR. Charges are still taken in EUR — Stripe converts on payout, at its
+          own rate and fee. Nothing is broken; it is the difference between what a hotel is billed
+          and what lands in the bank.
+        </p>
+      )}
+
       <ul className="border-t border-surface-border pt-2">
         <Step
           done={conn.configured ? conn.lastCheckOk : null}
@@ -222,7 +240,12 @@ function ModePanel({ conn }: { conn: StripeConnection }) {
 }
 
 export default async function StripePage() {
-  const [test, live] = await Promise.all([getStripeConnection("test"), getStripeConnection("live")]);
+  const [test, live, modeStatus, session] = await Promise.all([
+    getStripeConnection("test"),
+    getStripeConnection("live"),
+    stripeModeStatus(),
+    getOperatorSession(),
+  ]);
 
   return (
     <div>
@@ -260,9 +283,18 @@ export default async function StripePage() {
         </p>
       </div>
 
+      {/* Which environment is in use, above both panels: it is the question somebody arriving here
+          needs answered before they read anything else on the page. */}
+      <StripeModeSwitch
+        mode={modeStatus.mode}
+        problem={modeStatus.problem}
+        canEdit={session?.role === "super_admin"}
+        liveReady={live.configured && live.lastCheckOk === true}
+      />
+
       <div className="grid gap-3 lg:grid-cols-2">
-        <ModePanel conn={test} />
-        <ModePanel conn={live} />
+        <ModePanel conn={test} inUse={modeStatus.mode === "test"} />
+        <ModePanel conn={live} inUse={modeStatus.mode === "live"} />
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3 text-[11.5px]">

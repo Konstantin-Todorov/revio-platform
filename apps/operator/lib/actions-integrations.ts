@@ -296,3 +296,51 @@ export async function clearInvoicePaymentLink(fd: FormData): Promise<void> {
   revalidatePath(`/invoice/${invoiceId}`);
   revalidatePath("/billing");
 }
+
+/**
+ * Choose which Stripe environment payments use.
+ *
+ * ## Going live has a precondition, and it is not the same as inferring
+ *
+ * Live is refused unless a live key is stored **and has been tested successfully**. That is not the
+ * defect this replaced: the old code read the presence of a tested key as the decision, whereas this
+ * reads a person's decision and merely refuses to pretend it can be honoured. The difference is that
+ * pasting a key here changes nothing at all until somebody says so.
+ *
+ * Switching back to sandbox has no precondition. Stopping charging real cards is never the dangerous
+ * direction, and a gate on it would be a gate on the panic button.
+ */
+export async function setStripeMode(fd: FormData): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again to change the payment environment.");
+  if (session.role !== "super_admin") {
+    // Deliberately narrower than most settings: this one decides whether real money moves.
+    return flashError("Only a super admin can switch the payment environment.");
+  }
+
+  const mode = String(fd.get("mode") ?? "").trim();
+  if (!isStripeMode(mode)) return flashError("Reload the page and try again.");
+
+  if (mode === "live") {
+    const cred = await prisma.platformCredential.findUnique({
+      where: { provider_mode: { provider: "stripe", mode: "live" } },
+      select: { lastCheckOk: true },
+    });
+    if (!cred) {
+      return flashError("Add the live keys first. Going live with nothing stored would leave every payment link broken.");
+    }
+    if (cred.lastCheckOk !== true) {
+      return flashError("The live key has not been checked successfully. Press Check now on the live panel first — going live on an untested key is how a customer finds the problem for you.");
+    }
+  }
+
+  await prisma.operatorCompany.update({ where: { id: "singleton" }, data: { stripeMode: mode } });
+  await setFlash(
+    mode === "live" ? "error" : "success",
+    mode === "live"
+      ? "Payments are now LIVE. Every payment link created from here on charges a real card."
+      : "Payments are back in sandbox. Nothing created from here on can charge anybody.",
+  );
+  revalidatePath("/integrations");
+  revalidatePath("/integrations/stripe");
+}

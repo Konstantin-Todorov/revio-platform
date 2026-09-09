@@ -474,6 +474,16 @@ model OperatorCompany {
   /// put 20% on every Bulgarian invoice. Nothing had been issued to a real client, so it was a
   /// defect and not a correction — after the first one it would have been a credit note.
   vatRegistration    String   @default("none")
+  /// Which Stripe environment payments actually use — "test" or "live".
+  ///
+  /// ⚠️ **A CHOICE, never an inference.** Until 2026-09-09 this was derived: "a working live key
+  /// exists" meant "we are live". So adding a live key merely to check the connection silently made
+  /// the next payment link charge a real card. The whole point of validating a key's mode against a
+  /// mode a person picked was to stop exactly that, and then the *selection* inferred it anyway.
+  ///
+  /// Going live is now a deliberate act with a precondition (a live key that has been tested), and
+  /// nothing that happens on the Integrations screen can move it on its own.
+  stripeMode         String   @default("test")
   /// Company registration number (EIK in Bulgaria).
   companyId          String?
   addressLine        String?
