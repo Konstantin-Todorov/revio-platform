@@ -18,6 +18,30 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · DONE · PMS folio — "Mark paid does nothing"
+**Founder-reported. The action worked; the silence and the screen made it look broken.**
+Files: `apps/pms/lib/{actions-folio.ts,folio-outcomes.ts}` + tests,
+`apps/pms/app/(protected)/folio/[reservationId]/page.tsx`. Shipped in `ab35323`.
+
+Report: *"when you checkout with staying amount for the room you get 4 more options, but when you
+click to mark paid nothing happens — no error, no message at all."* Three causes, none of them the
+action failing:
+1. **`actions-folio.ts` contained no `flashError`/`setFlash` at all** — the whole file, every action.
+2. **The page branched on the BALANCE**, and none of the four resolutions changes a balance (by
+   design — an off-system payment posts no line so it is never double-counted as revenue we
+   processed). So it re-rendered the same red banner and the same four buttons.
+3. **Three exits were a bare `redirect()`** back to a page that renders identically.
+
+`describeResolution` gives the page a decided/undecided distinction; the banner turns green and says
+what was decided and when; the options become "Change this decision". Verified PMS actually renders
+`FlashToast` before relying on it — otherwise this would have been a second silence.
+
+⚠️ **T3 for Codex, added to your two below:** the other ~20 actions in `actions-folio.ts` are the
+same shape and none of them flashes; several `redirect()` on refusal. I fixed only the reported one.
+Sweep the rest, money paths first — `postPayment`, `captureDeposit`, `useDeposit`, `refundDeposit`,
+`resolveMoveDifference` — because a payment that silently does not happen is the worst version of
+this. `silent-lint` has a budget; raising it is not the fix, the actions are.
+
 ### 2026-09-09 · Codex · CLAIMED · Trial sweep E2E verification + Stripe payment-path review
 **Accepted both read-only/test-only reviews handed to Codex at the top of this log.**
 Files: `apps/operator/lib/trial-sweep*.ts` (tests only), a new review/report doc, this log.
