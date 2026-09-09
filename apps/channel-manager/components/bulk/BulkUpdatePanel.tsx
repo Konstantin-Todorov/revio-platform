@@ -7,7 +7,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
 
 type Opt = { id: string; name: string; code: string };
-type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null; roomLabel?: string };
+type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null; roomLabel?: string; active?: boolean };
 
 const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
 const RATE_MODES: [BulkRateMode, string][] = [
@@ -32,7 +32,15 @@ export function BulkUpdatePanel({
   onApplied?: (r: BulkResult) => void;
 }) {
   const in30 = useMemo(() => new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10), []);
-  const manualPlans = ratePlans.filter((p) => p.priceLogic === "manual");
+  /*
+   * Only plans that can actually hold a price.
+   *
+   * An INACTIVE plan was offered here and silently discarded by the writer — the operator ticked
+   * "Standard Rate", typed a number, was told the update applied, and that plan had no prices. The
+   * writer now names what it dropped; this stops it being offered in the first place, which is the
+   * better half of the fix: the best error message is the one nobody has to read.
+   */
+  const manualPlans = ratePlans.filter((p) => p.priceLogic === "manual" && p.active !== false);
   const derivedPlans = ratePlans.filter((p) => p.priceLogic !== "manual");
 
   // Scope

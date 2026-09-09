@@ -236,6 +236,7 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
 
   // Rate targeting: only MANUAL plans are price-edited (derived plans follow their parent).
   let ratePlanIds: string[] = [];
+  let droppedPlans: { name: string; why: string }[] = [];
   if (doRate) {
     const requested = payload.ratePlanIds ?? [];
     const manualPlans = await prisma.ratePlan.findMany({
@@ -243,8 +244,40 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
       select: { id: true }, orderBy: { sortOrder: "asc" },
     });
     ratePlanIds = manualPlans.map((p) => p.id);
+
+    /*
+     * ⚠️ SAY WHAT WAS DROPPED. This silently threw away plans, and it cost the first real hotel a day.
+     *
+     * The picker (`getRoomsAndRates`) lists every rate plan, including INACTIVE ones and derived
+     * ones. The filter above then quietly removes them: an operator ticked "Standard Rate", typed a
+     * price, was told the update was applied, and that plan had no prices at all. The audit entry
+     * agreed with the screen, because `affected` counted room × date rather than rows written.
+     *
+     * Refusing outright would be wrong — the plans they picked that ARE priceable should still be
+     * written. But a silent partial apply is the thing this codebase keeps being bitten by, so the
+     * ones that were dropped are named, with the reason, in the result the operator reads.
+     */
+    if (requested.length > 0) {
+      const missing = requested.filter((id) => !ratePlanIds.includes(id));
+      if (missing.length > 0) {
+        const rows = await prisma.ratePlan.findMany({
+          where: { id: { in: missing } },
+          select: { name: true, active: true, priceLogic: true },
+        });
+        droppedPlans = rows.map((r) => ({
+          name: r.name,
+          why: !r.active ? "inactive" : r.priceLogic !== "manual" ? "derived — it follows its parent" : "not on this property",
+        }));
+      }
+    }
+
     if (requested.length === 0) { const std = await standardPlanId(propertyId); ratePlanIds = std ? [std] : []; }
-    if (ratePlanIds.length === 0) return { ...empty, error: "Select at least one manual rate plan for the price change (derived plans follow their parent)." };
+    if (ratePlanIds.length === 0) {
+      const because = droppedPlans.length > 0
+        ? ` ${droppedPlans.map((d) => `${d.name} is ${d.why}`).join("; ")}.`
+        : "";
+      return { ...empty, error: `No price was written — none of the selected rate plans can hold one.${because} Pick a manual, active plan (derived plans follow their parent).` };
+    }
   }
 
   // Total-rooms safety net (spec A4): more inventory than physically exists saves, but warns.
@@ -294,8 +327,17 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
 
   const { inventory, ...restrictionCell } = cell;
   let affected = 0;
+  /*
+   * Rooms a RATE change could not reach, because no selected plan is sold on them.
+   *
+   * `affected` used to increment once per room × date regardless, so a rate run over a room with no
+   * matching plan reported cells it had not written. "It says done and then the prices are not
+   * there" is that sentence, from the operator's side.
+   */
+  const roomsWithNoPlan: string[] = [];
   for (const roomTypeId of roomTypeIds) {
     const roomPlans = plansForRoom.get(roomTypeId) ?? [];
+    if (doRate && roomPlans.length === 0) roomsWithNoPlan.push(roomTypeId);
     const targets = restrictionPlansFor(roomTypeId);
     for (const date of dates) {
       // Rooms-to-sell belongs to the room; restrictions go to whichever plans were named.
@@ -344,12 +386,32 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
     }
   }
 
+  /*
+   * Everything that did NOT happen, said in the same breath as what did.
+   *
+   * A partial apply is legitimate — the plans that can hold a price are written — but it must never
+   * be reported as a whole one. Both of these were silent until 2026-09-09.
+   */
+  const notes: string[] = [];
+  if (droppedPlans.length > 0) {
+    notes.push(
+      `No price was written for ${droppedPlans.map((d) => `${d.name} (${d.why})`).join(", ")}.`,
+    );
+  }
+  if (roomsWithNoPlan.length > 0) {
+    const names = await prisma.roomType.findMany({ where: { id: { in: roomsWithNoPlan } }, select: { name: true } });
+    notes.push(
+      `${names.map((n) => n.name).join(", ")} got no price — none of the selected rate plans is sold on ${names.length === 1 ? "it" : "them"}.`,
+    );
+  }
+  const fullWarning = [warning, ...notes].filter(Boolean).join(" ") || undefined;
+
   return {
     changed, affected, roomTypeIds, cells,
     dates: dateKeys,
     // Rate plans narrow the scope only when a price changed; a restriction is written per room type.
     ratePlanIds: doRate ? ratePlanIds : [],
-    ...(warning ? { warning } : {}),
+    ...(fullWarning ? { warning: fullWarning } : {}),
   };
 }
 

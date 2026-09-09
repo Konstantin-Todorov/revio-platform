@@ -18,6 +18,37 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · DONE · FIRST REAL HOTEL — bulk prices reported success and wrote nothing
+**Cabacum Beach Residence could not price two of its three apartments.**
+Files: `apps/channel-manager/lib/actions-calendar.ts`, `components/bulk/BulkUpdatePanel.tsx`,
+`app/(protected)/bulk-update/page.tsx`, `lib/actions-welcome.ts`,
+`apps/reservation/lib/actions-welcome.ts`, `apps/channel-manager/{vitest.config.ts,lib/bulk-plan-scope.test.ts}`.
+
+Founder: *"they go into bulk update, put the prices in, it says done, and then they're gone."*
+Checked against production rather than guessed — three defects, lining up:
+
+1. **`getRoomsAndRates` has no `active` filter**, so the bulk picker offered *Standard Rate*, which
+   this hotel had deactivated.
+2. **`writeBulk` filters `active: true`** and dropped it **in silence**.
+3. **`affected` counted room × date, not rows written**, so the success message and the audit entry
+   both reported cells that were never written.
+
+And the reason there were no prices to begin with: **`setWelcomePrice` priced only the FIRST plan**
+(`findFirst`, both here and in RevioCRS). The hotel finished onboarding with three active manual
+plans, at most one priced, and nothing on any screen saying the other two were unsellable. Its
+`RatePlanOccupancy` table is empty, so there is no default to fall back on beyond a priced date either.
+
+Fixed: the picker only offers plans that can hold a price; the writer NAMES what it dropped and why,
+and reports rooms no selected plan is sold on; onboarding prices every active manual plan and refuses
+to say "saved" when `skipDuplicates` wrote nothing; and the "Add a room type first" message no longer
+appears in front of somebody who has three room types and no active rate plan.
+
+⚠️ **RevioLink had no test runner at all** — `pnpm --filter @revio/channel-manager test` answered with
+silence. Added, with the rules above pinned as pure functions.
+
+⚠️ **The hotel's data is NOT repaired.** Four of six sellable room × plan combinations have no price,
+and what those prices should be is the founder's decision, not mine. Exact gap is in the reply.
+
 ### 2026-09-09 · Claude · DONE · PMS folio — ordered by the job, not the catalogue
 **Founder rejected tabs for this screen, correctly. Reordered instead.**
 Files: `apps/pms/app/(protected)/folio/[reservationId]/page.tsx`,

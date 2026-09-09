@@ -140,9 +140,20 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
   if (!Number.isFinite(major) || major <= 0) return { error: "Enter a nightly price." };
   const priceMinor = Math.round(major * 100);
 
-  const plan = await prisma.ratePlan.findFirst({
-    where: { propertyId: property.id, active: true },
+  /*
+   * EVERY sellable plan, not just the first — the same fix as RevioLink's, for the same reason.
+   *
+   * The first real hotel came out of onboarding with three active manual plans and at most one of
+   * them priced. The other two were live, linked to every room, and unsellable, with nothing on any
+   * screen saying so. A plan that is active and manual must have a price or it cannot sell.
+   *
+   * Derived plans are excluded: they follow their parent by definition, and pricing one directly is
+   * overwritten the moment the parent moves.
+   */
+  const plans = await prisma.ratePlan.findMany({
+    where: { propertyId: property.id, active: true, priceLogic: "manual" },
     orderBy: { sortOrder: "asc" },
+    select: { id: true },
   });
   /*
    * ⚠️ Occupancy is REQUIRED on every write, and this is where that was missed.
@@ -160,7 +171,12 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
     where: { propertyId: property.id },
     select: { id: true, maxGuests: true, defaultOccupancy: true },
   });
-  if (!plan || roomTypes.length === 0) return { error: "Add a room type first." };
+  // Two causes, two messages. "Add a room type first" in front of somebody who has three room types
+  // and no active rate plan sends them to the wrong screen.
+  if (roomTypes.length === 0) return { error: "Add a room type first — a price belongs to a room." };
+  if (plans.length === 0) {
+    return { error: "There is no active rate plan to price. Add one in Rates & Restrictions, then come back — a price has to live on a plan." };
+  }
 
   const DAYS = 180;
   const today = new Date();
@@ -168,22 +184,26 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
     tenantId: string; propertyId: string; ratePlanId: string; roomTypeId: string;
     date: Date; occupancy: number; priceMinor: number;
   }[] = [];
-  for (const rt of roomTypes) {
-    const occupancy = Math.max(1, rt.maxGuests);
-    for (let d = 0; d < DAYS; d++) {
-      const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + d));
-      rows.push({
-        tenantId: session.tenantId,
-        propertyId: property.id,
-        ratePlanId: plan.id,
-        roomTypeId: rt.id,
-        date,
-        occupancy,
-        priceMinor,
-      });
+  for (const plan of plans) {
+    for (const rt of roomTypes) {
+      const occupancy = Math.max(1, rt.maxGuests);
+      for (let d = 0; d < DAYS; d++) {
+        const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + d));
+        rows.push({
+          tenantId: session.tenantId,
+          propertyId: property.id,
+          ratePlanId: plan.id,
+          roomTypeId: rt.id,
+          date,
+          occupancy,
+          priceMinor,
+        });
+      }
     }
   }
-  await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
+  // Safe to re-run — it never overwrites a price somebody has since edited. Which means it can write
+  // nothing, and reporting "saved" for that would be the silence this project keeps being bitten by.
+  const written = await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
 
   /*
    * And the plan needs its occupancy option, or it has no default price to fall back on.
@@ -192,16 +212,23 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
    * it ran. Without this a date outside the 180-night window prices as null rather than falling back
    * to the plan's own rate.
    */
-  for (const rt of roomTypes) {
-    const occupancy = Math.max(1, rt.maxGuests);
-    await prisma.ratePlanOccupancy.upsert({
-      where: { ratePlanId_occupancy: { ratePlanId: plan.id, occupancy } },
-      create: {
-        tenantId: session.tenantId, ratePlanId: plan.id, occupancy,
-        isPrimary: true, mode: "manual", rateMinor: priceMinor, rounding: "none",
-      },
-      update: { rateMinor: priceMinor },
-    });
+  for (const plan of plans) {
+    for (const rt of roomTypes) {
+      const occupancy = Math.max(1, rt.maxGuests);
+      await prisma.ratePlanOccupancy.upsert({
+        where: { ratePlanId_occupancy: { ratePlanId: plan.id, occupancy } },
+        create: {
+          tenantId: session.tenantId, ratePlanId: plan.id, occupancy,
+          isPrimary: true, mode: "manual", rateMinor: priceMinor, rounding: "none",
+        },
+        update: { rateMinor: priceMinor },
+      });
+    }
+  }
+
+  if (written.count === 0 && rows.length > 0) {
+    // Every date already had a price. Nothing is wrong, but "saved" would be a lie.
+    return { error: "Those dates already have prices, so nothing was changed. Edit them on the calendar or in Bulk update." };
   }
 
   revalidatePath("/calendar");
