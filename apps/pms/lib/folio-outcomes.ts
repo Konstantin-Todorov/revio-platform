@@ -118,3 +118,84 @@ export function outcomeHeadline(totals: readonly OutcomeTotal[]): {
     totals.filter((t) => t.tone === tone).reduce((s, t) => s + t.amountMinor, 0);
   return { collectedMinor: sum("collected"), owedMinor: sum("owed"), lostMinor: sum("lost") };
 }
+
+/**
+ * What a RECORDED decision means, for the screen that has to show it back.
+ *
+ * ## Why this was needed
+ *
+ * The founder reported that pressing **Mark paid** did nothing — "no error, no message at all". The
+ * action was in fact working: it wrote the outcome and returned. But it said nothing, and the screen
+ * could not tell a decided folio from an undecided one, because it branched on the BALANCE
+ * (`combined.balance === 0`) and none of these four exits changes a balance.
+ *
+ * So after marking it paid the page re-rendered with the same red "closed with €513 outstanding"
+ * banner and the same four buttons. Working code and a screen that looked identical afterwards is
+ * indistinguishable from a broken button — and worse, because it invites pressing it again.
+ *
+ * `outcome === null` is the only undecided state. Everything else has been decided by a person, and
+ * the screen owes them the answer back.
+ */
+export interface ResolutionSummary {
+  headline: string;
+  /** What it means for the money. The balance is unchanged in every case, so this has to say so. */
+  meaning: string;
+  tone: "collected" | "owed" | "lost";
+  /** Still chased, and still on the receivables list. Only `outstanding` is. */
+  stillOwed: boolean;
+}
+
+const RESOLUTION_SUMMARY: Record<FolioOutcome, ResolutionSummary> = {
+  settled: {
+    headline: "Settled through the folio",
+    meaning: "Paid in full, the ordinary way.",
+    tone: "collected",
+    stillOwed: false,
+  },
+  paid_offsystem: {
+    headline: "Paid off-system",
+    meaning:
+      "The money arrived by bank transfer, cash or an external terminal. The folio still shows a balance because nothing was posted through it — that is deliberate, so the payment is never double-counted as revenue we processed.",
+    tone: "collected",
+    stillOwed: false,
+  },
+  outstanding: {
+    headline: "Kept as a receivable",
+    meaning: "Still owed and still being chased. It stays on the receivables list until that changes.",
+    tone: "owed",
+    stillOwed: true,
+  },
+  written_off: {
+    headline: "Written off",
+    meaning: "The balance is forgiven and recorded as a loss. It is never counted as a payment.",
+    tone: "lost",
+    stillOwed: false,
+  },
+};
+
+/** The decision on a folio, or null while nobody has made one. */
+export function describeResolution(outcome: string | null | undefined): ResolutionSummary | null {
+  if (!outcome) return null;
+  return RESOLUTION_SUMMARY[outcome as FolioOutcome] ?? null;
+}
+
+/**
+ * What to tell the person who just pressed the button.
+ *
+ * Names the amount and what happens to it, because the folio balance will not change and the number
+ * on screen will look untouched. "Recorded" alone would leave them checking whether it worked.
+ */
+export function resolutionConfirmation(resolution: string, moneyLabel: string): string {
+  switch (resolution) {
+    case "reopen":
+      return `Folio reopened. Post the payment and it will close at zero.`;
+    case "paid_offsystem":
+      return `Recorded as paid off-system. ${moneyLabel} counts as collected, and the folio keeps showing the balance because nothing was posted through it.`;
+    case "receivable":
+      return `Kept as a receivable. ${moneyLabel} stays on the receivables list until somebody resolves it.`;
+    case "written_off":
+      return `Written off. ${moneyLabel} is recorded as a loss, never as a payment.`;
+    default:
+      return "Decision recorded.";
+  }
+}

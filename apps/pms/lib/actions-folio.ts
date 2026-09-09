@@ -11,6 +11,8 @@ import { assessMoveForReservation } from "./move-reconciliation";
 import { postFolioLine } from "./posting";
 import { chargeCard, refundCard } from "@revio/payments";
 import { logAudit, str, int } from "./mutation-helpers";
+import { flashError, setFlash } from "@revio/ui/flash";
+import { resolutionConfirmation } from "./folio-outcomes";
 
 /**
  * Session + capability gate for every action in this file.
@@ -309,15 +311,31 @@ export async function resolveFolio(fd: FormData): Promise<void> {
   const resolution = str(fd, "resolution");
   const note = str(fd, "note");
 
+  /*
+   * Every refusal below says why.
+   *
+   * All three used to be a bare `redirect()` back to the same page — which renders identically, so
+   * the button looked broken. The founder reported exactly that on 2026-09-09: *"when you click to
+   * mark paid nothing happens, no error, no message at all."* A server action that declines and says
+   * nothing is worse than one that throws, because there is nothing to report and nothing to fix.
+   */
   if (!FOLIO_RESOLUTIONS.includes(resolution as (typeof FOLIO_RESOLUTIONS)[number])) {
-    redirect(`/folio/${reservationId}`);
+    return flashError("That is not one of the four ways to resolve a folio. Reload the page and try again.");
   }
 
   const folio = await prisma.folio.findFirst({
     where: { id: folioId, reservationId, propertyId: session.activePropertyId },
-    select: { id: true, status: true, outcome: true, label: true },
+    select: { id: true, status: true, outcome: true, label: true, lines: { select: { kind: true, amountMinor: true, voided: true } } },
   });
-  if (!folio || folio.status !== "closed") redirect(`/folio/${reservationId}`);
+  if (!folio) {
+    return flashError("That folio no longer exists on this stay. Reload the page.");
+  }
+  if (folio.status !== "closed") {
+    // The four resolutions are the exits from "closed with a balance". An OPEN folio takes a payment
+    // the ordinary way, and offering to mark it paid off-system would be a second, quieter path to
+    // the same place — with no line on the bill to show for it.
+    return flashError("This folio is still open. Post the payment on it directly, or close it first — these four are the ways out of a folio that closed still owing money.");
+  }
 
   const now = new Date();
   await withTenantTransaction(session.tenantId, async (tx) => {
@@ -339,10 +357,21 @@ export async function resolveFolio(fd: FormData): Promise<void> {
   });
 
   await logAudit(session.activePropertyId, session.tenantId, {
-    entity: "folio_resolution", field: folio!.label,
-    oldValue: folio!.outcome ?? "closed", newValue: `${resolution}${note ? ` · ${note}` : ""}`,
+    entity: "folio_resolution", field: folio.label,
+    oldValue: folio.outcome ?? "closed", newValue: `${resolution}${note ? ` · ${note}` : ""}`,
     userId: session.userId,
   });
+
+  /*
+   * Say what happened, naming the money.
+   *
+   * None of these four posts a folio line, so the balance on screen is about to look exactly as it
+   * did a moment ago. Without a sentence the only honest reading of that screen is "nothing
+   * happened" — which is what was reported.
+   */
+  const { balance } = folioBalance(folio.lines);
+  const moneyLabel = `${(Math.abs(balance) / 100).toFixed(2)}`;
+  await setFlash("success", resolutionConfirmation(resolution, moneyLabel));
   refresh(reservationId);
 }
 

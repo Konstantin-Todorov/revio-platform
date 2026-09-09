@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 }
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat, FileText, Trash2 } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
+import { describeResolution } from "@/lib/folio-outcomes";
 import { assessMoveForReservation } from "@/lib/move-reconciliation";
 import { listInvoicesForReservation, DOC_LABEL } from "@/lib/invoice";
 import { gatewayMode } from "@revio/payments";
@@ -134,6 +135,15 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const outstandingFolio =
     folios.find((f) => f.status === "closed" && f.totals.balance !== 0) ?? folios[0]!;
   const outstandingCount = folios.filter((f) => f.status === "closed" && f.totals.balance !== 0).length;
+  /*
+   * Whether somebody has already DECIDED what happens to this money.
+   *
+   * The page used to branch only on `settled` (balance === 0), and none of the four resolutions
+   * changes a balance — so after pressing "Mark paid" it re-rendered the same red banner and the
+   * same four buttons. Working code, identical screen, and the founder reasonably read that as a
+   * broken button. `outcome` is the fact that moved; this is the page reading it.
+   */
+  const decision = describeResolution(outstandingFolio.outcome);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -592,21 +602,70 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
              available action. The money is still owed, so it says so, and it offers the four ways
              out. Every one is logged with who and why. */
           <Card surface="flat" className="p-4">
-            <div className="mb-3 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2.5">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
-              <div className="text-[12.5px] text-danger-700">
-                <span className="font-bold">Closed with {money(combined.balance, currency)} outstanding.</span>{" "}
-                The stay has ended and this money is still owed. It stays on the{" "}
-                <Link href="/folios?tab=receivables" className="font-semibold underline">receivables list</Link> until it is resolved.
-                {outstandingCount > 1 && (
-                  <> These resolutions apply to <span className="font-semibold">{outstandingFolio.label}</span> — {outstandingCount - 1} other folio{outstandingCount === 2 ? "" : "s"} on this stay {outstandingCount === 2 ? "is" : "are"} also outstanding and {outstandingCount === 2 ? "needs" : "need"} resolving separately.</>
+            {/*
+              * Decided or undecided — two genuinely different states, and the screen used to show
+              * only one of them. A folio somebody has already marked paid off-system is not an
+              * unanswered question, and shouting "outstanding" at them in red is both wrong and an
+              * invitation to press the button a second time.
+              */}
+            {decision ? (
+              <div
+                className={`mb-3 flex items-start gap-2 rounded-md px-3 py-2.5 ${
+                  decision.tone === "collected"
+                    ? "bg-success-50 text-success-700"
+                    : decision.tone === "lost"
+                      ? "bg-warning-50 text-warning-700"
+                      : "bg-surface-sunken text-ink-700"
+                }`}
+              >
+                {decision.tone === "collected" ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                ) : (
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 )}
+                <div className="text-[12.5px]">
+                  <span className="font-bold">
+                    {decision.headline} — {money(combined.balance, currency)}.
+                  </span>{" "}
+                  {decision.meaning}
+                  {outstandingFolio.outcomeNote && (
+                    <> <span className="font-semibold">Note:</span> {outstandingFolio.outcomeNote}</>
+                  )}
+                  {outstandingFolio.outcomeAt && (
+                    <span className="opacity-80">
+                      {" "}Decided {new Date(outstandingFolio.outcomeAt).toLocaleDateString("en-GB")}.
+                    </span>
+                  )}
+                  {decision.stillOwed && (
+                    <> It stays on the{" "}
+                      <Link href="/folios?tab=receivables" className="font-semibold underline">receivables list</Link>.
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mb-3 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2.5">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
+                <div className="text-[12.5px] text-danger-700">
+                  <span className="font-bold">Closed with {money(combined.balance, currency)} outstanding.</span>{" "}
+                  The stay has ended and this money is still owed. It stays on the{" "}
+                  <Link href="/folios?tab=receivables" className="font-semibold underline">receivables list</Link> until it is resolved.
+                  {outstandingCount > 1 && (
+                    <> These resolutions apply to <span className="font-semibold">{outstandingFolio.label}</span> — {outstandingCount - 1} other folio{outstandingCount === 2 ? "" : "s"} on this stay {outstandingCount === 2 ? "is" : "are"} also outstanding and {outstandingCount === 2 ? "needs" : "need"} resolving separately.</>
+                  )}
+                </div>
+              </div>
+            )}
 
             {!isManager && (
               <p className="mb-3 text-[12px] text-ink-500">
                 A manager settles this. You can see what is owed and what the options are, but not choose one.
+              </p>
+            )}
+
+            {decision && isManager && (
+              <p className="mb-2 text-[11.5px] font-semibold uppercase tracking-wide text-ink-400">
+                Change this decision
               </p>
             )}
 

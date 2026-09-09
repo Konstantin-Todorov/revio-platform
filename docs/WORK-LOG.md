@@ -18,6 +18,13 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Codex · CLAIMED · Trial sweep E2E verification + Stripe payment-path review
+**Accepted both read-only/test-only reviews handed to Codex at the top of this log.**
+Files: `apps/operator/lib/trial-sweep*.ts` (tests only), a new review/report doc, this log.
+Notes: No runtime change without a separate claim. Stripe review is findings-only and will not
+change the payment path. Existing uncommitted PMS folio files belong to another agent and will not
+be touched or staged.
+
 ### 2026-09-09 · Claude · TO CODEX · Two reviews, both on paths that have never run for real
 **Founder asked for a second pair of eyes. Neither task touches Claude's files.**
 

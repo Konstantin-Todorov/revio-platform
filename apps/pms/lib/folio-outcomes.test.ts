@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { summariseOutcomes, outcomeHeadline, FOLIO_OUTCOMES } from "./folio-outcomes";
+import { summariseOutcomes, outcomeHeadline, FOLIO_OUTCOMES, describeResolution, resolutionConfirmation } from "./folio-outcomes";
 
 const row = (outcome: string | null, grossMinor: number) => ({ outcome, grossMinor });
 
@@ -77,5 +77,71 @@ describe("outcomeHeadline", () => {
     expect(h.collectedMinor).toBe(0);
     expect(h.lostMinor).toBe(0);
     expect(h.owedMinor).toBe(8000);
+  });
+});
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * The reported bug: "when you click to mark paid nothing happens, no error, no message at all."
+ *
+ * The action was working. What was missing was any way for the SCREEN to tell a decided folio from
+ * an undecided one — it branched on the balance, and none of the four resolutions changes a balance.
+ * ---------------------------------------------------------------------------------------------
+ */
+describe("describeResolution — decided is not the same as settled", () => {
+  it("returns nothing while nobody has decided", () => {
+    // The only state that should show the red banner and the four buttons.
+    expect(describeResolution(null)).toBeNull();
+    expect(describeResolution(undefined)).toBeNull();
+    expect(describeResolution("")).toBeNull();
+  });
+
+  it("recognises a folio marked paid off-system, even though its balance is unchanged", () => {
+    const d = describeResolution("paid_offsystem")!;
+    expect(d.tone).toBe("collected");
+    expect(d.stillOwed).toBe(false);
+    // The sentence has to explain the balance still showing, or the screen contradicts itself.
+    expect(d.meaning).toMatch(/still shows a balance|nothing was posted/i);
+  });
+
+  it("keeps a receivable on the list, because that is what the decision means", () => {
+    const d = describeResolution("outstanding")!;
+    expect(d.stillOwed).toBe(true);
+    expect(d.tone).toBe("owed");
+  });
+
+  it("never reports a write-off as money collected", () => {
+    // The distinction the whole module exists for: one is revenue, one is a loss.
+    expect(describeResolution("written_off")!.tone).toBe("lost");
+    expect(describeResolution("written_off")!.stillOwed).toBe(false);
+  });
+
+  it("returns nothing for an outcome it does not recognise, rather than guessing", () => {
+    // A new value must surface as missing, never as a confident "collected".
+    expect(describeResolution("refunded_somehow")).toBeNull();
+  });
+});
+
+describe("resolutionConfirmation — what the person who pressed the button is told", () => {
+  it("names the amount, because the balance on screen will not move", () => {
+    for (const r of ["paid_offsystem", "receivable", "written_off"]) {
+      expect(resolutionConfirmation(r, "513.00"), r).toContain("513.00");
+    }
+  });
+
+  it("says what happens to the money, differently for each", () => {
+    expect(resolutionConfirmation("paid_offsystem", "513.00")).toMatch(/collected/i);
+    expect(resolutionConfirmation("written_off", "513.00")).toMatch(/loss/i);
+    expect(resolutionConfirmation("receivable", "513.00")).toMatch(/receivables list/i);
+    expect(resolutionConfirmation("reopen", "513.00")).toMatch(/close at zero/i);
+  });
+
+  it("never calls a write-off a payment", () => {
+    expect(resolutionConfirmation("written_off", "513.00")).toMatch(/never as a payment/i);
+  });
+
+  it("still says something for an unknown resolution", () => {
+    // Silence is the failure this whole change is about.
+    expect(resolutionConfirmation("nonsense", "1.00").length).toBeGreaterThan(0);
   });
 });
