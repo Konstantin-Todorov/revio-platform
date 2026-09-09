@@ -1,23 +1,19 @@
 import type { ReactNode } from "react";
-import { SettingsNav } from "@revio/ui/settings-nav";
-import { PageHeader } from "@/components/ui/primitives";
-import { SETTINGS_SECTIONS, SETTINGS_ELSEWHERE } from "./sections";
 
 /**
- * The Settings shell: one header, the section nav, and whichever section is open.
+ * Settings is now an area like any other.
  *
- * The same component and the same shape the three hotel products use. This console is not a hotel
- * product, but the person opening it is often the same person who has just been in one of them, and
- * a fourth arrangement of the same job helps nobody.
+ * It used to render its own `SettingsNav` down the left of the page, which meant the console had
+ * **two different vertical menus doing one job** — the shell's and this one — sitting side by side
+ * on this screen and nowhere else. The shell's `SectionPanel` is that menu now, driven by the same
+ * `navigation.ts` as every other area, so there is one of them (`docs/UI-STANDARD.md` rule 3).
+ *
+ * The three hotel products keep `@revio/ui/settings-nav`: they have one settings screen and no area
+ * rail, so for them it is still the right and only pattern. This console outgrew it.
+ *
+ * Nothing left here but the children — which is the shape a layout should reach when the thing it
+ * was wrapping has moved somewhere it belongs.
  */
 export default function SettingsLayout({ children }: { children: ReactNode }) {
-  return (
-    <div className="space-y-5">
-      <PageHeader title="Settings" subtitle="Operator team, roles and platform configuration" />
-      <div className="flex flex-col gap-5 lg:flex-row">
-        <SettingsNav sections={SETTINGS_SECTIONS} elsewhere={SETTINGS_ELSEWHERE} />
-        <div className="min-w-0 flex-1 space-y-4">{children}</div>
-      </div>
-    </div>
-  );
+  return <div className="space-y-4">{children}</div>;
 }

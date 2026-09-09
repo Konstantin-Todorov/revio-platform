@@ -18,6 +18,28 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · DONE · Operator menu, fourth attempt — rail + vertical panel
+**Icon rail, vertical section panel, horizontal only inside a page.**
+Files: `components/shell/{navigation.ts,AreaRail,SectionPanel,MobileNav,ShellFrame,Sidebar}.tsx`
++ two test files, `app/(protected)/layout.tsx`, `app/(protected)/settings/{layout,page}.tsx`.
+Deleted: `AreaTabs.tsx`, `app/(protected)/settings/sections.ts`.
+
+Founder rejected the horizontal-tab version and gave a reference screenshot: narrow icon rail →
+vertical section list → horizontal tabs only inside a page. *"As it is in Settings — first a
+vertical menu, and then if needed add horizontal in one of them."*
+
+Vertical wins at level 2 because it **scales and does not compete**: five Operations sections as a
+tab row sit directly above whatever tabs the page owns. Down the side there is no competition, and
+the panel can stay on a detail page — which the tab row could not.
+
+**Settings lost its own `SettingsNav`.** The console had two vertical menus doing one job, side by
+side on that one screen. Settings is now an area like any other. The hotel apps keep the shared
+component; they have no rail and one settings screen, so for them it is still right.
+
+Looked at before shipping, and the fixture lied twice: four fixed sidebars stacking on the viewport,
+then `h-screen` clipping the Settings icon out of a 520px preview frame so it read as missing. Both
+were the fixture, not the product — noted in the test so the next person does not chase them.
+
 ### 2026-09-09 · Claude · DONE · Stripe part 2 — an invoice can actually be paid
 **Checkout link, webhook, and the invoice settling itself.**
 Files: `apps/operator/lib/stripe-{checkout,webhook}.ts` + tests, `app/api/webhooks/stripe/route.ts`,

@@ -63,7 +63,7 @@ Three that show the shape of it:
 `production` branch at the **same commit**; the marketing site is on `production` of its own repo;
 Postgres is an image.
 
-**1,928 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
+**1,933 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
 change — typecheck, lint, and ten ratchets that each exist because something specific went wrong
 once: copy · authz · silent · money · health · a11y · scroll-lock · jobs · zoom · tokens. CI additionally applies every migration into an empty database and runs the seed.
 
@@ -223,7 +223,7 @@ that are assessments rather than code: `docs/COMPETITIVE-GAPS-2026-09.md` and
 | **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
 | **Send the payment link** ⏳ | ✅ An invoice can now be paid by card — link, hosted Checkout, webhook, invoice settling itself. What is *not* built is the email that carries the link: the operator copies the URL off `/invoice/[id]` and pastes it. Deliberate — sending it is a decision with a covering sentence, and a Send button that silently composed one would be worse than none | Small |
 | **Refunds and recurring** ⏳ | A card payment can be taken and not given back: a refund is done in the Stripe dashboard and our invoice would not know. And every month is still an invoice somebody generates and sends — Stripe Subscriptions would make it automatic, but that is a pricing-model decision as much as a build | Medium |
-| **Operator navigation — properly this time** ⏳ | **Two attempts rejected, both by the founder, and the reasons are recorded so a third does not repeat them.** Attempt 1 wrapped headings around the same flat list — *"it still reads as one long, amateur list."* Attempt 2 was reverted as off-design: *"it did not make it with our design and it was bad."* The requirement stands and is specific: **the sidebar exposes a small number of areas; choosing one reveals that area's screens as an inner tab level**, using the tab pattern already shipped on `/clients/[id]` — the one the founder said he liked. Logical and tidy, no route, action or revalidation change | Medium |
+| **Use the new menu for a week** | ✅ Built on the fourth attempt — icon rail → vertical section panel → horizontal tabs only inside a page, from the founder's own reference. Nothing left to build; what is left is finding out whether the grouping survives daily use. The four rejected shapes and why are in `apps/operator/CLAUDE.md` so a fifth does not repeat them | — |
 | **Client analytics** | Every number on the client page is today's value. A twelve-month sparkline, one health score with its parts visible, and MRR movement — the three things every mature console leads with, and all four inputs already exist | Medium |
 | **Hotel's own Stripe keys** | The model is settled (their account, not Connect — we never touch the money) and designed in `docs/PLAN-2026-09-09.md` §1. It follows ours rather than leading it, and it reuses the `PlatformCredential` shape wholesale — the encryption, the mode validation and the test-before-store are already built and tested | Medium |
 | **In-app AI assistant** | The biggest differentiator and the least urgent. Founder's framing: future context, not a task. Waiting for a real support queue to learn from | Large |

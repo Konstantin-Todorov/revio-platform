@@ -178,6 +178,57 @@ amber banner. The default stays honest; the toggle is opt-in and never sticky.
 One click flips the flag either way. A demo tenant that becomes a paying customer keeps its whole
 history instead of starting again on a fresh tenant, and a real client can be borrowed for a test.
 
+## The menu: three levels, and the fourth attempt is the one that stuck
+
+```
+ rail (68px)   panel (232px)        page
+ ┌────┬──────────────┬─────────────────────────────┐
+ │ ▣  │ Operations   │  Integrations               │
+ │ ◉  │  Health      │  ┌────────┬──────────────┐  │
+ │ ◈  │  Errors      │  │ Details│ Subscription │  │ ← level 3, owned by the page
+ │ ◐  │ ▸Integrations│  └────────┴──────────────┘  │
+ │ ⚙  │  Connectivity│                             │
+ └────┴──────────────┴─────────────────────────────┘
+```
+
+**Level 1 — areas as icons.** Seven, learned once and then hit by muscle memory. The fourteen
+labelled links they replaced had to be *read* every time, which is the tax this removes.
+
+**Level 2 — sections, VERTICAL.** The founder's instruction and his own reference screenshot:
+*"first a vertical menu, and then if needed, add horizontal inside one of them."*
+
+**Level 3 — horizontal tabs inside a page**, for several views of one record: the client's three
+tabs, Stripe's two modes. Owned by the pages, not by `navigation.ts`.
+
+⚠️ **Why vertical beats horizontal at level 2, having tried both.** A tab row does not scale and it
+*competes*: Operations has five sections and Settings four, and as tabs they sit directly above
+whatever tabs the page itself has, leaving the reader to work out which row means what. Down the
+side there is no competition, there is room for a line of explanation, and a seventh section changes
+nothing about the layout. It is also why the panel can **stay on a detail page** where the tab row
+had to disappear — and losing the menu when you drill in is how somebody gets stranded.
+
+The four attempts, so a fifth does not repeat them: fourteen flat links (*chaotic*); headings over
+the same fourteen (*"it still reads as one long, amateur list"*); a rebuild reverted as off-design;
+areas with horizontal tabs (worked, but put the menu in two directions at once).
+
+**Settings has no navigation of its own any more.** It used to render `SettingsNav` inside the page,
+so this console had two vertical menus doing one job, side by side on that screen and nowhere else.
+Settings is now an area like any other and `SectionPanel` is that menu — `docs/UI-STANDARD.md` rule
+3, one component per concept. The three hotel products keep `@revio/ui/settings-nav`: they have one
+settings screen and no area rail, so for them it is still right.
+
+⚠️ **A phone gets `MobileNav`, not a shrunken rail.** The rail trades width for two levels at once
+and a phone has no width to trade; forcing it through gives a 68px drawer of unlabelled icons. Same
+routes, same order, same names, flattened into one labelled list.
+
+`navigation.ts` is the only place that decides what belongs where — the rail, the panel, the mobile
+list and the content offset all read it, so the gap and the panel cannot disagree about how wide the
+chrome is. **No route ever changes from it**, which is what makes a navigation change safe to ship.
+
+`shell-view.test.tsx` renders the real chrome with the app's own compiled CSS
+(`OPERATOR_SHELL_PREVIEW=… pnpm --filter @revio/operator test`). Two of the four attempts were green
+and rejected on sight, so looking is not optional here.
+
 ## Integrations & payments (`/integrations`, 2026-09-09)
 
 **Our own Stripe account** — the one hotels pay *us* through. Deliberately not the same thing as the
