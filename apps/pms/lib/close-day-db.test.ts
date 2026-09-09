@@ -18,6 +18,7 @@ const control = vi.hoisted(() => ({
   boundary: null as "posting" | "accrual" | "audit" | null,
   afterRead: null as (() => Promise<void>) | null,
   push: vi.fn(),
+  slowAudit: false,
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("./db", () => ({ prisma: new Proxy({}, { get() { throw new Error("Session DB proxy used by Close Day"); } }) }));
@@ -60,6 +61,8 @@ vi.mock("./posting", async (importOriginal) => {
 vi.mock("./mutation-helpers", async (importOriginal) => {
   const original = await importOriginal<typeof import("./mutation-helpers")>();
   return { ...original, logAudit: async (...args: Parameters<typeof original.logAudit>) => {
+    // Exercise the REAL 15-second transaction timeout, not a mocked rollback or shorter budget.
+    if (control.slowAudit) await (args[3] as TenantTx).$executeRaw`SELECT pg_sleep(16)`;
     await original.logAudit(...args);
     if (control.boundary === "audit") throw new Error("injected after actual audit");
   } };
@@ -85,6 +88,7 @@ describe.skipIf(!enabled)("Close Day against PostgreSQL with real accrual/postin
     vi.setSystemTime(date("2026-09-10"));
     control.boundary = null;
     control.afterRead = null;
+    control.slowAudit = false;
     control.push.mockReset().mockResolvedValue(undefined);
     const tenant = await db.tenant.create({ data: { name: "Close Day fixture", slug: `close-day-${crypto.randomUUID()}`, isDemo: true } });
     tenantId = tenant.id;
@@ -174,4 +178,79 @@ describe.skipIf(!enabled)("Close Day against PostgreSQL with real accrual/postin
     expect(await runCloseDay("unrelated-tenant", propertyId, actor, "2026-09-07")).toBeNull();
     expect((await snapshot()).property.businessDate).toEqual(date("2026-09-07"));
   });
+
+  // Opt-in performance investigation: normal unit/DB runs do not create large fixtures or sleep.
+  // CLOSE_DAY_LOAD=1 with the three guarded local URLs above. Timings exclude fixture creation,
+  // use real PostgreSQL/RLS/posting/audit, and deliberately exclude external channel delivery.
+  async function fillHotel(rooms: number, warm: boolean) {
+    const base = { tenantId, propertyId };
+    const stay = await db.reservation.findFirstOrThrow({ where: { ...base, id: { not: absentId } }, include: { lines: true } });
+    const template = stay.lines[0]!;
+    const seed = Array.from({ length: rooms - 1 }, (_, i) => ({
+      reservationId: crypto.randomUUID(), lineId: crypto.randomUUID(), unitId: crypto.randomUUID(), label: `load-${i}`,
+    }));
+    await db.reservation.createMany({ data: seed.map((s) => ({ ...base, id: s.reservationId, guestName: "Synthetic load guest", totalMinor: 40000 })) });
+    await db.reservationLine.createMany({ data: seed.map((s) => ({ id: s.lineId, reservationId: s.reservationId, roomTypeId: template.roomTypeId, ratePlanId: template.ratePlanId, checkIn: template.checkIn, checkOut: template.checkOut, priceMinor: 40000 })) });
+    await db.unit.createMany({ data: seed.map((s) => ({ ...base, id: s.unitId, roomTypeId: template.roomTypeId, label: s.label })) });
+    await db.roomAssignment.createMany({ data: seed.map((s) => ({ ...base, reservationId: s.reservationId, reservationLineId: s.lineId, unitId: s.unitId, checkIn: template.checkIn, checkOut: template.checkOut, checkedInAt: template.checkIn })) });
+    await db.stayExtra.createMany({ data: seed.flatMap((s) => [
+      { ...base, reservationId: s.reservationId, name: "Breakfast", priceMinor: 1200, basis: "per_night" },
+      { ...base, reservationId: s.reservationId, name: "Transfer", priceMinor: 3000, basis: "per_stay" },
+    ]) });
+    await db.roomType.update({ where: { id: template.roomTypeId }, data: { totalRooms: rooms } });
+    if (warm) {
+      const folios = [stay.id, ...seed.map((s) => s.reservationId)].map((reservationId) => ({ ...base, id: crypto.randomUUID(), reservationId, currency: "EUR" }));
+      await db.folio.createMany({ data: folios });
+      // Fifty historical charges per occupied room stress the close's open-balance scan too.
+      await db.folioLine.createMany({ data: folios.flatMap((f) => [
+        { ...base, folioId: f.id, kind: "accommodation", description: "Seed accommodation", amountMinor: 40000 },
+        ...Array.from({ length: 50 }, () => ({ ...base, folioId: f.id, kind: "extra", description: "Seed historical extra", amountMinor: 100 })),
+      ]) });
+    }
+  }
+
+  it.runIf(process.env.CLOSE_DAY_LOAD === "1").each([
+    { rooms: 50, warm: false }, { rooms: 200, warm: false }, { rooms: 500, warm: false },
+    { rooms: 50, warm: true }, { rooms: 200, warm: true }, { rooms: 500, warm: true },
+  ])("load: $rooms occupied rooms, existing folios=$warm", async ({ rooms, warm }) => {
+    await fillHotel(rooms, warm);
+    const measurements: number[] = [];
+    for (const [index, businessDate] of ["2026-09-07", "2026-09-08", "2026-09-09"].entries()) {
+      const started = performance.now();
+      const outcome = await runCloseDay(tenantId, propertyId, actor, businessDate);
+      measurements.push(Math.round(performance.now() - started));
+      expect(outcome?.accrued).toBe(rooms * (index === 0 ? 2 : 1));
+      await expect(runCloseDay(tenantId, propertyId, actor, businessDate)).rejects.toBeInstanceOf(DayAlreadyClosedError);
+    }
+    const lines = await db.folioLine.findMany({ where: { propertyId }, select: { amountMinor: true, ref: true } });
+    expect(lines).toHaveLength(rooms * (warm ? 55 : 5));
+    expect(lines.reduce((sum, l) => sum + l.amountMinor, 0)).toBe(rooms * (46600 + (warm ? 5000 : 0)));
+    const refs = lines.flatMap((l) => l.ref ? [l.ref] : []);
+    expect(new Set(refs).size).toBe(rooms * 4);
+    expect(await db.auditEntry.count({ where: { propertyId, entity: "close_day" } })).toBe(3);
+    console.info("CLOSE_DAY_LOAD", JSON.stringify({ rooms, warm, historicalLines: warm ? rooms * 50 : 0, closeMs: measurements, transactionBudgetMs: 15000 }));
+  }, 90000);
+
+  it.runIf(process.env.CLOSE_DAY_LOAD === "1")("load: transaction timeout leaves 200-room close retryable", async () => {
+    await fillHotel(200, false);
+    control.slowAudit = true;
+    const started = performance.now();
+    await expect(runCloseDay(tenantId, propertyId, actor, "2026-09-07")).rejects.toMatchObject({ code: "P2028" });
+    const elapsedMs = Math.round(performance.now() - started);
+    const failed = await snapshot();
+    expect(failed.property.businessDate).toEqual(date("2026-09-07"));
+    expect(failed.property.lastClosedAt).toBeNull();
+    expect(failed.absent.status).toBe("confirmed");
+    expect(failed.folios).toBe(0);
+    expect(failed.lines).toHaveLength(0);
+    expect(failed.audits).toHaveLength(0);
+    expect(control.push).not.toHaveBeenCalled();
+    control.slowAudit = false;
+    await expect(runCloseDay(tenantId, propertyId, actor, "2026-09-07")).resolves.toMatchObject({ accrued: 400, noShows: 1 });
+    const closed = await snapshot();
+    expect(closed.lines).toHaveLength(600);
+    expect(closed.lines.reduce((sum, l) => sum + l.amountMinor, 0)).toBe(200 * 44200);
+    expect(closed.audits).toHaveLength(1);
+    console.info("CLOSE_DAY_TIMEOUT", JSON.stringify({ rooms: 200, injectedSleepMs: 16000, elapsedMs, rollback: "complete", retry: "400 extras, one audit" }));
+  }, 60000);
 });

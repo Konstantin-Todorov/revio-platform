@@ -34,7 +34,7 @@ design work. Restored `Sidebar.tsx` and the protected layout byte-for-byte to HE
 navigation model, section component and tests. No menu/design implementation remains. Do not resume
 this task without a new founder request.
 
-### 2026-09-09 · Codex · CLAIMED · Close Day load/timeout verification
+### 2026-09-09 · Codex · DONE · Close Day load/timeout verification
 **Test-only investigation of larger hotels and the existing 15-second transaction budget.**
 Files: `apps/pms/lib/close-day-db.test.ts` (opt-in load cases),
 `docs/CLOSE-DAY-LOAD-2026-09-09.md`, this log. No application/runtime changes planned.
@@ -44,9 +44,12 @@ is excluded from timings; local timings are not production capacity guarantees.
 Pull attempted but blocked by both agents' uncommitted work; no stash/rebase or generated-client
 rewrite in the shared tree. Leave Claude's active Stripe/VAT/schema work untouched.
 **New test/report changes will remain uncommitted; stage only owned paths. No deploy or production access.**
-Paused on founder request to view the operator sidebar. Opt-in load/timeout cases have been written
-but NOT executed/verified yet; no capacity result or report exists yet. `close-day-db.test.ts`
-remains modified/uncommitted and must not be swept into another task's commit.
+Completed against a fresh 106-migration loopback PostgreSQL 16.14 database through a dedicated
+non-superuser/non-BYPASSRLS role. All 12 DB tests passed. Up to 200 occupied rooms retained strong
+headroom; the heaviest 500-room/25,000-history-line close took 10.9s of the 15s budget, so this is
+not evidence for comfortable 500-room production capacity. A real timeout rolled back every write
+and retried exactly once. Exact timings, amount/ref assertions and recommendation are in
+`docs/CLOSE-DAY-LOAD-2026-09-09.md`. Test/report only; no runtime or production DB change.
 
 ### 2026-09-09 · Claude · DONE · The Integrations link in the sidebar
 **One nav row, added after Codex abandoned the navigation task.**
