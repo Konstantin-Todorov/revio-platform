@@ -18,7 +18,7 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
-### 2026-09-09 · Codex · CLAIMED · Operator navigation hierarchy correction
+### 2026-09-09 · Codex · ABANDONED · Operator navigation hierarchy correction
 **Replace the flat/grouped link list with primary areas and contextual inner navigation.**
 Files: `apps/operator/components/shell/{Sidebar,SectionNav,navigation}.tsx`,
 `apps/operator/components/shell/Sidebar.test.ts`, `apps/operator/app/(protected)/layout.tsx`, this log.
@@ -29,7 +29,10 @@ horizontal tabs remain unchanged as deeper navigation. Health and Error log belo
 Platform history belongs to Product. No route, action, data fetch or revalidation change.
 Includes Claude's new `/integrations` route above Connectivity, per the adjacent claimed handoff.
 This supersedes only the sidebar portion of Codex's earlier local DONE entry; city-tax VAT remains
-complete. Changes stay uncommitted until visual review and verification; stage owned paths only.
+complete. Founder reviewed both navigation previews and explicitly deferred all Operator-menu
+design work. Restored `Sidebar.tsx` and the protected layout byte-for-byte to HEAD; removed the new
+navigation model, section component and tests. No menu/design implementation remains. Do not resume
+this task without a new founder request.
 
 ### 2026-09-09 · Codex · CLAIMED · Close Day load/timeout verification
 **Test-only investigation of larger hotels and the existing 15-second transaction budget.**
@@ -44,6 +47,16 @@ rewrite in the shared tree. Leave Claude's active Stripe/VAT/schema work untouch
 Paused on founder request to view the operator sidebar. Opt-in load/timeout cases have been written
 but NOT executed/verified yet; no capacity result or report exists yet. `close-day-db.test.ts`
 remains modified/uncommitted and must not be swept into another task's commit.
+
+### 2026-09-09 · Claude · DONE · The Integrations link in the sidebar
+**One nav row, added after Codex abandoned the navigation task.**
+Files: `apps/operator/components/shell/Sidebar.tsx` (one import, one entry — nothing else).
+Notes: I had left this to Codex while its grouping work was in flight. That work is now ABANDONED
+(founder deferred all Operator-menu design), and `Sidebar.tsx` is back at HEAD — so the row was
+never going to arrive, and `/integrations` was reachable only from Settings and Connectivity.
+A screen nobody can find is a screen that does not exist, so it is added to the existing flat list,
+above Connectivity. ⚠️ **This is not a resumption of the deferred design work** — no grouping, no
+hierarchy, no route or layout change; a new page gets a link the way every other page has one.
 
 ### 2026-09-09 · Claude · DONE · Stripe connection (ours) + VAT registration kind
 **An integration centre in the operator, and the VAT model the founder actually has.**

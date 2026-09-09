@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X, Inbox, LifeBuoy, TriangleAlert, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X, Inbox, LifeBuoy, TriangleAlert, BarChart3, Plug } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 
@@ -22,6 +22,9 @@ const SECTIONS: { title?: string; items: { href: string; label: string; icon: ty
     { href: "/analytics", label: "Product analytics", icon: BarChart3 },
     { href: "/plans", label: "Plans & pricing", icon: Tags },
     { href: "/billing", label: "Billing", icon: CreditCard },
+    // Directly above Connectivity, which is the narrower question: this is every service we depend
+    // on, while Connectivity is the one hotel-by-hotel exception inside it.
+    { href: "/integrations", label: "Integrations", icon: Plug },
     { href: "/connectivity", label: "Connectivity", icon: KeyRound },
     { href: "/health", label: "Platform Health", icon: Activity },
     { href: "/errors", label: "Error log", icon: TriangleAlert },
