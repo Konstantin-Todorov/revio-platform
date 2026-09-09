@@ -18,6 +18,34 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · DONE · Operator navigation — areas in the sidebar, screens as tabs
+**Third attempt, and the first two are why this one is written down carefully.**
+Files: `apps/operator/components/shell/{navigation.ts,AreaTabs.tsx,Sidebar.tsx}` + two test files,
+`apps/operator/app/(protected)/layout.tsx`.
+
+Founder, this session: *"I told Codex to revert the builds for the UI/UX tabs, it did not make it
+with our design and it was bad. The restructuring needs to be logically and tidy."* So the task is
+live again, not deferred — what was rejected was the execution.
+
+**What the two rejections actually taught, since neither was about behaviour:**
+1. Headings over the same flat list is still a flat list. *"It still reads as one long, amateur list."*
+2. A new visual dialect gets rejected as off-design however well it is argued.
+
+**So: invent nothing.** The sidebar shows **seven AREAS and not one screen name**; choosing one
+reveals its screens as the *exact* underline tabs already shipped on `/clients/[id]` — same border
+weight, same colours, same type size, the pattern the founder said he liked. The sidebar item styling
+(accent rail, hover, active fill) is untouched from HEAD.
+
+Areas: Overview · Clients · Support · Revenue · Operations · Product · Settings. Auth log sits in
+**Operations**, not Settings — the founder's rule was that it is read when something has gone wrong,
+and Operations is where you go when something has gone wrong, so this honours the rule rather than
+routing around it. No route, action, data fetch or `revalidatePath` changed; all fourteen screens are
+still reachable and a test asserts that none was dropped.
+
+**Rendered and looked at before shipping** (`shell-view.test.tsx` emits a fixture with the app's own
+compiled CSS — `OPERATOR_SHELL_PREVIEW=… pnpm --filter @revio/operator test`), because both previous
+attempts had green tests and were rejected on sight. 20 tests across the two files.
+
 ### 2026-09-09 · Codex · ABANDONED · Operator navigation hierarchy correction
 **Replace the flat/grouped link list with primary areas and contextual inner navigation.**
 Files: `apps/operator/components/shell/{Sidebar,SectionNav,navigation}.tsx`,

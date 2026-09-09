@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
+import { AreaTabs } from "@/components/shell/AreaTabs";
 import { ShellProvider } from "@/components/shell/ShellContext";
 import { getOperatorSession } from "@/lib/session";
 import { getNotifications } from "@/lib/data";
@@ -35,7 +36,12 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             {/* A server action that refused says so here. Without it a form that
                 legitimately declined came back looking untouched. */}
             <FlashToast flash={await readFlash()} cookieName={FLASH_COOKIE} />
-            <div className="mx-auto max-w-[1400px]">{children}</div>
+            <div className="mx-auto max-w-[1400px]">
+              {/* The screens inside the area the sidebar is highlighting. Renders nothing for an
+                  area with one screen, and nothing on a detail page that carries its own tabs. */}
+              <AreaTabs />
+              {children}
+            </div>
           </main>
         </div>
       </div>

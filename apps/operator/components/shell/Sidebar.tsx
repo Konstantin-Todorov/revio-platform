@@ -2,40 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, CreditCard, KeyRound, Activity, Settings, Tags, ShieldAlert, History, X, Inbox, LifeBuoy, TriangleAlert, BarChart3, Plug } from "lucide-react";
+import { X } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
+import { OPERATOR_AREAS, areaForPath } from "./navigation";
 
-const SECTIONS: { title?: string; items: { href: string; label: string; icon: typeof LayoutDashboard }[] }[] = [
-  { items: [
-    { href: "/overview", label: "Overview", icon: LayoutDashboard },
-    { href: "/clients", label: "Clients", icon: Building2 },
-    // Beside Clients on purpose: a demo request is the stage before one, and the two get looked at
-    // in the same sitting.
-    { href: "/leads", label: "Demo requests", icon: Inbox },
-    { href: "/support", label: "Support", icon: LifeBuoy },
-  ] },
-  { title: "Platform", items: [
-    // Plans sits above Billing: the price list is the decision, the invoices are the consequence.
-    // Above the money screens on purpose: what people actually open is the question that decides
-    // what to build, and the invoices are the consequence of having built the right thing.
-    { href: "/analytics", label: "Product analytics", icon: BarChart3 },
-    { href: "/plans", label: "Plans & pricing", icon: Tags },
-    { href: "/billing", label: "Billing", icon: CreditCard },
-    // Directly above Connectivity, which is the narrower question: this is every service we depend
-    // on, while Connectivity is the one hotel-by-hotel exception inside it.
-    { href: "/integrations", label: "Integrations", icon: Plug },
-    { href: "/connectivity", label: "Connectivity", icon: KeyRound },
-    { href: "/health", label: "Platform Health", icon: Activity },
-    { href: "/errors", label: "Error log", icon: TriangleAlert },
-    { href: "/platform-history", label: "Platform history", icon: History },
-    // Next to Settings rather than under it: it is read when something has gone wrong, and a
-    // screen you have to remember lives inside another one is a screen nobody finds in a hurry.
-    { href: "/auth-log", label: "Auth log", icon: ShieldAlert },
-    { href: "/settings", label: "Settings", icon: Settings },
-  ] },
-];
-
+/**
+ * Seven areas, and not one screen name among them.
+ *
+ * The whole point of the change: a menu that lists every screen makes you read fourteen things to
+ * find one, and a menu that lists seven *questions* makes you read the one you came with. The
+ * screens have not gone anywhere — choosing an area reveals them as a tab row (`AreaTabs`), which is
+ * the same underline pattern already used inside a client.
+ *
+ * The model lives in `navigation.ts` so the sidebar and the tab row cannot disagree about what
+ * belongs where, and so the grouping can be argued with in one place.
+ */
 export function Sidebar() {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
@@ -70,22 +52,24 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-4">
-        {SECTIONS.map((section, i) => (
-          <div key={i} className="mb-1">
-            {section.title && (
-              <div className="px-3 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-[0.13em] text-white/30">{section.title}</div>
-            )}
-            {section.items.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
-              const Icon = item.icon;
+      <nav aria-label="Operator areas" className="flex-1 overflow-y-auto px-3 py-2">
+        {(() => {
+          const current = areaForPath(pathname);
+          return OPERATOR_AREAS.map((area) => {
+              // The area is active for every screen inside it, so drilling into `/clients/abc` or
+              // `/integrations/stripe` never leaves the menu looking as though you are nowhere.
+              const active = current?.key === area.key;
+              const Icon = area.icon;
               return (
                 <Link
-                  key={item.href}
-                  href={item.href}
+                  key={area.key}
+                  // An area is not a page: it opens at its first screen. Ordering inside
+                  // `navigation.ts` is therefore a real decision — Plans before Billing, health
+                  // before faults — because the first screen is what the area *means*.
+                  href={area.screens[0]!.href}
                   onClick={() => setOpen(false)}
                   aria-current={active ? "page" : undefined}
-                  className={`group relative mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
+                  className={`group relative mb-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
                     active ? "bg-product-mark/[0.14] text-white" : "text-white/65 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
                   }`}
                 >
@@ -101,12 +85,11 @@ export function Sidebar() {
                     }`}
                     strokeWidth={2}
                   />
-                  <span className="flex-1">{item.label}</span>
+                  <span className="flex-1">{area.label}</span>
                 </Link>
               );
-            })}
-          </div>
-        ))}
+          });
+        })()}
       </nav>
 
       <div className="border-t border-white/10 px-5 py-3 text-[11px] text-white/40">All hotels · super-admin</div>
