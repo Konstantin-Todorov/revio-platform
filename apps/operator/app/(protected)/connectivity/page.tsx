@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getConnectivity } from "@/lib/data";
 import { removeConnectivityKey, testStoredKey, testPlatformKey } from "@/lib/actions-connectivity";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -72,6 +73,19 @@ export default async function Page() {
 
   return (
     <div>
+      {/*
+        * Channex is one connection among several, and this screen is only about that one.
+        *
+        * Somebody arriving here to ask "is our Stripe set up" has come to a page that cannot answer
+        * it and gives no sign of where to go. One line fixes that. (The Integrations row belongs in
+        * the sidebar too; that file is mid-edit elsewhere — see docs/WORK-LOG.md.)
+        */}
+      <Link
+        href="/integrations"
+        className="mb-3 inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-accent-600 transition-colors hover:underline"
+      >
+        ← All integrations · Stripe, email, support mailbox
+      </Link>
       {/*
         * THE PLATFORM KEY IS THE NORMAL CASE, so it goes first and largest.
         *

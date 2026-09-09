@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { decideVat, applyVat, isEu, type VatContext } from "./vat";
+import { decideVat, applyVat, isEu, suppressesVatLine, type VatContext } from "./vat";
 
 /**
  * The branches here are the ones that cost money when they are wrong, so each test says what the
@@ -108,6 +108,123 @@ describe("applyVat", () => {
         const a = applyVat(n, r);
         expect(a.netMinor + a.taxMinor).toBe(a.grossMinor);
       }
+    }
+  });
+});
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * чл. 97а — the registration that is neither "registered" nor "not", added 2026-09-09.
+ *
+ * Every test below fails against the old two-state code, which is the point of writing them: the
+ * old code had no way to express this state and answered "domestic, 20%" to the first one.
+ * ---------------------------------------------------------------------------------------------
+ */
+
+/** Us as we actually are: a BG number valid only for supplies outside Bulgaria. */
+const BG_97A: VatContext = { ...BG, registration: "art97a" };
+
+describe("decideVat — чл. 97а registration", () => {
+  /*
+   * THE test. Under чл. 113, ал. 9 a person registered only under чл. 97а may not state VAT in an
+   * invoice at all. The old code held a VAT number, concluded "registered", and put 20% on this
+   * invoice — collecting tax from a Bulgarian customer that we are prohibited from charging.
+   */
+  it("charges a Bulgarian customer NOTHING, and cites the ground", () => {
+    const d = decideVat(BG_97A);
+    expect(d.treatment).toBe("art97a_domestic");
+    expect(d.ratePct).toBe(0);
+    expect(d.note).toMatch(/чл\. 113, ал\. 9/);
+    expect(d.needsReview).toBe(false);
+  });
+
+  /*
+   * A zero-rated supply and a supply on which VAT may not be STATED are different things, and an
+   * invoice printing "VAT 0%" where the law wants the чл. 113, ал. 9 ground is a defective document.
+   * The rate alone cannot carry that difference, which is why the flag exists.
+   */
+  it("suppresses the VAT line entirely rather than printing 0%", () => {
+    expect(decideVat(BG_97A).suppressVatLine).toBe(true);
+    // Reverse charge is the contrast: also 0%, but the line MUST appear, with its legal note.
+    expect(decideVat({ ...BG_97A, buyerCountry: "DE", buyerVatId: "DE811234567" }).suppressVatLine).toBe(false);
+  });
+
+  it("still counts toward the чл. 96 threshold — no VAT charged is not no turnover", () => {
+    // The trap: a supply that carries no tax is still domestic turnover, and it is what eventually
+    // forces full registration. Excluding it would let us cross the threshold without noticing.
+    expect(decideVat(BG_97A).countsTowardThreshold).toBe(true);
+  });
+
+  it("treats an EU business exactly as full registration does — that is the point of holding it", () => {
+    const a = decideVat({ ...BG_97A, buyerCountry: "DE", buyerVatId: "DE811234567" });
+    const b = decideVat({ ...BG, registration: "full", buyerCountry: "DE", buyerVatId: "DE811234567" });
+    expect(a.treatment).toBe("eu_reverse_charge");
+    expect(a.treatment).toBe(b.treatment);
+    expect(a.ratePct).toBe(0);
+    expect(a.note).toMatch(/чл\. 21, ал\. 2/);
+    expect(a.note).toMatch(/196/);
+  });
+
+  it("never counts an EU B2B sale toward the domestic threshold", () => {
+    // Supplied where the customer is (чл. 21, ал. 2), so it is not Bulgarian turnover. Counting it
+    // would have us registering years early, and full registration cannot be undone for a year.
+    const d = decideVat({ ...BG_97A, buyerCountry: "DE", buyerVatId: "DE811234567" });
+    expect(d.countsTowardThreshold).toBe(false);
+  });
+
+  it("blocks an EU customer with no VAT number instead of guessing a rate it cannot charge", () => {
+    const d = decideVat({ ...BG_97A, buyerCountry: "DE", buyerVatId: null });
+    expect(d.needsReview).toBe(true);
+    expect(d.ratePct).toBe(0); // a чл. 97а registration permits no rate at all
+    expect(d.note).toMatch(/97а|OSS/);
+  });
+
+  it("leaves a non-EU customer outside the scope, as before", () => {
+    const d = decideVat({ ...BG_97A, buyerCountry: "US", buyerVatId: null });
+    expect(d.treatment).toBe("outside_eu");
+    expect(d.ratePct).toBe(0);
+  });
+});
+
+describe("decideVat — registration overrides the number's mere presence", () => {
+  it("charges nothing at all when not registered, VAT number or not", () => {
+    const d = decideVat({ ...BG, registration: "none" });
+    expect(d.treatment).toBe("not_registered");
+    expect(d.ratePct).toBe(0);
+    expect(d.suppressVatLine).toBe(true);
+  });
+
+  it("charges the domestic rate only under full registration", () => {
+    expect(decideVat({ ...BG, registration: "full" }).ratePct).toBe(20);
+    expect(decideVat({ ...BG, registration: "art97a" }).ratePct).toBe(0);
+    expect(decideVat({ ...BG, registration: "none" }).ratePct).toBe(0);
+  });
+
+  /*
+   * The compatibility path, asserted rather than assumed: a caller that has not been updated still
+   * gets the OLD behaviour rather than silently switching treatment. It is also the behaviour we
+   * consider wrong, which is why every real call site passes `registration` explicitly.
+   */
+  it("falls back to the old inference when no registration is supplied", () => {
+    expect(decideVat({ ...BG, registration: undefined }).ratePct).toBe(20);
+    expect(decideVat({ ...BG, registration: undefined, issuerVatId: null }).treatment).toBe("not_registered");
+  });
+});
+
+describe("suppressesVatLine — answerable from the stored treatment alone", () => {
+  it("matches what decideVat decided, for every treatment it can produce", () => {
+    // An invoice is rendered from what was decided when it was ISSUED, so the renderer only has the
+    // treatment string. If these two ever disagreed, a document would print a line the law forbids.
+    const cases: VatContext[] = [
+      BG_97A,
+      { ...BG, registration: "full" },
+      { ...BG, registration: "none" },
+      { ...BG_97A, buyerCountry: "DE", buyerVatId: "DE811234567" },
+      { ...BG_97A, buyerCountry: "US", buyerVatId: null },
+    ];
+    for (const c of cases) {
+      const d = decideVat(c);
+      expect(suppressesVatLine(d.treatment)).toBe(d.suppressVatLine);
     }
   });
 });

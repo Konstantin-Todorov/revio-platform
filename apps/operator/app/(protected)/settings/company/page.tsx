@@ -3,6 +3,8 @@ import { Card } from "@/components/ui/primitives";
 import { CompanyForm } from "@/components/billing/CompanyForm";
 import { getCompany } from "@/lib/invoice-doc";
 import { getOperatorSession } from "@/lib/session";
+import { VatRegistrationCard } from "@/components/billing/VatRegistrationCard";
+import { getVatPosition } from "@/lib/integrations";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ export default async function CompanySettingsPage() {
   const session = await getOperatorSession();
   const isAdmin = session?.role === "super_admin";
   const company = await getCompany();
+  const vat = await getVatPosition();
 
   return (
     <>
@@ -57,6 +60,24 @@ export default async function CompanySettingsPage() {
         }}
       />
     </Card>
+
+    {/*
+      * Directly under the identity, because it is part of it.
+      *
+      * Which registration we hold is not a preference sitting beside a phone number — it is what
+      * makes the VAT number above mean something. Putting it anywhere else invites the two to be
+      * edited apart, and a VAT number with the wrong registration behind it is how a domestic
+      * invoice ends up charging 20% we are not entitled to state.
+      */}
+    {vat && (
+      <VatRegistrationCard
+        current={vat.registration}
+        vatId={vat.vatId}
+        country={vat.country}
+        canEdit={isAdmin}
+        threshold={vat.threshold}
+      />
+    )}
     </>
   );
 }

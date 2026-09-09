@@ -209,6 +209,62 @@ model ConnectivityCredential {
   @@index([tenantId])
 }
 
+/// A credential for one of OUR OWN integrations. Stripe first; the shape is meant to take the next
+/// one as a row rather than a project.
+///
+/// Deliberately NOT `ConnectivityCredential`. That one is **per tenant** and holds a hotel's own
+/// Channex key — an exception to the platform key. This is the platform's own credential, there is
+/// at most one per provider and mode, and only the operator console ever reads it.
+///
+/// **Entered through the console, never by hand in the database.** That is the whole point of the
+/// screen: a secret typed into psql has no encryption, no test, no record of who set it and no hint
+/// to recognise it by later.
+model PlatformCredential {
+  id       String @id @default(cuid())
+  /// "stripe". One string rather than an enum so adding a provider is a migration nobody writes.
+  provider String
+  /// "test" | "live".
+  ///
+  /// NEVER inferred from the key. The mode is chosen by a person and the key is validated against
+  /// it, because a live key pasted into a sandbox field is real money moving while somebody believes
+  /// they are rehearsing. Same trap as Channex sandbox-vs-production, which has cost a day already.
+  mode     String
+  /// base64 iv.tag.ciphertext (AES-256-GCM) — the same envelope as ConnectivityCredential, so key
+  /// rotation covers both without a second mechanism.
+  cipher   String
+  /// What the screen shows in place of the key: "sk_test_••••4242". A key that can be read back out
+  /// of the UI is a key that leaks in a screenshot, so there is deliberately no way to reveal it.
+  hint     String
+  /// The publishable key. NOT a secret — Stripe prints it in its own dashboard and the browser needs
+  /// it for Elements — so it is stored in clear on purpose. Encrypting it would buy nothing and cost
+  /// a decrypt on every page that renders a payment form.
+  publishableKey String?
+  /// Webhook signing secret, encrypted. Absent until webhooks are wired; a webhook whose signature
+  /// is not verified is an unauthenticated write endpoint wearing a payment provider's name.
+  webhookCipher  String?
+  /// When this credential was last exercised against the provider, and what came back.
+  ///
+  /// Stored rather than checked on render, for the reason ConnectivityCredential states: otherwise
+  /// the screen makes a live API call per row per page load and a slow provider makes our own
+  /// console look broken.
+  ///
+  /// `lastCheckOk = null` means NEVER TESTED, which is not the same as working, and the screen must
+  /// not colour it green.
+  lastCheckedAt    DateTime?
+  lastCheckOk      Boolean?
+  lastCheckMessage String?
+  /// What the last check actually saw — account name, country, currency, what the provider says the
+  /// account may do. Kept so the screen can be informative without a live call, and so a check that
+  /// passed leaves evidence of what it passed against.
+  lastCheckDetail  Json?
+  /// Who set it, for the audit question "when did this change and who changed it".
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, mode])
+}
+
 // A demand-generation enquiry from the public website — operator-only, like everything else that is
 // ours ABOUT a prospect rather than a hotel's own data.
 //
@@ -381,8 +437,22 @@ model OperatorCompany {
   /// invoice carrying a Cyrillic name above a Latin address reads as two different companies.
   addressLineLatin   String?
   cityLatin          String?
-  /// Absent = not VAT registered, which zero-rates every invoice. See decideVat().
+  /// Our VAT number. On its own this says NOTHING about how much VAT to charge — see
+  /// `vatRegistration`, which is the field that decides.
   vatId              String?
+  /// WHICH registration we hold. Three states, because Bulgaria has three and the middle one is
+  /// the one we are actually in.
+  ///
+  ///   "none"   — not registered. No VAT on anything.
+  ///   "art97a" — registered under чл. 97а ЗДДС: a real BG number, valid ONLY for cross-border
+  ///              services. We may NOT state VAT on a domestic invoice (чл. 113, ал. 9) and may not
+  ///              deduct input VAT (чл. 70, ал. 4). EU B2B is reverse charge.
+  ///   "full"   — registered under чл. 96: ordinary domestic VAT at `standardVatPct`.
+  ///
+  /// ⚠️ This existed as `vatId != null` until 2026-09-09, which collapsed "art97a" into "full" and
+  /// put 20% on every Bulgarian invoice. Nothing had been issued to a real client, so it was a
+  /// defect and not a correction — after the first one it would have been a credit note.
+  vatRegistration    String   @default("none")
   /// Company registration number (EIK in Bulgaria).
   companyId          String?
   addressLine        String?

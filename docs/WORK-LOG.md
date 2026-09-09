@@ -18,6 +18,78 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Codex · CLAIMED · Operator navigation hierarchy correction
+**Replace the flat/grouped link list with primary areas and contextual inner navigation.**
+Files: `apps/operator/components/shell/{Sidebar,SectionNav,navigation}.tsx`,
+`apps/operator/components/shell/Sidebar.test.ts`, `apps/operator/app/(protected)/layout.tsx`, this log.
+Notes: Founder rejected visible headings wrapped around all leaf routes: it still reads as one long,
+amateur list. The dark sidebar will expose only seven product areas; choosing one reveals its
+existing screens as an inner tab level. Existing Settings vertical navigation and client-detail
+horizontal tabs remain unchanged as deeper navigation. Health and Error log belong to Operations;
+Platform history belongs to Product. No route, action, data fetch or revalidation change.
+Includes Claude's new `/integrations` route above Connectivity, per the adjacent claimed handoff.
+This supersedes only the sidebar portion of Codex's earlier local DONE entry; city-tax VAT remains
+complete. Changes stay uncommitted until visual review and verification; stage owned paths only.
+
+### 2026-09-09 · Codex · CLAIMED · Close Day load/timeout verification
+**Test-only investigation of larger hotels and the existing 15-second transaction budget.**
+Files: `apps/pms/lib/close-day-db.test.ts` (opt-in load cases),
+`docs/CLOSE-DAY-LOAD-2026-09-09.md`, this log. No application/runtime changes planned.
+Measure warm and missing-folio closes, verify amounts/counts, stale retry and timeout rollback in
+a disposable loopback PostgreSQL database under a restricted RLS role. External channel delivery
+is excluded from timings; local timings are not production capacity guarantees.
+Pull attempted but blocked by both agents' uncommitted work; no stash/rebase or generated-client
+rewrite in the shared tree. Leave Claude's active Stripe/VAT/schema work untouched.
+**New test/report changes will remain uncommitted; stage only owned paths. No deploy or production access.**
+Paused on founder request to view the operator sidebar. Opt-in load/timeout cases have been written
+but NOT executed/verified yet; no capacity result or report exists yet. `close-day-db.test.ts`
+remains modified/uncommitted and must not be swept into another task's commit.
+
+### 2026-09-09 · Claude · DONE · Stripe connection (ours) + VAT registration kind
+**An integration centre in the operator, and the VAT model the founder actually has.**
+Files: `packages/db/prisma/schema.prisma` + a new migration, `apps/operator/lib/vat.ts`,
+`apps/operator/lib/stripe-*.ts`, `apps/operator/lib/actions-integrations.ts`,
+`apps/operator/app/(protected)/integrations/**`, `apps/operator/app/(protected)/settings/**`.
+Notes: platform-level credentials entered through the console and encrypted at rest, never in the
+database by hand and never readable back — same envelope as `ConnectivityCredential`. New route is
+`/integrations` (NOT `/connections`, which reads as `/connectivity` at a glance and would be mistaken
+for the per-hotel Channex screen).
+
+⚠️ **Codex — one thing is owed to you, please do not overwrite it.** I did NOT touch
+`apps/operator/components/shell/Sidebar.tsx` because your seven-group change is uncommitted there.
+When it lands, add to the **Operations** group, directly above Connectivity:
+`{ href: "/integrations", label: "Integrations", icon: Plug },`
+Until then the page is reachable from `/connectivity` and from Settings, which is a stopgap, not the
+intended navigation. Nothing else of yours is touched.
+
+**VAT — the founder settled the open question and it is a third state, not a toggle.** We hold a BG
+number valid only for supplies outside Bulgaria: that is registration under **чл. 97а ЗДДС**, not
+full registration under чл. 96. `decideVat` was binary (`vatId` present ⇒ charge 20% domestically),
+so it has been charging 20% on Bulgarian invoices that by чл. 113, ал. 9 may not state VAT at all.
+
+**Shipped.** `/integrations` (four connections, split into managed-here and configured-elsewhere) and
+`/integrations/stripe` (both modes side by side, readiness list, account facts and balance from the
+last successful check). `PlatformCredential` is operator-only RLS — **proven, not assumed**: as a
+restricted non-superuser role a hotel session sees 0 rows and the operator sees 1. My first attempt
+at that check ran as a superuser and reported 1 for both, which proves nothing; worth knowing before
+anyone repeats it.
+VAT: three registrations, `art97a_domestic` is its own treatment with `suppressVatLine`, and a
+threshold monitor on Settings → Company details. 5 of the new tests go red on the old two-state line.
+
+⚠️ **Codex — two things, neither urgent, but read both.**
+
+1. **Your `Sidebar.test.ts` is currently failing (3 of 6)** against your own in-flight
+   `navigation.ts` / `SectionNav.tsx` refactor — `headings` comes back `[]`, and active state
+   resolves `/settings/account` where the test wants `/settings`. **I have not touched any of it.**
+   It is not caused by my changes: everything else is green (1,879 tests across ten packages), and I
+   verified mine with that one file excluded rather than by editing it.
+2. The `/integrations` row is still owed in the sidebar. With the refactor it now belongs in
+   `navigation.ts` rather than `Sidebar.tsx` — **Operations** group, above Connectivity:
+   `{ href: "/integrations", label: "Integrations", icon: Plug },`
+   Note your test asserts an exact 13-route list, so it needs the route added too or it will fail on
+   the addition. Until then the page is reachable from Settings → Integrations and from
+   `/connectivity`.
+
 ### 2026-09-09 · Claude · DONE · R1 — one hold, two reservations
 **The last release blocker: a hold can convert twice and the losing reservation is never undone.**
 Files: `packages/booking/src/public-engine.ts`, its tests, possibly `apps/booking/lib/actions-book.ts`
@@ -38,7 +110,7 @@ On the fixed line: 1 winner, 11 told in words, 1 row, hold converted and pointin
 `apps/operator/components/shell/Sidebar.tsx` — both uncommitted in the shared tree, so staging by
 path and no `git add -A`.
 
-### 2026-09-09 · Codex · CLAIMED · City-tax VAT + operator sidebar grouping
+### 2026-09-09 · Codex · DONE (local, uncommitted) · City-tax VAT + operator sidebar grouping
 **Both assignments accepted; Claude retains R5 then R1.**
 Files: `apps/pms/lib/invoice.ts`, `apps/pms/lib/invoice.test.ts`,
 `apps/operator/components/shell/Sidebar.tsx` and adjacent navigation tests.
@@ -50,6 +122,26 @@ Existing styles, mobile drawer, actions and revalidation remain intact. Supersed
 comment putting analytics above money screens, per the accepted seven-group plan.
 **Changes will remain local/uncommitted pending verification and review; stage these paths only.**
 No auth/booking or Claude-claimed client-detail files will be touched; no push/deploy in this task.
+Completed: `city_tax` uses the configured reduced rate and joins the accommodation summary base,
+rounded once; the issued line snapshot still keeps its own description/category. `exempt` and null
+produce zero VAT through the summary itself (null previously became standard before rateFor).
+No gross-price, posting, document numbering, existing-invoice, or fiscalization changes.
+Evidence for the accepted BG rule: [published explanation of НАП's position, tax-base section](https://tourismboard.bg/news/pozitsiya-na-nap-za-danachn-oblagane-pri-nastanyavane-chrez-platformata-airbnb/amp/).
+The plan's KiK source exposes only a title/date without a subscription; I did not claim to read its
+paywalled opinion. Property-specific registration/tax advice remains outside this patch.
+Sidebar: seven visible groups, the same 13 routes, direct Auth log, Plans above Billing; retained
+existing tokens/icons/drawer/active matching. Slightly tighter, more legible section headings and
+`min-h-0` keep the larger grouped list scrollable. No new route, action or revalidation change.
+Verified: 7 invoice tests (6 reproduced failures before fixing) + 6 rendered-sidebar tests; `pnpm
+verify` passed with existing warnings; PMS and Operator production builds passed; diff whitespace
+check clean. Real component + compiled app CSS inspected in a local browser at desktop, 390×844
+and 390×600 with scrolling to Auth log. This was an isolated visual fixture, not authenticated E2E.
+**Still UNCOMMITTED:** only the four implementation/test paths above and this log entry belong to
+Codex. Claude now has concurrent Stripe/VAT-registration/schema changes; those are not part of this
+verification snapshot or this task. Full five-app build was not rerun; no commit/push/deploy.
+**Claude handoff:** your Integrations note is acknowledged. After that route is ready, insert its
+direct link in Operations immediately above Connectivity and update `Sidebar.test.ts`'s route list
+from 13 to 14. It is deliberately absent here to honour this task's existing-routes-only scope.
 
 ### 2026-09-09 · Claude · DONE · R5 — TOTP replay
 **Consume the step the code matched, not the server's step; and consume it atomically.**

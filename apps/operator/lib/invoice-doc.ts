@@ -1,6 +1,6 @@
 import "server-only";
 import { forSystem, withSystemTransaction } from "@revio/db";
-import { decideVat, applyVat } from "./vat";
+import { decideVat, applyVat, registrationOf } from "./vat";
 import { type Entitlements } from "./pricing";
 import { invoiceLines, formatAddress, formatInvoiceNumber, formatDemoNumber, chooseIdentity } from "./invoice-lines";
 
@@ -68,6 +68,9 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
 
   const vat = decideVat({
     issuerCountry: company.country,
+    // WHICH registration, not merely whether a number exists. Passing this explicitly is the fix for
+    // the defect that put 20% on every Bulgarian invoice while we hold only a чл. 97а registration.
+    registration: registrationOf(company),
     issuerVatId: company.vatId,
     standardRatePct: company.standardVatPct,
     buyerCountry: billing.country,

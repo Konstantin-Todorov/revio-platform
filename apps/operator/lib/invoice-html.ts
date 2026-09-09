@@ -19,6 +19,9 @@
  * is escaped. Interpolating a legal name into markup is exactly where an apostrophe in "O'Brien Ltd"
  * breaks a document, quite apart from anyone doing it on purpose.
  */
+// The one rule this file must not re-derive: whether the law permits a VAT line at all. It lives
+// beside `decideVat` so the document and the decision cannot disagree.
+import { suppressesVatLine } from "./vat";
 
 export function esc(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -147,7 +150,19 @@ export function invoiceBodyHtml(d: InvoiceDocData): string {
   <div class="totals">
     <dl>
       <dt>Subtotal (excl. VAT)</dt><dd class="num">${esc(money(d.netMinor, cur))}</dd>
-      <dt>${esc(vatLineLabel(d.vatTreatment, d.vatRatePct))}</dt><dd class="num">${esc(money(d.taxMinor, cur))}</dd>
+      ${
+        /*
+         * A supply on which VAT MAY NOT BE STATED gets no VAT line — not a line reading 0%.
+         *
+         * Under чл. 113, ал. 9 ЗДДС a person registered only under чл. 97а is prohibited from
+         * stating VAT in an invoice, and "VAT 0.00" states it. The legal ground still prints, as
+         * `d.vatNote`, immediately below the totals — which is what makes the omission correct
+         * rather than an omission.
+         */
+        suppressesVatLine(d.vatTreatment)
+          ? ""
+          : `<dt>${esc(vatLineLabel(d.vatTreatment, d.vatRatePct))}</dt><dd class="num">${esc(money(d.taxMinor, cur))}</dd>`
+      }
       <dt class="grand">Total due</dt><dd class="num grand">${esc(money(d.grossMinor, cur))}</dd>
     </dl>
   </div>

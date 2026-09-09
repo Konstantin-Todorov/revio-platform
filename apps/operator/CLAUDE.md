@@ -178,6 +178,64 @@ amber banner. The default stays honest; the toggle is opt-in and never sticky.
 One click flips the flag either way. A demo tenant that becomes a paying customer keeps its whole
 history instead of starting again on a fresh tenant, and a real client can be borrowed for a test.
 
+## Integrations & payments (`/integrations`, 2026-09-09)
+
+**Our own Stripe account** — the one hotels pay *us* through. Deliberately not the same thing as the
+hotel's own Stripe (Connect, `@revio/payments/connect.ts`), which takes deposits from *guests* and
+whose funds never enter our balance. Both exist; confusing them is expensive, so the screen says
+which one it is in its first paragraph.
+
+**Credentials are entered in the console, not in the database and not in an environment variable.**
+The Channex keys live in Railway variables and that cost is visible on this very page as *set
+elsewhere*: nobody can see what is installed, nothing records who set it or when, there is no way to
+test it, and changing it needs a deploy. `PlatformCredential` fixes all four for the credential where
+it matters most — encrypted with the same AES-256-GCM envelope as `ConnectivityCredential`, so one
+key rotation covers both, and **never readable back**: the screen shows `sk_test_••••4242` and there
+is no reveal.
+
+Three rules carried over from `ConnectivityCredential`, each of which cost something once:
+
+1. **Tested before stored, and a rejected key is refused.** Storing whatever was pasted is how a dead
+   key sat on a screen looking healthy while a real hotel's channel did nothing for hours
+   (2026-09-01). The one exception is deliberate: a key Stripe never *answered* about — a timeout, a
+   rate limit, their outage — is stored `untested` rather than refused, because configuring payments
+   must not require Stripe to be up at that moment.
+2. **Never tested is not working, and it is not green.** Four states, and `untested` is amber.
+3. **Check the status code, never the shape of the answer.** `stripe-check.ts` branches only on
+   `res.status`. A Stripe error is valid JSON and `json.id` on it is simply `undefined` — the exact
+   trap that produced 411 consecutive "success" events against a revoked Channex key.
+
+⚠️ **Mode is chosen by a person and validated against the key, never inferred from it.** Stripe puts
+the mode in the prefix, so inferring is trivial — and that is the trap: paste a live key into the
+field you believe is sandbox and inference agrees with you while real cards are charged.
+`validateSecretKey` refuses both directions. A live key in the sandbox slot is the dangerous one; a
+test key in the live slot is merely broken and is refused just as firmly, because silently accepting
+it leaves a "live" setup that can never take a payment, discovered by a customer.
+
+⚠️ **Test and live are different accounts that cannot see each other's data.** Customer ids, saved
+cards and payment intents created under one do not exist under the other, so switching mode migrates
+nothing. Both modes are shown side by side rather than behind a switch, to make that structural.
+
+## VAT: three registrations, not a toggle (2026-09-09)
+
+`decideVat` read `vatId != null` as "registered" and charged the domestic rate. Bulgaria has a
+**third state**, and it is the one we are in: **чл. 97а ЗДДС** gives a real BG VAT number valid only
+for cross-border services. Under it we hold a number and are nonetheless **forbidden to state VAT on
+a Bulgarian invoice** (чл. 113, ал. 9) and cannot deduct input VAT (чл. 70, ал. 4).
+
+So with `BG205090014` on file, every Bulgarian invoice would have carried 20% we may not charge.
+Zero had been issued to a real client, which is the only reason this was a defect and not a credit
+note. Five tests go red on the old two-state line.
+
+⚠️ **`art97a_domestic` is not a 0% rate.** A supply on which VAT may not be *stated* is different
+from a zero-rated one, and an invoice printing "VAT 0%" where the law wants the чл. 113, ал. 9 ground
+is a defective document. `suppressVatLine` carries that to the renderer; the rate alone cannot.
+
+`vat-threshold.ts` watches the other half: чл. 96 registration becomes mandatory above **EUR 51,130
+of domestic turnover in a calendar year** — a calendar-year test, not a rolling twelve months — with
+**seven days** to apply. EU B2B sales are supplied where the customer is and never count toward it.
+The deadline starts with an invoice rather than a date, so software watches it.
+
 ## Boundary
 Reads cross-tenant data through `@revio/core` admin APIs that bypass tenant RLS **only** under an
 operator identity. Never embed hotel-facing screens here; link out instead. Keep operator business data
