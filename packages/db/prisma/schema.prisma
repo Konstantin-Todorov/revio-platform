@@ -341,6 +341,27 @@ model Invoice {
   lineItems   String? // human-readable summary of what's billed (plan + products)
   createdAt   DateTime  @default(now())
   paidAt      DateTime?
+  /// How it was actually paid — "stripe" or "manual". Null on an unpaid invoice, and on every
+  /// invoice paid before there was a card path, which is why absence means manual rather than
+  /// unknown: somebody marked it paid because money arrived in the bank.
+  paidVia     String?
+
+  // --- Card payment (Stripe Checkout) --------------------------------------
+  // We use Stripe as a payment RAIL against our own invoice, never as an invoicing system. Stripe
+  // Invoicing would issue documents with its own numbering, and Bulgarian law requires one gapless
+  // ascending run per company (see OperatorInvoiceSeries) — a second numbering source is not a
+  // convenience, it is a compliance defect.
+  /// The Checkout Session. Unique because a session belongs to exactly one invoice, and it is the
+  /// key the webhook uses to prove an event is about this row.
+  stripeSessionId       String?   @unique
+  stripePaymentIntentId String?
+  /// "test" | "live". Recorded rather than inferred: a link made in test mode charges nothing, and a
+  /// screen that cannot tell the operator which kind they are looking at is worse than no screen.
+  stripeMode            String?
+  /// The hosted URL the hotel opens. Stripe expires these (24h by default), so it is stored WITH its
+  /// expiry — a dead link handed to a customer is worse than no link, because they try it.
+  stripeCheckoutUrl     String?
+  stripeCheckoutExpires DateTime?
 
   // --- The issued document -------------------------------------------------
   // Everything below is NULL while the invoice is a draft and frozen the moment it is issued.

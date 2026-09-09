@@ -6,6 +6,7 @@ import { getCompany } from "@/lib/invoice-doc";
 import { invoiceDocData } from "@/lib/invoice-data";
 import { invoiceBodyHtml, INVOICE_DOC_CSS } from "@/lib/invoice-html";
 import { PrintButton } from "@/components/billing/PrintButton";
+import { PaymentLinkCard } from "@/components/billing/PaymentLinkCard";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,11 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
           <PrintButton />
         </div>
       </div>
+
+      {/* How it gets paid, above the document itself: somebody opening this page while chasing a
+          bill wants the link, not to re-read the invoice they already sent. `data-print-hide`
+          because it is ours, not part of the legal document. */}
+      <PaymentLinkCard invoice={invoice} />
 
       {!invoice.number && (
         <div data-print-hide className="mb-4 rounded-md bg-warning-50 px-3 py-2.5 text-[12.5px] font-medium text-warning-600">

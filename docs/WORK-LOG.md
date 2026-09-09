@@ -18,6 +18,30 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · DONE · Stripe part 2 — an invoice can actually be paid
+**Checkout link, webhook, and the invoice settling itself.**
+Files: `apps/operator/lib/stripe-{checkout,webhook}.ts` + tests, `app/api/webhooks/stripe/route.ts`,
+`app/paid/page.tsx`, `middleware.ts`, `components/billing/{PaymentLinkCard,CopyLinkButton}.tsx`,
+`lib/actions-integrations.ts`, `app/(protected)/invoice/[id]/page.tsx`,
+`scripts/webhook-verify.ts`, migration `20260909120000_invoice_stripe_payment`.
+
+Notes: **a redirect is not evidence** — `/paid` is static and decides nothing; the webhook is what
+marks an invoice paid. That route is the most security-sensitive in the codebase: public, and it
+settles bills. Raw bytes → verify → parse, five-minute replay tolerance, `timingSafeEqual`, and the
+mode is decided by *which secret verified* rather than by the body's own `livemode`.
+
+⚠️ `middleware.ts` gained `api/webhooks` in the matcher. Same class as the `api/jobs` miss that let
+`trial-sweep` POST into the login page for its whole life: a 307 to /login is a 2xx to Stripe's retry
+logic, so payments would be recorded as delivered while no invoice was ever marked paid.
+
+**Proven over HTTP, not asserted.** `webhook-verify` runs the real route against a real database —
+forged / unsigned / stale / genuine / replayed / wrong-amount, 13 checks. With the signature check
+removed it goes red on the first and marks the invoice paid from a forged request, which is the
+demonstration that it is wired in at all. 21 unit tests on the verification itself.
+
+Still open, and recorded in STATUS.md: the *email* that sends the link (the operator copies the URL
+by hand today), refunds, and Stripe Subscriptions for recurring billing.
+
 ### 2026-09-09 · Claude · DONE · Operator navigation — areas in the sidebar, screens as tabs
 **Third attempt, and the first two are why this one is written down carefully.**
 Files: `apps/operator/components/shell/{navigation.ts,AreaTabs.tsx,Sidebar.tsx}` + two test files,

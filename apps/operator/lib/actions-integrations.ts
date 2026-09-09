@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { forSystem, encryptSecret } from "@revio/db";
 import { flashError, setFlash } from "@revio/ui/flash";
 import { getOperatorSession } from "./session";
 import { checkStripeKey } from "./stripe-check";
-import { readStripeSecret } from "./integrations";
+import { readStripeSecret, activeStripeMode } from "./integrations";
+import { createCheckoutSession, isLinkLive } from "./stripe-checkout";
 import { isStripeMode, validateSecretKey, validatePublishableKey, validateWebhookSecret } from "./stripe-key";
 import { isVatRegistration } from "./vat";
 
@@ -186,4 +188,111 @@ export async function setVatRegistration(fd: FormData): Promise<void> {
   );
   revalidatePath("/settings");
   revalidatePath("/integrations");
+}
+
+/**
+ * Create the payment link for an issued invoice.
+ *
+ * ## Every refusal below is a bill that would otherwise be paid twice, or paid wrongly
+ *
+ * A draft has no number and no frozen amount — its price can still move — so a link against one
+ * charges a figure nobody has agreed. An already-paid invoice does not need a second link. And a
+ * live link is not regenerated: two live links for one invoice is two chances to pay the same bill,
+ * and the refund conversation that follows costs more than the button saved.
+ */
+export async function createInvoicePaymentLink(fd: FormData): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again to create a payment link.");
+
+  const invoiceId = String(fd.get("invoiceId") ?? "").trim();
+  if (!invoiceId) return flashError("Reload the page and try again.");
+
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!invoice) return flashError("That invoice no longer exists.");
+  if (!invoice.number) {
+    return flashError("Issue this invoice first — a draft has no number and its amount can still change.");
+  }
+  if (invoice.status === "paid") return flashError("This invoice is already paid.");
+  if (isLinkLive(invoice.stripeCheckoutExpires)) {
+    return flashError("There is already a live payment link for this invoice. Two links means two chances to pay the same bill — send the existing one.");
+  }
+
+  const owed = invoice.grossMinor ?? invoice.amountMinor;
+  const mode = await activeStripeMode();
+  const secretKey = await readStripeSecret(mode);
+  if (!secretKey) {
+    return flashError(`No usable Stripe key is stored for ${mode} mode. Set it up on Integrations first.`);
+  }
+
+  const [tenant, billing] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: invoice.tenantId }, select: { name: true } }),
+    prisma.clientBilling.findUnique({ where: { tenantId: invoice.tenantId }, select: { legalName: true, billingEmail: true } }),
+  ]);
+
+  /*
+   * The origin comes from the request, not from a constant.
+   *
+   * Stripe sends the browser back here, and a hard-coded production URL would bounce anyone testing
+   * on a preview deployment out to production halfway through a payment — which is exactly when a
+   * surprise is least welcome.
+   */
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host");
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const origin = host ? `${proto}://${host}` : "https://operator.reviosoft.app";
+
+  const result = await createCheckoutSession({
+    mode,
+    secretKey,
+    invoiceId: invoice.id,
+    invoiceNumber: invoice.number,
+    amountMinor: owed,
+    currency: invoice.currency,
+    customerName: billing?.legalName ?? tenant?.name ?? "Customer",
+    customerEmail: billing?.billingEmail ?? null,
+    origin,
+  });
+  if (!result.ok) return flashError(result.error);
+
+  await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: {
+      stripeSessionId: result.session.sessionId,
+      stripeCheckoutUrl: result.session.url,
+      stripeCheckoutExpires: result.session.expiresAt,
+      stripeMode: mode,
+    },
+  });
+
+  await setFlash(
+    mode === "live" ? "success" : "info",
+    mode === "live"
+      ? "Payment link created. Sending it will charge a real card."
+      : "Payment link created in SANDBOX mode — it charges nothing. Use Stripe's test card 4242 4242 4242 4242.",
+  );
+  revalidatePath(`/invoice/${invoice.id}`);
+  revalidatePath("/billing");
+}
+
+/**
+ * Cancel a live link.
+ *
+ * Forgetting the URL is enough for our side, but Stripe's session stays open until it expires — so
+ * the message says so rather than implying a certainty we do not have. Somebody holding the old URL
+ * could still pay it, and the webhook would still settle the invoice correctly; what this stops is
+ * us continuing to hand it out.
+ */
+export async function clearInvoicePaymentLink(fd: FormData): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again to change a payment link.");
+  const invoiceId = String(fd.get("invoiceId") ?? "").trim();
+  if (!invoiceId) return flashError("Reload the page and try again.");
+
+  await prisma.invoice.updateMany({
+    where: { id: invoiceId, status: { not: "paid" } },
+    data: { stripeCheckoutUrl: null, stripeCheckoutExpires: null },
+  });
+  await setFlash("success", "Link withdrawn here. Anyone still holding the URL can use it until Stripe expires it, and a payment would still be recorded correctly.");
+  revalidatePath(`/invoice/${invoiceId}`);
+  revalidatePath("/billing");
 }

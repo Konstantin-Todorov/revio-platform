@@ -216,6 +216,47 @@ it leaves a "live" setup that can never take a payment, discovered by a customer
 cards and payment intents created under one do not exist under the other, so switching mode migrates
 nothing. Both modes are shown side by side rather than behind a switch, to make that structural.
 
+## Taking the payment (2026-09-09)
+
+**A redirect is not evidence.** The obvious design marks an invoice paid when the customer's browser
+reaches the success page, and it is wrong in both directions: anyone can open that URL without
+paying, and a customer who pays then closes the tab never reaches it. The only party that knows a
+payment succeeded is Stripe, which is why `app/api/webhooks/stripe` exists and why `/paid` is
+deliberately static — it looks nothing up and decides nothing.
+
+⚠️ **The webhook is the most security-sensitive route in this codebase.** It is public (Stripe is a
+server with no session) and it marks our invoices paid. Without a verified signature it is an
+unauthenticated write saying "this customer has paid", and anyone who guesses the path clears their
+own bill. Four properties hold it together:
+
+1. **Raw bytes, then verify, then parse.** `req.json()` would destroy the bytes the signature is
+   over; re-serialising changes key order and the check then fails for every genuine event. No field
+   of the body is read before verification — *including which mode sent it*, because the body cannot
+   be asked to authenticate itself.
+2. **The timestamp is security, not metadata.** Without a tolerance a captured "paid" event replays
+   forever. Five minutes, Stripe's own recommendation, checked before the MAC.
+3. **Idempotent by `where` clause.** Stripe delivers at least once and retries on any non-2xx, so
+   `updateMany({ status: { not: "paid" } })` and its count is the decision — same shape as the hold
+   conversion in R1.
+4. **Status codes are part of the design.** 400 only for "did not verify". Everything verified is
+   200, handled or not: a route that errors on an event it does not care about is retried forever and
+   eventually **disabled by Stripe**, taking the events we do care about with it.
+
+Two guards beyond the signature, both defence in depth: the session must be the one we created for
+*this* invoice (hence the unique index on `stripeSessionId`), and the amount and currency must match
+what we asked for. Only an **issued** invoice can be settled — a draft has no number and its amount
+can still move.
+
+**Stripe is a payment rail, never an invoicing system.** Stripe Invoicing issues documents under its
+own numbering and Bulgarian law wants one gapless ascending run per company
+(`OperatorInvoiceSeries`); a second source of invoice numbers is a compliance defect. So Checkout
+carries one line named with *our* invoice number, and the document the customer files is ours.
+
+`pnpm --filter @revio/operator webhook-verify` fires real HTTP at the real route and checks the
+database — forged, unsigned, stale, genuine, replayed, wrong-amount. The unit tests prove the
+signature function refuses a forgery; only this proves the route *calls* it. Removing the check makes
+it go red on "a forged signature is refused" with the invoice marked paid, which is what it is for.
+
 ## VAT: three registrations, not a toggle (2026-09-09)
 
 `decideVat` read `vatId != null` as "registered" and charged the domestic rate. Bulgaria has a

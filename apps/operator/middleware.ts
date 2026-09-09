@@ -15,7 +15,12 @@ export function middleware(req: NextRequest) {
     pathname === "/login/2fa" ||
     pathname === "/forgot-password" ||
     pathname.startsWith("/reset-password/") ||
-    pathname.startsWith("/accept-invite/");
+    pathname.startsWith("/accept-invite/") ||
+    // Where Stripe returns the customer's browser after Checkout. The person landing here is a
+    // hotel owner who has just paid; they have no operator login and never will, so bouncing them
+    // to /login after taking their money would read as the payment having gone wrong. The page
+    // shows static copy and looks nothing up, so there is nothing on it to protect.
+    pathname === "/paid";
   const isLogin = pathname === "/login";
   const hasSession = req.cookies.has(SESSION_COOKIE);
 
@@ -48,8 +53,14 @@ export const config = {
    *                 life POSTing into the login page. Every other app already exempted `api/jobs`;
    *                 this file described the exact failure above and did not list it.
    *
+   *   api/webhooks — Stripe POSTs here to say an invoice has been paid. The same shape as the
+   *                 three above, and the same failure if it were missed: a 307 to /login is a 2xx
+   *                 to Stripe's retry logic, so every payment would be recorded as delivered while
+   *                 no invoice was ever marked paid.
+   *
    * None is unguarded. Health returns only up/down; leads and jobs each require a shared secret and
-   * refuse outright when one is not configured.
+   * refuse outright when one is not configured; the Stripe webhook refuses anything without a valid
+   * HMAC signature, and refuses everything when no signing secret is stored.
    */
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/leads|api/jobs|.*\\.[a-zA-Z0-9]+$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/leads|api/jobs|api/webhooks|.*\\.[a-zA-Z0-9]+$).*)"],
 };

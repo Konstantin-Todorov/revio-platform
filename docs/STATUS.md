@@ -63,7 +63,7 @@ Three that show the shape of it:
 `production` branch at the **same commit**; the marketing site is on `production` of its own repo;
 Postgres is an image.
 
-**1,897 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
+**1,928 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
 change — typecheck, lint, and ten ratchets that each exist because something specific went wrong
 once: copy · authz · silent · money · health · a11y · scroll-lock · jobs · zoom · tokens. CI additionally applies every migration into an empty database and runs the seed.
 
@@ -72,9 +72,10 @@ is the only real proof of something the platform promises. Run them by hand agai
 demo database before a release:
 
 ```
-pnpm --filter @revio/db claim-verify        # the claim primitive is atomic
-pnpm --filter @revio/booking engine-race    # the booking path never oversells a hold
-pnpm --filter @revio/booking confirm-race   # one hold becomes exactly one reservation
+pnpm --filter @revio/db claim-verify         # the claim primitive is atomic
+pnpm --filter @revio/booking engine-race     # the booking path never oversells a hold
+pnpm --filter @revio/booking confirm-race    # one hold becomes exactly one reservation
+pnpm --filter @revio/operator webhook-verify # a forged Stripe event cannot mark an invoice paid
 ```
 
 The last of those is new on 2026-09-08 and found the worst defect of the week — see *Known issues*.
@@ -129,7 +130,26 @@ Nothing of ours is half-built. **Codex has two items uncommitted in the shared t
 `apps/operator/components/shell/Sidebar.tsx`. They are local only; nothing is deployed. Stage by path
 if you commit anything nearby.
 
-### Shipped 2026-09-09 — payments plumbing, and a VAT defect that would have overcharged every Bulgarian client
+### Shipped 2026-09-09 · part 3 — a hotel can pay an invoice by card
+
+`/invoice/[id]` now offers **Create payment link**: a Stripe-hosted Checkout page for the gross
+amount, carrying our own invoice number. No card detail reaches Revio.
+
+⚠️ **A redirect is not evidence.** The invoice is marked paid by Stripe telling us so over a webhook
+— never by the customer's browser reaching a thank-you page, which anyone can open without paying
+and which a customer who pays and closes the tab never reaches. `/paid` is deliberately static.
+
+That webhook is the most security-sensitive route here: public, and it settles bills. Raw bytes →
+verify → parse; a five-minute replay tolerance; constant-time comparison; and **which mode signed is
+decided by which secret verified**, never by the body's own claim. `pnpm --filter @revio/operator
+webhook-verify` fires real HTTP at it and checks the database — forged, unsigned, stale, genuine,
+replayed, wrong-amount. *Verified by removing the signature check and watching a forged request mark
+the invoice paid*, then putting it back.
+
+`middleware.ts` gained `api/webhooks`, the same class as the `api/jobs` miss that let `trial-sweep`
+POST into the login page for its whole life.
+
+### Shipped 2026-09-09 · parts 1–2 — payments plumbing, and a VAT defect that would have overcharged every Bulgarian client
 
 **`/integrations`** — every connection the platform depends on, in one list, because three of the four
 fail *silently*: a rolled Stripe key, an unset `RESEND_API_KEY` and an unread mailbox all look
@@ -201,7 +221,8 @@ that are assessments rather than code: `docs/COMPETITIVE-GAPS-2026-09.md` and
 | | Why | Effort |
 | --- | --- | --- |
 | **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
-| **Charge a card — Stripe part 2** ⏳ | **Started, not finished.** The *connection* shipped 2026-09-09 and can be set up, tested and inspected; what it cannot do is take money. `/billing` still issues an invoice nobody can pay by card. Three pieces remain: (1) a PaymentIntent raised against an `Invoice`, (2) a hosted page or Elements form the hotel can actually pay on, (3) the **webhook** — without it a payment succeeds at Stripe and our invoice stays unpaid forever, because a browser redirect is not evidence. Needs the signing secret the settings screen already has a field for | Medium |
+| **Send the payment link** ⏳ | ✅ An invoice can now be paid by card — link, hosted Checkout, webhook, invoice settling itself. What is *not* built is the email that carries the link: the operator copies the URL off `/invoice/[id]` and pastes it. Deliberate — sending it is a decision with a covering sentence, and a Send button that silently composed one would be worse than none | Small |
+| **Refunds and recurring** ⏳ | A card payment can be taken and not given back: a refund is done in the Stripe dashboard and our invoice would not know. And every month is still an invoice somebody generates and sends — Stripe Subscriptions would make it automatic, but that is a pricing-model decision as much as a build | Medium |
 | **Operator navigation — properly this time** ⏳ | **Two attempts rejected, both by the founder, and the reasons are recorded so a third does not repeat them.** Attempt 1 wrapped headings around the same flat list — *"it still reads as one long, amateur list."* Attempt 2 was reverted as off-design: *"it did not make it with our design and it was bad."* The requirement stands and is specific: **the sidebar exposes a small number of areas; choosing one reveals that area's screens as an inner tab level**, using the tab pattern already shipped on `/clients/[id]` — the one the founder said he liked. Logical and tidy, no route, action or revalidation change | Medium |
 | **Client analytics** | Every number on the client page is today's value. A twelve-month sparkline, one health score with its parts visible, and MRR movement — the three things every mature console leads with, and all four inputs already exist | Medium |
 | **Hotel's own Stripe keys** | The model is settled (their account, not Connect — we never touch the money) and designed in `docs/PLAN-2026-09-09.md` §1. It follows ours rather than leading it, and it reuses the `PlatformCredential` shape wholesale — the encryption, the mode validation and the test-before-store are already built and tested | Medium |

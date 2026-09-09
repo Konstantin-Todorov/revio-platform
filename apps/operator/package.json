@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "webhook-verify": "tsx scripts/webhook-verify.ts"
   },
   "dependencies": {
     "@revio/core": "workspace:*",
@@ -36,6 +37,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "tsx": "^4.19.0"
   }
 }
