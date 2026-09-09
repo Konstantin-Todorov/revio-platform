@@ -18,6 +18,12 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Codex · DONE · PMS folio action feedback sweep
+**Make every folio mutation report success or refusal, prioritising payment and deposit paths.**
+Files: `apps/pms/lib/actions-folio.ts` and its focused tests, this log.
+Notes: All 13 folio mutations now confirm success and explain every refusal; the legacy silent
+query-string redirects are gone. A focused 15-case ratchet test, full repo gate, and PMS build pass.
+
 ### 2026-09-09 · Claude · DONE · PMS folio — "Mark paid does nothing"
 **Founder-reported. The action worked; the silence and the screen made it look broken.**
 Files: `apps/pms/lib/{actions-folio.ts,folio-outcomes.ts}` + tests,
