@@ -63,6 +63,35 @@
 > in J:** §9 Configuration expansion + the ten screens J1–J9 (wire these primitives into UI), J10 Close Day
 > (awaits §11), J11 verify+deploy. Wire `recordOpsEvent` into HK/maintenance status changes when building J6/J8.
 
+## The folio screen is ordered by the job, not by the catalogue (2026-09-09)
+
+It ran: post a charge → take a payment → stay extras → invoicing → deposits → **check out, at line 560
+of 713**. A receptionist with a guest in front of them scrolled past four sections they did not need
+to reach the button they opened the page for.
+
+Now: **take the money, then send them on their way.** Everything else folds away below.
+
+⚠️ **Tabs were proposed for this and rejected, correctly.** The founder's objection: *"won't it be
+harder for receptionists, won't they get more confused?"* At a front desk, yes — and the reasons are
+specific to this screen rather than to tabs in general:
+
+- **You do not know in advance which tab you need.** "Half on the card, half in cash", or "can I have
+  it on the company", arrives *after* the page is open.
+- **A tab you never open is a feature you never learn exists.** Somebody can work here for months
+  without discovering deposits.
+- **It breaks muscle memory**, and this is done twenty times a day with somebody waiting.
+
+Tabs suit the operator's client page, where one person reads at leisure. This is a queue. `Foldaway`
+is what replaced the idea: `<details>`/`<summary>`, everything still in one scroll, nothing behind a
+label you must know to click — and **the state on the line**, so "are there deposits?" is answered by
+"None held" without a click. It stays in the document while shut, so find-in-page still reaches it.
+
+Two things carry real weight and neither is decoration: the running total is **sticky** at
+`top-[60px]` (clearing the topbar) because the balance is what a receptionist checks against what the
+guest is handing over; and `tone="attention"` colours a state that is a **job** — money held must be
+applied or refunded before the guest walks out — differently from one that is merely true. Caught by
+looking: "€50 held — apply or refund before checkout" was the same grey as "No invoice issued yet".
+
 Sold standalone as an operations layer, even over a foreign reservation system. Reads/writes inventory
 **only** through `@revio/core` — never ad-hoc queries against inventory tables.
 

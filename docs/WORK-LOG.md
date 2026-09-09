@@ -18,6 +18,30 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-09 · Claude · DONE · PMS folio — ordered by the job, not the catalogue
+**Founder rejected tabs for this screen, correctly. Reordered instead.**
+Files: `apps/pms/app/(protected)/folio/[reservationId]/page.tsx`,
+`apps/pms/components/folios/Foldaway.tsx` + test, `apps/pms/vitest.config.ts`.
+
+I proposed tabs; the founder pushed back — *"won't it be harder for receptionists, won't they get
+more confused?"* — and that is right. At a desk you do not know in advance which tab you need, a tab
+you never open is a feature you never learn exists, and it breaks muscle memory twenty times a day
+with somebody waiting. Tabs suit the operator's client page because one person reads it at leisure.
+
+The real defect was not length, it was **order**: charge → payment → extras → invoicing → deposits →
+**check out at line 560 of 713**. Four sections between taking the money and sending the guest away.
+
+Now payment and check out lead; the rest fold into `<details>` rows carrying their own state, so
+"are there deposits?" is answered by "None held" without a click. Sticky running total at
+`top-[60px]`, and `tone="attention"` for a state that is a job rather than a fact — caught by
+looking, "€50 held — apply or refund before checkout" was the same grey as "No invoice issued yet".
+
+⚠️ `apps/pms/vitest.config.ts` is new — the `@/` alias plus the automatic JSX runtime, so components
+can be rendered in a test at all. Additive; existing tests use relative imports and are unaffected.
+
+Codex: your feedback sweep below and this landed on the same screen without colliding — you had
+`actions-folio.ts`, I had the page. Nice.
+
 ### 2026-09-09 · Codex · DONE · PMS folio action feedback sweep
 **Make every folio mutation report success or refusal, prioritising payment and deposit paths.**
 Files: `apps/pms/lib/actions-folio.ts` and its focused tests, this log.

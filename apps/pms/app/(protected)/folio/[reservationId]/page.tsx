@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, CreditCard, LogOut, Ban, AlertTriangle, CheckCircle2 }
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { SplitSquareHorizontal, ArrowRightLeft, ShieldCheck, Repeat, FileText, Trash2 } from "lucide-react";
 import { getFolioView } from "@/lib/folio";
+import { Foldaway } from "@/components/folios/Foldaway";
 import { describeResolution } from "@/lib/folio-outcomes";
 import { assessMoveForReservation } from "@/lib/move-reconciliation";
 import { listInvoicesForReservation, DOC_LABEL } from "@/lib/invoice";
@@ -319,8 +320,18 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
         </Card>
       ))}
 
-      {/* Combined total across every folio + add a split/company folio. */}
-      <Card surface="flat" className="mb-4">
+      {/*
+        * The running total, and it STAYS ON SCREEN.
+        *
+        * The bill below can be long — a week's nights, minibar, extras, taxes — and the balance is
+        * the number a receptionist checks against what the guest is handing over. Scrolling away
+        * from it to read a line and back again is the small friction that makes somebody reach for
+        * a calculator instead of trusting the screen.
+        *
+        * `top-[60px]` clears the topbar, which is `sticky top-0 h-[60px]`. Two sticky things at the
+        * same offset would overlap, and the one that loses is the one you need.
+        */}
+      <Card surface="flat" className="sticky top-[60px] z-10 mb-4 shadow-sm">
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="space-y-1 text-[13px]">
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-ink-500">
@@ -347,29 +358,18 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
       </Card>
 
       {open ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Post a charge */}
-          <Card surface="flat" className="p-4">
-            <h3 className="mb-3 text-[13px] font-bold text-ink-900">Post a charge</h3>
-            <form action={postCharge} className="space-y-2.5">
-              <input type="hidden" name="reservationId" value={reservationId} />
-              <div className="flex gap-2">
-                <select name="kind" defaultValue="minibar" className={`${inputCls} w-28`}>
-                  <option value="minibar">Minibar</option>
-                  <option value="extra">Extra</option>
-                  <option value="fee">Fee</option>
-                </select>
-                <input name="description" required placeholder="Description" className={`${inputCls} flex-1`} />
-              </div>
-              <div className="flex gap-2">
-                <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${currency})`} className={`${inputCls} flex-1`} />
-                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500">
-                  <Plus className="h-3.5 w-3.5" /> Add
-                </button>
-              </div>
-            </form>
-          </Card>
-
+        <div className="space-y-4">
+          {/*
+            * ORDER FOLLOWS THE JOB, not the catalogue of what a folio can do.
+            *
+            * This screen used to run: post a charge, take a payment, stay extras, invoicing,
+            * deposits, check out — with **Check out at line 560 of 713**. A receptionist with a
+            * guest in front of them had to scroll past four sections they did not need to reach the
+            * button they opened the page for.
+            *
+            * Take the money, then send them on their way. Everything else folds away below, each
+            * with its state on the line so the common question is answered without opening it.
+            */}
           {/* Record a payment */}
           <Card surface="flat" className="p-4">
             <h3 className="mb-3 text-[13px] font-bold text-ink-900">Record a payment</h3>
@@ -397,10 +397,76 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
             </form>
           </Card>
 
+          {/* Check out */}
+          <Card surface="flat" className="p-4">
+            <h3 className="mb-3 text-[13px] font-bold text-ink-900">Check out</h3>
+            {combined.depositsHeld > 0 && (
+              <p className="mb-2.5 flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-2 text-[12px] text-brand-800">
+                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span><span className="font-semibold">{money(combined.depositsHeld, currency)} still held.</span> Use it against the balance or refund it before the guest leaves.</span>
+              </p>
+            )}
+            {settled ? (
+              <form action={checkOut} className="flex items-center gap-3">
+                <input type="hidden" name="reservationId" value={reservationId} />
+                <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success-600"><CheckCircle2 className="h-4 w-4" /> Balance settled</span>
+                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">
+                  <LogOut className="h-4 w-4" /> Check out
+                </button>
+              </form>
+            ) : (
+              <form action={checkOut} className="space-y-2.5">
+                <input type="hidden" name="reservationId" value={reservationId} />
+                <input type="hidden" name="override" value="1" />
+                <p className="text-[12.5px] text-ink-600">
+                  Outstanding balance of <span className="font-bold text-danger-600">{money(combined.balance, currency)}</span> across {folios.length} folio{folios.length === 1 ? "" : "s"}. Settle it above, or check out with an override (logged).
+                </p>
+                <div className="flex gap-2">
+                  <input name="reason" type="text" placeholder="Override reason (e.g. bill to company)" className={`${inputCls} flex-1`} />
+                  <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-danger-500 px-3 py-2 text-[12.5px] font-semibold text-danger-600 transition-colors hover:bg-danger-50">
+                    <LogOut className="h-3.5 w-3.5" /> Check out with balance
+                  </button>
+                </div>
+              </form>
+            )}
+          </Card>
+
+          {/*
+            * Not what you came here for. Folded, never hidden — see `Foldaway` for why this is not
+            * tabs: at a desk you do not know in advance which one you need, and a tab you never open
+            * is a feature you never learn exists.
+            */}
+          <Foldaway title="Post a charge" state="Minibar, an extra, a one-off fee">
+          {/* Post a charge */}
+          <div className="p-4">
+            <form action={postCharge} className="space-y-2.5">
+              <input type="hidden" name="reservationId" value={reservationId} />
+              <div className="flex gap-2">
+                <select name="kind" defaultValue="minibar" className={`${inputCls} w-28`}>
+                  <option value="minibar">Minibar</option>
+                  <option value="extra">Extra</option>
+                  <option value="fee">Fee</option>
+                </select>
+                <input name="description" required placeholder="Description" className={`${inputCls} flex-1`} />
+              </div>
+              <div className="flex gap-2">
+                <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${currency})`} className={`${inputCls} flex-1`} />
+                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500">
+                  <Plus className="h-3.5 w-3.5" /> Add
+                </button>
+              </div>
+            </form>
+          </div>
+
+          </Foldaway>
+
+          <Foldaway
+            title="Stay extras"
+            state={stayExtras.length === 0 ? "None on this stay" : `${stayExtras.length} recurring per night`}
+          >
           {/* Stay extras — recurring, accrue per night at the audit (spec §3.6) */}
-          <Card surface="flat" className="p-4 lg:col-span-2">
+          <div className="p-4">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="text-[13px] font-bold text-ink-900">Stay extras</h3>
               <span className="text-[11px] text-ink-400">Recurring per night — posts at each night audit. Doesn’t change the booked rate plan; the folio reflects reality.</span>
             </div>
             {stayExtras.length > 0 && (
@@ -430,12 +496,17 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 <Repeat className="h-3.5 w-3.5" /> Add for the stay
               </button>
             </form>
-          </Card>
+          </div>
 
+          </Foldaway>
+
+          <Foldaway
+            title="Invoicing"
+            state={invoices.length === 0 ? "No invoice issued yet" : `${invoices.length} issued`}
+          >
           {/* Invoicing — render a folio (or the split's chosen folio) as a numbered tax document (§4.3) */}
-          <Card surface="flat" className="p-4 lg:col-span-2">
+          <div className="p-4">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="text-[13px] font-bold text-ink-900">Invoicing</h3>
               <span className="text-[11px] text-ink-400">Charges live on folios; an invoice renders them as a numbered tax document — gapless series, tax per rate, accommodation broken out.</span>
             </div>
             {invoices.length > 0 && (
@@ -481,12 +552,30 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 <FileText className="h-3.5 w-3.5" /> Issue
               </button>
             </form>
-          </Card>
+          </div>
 
+          </Foldaway>
+
+          {/*
+            * The one that opens by itself, and only for a reason: money we are holding has to be
+            * applied or refunded before the guest walks out of the door. Not "this section is
+            * important" — a thing to deal with now.
+            */}
+          <Foldaway
+            title="Deposits"
+            state={
+              depositTypes.length === 0
+                ? "No deposit types set up"
+                : combined.depositsHeld > 0
+                  ? `${money(combined.depositsHeld, currency)} held — apply or refund before checkout`
+                  : "None held"
+            }
+            defaultOpen={combined.depositsHeld > 0}
+            tone={combined.depositsHeld > 0 ? "attention" : "quiet"}
+          >
           {/* Deposits — a liability, not revenue (spec §4.4) */}
-          <Card surface="flat" className="p-4 lg:col-span-2">
+          <div className="p-4">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <h3 className="text-[13px] font-bold text-ink-900">Deposits</h3>
               <span className="text-[12px] text-ink-500">
                 Held: <span className="tnum font-bold text-brand-700">{money(combined.depositsHeld, currency)}</span>
                 <span className="ml-1.5 text-[11px] text-ink-400">money held that may be returned — outside the balance until applied</span>
@@ -555,41 +644,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
               )}
             </div>
             )}
-          </Card>
+          </div>
 
-          {/* Check out */}
-          <Card surface="flat" className="p-4 lg:col-span-2">
-            <h3 className="mb-3 text-[13px] font-bold text-ink-900">Check out</h3>
-            {combined.depositsHeld > 0 && (
-              <p className="mb-2.5 flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-2 text-[12px] text-brand-800">
-                <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span><span className="font-semibold">{money(combined.depositsHeld, currency)} still held.</span> Use it against the balance or refund it before the guest leaves.</span>
-              </p>
-            )}
-            {settled ? (
-              <form action={checkOut} className="flex items-center gap-3">
-                <input type="hidden" name="reservationId" value={reservationId} />
-                <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success-600"><CheckCircle2 className="h-4 w-4" /> Balance settled</span>
-                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">
-                  <LogOut className="h-4 w-4" /> Check out
-                </button>
-              </form>
-            ) : (
-              <form action={checkOut} className="space-y-2.5">
-                <input type="hidden" name="reservationId" value={reservationId} />
-                <input type="hidden" name="override" value="1" />
-                <p className="text-[12.5px] text-ink-600">
-                  Outstanding balance of <span className="font-bold text-danger-600">{money(combined.balance, currency)}</span> across {folios.length} folio{folios.length === 1 ? "" : "s"}. Settle it above, or check out with an override (logged).
-                </p>
-                <div className="flex gap-2">
-                  <input name="reason" type="text" placeholder="Override reason (e.g. bill to company)" className={`${inputCls} flex-1`} />
-                  <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-danger-500 px-3 py-2 text-[12.5px] font-semibold text-danger-600 transition-colors hover:bg-danger-50">
-                    <LogOut className="h-3.5 w-3.5" /> Check out with balance
-                  </button>
-                </div>
-              </form>
-            )}
-          </Card>
+          </Foldaway>
         </div>
       ) : (
         settled ? (
