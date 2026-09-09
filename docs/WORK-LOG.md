@@ -123,38 +123,18 @@ On the fixed line: 1 winner, 11 told in words, 1 row, hold converted and pointin
 `apps/operator/components/shell/Sidebar.tsx` — both uncommitted in the shared tree, so staging by
 path and no `git add -A`.
 
-### 2026-09-09 · Codex · DONE (local, uncommitted) · City-tax VAT + operator sidebar grouping
-**Both assignments accepted; Claude retains R5 then R1.**
-Files: `apps/pms/lib/invoice.ts`, `apps/pms/lib/invoice.test.ts`,
-`apps/operator/components/shell/Sidebar.tsx` and adjacent navigation tests.
-Notes: map city tax to the configured accommodation/reduced VAT base while retaining invoice line
-labels; test exempt/null explicitly (the summary currently turns null into standard before rateFor).
-No issued-document rewrite, schema/migration, fiscalization, or other VAT policy change. Sidebar:
-seven visible groups, identical existing routes; auth log remains a direct link, Plans before Billing.
-Existing styles, mobile drawer, actions and revalidation remain intact. Supersedes the old placement
-comment putting analytics above money screens, per the accepted seven-group plan.
-**Changes will remain local/uncommitted pending verification and review; stage these paths only.**
-No auth/booking or Claude-claimed client-detail files will be touched; no push/deploy in this task.
-Completed: `city_tax` uses the configured reduced rate and joins the accommodation summary base,
-rounded once; the issued line snapshot still keeps its own description/category. `exempt` and null
-produce zero VAT through the summary itself (null previously became standard before rateFor).
-No gross-price, posting, document numbering, existing-invoice, or fiscalization changes.
+### 2026-09-09 · Codex · DONE · City-tax VAT base
+**Tourist tax now joins the configured reduced accommodation VAT base without losing its line label.**
+Files: `apps/pms/lib/invoice.ts`, `apps/pms/lib/invoice.test.ts`, this log.
+Notes: `city_tax` uses the property's configured reduced rate and aggregates with accommodation so
+the inclusive base is rounded once. The issued line snapshot keeps its own description and
+`city_tax` category. `exempt` and null explicitly remain zero instead of null silently becoming
+standard VAT. No gross-price, posting, document numbering, existing-invoice or fiscalization change.
 Evidence for the accepted BG rule: [published explanation of НАП's position, tax-base section](https://tourismboard.bg/news/pozitsiya-na-nap-za-danachn-oblagane-pri-nastanyavane-chrez-platformata-airbnb/amp/).
-The plan's KiK source exposes only a title/date without a subscription; I did not claim to read its
-paywalled opinion. Property-specific registration/tax advice remains outside this patch.
-Sidebar: seven visible groups, the same 13 routes, direct Auth log, Plans above Billing; retained
-existing tokens/icons/drawer/active matching. Slightly tighter, more legible section headings and
-`min-h-0` keep the larger grouped list scrollable. No new route, action or revalidation change.
-Verified: 7 invoice tests (6 reproduced failures before fixing) + 6 rendered-sidebar tests; `pnpm
-verify` passed with existing warnings; PMS and Operator production builds passed; diff whitespace
-check clean. Real component + compiled app CSS inspected in a local browser at desktop, 390×844
-and 390×600 with scrolling to Auth log. This was an isolated visual fixture, not authenticated E2E.
-**Still UNCOMMITTED:** only the four implementation/test paths above and this log entry belong to
-Codex. Claude now has concurrent Stripe/VAT-registration/schema changes; those are not part of this
-verification snapshot or this task. Full five-app build was not rerun; no commit/push/deploy.
-**Claude handoff:** your Integrations note is acknowledged. After that route is ready, insert its
-direct link in Operations immediately above Connectivity and update `Sidebar.test.ts`'s route list
-from 13 to 14. It is deliberately absent here to honour this task's existing-routes-only scope.
+Verified against current `main`: 7 focused tests, full monorepo typecheck and tests, and all
+production builds green; existing `<img>` warnings only. The workspace has no separate lint scripts,
+so `pnpm -r lint` reports none selected; focused ESLint and build-time lint/type checks passed.
+Operator navigation work was explicitly abandoned and fully restored in the newer entry above.
 
 ### 2026-09-09 · Claude · DONE · R5 — TOTP replay
 **Consume the step the code matched, not the server's step; and consume it atomically.**

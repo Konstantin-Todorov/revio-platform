@@ -29,8 +29,10 @@ export interface TaxRow { category: string; ratePct: number; netMinor: number; t
  * so tax is backed out of the gross: net = round(gross / (1 + rate)), tax = gross − net. */
 function rateFor(category: string | null, rates: { standard: number; reduced: number }): number {
   if (category === "standard") return rates.standard;
-  if (category === "reduced") return rates.reduced;
-  return 0; // city_tax, exempt, null → no VAT
+  // Tourist tax is part of the accommodation VAT base, not an exempt supply (BG ЗДДС 26(3)(1)).
+  // Use the property's reduced rate; keep the original category/label in the invoice line snapshot.
+  if (category === "reduced" || category === "city_tax") return rates.reduced;
+  return 0; // exempt, null → no VAT
 }
 
 export function computeTaxSummary(
@@ -40,8 +42,10 @@ export function computeTaxSummary(
   const byRate = new Map<string, { category: string; ratePct: number; grossMinor: number }>();
   for (const l of lines) {
     if (l.voided || !INVOICE_KINDS.has(l.kind)) continue;
-    const cat = l.taxCategory ?? "standard";
-    const ratePct = rateFor(cat, rates);
+    const ratePct = rateFor(l.taxCategory, rates);
+    // One accommodation base, rounded once. This is summary grouping only: the separately labelled
+    // tourist-tax line remains untouched. Missing categories must not silently become standard VAT.
+    const cat = l.taxCategory === "city_tax" ? "reduced" : l.taxCategory ?? "exempt";
     const key = `${cat}:${ratePct}`;
     const e = byRate.get(key) ?? { category: cat, ratePct, grossMinor: 0 };
     e.grossMinor += l.amountMinor;
