@@ -1,6 +1,6 @@
 # Revio — where the project actually is
 
-**Updated 2026-09-08**, at commit `c024455` — which CI passed and `promote.yml` fast-forwarded onto
+**Updated 2026-09-09**, at commit `eaadab6` — which CI passed and `promote.yml` fast-forwarded onto
 `production`, *checked with `git ls-remote --heads origin production`*. Every line below names how it
 was checked. Nothing here is copied forward from another document.
 
@@ -63,7 +63,7 @@ Three that show the shape of it:
 `production` branch at the **same commit**; the marketing site is on `production` of its own repo;
 Postgres is an image.
 
-**1,840 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
+**1,897 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
 change — typecheck, lint, and ten ratchets that each exist because something specific went wrong
 once: copy · authz · silent · money · health · a11y · scroll-lock · jobs · zoom · tokens. CI additionally applies every migration into an empty database and runs the seed.
 
@@ -129,6 +129,30 @@ Nothing of ours is half-built. **Codex has two items uncommitted in the shared t
 `apps/operator/components/shell/Sidebar.tsx`. They are local only; nothing is deployed. Stage by path
 if you commit anything nearby.
 
+### Shipped 2026-09-09 — payments plumbing, and a VAT defect that would have overcharged every Bulgarian client
+
+**`/integrations`** — every connection the platform depends on, in one list, because three of the four
+fail *silently*: a rolled Stripe key, an unset `RESEND_API_KEY` and an unread mailbox all look
+exactly like a quiet day. **`/integrations/stripe`** holds our own Stripe account: keys pasted in the
+console rather than into a Railway variable or the database, encrypted at rest, **tested before they
+are stored**, and never readable back. Both modes are shown side by side rather than behind a switch,
+because test and live are different accounts whose data cannot see each other.
+
+⚠️ **Mode is chosen by a person and checked against the key, never inferred from it.** Stripe puts the
+mode in the prefix, so inferring is trivial — and that is the trap: a live key pasted into the field
+you believe is sandbox charges real cards while you rehearse. Refused in both directions.
+
+⚠️ **The VAT defect.** `decideVat` read "has a VAT number" as "registered" and charged 20%. We hold
+`BG205090014` under **чл. 97а ЗДДС** — valid only for cross-border services — under which we may
+**not state VAT on a Bulgarian invoice at all** (чл. 113, ал. 9). Every domestic invoice would have
+carried 20% we are prohibited from charging. **Zero had been issued to a real client**, which is the
+only reason this was a defect and not a credit note and an apology. Five tests go red on the old
+line. Also added: a monitor for the чл. 96 threshold (EUR 51,130 of *domestic* turnover in a
+*calendar* year, seven days to apply) on Settings → Company details.
+
+*Checked against production:* migration applied 00:46 UTC, `vatRegistration = art97a`,
+`PlatformCredential` empty and waiting for a key.
+
 ### Shipped 2026-09-08 — an external review, and all four release blockers closed
 
 An outside reviewer (Codex) read the codebase and filed five findings. **All five were confirmed by
@@ -177,8 +201,7 @@ that are assessments rather than code: `docs/COMPETITIVE-GAPS-2026-09.md` and
 | | Why | Effort |
 | --- | --- | --- |
 | **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
-| **Stripe for OUR billing first** | Founder's call on 2026-09-08: before hotels paste their own keys, *we* need to be able to collect. Today `/billing` issues real invoices and moves no money — a hotel that says yes has no way to pay us but a bank transfer somebody has to chase. TEST keys only until the founder switches it | Medium |
-| **A VAT-registered toggle** | We are not registered today and will be. The invoice issuer's VAT number is already what decides the rate, so this is a switch and a label, not a rewrite — and it has to exist *before* the first invoice, not after | Small |
+| **Charge a card, not just store a key** | ✅ The *connection* shipped 2026-09-09; what it cannot yet do is take money. `/billing` still issues an invoice nobody can pay by card. Next: a payment intent against an invoice, the webhook that hears it succeeded, and `Invoice.status` moving to paid on its own | Medium |
 | **Client analytics** | Every number on the client page is today's value. A twelve-month sparkline, one health score with its parts visible, and MRR movement — the three things every mature console leads with, and all four inputs already exist | Medium |
 | **Hotel's own Stripe keys** | The model is settled (their account, not Connect — we never touch the money) and designed in `docs/PLAN-2026-09-09.md` §1. It follows ours rather than leading it | Medium |
 | **In-app AI assistant** | The biggest differentiator and the least urgent. Founder's framing: future context, not a task. Waiting for a real support queue to learn from | Large |
@@ -211,8 +234,8 @@ inbound-email job now reads `support@reviosoft.app`.
 
 | | Who | Why it matters |
 | --- | --- | --- |
-| **Are we VAT-registered, and against what turnover?** | Founder | Answered in part on 2026-09-08: *not registered now, probably soon*, and you want a toggle. But `OperatorCompany.vatId` is currently **set to `BG205090014`**, which is what makes our invoices carry 20%. Either that number is right and we are registered, or it should come off. It cannot be both, and it decides what every invoice says. Research and sources: `docs/PLAN-2026-09-09.md` §3 |
-| **Sandbox or live for our own Stripe** | Founder | Decides whether the first build can take a real payment or only rehearse one. I will build against TEST keys either way; going live is your action, not mine |
+| **Paste the Stripe sandbox keys** | Founder | `/integrations/stripe` → Sandbox → *Set up*. Secret (`sk_test_…`) and publishable (`pk_test_…`) from Stripe → Developers → API keys. The key is tested before it is stored and never shown again. **I do not enter keys, so this one is yours** |
+| **Confirm the article on the VAT certificate** | Founder | Set to **чл. 97а** on 2026-09-09 from your description — a BG number valid only outside Bulgaria. That is what the certificate should say; if it says чл. 96 instead, it is one click on Settings → Company details. It decides the tax on every invoice |
 | **Decide what to do about *Ventsi Group*** | Founder | A real account, currently suspended |
 | **Euro changeover and fiscalization** | Founder | Both are dated obligations rather than features. `TaxInvoice.fiscalRef` is the seam; `docs/specs/BG-FISCALIZATION-RESEARCH.md` |
 
