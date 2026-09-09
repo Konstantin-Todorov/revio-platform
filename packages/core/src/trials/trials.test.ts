@@ -80,6 +80,11 @@ describe("dueReminder — never twice, and never the wrong one", () => {
     expect(dueReminder(trial({ endsAt: inDays(1), remindedDays: [7] }), NOW)).toBe(1);
   });
 
+  it("never sends a stale seven-day warning after the one-day warning", () => {
+    // A missed older threshold stays missed; running the sweep again must not move backwards.
+    expect(dueReminder(trial({ endsAt: inDays(1), remindedDays: [1] }), NOW)).toBeNull();
+  });
+
   it("sends nothing once it has expired", () => {
     // Past the end there is no warning left to give — there is an expiry to perform.
     expect(dueReminder(trial({ endsAt: inDays(-1) }), NOW)).toBeNull();

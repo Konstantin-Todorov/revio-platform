@@ -81,11 +81,11 @@ export function daysRemaining(trial: TrialFacts, now: Date): number {
 export function dueReminder(trial: TrialFacts, now: Date): TrialReminderDay | null {
   if (trial.endedAt || now >= trial.endsAt) return null;
   const left = daysRemaining(trial, now);
-  // Ascending, so the most urgent threshold is considered first.
-  for (const day of [...TRIAL_REMINDER_DAYS].sort((a, b) => a - b)) {
-    if (left <= day && !trial.remindedDays.includes(day)) return day;
-  }
-  return null;
+  // Pick the most urgent threshold reached BEFORE checking whether it was sent. If the one-day
+  // warning has already gone, falling through to seven would send "7 days left" afterwards — the
+  // exact stale warning the urgency ordering exists to prevent.
+  const due = [...TRIAL_REMINDER_DAYS].sort((a, b) => a - b).find((day) => left <= day);
+  return due !== undefined && !trial.remindedDays.includes(due) ? due : null;
 }
 
 /** Has the clock run out with nothing having acted on it? The sweep's only question. */

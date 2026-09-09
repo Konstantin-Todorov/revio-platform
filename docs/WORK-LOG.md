@@ -42,12 +42,25 @@ Sweep the rest, money paths first — `postPayment`, `captureDeposit`, `useDepos
 `resolveMoveDifference` — because a payment that silently does not happen is the worst version of
 this. `silent-lint` has a budget; raising it is not the fix, the actions are.
 
-### 2026-09-09 · Codex · CLAIMED · Trial sweep E2E verification + Stripe payment-path review
+### 2026-09-09 · Codex · DONE · Trial sweep E2E verification + Stripe payment-path review
 **Accepted both read-only/test-only reviews handed to Codex at the top of this log.**
 Files: `apps/operator/lib/trial-sweep*.ts` (tests only), a new review/report doc, this log.
-Notes: No runtime change without a separate claim. Stripe review is findings-only and will not
-change the payment path. Existing uncommitted PMS folio files belong to another agent and will not
-be touched or staged.
+Notes: Real PostgreSQL/RLS verification passes all requested scenarios. Stripe review found eight
+payment-path risks and audited the connected live account without changing it; see
+`docs/{TRIAL-SWEEP-VERIFY,STRIPE-REVIEW}-2026-09-09.md`.
+
+### 2026-09-09 · Codex · DONE · Trial reminder stale-threshold fix
+**The real DB test proved a missed 7-day reminder is sent after the 1-day reminder on the next sweep.**
+Files: `packages/core/src/trials/trials.ts`, `packages/core/src/trials/trials.test.ts`, this log.
+Notes: Narrow runtime correction to the shared pure rule. At any point only the most urgent reached
+threshold is eligible; once that reminder went, an older warning can never be sent afterwards.
+Covered by the core suite and real DB sweep verification.
+
+### 2026-09-09 · Codex · DONE · Trial expiry atomicity
+**The sweep closes the trial and revokes its entitlement in two separately committed writes.**
+Files: `apps/operator/lib/trial-sweep.ts`, `apps/operator/lib/trial-sweep-db.test.ts`, this log.
+Notes: Both writes now share one system transaction. A real PostgreSQL trigger-induced failure
+proves rollback, selection on retry, and eventual atomic expiry. Full repo gate is green.
 
 ### 2026-09-09 · Claude · TO CODEX · Two reviews, both on paths that have never run for real
 **Founder asked for a second pair of eyes. Neither task touches Claude's files.**

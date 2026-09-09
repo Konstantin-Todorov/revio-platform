@@ -1,5 +1,5 @@
 import "server-only";
-import { forSystem } from "@revio/db";
+import { forSystem, withSystemTransaction } from "@revio/db";
 import { sendEmail } from "@revio/email";
 import {
   PRODUCT_BY_KEY,
@@ -83,21 +83,24 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
     // ── expiry first: a trial past its end has no warning left to give ────────────────────────
     if (needsExpiring(facts, now)) {
       /*
-       * Close the trial and revoke in one place, and close it FIRST.
-       *
-       * If the entitlement write failed after the trial was closed, the hotel keeps access they are
-       * no longer paying for — visible, recoverable, and in their favour. The other order risks
-       * revoking access while the trial still looks running, which the next sweep would try to
-       * revoke again and which reads to the hotel as an unexplained outage.
+       * The trial and the entitlement are one business transition, so they commit together.
+       * Closing first in a separate transaction used to strand access ON forever when the second
+       * write failed: the next sweep ignored the already-ended row and never retried revocation.
+       * The conditional close also makes two concurrent sweep processes harmless.
        */
-      await db.productTrial.update({
-        where: { id: t.id },
-        data: { endedAt: now, outcome: "expired" },
+      const expired = await withSystemTransaction(async (tx) => {
+        const closed = await tx.productTrial.updateMany({
+          where: { id: t.id, endedAt: null },
+          data: { endedAt: now, outcome: "expired" },
+        });
+        if (closed.count === 0) return false;
+        await tx.tenant.update({
+          where: { id: t.tenantId },
+          data: { [FIELD[t.product as ProductKey]]: false },
+        });
+        return true;
       });
-      await db.tenant.update({
-        where: { id: t.tenantId },
-        data: { [FIELD[t.product as ProductKey]]: false },
-      });
+      if (!expired) continue;
 
       if (owner?.email) {
         const mail = {
