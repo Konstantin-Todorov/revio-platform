@@ -328,8 +328,8 @@ model UserRecoveryCode {
 }
 
 // Operator-side billing (our invoices to the hotels). Operator business data — a hotel can NEVER read
-// it (RLS = bypass-only, like ConnectivityCredential). Payments are MOCKED in V1 (no gateway): status
-// moves draft → sent → paid manually; no card/money is handled here.
+// it (RLS = bypass-only, like ConnectivityCredential). Payment can be recorded manually for bank
+// transfers or settled by a verified Stripe Checkout webhook; card data never reaches Revio.
 model Invoice {
   id          String    @id @default(cuid())
   tenantId    String

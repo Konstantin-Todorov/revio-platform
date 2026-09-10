@@ -244,8 +244,8 @@ export default async function BillingPage() {
       )}
 
       <p className="mt-4 text-[11.5px] text-ink-400">
-        Payments are recorded manually (mock) — “Mark paid” settles an invoice without a gateway. A real
-        payment integration (Stripe) is a later phase; no card or money is handled here.
+        Issued invoices can be paid through Stripe Checkout; the signed Stripe webhook records the
+        card payment. Use “Mark paid” only for a bank transfer or another off-platform settlement.
       </p>
     </div>
   );

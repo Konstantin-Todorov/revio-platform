@@ -106,10 +106,6 @@ export async function generateInvoices(): Promise<void> {
 }
 
 /**
- * Move an invoice draft → sent → paid. Marking "paid" is a MOCK settlement (no gateway, no card) —
- * a real payment integration is future work.
- */
-/**
  * Move an invoice through its lifecycle — and refuse the moves a ledger must not permit.
  *
  * This used to accept ANY status from ANY status with no checks and no attribution. It produced a

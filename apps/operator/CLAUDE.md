@@ -358,6 +358,7 @@ recent failures), **Settings** (your account + operator-staff CRUD via `actions-
 super-admin gated, keeps ≥1 super admin, no self-removal + platform info), **Billing**
 (`lib/pricing.ts` plan-base + per-product module fee → monthly price + MRR; `Invoice` table with
 **operator-only bypass RLS** so hotels can never read billing; `actions-billing.ts` generateInvoices +
-draft→sent→paid; **payments are MOCKED — no gateway, no card, no money moved**; real Stripe is future).
+draft→sent→paid; manual settlement remains for bank transfers and Stripe Checkout settles card
+payments only after its signed webhook verifies the exact stored session and amount).
 Data reads via `forSystem()` (bypass RLS = operator perimeter). **Entitlement gating verified**: a client
 with one/some/all products is correctly gated per app; toggling flips access.

@@ -40,6 +40,7 @@ const ICONS: Record<string, typeof Plug> = {
 const STATE: Record<IntegrationState, { tone: "success" | "danger" | "warning" | "neutral"; label: string }> = {
   working: { tone: "success", label: "working" },
   rejected: { tone: "danger", label: "rejected" },
+  decryption_error: { tone: "danger", label: "cannot decrypt" },
   untested: { tone: "warning", label: "never tested" },
   not_configured: { tone: "neutral", label: "not set up" },
   elsewhere: { tone: "neutral", label: "set elsewhere" },

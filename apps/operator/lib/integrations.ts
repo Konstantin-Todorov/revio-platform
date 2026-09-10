@@ -30,6 +30,7 @@ import { vatThresholdStatus, type ThresholdStatus } from "./vat-threshold";
 import { registrationOf, type VatRegistration } from "./vat";
 import type { StripeMode } from "./stripe-key";
 import type { StripeAccountInfo } from "./stripe-check";
+import { readStoredSecret, type StoredSecretRead } from "./stripe-credential";
 
 const prisma = forSystem();
 
@@ -40,6 +41,8 @@ export type IntegrationState =
   | "rejected"
   /** Configured and never exercised. NOT the same as working — see the note above. */
   | "untested"
+  /** Configured, but CONNECTIVITY_SECRET cannot decrypt what was stored. */
+  | "decryption_error"
   /** Nothing set. Often the correct state, so it must not read as a fault. */
   | "not_configured"
   /** Set somewhere this service cannot read — true of the Channex keys, which live on other apps. */
@@ -75,6 +78,9 @@ export interface StripeConnection {
   account: StripeAccountInfo | null;
   updatedBy: string | null;
   updatedAt: Date | null;
+  secretState: StoredSecretRead["state"];
+  webhookSecretState: StoredSecretRead["state"];
+  credentialProblem: string | null;
 }
 
 function stateOf(cred: { lastCheckOk: boolean | null } | null): IntegrationState {
@@ -88,18 +94,26 @@ export async function getStripeConnection(mode: StripeMode): Promise<StripeConne
   const cred = await prisma.platformCredential.findUnique({
     where: { provider_mode: { provider: "stripe", mode } },
   });
+  const secret = readStoredSecret(cred?.cipher, decryptSecret);
+  const webhook = readStoredSecret(cred?.webhookCipher, decryptSecret);
+  const broken = secret.state === "decryption_error" || webhook.state === "decryption_error";
   return {
     mode,
     configured: !!cred,
     hint: cred?.hint ?? null,
     publishableKey: cred?.publishableKey ?? null,
-    hasWebhookSecret: !!cred?.webhookCipher,
+    hasWebhookSecret: webhook.state === "ready",
     lastCheckedAt: cred?.lastCheckedAt ?? null,
     lastCheckOk: cred?.lastCheckOk ?? null,
     lastCheckMessage: cred?.lastCheckMessage ?? null,
     account: (cred?.lastCheckDetail as StripeAccountInfo | null) ?? null,
     updatedBy: cred?.updatedBy ?? null,
     updatedAt: cred?.updatedAt ?? null,
+    secretState: secret.state,
+    webhookSecretState: webhook.state,
+    credentialProblem: broken
+      ? "Stored Stripe credentials cannot be decrypted. CONNECTIVITY_SECRET may have changed; payments must stay off until the key rotation is repaired or the credentials are replaced."
+      : null,
   };
 }
 
@@ -110,19 +124,21 @@ export async function getStripeConnection(mode: StripeMode): Promise<StripeConne
  * *cannot* leak a key, because the key is not in the type. This is the narrow door, it is called
  * from server actions only, and what it returns is never returned onward to a component.
  */
-export async function readStripeSecret(mode: StripeMode): Promise<string | null> {
+export async function readStripeSecret(mode: StripeMode): Promise<StoredSecretRead> {
   const cred = await prisma.platformCredential.findUnique({
     where: { provider_mode: { provider: "stripe", mode } },
     select: { cipher: true },
   });
-  if (!cred) return null;
-  try {
-    return decryptSecret(cred.cipher);
-  } catch {
-    // A key we cannot decrypt is as unusable as one Stripe rejects, and the two need different
-    // repairs — CONNECTIVITY_SECRET having changed is a rotation problem, not a credential problem.
-    return null;
-  }
+  return readStoredSecret(cred?.cipher, decryptSecret);
+}
+
+/** The webhook verifier's secret, kept separate from the API key so neither caller receives both. */
+export async function readStripeWebhookSecret(mode: StripeMode): Promise<StoredSecretRead> {
+  const cred = await prisma.platformCredential.findUnique({
+    where: { provider_mode: { provider: "stripe", mode } },
+    select: { webhookCipher: true },
+  });
+  return readStoredSecret(cred?.webhookCipher, decryptSecret);
 }
 
 /**
@@ -162,16 +178,30 @@ export async function stripeModeStatus(): Promise<{
   const mode = await activeStripeMode();
   const cred = await prisma.platformCredential.findUnique({
     where: { provider_mode: { provider: "stripe", mode } },
-    select: { lastCheckOk: true },
+    select: { lastCheckOk: true, cipher: true, webhookCipher: true, lastCheckDetail: true },
   });
   if (!cred) {
     return { mode, usable: false, problem: `Payments are set to ${mode === "live" ? "LIVE" : "sandbox"}, but no ${mode} key is stored. Nothing can be charged.` };
+  }
+  if (readStoredSecret(cred.cipher, decryptSecret).state === "decryption_error") {
+    return { mode, usable: false, problem: `Payments are set to ${mode === "live" ? "LIVE" : "sandbox"}, but the stored key cannot be decrypted. Repair CONNECTIVITY_SECRET rotation or replace the credential before creating a payment link.` };
+  }
+  const webhook = readStoredSecret(cred.webhookCipher, decryptSecret);
+  if (webhook.state === "missing") {
+    return { mode, usable: false, problem: `Payments are set to ${mode === "live" ? "LIVE" : "sandbox"}, but no webhook signing secret is stored. A card could be charged while the invoice remains unpaid in Revio.` };
+  }
+  if (webhook.state === "decryption_error") {
+    return { mode, usable: false, problem: `Payments are set to ${mode === "live" ? "LIVE" : "sandbox"}, but the webhook signing secret cannot be decrypted. Genuine payment events cannot be verified.` };
   }
   if (cred.lastCheckOk === false) {
     return { mode, usable: false, problem: `The stored ${mode} key was rejected by Stripe the last time it was checked. Payment links will fail until it is replaced.` };
   }
   if (cred.lastCheckOk === null) {
     return { mode, usable: true, problem: `The ${mode} key has never been tested. Press Check now before relying on it — a key nobody has exercised is not a working key.` };
+  }
+  const account = cred.lastCheckDetail as StripeAccountInfo | null;
+  if (mode === "live" && account?.chargesEnabled !== true) {
+    return { mode, usable: false, problem: "Payments are set to LIVE, but Stripe has not confirmed that this account can accept charges. Finish verification and press Check now." };
   }
   return { mode, usable: true, problem: null };
 }
@@ -183,17 +213,22 @@ export async function getIntegrations(): Promise<IntegrationRow[]> {
   const test = byMode.get("test") ?? null;
   // Live is the one that matters once it exists; until then the sandbox is the real answer.
   const stripe = live ?? test;
+  const stripeSecret = readStoredSecret(stripe?.cipher, decryptSecret);
+  const stripeWebhook = readStoredSecret(stripe?.webhookCipher, decryptSecret);
+  const stripeDecryptFailed = stripeSecret.state === "decryption_error" || stripeWebhook.state === "decryption_error";
 
   const rows: IntegrationRow[] = [
     {
       key: "stripe",
       name: "Stripe",
       purpose: "Collects subscription payments from hotels, so an invoice can be paid by card instead of chased by bank transfer.",
-      state: stateOf(stripe),
+      state: stripeDecryptFailed ? "decryption_error" : stateOf(stripe),
       mode: stripe ? (stripe.mode === "live" ? "live" : "sandbox") : null,
       hint: stripe?.hint ?? null,
       lastCheckedAt: stripe?.lastCheckedAt ?? null,
-      lastCheckMessage: stripe?.lastCheckMessage ?? null,
+      lastCheckMessage: stripeDecryptFailed
+        ? "Stored Stripe credentials cannot be decrypted. Repair CONNECTIVITY_SECRET rotation or replace them; the previous successful check is no longer current."
+        : stripe?.lastCheckMessage ?? null,
       href: "/integrations/stripe",
       managedHere: true,
     },

@@ -43,6 +43,8 @@ export interface CheckoutInput {
   customerEmail: string | null;
   /** Where Stripe returns the browser afterwards, e.g. https://operator.reviosoft.app */
   origin: string;
+  /** The last session stored for this invoice. It makes the next generation stable across races. */
+  previousSessionId?: string | null;
   /** Hours the link stays valid. Stripe's own maximum is 24. */
   expiresInHours?: number;
 }
@@ -58,6 +60,18 @@ export type CheckoutResult =
   | { ok: false; error: string };
 
 const API = "https://api.stripe.com/v1";
+
+/**
+ * One stable Stripe request per invoice generation.
+ *
+ * The previous implementation included the wall-clock hour. Two clicks either side of the hour
+ * could therefore create two payable sessions. The last STORED session is the generation token:
+ * concurrent callers see the same previous value and Stripe returns the same session; after that
+ * session expires, its id becomes the stable token for exactly one successor.
+ */
+export function checkoutIdempotencyKey(invoiceId: string, previousSessionId?: string | null): string {
+  return `revio-invoice-${invoiceId}-${previousSessionId ?? "initial"}`;
+}
 
 /**
  * Create the session.
@@ -113,10 +127,11 @@ export async function createCheckoutSession(input: CheckoutInput): Promise<Check
          * Idempotency, so a double-click or a retry cannot create two live payment links for one
          * invoice — two links means two chances to pay the same bill twice.
          *
-         * Keyed on the invoice AND the hour, so pressing the button again tomorrow (after the first
-         * link expired) legitimately makes a new one rather than returning a dead session.
+         * Keyed on the invoice and its last stored session — never on the wall clock. Concurrent
+         * callers therefore use the same key even across an hour boundary. Once a session expires,
+         * its id becomes the generation token for the one legitimate successor.
          */
-        "Idempotency-Key": `revio-invoice-${input.invoiceId}-${Math.floor(Date.now() / 3_600_000)}`,
+        "Idempotency-Key": checkoutIdempotencyKey(input.invoiceId, input.previousSessionId),
       },
       body: body.toString(),
     });

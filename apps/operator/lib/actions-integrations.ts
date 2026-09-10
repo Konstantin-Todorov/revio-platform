@@ -6,7 +6,7 @@ import { forSystem, encryptSecret } from "@revio/db";
 import { flashError, setFlash } from "@revio/ui/flash";
 import { getOperatorSession } from "./session";
 import { checkStripeKey } from "./stripe-check";
-import { readStripeSecret, activeStripeMode } from "./integrations";
+import { readStripeSecret, readStripeWebhookSecret, activeStripeMode } from "./integrations";
 import { createCheckoutSession, isLinkLive } from "./stripe-checkout";
 import { isStripeMode, validateSecretKey, validatePublishableKey, validateWebhookSecret } from "./stripe-key";
 import { isVatRegistration } from "./vat";
@@ -105,14 +105,13 @@ export async function testStripeConnection(fd: FormData): Promise<void> {
   const mode = String(fd.get("mode") ?? "").trim();
   if (!isStripeMode(mode)) return flashError("Reload the page and try again.");
 
-  const key = await readStripeSecret(mode);
-  if (!key) {
-    return flashError(
-      "There is no usable key stored for this mode. If one was saved, CONNECTIVITY_SECRET may have changed since — see DEPLOY.md, key rotation.",
-    );
+  const storedKey = await readStripeSecret(mode);
+  if (storedKey.state === "missing") return flashError("There is no Stripe key stored for this mode.");
+  if (storedKey.state === "decryption_error") {
+    return flashError("The stored key cannot be decrypted. CONNECTIVITY_SECRET may have changed — repair the rotation or replace the credential before using payments.");
   }
 
-  const check = await checkStripeKey(key, mode);
+  const check = await checkStripeKey(storedKey.secret, mode);
   await prisma.platformCredential.update({
     where: { provider_mode: { provider: "stripe", mode } },
     data: {
@@ -219,9 +218,10 @@ export async function createInvoicePaymentLink(fd: FormData): Promise<void> {
 
   const owed = invoice.grossMinor ?? invoice.amountMinor;
   const mode = await activeStripeMode();
-  const secretKey = await readStripeSecret(mode);
-  if (!secretKey) {
-    return flashError(`No usable Stripe key is stored for ${mode} mode. Set it up on Integrations first.`);
+  const storedKey = await readStripeSecret(mode);
+  if (storedKey.state === "missing") return flashError(`No Stripe key is stored for ${mode} mode. Set it up on Integrations first.`);
+  if (storedKey.state === "decryption_error") {
+    return flashError("The stored Stripe key cannot be decrypted. Repair CONNECTIVITY_SECRET rotation or replace the credential before creating a payment link.");
   }
 
   const [tenant, billing] = await Promise.all([
@@ -243,7 +243,7 @@ export async function createInvoicePaymentLink(fd: FormData): Promise<void> {
 
   const result = await createCheckoutSession({
     mode,
-    secretKey,
+    secretKey: storedKey.secret,
     invoiceId: invoice.id,
     invoiceNumber: invoice.number,
     amountMinor: owed,
@@ -251,6 +251,7 @@ export async function createInvoicePaymentLink(fd: FormData): Promise<void> {
     customerName: billing?.legalName ?? tenant?.name ?? "Customer",
     customerEmail: billing?.billingEmail ?? null,
     origin,
+    previousSessionId: invoice.stripeSessionId,
   });
   if (!result.ok) return flashError(result.error);
 
@@ -324,13 +325,31 @@ export async function setStripeMode(fd: FormData): Promise<void> {
   if (mode === "live") {
     const cred = await prisma.platformCredential.findUnique({
       where: { provider_mode: { provider: "stripe", mode: "live" } },
-      select: { lastCheckOk: true },
+      select: { lastCheckOk: true, lastCheckDetail: true },
     });
     if (!cred) {
       return flashError("Add the live keys first. Going live with nothing stored would leave every payment link broken.");
     }
     if (cred.lastCheckOk !== true) {
       return flashError("The live key has not been checked successfully. Press Check now on the live panel first — going live on an untested key is how a customer finds the problem for you.");
+    }
+    const detail = cred.lastCheckDetail as { chargesEnabled?: boolean } | null;
+    if (detail?.chargesEnabled !== true) {
+      return flashError("Stripe has not confirmed that this live account can accept charges. Finish account verification and press Check now before going live.");
+    }
+    const [apiKey, webhook] = await Promise.all([
+      readStripeSecret("live"),
+      readStripeWebhookSecret("live"),
+    ]);
+    if (apiKey.state !== "ready") {
+      return flashError(apiKey.state === "decryption_error"
+        ? "The live API key cannot be decrypted. Repair CONNECTIVITY_SECRET rotation or replace it before going live."
+        : "The live API key is missing.");
+    }
+    if (webhook.state !== "ready") {
+      return flashError(webhook.state === "decryption_error"
+        ? "The live webhook secret cannot be decrypted. Genuine payments could not settle invoices in Revio."
+        : "Add the live webhook signing secret before going live. Without it, Stripe can charge a card but Revio cannot verify the payment.");
     }
   }
 

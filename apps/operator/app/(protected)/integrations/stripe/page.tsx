@@ -91,6 +91,8 @@ function ModePanel({ conn, inUse }: { conn: StripeConnection; inUse: boolean }) 
             {inUse && <StatusPill tone={live ? "danger" : "neutral"}>in use</StatusPill>}
             {!conn.configured ? (
               <StatusPill tone="neutral">not set up</StatusPill>
+            ) : conn.credentialProblem ? (
+              <StatusPill tone="danger">cannot decrypt</StatusPill>
             ) : conn.lastCheckOk === null ? (
               <StatusPill tone="warning">never tested</StatusPill>
             ) : (
@@ -147,6 +149,12 @@ function ModePanel({ conn, inUse }: { conn: StripeConnection; inUse: boolean }) 
         </p>
       )}
 
+      {conn.credentialProblem && (
+        <p className="mb-3 rounded-md bg-danger-50 px-3 py-2 text-[12px] leading-relaxed text-danger-700">
+          {conn.credentialProblem}
+        </p>
+      )}
+
       {/* What Stripe itself said, last time we asked. Recorded rather than fetched on render: one
           live API call per page load would make our console as slow as Stripe's worst minute. */}
       {a && (
@@ -185,10 +193,12 @@ function ModePanel({ conn, inUse }: { conn: StripeConnection; inUse: boolean }) 
 
       <ul className="border-t border-surface-border pt-2">
         <Step
-          done={conn.configured ? conn.lastCheckOk : null}
+          done={conn.configured ? (conn.secretState === "decryption_error" ? false : conn.lastCheckOk) : null}
           label="Secret key"
           detail={
-            conn.configured
+            conn.secretState === "decryption_error"
+              ? "Stored, but unreadable with the current CONNECTIVITY_SECRET. Repair the rotation or replace it."
+              : conn.configured
               ? "Stored encrypted (AES-256-GCM) and never shown again. Used server-side only."
               : "Not set. Paste it from Stripe → Developers → API keys."
           }
@@ -214,10 +224,12 @@ function ModePanel({ conn, inUse }: { conn: StripeConnection; inUse: boolean }) 
           }
         />
         <Step
-          done={conn.configured ? conn.hasWebhookSecret : null}
+          done={conn.configured ? (conn.webhookSecretState === "decryption_error" ? false : conn.hasWebhookSecret) : null}
           label="Webhook signing secret"
           detail={
-            conn.hasWebhookSecret
+            conn.webhookSecretState === "decryption_error"
+              ? "Stored, but unreadable with the current CONNECTIVITY_SECRET. Genuine payment events cannot be verified."
+              : conn.hasWebhookSecret
               ? "Incoming events can be verified as genuinely from Stripe."
               : "Not set. Until it is, we would never hear that a payment succeeded — and an unverified webhook is an open write endpoint wearing Stripe's name."
           }
@@ -289,7 +301,13 @@ export default async function StripePage() {
         mode={modeStatus.mode}
         problem={modeStatus.problem}
         canEdit={session?.role === "super_admin"}
-        liveReady={live.configured && live.lastCheckOk === true}
+        liveReady={
+          live.configured
+          && live.lastCheckOk === true
+          && live.account?.chargesEnabled === true
+          && live.secretState === "ready"
+          && live.webhookSecretState === "ready"
+        }
       />
 
       <div className="grid gap-3 lg:grid-cols-2">

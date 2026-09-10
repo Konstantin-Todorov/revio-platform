@@ -18,6 +18,33 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-10 · Codex · DONE · Stripe live-readiness S4/S6
+**Close the duplicate Checkout-session race and surface encrypted-credential failures as unhealthy.**
+Files: `apps/operator/lib/stripe-{checkout,credential}*`, integrations/actions and Stripe webhook,
+the two integration screens, Billing's stale payment copy, and matching architecture comments.
+Notes: No Stripe Dashboard mutation, live key access, real payment or mode switch in this code task.
+S2 refunds/disputes remains a separate accounting-model decision; S3 restricted keys remains a
+separate least-privilege task. The Checkout idempotency generation is now the last stored session,
+not the wall clock; encrypted API/webhook failures are distinct red states and block Live, as does
+`charges_enabled != true`. Removed stale “Stripe is future/mocked” copy. Full repository
+typecheck/test/lint/build gate is green (existing image/`any` warnings only; DB-backed optional tests
+remain skipped without their opt-in environment).
+
+### 2026-09-10 · Codex · DONE · Stripe sandbox end-to-end rehearsal
+**Proved the deployed Operator flow from a demo invoice through Stripe Checkout and back through the signed webhook.**
+Files: `docs/WORK-LOG.md` only; Stripe Dashboard and demo Operator data, no runtime code.
+Notes: Issued demo invoice `DEMO-000004` for Hotel Sofia Group, created its €141.60 sandbox Checkout
+link, paid with Stripe's test card, and verified Operator now records `Paid · by card · Stripe test`.
+Railway recorded the corresponding POST to `/api/webhooks/stripe` as HTTP 200 on deployed commit
+`e168961`; no money moved. The sandbox destination is active and now listens to both
+`checkout.session.completed` and `checkout.session.async_payment_succeeded`. Official icon/logo and
+Revio colours are saved. The founder disabled Stripe Adaptive Pricing on 2026-09-10, so Checkout
+will remain EUR-only unless that product decision is revisited. The dedicated Revio live profile
+has been opened as a new Bulgarian company account but is not activated: Stripe still requires the
+legal entity, representative/owners, public details, EUR payout bank and final verification. The
+old Weber live credential remains stored and untouched; Sandbox remains the active Operator mode.
+Recorded alongside the next verified Stripe code commit; no standalone documentation deploy was made.
+
 ### 2026-09-10 · Codex · DONE · Stripe webhook launch blockers S1/S5
 **Accept delayed successful Checkout events and require every settlement to match the stored session exactly.**
 Files: `apps/operator/lib/stripe-webhook.ts`, `apps/operator/lib/stripe-webhook.test.ts`,

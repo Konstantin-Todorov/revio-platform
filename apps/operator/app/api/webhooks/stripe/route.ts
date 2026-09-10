@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
     } catch {
       // A secret we cannot decrypt is a rotation problem, not an event problem. Drop it rather than
       // failing the whole request — the other mode may still verify.
+      console.error(`[stripe-webhook] ${c.mode} webhook secret cannot be decrypted; check CONNECTIVITY_SECRET rotation`);
       return [];
     }
   });
