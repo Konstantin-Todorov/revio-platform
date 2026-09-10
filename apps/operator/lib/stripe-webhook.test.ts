@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createHmac } from "node:crypto";
 import {
   verifyStripeSignature, verifyAgainstModes, parseSignatureHeader, readCheckoutCompleted,
-  SIGNATURE_TOLERANCE_SECONDS,
+  matchesStoredCheckoutSession, SIGNATURE_TOLERANCE_SECONDS,
 } from "./stripe-webhook";
 
 /**
@@ -172,6 +172,24 @@ describe("readCheckoutCompleted", () => {
     expect(readCheckoutCompleted(body)?.paymentIntentId).toBe("pi_expanded");
   });
 
+  it("accepts Stripe's later success event for delayed payment methods", () => {
+    const body = JSON.parse(BODY);
+    body.id = "evt_async_1";
+    body.type = "checkout.session.async_payment_succeeded";
+    expect(readCheckoutCompleted(body)).toMatchObject({
+      eventId: "evt_async_1",
+      eventType: "checkout.session.async_payment_succeeded",
+      sessionId: "cs_1",
+      paymentStatus: "paid",
+    });
+  });
+
+  it("does not treat a delayed payment failure as payment truth", () => {
+    const body = JSON.parse(BODY);
+    body.type = "checkout.session.async_payment_failed";
+    expect(readCheckoutCompleted(body)).toBeNull();
+  });
+
   it("returns null for an event we do not handle, rather than throwing", () => {
     /*
      * Stripe delivers everything the endpoint is subscribed to. A route that 500s on an unrelated
@@ -188,5 +206,16 @@ describe("readCheckoutCompleted", () => {
     const body = JSON.parse(BODY);
     delete body.data.object.metadata;
     expect(readCheckoutCompleted(body)?.invoiceId).toBeNull();
+  });
+});
+
+describe("matchesStoredCheckoutSession", () => {
+  it("accepts only the exact session id Revio stored for the invoice", () => {
+    expect(matchesStoredCheckoutSession("cs_1", "cs_1")).toBe(true);
+    expect(matchesStoredCheckoutSession("cs_other", "cs_1")).toBe(false);
+  });
+
+  it("refuses an invoice with no stored session instead of treating null as a wildcard", () => {
+    expect(matchesStoredCheckoutSession(null, "cs_1")).toBe(false);
   });
 });

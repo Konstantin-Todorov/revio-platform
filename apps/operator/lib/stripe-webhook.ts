@@ -164,6 +164,19 @@ export interface CheckoutCompleted {
   livemode: boolean | null;
 }
 
+/**
+ * Both events are payment truth for Checkout.
+ *
+ * `checkout.session.completed` is enough for cards and wallets. Delayed methods complete the
+ * browser flow while still pending and later report the actual payment through
+ * `checkout.session.async_payment_succeeded`. Treating only the first event as actionable leaves a
+ * successfully paid invoice open forever when a delayed method is enabled in Stripe.
+ */
+const SUCCESSFUL_CHECKOUT_EVENTS = new Set([
+  "checkout.session.completed",
+  "checkout.session.async_payment_succeeded",
+]);
+
 function obj(v: unknown): Record<string, unknown> | null {
   return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 }
@@ -182,7 +195,7 @@ export function readCheckoutCompleted(body: unknown): CheckoutCompleted | null {
   if (!root) return null;
   const eventType = str(root, "type");
   const eventId = str(root, "id");
-  if (!eventType || !eventId || eventType !== "checkout.session.completed") return null;
+  if (!eventType || !eventId || !SUCCESSFUL_CHECKOUT_EVENTS.has(eventType)) return null;
 
   const data = obj(root.data);
   const session = data ? obj(data.object) : null;
@@ -206,4 +219,12 @@ export function readCheckoutCompleted(body: unknown): CheckoutCompleted | null {
     invoiceId: metadata ? str(metadata, "revioInvoiceId") : null,
     livemode: typeof root.livemode === "boolean" ? root.livemode : null,
   };
+}
+
+/**
+ * Metadata says which invoice a session claims to pay; the stored id proves we created that exact
+ * session for it. A missing stored id is therefore a refusal, not a wildcard.
+ */
+export function matchesStoredCheckoutSession(storedSessionId: string | null, eventSessionId: string): boolean {
+  return storedSessionId !== null && storedSessionId === eventSessionId;
 }

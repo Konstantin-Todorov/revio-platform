@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { forSystem, decryptSecret } from "@revio/db";
-import { verifyAgainstModes, readCheckoutCompleted } from "@/lib/stripe-webhook";
+import { verifyAgainstModes, readCheckoutCompleted, matchesStoredCheckoutSession } from "@/lib/stripe-webhook";
 
 /**
  * Where Stripe tells us an invoice has been paid.
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
    * the account that signed it, and a session belonging to a different invoice must never be able to
    * settle this one. The unique index on `stripeSessionId` is the other half of this guarantee.
    */
-  if (invoice.stripeSessionId && invoice.stripeSessionId !== event.sessionId) {
+  if (!matchesStoredCheckoutSession(invoice.stripeSessionId, event.sessionId)) {
     return NextResponse.json({ received: true, handled: false, reason: "session does not belong to this invoice" });
   }
 

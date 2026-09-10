@@ -18,6 +18,29 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-10 · Codex · DONE · Stripe webhook launch blockers S1/S5
+**Accept delayed successful Checkout events and require every settlement to match the stored session exactly.**
+Files: `apps/operator/lib/stripe-webhook.ts`, `apps/operator/lib/stripe-webhook.test.ts`,
+`apps/operator/app/api/webhooks/stripe/route.ts`, focused verification/tests, this log.
+Notes: Follow-up to S1/S5 in `docs/STRIPE-REVIEW-2026-09-09.md`. Delayed success is now payment
+truth; delayed failure remains ignored; a missing stored session id is a refusal instead of a
+wildcard. Added four regression cases. Full repository typecheck/test/lint/build gate is green
+(existing image/`any` warnings only); Operator focused test is 25/25. No credential, invoice,
+schema, pricing or mode mutation in this code task. Stage only these paths; never `git add -A`.
+
+### 2026-09-10 · Codex · DONE · Stripe Revio EUR sandbox configuration
+**Replaced the Operator sandbox connection with the separate Revio BG/EUR Stripe sandbox and verified the real test path.**
+Files: `docs/WORK-LOG.md` only; Stripe Dashboard and Operator configuration, no runtime code.
+Notes: The Operator remains explicitly in sandbox; the existing Weber live key was not changed and
+live mode was not activated. The new secret, publishable key and webhook signing secret are stored
+encrypted in Operator. A €1.00 test PaymentIntent succeeded (`livemode: false`) and a locally signed
+connectivity event reached `/api/webhooks/stripe` with HTTP 200, proving that the stored webhook
+secret matches. Stripe still reports `charges_enabled: false` until the new Revio business account
+finishes verification, even though test charges work. Sandbox branding is complete and visibly
+verified: official `design/brand/Revio favicon.png`, official dark-blue Revio logo, colours
+`#0e1f3a` and `#2563c9`, with the logo preferred at Checkout. Do not add static Stripe products:
+Checkout deliberately uses inline `price_data` from Operator pricing.
+
 ### 2026-09-09 · Claude · DONE · FIRST REAL HOTEL — bulk prices reported success and wrote nothing
 **Cabacum Beach Residence could not price two of its three apartments.**
 Files: `apps/channel-manager/lib/actions-calendar.ts`, `components/bulk/BulkUpdatePanel.tsx`,
