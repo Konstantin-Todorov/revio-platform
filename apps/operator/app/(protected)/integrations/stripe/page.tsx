@@ -194,13 +194,13 @@ function ModePanel({ conn, inUse }: { conn: StripeConnection; inUse: boolean }) 
       <ul className="border-t border-surface-border pt-2">
         <Step
           done={conn.configured ? (conn.secretState === "decryption_error" ? false : conn.lastCheckOk) : null}
-          label="Secret key"
+          label="Server API key"
           detail={
             conn.secretState === "decryption_error"
               ? "Stored, but unreadable with the current CONNECTIVITY_SECRET. Repair the rotation or replace it."
               : conn.configured
-              ? "Stored encrypted (AES-256-GCM) and never shown again. Used server-side only."
-              : "Not set. Paste it from Stripe → Developers → API keys."
+              ? "Stored encrypted (AES-256-GCM) and never shown again. Prefer a restricted rk_ key with only the permissions this path needs."
+              : "Not set. Create a restricted API key in Stripe with Account read, Balance read and Checkout Sessions write."
           }
         />
         <Step
@@ -219,8 +219,8 @@ function ModePanel({ conn, inUse }: { conn: StripeConnection; inUse: boolean }) 
           label="Publishable key"
           detail={
             conn.publishableKey
-              ? "The payment form can load in a browser."
-              : "Not set. Without it there is no card form — the secret key alone cannot render one."
+              ? "Stored for a future embedded form; Stripe-hosted Checkout does not use it."
+              : "Optional. Stripe-hosted Checkout does not need a publishable key."
           }
         />
         <Step

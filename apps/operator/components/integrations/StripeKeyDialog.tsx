@@ -67,8 +67,8 @@ export function StripeKeyDialog({ mode, hasKey }: { mode: StripeMode; hasKey: bo
           <input type="hidden" name="mode" value={mode} />
 
           <Field
-            label="Secret key"
-            hint={`Stripe → Developers → API keys. Starts ${live ? "sk_live_" : "sk_test_"}`}
+            label="Server API key"
+            hint={`Prefer a restricted key with Account read, Balance read and Checkout Sessions write. Starts ${live ? "rk_live_" : "rk_test_"}; a full sk_ key also works.`}
           >
             <input
               name="secretKey"
@@ -76,11 +76,11 @@ export function StripeKeyDialog({ mode, hasKey }: { mode: StripeMode; hasKey: bo
               required
               autoComplete="off"
               className={inputCls}
-              placeholder={live ? "sk_live_…" : "sk_test_…"}
+              placeholder={live ? "rk_live_… or sk_live_…" : "rk_test_… or sk_test_…"}
             />
           </Field>
 
-          <Field label="Publishable key" hint="Optional now, required before a card form can load. Safe to be public.">
+          <Field label="Publishable key" hint="Optional and not used by hosted Checkout. Keep it only for a future embedded card form; safe to be public.">
             <input
               name="publishableKey"
               type="text"

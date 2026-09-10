@@ -18,13 +18,21 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-10 · Codex · DONE · Stripe least-privilege setup copy
+**Make the Operator setup form describe the restricted API key it already supports and stop calling an unused publishable key required.**
+Files: `apps/operator/components/integrations/StripeKeyDialog.tsx`, Stripe readiness copy, this log.
+Notes: Documentation/UI truth only; no key, mode, Dashboard or payment mutation. The form now leads
+with `rk_…`, names the minimum Account/Balance/Checkout permissions, still accepts `sk_…`, and says
+plainly that the publishable key is not used by our Stripe-hosted Checkout path.
+
 ### 2026-09-10 · Codex · DONE · Stripe live-readiness S4/S6
 **Close the duplicate Checkout-session race and surface encrypted-credential failures as unhealthy.**
 Files: `apps/operator/lib/stripe-{checkout,credential}*`, integrations/actions and Stripe webhook,
 the two integration screens, Billing's stale payment copy, and matching architecture comments.
 Notes: No Stripe Dashboard mutation, live key access, real payment or mode switch in this code task.
-S2 refunds/disputes remains a separate accounting-model decision; S3 restricted keys remains a
-separate least-privilege task. The Checkout idempotency generation is now the last stored session,
+S2 refunds/disputes remains a separate accounting-model decision. S3 was already closed by the
+initial integration: `rk_test_…` / `rk_live_…` are accepted and tested, although the form copy still
+described only full `sk_…` keys. The Checkout idempotency generation is now the last stored session,
 not the wall clock; encrypted API/webhook failures are distinct red states and block Live, as does
 `charges_enabled != true`. Removed stale “Stripe is future/mocked” copy. Full repository
 typecheck/test/lint/build gate is green (existing image/`any` warnings only; DB-backed optional tests
