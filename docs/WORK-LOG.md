@@ -18,6 +18,41 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · The trial sweep says what it actually did
+**It counted a warning as sent when there was nobody to send it to.**
+Files: `apps/operator/lib/trial-sweep.ts`, `lib/trial-sweep-db.test.ts` (4 new cases + a mock fix),
+`app/(protected)/clients/[id]/page.tsx`.
+
+Codex had already fixed the two mechanical bugs (a stale 7-day reminder arriving after the 1-day one;
+expiry committing in two transactions). What remained was the reporting:
+
+```ts
+if (owner?.email) { …send… }   // silently skipped when there is none
+result.reminded++;              // counted anyway
+result.details.push("… warning sent");
+```
+
+So a hotel with no active owner on the account was on course to lose a product **on the day, with no
+warning at all**, and the only place that could have said so was reporting that it had told them.
+
+`reminded` now means *reached a provider*. `unreachable` and `failed` are their own numbers.
+
+⚠️ **The two failures are treated differently on purpose.** A provider refusal still consumes the
+threshold — retrying every five minutes for the rest of the trial turns one failed send into a burst
+of identical warnings, and one missed warning is recoverable where twenty is not. **No recipient at
+all does NOT**, because there is no send to retry and nothing to flood: a missing owner email is a
+five-minute repair, and consuming the threshold would turn it into a permanent loss of the warning.
+A test proves the warning goes out on the next sweep once somebody is added.
+
+The client page shows **nobody to warn** on a running trial, which is the half a person can fix.
+
+⚠️ Codex's mock resolved `undefined` where `sendEmail` returns an `EmailResult`. Invisible while the
+sweep ignored the return value; a crash the moment it read it. Fixed — a mock that does not honour
+its function's contract is a test asserting against something that does not exist.
+
+**8/8 against real PostgreSQL** with RLS under a non-superuser role. Restoring the old counting turns
+two of the new cases red.
+
 ### 2026-09-11 · Claude · DONE · A paid invoice looks paid, and the emails lead with the money
 **Founder asked whether the flow was the simplest. It was, with one real gap.**
 Files: `apps/operator/lib/{invoice-data,invoice-html,invoice-emails}.ts`.

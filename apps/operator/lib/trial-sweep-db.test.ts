@@ -40,7 +40,15 @@ describe.skipIf(!enabled)("trial sweep against PostgreSQL with real RLS and rows
   });
 
   beforeEach(() => {
-    mail.send.mockReset().mockResolvedValue(undefined);
+    /*
+     * The real `sendEmail` resolves an `EmailResult`, never `undefined`.
+     *
+     * The mock used to resolve nothing, which was invisible while the sweep ignored the return
+     * value — and became a crash the moment it started reporting sent-versus-failed honestly. A mock
+     * that does not honour its function's contract is a test asserting against a thing that does
+     * not exist.
+     */
+    mail.send.mockReset().mockResolvedValue({ ok: true, mode: "mock" });
   });
 
   afterEach(async () => {
@@ -192,5 +200,122 @@ describe.skipIf(!enabled)("trial sweep against PostgreSQL with real RLS and rows
     await expect(
       db.productTrial.create({ data: { tenantId: client.id, product: "crs", endsAt: inDays(30) } }),
     ).resolves.toMatchObject({ tenantId: client.id, product: "crs", endedAt: null });
+  });
+});
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * What the sweep SAYS it did (2026-09-11).
+ *
+ * `reminded` used to be incremented whether or not anything was sent — including when the account
+ * had no owner with an email address at all. A hotel in that state loses access on the day with no
+ * warning whatsoever, and the one place that could have said so was reporting that it had told them.
+ * ---------------------------------------------------------------------------------------------
+ */
+describe.skipIf(!enabled)("the sweep reports what actually happened", () => {
+  const db = forSystem();
+  const created: string[] = [];
+  const now = new Date("2026-09-09T12:00:00.000Z");
+  const inDays = (d: number) => new Date(now.getTime() + d * 86_400_000);
+
+  beforeEach(() => {
+    mail.send.mockReset().mockResolvedValue({ ok: true, mode: "mock" });
+  });
+
+  afterEach(async () => {
+    if (created.length) await db.tenant.deleteMany({ where: { id: { in: created.splice(0) } } });
+  });
+
+  /** A tenant on a trial ending in `days`, optionally with nobody to write to. */
+  async function trialTenant(days: number, opts: { owner: boolean }) {
+    const id = crypto.randomUUID();
+    const tenant = await db.tenant.create({
+      data: {
+        id,
+        name: `Reporting ${id.slice(0, 8)}`,
+        slug: `trial-report-${id}`,
+        isDemo: true,
+        hasPms: true,
+        ...(opts.owner
+          ? {
+              users: {
+                create: {
+                  name: "Owner", email: `${id}@trial-report.invalid`,
+                  role: "owner", active: true, passwordHash: "x",
+                },
+              },
+            }
+          : {}),
+      },
+    });
+    created.push(tenant.id);
+    await db.productTrial.create({
+      data: { tenantId: tenant.id, product: "pms", startedAt: now, endsAt: inDays(days) },
+    });
+    return tenant;
+  }
+
+  it("does NOT call a warning sent when there is nobody to send it to", async () => {
+    const tenant = await trialTenant(1, { owner: false });
+    const r = await sweepTrials(now);
+
+    expect(mail.send).not.toHaveBeenCalled();
+    expect(r.reminded).toBe(0);
+    expect(r.unreachable).toBeGreaterThanOrEqual(1);
+    expect(r.details.join("\n")).toMatch(/NOBODY TO WARN/);
+
+    // And the threshold is NOT consumed, so the repair still works.
+    const trial = await db.productTrial.findFirstOrThrow({ where: { tenantId: tenant.id } });
+    expect(trial.remindedAt1).toBeNull();
+  });
+
+  /*
+   * THE reason the threshold is left alone in that case. A missing owner email is a five-minute
+   * repair; consuming the threshold would turn it into a permanent loss of the warning.
+   */
+  it("sends the warning on the next sweep once somebody can receive it", async () => {
+    const tenant = await trialTenant(1, { owner: false });
+    await sweepTrials(now);
+    expect(mail.send).not.toHaveBeenCalled();
+
+    await db.user.create({
+      data: { tenantId: tenant.id, email: `added-later-${tenant.id}@trial-report.invalid`, name: "Owner", role: "owner", active: true, passwordHash: "x" },
+    });
+
+    const r = await sweepTrials(now);
+    expect(mail.send).toHaveBeenCalledTimes(1);
+    expect(r.reminded).toBe(1);
+    expect(r.unreachable).toBe(0);
+  });
+
+  it("reports a refused send as FAILED, not as sent — but still consumes the threshold", async () => {
+    /*
+     * The threshold is consumed on a provider failure on purpose: the alternative is retrying every
+     * five minutes for the rest of the trial and, if the provider recovers, a burst of identical
+     * warnings. One missed warning is recoverable; twenty is not. What changed is that it is no
+     * longer COUNTED as sent.
+     */
+    const tenant = await trialTenant(1, { owner: true });
+    mail.send.mockResolvedValue({ ok: false, mode: "resend", error: "Resend 422" });
+
+    const r = await sweepTrials(now);
+    expect(r.reminded).toBe(0);
+    expect(r.failed).toBe(1);
+    expect(r.details.join("\n")).toMatch(/FAILED to send/);
+
+    const trial = await db.productTrial.findFirstOrThrow({ where: { tenantId: tenant.id } });
+    expect(trial.remindedAt1).not.toBeNull();
+  });
+
+  it("expires a trial nobody could be warned about, and says nobody was told", async () => {
+    // The entitlement must still be revoked — the clock ran out either way. What must not happen is
+    // the operator reading a clean expiry line for a customer who was cut off in silence.
+    const tenant = await trialTenant(-1, { owner: false });
+    const r = await sweepTrials(now);
+
+    expect(r.expired).toBe(1);
+    expect(r.details.join("\n")).toMatch(/NOBODY WAS TOLD/);
+    const after = await db.tenant.findUniqueOrThrow({ where: { id: tenant.id } });
+    expect(after.hasPms).toBe(false);
   });
 });

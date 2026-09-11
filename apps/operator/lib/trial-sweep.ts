@@ -44,8 +44,21 @@ const FIELD: Record<ProductKey, "hasChannelManager" | "hasReservation" | "hasPms
 };
 
 export interface TrialSweepResult {
+  /** Warnings that actually reached a mail provider. */
   reminded: number;
   expired: number;
+  /**
+   * Trials where a warning came due and there was **nobody to send it to** — no active owner with an
+   * email address on the account.
+   *
+   * Its own number rather than folded into `reminded`, because it used to be counted as a warning
+   * sent. That is the failure this project keeps finding: reporting success for something that did
+   * not happen. A hotel in this state loses access on the day with no warning whatsoever, and the
+   * only place that could have said so was claiming it had told them.
+   */
+  unreachable: number;
+  /** The provider refused or was down. The threshold is still consumed — see the note below. */
+  failed: number;
   details: string[];
 }
 
@@ -64,7 +77,7 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
     },
   });
 
-  const result: TrialSweepResult = { reminded: 0, expired: 0, details: [] };
+  const result: TrialSweepResult = { reminded: 0, expired: 0, unreachable: 0, failed: 0, details: [] };
 
   for (const t of running) {
     const product = PRODUCT_BY_KEY[t.product as ProductKey];
@@ -125,7 +138,12 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
       }
 
       result.expired++;
-      result.details.push(`${t.tenant.name}: ${product.name} trial expired, access removed`);
+      result.details.push(
+        owner?.email
+          ? `${t.tenant.name}: ${product.name} trial expired, access removed`
+          : `${t.tenant.name}: ${product.name} trial expired, access removed — NOBODY WAS TOLD (no active owner with an email)`,
+      );
+      if (!owner?.email) result.unreachable++;
       continue;
     }
 
@@ -150,27 +168,51 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
           },
         ],
       };
-      await sendEmail({
+      const sent = await sendEmail({
         to: [owner.email],
         subject: `${left} day${left === 1 ? "" : "s"} left on your ${product.name} trial`,
         text: renderSystemEmailText(mail),
         html: renderSystemEmail(mail),
-      }).catch(() => { /* recorded as sent below either way — see the note */ });
+      }).catch(() => ({ ok: false, mode: "resend" as const, error: "send threw" }));
+
+      /*
+       * The threshold is consumed even when the provider refused.
+       *
+       * Deliberate: the alternative is retrying every five minutes for the rest of the trial, which
+       * turns one failed send into a hundred attempts and, if the provider recovers mid-way, a burst
+       * of identical warnings. One warning missed is recoverable; a hotel receiving twenty is not.
+       *
+       * But it is REPORTED as failed rather than sent, which it was not.
+       */
+      await db.productTrial.update({
+        where: { id: t.id },
+        data: due === 7 ? { remindedAt7: now } : { remindedAt1: now },
+      });
+      if (sent.ok) {
+        result.reminded++;
+        result.details.push(`${t.tenant.name}: ${product.name} trial — ${left}-day warning sent`);
+      } else {
+        result.failed++;
+        result.details.push(`${t.tenant.name}: ${product.name} trial — ${left}-day warning FAILED to send (${sent.error ?? "unknown"})`);
+      }
+      continue;
     }
 
     /*
-     * Recorded as sent even when the mail failed.
+     * Nobody to tell, and the threshold is deliberately NOT consumed.
      *
-     * Deliberate: the alternative is retrying every five minutes for the rest of the trial, which
-     * turns one failed send into a hundred attempts and, if the provider recovers mid-way, a burst
-     * of identical warnings. One warning missed is recoverable; a hotel receiving twenty is not.
+     * The retry-storm reasoning above does not apply here: with no recipient there is no send to
+     * retry, so nothing floods. And a missing owner email is a FIXABLE condition — recording the
+     * threshold would mean that adding an owner tomorrow still never produces the warning, which
+     * turns a five-minute repair into a permanent loss.
+     *
+     * Counted separately and named in the details, because this hotel is on course to lose access
+     * on the day with no warning at all.
      */
-    await db.productTrial.update({
-      where: { id: t.id },
-      data: due === 7 ? { remindedAt7: now } : { remindedAt1: now },
-    });
-    result.reminded++;
-    result.details.push(`${t.tenant.name}: ${product.name} trial — ${left}-day warning sent`);
+    result.unreachable++;
+    result.details.push(
+      `${t.tenant.name}: ${product.name} trial — ${left} day${left === 1 ? "" : "s"} left and NOBODY TO WARN (no active owner with an email). Add one and the warning goes on the next sweep.`,
+    );
   }
 
   return result;

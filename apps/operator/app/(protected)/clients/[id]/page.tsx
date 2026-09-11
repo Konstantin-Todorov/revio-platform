@@ -77,6 +77,15 @@ export default async function ClientDetailPage({
 
   const now = new Date();
   const running = c.trials.filter((t) => !t.endedAt);
+  /*
+   * Can this client be warned at all before a trial runs out?
+   *
+   * The sweep emails the active owner. With none on the account it sends nothing, and until
+   * 2026-09-11 it still counted the warning as sent — so a hotel could lose a product on the day
+   * with no warning whatsoever and every report would say they had been told. The sweep is honest
+   * about it now; this is the other half, on the screen where somebody can actually fix it.
+   */
+  const warnable = c.tenant.users.some((u) => u.active && u.role === "owner" && !!u.email);
   const past = c.trials.filter((t) => t.endedAt);
   /*
    * Only products they do NOT have. A trial of something they already own would take it away when it
@@ -456,6 +465,16 @@ export default async function ClientDetailPage({
                       <span className="text-[11.5px] text-ink-400">
                         ends {t.endsAt.toISOString().slice(0, 10)}
                       </span>
+                      {/* The warning that cannot be sent. Loud, because the consequence is a
+                          customer losing a product with no notice and no idea why. */}
+                      {!warnable && (
+                        <span
+                          title="The trial reminders go to the active owner. There is none with an email on this account."
+                          className="rounded bg-danger-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-danger-700"
+                        >
+                          nobody to warn
+                        </span>
+                      )}
                       {/* Keeping it is the ONLY path from trial to paid, and it is this button. No
                           clock and no email can do it. */}
                       <form action={endTrial} className="ml-auto flex gap-2">
