@@ -45,6 +45,13 @@ refused exactly as a forged payment is.
 
 Remaining from the review: S7 and S8, both Low. All three Highs and all three Mediums are closed.
 
+⚠️ **This turned `main` red once, and the reason is worth keeping.** The index went into the
+migration SQL and was not declared on the model, so `db:drift` caught it — in CI, on a push, which is
+the slowest and most public place to find out. Every local gate was green because none of them
+compares the schema against the migrations. `drift:lint` is now the thirteenth check in
+`pnpm verify`; it **skips loudly** without a shadow database rather than passing, and it goes red on
+the exact drift that caused this, with the same message CI gave.
+
 ### 2026-09-10 · Codex · DONE · Stripe least-privilege setup copy
 **Make the Operator setup form describe the restricted API key it already supports and stop calling an unused publishable key required.**
 Files: `apps/operator/components/integrations/StripeKeyDialog.tsx`, Stripe readiness copy, this log.

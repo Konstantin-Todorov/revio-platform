@@ -425,6 +425,8 @@ model Invoice {
 
   @@unique([tenantId, period])
   @@index([tenantId])
+  /// How a refund finds its invoice: the event names the payment intent, never the session.
+  @@index([stripePaymentIntentId])
 }
 
 /// An unhandled server error, aggregated by signature.

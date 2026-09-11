@@ -45,6 +45,24 @@ called with the wrong sellable base oversells just as happily as no claim at all
 `pnpm --filter @revio/booking confirm-race` races the confirm end, because a guest who already holds
 a room never reaches `claimHold` — there the claim is the hold's *conversion*, and it was missing.
 
+## `schema.prisma` and the migrations must describe the same database
+
+A change made in a migration has to be declared on the model too. On 2026-09-11 an index was added in
+SQL only: typecheck, eleven lints, 2,005 tests and a full build were all green, and the first thing
+that noticed was CI failing on `main`.
+
+⚠️ **Drift is not cosmetic.** `migrate diff` reads the schema as the truth, so an index that exists
+only in a migration is one a future `migrate dev` will generate a migration to **drop**.
+
+`pnpm drift:lint` (in `pnpm verify`) checks it. It needs a scratch shadow database — `migrate diff`
+replays every migration into one — and **skips loudly** when there is none rather than reporting
+success, because a check that passes when it could not run is how `trial-sweep` returned 200 for its
+whole life without ever running:
+
+```
+SHADOW_DATABASE_URL=postgresql://…/revio_drift_shadow pnpm verify
+```
+
 ## Two things that must never end up in a column
 
 Both are cheap to add by accident and expensive to undo, so they are stated here rather than left to
