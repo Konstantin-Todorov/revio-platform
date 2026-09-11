@@ -1,4 +1,22 @@
-import { prisma } from "./client.js";
+/*
+ * ⚠️ `forSystem()`, NEVER the raw `prisma` client from `./client.js`.
+ *
+ * Every table these functions touch is behind a perimeter: `ProductTrial`, `ClientBilling`,
+ * `Invoice` and `OperatorCompany` carry `operator_only`, and `Tenant` carries `tenant_isolation`.
+ * The services connect as the restricted `revio_app` role, which has no `BYPASSRLS`, so a query on
+ * the raw client does not fail — **it returns zero rows**, and the screen above it renders nothing
+ * at all.
+ *
+ * That shipped on 2026-09-11. The trial banner never appeared for anybody and the billing page was
+ * blank in all three products, and nothing caught it: the typecheck passed, the build passed, every
+ * test passed because none of them touches a database, and the page "rendered successfully". The
+ * founder found it in about thirty seconds.
+ *
+ * `scripts/perimeter-lint.mjs` now makes this mechanically impossible to repeat.
+ */
+import { forSystem } from "./rls.js";
+
+const prisma = forSystem();
 
 /**
  * What a hotel may see about its own account with us.

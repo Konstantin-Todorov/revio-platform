@@ -18,6 +18,38 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · Everything I shipped today read through the WRONG Prisma client
+**RLS returned zero rows, silently. The trial banner never appeared and billing was blank.**
+Files: `packages/db/src/{hotel-billing,self-trial}.ts`, `scripts/perimeter-lint.mjs` (NEW),
+`package.json`, `.github/workflows/ci.yml`, the three `settings/billing/page.tsx`.
+
+⚠️ **READ THIS BEFORE ADDING A QUERY TO `@revio/db`.** Both modules I added today imported `prisma`
+from `./client.js` — the RAW client, which sets no GUC. Services connect as the restricted
+`revio_app` role with no `BYPASSRLS`, so queries on `ProductTrial`, `ClientBilling`, `Invoice`,
+`OperatorCompany` and `Tenant` **returned zero rows instead of erroring**. `hotelBillingAccount`
+returned null, the page did `return null`, and the founder saw a blank screen in all three products.
+
+Nothing caught it: typecheck, build and 2,113 tests were all green, because not one test touches a
+database. The pages "rendered successfully" — as nothing.
+
+**`pnpm perimeter:lint` (13th → now 14th check, also in CI)** makes it mechanically impossible:
+inside `packages/db/src`, `apps/**` and two more packages, a model with an RLS policy may not be
+reached through the raw client. Two things it got wrong at first and both are worth knowing:
+- the guarded-table list is parsed from the migrations, and **most policies here are applied in a
+  `FOREACH t IN ARRAY ARRAY['Folio','FolioLine'] LOOP`** — missing that shape left `Invoice`,
+  `Guest`, `Unit` and most of the schema out of the set, so it reported "clean" over exactly the
+  tables it exists to protect;
+- it must **strip comments**, or `inventory-claim.ts`'s prose describing the wrong shape trips it.
+Proved by reintroducing the bug: 5 findings, exit 1. Restored: clean, 639 files, 75 tables.
+
+Also: the billing pages no longer `return null` on a data miss — a screen that cannot answer must
+say so rather than render nothing.
+
+⚠️ **Separately, the RevioPMS sidebar has NO link to `/settings` at all** — only the account
+dropdown does, while "Configuration" (a different area) sits in the main nav. Found while answering
+the founder's menu question; fix in the next entry.
+
+
 ### 2026-09-11 · Claude · DONE · A hotel fills in its own invoicing details — the human step in the middle of the automation
 **Founder: "дали не трябва... да имат билинг част и да виждат какво става като цяло" / company details.**
 Files: `packages/core/src/billing/billing-identity.ts` (+ 14 tests),

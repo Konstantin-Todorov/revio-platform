@@ -136,6 +136,14 @@ jobs:
       - name: Colour classes resolve
         run: pnpm tokens:lint
 
+      # ⚠️ Row-level security fails CLOSED and SILENT. A query on a protected table through the raw
+      # Prisma client does not error — it returns ZERO ROWS, and the screen above renders nothing.
+      # That shipped on 2026-09-11: the trial banner never appeared and the billing page was blank
+      # in all three products, while the typecheck, the build and 2,113 tests were all green,
+      # because not one test touches a database. A person found it by opening the screen.
+      - name: Perimeter
+        run: pnpm perimeter:lint
+
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift
         env:

@@ -35,6 +35,8 @@ export const dynamic = "force-dynamic";
  */
 export default async function BillingSettingsPage() {
   const session = await getSession();
+  // The layout already redirects a signed-out visitor; this is belt and braces and renders nothing
+  // only in a state that cannot be reached through a browser.
   if (!session) return null;
 
   if (!isTrialDecider(session.role)) {
@@ -55,7 +57,25 @@ export default async function BillingSettingsPage() {
     revioPaymentDetails(),
     hotelBillingIdentity(session.tenantId),
   ]);
-  if (!account) return null;
+  /*
+   * ⚠️ Never render nothing.
+   *
+   * This was `return null`, and on 2026-09-11 that turned a data problem into a blank page: the
+   * reader had no way to tell a screen that failed from a screen with nothing on it. (The cause was
+   * `@revio/db` querying through the raw Prisma client, so row-level security returned zero rows
+   * silently — see `scripts/perimeter-lint.mjs`.) A screen that cannot answer must say so.
+   */
+  if (!account) {
+    return (
+      <div className="rounded-xl border border-danger-200 bg-danger-50 p-6">
+        <h1 className="text-[15px] font-semibold text-danger-700">We could not load your billing details</h1>
+        <p className="mt-1.5 max-w-[56ch] text-[13px] leading-relaxed text-ink-700">
+          This is our problem, not yours — nothing about your account has changed. Reload the page,
+          and if it happens again reply to any Revio email and we will look at it.
+        </p>
+      </div>
+    );
+  }
 
   const onTrial = account.trials.map((t) => t.product);
   const breakdown = priceBreakdown(account.plan, billableEntitlements(account.entitlements, onTrial));
