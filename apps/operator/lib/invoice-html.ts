@@ -65,6 +65,8 @@ export interface InvoiceDocData {
   vatTreatment: string | null;
   vatNote: string | null;
   footerNote: string | null;
+  /** Settlement, when there is one. A paid invoice has to look paid. */
+  paid?: { on: string; via: string | null; reference: string | null } | null;
 }
 
 export function money(minor: number, currency: string): string {
@@ -163,9 +165,24 @@ export function invoiceBodyHtml(d: InvoiceDocData): string {
           ? ""
           : `<dt>${esc(vatLineLabel(d.vatTreatment, d.vatRatePct))}</dt><dd class="num">${esc(money(d.taxMinor, cur))}</dd>`
       }
-      <dt class="grand">Total due</dt><dd class="num grand">${esc(money(d.grossMinor, cur))}</dd>
+      <dt class="grand">${d.paid ? "Total paid" : "Total due"}</dt><dd class="num grand">${esc(money(d.grossMinor, cur))}</dd>
     </dl>
   </div>
+
+  ${
+    /*
+     * A paid invoice has to LOOK paid.
+     *
+     * Without this the document is byte-identical before and after payment, which made the receipt
+     * email attach the same bill a second time — reading to a customer as "we are asking again".
+     * The reference is what reconciles this document against their card statement, so it is printed
+     * rather than kept on a screen only we can see.
+     */
+    d.paid
+      ? `<div class="paid"><span class="mark">Paid</span>
+<span>${esc(d.paid.on)}${d.paid.via ? ` · ${esc(d.paid.via)}` : ""}${d.paid.reference ? ` · ${esc(d.paid.reference)}` : ""}</span></div>`
+      : ""
+  }
 
   ${d.vatNote ? `<p class="note">${esc(d.vatNote)}</p>` : ""}
   ${payment}
@@ -187,6 +204,8 @@ export function invoiceBodyHtml(d: InvoiceDocData): string {
 export const INVOICE_DOC_CSS = `
 .doc { box-sizing: border-box; font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1c2434; max-width: 780px; margin: 0 auto; background: #fff; padding: 40px; border-radius: 10px; border: 1px solid #e4e7ec; }
 .doc .mono, .doc .num { font-variant-numeric: tabular-nums; }
+.doc .paid { display: flex; align-items: center; gap: 10px; margin: 18px 0 0; padding: 10px 14px; border: 1px solid #b7e0c4; background: #f1faf4; border-radius: 8px; font-size: 12px; color: #2c6b44; font-variant-numeric: tabular-nums; }
+.doc .paid .mark { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .doc h3 { margin: 0 0 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8a94a6; }
 .doc header { display: flex; justify-content: space-between; gap: 40px; border-bottom: 1px solid #e4e7ec; padding-bottom: 24px; }
 .doc header .issuer .name { font-size: 15px; font-weight: 700; }

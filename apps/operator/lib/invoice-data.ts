@@ -18,6 +18,14 @@ export function invoiceDocData(
     buyerName: string | null; buyerVatId: string | null; buyerCompanyId: string | null; buyerAddress: string | null;
     netMinor: number | null; taxMinor: number | null; grossMinor: number | null;
     vatRatePct: number | null; vatTreatment: string | null; vatNote: string | null;
+    /*
+     * Settlement, so a paid invoice LOOKS paid.
+     *
+     * Without these the document is identical before and after payment — which made the receipt
+     * email attach the same bill a second time, reading to a customer as "we are asking again".
+     * A paid invoice is a different document to file, and it is the one an accountant wants.
+     */
+    status?: string; paidAt?: Date | null; paidVia?: string | null; paidReference?: string | null;
   },
   ctx: {
     tenantName: string | null;
@@ -80,5 +88,13 @@ export function invoiceDocData(
     vatTreatment: invoice.vatTreatment,
     vatNote: invoice.vatNote,
     footerNote: ctx.company?.footerNote ?? null,
+    paid:
+      invoice.status === "paid" && invoice.paidAt
+        ? {
+            on: invoice.paidAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+            via: invoice.paidVia === "stripe" ? "Card" : invoice.paidVia === "manual" ? "Bank transfer" : null,
+            reference: invoice.paidReference ?? null,
+          }
+        : null,
   };
 }

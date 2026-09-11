@@ -57,12 +57,22 @@ function build(args: SystemEmailArgs, subject: string): BuiltEmail {
 
 /** "Here is your invoice, and here is a button." */
 export function invoicePaymentRequestEmail(f: InvoiceEmailFacts): BuiltEmail {
+  /*
+   * The facts first, as ROWS rather than prose.
+   *
+   * Looked at the rendered mail and the amount — the single thing this letter is about — was buried
+   * mid-sentence. Somebody in a finance inbox scans for a number and a date before they read a word,
+   * and the shell's `list` block renders exactly that: tinted rows, no bullets, nothing to parse.
+   */
   const blocks: SystemEmailBlock[] = [
     {
-      p:
-        `Invoice ${f.number} for ${f.amount} is attached.` +
-        (f.dueDate ? ` It is due on ${f.dueDate}.` : ""),
+      list: [
+        `Amount due — ${f.amount}`,
+        ...(f.dueDate ? [`Due — ${f.dueDate}`] : []),
+        `Invoice — ${f.number}`,
+      ],
     },
+    { p: `The invoice is attached to this email${f.customerName ? ` for ${f.customerName}` : ""}.` },
   ];
 
   if (f.payUrl) {
@@ -100,13 +110,25 @@ export function invoicePaymentRequestEmail(f: InvoiceEmailFacts): BuiltEmail {
 /** "We have it." Sent once the payment actually settles, never when a browser reaches a page. */
 export function invoicePaidEmail(f: InvoiceEmailFacts & { paidOn: string }): BuiltEmail {
   const blocks: SystemEmailBlock[] = [
-    { p: `We have received ${f.amount} for invoice ${f.number}. Thank you.` },
+    { p: "Thank you — your payment has been received in full." },
     {
-      p:
-        `The paid invoice is attached for your records. Nothing further is needed from you` +
-        (f.sandbox ? " — though this was a TEST payment and no money actually moved." : "."),
+      list: [
+        `Amount paid — ${f.amount}`,
+        `Paid on — ${f.paidOn}`,
+        `Invoice — ${f.number}`,
+      ],
     },
-    { note: `Paid on ${f.paidOn}. Reply to this email if anything does not match your records.` },
+    {
+      /*
+       * The attached document is now a PAID invoice, not the same bill again. That distinction is
+       * the reason the document carries a settlement stamp: before it existed, this attachment was
+       * byte-identical to the one in the request, which reads as being asked a second time.
+       */
+      p:
+        `The paid invoice is attached for your records — it shows the settlement date and reference. ` +
+        `Nothing further is needed from you${f.sandbox ? ", though this was a TEST payment and no money actually moved" : ""}.`,
+    },
+    { note: "Reply to this email if anything does not match your records — a person reads it." },
   ];
   return build(
     { preview: `Payment received — ${f.amount}`, heading: "Payment received", blocks },

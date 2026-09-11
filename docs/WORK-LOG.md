@@ -18,6 +18,27 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · A paid invoice looks paid, and the emails lead with the money
+**Founder asked whether the flow was the simplest. It was, with one real gap.**
+Files: `apps/operator/lib/{invoice-data,invoice-html,invoice-emails}.ts`.
+
+The described flow — email with a button → pay in Stripe → email with the invoice → everything
+updated — is right, and the invoice belongs in BOTH letters: it is the bill when we ask, and the
+receipt when it is settled. The gap was that **the document did not know it was paid**, so the second
+attachment was byte-identical to the first. A customer receiving the same bill twice reads it as
+being asked again.
+
+Now the document carries a settlement band — date, method and the Stripe reference that reconciles it
+against their card statement — and the total reads "Total paid" rather than "Total due".
+
+**Looked at all three rendered** (two emails and both invoice states) and changed one thing that only
+showed up that way: the amount was buried mid-sentence in prose. It is the single fact the letter is
+about, and somebody in a finance inbox scans for a number before reading a word. Both emails now lead
+with tinted rows — amount, date, invoice number — using the shell's existing `list` block.
+
+⚠️ The empty description column in my first preview was my fixture using `label` where the type says
+`description`. The product was correct; the test data was not.
+
 ### 2026-09-11 · Claude · DONE · The invoice email, the receipt, and S7/S8
 **The payment journey end to end: ask, pay, confirm — and the last two review findings.**
 Files: `packages/email/src/transport.ts` (attachments), `apps/operator/lib/invoice-emails.ts` + tests,
