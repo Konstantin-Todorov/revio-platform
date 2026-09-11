@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, CalendarDays, SlidersHorizontal, BedDouble, Radio,
-  Link2, CalendarCheck, RefreshCw, Users, Settings, Mail, X, LifeBuoy,
+  Link2, CalendarCheck, RefreshCw, X,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
+import { navTail } from "@revio/ui/nav-tail";
 
 type Item = { href: string; label: string; icon: typeof LayoutDashboard; badge?: number; tone?: "danger" | "warning" };
 
@@ -33,15 +34,22 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   ] },
 ];
 
-// Bottom-anchored Account group — rarely-touched admin (spec §2).
+/*
+ * The bottom of the sidebar, shared with RevioCRS and RevioPMS — see `@revio/ui/nav-tail`.
+ *
+ * ⚠️ **User Management and Guest Emails are deliberately NOT here any more.** Both were loose items
+ * in an "Account" group, and `/settings/emails` was literally a Settings URL pinned to the main
+ * nav. Settings already lists both under "Linked rather than moved" (`settings/sections.ts`), so
+ * nothing became harder to reach and no route changed — the menu just stopped answering the same
+ * question in two places.
+ *
+ * RevioLink has no `/activity` route, so its tail is Help then Settings. The ORDER of what remains
+ * is identical in all three products, which is the property worth having: Settings is the last item
+ * everywhere, Help is directly above it everywhere.
+ */
 const ACCOUNT_SECTION: { title: string; items: Item[] } = {
   title: "Account",
-  items: [
-    { href: "/users", label: "User Management", icon: Users },
-    { href: "/settings/emails", label: "Guest Emails", icon: Mail },
-    { href: "/settings", label: "Settings", icon: Settings },
-    { href: "/help", label: "Help", icon: LifeBuoy },
-  ],
+  items: navTail(["/help", "/settings"]).map((t) => ({ href: t.href, label: t.label, icon: t.Icon })),
 };
 
 // Every nav destination, so the active check can pick the MOST SPECIFIC match. Without this a nested

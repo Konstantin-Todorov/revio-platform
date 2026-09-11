@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, CalendarRange, Wrench, CalendarCheck, Tags, BarChart3,
-  Share2, Users, Settings, Globe, X, type LucideIcon, History, Clock, LifeBuoy,
+  Share2, Users, Globe, X, type LucideIcon, Clock,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
+import { navTail } from "@revio/ui/nav-tail";
 
 type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 
@@ -16,7 +17,7 @@ type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 // V2 nav (docs/specs/CRS-GUIDE-V1.md §2): screens sorted by mode — overview / bookings /
 // commercial control / configuration. Rates & Restrictions dissolved three ways (products →
 // Rooms & Rates; standing defaults → Settings; rules → Bulk); Inventory Setup merged away.
-const SECTIONS: { title?: string; items: Item[] }[] = [
+const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
   { title: "Overview", items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/reports", label: "Analytics", icon: BarChart3 },
@@ -32,17 +33,29 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
     { href: "/rooms-rates", label: "Rooms & Rates", icon: Tags },
     { href: "/bulk", label: "Bulk Rates & Availability", icon: Wrench },
   ] },
-  { title: "Configuration", items: [
+  { title: "Distribution", items: [
     { href: "/distribution", label: "Distribution", icon: Share2 },
     // The direct channel gets its own screen next to the OTA one — it is a sales channel the hotel
     // configures, not a preference buried in Settings.
     { href: "/booking-engine", label: "Booking Engine", icon: Globe },
-    { href: "/settings", label: "Settings", icon: Settings },
-    { href: "/help", label: "Help", icon: LifeBuoy },
-    // One history per property, whichever product wrote the row — a CRS-only client would
-    // otherwise have no way to see any of it.
-    { href: "/activity", label: "Activity", icon: History },
   ] },
+  /*
+   * The shared tail — see `@revio/ui/nav-tail`. Settings last in every product, Help above it,
+   * Activity above that.
+   *
+   * These three used to sit inside a "Configuration" group alongside Distribution and Booking
+   * Engine, which are the hotel's WORK: a sales channel they configure, not a preference. Worse,
+   * Activity came AFTER Settings, so this was the one product where the last item in the menu was
+   * not the one every other piece of software puts there.
+   */
+  {
+    tail: true,
+    items: navTail(["/activity", "/help", "/settings"]).map((t) => ({
+      href: t.href,
+      label: t.label,
+      icon: t.Icon,
+    })),
+  },
 ];
 
 export function Sidebar({ footer }: { footer: string }) {
@@ -83,9 +96,14 @@ export function Sidebar({ footer }: { footer: string }) {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-4">
+      {/*
+        `flex-col` so the tail can be pushed to the bottom with `mt-auto` — the shared Activity ·
+        Help · Settings group belongs at the foot of the sidebar, where it is the same target in
+        every product whatever is above it.
+      */}
+      <nav className="flex flex-1 flex-col overflow-y-auto px-3 pb-4">
         {SECTIONS.map((section, i) => (
-          <div key={i} className="mb-1">
+          <div key={i} className={section.tail ? "mb-1 mt-auto border-t border-white/10 pt-2" : "mb-1"}>
             {section.title && (
               <div className="px-3 pb-2 pt-5 text-[10px] font-bold uppercase tracking-[0.15em] text-white/30">
                 {section.title}

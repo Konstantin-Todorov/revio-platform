@@ -18,6 +18,36 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · One bottom to the menu in all three products
+**Founder: "ending with help and settings everywhere to be in the bottom."**
+Files: `packages/ui/src/nav-tail.tsx` (NEW), each app's `components/shell/Sidebar.tsx`,
+`apps/pms/lib/roles.ts` (+ tests), `apps/pms/components/shell/nav-tail.test.tsx` (NEW).
+
+⚠️ **The RevioPMS sidebar had NO link to `/settings`** — that whole area (Property · Operations ·
+Connections · Your account · Billing) was reachable only from the account dropdown, while
+"Configuration", a different area, sat in the main nav. That is why the founder could not find the
+new billing page in RevioPMS even after the RLS fix.
+
+The three had drifted further than they looked: CM had Settings·Help in an "Account" group with two
+loose settings items; CRS had Settings·Help·**Activity** — the one product where the last item was
+not Settings — mixed in with Distribution and Booking Engine, which are work; PMS had Help·Activity
+inside "Setup" and Close Day below everything.
+
+`@revio/ui/nav-tail` is now the one definition: **Activity · Help · Settings**, bottom-anchored
+(`mt-auto` in a flex column) above a rule, filtered to the routes each product has so the order
+never changes. ⚠️ **Settings is last in every product. Do not reorder it.** No route changed.
+
+Also removed from the CM sidebar: `User Management` and `/settings/emails`, both of which Settings
+already lists under `SETTINGS_ELSEWHERE` — the menu was answering one question in two places.
+
+⚠️ **`SCOPED_NAV` now gives every scoped PMS role `/help`.** `actions-support.ts` is exempted from
+`authz-lint` on the stated ground that anybody signed in may ask for help — *"a housekeeper who
+cannot open Settings is exactly the person most likely to be standing in front of a broken screen"*
+— and the nav contradicted it: a housekeeper saw one item and could not reach Help at all.
+
+Notes: `pnpm verify` green, 2,121 tests, perimeter + drift both run and clean.
+
+
 ### 2026-09-11 · Claude · DONE · Everything I shipped today read through the WRONG Prisma client
 **RLS returned zero rows, silently. The trial banner never appeared and billing was blank.**
 Files: `packages/db/src/{hotel-billing,self-trial}.ts`, `scripts/perimeter-lint.mjs` (NEW),

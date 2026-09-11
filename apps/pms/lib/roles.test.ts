@@ -149,3 +149,30 @@ describe("subscription — narrower than manage, on purpose", () => {
     }
   });
 });
+
+describe("every role can reach Help", () => {
+  /*
+   * `actions-support.ts` is exempted from the capability lint on the stated ground that anybody
+   * signed in may ask for help — "a housekeeper who cannot open Settings is exactly the person most
+   * likely to be standing in front of a broken screen". The NAV contradicted that until
+   * 2026-09-11: a housekeeper saw one item and had no route to Help at all.
+   */
+  it("lets every scoped role open /help", () => {
+    for (const role of SCOPED) {
+      expect(roleAllowsPath(role, "/help"), role).toBe(true);
+    }
+  });
+
+  it("still keeps scoped roles out of everything else", () => {
+    // The point is one extra destination, not a hole in the scoping.
+    expect(roleAllowsPath("housekeeper", "/folios")).toBe(false);
+    expect(roleAllowsPath("housekeeper", "/settings")).toBe(false);
+    expect(roleAllowsPath("outlet_pos", "/housekeeping")).toBe(false);
+  });
+
+  it("lets full-access roles reach Settings, which the sidebar did not link to at all", () => {
+    for (const role of MANAGERS) {
+      expect(roleAllowsPath(role, "/settings"), role).toBe(true);
+    }
+  });
+});

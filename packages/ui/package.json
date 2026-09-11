@@ -50,7 +50,8 @@
     "./submit-button": "./src/submit-button.tsx",
     "./trial-banner": "./src/trial-banner.tsx",
     "./billing-panel": "./src/billing-panel.tsx",
-    "./billing-identity-form": "./src/billing-identity-form.tsx"
+    "./billing-identity-form": "./src/billing-identity-form.tsx",
+    "./nav-tail": "./src/nav-tail.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

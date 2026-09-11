@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon, CalendarRange, BookUser, History, LifeBuoy,
+  LayoutDashboard, BedDouble, Sparkles, Receipt, Wine, Wrench, Moon, Users, UserCog, SlidersHorizontal, X, type LucideIcon, CalendarRange, BookUser,
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
+import { navTail } from "@revio/ui/nav-tail";
 import { roleAllowsPath } from "@/lib/roles";
 
 type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
@@ -14,7 +15,7 @@ type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 // Nav regrouped to the roles that use each area (spec §2): Front Office (reception) · Rooms &
 // Housekeeping · Setup (manager/admin) · End of Day. New tabs (Guests / User Management /
 // Configuration) land as placeholders until their phase builds them (D4 / D8 / E7).
-const SECTIONS: { title?: string; items: Item[] }[] = [
+const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
   { title: "Front office", items: [
     { href: "/dashboard", label: "Front Desk", icon: LayoutDashboard },
     // Between Front Desk and Guests on purpose: Front Desk is today as a list, the calendar is the
@@ -35,14 +36,31 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
   { title: "Setup", items: [
     { href: "/users", label: "Staff & Access", icon: UserCog },
     { href: "/configuration", label: "Configuration", icon: SlidersHorizontal },
-    { href: "/help", label: "Help", icon: LifeBuoy },
-    // Under Setup rather than Front office: it is what a manager checks after the fact, not
-    // something anybody uses during a shift.
-    { href: "/activity", label: "Activity", icon: History },
   ] },
   { title: "End of day", items: [
     { href: "/closeday", label: "Close Day", icon: Moon },
   ] },
+  /*
+   * The shared tail — see `@revio/ui/nav-tail`.
+   *
+   * ⚠️ **This product had no link to `/settings` anywhere in its sidebar.** Settings exists here
+   * (Property · Operations · Connections · Your account · Billing) and was reachable only from the
+   * account dropdown, while "Configuration" — a different area entirely — sat in the main nav. So
+   * a hotel looking for its billing details in RevioPMS could not find them from the menu at all.
+   * Found on 2026-09-11 when the founder asked why the billing page showed nothing.
+   *
+   * Help and Activity moved out of "Setup" for the same reason they are in the tail everywhere
+   * else: they are the software, not the hotel's work. Close Day stays above the rule because it
+   * IS the hotel's work — a nightly operation somebody performs, not a preference.
+   */
+  {
+    tail: true,
+    items: navTail(["/activity", "/help", "/settings"]).map((t) => ({
+      href: t.href,
+      label: t.label,
+      icon: t.Icon,
+    })),
+  },
 ];
 
 export function Sidebar({ role, footer }: { role: string; footer: string }) {
@@ -87,9 +105,14 @@ export function Sidebar({ role, footer }: { role: string; footer: string }) {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-4">
+      {/*
+        `flex-col` so the tail can be pushed to the bottom with `mt-auto` — Activity · Help ·
+        Settings sit at the foot of the sidebar in all three products, which is what makes Settings
+        the same target everywhere without anybody reading the label.
+      */}
+      <nav className="flex flex-1 flex-col overflow-y-auto px-3 pb-4">
         {sections.map((section, i) => (
-          <div key={i} className="mb-1">
+          <div key={i} className={section.tail ? "mb-1 mt-auto border-t border-white/10 pt-2" : "mb-1"}>
             {section.title && (
               <div className="px-3 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35">
                 {section.title}

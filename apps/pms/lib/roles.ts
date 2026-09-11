@@ -23,11 +23,25 @@ export const POS_OUTLET_LABEL: Record<string, string> = { minibar: "Minibar", sp
 // Scoped roles see only part of the PMS — the housekeeper mobile view (§3.4) and the outlet-only
 // posting view (§3.7). Any role not listed here has full access. Drives BOTH the sidebar filter and
 // the layout route-guard, so typing a URL can't escape the scope.
+/*
+ * ⚠️ `/help` is in EVERY list, deliberately.
+ *
+ * `actions-support.ts` states the principle and is exempted from the capability lint for it:
+ * *"anybody signed in may ask for help, whatever their role — a housekeeper who cannot open
+ * Settings is exactly the person most likely to be standing in front of a broken screen, and a
+ * support form that refuses them loses the report."*
+ *
+ * The nav contradicted that. A housekeeper saw one item and had no route to Help at all, so the
+ * person most likely to need it was the one person who could not reach it. Found on 2026-09-11
+ * while making the bottom of the menu consistent across the three products.
+ */
+const HELP = "/help";
+
 export const SCOPED_NAV: Record<string, string[]> = {
-  housekeeper: ["/housekeeping"],
-  hk_supervisor: ["/housekeeping", "/rooms", "/maintenance"],
-  maintenance: ["/maintenance", "/rooms"],
-  outlet_pos: ["/minibar"],
+  housekeeper: ["/housekeeping", HELP],
+  hk_supervisor: ["/housekeeping", "/rooms", "/maintenance", HELP],
+  maintenance: ["/maintenance", "/rooms", HELP],
+  outlet_pos: ["/minibar", HELP],
 };
 export function roleHome(role: string): string {
   return SCOPED_NAV[role]?.[0] ?? "/dashboard";
