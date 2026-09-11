@@ -18,6 +18,42 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · Client analytics — three measures, not one score
+**Founder: "искам да разбирам кой колко време какво ползва, време ли е за ъпсел."**
+Files: `apps/operator/lib/{engagement.ts,usage.ts}` (+ 14 engagement tests),
+`apps/operator/components/ui/{Donut,DailyBars}.tsx` (+ 11 tests),
+`apps/operator/app/(protected)/analytics/page.tsx`.
+
+⚠️ **Deliberately NOT an engagement score out of 100.** A single figure mixing "they come in every
+day" with "eleven people use it" cannot be argued with, cannot be acted on, and moves for reasons
+nobody can name — the same rule `clientOpportunities` already states as *null rather than a
+flattering guess*. Three measures instead, each leading to a different phone call:
+
+- **Regularity** — days in, out of 30. Habit or visit.
+- **Reach** — people active out of staff accounts. ⚠️ The one nobody measures and the best churn
+  predictor here: a product ONE person uses leaves when they do. The note changes meaning at exactly
+  one person, not at a percentage.
+- **Depth** — screens opened out of screens their products offer. Running the hotel on it, or
+  looking at it.
+
+`slipping` is checked BEFORE `thriving`/`steady` on purpose: a hotel halfway down from a strong month
+still has a healthy 30-day total, and a totals-based screen always misses it. `trendPct` is `null`
+rather than 0 when the previous week had nothing — a first week of use is not +100% growth.
+
+Upsell returns REASONS, never a boolean, and returns none for anybody not already using what they
+bought. `screensAvailable` is counted from what all hotels between them have opened (there is no list
+of screens in the database); with one customer the denominator equals their own usage — noted in the
+code, resolves itself with a second hotel.
+
+Charts are hand-drawn SVG, no library: a donut as `stroke-dasharray` on one circle (no arc paths to
+get wrong), and columns rather than a line for the daily series — a line interpolates a weekend that
+never happened and draws a hotel that stopped as a gentle slope. Weekends are grey, because a quiet
+Saturday is a working hotel and a quiet Tuesday is a phone call.
+
+Notes: `pnpm verify` green, 2,132 tests, perimeter + drift run and clean. Demo tenants are INCLUDED
+here (usage is operations, not money — `lib/demo.ts`).
+
+
 ### 2026-09-11 · Claude · DONE · One bottom to the menu in all three products
 **Founder: "ending with help and settings everywhere to be in the bottom."**
 Files: `packages/ui/src/nav-tail.tsx` (NEW), each app's `components/shell/Sidebar.tsx`,
