@@ -12,6 +12,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { href: "/settings/policies", label: "Rates & policies", blurb: "Standing defaults applied when nothing more specific does, and how you price rooms" },
   { href: "/settings/taxes", label: "Taxes & fees", blurb: "What is added to a stay, and how it is shown to the guest" },
   { href: "/settings/users", label: "Users & permissions", blurb: "Roles, and the people assigned to them on the one shared Revio identity" },
+  { href: "/settings/billing", label: "Billing", blurb: "What you pay, and every invoice we have issued" },
   { href: "/settings/account", label: "Your account", blurb: "Two-factor authentication and your sessions" },
 ];
 

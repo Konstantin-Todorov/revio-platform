@@ -11,6 +11,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { href: "/settings/property", label: "Property", blurb: "Your hotel's details, and the properties on this account" },
   { href: "/settings/delivery", label: "Bookings & email", blurb: "Where channel bookings are sent, the daily arrivals summary, and the mail your guests receive" },
   { href: "/settings/team", label: "Team", blurb: "The people on this account and what they may do" },
+  { href: "/settings/billing", label: "Billing", blurb: "What you pay, and every invoice we have issued" },
   { href: "/settings/account", label: "Your account", blurb: "Two-factor authentication and your sessions" },
 ];
 

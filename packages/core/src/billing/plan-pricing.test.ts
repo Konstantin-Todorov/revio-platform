@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUNDLE_DISCOUNT_PCT, COMBINATIONS, PLAN_BASE_MINOR, ROOM_TIERS, attributeRevenue, combinationKeyOf, directBookingFeeMinor, entitlementsFor, monthlyPriceMinor, priceBreakdown, splitProportionally, tierForRooms, effectivePlan, describeOverride } from "./pricing.js";
+import { BUNDLE_DISCOUNT_PCT, billableEntitlements, COMBINATIONS, PLAN_BASE_MINOR, ROOM_TIERS, attributeRevenue, combinationKeyOf, directBookingFeeMinor, entitlementsFor, monthlyPriceMinor, priceBreakdown, splitProportionally, tierForRooms, effectivePlan, describeOverride } from "./plan-pricing.js";
 
 const ALL = entitlementsFor(["channelManager", "reservation", "pms"]);
 const CM = entitlementsFor(["channelManager"]);
@@ -231,5 +231,48 @@ describe("describeOverride — an exception with a name on it", () => {
     const s = describeOverride({ plan: "starter", reason: "legacy", by: null, at: null });
     expect(s).toContain("someone");
     expect(s).toContain("unknown date");
+  });
+});
+
+describe("billableEntitlements — a trial is not a sale", () => {
+  const ALL_ENT = entitlementsFor(["channelManager", "reservation", "pms"]);
+
+  it("removes a product that is on a running trial", () => {
+    expect(billableEntitlements(ALL_ENT, ["pms"])).toEqual({
+      channelManager: true, reservation: true, pms: false,
+    });
+  });
+
+  /*
+   * THE one that makes this more than a missing line. The bundle discount is priced by the NUMBER of
+   * modules, so a third product arriving on trial re-prices the two they actually pay for. Billing
+   * the raw entitlements charges for the free product AND gets the paid ones wrong.
+   */
+  it("prices the paid products as if the trial were not there at all", () => {
+    const paidFor = entitlementsFor(["channelManager", "reservation"]);
+    const withTrial = monthlyPriceMinor("growth", billableEntitlements(ALL_ENT, ["pms"]));
+    expect(withTrial).toBe(monthlyPriceMinor("growth", paidFor));
+    // And it is genuinely different from billing the raw flags — otherwise this test proves nothing.
+    expect(withTrial).not.toBe(monthlyPriceMinor("growth", ALL_ENT));
+  });
+
+  it("charges nothing at all for a hotel whose only product is on trial", () => {
+    const onlyTrial = entitlementsFor(["pms"]);
+    expect(monthlyPriceMinor("starter", billableEntitlements(onlyTrial, ["pms"]))).toBe(0);
+  });
+
+  it("bills normally once the trial has ended, with no extra bookkeeping", () => {
+    // Converting sets `endedAt`, so the product simply stops appearing in `onTrial`.
+    expect(billableEntitlements(ALL_ENT, [])).toEqual(ALL_ENT);
+  });
+
+  it("ignores a product key it does not recognise instead of zeroing something", () => {
+    expect(billableEntitlements(ALL_ENT, ["direct", ""])).toEqual(ALL_ENT);
+  });
+
+  it("never turns a product ON", () => {
+    // It can only ever subtract. A trial of something they do not have must not grant it here.
+    const cmOnly = entitlementsFor(["channelManager"]);
+    expect(billableEntitlements(cmOnly, ["pms"])).toEqual(cmOnly);
   });
 });

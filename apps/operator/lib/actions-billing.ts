@@ -5,6 +5,7 @@ import { forSystem, isBillablePeriod } from "@revio/db";
 import { getOperatorSession } from "./session";
 import {
   DIRECT_BOOKING_FEE_PCT,
+  billableEntitlements,
   billedProducts,
   directBookingFeeMinor,
   monthlyPriceMinor,
@@ -67,6 +68,30 @@ export async function generateInvoices(): Promise<void> {
   const { from, to } = periodRange(period);
   const usageByTenant = await directUsageByTenant(from, to);
 
+  /*
+   * ⚠️ Which products are on a FREE TRIAL right now, so they are not invoiced.
+   *
+   * A trial is an entitlement flag — `hasPms` is true during a RevioPMS trial, because that is how
+   * the hotel gets in. This loop priced straight from those flags, so every promise the platform
+   * makes about a trial ("nothing is charged", on the product page, in the trial email, on the
+   * self-serve screen and on the banner inside their own product) was contradicted by the invoice.
+   *
+   * And it is not only the free product that came out wrong: the bundle discount is priced by the
+   * NUMBER of modules, so a third product arriving on trial re-priced the two they really do pay
+   * for. See `billableEntitlements`.
+   *
+   * One query for every tenant rather than one per tenant, and the same function the hotel's own
+   * billing screen uses — so the figure we charge and the figure they read cannot disagree.
+   */
+  const runningTrials = await prisma.productTrial.findMany({
+    where: { endedAt: null },
+    select: { tenantId: true, product: true },
+  });
+  const trialsByTenant = new Map<string, string[]>();
+  for (const t of runningTrials) {
+    trialsByTenant.set(t.tenantId, [...(trialsByTenant.get(t.tenantId) ?? []), t.product]);
+  }
+
   for (const t of tenants) {
     /*
      * "Free until your first booking syncs" — honoured here, where the money is.
@@ -80,7 +105,9 @@ export async function generateInvoices(): Promise<void> {
      */
     if (!isBillablePeriod(period, t.billingStartsAt)) continue;
 
-    const ent: Entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
+    // What they hold, then what they actually pay for. A product mid-trial is the difference.
+    const held: Entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
+    const ent = billableEntitlements(held, trialsByTenant.get(t.id) ?? []);
     const usage = usageByTenant.get(t.id);
     const usageFeeMinor = usage ? directBookingFeeMinor(usage.revenueMinor) : 0;
     const amountMinor = monthlyPriceMinor(t.plan, ent) + usageFeeMinor;

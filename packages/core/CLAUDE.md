@@ -29,6 +29,19 @@ inventory/rate/restriction query inside an app, stop — add it here instead, be
   CRS's one way out to distribution (`RevioLinkInternalConnector` = shared-DB no-op; third-party CMs
   implement the same interface).
 
+- `billing/` — **what we charge hotels.** Platform fee by room tier, module fee per product, bundle
+  discount by module count, and the 2% RevioDirect usage fee. It moved here from the operator app on
+  2026-09-11, when the hotel products needed to show a customer their own bill: the invoice and the
+  screen must be produced by one function or they will disagree, and the customer will be right.
+  ⚠️ `billableEntitlements` is the one to know — a product on a running trial is **not** billed, and
+  because the discount is priced by the number of modules, forgetting it gets the *paid* products
+  wrong too. `BilledProductKey` here is `"channelManager" | "reservation" | "pms"` (the entitlement
+  columns), NOT the `ProductKey` in `products/` which is `"cm" | "crs" | "pms"`.
+- `trials/` — trial state, the reminder schedule, who may start one (`canSelfStartTrial`), and what
+  the banner inside a hotel's own product says (`trialBanner`). The tone thresholds are the same days
+  the reminder emails use, deliberately: a strip and an inbox that disagree about urgency are worse
+  than either alone.
+
 ## Rules
 - **Pure and tested.** No DB, no HTTP, no framework imports here. Functions in / values out, so the
   same logic is reused by apps, jobs, and tests, and can be extracted to a service later untouched.

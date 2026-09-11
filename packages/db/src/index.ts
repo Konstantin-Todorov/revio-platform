@@ -91,6 +91,7 @@ export {
 export * from "@prisma/client";
 export { occupancyKeysFor, occupancyKeyFor } from "./occupancy-key.js";
 export { selfStartTrial, runningTrialFor, requestKeepTrial, type SelfStartResult } from "./self-trial.js";
+export { hotelInvoices, hotelBillingAccount, revioPaymentDetails, type HotelInvoice } from "./hotel-billing.js";
 
 export { claimRegisterNo } from "./register-number.js";
 export {

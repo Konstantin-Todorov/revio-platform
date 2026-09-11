@@ -10,7 +10,7 @@ import { provisioningState, soldButNotProvisioned } from "./provisioning";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { directUsageByTenant } from "./direct-usage";
-import { PRODUCT_BY_KEY, channelEconomics, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
+import { PRODUCT_BY_KEY, billableEntitlements, channelEconomics, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
 import { partitionDemo } from "./demo";
 import {
@@ -162,7 +162,18 @@ export async function getClients() {
       ]);
 
       const entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
-      const monthly = monthlyPriceMinor(t.plan, entitlements);
+      /*
+       * ⚠️ What they HOLD and what they PAY for are not the same set, and every money figure below
+       * uses the second one.
+       *
+       * A trial is an entitlement flag, so a hotel trying RevioPMS has `hasPms` true. Counting that
+       * in MRR reports revenue that does not exist and will not exist unless somebody converts it —
+       * the same mistake as counting demo tenants, which this console already refuses to make.
+       * `entitlements` stays the held set, because the screens that ask "what can they open" want
+       * exactly that.
+       */
+      const billedEntitlements = billableEntitlements(entitlements, t.productTrials.map((tr) => tr.product));
+      const monthly = monthlyPriceMinor(t.plan, billedEntitlements);
       const observed = observedStage({
         status: t.status, createdAt: t.createdAt,
         properties: t.properties.length, roomTypes,
@@ -212,6 +223,8 @@ export async function getClients() {
         isDemo: t.isDemo,
         productTrials: t.productTrials,
         entitlements,
+        /** What they are actually invoiced for: `entitlements` minus anything on a running trial. */
+        billedEntitlements,
         owner: t.users[0] ? { name: t.users[0].name, email: t.users[0].email } : null,
         properties: t.properties,
         counts: { roomTypes, units, channels, channelsConnected, reservations, openErrors },
@@ -321,7 +334,7 @@ export async function getOperatorDashboard({ includeDemo = false }: { includeDem
   const real = includeDemo ? clients : split.real;
   const demo = split.demo;
   const active = real.filter((c) => c.status === "active");
-  const mrrMinor = active.reduce((s, c) => s + monthlyPriceMinor(c.plan, c.entitlements), 0);
+  const mrrMinor = active.reduce((s, c) => s + monthlyPriceMinor(c.plan, c.billedEntitlements), 0);
   const demoActive = demo.filter((c) => c.status === "active");
 
   // Per-client rollup for the leaderboard + the attention feed. getClients already did the per-tenant
@@ -331,7 +344,7 @@ export async function getOperatorDashboard({ includeDemo = false }: { includeDem
     const drift = tierDrift(c.plan, c.counts.units);
     return {
       id: c.id, name: c.name, status: c.status, plan: c.plan,
-      monthlyMinor: monthlyPriceMinor(c.plan, c.entitlements),
+      monthlyMinor: monthlyPriceMinor(c.plan, c.billedEntitlements),
       attention: c.attention, worst: c.worst,
       openErrors: c.counts.openErrors, reservations: c.counts.reservations,
       driftMinor: drift && drift.monthlyDeltaMinor > 0 ? drift.monthlyDeltaMinor : 0,
@@ -356,7 +369,7 @@ export async function getOperatorDashboard({ includeDemo = false }: { includeDem
       name: c.name,
       at: c.account.renewalDate!,
       days: Math.ceil((c.account.renewalDate!.getTime() - now.getTime()) / 86_400_000),
-      monthlyMinor: monthlyPriceMinor(c.plan, c.entitlements),
+      monthlyMinor: monthlyPriceMinor(c.plan, c.billedEntitlements),
       accountManager: c.account.accountManager,
     }))
     .filter((r) => r.days <= RENEWAL_HORIZON_DAYS)
@@ -376,7 +389,7 @@ export async function getOperatorDashboard({ includeDemo = false }: { includeDem
       active: demoActive.length,
       // What they WOULD be worth. Shown separately so the exclusion is visible rather than silent —
       // a number quietly missing from a dashboard is the thing you never notice is missing.
-      mrrMinor: demoActive.reduce((s, c) => s + monthlyPriceMinor(c.plan, c.entitlements), 0),
+      mrrMinor: demoActive.reduce((s, c) => s + monthlyPriceMinor(c.plan, c.billedEntitlements), 0),
       names: demo.map((c) => ({ id: c.id, name: c.name })),
     },
     back: backKeys.map((k) => ({
@@ -543,7 +556,16 @@ export async function getClientDetail(id: string) {
     revenueMinor: 0,
     bookings: 0,
   };
-  const monthly = monthlyPriceMinor(tenant.plan, entitlements);
+  /*
+   * Priced on what they PAY for, not on what they hold — a product mid-trial is not revenue. The
+   * same distinction `getClients` draws for MRR; see `billableEntitlements`.
+   */
+  const runningTrialProducts = await prisma.productTrial.findMany({
+    where: { tenantId: id, endedAt: null },
+    select: { product: true },
+  });
+  const billedEntitlements = billableEntitlements(entitlements, runningTrialProducts.map((t) => t.product));
+  const monthly = monthlyPriceMinor(tenant.plan, billedEntitlements);
 
   const observed = observedStage({
     status: tenant.status, createdAt: tenant.createdAt,

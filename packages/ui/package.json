@@ -48,7 +48,8 @@
     "./settings-nav": "./src/settings-nav.tsx",
     "./usage-beacon": "./src/usage-beacon.tsx",
     "./submit-button": "./src/submit-button.tsx",
-    "./trial-banner": "./src/trial-banner.tsx"
+    "./trial-banner": "./src/trial-banner.tsx",
+    "./billing-panel": "./src/billing-panel.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

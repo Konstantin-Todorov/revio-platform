@@ -86,6 +86,21 @@ to that data, it just may not see anyone else's. `operator_only` (`ConnectivityC
 is unhappy — and are visible only under `app.bypass = 'on'`, which only the Operator console sets.
 When adding a table, the question is not "does it have a `tenantId`" but "**whose data is this?**"
 
+### The named exceptions, and why each is a function rather than a policy change
+
+Four readers cross the operator perimeter on purpose. Each is one function, narrow in every
+direction, and listed here so a fifth has to justify itself against them:
+
+| Function | Reads | Why not just widen the policy |
+| --- | --- | --- |
+| `runningTrialFor` | one tenant's running trial of one product | `ProductTrial` also holds `outcome`, `grantedById` and the reminder stamps — our record *about* them |
+| `requestKeepTrial` | writes `keepRequestedAt` only | it can set one column, on one row, for one tenant |
+| `hotelInvoices` | a tenant's **sent and paid** invoices | ⚠️ **drafts**. A draft is our working figure and `generateInvoices` deliberately re-prices it; under a plain RLS policy every hotel-side query would have to remember to exclude them. Here it cannot be forgotten |
+| `revioPaymentDetails` | our IBAN, BIC and bank name | already printed on the invoice in the customer's hand |
+
+The shape of the argument is the same each time: **RLS decides *whose* rows; these decide *which* of
+their rows are finished enough to show.** Only the first is a policy.
+
 `src/rls.ts` exposes `forTenant(id)` and `forSystem()`. Choosing between them **is** the security
 decision — everything downstream inherits it — so it belongs at the top of a request, not deep in a
 data function. The public booking app is the interesting case: it has no session, so `lib/property.ts`

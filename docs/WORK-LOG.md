@@ -18,6 +18,37 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · A billing section in all three hotel products — and a trial that was being invoiced
+**Founder: "дали не трябва и трите софтуера в админ акаунтите да имат билинг част."**
+Files: `packages/core/src/billing/plan-pricing.ts` (+ test, MOVED from `apps/operator/lib/pricing.ts`),
+`packages/db/src/hotel-billing.ts`, `packages/ui/src/billing-panel.tsx`,
+`apps/operator/lib/{pricing,actions-billing,data}.ts`,
+`apps/{channel-manager,pms}/app/(protected)/settings/billing/`,
+`apps/reservation/app/(protected)/(property)/settings/billing/`, each app's `settings/sections.ts`,
+`apps/pms/components/shell/billing-panel.test.tsx`.
+
+⚠️ **`apps/operator/lib/pricing.ts` is now a SHIM over `@revio/core`.** Same exports, same names —
+`Entitlements` and `ProductKey` are aliased there because core's `ProductKey` is the `"cm"|"crs"|"pms"`
+spelling and the billing one is `BilledProductKey`. Nothing in the operator changed its imports. If
+you are editing prices, edit `packages/core/src/billing/plan-pricing.ts`.
+
+⚠️ **A REAL DEFECT, found while building the screen: `generateInvoices` was charging for products on
+a free trial.** A trial is an entitlement flag, so `hasPms` is true during a RevioPMS trial, and the
+loop priced straight from the flags. Worse than one line — the bundle discount is priced by the
+NUMBER of modules, so a trial re-priced the products they really do pay for. MRR had it the other
+way round and reported revenue that does not exist. `billableEntitlements` (core, 6 tests) now sits
+between the flags and every money figure. No real client had been invoiced yet.
+
+The screen itself is one component in `@revio/ui` used by all three products: the monthly total with
+the arithmetic that produced it, what is outstanding with our IBAN, and the invoice history with a
+card button where a live Stripe link exists. It computes nothing of its own — `priceBreakdown` is
+the function that generates the invoice. Gated on `manageSubscription`.
+
+Notes: `pnpm verify` green, 2,078 tests, `drift:lint` run against a scratch shadow DB. Rendering the
+panel and looking at it caught the IBAN running its characters together under `tracking-tight` — now
+grouped in fours the way a bank prints one.
+
+
 ### 2026-09-11 · Claude · DONE · The trial button that "did nothing", and the strip that tells a hotel it is on one
 **A user-facing action awaited an email send with no timeout and no pending state.**
 Files: `packages/email/src/transport.ts`, `packages/ui/src/{submit-button,trial-banner}.tsx`,

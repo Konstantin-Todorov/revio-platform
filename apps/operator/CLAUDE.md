@@ -148,6 +148,29 @@ The page ends with **what the model changes about today's bills**, per client, a
 invoice actually sent. A repricing that can only be discovered from an invoice is not a decision, it
 is an accident — and nothing moves until someone generates invoices on `/billing`.
 
+## Pricing moved to `@revio/core`, and a trial is not revenue (2026-09-11)
+
+`lib/pricing.ts` is now a **shim**. The model itself lives in `@revio/core` `billing/plan-pricing.ts`
+because a second caller appeared: the founder asked for a billing section inside the three hotel
+products, and an app may never import another app's internals. It belongs there on its own merits —
+constants and arithmetic, no database, no framework — and the point of moving rather than copying is
+that the figure a hotel reads and the figure we invoice are produced by the same function.
+
+The shim keeps the operator's own spellings: `Entitlements` (identical to core's) and `ProductKey`,
+which in core is `BilledProductKey` because **`ProductKey` there means `"cm" | "crs" | "pms"`** — the
+short key a URL, an email and a `ProductTrial` row use. Two types with one name is a real bug class;
+it mislabelled a product on this very page once this week.
+
+⚠️ **`billableEntitlements` — a trial was being invoiced.** A trial is an entitlement flag, so
+`hasPms` is `true` during a RevioPMS trial. `generateInvoices` priced straight from those flags, so
+every promise the platform makes about a trial was contradicted by the bill — and because the bundle
+discount is priced by the **number** of modules, a third product arriving on trial also re-priced the
+two they really do pay for. MRR had the same fault in the other direction: revenue that does not
+exist. Both now price on `billedEntitlements`; `entitlements` stays the *held* set, because the
+screens that ask "what can they open" want exactly that. Found while building the hotel's own billing
+screen, which would have shown the customer the wrong number with our name on it. No real client had
+been invoiced yet.
+
 ## Demo tenants in production (`Tenant.isDemo`, 2026-08-06)
 
 Hotel Sofia Group and Black Sea Resort **stay in production permanently**. The alternative is a
