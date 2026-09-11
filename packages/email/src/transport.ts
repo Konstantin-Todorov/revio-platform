@@ -35,7 +35,7 @@ function resolveFrom(fromName?: string | null): string {
   return `${safeName} <${address}>`;
 }
 
-export async function sendEmail({ to, subject, text, html, fromName, replyTo }: {
+export async function sendEmail({ to, subject, text, html, fromName, replyTo, attachments }: {
   to: string[];
   subject: string;
   text: string;
@@ -52,10 +52,22 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo }: 
   fromName?: string | null;
   /** The hotel's own address — replies reach them, though the mail is DKIM-signed by us. */
   replyTo?: string | null;
+  /**
+   * Files to send with the message.
+   *
+   * Added for the invoice emails: a customer who is asked to pay needs the document itself, and the
+   * invoice lives behind the operator login where they will never reach it. Attaching it is what
+   * makes the mail self-contained — no public invoice URL had to be invented, which would have been
+   * a new unauthenticated surface exposing one customer's billing to anyone who guessed an id.
+   *
+   * `content` is the raw UTF-8 body; the transport base64-encodes it. Kept small on purpose — this
+   * is for a ~12KB HTML invoice, not for photographs.
+   */
+  attachments?: { filename: string; content: string }[] | null;
 }): Promise<EmailResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
-    console.log(`[email:mock] from="${resolveFrom(fromName)}" replyTo=${replyTo ?? "-"} to=${to.join(",")} subject="${subject}" html=${html?.trim() ? "yes" : "no"}\n${text}`);
+    console.log(`[email:mock] from="${resolveFrom(fromName)}" replyTo=${replyTo ?? "-"} to=${to.join(",")} subject="${subject}" html=${html?.trim() ? "yes" : "no"} attachments=${attachments?.length ?? 0}\n${text}`);
     return { ok: true, mode: "mock" };
   }
   try {
@@ -69,6 +81,11 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo }: 
         text,
         ...(html?.trim() ? { html } : {}),
         ...(replyTo?.trim() ? { reply_to: replyTo.trim() } : {}),
+        // Resend takes base64. Encoding here rather than at the call site keeps every caller passing
+        // ordinary text and keeps the one place that knows the wire format the one that produces it.
+        ...(attachments?.length
+          ? { attachments: attachments.map((a) => ({ filename: a.filename, content: Buffer.from(a.content, "utf8").toString("base64") })) }
+          : {}),
       }),
     });
     if (!res.ok) return { ok: false, mode: "resend", error: `Resend ${res.status}: ${(await res.text()).slice(0, 200)}` };

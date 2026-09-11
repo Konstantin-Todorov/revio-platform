@@ -20,6 +20,7 @@
  * answered and said no" from "we never got an answer", and the screen shows them differently.
  */
 
+import { STRIPE_API_VERSION } from "./stripe-api-version";
 import type { StripeMode } from "./stripe-key";
 
 export interface StripeAccountInfo {
@@ -70,7 +71,7 @@ async function call(path: string, key: string): Promise<{ status: number; json: 
         Authorization: `Bearer ${key}`,
         // Pin the API version so a Stripe upgrade cannot change the shape of what we read here
         // without somebody choosing it.
-        "Stripe-Version": "2024-06-20",
+        "Stripe-Version": STRIPE_API_VERSION,
       },
       signal: controller.signal,
     });

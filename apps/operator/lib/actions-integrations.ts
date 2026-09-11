@@ -8,6 +8,10 @@ import { getOperatorSession } from "./session";
 import { checkStripeKey } from "./stripe-check";
 import { readStripeSecret, readStripeWebhookSecret, activeStripeMode } from "./integrations";
 import { createCheckoutSession, isLinkLive } from "./stripe-checkout";
+import { sendEmail } from "@revio/email";
+import { invoicePaymentRequestEmail } from "./invoice-emails";
+import { invoiceDocData } from "./invoice-data";
+import { invoiceFileHtml, invoiceFileName } from "./invoice-html";
 import { isStripeMode, validateSecretKey, validatePublishableKey, validateWebhookSecret } from "./stripe-key";
 import { isVatRegistration } from "./vat";
 
@@ -362,4 +366,90 @@ export async function setStripeMode(fd: FormData): Promise<void> {
   );
   revalidatePath("/integrations");
   revalidatePath("/integrations/stripe");
+}
+
+/**
+ * Email the invoice to the customer — with the document attached and, if one exists, the pay button.
+ *
+ * ## Why sending is its own act
+ *
+ * Creating a payment link and asking somebody for money are two different decisions, and the second
+ * is the one with a person on the other end. Keeping them apart means an operator can make a link,
+ * look at it, and still choose not to send — which is what you want the first time, and what you
+ * want again the day a number looks wrong.
+ *
+ * ## The invoice is ATTACHED, not linked
+ *
+ * `/invoice/[id]` sits behind the operator login and a customer will never reach it. The alternative
+ * — a public invoice URL — would be a new unauthenticated surface exposing one customer's legal
+ * identity, our bank details and their billing to anybody who guessed an id. An attachment avoids
+ * inventing that, and a file is what their accountant wants anyway.
+ */
+export async function emailInvoiceToCustomer(fd: FormData): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again to send an invoice.");
+
+  const invoiceId = String(fd.get("invoiceId") ?? "").trim();
+  if (!invoiceId) return flashError("Reload the page and try again.");
+
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!invoice) return flashError("That invoice no longer exists.");
+  if (!invoice.number) {
+    return flashError("Issue this invoice first — an email about a draft is an email about a number that can still change.");
+  }
+
+  const [tenant, billing, company] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: invoice.tenantId }, select: { name: true } }),
+    prisma.clientBilling.findUnique({ where: { tenantId: invoice.tenantId } }),
+    prisma.operatorCompany.findUnique({ where: { id: "singleton" } }),
+  ]);
+
+  const to = billing?.billingEmail?.trim();
+  if (!to) {
+    // Naming the screen matters: the alternative is an operator hunting for where a billing email
+    // lives while an invoice sits unsent.
+    return flashError(`No billing email for ${tenant?.name ?? "this client"}. Add one on their client page, under Billing.`);
+  }
+
+  const owed = invoice.grossMinor ?? invoice.amountMinor;
+  const amount = new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.currency }).format(owed / 100);
+  const linkLive = isLinkLive(invoice.stripeCheckoutExpires);
+
+  const mail = invoicePaymentRequestEmail({
+    number: invoice.number,
+    amount,
+    customerName: billing?.legalName ?? tenant?.name ?? "there",
+    dueDate: invoice.dueDate ? invoice.dueDate.toLocaleDateString("en-GB") : null,
+    payUrl: linkLive ? invoice.stripeCheckoutUrl : null,
+    payLinkExpires: linkLive && invoice.stripeCheckoutExpires ? invoice.stripeCheckoutExpires.toLocaleString("en-GB") : null,
+    iban: company?.iban ?? null,
+    bankName: company?.bankName ?? null,
+    sandbox: invoice.stripeMode === "test",
+  });
+
+  const doc = invoiceDocData(invoice, { tenantName: tenant?.name ?? null, company: null, billing });
+  const result = await sendEmail({
+    to: [to],
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    attachments: [{ filename: invoiceFileName(doc), content: invoiceFileHtml(doc) }],
+  });
+
+  if (!result.ok) {
+    // A mail that did not go must never look like one that did — this is the whole reason the
+    // transport returns a result instead of swallowing failures.
+    return flashError(`The email could not be sent: ${result.error ?? "unknown error"}. Nothing has changed on the invoice.`);
+  }
+
+  await setFlash(
+    "success",
+    result.mode === "mock"
+      ? `Composed for ${to} — but RESEND_API_KEY is not set on this service, so it was written to the log instead of sent.`
+      : linkLive
+        ? `Sent to ${to}, with the invoice attached and a card link${invoice.stripeMode === "test" ? " (sandbox — it charges nothing)" : ""}.`
+        : `Sent to ${to} with the invoice attached. No card link was included — create one first if you want them to be able to pay by card.`,
+  );
+  revalidatePath(`/invoice/${invoice.id}`);
+  revalidatePath("/billing");
 }

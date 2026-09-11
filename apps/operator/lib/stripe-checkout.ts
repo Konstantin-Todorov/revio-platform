@@ -1,3 +1,4 @@
+import { STRIPE_API_VERSION } from "./stripe-api-version";
 import type { StripeMode } from "./stripe-key";
 
 /**
@@ -95,6 +96,18 @@ export async function createCheckoutSession(input: CheckoutInput): Promise<Check
     "line_items[0][price_data][unit_amount]": String(input.amountMinor),
     // The customer sees OUR invoice number on Stripe's page, so the thing they are paying and the
     // document in their accounts are visibly the same thing.
+    /*
+     * ⚠️ `product_data` asks Stripe to CREATE A PRODUCT for every link (§S7).
+     *
+     * Left deliberately, and this is the reasoning rather than an oversight. The alternative is one
+     * standing "Revio subscription" Product that every inline Price references, which keeps the
+     * catalogue tidy — and costs the thing that matters more: the customer sees OUR invoice number
+     * on Stripe's page, on their card statement and in Stripe's own receipt, so the thing they are
+     * paying and the document in their accounts are visibly one thing.
+     *
+     * Revisit when the catalogue is genuinely in the way — a few hundred invoices a year is not
+     * clutter worth trading that for, and the product name IS the reconciliation key.
+     */
     "line_items[0][price_data][product_data][name]": `Revio invoice ${input.invoiceNumber}`,
     "line_items[0][price_data][product_data][description]": `${input.customerName} — hotel software subscription`,
     /*
@@ -109,7 +122,19 @@ export async function createCheckoutSession(input: CheckoutInput): Promise<Check
     "payment_intent_data[metadata][revioInvoiceId]": input.invoiceId,
     // What appears on the customer's card statement. Blank here is a support ticket in a month.
     "payment_intent_data[description]": `Revio invoice ${input.invoiceNumber}`,
-    success_url: `${input.origin}/paid`,
+    /*
+     * `{CHECKOUT_SESSION_ID}` is a literal placeholder Stripe substitutes on the redirect. It is what
+     * lets the thank-you page say WHICH invoice was paid.
+     *
+     * It stays safe because the page resolves it against OUR OWN database — an invoice whose
+     * `stripeSessionId` matches and which the webhook has already settled — rather than calling
+     * Stripe. So a public page makes no API call, uses no key, and can only ever echo back a number
+     * and an amount the person who just paid already has in their hand.
+     *
+     * URLSearchParams encodes the braces for the request body; Stripe decodes them and stores the
+     * placeholder intact, which is the documented behaviour.
+     */
+    success_url: `${input.origin}/paid?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${input.origin}/paid?cancelled=1`,
     expires_at: String(Math.floor(expiresAt.getTime() / 1000)),
   });
@@ -122,7 +147,7 @@ export async function createCheckoutSession(input: CheckoutInput): Promise<Check
       headers: {
         Authorization: `Bearer ${input.secretKey}`,
         "Content-Type": "application/x-www-form-urlencoded",
-        "Stripe-Version": "2024-06-20",
+        "Stripe-Version": STRIPE_API_VERSION,
         /*
          * Idempotency, so a double-click or a retry cannot create two live payment links for one
          * invoice — two links means two chances to pay the same bill twice.

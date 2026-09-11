@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { forSystem, decryptSecret } from "@revio/db";
 import { verifyAgainstModes, readCheckoutCompleted, readRefundOrDispute, matchesStoredCheckoutSession } from "@/lib/stripe-webhook";
+import { sendEmail } from "@revio/email";
+import { invoicePaidEmail } from "@/lib/invoice-emails";
+import { invoiceDocData } from "@/lib/invoice-data";
+import { invoiceFileHtml, invoiceFileName } from "@/lib/invoice-html";
 
 /**
  * Where Stripe tells us an invoice has been paid.
@@ -175,6 +179,20 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  /*
+   * The receipt, and ONLY when this delivery was the one that settled it.
+   *
+   * `count === 1` is the same guard the status change keys off, so a retried or replayed delivery
+   * cannot email the customer twice about one payment — which would read as a second charge.
+   *
+   * Best-effort on purpose, and last: the money has arrived and the invoice is correct. A mail
+   * provider having a bad minute must never turn a completed payment into a failed webhook, because
+   * a non-2xx makes Stripe retry and eventually disable the endpoint.
+   */
+  if (count === 1) {
+    await sendPaidReceipt(invoice.id).catch(() => { /* the invoice is already right; the mail is the softer half */ });
+  }
+
   return NextResponse.json({ received: true, handled: true, changed: count === 1 });
 }
 
@@ -255,5 +273,46 @@ async function settleRefundOrDispute(e: Awaited<ReturnType<typeof readRefundOrDi
     changed: true,
     refundedMinor: refunded,
     fully: refunded >= (invoice.grossMinor ?? invoice.amountMinor),
+  });
+}
+
+/**
+ * "We have your payment", with the paid invoice attached.
+ *
+ * Sent from HERE rather than from the success page, for the same reason the invoice is settled here:
+ * a redirect is not evidence. A customer who pays and closes the tab never reaches that page, and
+ * anybody can open it without paying — so a receipt sent from it would be both missing and wrong.
+ *
+ * Everything is re-read rather than passed in, because this runs after the settling write and the
+ * letter should describe the invoice as it now IS.
+ */
+async function sendPaidReceipt(invoiceId: string): Promise<void> {
+  const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+  if (!invoice?.number) return;
+
+  const [tenant, billing] = await Promise.all([
+    prisma.tenant.findUnique({ where: { id: invoice.tenantId }, select: { name: true } }),
+    prisma.clientBilling.findUnique({ where: { tenantId: invoice.tenantId } }),
+  ]);
+  const to = billing?.billingEmail?.trim();
+  // No address on file is a gap to fix on the client page, not a reason to fail a settled payment.
+  if (!to) return;
+
+  const owed = invoice.grossMinor ?? invoice.amountMinor;
+  const mail = invoicePaidEmail({
+    number: invoice.number,
+    amount: new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.currency }).format(owed / 100),
+    customerName: billing?.legalName ?? tenant?.name ?? "there",
+    paidOn: (invoice.paidAt ?? new Date()).toLocaleDateString("en-GB"),
+    sandbox: invoice.stripeMode === "test",
+  });
+
+  const doc = invoiceDocData(invoice, { tenantName: tenant?.name ?? null, company: null, billing });
+  await sendEmail({
+    to: [to],
+    subject: mail.subject,
+    text: mail.text,
+    html: mail.html,
+    attachments: [{ filename: invoiceFileName(doc), content: invoiceFileHtml(doc) }],
   });
 }

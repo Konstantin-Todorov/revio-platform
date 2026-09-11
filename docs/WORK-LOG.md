@@ -18,6 +18,36 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · The invoice email, the receipt, and S7/S8
+**The payment journey end to end: ask, pay, confirm — and the last two review findings.**
+Files: `packages/email/src/transport.ts` (attachments), `apps/operator/lib/invoice-emails.ts` + tests,
+`lib/actions-integrations.ts`, `app/api/webhooks/stripe/route.ts`, `components/billing/PaymentLinkCard.tsx`,
+`app/paid/page.tsx`, `lib/stripe-{checkout,check,api-version}.ts`, `docs/STRIPE-REVIEW-2026-09-09.md`.
+
+Founder asked whether the email-with-a-button already existed. It did not — **nothing in the repo
+mentioned a payment link email**; the operator copied the URL by hand. Built now:
+
+1. **"Here is your invoice"** — button + the bare URL (the shell renders both; gateways strip
+   buttons), the invoice **attached**, and bank details in the same letter because a finance person
+   may have no card authority and a one-way request reads as a demand.
+2. **"Payment received"** — sent from the WEBHOOK, gated on `count === 1`, so a retried delivery
+   cannot email twice about one payment. Best-effort and last: a mail outage must never turn a
+   settled payment into a non-2xx that makes Stripe disable the endpoint.
+3. **`/paid` now names the invoice** — resolved against OUR OWN database on `stripeSessionId` AND
+   `status: "paid"`, never by calling Stripe. A public page makes no API call and can only echo back
+   a number the payer already has. Third state added for when the redirect beats the webhook.
+
+⚠️ **The invoice is attached, not linked.** A public invoice URL would be a new unauthenticated
+surface exposing a customer's legal identity, our bank details and their billing to an id guess.
+
+**S8 fixed** — one `STRIPE_API_VERSION` constant instead of the number in two files, with the
+upgrade sequence written down. **S7 accepted rather than fixed**, reasoning in the code: a standing
+product tidies the catalogue and costs the customer seeing *our* invoice number on their statement.
+
+⚠️ One test I wrote was wrong and the code was right: it banned `javascript:` anywhere in the HTML,
+but the shell's safe fallback renders the string as inert escaped TEXT. Asserting the href is the
+property that matters; the substring ban would have failed on correct behaviour.
+
 ### 2026-09-11 · Claude · DONE · S2 — refunds and disputes reach our books
 **The last High in the Stripe review. A refund left `Invoice.status = "paid"` and nothing said otherwise.**
 Files: `packages/db/prisma/schema.prisma` + migration `20260911090000_invoice_refunds_and_disputes`,

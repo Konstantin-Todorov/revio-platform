@@ -1,6 +1,6 @@
-import { CreditCard, Link2, ShieldCheck } from "lucide-react";
+import { CreditCard, Link2, Mail, ShieldCheck } from "lucide-react";
 import { Card, StatusPill } from "@/components/ui/primitives";
-import { createInvoicePaymentLink, clearInvoicePaymentLink } from "@/lib/actions-integrations";
+import { createInvoicePaymentLink, clearInvoicePaymentLink, emailInvoiceToCustomer } from "@/lib/actions-integrations";
 import { isLinkLive } from "@/lib/stripe-checkout";
 import { CopyLinkButton } from "./CopyLinkButton";
 
@@ -124,21 +124,44 @@ export function PaymentLinkCard({
           </div>
           <p className="mt-1 max-w-[62ch] text-[11.5px] leading-relaxed text-ink-400">
             A Stripe-hosted page for {money}. No card detail reaches Revio, and the invoice is marked
-            paid by Stripe telling us so — not by the customer reaching a thank-you page.
+            paid by Stripe telling us so — not by the customer reaching a thank-you page. The email
+            carries the invoice as an attachment and, when a link exists, a button to pay it; bank
+            details go in the same letter, because not everyone in a finance office can use a card.
           </p>
         </div>
 
-        {!live && invoice.number && (
-          <form action={createInvoicePaymentLink}>
-            <input type="hidden" name="invoiceId" value={invoice.id} />
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700"
-            >
-              <Link2 className="h-4 w-4" /> Create payment link
-            </button>
-          </form>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {!live && invoice.number && (
+            <form action={createInvoicePaymentLink}>
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <button
+                type="submit"
+                className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
+              >
+                <Link2 className="h-4 w-4" /> Create payment link
+              </button>
+            </form>
+          )}
+          {/*
+            * Sending is its own act, and it is the primary one.
+            *
+            * Making a link and asking somebody for money are different decisions, and only the
+            * second has a person on the other end. Keeping them apart lets an operator make a link,
+            * look at it, and still choose not to send — which is what you want the first time, and
+            * again the day a number looks wrong.
+            */}
+          {invoice.number && (
+            <form action={emailInvoiceToCustomer}>
+              <input type="hidden" name="invoiceId" value={invoice.id} />
+              <button
+                type="submit"
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700"
+              >
+                <Mail className="h-4 w-4" /> {live ? "Email invoice and link" : "Email the invoice"}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
 
       {/* An invoice with no number has no frozen amount, so a link against it would charge a figure

@@ -49,7 +49,7 @@ methods only.
 Sources: [Stripe fulfillment guide](https://docs.stripe.com/checkout/fulfillment),
 [dynamic payment methods](https://docs.stripe.com/payments/checkout/payment-methods).
 
-### S2 · High · Refunds and disputes do not change our payment truth
+### S2 · High · Refunds and disputes do not change our payment truth — **FIXED 2026-09-11**
 
 A refund or dispute in Stripe leaves `Invoice.status = "paid"`. The payment intent carries the Revio
 invoice id, which makes reconciliation possible, but the endpoint does not subscribe to or process
@@ -89,14 +89,20 @@ successful Stripe check stored in the database. The screen can therefore remain 
 an undecryptable signing secret before returning a generic signature error. Surface a distinct
 `decryption_error` state in Integrations/Health and log it as an operational fault.
 
-### S7 · Low · Every payment link creates a new Stripe Product and Price
+### S7 · Low · Every payment link creates a new Stripe Product and Price — **ACCEPTED, not fixed (2026-09-11)**
 
-`price_data.product_data` asks Stripe to generate a new Product inline, so a product-per-invoice will
-eventually clutter the catalog and reporting. No pre-created fixed prices are needed because invoice
+**Accepted rather than fixed, with the reasoning in the code.** The standing-product alternative keeps
+the catalogue tidy and costs the thing that matters more: the customer sees *our* invoice number on
+Stripe's page, on their card statement and in Stripe's own receipt, so what they pay and the document
+in their accounts are visibly one thing. A few hundred invoices a year is not clutter worth trading
+that for. Revisit when the catalogue is genuinely in the way.
+
+Original finding: `price_data.product_data` asks Stripe to generate a new Product inline, so a
+product-per-invoice will eventually clutter the catalog and reporting. No pre-created fixed prices are needed because invoice
 amounts vary, but one Revio product per mode can be referenced while creating each variable inline
 Price. Source: [Checkout Session API](https://docs.stripe.com/api/checkout/sessions/create).
 
-### S8 · Low · API versions differ
+### S8 · Low · API versions differ — **FIXED 2026-09-11** (`stripe-api-version.ts`, one constant)
 
 Outbound calls pin `2024-06-20`; the live event destination is pinned to `2026-08-26.dahlia`. The
 fields used today are compatible, but the two sides should be intentionally aligned and regression
