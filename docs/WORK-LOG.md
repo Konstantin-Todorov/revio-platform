@@ -18,6 +18,35 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · The sidebar scrolled and nothing said so
+**Founder: "they may not think of scrolling" — a screen nobody scrolls to is a feature nobody finds.**
+Files: `packages/ui/src/nav-tail.tsx`, the three `components/shell/Sidebar.tsx`,
+`apps/{pms,channel-manager,reservation}/components/shell/sidebar-fit.test.tsx` (NEW),
+`apps/reservation/{vitest.config.ts,package.json}` (NEW test runner).
+
+⚠️ **The finding, measured rather than guessed: `nav.offsetWidth - nav.clientWidth` was 0.** macOS
+draws an overlay scrollbar that does not exist until you already scroll, so a menu 156px past the
+bottom of a 1280x720 laptop gave NO indication it continued. Three fixes, all shared:
+
+1. **`NAV_SCROLL_CLASS`** — ⚠️ `scrollbar-width` and `scrollbar-color` are deliberately NOT set.
+   Chrome 121+ ignores every `::-webkit-scrollbar` rule when either standard property is present, so
+   setting both for "cross-browser coverage" silently cancelled the fix — measured at 0px twice
+   before I spotted it. The pseudo-elements alone opt the element out of overlay scrollbars.
+2. **The tail moved OUTSIDE the scroll region in all three.** It was the last group inside it, so
+   Settings and Help were the two things below the fold on an invisible-scrollbar menu. CRS/PMS
+   needed `renderSection` extracted to do this without duplicating any nav-row JSX.
+3. **`NAV_ROW_CLASS` / `NAV_HEADING_CLASS`** — `py-1.5` and `pt-3`, shared so the three cannot drift.
+
+Measured after (overflow at viewport height, tail visible at every size in all three):
+`RevioLink` fits to 600px · `RevioCRS` fits at 720px, 114px over at 600px ·
+`RevioPMS` 62px over at 720px (was 156px). PMS keeps a small scroll — it has the most items, and
+regrouping the founder's spec'd §2 sections to win 32px is the wrong trade.
+
+⚠️ **RevioCRS had NO test runner** — no `test` script, no vitest config — so `pnpm -r test`, `verify`
+and CI had never run one test for that app and said nothing about it. A filtered pnpm run with no
+such script exits 0 silently. Fixed; it now runs with the others.
+
+
 ### 2026-09-11 · Claude · DONE · Client analytics — three measures, not one score
 **Founder: "искам да разбирам кой колко време какво ползва, време ли е за ъпсел."**
 Files: `apps/operator/lib/{engagement.ts,usage.ts}` (+ 14 engagement tests),

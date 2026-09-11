@@ -60,3 +60,61 @@ const TAIL: NavTailItem[] = [
 export function navTail(hasRoutes: readonly string[]): NavTailItem[] {
   return TAIL.filter((item) => hasRoutes.includes(item.href));
 }
+
+/**
+ * The scrolling region of a sidebar, styled so a person can SEE that it scrolls.
+ *
+ * ## The bug this closes
+ *
+ * Measured on 2026-09-11: RevioPMS's menu needs 767px and has 611px at a 1280×720 laptop — four
+ * items' worth below the fold — and RevioLink overflows by 73px at 600px. That on its own is
+ * survivable. What is not: **`nav.offsetWidth - nav.clientWidth` was 0**, meaning macOS drew an
+ * overlay scrollbar that is invisible until you already scroll. So there was no indication of any
+ * kind that the menu continued, and the founder reported exactly the consequence — *"some users
+ * might not have the intent to scroll, they may not think of scrolling"*. A screen nobody scrolls
+ * to is a feature nobody learns exists.
+ *
+ * Styling `::-webkit-scrollbar` opts the element out of overlay scrollbars entirely, so the track
+ * is always laid out and the thumb is always drawn. That is the whole fix: the oldest, most
+ * universally understood "there is more here" signal in software, which we had switched off by
+ * accident.
+ *
+ * ## Why a class string and not a stylesheet
+ *
+ * The three apps have no shared CSS file — each owns its own `globals.css`, so a rule written for
+ * one would have to be copied three times and would diverge. Every app's Tailwind config DOES scan
+ * `packages/ui/src/**`, so a class list written here is generated into all three from one place.
+ */
+export const NAV_SCROLL_CLASS = [
+  "overflow-y-auto",
+  /*
+   * ⚠️ `scrollbar-width` and `scrollbar-color` are deliberately NOT set here, and that is the whole
+   * trick. Chrome 121+ implements the standard properties, and when either is present it **ignores
+   * every `::-webkit-scrollbar` rule on the element**. Setting both — the obvious thing to do for
+   * cross-browser coverage — silently cancelled this fix: measured, the scrollbar still took zero
+   * width and was still invisible. The pseudo-elements alone are what opt the element out of
+   * macOS's overlay scrollbar and give it a track that is always laid out and always drawn.
+   */
+  "[&::-webkit-scrollbar]:w-[10px]",
+  "[&::-webkit-scrollbar-track]:bg-transparent",
+  "[&::-webkit-scrollbar-thumb]:rounded-full",
+  // A transparent border plus padding-box clipping insets the thumb, so it reads as a slim pill in
+  // the margin rather than a bar welded to the edge of the menu.
+  "[&::-webkit-scrollbar-thumb]:border-[3px]",
+  "[&::-webkit-scrollbar-thumb]:border-transparent",
+  "[&::-webkit-scrollbar-thumb]:bg-clip-padding",
+  "[&::-webkit-scrollbar-thumb]:bg-white/25",
+  "hover:[&::-webkit-scrollbar-thumb]:bg-white/40",
+].join(" ");
+
+/**
+ * Vertical rhythm for a sidebar row and its group heading, shared so the three cannot drift.
+ *
+ * ⚠️ These are **tighter than they were**, on purpose and by measurement rather than taste: the old
+ * values put RevioPMS 156px past the bottom of a 720px laptop. `py-1.5` on a row and `pt-3` on a
+ * heading recover about 92px of that across the longest menu, which is most of the difference
+ * between a menu that scrolls and one that does not — while keeping a 34px row, comfortably above
+ * the 24px anybody would call cramped and still a large touch target.
+ */
+export const NAV_ROW_CLASS = "mb-0.5 px-3 py-1.5";
+export const NAV_HEADING_CLASS = "px-3 pb-1 pt-3";

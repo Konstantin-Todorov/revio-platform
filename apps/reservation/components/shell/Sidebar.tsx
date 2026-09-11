@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
-import { navTail } from "@revio/ui/nav-tail";
+import { NAV_HEADING_CLASS, NAV_ROW_CLASS, NAV_SCROLL_CLASS, navTail } from "@revio/ui/nav-tail";
 
 type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 
@@ -61,6 +61,81 @@ const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
 export function Sidebar({ footer }: { footer: string }) {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
+  /*
+   * One section, rendered from a named function so the TAIL can live outside the scrolling
+   * region without a single line of this JSX being duplicated. Two copies of a nav row diverge,
+   * and the copy that diverges is the one nobody is looking at.
+   */
+  const renderSection = (section: (typeof SECTIONS)[number], i: number) => (
+          <div key={i} /* The pinned wrapper below owns the rule and the padding now, so a tail section
+                 styles itself exactly like any other — one fewer thing that can disagree. */
+              className="mb-1">
+            {section.title && (
+              <div className={`${NAV_HEADING_CLASS} text-[10px] font-bold uppercase tracking-[0.15em] text-white/30`}>
+                {section.title}
+              </div>
+            )}
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              if (item.soon) {
+                return (
+                  <div
+                    key={item.href}
+                    className={`${NAV_ROW_CLASS} flex cursor-default items-center gap-3 rounded-md text-[13.5px] font-medium text-white/30`}
+                    title={`${item.label} arrives in ${item.soon}`}
+                  >
+                    <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+                    <span className="flex-1">{item.label}</span>
+                    <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/40">
+                      {item.soon}
+                    </span>
+                  </div>
+                );
+              }
+              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  aria-current={active ? "page" : undefined}
+                  /*
+                   * Transitions colour AND transform AND background together (motion rule 1) — a
+                   * `transition-colors` link changes hue and nothing else, which is what made the
+                   * whole nav feel like a static list rather than something you are operating.
+                   * The focus ring is rule 2: there were two on the entire platform.
+                   */
+                  className={`group relative ${NAV_ROW_CLASS} flex items-center gap-3 rounded-lg text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
+                    active
+                      ? "bg-product-mark/[0.14] text-white"
+                      : "text-white/70 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
+                  }`}
+                >
+                  {/*
+                   * The rail is always rendered and scales in, rather than being mounted only when
+                   * active. Mounting it on activation means it pops into existence at full size on
+                   * every navigation; scaling from 0 lets it grow out of the edge it belongs to.
+                   * `origin-center` with scale-y keeps it centred while it grows.
+                   */}
+                  <span
+                    aria-hidden="true"
+                    className={`absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 origin-center rounded-r bg-product-mark transition-transform duration-base ease-out ${
+                      active ? "scale-y-100" : "scale-y-0"
+                    }`}
+                  />
+                  <Icon
+                    className={`h-[18px] w-[18px] shrink-0 transition-colors duration-fast ease-standard ${
+                      active ? "text-product-mark" : "text-white/55 group-hover:text-white/85"
+                    }`}
+                    strokeWidth={2}
+                  />
+                  <span className="flex-1">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        );
+
   return (
     <>
       {/* Backdrop — mobile only, closes the drawer on tap */}
@@ -101,75 +176,24 @@ export function Sidebar({ footer }: { footer: string }) {
         Help · Settings group belongs at the foot of the sidebar, where it is the same target in
         every product whatever is above it.
       */}
-      <nav className="flex flex-1 flex-col overflow-y-auto px-3 pb-4">
-        {SECTIONS.map((section, i) => (
-          <div key={i} className={section.tail ? "mb-1 mt-auto border-t border-white/10 pt-2" : "mb-1"}>
-            {section.title && (
-              <div className="px-3 pb-2 pt-5 text-[10px] font-bold uppercase tracking-[0.15em] text-white/30">
-                {section.title}
-              </div>
-            )}
-            {section.items.map((item) => {
-              const Icon = item.icon;
-              if (item.soon) {
-                return (
-                  <div
-                    key={item.href}
-                    className="mb-0.5 flex cursor-default items-center gap-3 rounded-md px-3 py-2 text-[13.5px] font-medium text-white/30"
-                    title={`${item.label} arrives in ${item.soon}`}
-                  >
-                    <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-                    <span className="flex-1">{item.label}</span>
-                    <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/40">
-                      {item.soon}
-                    </span>
-                  </div>
-                );
-              }
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  aria-current={active ? "page" : undefined}
-                  /*
-                   * Transitions colour AND transform AND background together (motion rule 1) — a
-                   * `transition-colors` link changes hue and nothing else, which is what made the
-                   * whole nav feel like a static list rather than something you are operating.
-                   * The focus ring is rule 2: there were two on the entire platform.
-                   */
-                  className={`group relative mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
-                    active
-                      ? "bg-product-mark/[0.14] text-white"
-                      : "text-white/70 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
-                  }`}
-                >
-                  {/*
-                   * The rail is always rendered and scales in, rather than being mounted only when
-                   * active. Mounting it on activation means it pops into existence at full size on
-                   * every navigation; scaling from 0 lets it grow out of the edge it belongs to.
-                   * `origin-center` with scale-y keeps it centred while it grows.
-                   */}
-                  <span
-                    aria-hidden="true"
-                    className={`absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 origin-center rounded-r bg-product-mark transition-transform duration-base ease-out ${
-                      active ? "scale-y-100" : "scale-y-0"
-                    }`}
-                  />
-                  <Icon
-                    className={`h-[18px] w-[18px] shrink-0 transition-colors duration-fast ease-standard ${
-                      active ? "text-product-mark" : "text-white/55 group-hover:text-white/85"
-                    }`}
-                    strokeWidth={2}
-                  />
-                  <span className="flex-1">{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        ))}
+            <nav className={`min-h-0 flex-1 px-3 pb-2 ${NAV_SCROLL_CLASS}`}>
+        {SECTIONS.filter((x) => !x.tail).map(renderSection)}
       </nav>
+
+      {/*
+        ⚠️ The tail sits OUTSIDE the scrolling region.
+
+        It used to be the last group inside it, which meant that on a laptop short enough to
+        need scrolling — measured 156px short in RevioPMS at 1280x720 — Settings and Help were
+        below the fold of a menu whose scrollbar macOS draws as an invisible overlay. The two
+        destinations people hunt for were the two they could not see, on a list that gave no
+        sign it continued. Pinned here they cost the scroll region their own height and are
+        reachable without anybody discovering anything.
+      */}
+      <div className="border-t border-white/10 px-3 py-2">
+        {SECTIONS.filter((x) => x.tail).map(renderSection)}
+      </div>
+
 
       {/* The account this session belongs to — useful for a group, and never build metadata. */}
       <div className="truncate border-t border-white/10 px-5 py-3 text-[11px] text-white/40">{footer}</div>

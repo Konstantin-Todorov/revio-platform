@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
-import { navTail } from "@revio/ui/nav-tail";
+import { NAV_HEADING_CLASS, NAV_ROW_CLASS, NAV_SCROLL_CLASS, navTail } from "@revio/ui/nav-tail";
 
 type Item = { href: string; label: string; icon: typeof LayoutDashboard; badge?: number; tone?: "danger" | "warning" };
 
@@ -47,8 +47,7 @@ const SECTIONS: { title?: string; items: Item[] }[] = [
  * is identical in all three products, which is the property worth having: Settings is the last item
  * everywhere, Help is directly above it everywhere.
  */
-const ACCOUNT_SECTION: { title: string; items: Item[] } = {
-  title: "Account",
+const ACCOUNT_SECTION: { items: Item[] } = {
   items: navTail(["/help", "/settings"]).map((t) => ({ href: t.href, label: t.label, icon: t.Icon })),
 };
 
@@ -76,7 +75,7 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
           href={item.href}
           onClick={() => setOpen(false)}
           aria-current={active ? "page" : undefined}
-          className={`group relative mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
+          className={`group relative ${NAV_ROW_CLASS} flex items-center gap-3 rounded-lg text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
             active ? "bg-product-mark/[0.14] text-white" : "text-white/70 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
           }`}
         >
@@ -139,11 +138,11 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-4">
+      <nav className={`min-h-0 flex-1 px-3 pb-2 ${NAV_SCROLL_CLASS}`}>
         {SECTIONS.map((section, i) => (
           <div key={i} className="mb-1">
             {section.title && (
-              <div className="px-3 pb-1.5 pt-4 text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35">
+              <div className={`${NAV_HEADING_CLASS} text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35`}>
                 {section.title}
               </div>
             )}
@@ -154,9 +153,6 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
 
       {/* Bottom-anchored Account group (spec §2) — admin, not daily operations. */}
       <div className="border-t border-white/10 px-3 pb-3">
-        <div className="px-3 pb-1.5 pt-3 text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35">
-          {ACCOUNT_SECTION.title}
-        </div>
         {renderItems(ACCOUNT_SECTION.items)}
       </div>
 
