@@ -577,7 +577,13 @@ model ClientBilling {
   billingEmail String?
   /// Who the invoice should be addressed to — "Accounts payable", a finance manager's name.
   attention    String?
+  /// ⚠️ OURS, about their finance department. The hotel writes every other field on this row from
+  /// its own billing screen; this one is never in that payload. See `saveHotelBillingIdentity`.
   notes        String?
+  /// When the HOTEL last saved these details itself. Distinct from `updatedAt`, which also moves
+  /// when we edit the row — the difference is whether a legal name is the customer's own answer or
+  /// our transcription of a phone call.
+  selfServedAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

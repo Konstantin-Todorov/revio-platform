@@ -18,6 +18,39 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · A hotel fills in its own invoicing details — the human step in the middle of the automation
+**Founder: "дали не трябва... да имат билинг част и да виждат какво става като цяло" / company details.**
+Files: `packages/core/src/billing/billing-identity.ts` (+ 14 tests),
+`packages/db/src/hotel-billing.ts`, `packages/db/prisma/migrations/20260911210000_client_billing_self_served/`,
+`packages/ui/src/billing-identity-form.tsx`, each app's `lib/actions-billing-identity.ts` and
+`settings/billing/page.tsx`, `apps/operator/app/(protected)/clients/[id]/page.tsx`,
+`apps/pms/components/shell/billing-identity.test.tsx`.
+
+⚠️ **`ClientBilling` is now written by the HOTEL as well as by us.** `issueInvoice` always refused
+without it and `decideVat` blocks rather than guess a country — so it was already mandatory, just
+mandatory on *us*: every legal name and VAT number was typed into the operator console from
+something said on a phone. That is second-hand data AND a human step inside a flow meant to be
+automatic (a self-serve trial that converts cannot be invoiced until somebody notices).
+
+Two things to know before touching this row:
+- **`notes` is ours and is never in the hotel's payload.** `saveHotelBillingIdentity` lists the
+  customer-facing fields explicitly for that reason. Do not "tidy" it into a spread.
+- **`selfServedAt` vs `updatedAt`** answers "is this legal name the customer's own answer or our
+  transcription". The operator client page compares the two and says which.
+
+⚠️ **`Property.invoiceIssuerName/invoiceVatId/invoiceAddress` is a DIFFERENT THING** — the hotel's
+identity for invoices *the hotel* issues to *its guests*. Opposite direction. They look identical on
+screen, so the form says which one it is in its second sentence. Merging them would put the wrong
+company on somebody's tax document.
+
+VAT numbers are **format**-checked per country, never existence-checked — VIES is the only thing that
+could say otherwise, and claiming more on screen would stop people checking. Unknown countries pass.
+
+Notes: `pnpm verify` green, 2,113 tests, `drift:lint` run and clean. `authz-lint` refused a
+`guardSubscription()` wrapper I had written — correctly, since the whole point is that the gate is
+visible at the top of the action; the wrapper is gone and each app calls its own gate directly.
+
+
 ### 2026-09-11 · Claude · DONE · A billing section in all three hotel products — and a trial that was being invoiced
 **Founder: "дали не трябва и трите софтуера в админ акаунтите да имат билинг част."**
 Files: `packages/core/src/billing/plan-pricing.ts` (+ test, MOVED from `apps/operator/lib/pricing.ts`),

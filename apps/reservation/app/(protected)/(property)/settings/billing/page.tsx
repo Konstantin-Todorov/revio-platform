@@ -1,6 +1,10 @@
-import { hotelBillingAccount, hotelInvoices, revioPaymentDetails } from "@revio/db";
-import { PRODUCT_BY_KEY, billableEntitlements, priceBreakdown, tierForRooms } from "@revio/core";
+import { hotelBillingAccount, hotelBillingIdentity, hotelInvoices, revioPaymentDetails } from "@revio/db";
+import {
+  PRODUCT_BY_KEY, billableEntitlements, billingIdentityPrompt, priceBreakdown, tierForRooms,
+} from "@revio/core";
 import { BillingPanel } from "@revio/ui/billing-panel";
+import { BillingIdentityForm } from "@revio/ui/billing-identity-form";
+import { saveBillingIdentity } from "@/lib/actions-billing-identity";
 import { getSession } from "@/lib/session";
 import { isTrialDecider } from "@revio/core";
 
@@ -45,10 +49,11 @@ export default async function BillingSettingsPage() {
     );
   }
 
-  const [account, invoices, payment] = await Promise.all([
+  const [account, invoices, payment, identity] = await Promise.all([
     hotelBillingAccount(session.tenantId),
     hotelInvoices(session.tenantId),
     revioPaymentDetails(),
+    hotelBillingIdentity(session.tenantId),
   ]);
   if (!account) return null;
 
@@ -56,8 +61,58 @@ export default async function BillingSettingsPage() {
   const breakdown = priceBreakdown(account.plan, billableEntitlements(account.entitlements, onTrial));
   const tier = tierForRooms(account.rooms);
 
+  /*
+   * ⚠️ Company details come FIRST on this page when they are missing, above what they pay.
+   *
+   * Until this row exists we cannot issue them an invoice at all — `issueInvoice` refuses and
+   * `decideVat` blocks rather than guess a country. Showing them a tidy monthly figure above an
+   * unanswered form would imply the billing side is finished when it is the one thing that is not.
+   */
+  const prompt = billingIdentityPrompt(identity);
+  const identityValues = {
+    legalName: identity?.legalName ?? "",
+    country: identity?.country ?? "",
+    companyId: identity?.companyId ?? "",
+    vatId: identity?.vatId ?? "",
+    addressLine: identity?.addressLine ?? "",
+    city: identity?.city ?? "",
+    postCode: identity?.postCode ?? "",
+    billingEmail: identity?.billingEmail ?? "",
+    attention: identity?.attention ?? "",
+  };
+
+  const identityCard = (
+    <section
+      className={`rounded-xl border p-5 ${prompt ? "border-warning-200 bg-warning-50" : "border-surface-border bg-white"}`}
+    >
+      <h2 className="text-[13.5px] font-semibold text-ink-900">Your company details</h2>
+      {/*
+        The sentence that stops the wrong company ending up on a tax document. This product also
+        holds the identity a hotel uses to invoice its OWN guests, and the two forms look identical.
+      */}
+      <p className="mt-1 max-w-[68ch] text-[12.5px] leading-relaxed text-ink-600">
+        These go on the invoices <strong>Revio issues to you</strong> — not on the invoices you issue
+        your guests, which are set up separately under your property.
+      </p>
+      {prompt && (
+        <p className="mt-3 rounded-md border border-warning-200 bg-white px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning-800">
+          {prompt}
+        </p>
+      )}
+      <div className="mt-4">
+        <BillingIdentityForm
+          values={identityValues}
+          action={saveBillingIdentity}
+          selfServedAt={identity?.selfServedAt ?? null}
+        />
+      </div>
+    </section>
+  );
+
   return (
-    <BillingPanel
+    <div className="space-y-4">
+      {prompt && identityCard}
+      <BillingPanel
       breakdown={breakdown}
       planLabel={tier.label}
       rooms={account.rooms}
@@ -68,5 +123,8 @@ export default async function BillingSettingsPage() {
       invoices={invoices}
       payment={payment}
     />
+      {/* Complete: it moves below the bill, where it is a record to correct rather than a task. */}
+      {!prompt && identityCard}
+    </div>
   );
 }

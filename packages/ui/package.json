@@ -49,7 +49,8 @@
     "./usage-beacon": "./src/usage-beacon.tsx",
     "./submit-button": "./src/submit-button.tsx",
     "./trial-banner": "./src/trial-banner.tsx",
-    "./billing-panel": "./src/billing-panel.tsx"
+    "./billing-panel": "./src/billing-panel.tsx",
+    "./billing-identity-form": "./src/billing-identity-form.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

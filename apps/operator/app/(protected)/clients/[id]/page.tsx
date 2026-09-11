@@ -612,6 +612,30 @@ export default async function ClientDetailPage({
           {!billing && (
             <p className="mb-3 rounded-md bg-warning-50 px-3 py-2 text-[12px] font-medium text-warning-600">
               This client cannot be invoiced until their legal name, country and address are recorded.
+              They can fill it in themselves under Settings › Billing in any product they use.
+            </p>
+          )}
+          {/*
+            ⚠️ Whose answer is this?
+            A legal name the hotel typed and a legal name we transcribed from a phone call are
+            different levels of confidence in a tax document, and they are indistinguishable in the
+            fields below. `selfServedAt` is the only thing that can tell them apart, and it is
+            compared against `updatedAt` because an operator edit afterwards makes the current values
+            ours again whatever the hotel once entered.
+          */}
+          {billing?.selfServedAt && (
+            <p className="mb-3 text-[11.5px] text-ink-500">
+              {billing.selfServedAt >= billing.updatedAt ? (
+                <>
+                  <span className="font-semibold text-success-700">The hotel entered this themselves</span>{" "}
+                  on {billing.selfServedAt.toISOString().slice(0, 10)}.
+                </>
+              ) : (
+                <>
+                  Edited by us since. The hotel last filled it in on{" "}
+                  {billing.selfServedAt.toISOString().slice(0, 10)}.
+                </>
+              )}
             </p>
           )}
           <ClientBillingForm

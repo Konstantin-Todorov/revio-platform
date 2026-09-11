@@ -141,3 +141,94 @@ export async function revioPaymentDetails(): Promise<{
   if (!c?.iban) return null;
   return { legalName: c.legalName, iban: c.iban, bic: c.bic, bankName: c.bankName, email: c.email };
 }
+
+/**
+ * The hotel's own company details, as they will appear on the invoice we issue them.
+ *
+ * ## Why the hotel writes this row, when `ClientBilling` is `operator_only`
+ *
+ * It was always required — `issueInvoice` refuses without it — and it was always **us** who typed
+ * it, from whatever a hotel said on the phone. That is our time spent on second-hand data, and it is
+ * a human step sitting in the middle of a flow meant to be automatic: a self-serve trial that
+ * converts to a paying account cannot be invoiced until somebody notices and fills in a form.
+ *
+ * The row stays `operator_only` because it is read when we issue invoices, and because the
+ * `notes` column on it is ours — an operator's remark about a customer's finance department is not
+ * something the customer should read. So this function writes the **customer-facing fields only**
+ * and never touches `notes`.
+ */
+export interface HotelBillingIdentity {
+  legalName: string;
+  country: string;
+  companyId: string;
+  vatId: string;
+  addressLine: string;
+  city: string;
+  postCode: string;
+  billingEmail: string;
+  attention: string;
+  /** When the hotel last saved it themselves. Null when only we have ever touched it. */
+  selfServedAt: Date | null;
+}
+
+export async function hotelBillingIdentity(tenantId: string): Promise<HotelBillingIdentity | null> {
+  const r = await prisma.clientBilling.findUnique({
+    where: { tenantId },
+    select: {
+      legalName: true, country: true, companyId: true, vatId: true,
+      addressLine: true, city: true, postCode: true, billingEmail: true, attention: true,
+      selfServedAt: true,
+    },
+  });
+  if (!r) return null;
+  // Nulls become empty strings: this feeds a form, and a form field is never null.
+  return {
+    legalName: r.legalName ?? "",
+    country: r.country ?? "",
+    companyId: r.companyId ?? "",
+    vatId: r.vatId ?? "",
+    addressLine: r.addressLine ?? "",
+    city: r.city ?? "",
+    postCode: r.postCode ?? "",
+    billingEmail: r.billingEmail ?? "",
+    attention: r.attention ?? "",
+    selfServedAt: r.selfServedAt,
+  };
+}
+
+/**
+ * The hotel saving its own details.
+ *
+ * ⚠️ **`notes` is never in the payload.** That column is our private remark about a customer's
+ * finance department, on a row the customer now also writes to. Leaving it out of the `update` is
+ * what keeps it ours — and it is the sort of thing that gets lost the first time somebody "tidies"
+ * this into a spread of the whole object.
+ *
+ * The values are validated by `validateBillingIdentity` in `@revio/core` before they reach here; the
+ * caller refuses and shows the problems. This stores what it is given.
+ */
+export async function saveHotelBillingIdentity(args: {
+  tenantId: string;
+  values: Omit<HotelBillingIdentity, "selfServedAt">;
+}): Promise<void> {
+  const v = args.values;
+  const data = {
+    legalName: v.legalName.trim(),
+    country: v.country.trim().toUpperCase() || null,
+    companyId: v.companyId.trim() || null,
+    vatId: v.vatId.trim() || null,
+    addressLine: v.addressLine.trim() || null,
+    city: v.city.trim() || null,
+    postCode: v.postCode.trim() || null,
+    billingEmail: v.billingEmail.trim() || null,
+    attention: v.attention.trim() || null,
+    // Who last touched it, so the operator can tell the hotel's own answer from our transcription of
+    // a phone call — and so a client page can stop asking us to fill in what they have filled in.
+    selfServedAt: new Date(),
+  };
+  await prisma.clientBilling.upsert({
+    where: { tenantId: args.tenantId },
+    create: { tenantId: args.tenantId, ...data },
+    update: data,
+  });
+}
