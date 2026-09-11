@@ -68,6 +68,18 @@ export const CAPABILITY_ROLES = {
   maintenance: [...MANAGERS, "hk_supervisor", "maintenance"],
   /** Posting outlet items to a folio. */
   outlet: [...MANAGERS, "reception", "outlet_pos"],
+  /**
+   * What the account BUYS: starting a free trial of another product, asking to keep one.
+   *
+   * ⚠️ Narrower than `manage`, and that is the whole reason it is its own entry. A `manager` runs
+   * this hotel's operation — configuration, staff, close day — and cannot sign the company up for
+   * anything. Every other capability here names data at risk; this one names money.
+   *
+   * Matches `manageSubscription` in `@revio/core`, which is the authoritative rule (`selfStartTrial`
+   * checks it again on the other side of the perimeter). This is the local half so the refusal is a
+   * sentence on the screen rather than a silent no.
+   */
+  subscription: ["owner", "admin"],
 } satisfies Record<string, readonly string[]>;
 
 export type Capability = keyof typeof CAPABILITY_ROLES;

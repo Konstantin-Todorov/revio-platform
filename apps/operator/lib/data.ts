@@ -10,7 +10,7 @@ import { provisioningState, soldButNotProvisioned } from "./provisioning";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { directUsageByTenant } from "./direct-usage";
-import { channelEconomics, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
+import { PRODUCT_BY_KEY, channelEconomics, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
 import { partitionDemo } from "./demo";
 import {
@@ -20,6 +20,25 @@ import {
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
+
+/**
+ * The trials a hotel has asked to keep, in the shape the attention feed wants.
+ *
+ * One helper because both the list and the detail page raise the same flag, and a signal that says
+ * "ring this customer" must not be able to appear on one screen and not the other. Rows without a
+ * request are dropped here rather than filtered by each caller.
+ */
+function keepRequestsOf(
+  trials: { product: string; endsAt: Date; keepRequestedAt: Date | null }[],
+): { product: string; askedAt: Date; endsAt: Date }[] {
+  return trials
+    .filter((t): t is typeof t & { keepRequestedAt: Date } => t.keepRequestedAt !== null)
+    .map((t) => ({
+      product: PRODUCT_BY_KEY[t.product as "cm" | "crs" | "pms"]?.name ?? t.product,
+      askedAt: t.keepRequestedAt,
+      endsAt: t.endsAt,
+    }));
+}
 
 export interface NotifItem { text: string; href: string; tone: "danger" | "warning" | "info" | "success" }
 
@@ -87,7 +106,12 @@ export async function getClients() {
       crmContacts: { where: { isPrimary: true }, take: 1, select: { name: true, email: true, phone: true } },
       // Running trials only. A client on trial is a different commercial state from one who bought,
       // and the list is where you see it without opening anybody.
-      productTrials: { where: { endedAt: null }, select: { product: true, endsAt: true } },
+      productTrials: {
+        where: { endedAt: null },
+        // `keepRequestedAt` is here because the hotel pressing "Keep it" is the strongest buying
+        // signal the platform produces, and it has a deadline: the trial still expires on its own.
+        select: { product: true, endsAt: true, keepRequestedAt: true },
+      },
       crmNotes: {
         where: { kind: { in: [...CONTACT_KINDS] } },
         orderBy: { occurredAt: "desc" },
@@ -162,6 +186,7 @@ export async function getClients() {
           directReservationsLast30d: directLast30d,
           unpaidInvoices,
           monthlyPriceMinor: monthly,
+          keepRequests: keepRequestsOf(t.productTrials),
         }),
         ...accountAttention({
           status: t.status,
@@ -528,6 +553,16 @@ export async function getClientDetail(id: string) {
   const contactedAt = lastContactAt(tenant.crmNotes);
   const statedStage = (tenant.crmAccount?.stage ?? "onboarding") as Stage;
 
+  /*
+   * Read before the attention feed rather than reusing the full `trials` list further down, which is
+   * loaded after it. A signal the operator has to act on must not depend on where in this function
+   * somebody happened to put a query.
+   */
+  const keepAsked = await prisma.productTrial.findMany({
+    where: { tenantId: id, endedAt: null, keepRequestedAt: { not: null } },
+    select: { product: true, endsAt: true, keepRequestedAt: true },
+  });
+
   const attention = sortBySeverity([
     ...clientAttention({
       status: tenant.status, createdAt: tenant.createdAt, entitlements,
@@ -538,6 +573,7 @@ export async function getClientDetail(id: string) {
       reservationsLast30d, bookingEngineProperties,
       directReservationsLast30d: economics.rows.filter((r) => r.category === "direct").reduce((s, r) => s + r.reservations, 0),
       unpaidInvoices, monthlyPriceMinor: monthly,
+      keepRequests: keepRequestsOf(keepAsked),
     }),
     ...accountAttention({
       status: tenant.status, createdAt: tenant.createdAt,

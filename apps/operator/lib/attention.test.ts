@@ -26,6 +26,39 @@ const healthy = (o: Partial<ClientSignals> = {}): ClientSignals => ({
 });
 
 describe("clientAttention", () => {
+  /*
+   * The only flag in this file raised by the CUSTOMER rather than derived from their behaviour, and
+   * the one that costs a sale if it is late: the trial keeps expiring on its own clock while we sit
+   * on the request.
+   */
+  it("raises the loudest flag when a hotel has asked to keep a trial", () => {
+    const flags = clientAttention(
+      healthy({
+        keepRequests: [{ product: "RevioPMS", askedAt: daysAgo(2), endsAt: new Date(NOW.getTime() + 5 * 86_400_000) }],
+      }),
+      NOW,
+    );
+    expect(flags[0]!.severity).toBe("act");
+    expect(flags[0]!.title).toMatch(/keep RevioPMS/);
+    // Both halves a call-back needs: how long ago they asked, and how long is left to answer.
+    expect(flags[0]!.detail).toMatch(/2 days ago/);
+    expect(flags[0]!.detail).toMatch(/5 days/);
+  });
+
+  it("stays silent about a keep request on a SUSPENDED client", () => {
+    // Suspension is the whole story while it lasts — the documented rule, restated because merging a
+    // new flag source is exactly when an invariant like this gets lost.
+    const flags = clientAttention(
+      healthy({
+        status: "suspended",
+        keepRequests: [{ product: "RevioPMS", askedAt: daysAgo(1), endsAt: new Date(NOW.getTime() + 86_400_000) }],
+      }),
+      NOW,
+    );
+    expect(flags).toHaveLength(1);
+    expect(flags[0]!.title).toBe("Suspended");
+  });
+
   it("says nothing about a healthy client", () => {
     // The most important test here. A console that always shows something teaches you to ignore it.
     expect(clientAttention(healthy(), NOW)).toEqual([]);

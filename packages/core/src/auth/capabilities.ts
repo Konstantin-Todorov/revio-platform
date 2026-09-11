@@ -53,7 +53,22 @@ export type Capability =
   /** Channels, mapping, connection state, manual pushes and pulls. */
   | "manageDistribution"
   /** Creating, modifying, cancelling bookings; holds; guest records. */
-  | "manageReservations";
+  | "manageReservations"
+  /**
+   * What the account BUYS: starting a free trial of another product, asking to keep one.
+   *
+   * The odd one out, and deliberately so. Every capability above names data at risk; this one names
+   * money at risk. It exists because a hotel can now switch a product on itself, and "who may commit
+   * this account to something that becomes a bill" is a real question with a different answer from
+   * "who may change a rate" — a revenue manager changes prices all day and cannot sign us up for
+   * anything.
+   *
+   * It was very nearly a second, parallel permission system living in the trials module
+   * (`isTrialDecider` checking its own list of roles). Two systems deciding who may write is exactly
+   * the failure `docs/UI-STANDARD.md` rule 3 warns about, and the copy that drifts is always the
+   * permissive one. `authz-lint` is what caught it.
+   */
+  | "manageSubscription";
 
 /**
  * Role → capabilities.
@@ -74,6 +89,7 @@ const GRANTS: Record<CommercialRole, readonly Capability[]> = {
     "manageInventory",
     "manageDistribution",
     "manageReservations",
+    "manageSubscription",
   ],
   admin: [
     "manageStaff",
@@ -82,6 +98,7 @@ const GRANTS: Record<CommercialRole, readonly Capability[]> = {
     "manageInventory",
     "manageDistribution",
     "manageReservations",
+    "manageSubscription",
   ],
   revenue_manager: ["manageRates", "manageInventory", "manageReservations"],
   distribution_manager: ["manageDistribution", "manageInventory"],
@@ -105,6 +122,16 @@ export function capabilitiesOf(role: string): readonly Capability[] {
   return GRANTS[role as CommercialRole] ?? [];
 }
 
+/**
+ * May this role commit the account to something that becomes a bill?
+ *
+ * One name for the question the trial screens ask, answered from the same grants table as every
+ * other write. The trials module used to hold its own set of role names for this.
+ */
+export function isTrialDecider(role: string): boolean {
+  return roleCan(role, "manageSubscription");
+}
+
 /** True when a role may perform no writes at all — used to show a read-only banner rather than to gate. */
 export function isReadOnly(role: string): boolean {
   return capabilitiesOf(role).length === 0;
@@ -125,6 +152,7 @@ export function refusalMessage(role: string, cap: Capability): string {
     manageInventory: "change availability",
     manageDistribution: "change channel connections",
     manageReservations: "create or change reservations",
+    manageSubscription: "start or keep a product on this account",
   };
   if (isReadOnly(role)) {
     return `Your account has read-only access, so it cannot ${what[cap]}. Ask an owner or admin at your property to change your role.`;

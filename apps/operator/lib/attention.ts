@@ -45,6 +45,11 @@ export interface ClientSignals {
   /** Invoices not yet paid, oldest first. */
   unpaidInvoices: { period: string; amountMinor: number; status: string }[];
   monthlyPriceMinor: number;
+  /**
+   * Trials the hotel has asked to KEEP, from the banner in their own product — product name and the
+   * day they asked. Empty for everyone else.
+   */
+  keepRequests?: { product: string; askedAt: Date; endsAt: Date }[];
 }
 
 const DAY = 86_400_000;
@@ -73,6 +78,27 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
     // Nothing else matters while they are locked out, and listing "no bookings in 30 days" under a
     // suspension is telling someone their car won't start while it is up on the ramp.
     return flags;
+  }
+
+  /*
+   * --- the customer put their hand up ------------------------------------
+   *
+   * FIRST, above unpaid invoices, and that ordering is the point: this is the only flag in the file
+   * raised by the customer rather than derived from their behaviour, and it is the one with a clock
+   * on it. They pressed "Keep it" inside the product; if nobody rings before the trial ends, the
+   * software switches itself off underneath a hotel that just said they wanted it — which is the
+   * worst possible answer to a customer saying yes.
+   *
+   * `act` regardless of how many days are left, because the work is one phone call and the cost of
+   * being late is losing a sale that was already made.
+   */
+  for (const k of s.keepRequests ?? []) {
+    const daysLeft = Math.max(0, Math.ceil((k.endsAt.getTime() - now.getTime()) / DAY));
+    flags.push({
+      severity: "act",
+      title: `They want to keep ${k.product}`,
+      detail: `Asked ${daysSince(k.askedAt, now) === 0 ? "today" : `${daysSince(k.askedAt, now)} days ago`}. The trial still ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — price it with them and mark it kept.`,
+    });
   }
 
   // --- money -------------------------------------------------------------

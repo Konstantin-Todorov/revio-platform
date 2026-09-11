@@ -81,8 +81,57 @@ export async function startTrial(fd: FormData): Promise<void> {
   });
   await db.tenant.update({ where: { id: tenantId }, data: { [FIELD[product]]: true } });
 
+  /*
+   * ⚠️ Everything past this point runs AFTER the trial is granted and committed, so nothing here
+   * may be allowed to lose the confirmation or the refresh.
+   *
+   * It used to `await sendEmail(...).catch(…)` with only the send itself guarded — building the
+   * message was not — and the transport had no timeout at all. A stalled provider connection
+   * therefore held this action open indefinitely with the trial already in the database and not one
+   * pixel changed on screen. That is exactly what was reported on 2026-09-11: press it, nothing
+   * happens, reload and the trial is there.
+   *
+   * Two changes, and both are needed. `@revio/email` now bounds the wait. This block cannot throw.
+   * And the result is carried into the flash, because "we could not tell the customer" is something
+   * the operator has to know — silently swallowing it means a hotel gets a product switched on with
+   * no idea it is running or when it stops.
+   */
   const owner = tenant.users[0];
-  if (owner?.email) {
+  const told = await notifyOwner(owner, product, endsAt);
+
+  revalidatePath("/clients", "layout");
+  revalidatePath(`/clients/${tenantId}`, "layout");
+  return setFlash(
+    told === "failed" ? "info" : "success",
+    `${info.name} on trial for ${tenant.name} until ${endsAt.toISOString().slice(0, 10)}.${TOLD_SUFFIX[told]}`,
+  );
+}
+
+/** What happened to the "your trial has started" email, in words the flash can use. */
+const TOLD_SUFFIX: Record<TellOutcome, string> = {
+  sent: " The owner has been emailed.",
+  // Not an error — the trial is correct and running. It is a job left for a human.
+  failed: " We could not email the owner, so tell them yourself — they do not know it is on.",
+  no_recipient: " There is no active owner with an email on this account, so nobody has been told.",
+};
+
+type TellOutcome = "sent" | "failed" | "no_recipient";
+
+/**
+ * Tell the owner their trial has started. Never throws, and never leaves the caller not knowing.
+ *
+ * The pitch is in the second paragraph and it is the real one: most SaaS trials are spent importing
+ * data, so the evaluation never happens. Ours cannot be — the hotel's rooms, rates and guests are
+ * already there because every product shares one core.
+ */
+async function notifyOwner(
+  owner: { name: string | null; email: string | null } | undefined,
+  product: ProductKey,
+  endsAt: Date,
+): Promise<TellOutcome> {
+  const info = PRODUCT_BY_KEY[product];
+  if (!owner?.email || !info) return "no_recipient";
+  try {
     const mail = {
       preview: `${info.name} is on for the next ${TRIAL_DAYS} days.`,
       heading: `${info.name} is switched on for ${TRIAL_DAYS} days`,
@@ -99,17 +148,17 @@ export async function startTrial(fd: FormData): Promise<void> {
         },
       ],
     };
-    await sendEmail({
+    const res = await sendEmail({
       to: [owner.email],
       subject: `${info.name} is switched on for ${TRIAL_DAYS} days`,
       text: renderSystemEmailText(mail),
       html: renderSystemEmail(mail),
-    }).catch(() => { /* access is already correct; the mail is the softer half */ });
+    });
+    return res.ok ? "sent" : "failed";
+  } catch {
+    // Rendering the message, resolving an origin, anything. The trial stands either way.
+    return "failed";
   }
-
-  revalidatePath("/clients");
-  revalidatePath(`/clients/${tenantId}`);
-  return setFlash("success", `${info.name} on trial for ${tenant.name} until ${endsAt.toISOString().slice(0, 10)}.`);
 }
 
 /**
@@ -149,8 +198,17 @@ export async function endTrial(fd: FormData): Promise<void> {
     });
   }
 
-  revalidatePath("/clients");
-  revalidatePath(`/clients/${trial.tenantId}`);
+  /*
+   * ⚠️ `"layout"`, not the default `"page"`, and that is load-bearing rather than tidy.
+   *
+   * `FlashToast` is rendered by `(protected)/layout.tsx`. Revalidating only the page path re-renders
+   * the page segment and leaves the cached layout in place — so the message this action just wrote
+   * is never drawn, and the screen comes back looking as though the button did nothing. Verified in
+   * the browser on 2026-09-11: page-type revalidation updated the content and showed no toast;
+   * layout-type showed it.
+   */
+  revalidatePath("/clients", "layout");
+  revalidatePath(`/clients/${trial.tenantId}`, "layout");
   return setFlash(
     "success",
     outcome === "converted"

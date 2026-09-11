@@ -18,6 +18,47 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · The trial button that "did nothing", and the strip that tells a hotel it is on one
+**A user-facing action awaited an email send with no timeout and no pending state.**
+Files: `packages/email/src/transport.ts`, `packages/ui/src/{submit-button,trial-banner}.tsx`,
+`packages/core/src/trials/banner.ts` (+ test), `packages/core/src/auth/capabilities.ts` (+ test),
+`packages/core/src/trials/self-serve.ts`, `packages/db/src/self-trial.ts`,
+`packages/db/prisma/migrations/20260911190000_trial_keep_request/`,
+`apps/operator/lib/{actions-trials,attention,data}.ts`, `apps/operator/app/(protected)/clients/[id]/page.tsx`,
+`apps/{channel-manager,reservation,pms}/app/(protected)/layout.tsx` + `lib/actions-self-trial.ts`
++ `components/shell/UserMenu.tsx`, `apps/pms/lib/roles.ts` (+ test).
+
+Founder: *"като натисна траяла в оператора и нищо не се случва, трябва да презаредя."* The trial was
+being granted every time. `startTrial` awaited `sendEmail` **after** the writes had committed, and
+`@revio/email` had no timeout at all — `fetch` has no default one — so a slow provider held the
+action open with nothing on screen moving. There is also no pending state on a `<form action={…}>`
+in a server component, so a working slow action and a dead one are pixel-identical.
+
+Three things, each of which is a defect on its own:
+- `EMAIL_TIMEOUT_MS = 10s` + a `timedOut` flag on `EmailResult` (distinct from a refusal: one is
+  settled, the other means we do not know).
+- `@revio/ui/submit-button` — `useFormStatus`, and it singles out the **pressed** button via
+  `data.get(name)` so three product buttons do not all claim to be starting.
+- `revalidatePath(path, "layout")` in the trial actions. **Verified in a browser, not assumed**:
+  page-type revalidation updated the page content and showed NO flash toast, because `FlashToast`
+  lives in `(protected)/layout.tsx`; layout-type showed it. ⚠️ Worth auditing elsewhere — any action
+  whose only revalidation is the current page path never shows its own message.
+
+Also: the banner the founder asked for (*"не трябва ли да им излиза отгоре че са в фри траил"*), one
+strip at the top of all three hotel apps, tone escalating on exactly the days the reminder emails go
+out. Its "Keep it" button records `ProductTrial.keepRequestedAt` and raises an `act` flag in the
+operator's attention feed — it deliberately does **not** convert anything.
+
+⚠️ **New capability `manageSubscription`** (core) / `subscription` (PMS roles). `authz-lint` caught
+that I had built a second permission system in the trials module (`isTrialDecider` with its own role
+list); it now reads from the same grants table. PMS `manager` holds every operational capability and
+NOT this one — an existing test asserted "managers get everything" and correctly went red.
+
+Notes: the self-serve trial pages from earlier today were unreachable — `trialHref` was optional and
+no app passed it. Now wired in all three `UserMenu`s. `pnpm verify` green (2,061 tests); `drift:lint`
+RUN, not skipped, against a scratch shadow DB — clean.
+
+
 ### 2026-09-11 · Claude · DONE · The trial sweep says what it actually did
 **It counted a warning as sent when there was nobody to send it to.**
 Files: `apps/operator/lib/trial-sweep.ts`, `lib/trial-sweep-db.test.ts` (4 new cases + a mock fix),

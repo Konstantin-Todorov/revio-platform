@@ -2576,6 +2576,11 @@ model ProductTrial {
   /// Which warnings have gone out, so none is ever sent twice however often the sweep runs.
   remindedAt7 DateTime?
   remindedAt1 DateTime?
+  /// The hotel pressed "Keep it" on the trial banner in their own product. The strongest buying
+  /// signal we get. It does NOT convert anything — an operator still does that deliberately.
+  keepRequestedAt   DateTime?
+  /// Which person at the hotel asked, so the call-back knows who to ask for.
+  keepRequestedById String?
   createdAt   DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)

@@ -13,7 +13,34 @@ export interface EmailResult {
   ok: boolean;
   mode: "resend" | "mock";
   error?: string;
+  /**
+   * The provider never answered inside `EMAIL_TIMEOUT_MS`.
+   *
+   * Distinct from a plain failure because it means something different to the caller: a rejected
+   * send is settled (Resend said no), while a timeout leaves us genuinely not knowing whether the
+   * message went out. `trial-sweep.ts` already draws that line for reminders — an unreachable
+   * provider must not consume a "we warned them" flag — and it can only draw it if the transport
+   * reports it.
+   */
+  timedOut?: boolean;
 }
+
+/**
+ * How long any one send may hold the caller.
+ *
+ * ⚠️ This existed as `Infinity` and that is a user-facing defect, not a tuning choice. `fetch` has
+ * no default timeout, so a provider that accepted the connection and then stalled held the request
+ * open for as long as it liked — and several of these sends happen INSIDE a server action a person
+ * is waiting on. The operator's "Start a trial" button is the reported case: the trial was granted,
+ * the transaction committed, and then the screen sat there with no spinner and no message while
+ * this fetch waited, which reads as a dead button. The founder pressed it, saw nothing happen, and
+ * reloaded — 2026-09-11.
+ *
+ * Ten seconds is long enough for a slow-but-working API call and short enough that a person has not
+ * yet concluded the software is broken. Anything that must not block a person at all should not be
+ * awaiting mail in the first place.
+ */
+const EMAIL_TIMEOUT_MS = 10_000;
 
 /**
  * The From header. A hotel sends as ITS OWN name, from OUR verified address — we can DKIM-sign
@@ -73,6 +100,8 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo, at
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
+      // A bounded wait. Without it one stalled provider connection is an unbounded page hang.
+      signal: AbortSignal.timeout(EMAIL_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from: resolveFrom(fromName),
@@ -91,7 +120,17 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo, at
     if (!res.ok) return { ok: false, mode: "resend", error: `Resend ${res.status}: ${(await res.text()).slice(0, 200)}` };
     return { ok: true, mode: "resend" };
   } catch (err) {
-    return { ok: false, mode: "resend", error: (err as Error).message };
+    /*
+     * `AbortSignal.timeout` rejects with a DOMException named "TimeoutError". Reported as its own
+     * outcome so a caller can tell "Resend refused this message" from "we never heard back".
+     */
+    const timedOut = (err as Error)?.name === "TimeoutError";
+    return {
+      ok: false,
+      mode: "resend",
+      error: timedOut ? `No answer from Resend within ${EMAIL_TIMEOUT_MS / 1000}s` : (err as Error).message,
+      ...(timedOut ? { timedOut: true } : {}),
+    };
   }
 }
 

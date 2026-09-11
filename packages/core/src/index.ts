@@ -66,6 +66,8 @@ export * from "./support/support.js";
 export * from "./help/articles.js";
 export * from "./help/search.js";
 export * from "./trials/trials.js";
+export * from "./trials/self-serve.js";
+export * from "./trials/banner.js";
 export * from "./invoicing/invoice-state.js";
 export * from "./metrics/fault-summary.js";
 export * from "./analytics/routes.js";

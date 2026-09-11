@@ -13,6 +13,7 @@ import {
 } from "@revio/core";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
+import { SubmitButton } from "@revio/ui/submit-button";
 import { AccountPanel } from "@/components/clients/AccountPanel";
 import { ContactsPanel } from "@/components/clients/ContactsPanel";
 import { RelationshipLog } from "@/components/clients/RelationshipLog";
@@ -465,6 +466,14 @@ export default async function ClientDetailPage({
                       <span className="text-[11.5px] text-ink-400">
                         ends {t.endsAt.toISOString().slice(0, 10)}
                       </span>
+                      {/* The customer has said yes. The loudest thing in this list, because it is
+                          the only line on the page the hotel wrote themselves — and it still has the
+                          trial's own clock running underneath it. */}
+                      {t.keepRequestedAt && (
+                        <span className="rounded bg-success-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-success-700">
+                          they asked to keep it · {t.keepRequestedAt.toISOString().slice(0, 10)}
+                        </span>
+                      )}
                       {/* The warning that cannot be sent. Loud, because the consequence is a
                           customer losing a product with no notice and no idea why. */}
                       {!warnable && (
@@ -479,20 +488,22 @@ export default async function ClientDetailPage({
                           clock and no email can do it. */}
                       <form action={endTrial} className="ml-auto flex gap-2">
                         <input type="hidden" name="id" value={t.id} />
-                        <button
+                        <SubmitButton
                           name="outcome"
                           value="converted"
+                          pendingLabel="Keeping…"
                           className="rounded-md bg-brand-800 px-2.5 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-brand-700"
                         >
                           They kept it
-                        </button>
-                        <button
+                        </SubmitButton>
+                        <SubmitButton
                           name="outcome"
                           value="cancelled"
+                          pendingLabel="Stopping…"
                           className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted"
                         >
                           Stop it
-                        </button>
+                        </SubmitButton>
                       </form>
                     </li>
                   );
@@ -505,14 +516,15 @@ export default async function ClientDetailPage({
                 <input type="hidden" name="tenantId" value={tenant.id} />
                 <span className="text-[11.5px] text-ink-500">Start a {TRIAL_DAYS}-day trial:</span>
                 {trialable.map((p) => (
-                  <button
+                  <SubmitButton
                     key={p.key}
                     name="product"
                     value={p.key}
+                    pendingLabel={`Starting ${p.name}…`}
                     className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
                   >
                     {p.name}
-                  </button>
+                  </SubmitButton>
                 ))}
               </form>
             )}

@@ -38,7 +38,16 @@ export function UserMenu({ userName, roleLabel, products, upsells }: { userName:
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-[248px] overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
-          <AccountMenuBody userName={userName} roleLabel={roleLabel} products={products} upsells={upsells} />
+          <AccountMenuBody
+            userName={userName}
+            roleLabel={roleLabel}
+            products={products}
+            upsells={upsells}
+            /* The route exists in this app, so the "Also available" list offers it instead of
+               telling somebody to ring us. The page behind it decides eligibility — this only
+               builds the address. */
+            trialHref={(key) => `/start-trial/${key}`}
+          />
           <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-700 transition-colors hover:bg-surface-muted">
             <Settings className="h-4 w-4 text-ink-400" /> Settings
           </Link>

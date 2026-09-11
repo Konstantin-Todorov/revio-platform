@@ -31,13 +31,22 @@ export function AccountMenuBody({
   roleLabel,
   products,
   upsells = [],
+  trialHref,
 }: {
   userName: string;
   userEmail?: string | null;
   roleLabel: string;
   products: ProductLink[];
-  /** Products the hotel does not have. Shown quietly; never a link, because we flip the entitlement. */
+  /** Products the hotel does not have. */
   upsells?: ProductUpsell[];
+  /**
+   * Where "try it" goes, per product key.
+   *
+   * Optional so an app that has not wired the route yet keeps the old honest text rather than
+   * offering a link that leads nowhere — which was the exact reason there was no button here at all
+   * until the mechanism existed.
+   */
+  trialHref?: (productKey: string) => string;
 }) {
   return (
     <>
@@ -88,18 +97,36 @@ export function AccountMenuBody({
           <p className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
             Also available
           </p>
-          {upsells.map((p) => (
-            <div key={p.key} className="px-3 py-1.5">
-              <span className="block text-[13px] text-ink-500">{p.name}</span>
-              <span className="block text-[11px] leading-snug text-ink-400">{p.reason}</span>
-            </div>
-          ))}
-          {/* No button: a hotel cannot switch a product on themselves — we flip the entitlement — so
-              the honest call to action is to ask, and anything else would be a control that cannot
-              finish what it offers. */}
-          <p className="px-3 pb-1.5 pt-1 text-[10.5px] italic text-ink-400">
-            Ask your Revio contact to switch one on.
-          </p>
+          {upsells.map((p) => {
+            const href = trialHref?.(p.key);
+            const body = (
+              <>
+                <span className="block text-[13px] text-ink-700">{p.name}</span>
+                <span className="block text-[11px] leading-snug text-ink-400">{p.reason}</span>
+                {href && (
+                  <span className="mt-0.5 block text-[11px] font-semibold text-brand-700">Try it free for 30 days →</span>
+                )}
+              </>
+            );
+            /*
+             * A link only where the app has wired the route. The reason there was no button here for
+             * so long was honest — "a control that cannot finish what it offers" — and that is still
+             * the rule; what changed is that the mechanism now exists, so where it does, this offers
+             * it, and where it does not, the old sentence stands.
+             */
+            return href ? (
+              <a key={p.key} href={href} className="block px-3 py-1.5 transition-colors hover:bg-surface-muted">
+                {body}
+              </a>
+            ) : (
+              <div key={p.key} className="px-3 py-1.5">{body}</div>
+            );
+          })}
+          {!trialHref && (
+            <p className="px-3 pb-1.5 pt-1 text-[10.5px] italic text-ink-400">
+              Ask your Revio contact to switch one on.
+            </p>
+          )}
         </div>
       )}
     </>

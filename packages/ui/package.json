@@ -38,6 +38,7 @@
     "./stale-deployment-boundary": "./src/stale-deployment-boundary.tsx",
     "./product-links": "./src/product-links.tsx",
     "./account-menu-body": "./src/account-menu-body.tsx",
+    "./start-trial-panel": "./src/start-trial-panel.tsx",
     "./get-help": "./src/get-help.tsx",
     "./help-centre": "./src/help-centre.tsx",
     "./report-client-error": "./src/report-client-error.ts",
@@ -45,7 +46,9 @@
     "./support-reply": "./src/support-reply.tsx",
     "./support-thread": "./src/support-thread.tsx",
     "./settings-nav": "./src/settings-nav.tsx",
-    "./usage-beacon": "./src/usage-beacon.tsx"
+    "./usage-beacon": "./src/usage-beacon.tsx",
+    "./submit-button": "./src/submit-button.tsx",
+    "./trial-banner": "./src/trial-banner.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

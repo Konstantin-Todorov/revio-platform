@@ -11,6 +11,10 @@ import { FlashToast } from "@revio/ui/flash-toast";
 import { UsageBeacon } from "@revio/ui/usage-beacon";
 import { recordScreenView } from "@/lib/actions-usage";
 import { readFlash, FLASH_COOKIE } from "@revio/ui/flash";
+import { runningTrialFor } from "@revio/db";
+import { trialBanner, isTrialDecider } from "@revio/core";
+import { TrialStrip } from "@revio/ui/trial-banner";
+import { keepThisTrial } from "@/lib/actions-self-trial";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -42,6 +46,27 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const products = productLinks(entitlements, "cm");
   const upsells = productUpsells(entitlements);
 
+  /*
+   * Is this product being tried rather than owned?
+   *
+   * Asked for THIS product only. A hotel that pays for RevioLink and is trying RevioPMS must not see
+   * a trial strip over the product they pay for — it would read as their paid software about to stop.
+   * One product per app, which is also why the key is a constant here rather than a search.
+   */
+  const trial = await runningTrialFor(session.tenantId, "cm");
+  const banner = trial
+    ? trialBanner(
+        {
+          product: "cm",
+          startedAt: trial.startedAt,
+          endsAt: trial.endsAt,
+          keepRequested: trial.keepRequestedAt !== null,
+        },
+        new Date(),
+        (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long" }),
+      )
+    : null;
+
   return (
     <ShellProvider>
       {/* The document scrolls. The sidebar is fixed and the topbar is sticky, so the chrome
@@ -67,6 +92,14 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             {/* A server action that refused says so here. Without it a form that
                 legitimately declined came back looking untouched. */}
             <FlashToast flash={await readFlash()} cookieName={FLASH_COOKIE} />
+            {/* Above the page, below the chrome: the first thing read on arrival at any screen,
+                and it scrolls away with the content rather than following the user down it. */}
+            {banner && (
+              <TrialStrip
+                banner={banner}
+                {...(isTrialDecider(session.role) ? { keepAction: keepThisTrial } : {})}
+              />
+            )}
             {/* Which screen is open. Renders nothing; see UsageBeacon. */}
             <UsageBeacon record={recordScreenView} />
             <div key={session.activePropertyId} className="mx-auto max-w-[1400px]">{children}</div>

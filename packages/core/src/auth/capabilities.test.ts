@@ -3,6 +3,7 @@ import {
   COMMERCIAL_ROLES,
   capabilitiesOf,
   isReadOnly,
+  isTrialDecider,
   refusalMessage,
   roleCan,
   type Capability,
@@ -15,6 +16,7 @@ const ALL_CAPS: Capability[] = [
   "manageInventory",
   "manageDistribution",
   "manageReservations",
+  "manageSubscription",
 ];
 
 describe("commercial capabilities", () => {
@@ -98,5 +100,39 @@ describe("commercial capabilities", () => {
       expect(msg).not.toContain("read-only");
       expect(msg).toContain("channel connections");
     });
+  });
+});
+
+describe("manageSubscription — money, not data", () => {
+  it("is held by the owner and the admin, and by nobody else", () => {
+    /*
+     * The one capability about what the account BUYS. A revenue manager changes prices all day and
+     * still cannot commit the company to a bill — that separation is the entire point of it being
+     * its own capability rather than being folded into manageSettings.
+     */
+    expect(roleCan("owner", "manageSubscription")).toBe(true);
+    expect(roleCan("admin", "manageSubscription")).toBe(true);
+    for (const role of ["revenue_manager", "distribution_manager", "read_only"]) {
+      expect(roleCan(role, "manageSubscription"), role).toBe(false);
+    }
+  });
+
+  it("is refused to PMS operational roles, which hold no commercial grants at all", () => {
+    // `manager` is the one worth naming: they run the hotel's operation and still cannot sign us up.
+    for (const role of ["manager", "reception", "housekeeper", "hk_supervisor", "maintenance", "outlet_pos", ""]) {
+      expect(roleCan(role, "manageSubscription"), role).toBe(false);
+    }
+  });
+
+  it("is the single source for who may start or keep a trial", () => {
+    // `isTrialDecider` used to be a second list of role names in the trials module. Two systems
+    // deciding who may write is how the permissive one ships.
+    for (const role of ["owner", "admin", "manager", "revenue_manager", "read_only", "reception"]) {
+      expect(isTrialDecider(role), role).toBe(roleCan(role, "manageSubscription"));
+    }
+  });
+
+  it("tells a refused person what they cannot do, in money terms", () => {
+    expect(refusalMessage("revenue_manager", "manageSubscription")).toMatch(/start or keep a product/);
   });
 });

@@ -9,10 +9,20 @@ import { CAPABILITY_ROLES, DELEGATOR_ROLES, PMS_ROLES, roleAllowsPath, roleHasCa
 const MANAGERS = ["owner", "admin", "manager"];
 const SCOPED = ["housekeeper", "hk_supervisor", "maintenance", "outlet_pos"];
 
+/**
+ * Capabilities about running the hotel. `subscription` is deliberately not one of them — it is about
+ * what the company pays for, and it is the only capability a manager does not hold. Listed here as a
+ * subtraction rather than by re-listing the operational ones, so a capability added later is covered
+ * by this test the day it exists instead of being quietly forgotten.
+ */
+const OPERATIONAL = (Object.keys(CAPABILITY_ROLES) as (keyof typeof CAPABILITY_ROLES)[]).filter(
+  (c) => c !== "subscription",
+);
+
 describe("capabilities", () => {
-  it("gives owner, admin and manager every capability", () => {
+  it("gives owner, admin and manager every capability for running the hotel", () => {
     for (const role of MANAGERS) {
-      for (const cap of Object.keys(CAPABILITY_ROLES) as (keyof typeof CAPABILITY_ROLES)[]) {
+      for (const cap of OPERATIONAL) {
         expect(roleHasCapability(role, cap), `${role} → ${cap}`).toBe(true);
       }
     }
@@ -113,5 +123,29 @@ describe("DELEGATOR_ROLES — who may clock somebody else in", () => {
     expect(roleHasCapability("reception", "manage")).toBe(false);
     expect(roleHasCapability("housekeeper", "housekeeping")).toBe(true);
     expect(DELEGATOR_ROLES.has("housekeeper")).toBe(false);
+  });
+});
+
+describe("subscription — narrower than manage, on purpose", () => {
+  it("is the owner and the admin only", () => {
+    expect(roleHasCapability("owner", "subscription")).toBe(true);
+    expect(roleHasCapability("admin", "subscription")).toBe(true);
+  });
+
+  /*
+   * THE one that matters. A manager holds `manage` — configuration, staff, close day — and must NOT
+   * be able to start a trial or ask to keep one. Every other capability in this file is about the
+   * hotel's operation; this one is about the company's money, and folding it into `manage` would
+   * hand that decision to whoever runs the front office.
+   */
+  it("refuses a manager, who may do everything else an owner can", () => {
+    expect(roleHasCapability("manager", "manage")).toBe(true);
+    expect(roleHasCapability("manager", "subscription")).toBe(false);
+  });
+
+  it("refuses every operational role", () => {
+    for (const role of ["reception", "housekeeper", "hk_supervisor", "maintenance", "outlet_pos"]) {
+      expect(roleHasCapability(role, "subscription"), role).toBe(false);
+    }
   });
 });

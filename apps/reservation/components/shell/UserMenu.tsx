@@ -38,7 +38,16 @@ export function UserMenu({ userName, roleLabel, products, upsells }: { userName:
       </button>
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-[248px] overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
-          <AccountMenuBody userName={userName} roleLabel={roleLabel} products={products} upsells={upsells} />
+          <AccountMenuBody
+            userName={userName}
+            roleLabel={roleLabel}
+            products={products}
+            upsells={upsells}
+            /* The route exists in this app, so the "Also available" list offers it instead of
+               telling somebody to ring us. The page behind it decides eligibility — this only
+               builds the address. */
+            trialHref={(key) => `/start-trial/${key}`}
+          />
           {/* Your account, not the property's settings. This menu hangs off the avatar and sits above
               "Sign out", so "Settings" here means the signed-in person — the sidebar already covers
               the property. Before the sections existed both links went to the same long page. */}
