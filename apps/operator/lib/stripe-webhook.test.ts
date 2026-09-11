@@ -1,8 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { createHmac } from "node:crypto";
 import {
-  verifyStripeSignature, verifyAgainstModes, parseSignatureHeader, readCheckoutCompleted,
-  matchesStoredCheckoutSession, SIGNATURE_TOLERANCE_SECONDS,
+  verifyStripeSignature, verifyAgainstModes, parseSignatureHeader, readCheckoutCompleted, matchesStoredCheckoutSession, SIGNATURE_TOLERANCE_SECONDS, readRefundOrDispute,
 } from "./stripe-webhook";
 
 /**
@@ -217,5 +216,116 @@ describe("matchesStoredCheckoutSession", () => {
 
   it("refuses an invoice with no stored session instead of treating null as a wildcard", () => {
     expect(matchesStoredCheckoutSession(null, "cs_1")).toBe(false);
+  });
+});
+
+/*
+ * ---------------------------------------------------------------------------------------------
+ * Money going back out (§S2).
+ *
+ * The rule under test is as much about what must NOT happen: a refund never turns the invoice
+ * unpaid. The supply happened and the payment happened; a refund is a later fact recorded beside
+ * them, not an undoing of them.
+ * ---------------------------------------------------------------------------------------------
+ */
+const refundBody = (over: Record<string, unknown> = {}) =>
+  JSON.stringify({
+    id: "evt_r1",
+    type: "charge.refunded",
+    livemode: false,
+    data: {
+      object: {
+        id: "ch_1", object: "charge", payment_intent: "pi_1",
+        amount: 14160, amount_refunded: 14160, currency: "eur",
+        metadata: { revioInvoiceId: "inv_1" },
+        ...over,
+      },
+    },
+  });
+
+describe("readRefundOrDispute", () => {
+  it("reads a refund, and takes the CUMULATIVE amount", () => {
+    /*
+     * `amount_refunded` is the running total on the charge, so two partial refunds arrive as two
+     * events and the second already carries the sum. Reading the per-refund amount instead would
+     * double-count on the second event, and a replay would double-count again.
+     */
+    const r = readRefundOrDispute(JSON.parse(refundBody({ amount_refunded: 5000 })))!;
+    expect(r.kind).toBe("refund");
+    expect(r.amountMinor).toBe(5000);
+    expect(r.paymentIntentId).toBe("pi_1");
+    expect(r.invoiceId).toBe("inv_1");
+  });
+
+  it("reads an expanded payment intent as well as an id", () => {
+    const r = readRefundOrDispute(JSON.parse(refundBody({ payment_intent: { id: "pi_expanded" } })))!;
+    expect(r.paymentIntentId).toBe("pi_expanded");
+  });
+
+  it("keeps a dispute's status verbatim rather than collapsing it to a boolean", () => {
+    // "needs_response" and "lost" are different amounts of trouble, and the operator has to be able
+    // to tell them apart without opening Stripe.
+    const body = { id: "evt_d", type: "charge.dispute.created", livemode: false,
+      data: { object: { id: "dp_1", payment_intent: "pi_1", amount: 14160, currency: "eur", status: "needs_response" } } };
+    const r = readRefundOrDispute(body)!;
+    expect(r.kind).toBe("dispute");
+    expect(r.disputeStatus).toBe("needs_response");
+  });
+
+  it("returns null for a payment event — the two paths must not overlap", () => {
+    // A checkout completion is settled by the other reader. If both claimed it, the order of two
+    // `if` statements would decide whether an invoice was paid or refunded.
+    expect(readRefundOrDispute(JSON.parse(BODY))).toBeNull();
+  });
+
+  it("returns null for anything else, rather than throwing", () => {
+    expect(readRefundOrDispute({ id: "e", type: "customer.created", data: { object: {} } })).toBeNull();
+    expect(readRefundOrDispute(null)).toBeNull();
+    expect(readRefundOrDispute({ type: "charge.refunded" })).toBeNull();
+  });
+
+  it("survives a charge with no metadata — the intent is how we find the invoice", () => {
+    /*
+     * This is the case that matters: a refund event carries a charge, not a Checkout session, so
+     * `metadata.revioInvoiceId` is often absent. `createCheckoutSession` writes our invoice id onto
+     * the payment INTENT for exactly this reason, and that is the identifier the route matches on.
+     */
+    const r = readRefundOrDispute(JSON.parse(refundBody({ metadata: undefined })))!;
+    expect(r.invoiceId).toBeNull();
+    expect(r.paymentIntentId).toBe("pi_1");
+  });
+});
+
+describe("what a refund must never do", () => {
+  /**
+   * The settlement rule, as a pure function mirroring the route: a refund updates the refunded
+   * amount and NOTHING about `status`.
+   */
+  const applyRefund = (invoice: { status: string; refundedMinor: number }, incomingCumulative: number) => ({
+    status: invoice.status, // deliberately untouched
+    refundedMinor: Math.max(invoice.refundedMinor, incomingCumulative),
+  });
+
+  it("leaves a paid invoice paid", () => {
+    // Flipping it back to unpaid would rewrite history AND put the customer on the chase list as
+    // though they had never paid — an untrue story about somebody who paid and was refunded.
+    expect(applyRefund({ status: "paid", refundedMinor: 0 }, 14160).status).toBe("paid");
+  });
+
+  it("is idempotent — a replayed refund event changes nothing", () => {
+    const once = applyRefund({ status: "paid", refundedMinor: 0 }, 14160);
+    const twice = applyRefund(once, 14160);
+    expect(twice.refundedMinor).toBe(14160);
+  });
+
+  it("never moves the refunded total backwards on an out-of-order delivery", () => {
+    // Stripe does not promise ordering. A stale event carrying the earlier cumulative figure must
+    // not undo a larger refund already recorded.
+    expect(applyRefund({ status: "paid", refundedMinor: 14160 }, 5000).refundedMinor).toBe(14160);
+  });
+
+  it("accumulates two partial refunds to the larger cumulative figure", () => {
+    const first = applyRefund({ status: "paid", refundedMinor: 0 }, 5000);
+    expect(applyRefund(first, 9000).refundedMinor).toBe(9000);
   });
 });

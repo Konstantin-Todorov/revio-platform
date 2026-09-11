@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { forSystem, decryptSecret } from "@revio/db";
-import { verifyAgainstModes, readCheckoutCompleted, matchesStoredCheckoutSession } from "@/lib/stripe-webhook";
+import { verifyAgainstModes, readCheckoutCompleted, readRefundOrDispute, matchesStoredCheckoutSession } from "@/lib/stripe-webhook";
 
 /**
  * Where Stripe tells us an invoice has been paid.
@@ -78,6 +78,15 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Verified, but the body is not JSON." }, { status: 400 });
   }
+
+  /*
+   * Money going OUT is payment truth too (§S2).
+   *
+   * Handled before the payment branch only because it is a different question entirely: a refund or
+   * dispute never settles an invoice, it records what happened to money that already arrived.
+   */
+  const back = readRefundOrDispute(body);
+  if (back) return settleRefundOrDispute(back);
 
   const event = readCheckoutCompleted(body);
   // Verified but not ours to act on. 200, so Stripe stops.
@@ -177,4 +186,74 @@ export async function POST(req: NextRequest) {
  */
 export function GET() {
   return NextResponse.json({ ok: true, endpoint: "stripe-webhook", method: "POST" });
+}
+
+/**
+ * Record money that came back, or a dispute, beside the invoice it belongs to.
+ *
+ * ## `status` never moves off "paid", and that is the whole design
+ *
+ * The invoice records a supply that happened and a payment that happened. Both stay true after the
+ * money is returned. Flipping it back to unpaid would rewrite history — and would put it back on the
+ * chase list as though the customer had never paid, which is an untrue story about somebody who paid
+ * and was then refunded.
+ *
+ * ## Matched on the payment intent, not on metadata alone
+ *
+ * A refund event carries a charge rather than a Checkout session, so it has no session id. It does
+ * carry the payment intent, and `createCheckoutSession` deliberately writes our invoice id onto the
+ * intent as well as the session — that second copy exists for exactly this. Where Stripe echoes the
+ * metadata back, it is checked AGAINST the intent rather than believed instead of it.
+ */
+async function settleRefundOrDispute(e: Awaited<ReturnType<typeof readRefundOrDispute>>) {
+  if (!e) return NextResponse.json({ received: true, handled: false });
+  if (!e.paymentIntentId) {
+    return NextResponse.json({ received: true, handled: false, reason: "no payment intent on the event" });
+  }
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { stripePaymentIntentId: e.paymentIntentId },
+    select: { id: true, number: true, refundedMinor: true, currency: true, grossMinor: true, amountMinor: true },
+  });
+  if (!invoice) {
+    // A payment we did not create — another integration on the same Stripe account, or a charge made
+    // by hand in the Dashboard. Not ours to record, and not an error.
+    return NextResponse.json({ received: true, handled: false, reason: "no invoice for that payment" });
+  }
+  if (e.invoiceId && e.invoiceId !== invoice.id) {
+    // The two identifiers disagree. Something is wrong upstream and guessing which to believe is
+    // exactly how the wrong invoice gets marked refunded.
+    return NextResponse.json({ received: true, handled: false, reason: "metadata and payment intent name different invoices" });
+  }
+
+  if (e.kind === "dispute") {
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { disputeStatus: e.disputeStatus, disputedAt: new Date() },
+    });
+    return NextResponse.json({ received: true, handled: true, kind: "dispute", status: e.disputeStatus });
+  }
+
+  /*
+   * `amount_refunded` is CUMULATIVE on the charge, so two partial refunds arrive as two events and
+   * the second already carries the total. Taking the larger of stored and incoming makes a replayed
+   * or out-of-order delivery harmless — the same reason the payment path keys off a `where` clause
+   * rather than counting on exactly-once delivery.
+   */
+  const refunded = Math.max(invoice.refundedMinor, e.amountMinor ?? 0);
+  if (refunded === invoice.refundedMinor) {
+    return NextResponse.json({ received: true, handled: true, changed: false });
+  }
+
+  await prisma.invoice.update({
+    where: { id: invoice.id },
+    data: { refundedMinor: refunded, refundedAt: new Date() },
+  });
+  return NextResponse.json({
+    received: true,
+    handled: true,
+    changed: true,
+    refundedMinor: refunded,
+    fully: refunded >= (invoice.grossMinor ?? invoice.amountMinor),
+  });
 }

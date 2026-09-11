@@ -308,6 +308,38 @@ database — forged, unsigned, stale, genuine, replayed, wrong-amount. The unit 
 signature function refuses a forgery; only this proves the route *calls* it. Removing the check makes
 it go red on "a forged signature is refused" with the invoice marked paid, which is what it is for.
 
+## Money going back out (§S2, 2026-09-11)
+
+A refund or dispute in Stripe used to leave `Invoice.status = "paid"` and nothing anywhere said
+otherwise — our books and Stripe's would disagree silently, and the first anyone would know is a bank
+balance that did not match.
+
+⚠️ **`status` never moves back off "paid", and that is the design rather than a shortcut.** The
+invoice records a supply that happened and a payment that happened, and both stay true after the
+money is returned. Flipping it to unpaid would rewrite history **and** put the customer back on the
+chase list as though they had never paid — an untrue story about somebody who paid and was refunded.
+So `refundedMinor` / `refundedAt` / `disputeStatus` sit *beside* it as their own facts.
+
+**Issuing a credit note is deliberately not done.** That is a legal document with its own numbering
+and its own rules, and whether one is owed is the accountant's call. The screen says so in those
+words rather than leaving the operator to wonder.
+
+Three details that are not obvious:
+
+- **A refund event carries a charge, not a Checkout session**, so `metadata.revioInvoiceId` is often
+  absent. `createCheckoutSession` writes our invoice id onto the payment **intent** as well — that
+  second copy exists for exactly this, and the intent is what the route matches on. Where Stripe does
+  echo the metadata back it is checked *against* the intent, never believed instead of it.
+- **`amount_refunded` is cumulative on the charge.** Two partial refunds arrive as two events and the
+  second already carries the total, so storing the larger of stored-and-incoming makes a replayed or
+  out-of-order delivery harmless. Reading the per-refund amount would double-count twice over.
+- **A dispute keeps Stripe's own status verbatim**, never collapsed to a boolean: "needs_response"
+  and "lost" are different amounts of trouble, and the operator must tell them apart without opening
+  Stripe.
+
+`webhook-verify` covers all of it over real HTTP — partial, out-of-order, full, disputed, and a
+forged refund refused exactly as a forged payment is.
+
 ## VAT: three registrations, not a toggle (2026-09-09)
 
 `decideVat` read `vatId != null` as "registered" and charged the domestic rate. Bulgaria has a

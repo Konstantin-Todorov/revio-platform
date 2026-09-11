@@ -228,3 +228,93 @@ export function readCheckoutCompleted(body: unknown): CheckoutCompleted | null {
 export function matchesStoredCheckoutSession(storedSessionId: string | null, eventSessionId: string): boolean {
   return storedSessionId !== null && storedSessionId === eventSessionId;
 }
+
+/**
+ * Money that came back, or is being argued about — the other half of payment truth (§S2).
+ *
+ * ## Why this is not simply "mark it unpaid"
+ *
+ * A refund does not un-issue an invoice. The document records a supply that happened and a payment
+ * that happened, and both remain true afterwards. Turning `status` back to unpaid would rewrite
+ * history and, worse, would put the invoice back on the chase list as though the customer had never
+ * paid — which is a different and untrue story about a person who paid and then was refunded.
+ *
+ * So this reports a fact to record *beside* the invoice. What it must never do is decide, on its own,
+ * that a credit note is owed: that is a legal document with its own numbering, and whether one is
+ * required is the accountant's call.
+ *
+ * ## Matching without metadata
+ *
+ * A refund event carries a charge, not a Checkout session, so `metadata.revioInvoiceId` is not on it.
+ * The payment intent IS, because `createCheckoutSession` puts our invoice id on the intent as well
+ * as on the session — that second copy exists for exactly this, and it is why an invoice is findable
+ * from a refund at all.
+ */
+export interface RefundOrDispute {
+  eventId: string;
+  eventType: string;
+  kind: "refund" | "dispute";
+  /** How we find the invoice: the intent our Checkout session created. */
+  paymentIntentId: string | null;
+  /** `metadata.revioInvoiceId` when Stripe echoed it back — checked against the intent, never trusted alone. */
+  invoiceId: string | null;
+  /** Refunds: the cumulative amount refunded on the charge. Disputes: the amount under dispute. */
+  amountMinor: number | null;
+  currency: string | null;
+  /** Disputes only: Stripe's own status, kept verbatim rather than collapsed into a boolean. */
+  disputeStatus: string | null;
+  livemode: boolean | null;
+}
+
+const REFUND_EVENTS = new Set(["charge.refunded", "charge.refund.updated"]);
+const DISPUTE_EVENTS = new Set([
+  "charge.dispute.created",
+  "charge.dispute.updated",
+  "charge.dispute.closed",
+]);
+
+function num(o: Record<string, unknown>, k: string): number | null {
+  return typeof o[k] === "number" ? (o[k] as number) : null;
+}
+
+/** The payment intent, whether Stripe sent it as an id or as the expanded object. */
+function intentOf(o: Record<string, unknown>): string | null {
+  const pi = o.payment_intent;
+  if (typeof pi === "string") return pi;
+  const expanded = obj(pi);
+  return expanded ? str(expanded, "id") : null;
+}
+
+export function readRefundOrDispute(body: unknown): RefundOrDispute | null {
+  const root = obj(body);
+  if (!root) return null;
+  const eventType = str(root, "type");
+  const eventId = str(root, "id");
+  if (!eventType || !eventId) return null;
+
+  const isRefund = REFUND_EVENTS.has(eventType);
+  const isDispute = DISPUTE_EVENTS.has(eventType);
+  if (!isRefund && !isDispute) return null;
+
+  const data = obj(root.data);
+  const o = data ? obj(data.object) : null;
+  if (!o) return null;
+
+  const metadata = obj(o.metadata);
+  return {
+    eventId,
+    eventType,
+    kind: isRefund ? "refund" : "dispute",
+    paymentIntentId: intentOf(o),
+    invoiceId: metadata ? str(metadata, "revioInvoiceId") : null,
+    /*
+     * `amount_refunded` is CUMULATIVE on the charge, which is what we want: two partial refunds
+     * arrive as two events and the second already carries the total. Storing the cumulative figure
+     * means a replayed or out-of-order event cannot double-count.
+     */
+    amountMinor: isRefund ? num(o, "amount_refunded") ?? num(o, "amount") : num(o, "amount"),
+    currency: str(o, "currency")?.toUpperCase() ?? null,
+    disputeStatus: isDispute ? str(o, "status") : null,
+    livemode: typeof root.livemode === "boolean" ? root.livemode : null,
+  };
+}

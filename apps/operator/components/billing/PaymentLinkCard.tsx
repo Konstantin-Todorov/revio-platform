@@ -35,12 +35,26 @@ export function PaymentLinkCard({
     stripeMode: string | null;
     stripeCheckoutUrl: string | null;
     stripeCheckoutExpires: Date | null;
+    refundedMinor: number;
+    refundedAt: Date | null;
+    disputeStatus: string | null;
+    disputedAt: Date | null;
   };
 }) {
   const live = isLinkLive(invoice.stripeCheckoutExpires);
   const owed = invoice.grossMinor ?? invoice.amountMinor;
-  const money = new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.currency }).format(owed / 100);
+  const fmt = (minor: number) =>
+    new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.currency }).format(minor / 100);
+  const money = fmt(owed);
   const isLive = invoice.stripeMode === "live";
+
+  const refunded = invoice.refundedMinor > 0;
+  const fullyRefunded = refunded && invoice.refundedMinor >= owed;
+  /*
+   * A dispute Stripe has already closed in our favour is history, not a live problem. Only an open
+   * one is something to act on — and "lost" is the one that actually cost money.
+   */
+  const liveDispute = invoice.disputeStatus && !["won", "warning_closed"].includes(invoice.disputeStatus);
 
   if (invoice.status === "paid") {
     return (
@@ -53,6 +67,34 @@ export function PaymentLinkCard({
             <span className="text-[11.5px] text-ink-400">{new Date(invoice.paidAt).toLocaleDateString("en-GB")}</span>
           )}
         </div>
+        {/*
+          * Money that came back, said plainly and NOT by changing the word "Paid" above it.
+          *
+          * The invoice records a supply and a payment that both genuinely happened; a refund is a
+          * later fact, not an undoing. Showing it as "unpaid" would rewrite history and put the
+          * customer back on the chase list as though they had never paid at all.
+          */}
+        {refunded && (
+          <p className={`mt-2 rounded-md px-3 py-2 text-[12px] leading-relaxed ${fullyRefunded ? "bg-warning-50 text-warning-700" : "bg-surface-sunken text-ink-700"}`}>
+            <strong className="font-semibold">
+              {fullyRefunded ? "Fully refunded" : "Partly refunded"} — {fmt(invoice.refundedMinor)}
+              {!fullyRefunded && ` of ${fmt(owed)}`}.
+            </strong>{" "}
+            {invoice.refundedAt && `${new Date(invoice.refundedAt).toLocaleDateString("en-GB")}. `}
+            The invoice stays issued and paid — that is what happened. Whether a credit note is owed
+            is a question for your accountant, not something the software decides.
+          </p>
+        )}
+
+        {invoice.disputeStatus && (
+          <p className={`mt-2 rounded-md px-3 py-2 text-[12px] leading-relaxed ${liveDispute ? "bg-danger-50 text-danger-700" : "bg-surface-sunken text-ink-600"}`}>
+            <strong className="font-semibold">Disputed — {invoice.disputeStatus.replace(/_/g, " ")}.</strong>{" "}
+            {liveDispute
+              ? "Stripe is holding this money pending the outcome. Respond in the Stripe dashboard; there is a deadline and it is short."
+              : "Closed. Nothing further to do here."}
+          </p>
+        )}
+
         {invoice.paidVia === "stripe" && (
           // The reference is what reconciles our row against Stripe's dashboard. Without it the two
           // are two claims about the same money with nothing joining them.

@@ -363,6 +363,27 @@ model Invoice {
   stripeCheckoutUrl     String?
   stripeCheckoutExpires DateTime?
 
+  // --- Money that came back, or is being argued about (S2) ------------------
+  //
+  // ⚠️ A REFUND DOES NOT UN-ISSUE AN INVOICE, and `status` therefore never moves back off "paid".
+  // The document records a supply that happened and a payment that happened; both remain true after
+  // the money is returned. The refund is a separate, later fact recorded beside it — which is also
+  // why these are their own columns rather than a second meaning loaded onto `status`.
+  //
+  // What this deliberately does NOT do is issue a credit note. That is a legal document with its own
+  // numbering and its own rules, and whether one is required is the accountant's call, not the
+  // software's. See `docs/STRIPE-REVIEW-2026-09-09.md` §S2.
+  /// How much has come back, in minor units. 0 is the normal case and is not the same as null.
+  refundedMinor         Int       @default(0)
+  /// When the most recent refund landed. Null while nothing has been returned.
+  refundedAt            DateTime?
+  /// Stripe's own dispute state — "warning_needs_response", "needs_response", "won", "lost", …
+  ///
+  /// Never collapsed into a boolean: "a dispute exists" and "we lost it" are different amounts of
+  /// trouble, and the operator needs to tell them apart without opening Stripe.
+  disputeStatus         String?
+  disputedAt            DateTime?
+
   // --- The issued document -------------------------------------------------
   // Everything below is NULL while the invoice is a draft and frozen the moment it is issued.
   // `number == null` is therefore the same statement as "not yet issued", which is why issuing is a

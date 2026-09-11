@@ -158,6 +158,61 @@ async function main() {
       `an event for €1.00 against a €${(AMOUNT / 100).toFixed(2)} invoice is refused — ${JSON.stringify(wrongRes.json)}`);
     check((await state()).status === "sent", "and the invoice stayed unpaid");
 
+    // 5 — money going back out (S2). Restore the paid state first: step 4 deliberately unpaid it.
+    const settle = eventBody({ invoiceId: invoice.id, sessionId, amountMinor: AMOUNT });
+    await post(settle, sign(settle, SECRET));
+    const paidAgain = await state();
+    check(paidAgain.status === "paid", "re-settled, ready to test a refund");
+
+    const refund = (cumulative: number, eventId: string) =>
+      JSON.stringify({
+        id: eventId, type: "charge.refunded", livemode: false,
+        data: { object: { id: "ch_verify", object: "charge", payment_intent: "pi_verify_1",
+          amount: AMOUNT, amount_refunded: cumulative, currency: "eur",
+          metadata: { revioInvoiceId: invoice.id } } },
+      });
+
+    const partial = refund(5000, "evt_refund_1");
+    const r1 = await post(partial, sign(partial, SECRET));
+    const afterPartial = await sys.invoice.findUniqueOrThrow({
+      where: { id: invoice.id }, select: { status: true, refundedMinor: true },
+    });
+    check(r1.status === 200 && afterPartial.refundedMinor === 5000,
+      `a partial refund is recorded — €50.00 of €${(AMOUNT / 100).toFixed(2)}`);
+    /*
+     * THE rule. A refund does not un-issue an invoice: the supply happened and the payment happened.
+     * Flipping it back to unpaid would rewrite history and put the customer on the chase list as
+     * though they had never paid at all.
+     */
+    check(afterPartial.status === "paid", `and the invoice is STILL paid — status "${afterPartial.status}"`);
+
+    // Out of order: an older cumulative figure must not undo a larger refund already recorded.
+    const staleRefund = refund(1000, "evt_refund_stale");
+    await post(staleRefund, sign(staleRefund, SECRET));
+    const afterStale = await sys.invoice.findUniqueOrThrow({ where: { id: invoice.id }, select: { refundedMinor: true } });
+    check(afterStale.refundedMinor === 5000, "an out-of-order refund event never moves the total backwards");
+
+    const full = refund(AMOUNT, "evt_refund_2");
+    await post(full, sign(full, SECRET));
+    const afterFull = await sys.invoice.findUniqueOrThrow({
+      where: { id: invoice.id }, select: { status: true, refundedMinor: true },
+    });
+    check(afterFull.refundedMinor === AMOUNT && afterFull.status === "paid",
+      "a full refund is recorded and the invoice is still paid — the two are separate facts");
+
+    // And a dispute, which is money Stripe is holding rather than money returned.
+    const dispute = JSON.stringify({
+      id: "evt_dispute_1", type: "charge.dispute.created", livemode: false,
+      data: { object: { id: "dp_verify", payment_intent: "pi_verify_1", amount: AMOUNT, currency: "eur", status: "needs_response" } },
+    });
+    await post(dispute, sign(dispute, SECRET));
+    const disputed = await sys.invoice.findUniqueOrThrow({ where: { id: invoice.id }, select: { disputeStatus: true } });
+    check(disputed.disputeStatus === "needs_response", `a dispute records Stripe's own status — "${disputed.disputeStatus}"`);
+
+    // A forged refund must be refused exactly as a forged payment is.
+    const forgedRefund = await post(full, sign(full, "whsec_attacker"));
+    check(forgedRefund.status === 400, `a forged refund is refused — HTTP ${forgedRefund.status}`);
+
     if (failed) console.error("\nThe webhook accepted something it should not have, or refused something it should not have.");
     process.exitCode = failed ? 1 : 0;
   } finally {

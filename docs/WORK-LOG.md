@@ -18,6 +18,33 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-11 · Claude · DONE · S2 — refunds and disputes reach our books
+**The last High in the Stripe review. A refund left `Invoice.status = "paid"` and nothing said otherwise.**
+Files: `packages/db/prisma/schema.prisma` + migration `20260911090000_invoice_refunds_and_disputes`,
+`apps/operator/lib/stripe-webhook.ts` + tests, `app/api/webhooks/stripe/route.ts`,
+`components/billing/PaymentLinkCard.tsx`, `scripts/webhook-verify.ts`.
+
+⚠️ **`status` deliberately does NOT move back off "paid".** The invoice records a supply and a
+payment that both genuinely happened; a refund is a later fact, not an undoing. Flipping it would
+rewrite history and put the customer back on the chase list as though they had never paid.
+`refundedMinor` / `refundedAt` / `disputeStatus` sit beside it instead.
+
+A credit note is deliberately NOT issued — legal document, own numbering, accountant's call. The
+screen says so in those words. Codex's review asked for a founder decision here; this is the decision
+and the reasoning, and the one part still open is only whether a credit note is required at all,
+which matters from the first real invoice (zero so far).
+
+Matched on the payment INTENT, not metadata: a refund event carries a charge, so the session id is
+absent — `createCheckoutSession` writes our invoice id onto the intent for exactly this reason.
+`amount_refunded` is cumulative, so taking the larger of stored-and-incoming makes replays and
+out-of-order deliveries harmless.
+
+**Proven over HTTP**: `webhook-verify` is now 20 checks — partial refund, out-of-order refund, full
+refund with the invoice still paid, a dispute keeping Stripe's own status, and a forged refund
+refused exactly as a forged payment is.
+
+Remaining from the review: S7 and S8, both Low. All three Highs and all three Mediums are closed.
+
 ### 2026-09-10 · Codex · DONE · Stripe least-privilege setup copy
 **Make the Operator setup form describe the restricted API key it already supports and stop calling an unused publishable key required.**
 Files: `apps/operator/components/integrations/StripeKeyDialog.tsx`, Stripe readiness copy, this log.
