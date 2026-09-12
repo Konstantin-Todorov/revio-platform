@@ -886,6 +886,15 @@ export async function publicCreateHold(
   db: Db,
   property: PropertyRow,
   q: PublicStayQuery & { roomTypeId: string },
+  /**
+   * The guest's browsing session, from the booking engine's own cookie.
+   *
+   * Optional only so a caller without a request context still works; pass it wherever there is one.
+   * Without it the hotel's conversion rate reads at roughly half the truth — a guest who compares
+   * two rooms leaves the first to expire, and that abandonment belongs to nobody. See
+   * `bookingFunnel` in `@revio/core`.
+   */
+  sessionId?: string | null,
 ): Promise<{ error?: string; hold?: PublicHold }> {
   const bad = validStay(q);
   if (bad) return { error: bad };
@@ -914,6 +923,8 @@ export async function publicCreateHold(
     checkOut: q.checkOut,
     expiresAt,
     sellableByNight: sellableByNightFor(rt.id, rt.totalRooms),
+    source: "booking_engine",
+    ...(sessionId ? { sessionId } : {}),
   });
   if (!claim.ok) return { error: "That room has just been taken." };
 

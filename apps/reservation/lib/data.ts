@@ -1186,3 +1186,52 @@ export async function findDuplicateGuests(guestId: string): Promise<DuplicateCan
 
   return matchDuplicates(guest, candidates);
 }
+
+/**
+ * The RevioDirect funnel — what the hotel's own booking page did, from the holds it already keeps.
+ *
+ * Reads ONLY `source: "booking_engine"` holds. A staff hold from the availability search is a
+ * receptionist working, not a guest deciding, and mixing the two would make the hotel's own use of
+ * the CRS look like traffic on its website.
+ *
+ * `inferredBefore` is the honest footnote: holds created before the source column existed are
+ * labelled by inference (no creator ⇒ the public engine), which is the best available answer and is
+ * not evidence. The screen says so rather than presenting inferred history as measured history.
+ */
+export const HOLD_SOURCE_RECORDED_FROM = "2026-09-12";
+
+export async function getBookingFunnel(fromIso: string, toIso: string) {
+  const property = await getProperty();
+  const holds = await prisma.hold.findMany({
+    where: {
+      propertyId: property.id,
+      source: "booking_engine",
+      createdAt: { gte: new Date(`${fromIso}T00:00:00Z`), lt: new Date(`${toIso}T23:59:59.999Z`) },
+    },
+    select: {
+      status: true, sessionId: true, roomTypeId: true, createdAt: true, checkIn: true, checkOut: true,
+    },
+    orderBy: { createdAt: "asc" },
+    take: 5000,
+  });
+
+  const roomTypes = await prisma.roomType.findMany({
+    where: { propertyId: property.id },
+    select: { id: true, name: true },
+  });
+
+  return {
+    property,
+    roomTypeName: new Map(roomTypes.map((r) => [r.id, r.name])),
+    holds: holds.map((h) => ({
+      status: h.status as "active" | "converted" | "released" | "expired",
+      sessionId: h.sessionId,
+      roomTypeId: h.roomTypeId,
+      createdAt: h.createdAt,
+      checkIn: h.checkIn.toISOString().slice(0, 10),
+      checkOut: h.checkOut.toISOString().slice(0, 10),
+    })),
+    /** True while the range reaches back before sessions and sources were recorded. */
+    inferred: fromIso < HOLD_SOURCE_RECORDED_FROM,
+  };
+}

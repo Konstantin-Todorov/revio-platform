@@ -1494,12 +1494,28 @@ model Hold {
   createdById   String?
   createdAt     DateTime @default(now())
 
+  /// Who opened it: "booking_engine" (a guest on RevioDirect) or "staff" (the CRS availability
+  /// search). Recorded rather than inferred from `createdById IS NULL` — that inference is true
+  /// today and silently wrong the first time anything else creates a hold without a user, which is
+  /// exactly the kind of coupling that turns a metric into a lie nobody notices.
+  source        String   @default("staff")
+
+  /// The guest's browsing session, for booking-engine holds only (null for staff).
+  ///
+  /// ⚠️ Without this the conversion rate is roughly HALF the truth. A guest who opens one room,
+  /// goes back and books a different one leaves the first hold to expire — so one person, one
+  /// booking, reads as one conversion AND one abandonment. Grouping by session counts that person
+  /// once, as the single decision they actually made.
+  sessionId     String?
+
   property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   roomType    RoomType     @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
   reservation Reservation? @relation(fields: [reservationId], references: [id])
 
   @@index([propertyId, status])
   @@index([roomTypeId, checkIn])
+  // The funnel reads holds by property and time, filtered to the engine.
+  @@index([propertyId, source, createdAt])
 }
 
 // Contact + booking history ONLY — hard scope line, not a CRM (no preferences/consent/loyalty).

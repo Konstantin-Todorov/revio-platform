@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { BedDouble, Users } from "lucide-react";
+import { cookies } from "next/headers";
 import { checkHold, clientIp, publicCreateHold, publicGetHold, publicSellableExtras } from "@revio/booking";
+import { BOOKING_SESSION_COOKIE } from "@/middleware";
 import { forTenant } from "@revio/db";
 import { getObjectStore } from "@revio/storage";
 import { getPublicProperty } from "@/lib/property";
@@ -79,9 +81,12 @@ export default async function BookPage({
     if (!checkHold(ip, property.id).ok) {
       redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`);
     }
+    // The browsing session this hold belongs to — see `middleware.ts`. Without it, opening a second
+    // room to compare reads as a second guest who then abandoned.
+    const sessionId = (await cookies()).get(BOOKING_SESSION_COOKIE)?.value ?? null;
     const created = await publicCreateHold(db, { ...property, id: property.id }, {
       checkIn, checkOut, guests, roomTypeId,
-    });
+    }, sessionId);
     if (created.error || !created.hold) {
       redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`);
     }

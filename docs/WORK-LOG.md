@@ -7,6 +7,42 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Claude · DONE · The RevioDirect funnel — the data was always there
+**Top item on `docs/STATUS.md`'s competitive-gap list: "no analytics on the booking page at all".**
+Files: `packages/core/src/metrics/booking-funnel.{ts,test.ts}`, `packages/db/prisma/schema.prisma` +
+`migrations/20260912200000_hold_source_and_session/`, `packages/db/src/inventory-claim.ts`,
+`packages/booking/src/public-engine.ts`, `apps/booking/middleware.ts`,
+`apps/reservation/{lib/data.ts,components/booking-engine/FunnelPanel.tsx}`,
+`apps/reservation/app/(protected)/(property)/booking-engine/page.tsx`.
+
+The engine has taken a hold on form-open since K4, and the hold already records its own ending
+(`converted` / `released` / `expired`). A funnel has been sitting in the database all along, read by
+nobody. Nothing new is captured.
+
+⚠️ **Counted by hold the number would have been about HALF the truth, and shipping that would have
+argued against the product on the product's own screen.** A guest who opens the Deluxe, goes back
+and books the Standard leaves the first hold to expire — one person, one booking, recorded as one
+conversion AND one abandonment. `Hold.sessionId` (new, from a first-party httpOnly cookie set in the
+booking engine's middleware) groups them; `funnelSessions` takes the best outcome per session.
+`Hold.source` replaces the inference "createdById IS NULL means a guest", which is true today and
+silently wrong the first time anything else makes a hold without a user.
+
+Three more rules, each a wrong number avoided: sessions still in progress are **excluded from the
+rate rather than counted as failures** (otherwise it sags whenever somebody is mid-booking); each
+room is measured against **its own** visitors (otherwise the room nobody opens always looks worst,
+when what it has is a visibility problem); and `null` rather than `0%` when nobody has decided yet.
+"Left the form" and "ran out of time" stay apart everywhere — one is a price signal, the other is
+the recovery-email opportunity.
+
+⚠️ **The backfill sets `app.bypass` explicitly.** `Hold` is under FORCE ROW LEVEL SECURITY, which
+binds the table owner too — only a superuser is exempt. No previous migration has ever set it, so
+**past data-backfill migrations may have silently matched zero rows**; worth checking `Folio.outcome`
+(2026-08-23) against production.
+
+25 tests. `pnpm verify` green, 2,300 tests, CRS + booking build. Rendered and looked at: the donut
+legend was truncating, and the per-room bar encoded visitors while its number said conversion — a
+0% room had a half-full bar. Both fixed before shipping.
+
 ### 2026-09-12 · Claude · DONE · A date field has to decide which way it looks
 **Founder report: "in the editing calendar and some other places we can add previous dates, like
 yesterday — it applies in most cases not in all, so check where we add date and fix this."**

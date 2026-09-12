@@ -3,7 +3,9 @@ import { slugifyPropertyName } from "@revio/booking";
 import { BOOKING_COPY_DEFAULTS, brandLogoPath, heroScrim } from "@revio/core";
 import { connectMode } from "@revio/payments";
 import { getObjectStore } from "@revio/storage";
-import { getProperty } from "@/lib/data";
+import { getBookingFunnel, getProperty, todayInTz } from "@/lib/data";
+import { funnelSessions } from "@revio/core";
+import { FunnelPanel } from "@/components/booking-engine/FunnelPanel";
 import { prisma } from "@/lib/db";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { AppearanceForm } from "@/components/booking-engine/AppearanceForm";
@@ -30,6 +32,19 @@ export const dynamic = "force-dynamic";
  */
 export default async function BookingEnginePage() {
   const property = await getProperty();
+
+  /*
+   * The last 30 days of the hotel's own funnel.
+   *
+   * A fixed window rather than a range picker on purpose: the question this screen answers is "is
+   * my booking page working", not "what happened in March". A picker here would be a second,
+   * weaker Analytics screen beside the real one.
+   */
+  const todayIso = todayInTz(property.timezone);
+  const funnelFrom = new Date(`${todayIso}T00:00:00Z`);
+  funnelFrom.setUTCDate(funnelFrom.getUTCDate() - 29);
+  const funnel = await getBookingFunnel(funnelFrom.toISOString().slice(0, 10), todayIso);
+  const sessions = funnelSessions(funnel.holds);
 
   /*
    * Which logos this hotel actually has.
@@ -117,6 +132,18 @@ export default async function BookingEnginePage() {
           ) : undefined
         }
       />
+
+      {/*
+        Above the configuration, below the link: an owner opening this screen is asking whether the
+        page is working before they are asking to change it.
+      */}
+      <Card>
+        <CardHeader
+          title="How your booking page is doing"
+          subtitle="The last 30 days — every guest who opened a booking form, and how it ended. No commission was paid on any of these."
+        />
+        <FunnelPanel sessions={sessions} roomTypeName={funnel.roomTypeName} inferred={funnel.inferred} />
+      </Card>
 
       <Card>
         <CardHeader

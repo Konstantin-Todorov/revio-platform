@@ -75,6 +75,18 @@ export interface ClaimHoldInput {
   expiresAt: Date;
   createdById?: string | null;
   /**
+   * Who opened it: `"booking_engine"` for a guest on RevioDirect, `"staff"` (the default) for the
+   * CRS availability search. Recorded rather than inferred from a null `createdById` — see the
+   * column comment in `schema.prisma`.
+   */
+  source?: "booking_engine" | "staff";
+  /**
+   * The guest's browsing session, for booking-engine holds only. Without it the direct-booking
+   * conversion rate is about half the truth: one guest comparing two rooms leaves one hold to
+   * expire, and that reads as an abandonment by a second person who does not exist.
+   */
+  sessionId?: string | null;
+  /**
    * Sellable rooms per night, computed by the caller with `computeWaterfall`. Must cover every
    * night of the stay; a missing night is treated as zero, which fails the claim rather than
    * silently selling a night nobody priced.
@@ -150,11 +162,13 @@ export async function claimHold(input: ClaimHoldInput): Promise<ClaimResult> {
       )
       INSERT INTO "Hold" (
         id, "tenantId", "propertyId", "roomTypeId", quantity,
-        "checkIn", "checkOut", status, "expiresAt", "createdById", "createdAt"
+        "checkIn", "checkOut", status, "expiresAt", "createdById", "createdAt",
+        source, "sessionId"
       )
       SELECT
         gen_random_uuid()::text, ${input.tenantId}, ${input.propertyId}, ${input.roomTypeId}, ${input.quantity},
-        ${input.checkIn}::date, ${input.checkOut}::date, 'active', ${input.expiresAt}, ${input.createdById ?? null}, now()
+        ${input.checkIn}::date, ${input.checkOut}::date, 'active', ${input.expiresAt}, ${input.createdById ?? null}, now(),
+        ${input.source ?? "staff"}, ${input.sessionId ?? null}
       WHERE NOT EXISTS (
         SELECT 1 FROM usage WHERE held + booked + ${input.quantity} > sellable
       )

@@ -45,6 +45,7 @@ export * from "./guests/contact-hydration.js";
 export * from "./guests/merge.js";
 export * from "./stays/calendar.js";
 export * from "./stays/past-dates.js";
+export * from "./metrics/booking-funnel.js";
 export * from "./guests/erasure.js";
 export * from "./rates/occupancy-options.js";
 export * from "./rates/pricing-model-switch.js";
