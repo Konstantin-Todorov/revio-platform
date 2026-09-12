@@ -57,7 +57,30 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
     // A second link needs to explain itself, or it reads as a duplicate we sent by mistake.
     resent: outcome.kind === "resent",
   });
-  await sendEmail({ to: [outcome.email], subject: mail.subject, text: mail.text, html: mail.html });
+  /*
+   * ⚠️ The send is CHECKED, not fired and forgotten.
+   *
+   * `sendEmail` returns `{ ok: false, error }` rather than throwing — it never throws, by design,
+   * so that a mail outage cannot turn a completed booking into an error page elsewhere in the
+   * platform. Here that same behaviour is a trap: ignoring the result sends somebody to a screen
+   * reading "Check your email" for a message that was never accepted, with nothing anywhere saying
+   * so. That is the exact defect class this codebase keeps finding — something reporting a success
+   * it did not achieve.
+   *
+   * The tenant is deliberately NOT unwound, for the same reason the operator invite does not: the
+   * account is made and correct, and only the mail failed. Trying again reaches the "resent" branch
+   * above, which issues a fresh link for the SAME account — so the recovery path already exists and
+   * this just has to point at it honestly.
+   */
+  const sent = await sendEmail({ to: [outcome.email], subject: mail.subject, text: mail.text, html: mail.html });
+  if (!sent.ok) {
+    console.error(`[signup] confirmation email failed for ${outcome.hotelName}: ${sent.error ?? "unknown"}`);
+    return {
+      error:
+        "Your account is created, but we could not send the confirmation email just now. " +
+        "Press the button again in a moment — we will send a fresh link to the same address.",
+    };
+  }
 
   redirect(outcome.kind === "resent" ? "/signup/sent?again=1" : "/signup/sent");
 }

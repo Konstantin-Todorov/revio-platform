@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { MailCheck } from "lucide-react";
 import { Logo } from "@/components/shell/Logo";
+import { TOKEN_POLICY } from "@revio/core";
 
 export const metadata = { title: "Check your email · Revio" };
 
@@ -14,6 +15,10 @@ export const metadata = { title: "Check your email · Revio" };
  *
  * What this page does NOT do is tell anyone whether the address was already known. That answer
  * lives on `/signup/existing`, and only a finished account reaches it.
+ *
+ * ⚠️ The link's lifetime is read from `TOKEN_POLICY`, never typed. It said "48 hours" here for a
+ * few hours — a number that appears nowhere in the code; the real policy is 7 days — and a hotel
+ * told the wrong one either abandons a link that still works or hurries over one that does not.
  */
 export default async function SignupSentPage({
   searchParams,
@@ -49,8 +54,8 @@ export default async function SignupSentPage({
         </p>
         <p className="mx-auto mt-3 max-w-sm text-[12.5px] leading-relaxed text-ink-400">
           {resent
-            ? "The earlier link no longer works. This one lasts 48 hours and can be used once."
-            : "Nothing yet? Check the spam folder. The link works once and expires in 48 hours."}
+            ? `The earlier link no longer works. This one lasts ${TOKEN_POLICY.invite.ttlLabel} and can be used once.`
+            : `Nothing yet? Check the spam folder. The link works once and expires in ${TOKEN_POLICY.invite.ttlLabel}.`}
         </p>
         <p className="mt-6 text-[12.5px] text-ink-500">
           <Link href="/login" className="font-semibold text-brand-700 hover:underline">Back to sign in</Link>

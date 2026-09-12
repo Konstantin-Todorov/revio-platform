@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { signupSlug, validateSignup, type SignupInput } from "./signup.js";
 import { signupEmail } from "../email/auth-emails.js";
+import { TOKEN_POLICY } from "../auth/tokens.js";
 
 const GOOD: SignupInput = {
   hotelName: "Hotel Cabacum Beach",
@@ -105,5 +106,17 @@ describe("signupEmail", () => {
   it("carries the link and says it is single-use", () => {
     expect(mail.text).toContain("https://cm.reviosoft.app/accept-invite/abc");
     expect(mail.text).toMatch(/once/i);
+  });
+});
+
+describe("the link's lifetime is never re-typed", () => {
+  it("⚠️ the signup email states the policy's own label, not a number somebody remembered", () => {
+    // This shipped saying "48 hours" on the confirmation screen — a figure that appears nowhere in
+    // the code, against a real policy of 7 days. A hotel told the wrong one either abandons a link
+    // that still works, or hurries over one that has already died. The only defence is that every
+    // surface reads TOKEN_POLICY rather than restating it.
+    const mail = signupEmail({ name: "Maria", context: "Hotel X", url: "https://example.test/x" });
+    expect(mail.text).toContain(TOKEN_POLICY.invite.ttlLabel);
+    expect(mail.text).not.toMatch(/48 hours/);
   });
 });

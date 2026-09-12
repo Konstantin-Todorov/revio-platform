@@ -117,7 +117,9 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo, at
           : {}),
       }),
     });
-    if (!res.ok) return { ok: false, mode: "resend", error: `Resend ${res.status}: ${(await res.text()).slice(0, 200)}` };
+    if (!res.ok) {
+      return fail(to, subject, `Resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
     return { ok: true, mode: "resend" };
   } catch (err) {
     /*
@@ -125,13 +127,32 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo, at
      * outcome so a caller can tell "Resend refused this message" from "we never heard back".
      */
     const timedOut = (err as Error)?.name === "TimeoutError";
-    return {
-      ok: false,
-      mode: "resend",
-      error: timedOut ? `No answer from Resend within ${EMAIL_TIMEOUT_MS / 1000}s` : (err as Error).message,
-      ...(timedOut ? { timedOut: true } : {}),
-    };
+    return fail(
+      to,
+      subject,
+      timedOut ? `No answer from Resend within ${EMAIL_TIMEOUT_MS / 1000}s` : (err as Error).message,
+      timedOut,
+    );
   }
+}
+
+/**
+ * Every failed send says so, out loud, exactly once.
+ *
+ * ⚠️ **A returned `{ ok: false }` that nobody reads is a silent failure**, and around twenty call
+ * sites across the platform discard this result — a staff invitation, a password reset, a trial
+ * warning. Each was written as fire-and-forget on the sound reasoning that a mail outage must never
+ * turn a completed booking into an error page. The cost was that it also never turned into
+ * *anything*: somebody is told "check your email" and waits for a message that was refused, and no
+ * log, no screen and no alert anywhere records it.
+ *
+ * Logging here fixes the whole class in one place and cannot be forgotten at a call site added next
+ * month. It does NOT change the contract — the result is still returned, and callers that can act
+ * on a failure (public signup does) still should. This is the floor, not the ceiling.
+ */
+function fail(to: string[], subject: string, error: string, timedOut = false): EmailResult {
+  console.error(`[email:failed] to=${to.join(",")} subject="${subject}" — ${error}`);
+  return { ok: false, mode: "resend", error, ...(timedOut ? { timedOut: true } : {}) };
 }
 
 /** Resolve a property's delivery recipients from its primary/secondary settings. */

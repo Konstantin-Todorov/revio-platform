@@ -7,6 +7,41 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Claude · DONE · Ran the real signup on production, and it found two bugs
+**Founder: "did we fix all errors? … everything needs to be fixed."** Verified the whole path rather
+than the pieces, which is how both of these surfaced.
+Files: `packages/email/src/transport.ts`, `apps/channel-manager/{lib/actions-signup.ts,app/signup/sent/page.tsx}`,
+`packages/core/src/onboarding/signup.test.ts`, `docs/partner/SIGNUP-AND-LOGIN-BRIEF.md`.
+
+**Verified on production, not asserted:** all 10 routes in the signup→login journey across the three
+products serve 200; `RESEND_API_KEY`/`EMAIL_FROM`/`AUTH_SECRET` are set on all three services;
+Railway's service URLs are the CUSTOM domains, so the emailed accept-invite link is right whichever
+product they choose. A real signup driven through a real browser produced exactly the designed row:
+`pending_signup`, all three entitlements **false**, **zero** trials, one property, one rate plan,
+owner with no password, one unused invite token.
+
+⚠️ **BUG 1 — "expires in 48 hours" was invented.** `TOKEN_POLICY.invite` says **7 days**; 48 hours
+appears nowhere in the code. A hotel told the wrong one abandons a link that still works. Now read
+from the constant, with a test asserting the email states the policy's own label.
+
+⚠️ **BUG 2 — the confirmation email's result was discarded.** `sendEmail` returns `{ok:false,error}`
+and never throws (deliberately — a mail outage must not turn a completed booking into an error
+page). Signup ignored it, so a refused send still showed "Check your email". **~20 call sites across
+the platform do the same** — staff invites, password resets, trial warnings. Fixed centrally: the
+transport now logs every failure once, which covers the whole class and cannot be forgotten at a
+call site added next month. Signup additionally acts on it, telling the hotel the account exists and
+to press again — which reaches the "resent" branch, so the recovery path already existed.
+
+⚠️ **The RLS worry is CLOSED and the news is good.** Production's migration role is `postgres` with
+`usesuper = t`, so it bypasses FORCE RLS. Checked on the data: `Folio.outcome` has every closed
+folio filled (14 settled · 3 outstanding · 2 paid_offsystem, open ones null), `Hold.source` shows
+17 staff / 23 booking_engine, `User.emailKey` 13 of 13. **No past backfill was lost.**
+
+⚠️ **A smoke-test tenant is sitting in production** — `Revio Smoke Test DELETE ME`, inert
+(`pending_signup`, no entitlements, no trials). Founder to remove; agent cannot write to production.
+
+`pnpm verify` green, 2,336 tests.
+
 ### 2026-09-12 · Claude · DONE · The all-three trial silently changed the onboarding
 **Founder: "the onboarding has to be maybe for most of the products, so they don't have a problem
 when they go into the different products."** Checking that found a gap the all-three decision had

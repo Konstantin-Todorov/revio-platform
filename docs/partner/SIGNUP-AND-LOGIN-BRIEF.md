@@ -95,7 +95,7 @@ Marketing copy must not promise "we've created your account", because sometimes 
 Two articles are missing and are now answerable:
 
 1. **"Starting your free trial"** — the four steps above; that the trial covers all three products
-   and why; that no card is needed; that the link expires in 48 hours and works once; what to do if
+   and why; that no card is needed; that the link expires in 7 days and works once (the authority is `TOKEN_POLICY.invite` — never re-type it); what to do if
    the email does not arrive (spam, then the sign-in page's *Forgot password*).
 2. **"Signing in to the right product"** — that one email and one password open every product the
    hotel has; which product does what, in one line each; that a hotel sees only what it owns.
