@@ -2725,3 +2725,29 @@ model WaitlistEntry {
   @@index([propertyId, checkIn])
   @@index([roomTypeId, checkIn])
 }
+
+/// What is left after a client is removed — deliberately the only thing.
+///
+/// Everything else about the hotel is gone, so without this nobody could ever answer "what happened
+/// to them?". The audit trail of a deletion cannot live inside the thing being deleted, which is why
+/// it is its own table and carries copies rather than relations.
+///
+/// Operator-only: a hotel must never be able to read that another one was removed.
+model DeletedClient {
+  id           String   @id @default(cuid())
+  tenantName   String
+  tenantSlug   String
+  wasDemo      Boolean  @default(false)
+  /// The status it held at the moment it was deleted — active, suspended, pending_signup.
+  lastStatus   String
+  clientSince  DateTime
+  /// What went with it, counted before the delete so the numbers are real rather than remembered.
+  reservations Int      @default(0)
+  properties   Int      @default(0)
+  users        Int      @default(0)
+  deletedByName String
+  deletedById   String
+  deletedAt    DateTime @default(now())
+
+  @@index([deletedAt])
+}

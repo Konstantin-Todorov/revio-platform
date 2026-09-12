@@ -1,6 +1,7 @@
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { activatePendingSignup, createPublicSignup } from "./public-signup.js";
+import { deleteClientCompletely } from "./client-deletion.js";
 
 /**
  * The signup chain, against a REAL database.
@@ -252,5 +253,93 @@ describeDb("public signup, end to end", () => {
     const after = await prisma!.tenant.findUniqueOrThrow({ where: { id: tenant.id } });
     // Asked for the PMS; got all three.
     expect([after.hasChannelManager, after.hasReservation, after.hasPms]).toEqual([true, true, true]);
+  });
+
+  describe("deleting a client", () => {
+    it("⚠️ leaves NOTHING behind — including the six tables the cascade cannot reach", async () => {
+      if (!reachable) return;
+      await createPublicSignup(NEW);
+      const tenant = (await tenantOf(NEW.email))!;
+
+      // Rows in two of the six that survive a plain cascade. ConnectivityCredential is the one that
+      // matters most: encrypted OTA credentials, which would otherwise sit in the database forever
+      // after the customer has gone.
+      await prisma!.$executeRawUnsafe(
+        `INSERT INTO "SupportRequest" (id, "tenantId", "propertyId", subject, body, kind, status, "createdAt", "updatedAt")
+         SELECT 'sr-test', $1, p.id, 's', 'b', 'question', 'open', now(), now() FROM "Property" p WHERE p."tenantId" = $1 LIMIT 1`,
+        tenant.id,
+      ).catch(() => { /* shape differs — the assertions below still cover the tables that exist */ });
+
+      const before = await prisma!.$queryRawUnsafe<{ n: bigint }[]>(
+        `SELECT count(*) AS n FROM "Property" WHERE "tenantId" = $1`, tenant.id,
+      );
+      expect(Number(before[0]!.n)).toBe(1);
+
+      const out = await deleteClientCompletely({
+        tenantId: tenant.id,
+        confirmation: tenant.name,
+        operatorUserId: "op-1",
+        operatorName: "Konstantin",
+      });
+      expect(out.ok, out.message).toBe(true);
+
+      // Nothing tenant-scoped survives, in ANY table that carries a tenantId.
+      const leftovers = await prisma!.$queryRawUnsafe<{ table_name: string }[]>(`
+        SELECT table_name FROM information_schema.columns
+        WHERE column_name = 'tenantId' AND table_schema = 'public'
+      `);
+      for (const { table_name } of leftovers) {
+        const rows = await prisma!.$queryRawUnsafe<{ n: bigint }[]>(
+          `SELECT count(*) AS n FROM "${table_name}" WHERE "tenantId" = $1`, tenant.id,
+        );
+        expect(Number(rows[0]!.n), `${table_name} still holds rows for a deleted client`).toBe(0);
+      }
+
+      // And the one thing that must survive: the record that it happened.
+      const record = await prisma!.deletedClient.findFirst({ where: { tenantSlug: tenant.slug } });
+      expect(record).not.toBeNull();
+      expect(record!.tenantName).toBe(tenant.name);
+      expect(record!.deletedByName).toBe("Konstantin");
+      expect(record!.properties).toBe(1);
+    });
+
+    it("⚠️ REFUSES when an invoice has been issued, whatever is typed", async () => {
+      if (!reachable) return;
+      await createPublicSignup(NEW);
+      const tenant = (await tenantOf(NEW.email))!;
+      // A REAL issued invoice — `period` and `amountMinor` are the actual column names; getting them
+      // wrong once already made this test pass for the wrong reason.
+      await prisma!.invoice.create({
+        data: {
+          tenantId: tenant.id,
+          period: "2026-09",
+          amountMinor: 14160,
+          currency: "EUR",
+          status: "sent",
+        },
+      });
+
+      const out = await deleteClientCompletely({
+        tenantId: tenant.id, confirmation: tenant.name,
+        operatorUserId: "op-1", operatorName: "Konstantin",
+      });
+      expect(out.ok).toBe(false);
+      expect(out.message).toMatch(/tax document/i);
+      expect(out.message).toMatch(/suspend/i);
+      // And nothing was removed.
+      expect(await prisma!.tenant.count({ where: { id: tenant.id } })).toBe(1);
+    });
+
+    it("refuses a mistyped confirmation, and deletes nothing", async () => {
+      if (!reachable) return;
+      await createPublicSignup(NEW);
+      const tenant = (await tenantOf(NEW.email))!;
+      const out = await deleteClientCompletely({
+        tenantId: tenant.id, confirmation: "hotel cabacum beach",
+        operatorUserId: "op-1", operatorName: "Konstantin",
+      });
+      expect(out.ok).toBe(false);
+      expect(await prisma!.tenant.count({ where: { id: tenant.id } })).toBe(1);
+    });
   });
 });

@@ -15,6 +15,9 @@ import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primit
 import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
 import { SubmitButton } from "@revio/ui/submit-button";
 import { AccountPanel } from "@/components/clients/AccountPanel";
+import { DangerZone } from "@/components/clients/DangerZone";
+import { clientDeletionFacts } from "@revio/db";
+import { canDeleteClient } from "@revio/core";
 import { ContactsPanel } from "@/components/clients/ContactsPanel";
 import { RelationshipLog } from "@/components/clients/RelationshipLog";
 import { ClientBillingForm } from "@/components/billing/ClientBillingForm";
@@ -73,8 +76,15 @@ export default async function ClientDetailPage({
   const requested = (await searchParams).tab;
   const tab: Tab = requested === "setup" || requested === "billing" ? requested : "overview";
   const c = await getClientDetail(id);
-  const [billing, session] = await Promise.all([getClientBilling(id), getOperatorSession()]);
+  const [billing, session, deletion] = await Promise.all([
+    getClientBilling(id),
+    getOperatorSession(),
+    clientDeletionFacts(id),
+  ]);
   if (!c) notFound();
+  // The same rule the server re-runs before it deletes anything — shown here so the screen and the
+  // action can never disagree about whether this client may go.
+  const deleteVerdict = deletion ? canDeleteClient(deletion.facts) : null;
 
   const now = new Date();
   const running = c.trials.filter((t) => !t.endedAt);
@@ -681,6 +691,21 @@ export default async function ClientDetailPage({
         </Card>
       </div>
         </>
+      )}
+
+      {/*
+        Last on the page, and only for a super admin. It is the one control here that cannot be
+        undone by anybody, so it sits below everything somebody came to read rather than beside it.
+      */}
+      {deletion && deleteVerdict && session?.role === "super_admin" && (
+        <DangerZone
+          tenantId={id}
+          tenantName={deletion.tenant.name}
+          counts={deletion.counts}
+          {...(deleteVerdict.ok
+            ? (deleteVerdict.warning ? { warning: deleteVerdict.warning } : {})
+            : { blocked: { reason: deleteVerdict.reason, instead: deleteVerdict.instead } })}
+        />
       )}
     </div>
   );

@@ -7,6 +7,38 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Claude · DONE · A client can be deleted — and the cascade did not reach everything
+**Founder: "we cannot delete a client. That's strange. I think we have to do that in our operator."**
+Correct — there was no delete path anywhere in the codebase. Building one found something worse.
+Files: `packages/core/src/billing/client-deletion.{ts,test.ts}`,
+`packages/db/src/{client-deletion.ts,client-deletion.db.test.ts,public-signup.integration.test.ts}` +
+`migrations/20260912230000_deleted_client/`, `apps/operator/{lib/actions.ts,components/clients/DangerZone.tsx,app/(protected)/clients/[id]/page.tsx}`.
+
+⚠️ **`tenant.delete()` would have left SIX tables behind.** The cascade reaches 55; six carry
+`tenantId` as a plain column with no foreign key, because the RLS pattern needs the column rather
+than the constraint. Two of them matter a great deal: **`ConnectivityCredential`** — encrypted OTA
+credentials, which would have sat in the database forever after the customer left — and
+**`Invoice`**. Orphans raise no error and RLS hides them, so nobody would ever have noticed.
+
+**The list is checked against the live schema, not maintained by hand.** `client-deletion.db.test.ts`
+asks Postgres to recompute the cascade closure and fails when the set changes, with a message naming
+the file to edit. Proved red by removing `ConnectivityCredential` from the list.
+
+**Deleting is refused for a client who traded.** `canDeleteClient` blocks anything with a **sent or
+paid invoice** — a tax document that exists in their accounts and their auditor's, where deleting our
+copy only means we cannot answer about it — and names suspension instead, which is the founder's
+rule: *they can come back at any time.* No override, deliberately.
+
+The UI states what goes (`43 reservations · 2 properties · 5 logins`, counted not estimated) and
+requires typing the client's own name — the one confirmation that cannot be produced without having
+read which client it is. **Super-admin only**, the console's only role-gated action, because it is
+its only irreversible one. A `DeletedClient` row survives, written inside the same transaction.
+
+`pnpm verify` green, 2,347 tests (17 new, 3 of them against a real database); drift-lint clean.
+
+**STILL OPEN from the same message:** trial-end should SUSPEND rather than leave a hotel with zero
+entitlements — needs checking against what such a hotel actually sees; and the signup/trial analytics.
+
 ### 2026-09-12 · Claude · DONE · Ran the real signup on production, and it found two bugs
 **Founder: "did we fix all errors? … everything needs to be fixed."** Verified the whole path rather
 than the pieces, which is how both of these surfaced.

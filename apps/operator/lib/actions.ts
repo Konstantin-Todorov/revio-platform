@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { forSystem, issueToken } from "@revio/db";
+import { redirect } from "next/navigation";
+import { deleteClientCompletely, forSystem, issueToken } from "@revio/db";
 import { inviteEmail, renderSystemEmail, renderSystemEmailText, PRODUCT_BY_KEY } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { originFor, primaryProduct } from "./product-origins";
@@ -276,4 +277,58 @@ export async function setDemo(fd: FormData): Promise<void> {
   revalidatePath("/overview");
   revalidatePath("/plans");
   revalidatePath("/billing");
+}
+
+/**
+ * Remove a client entirely.
+ *
+ * ## Why the console needed this at all
+ *
+ * There was no way to delete a client from anywhere — not a demo tenant, not a smoke test, not a
+ * signup somebody abandoned. The only tool was a suspension, which is the right answer for a hotel
+ * that left and the wrong one for a row that should never have existed.
+ *
+ * ## The three guards, and why none of them is the screen's job
+ *
+ * The screen shows a warning; this enforces the rule. A page open since before an invoice was sent
+ * would otherwise delete a tax record on the strength of a check made minutes ago. So
+ * `deleteClientCompletely` re-reads the facts, re-runs `canDeleteClient`, and re-checks the typed
+ * name — all inside the same call that does the deleting.
+ *
+ * What it deletes is deliberately more than `tenant.delete()`: six tenant-scoped tables carry no
+ * foreign key to `Tenant` and survive the cascade, one of them holding encrypted OTA credentials.
+ */
+export async function deleteClient(fd: FormData): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again to remove a client.");
+
+  /*
+   * ⚠️ Super-admin only, and it is the ONLY action in this console with a role gate.
+   *
+   * Everything else here is reversible in a click — an entitlement goes back on, a plan override is
+   * re-edited, a note is rewritten. This one is not reversible by anybody, at any time, and a
+   * support account exists to answer questions rather than to end a hotel.
+   */
+  if (session.role !== "super_admin") {
+    return flashError("Only a super admin can remove a client. Ask one, or suspend the account instead.");
+  }
+
+  const tenantId = String(fd.get("tenantId") ?? "");
+  const confirmation = String(fd.get("confirmation") ?? "");
+  if (!tenantId) return flashError("No client named.");
+
+  const result = await deleteClientCompletely({
+    tenantId,
+    confirmation,
+    operatorUserId: session.userId,
+    operatorName: session.name,
+  });
+
+  if (!result.ok) return flashError(result.message ?? "That client could not be removed.");
+
+  // Straight to the list: the page we were on describes a hotel that no longer exists.
+  revalidatePath("/clients");
+  revalidatePath("/overview");
+  await setFlash("success", "Client removed. Everything it owned went with it.");
+  redirect("/clients");
 }

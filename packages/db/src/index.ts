@@ -109,3 +109,4 @@ export {
   type SupportMessageInput,
 } from "./support.js";
 export { createPublicSignup, activatePendingSignup, type SignupOutcome } from "./public-signup.js";
+export { deleteClientCompletely, clientDeletionFacts, type DeleteClientResult } from "./client-deletion.js";
