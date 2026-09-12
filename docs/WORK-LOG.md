@@ -18,6 +18,55 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-12 · Claude · DONE · Fourteen reported bugs, one cause — read paths assumed a single rate plan
+**Ventsislav's bug log from Cabacum Beach Residence. His §2.2 hypothesis was exactly right.**
+Files: `packages/core/src/rates/calendar-rows.ts` (NEW, 11 tests),
+`packages/connectivity/src/sync.ts` (+ `push-outcome.test.ts`, 6 tests),
+`apps/channel-manager/lib/{data,actions-calendar,actions-config,mutation-helpers,connectivity}.ts`,
+`apps/channel-manager/components/{calendar/EditableCell,calendar/MonthView,mapping/MappingEditDialog}.tsx`,
+`apps/channel-manager/app/(protected)/{calendar,mapping,sync}/page.tsx`,
+`apps/reservation/lib/{data,actions-rates,mutation-helpers}.ts`,
+`apps/reservation/app/(protected)/(property)/inventory/page.tsx`,
+`apps/reservation/components/inventory/RateCell.tsx`.
+
+⚠️ **THE REGRESSION WAS MINE.** Before `9b528ff` (09-09) the bulk picker offered the inactive plan,
+so hotels wrote to the same wrong plan the calendar read — visibly wrong, but consistent. I made the
+WRITE path use only active plans and never opened the READ path. From that commit the data was
+correct and the screen stopped showing any of it. **A half-migration is worse than either end.**
+
+The two read surfaces resolved "the" plan differently and neither filtered on `active`:
+- RevioCRS: `findFirst({ priceLogic: "manual", active: true })` → *BB Flex*
+- RevioLink: `findFirst({ code: "BAR" })`, **no active filter** → *Standard Rate*, switched off
+
+`ratePlanRows` in `@revio/core` is the one rule now: **one row per ACTIVE plan, labelled with its own
+name, ordered by sortOrder**, with options/selection/rows reconciled from one set. That last part is
+BUG-006: RevioLink defaulted the filter to hardcoded demo codes `["BAR","NR","BRF"]`, so the pill said
+3, the list offered 2 and neither was ticked — three numbers, one control, none wrong on its own.
+
+⚠️ **Writes moved with the reads.** `saveCell` / `saveCalendarRate` took the plan from a lookup; they
+take it from the EDITED ROW now and verify it. Fixing reads alone would give a calendar that shows
+two plans and silently writes both into one.
+
+⚠️ **BUG-014 was the one to fix first and the reporter said so.** `recordPush` wrote
+`status: "success"` with NO channel **before** `syncRealChannels` ran and regardless of the result —
+that function returned `void` and swallowed everything. It masked the other thirteen. It returns a
+`RealPushOutcome` now and shared `pushVerdict` (6 tests) decides: success only when a channel
+ACCEPTED something; else `warning` (nothing mapped) / `failed` / `skipped` (paused) / `noop`.
+
+Mapping (BUG-010/011): the screen listed mapping ROWS, created once by one-shot provisioning — so
+every product added later was invisible, not broken. It lists **every active product** now, and
+mapping a never-sent one creates its row.
+
+⚠️ **NOT fixed, deliberately:** BUG-012 (coupled mapping rows) — the dialog holds per-row state and
+the write is keyed by row id, so the coupling is not in this code and a fix would be a guess;
+BUG-013 (duplicate / Booking.com-scoped Channex codes) — needs the Channex property inspected. Run
+the reporter's §2.3 test #4 first.
+
+⚠️ **Codex: I am sorry — `git add -A` in `16ed1e3` swept in your uncommitted `design/home-preview/`
+and `design/docs-preview/`.** Untracked again in the next commit; the files are untouched on disk.
+My fault, and the reason AGENTS.md §5 says to commit by path.
+
+
 ### 2026-09-12 · Codex · DONE · Marketing homepage motion prototype
 **Founder requests a viewable homepage upgrade for the official marketing site, not documentation.**
 Files: `design/home-preview/`, `docs/WORK-LOG.md`.
