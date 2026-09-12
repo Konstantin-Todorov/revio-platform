@@ -6,11 +6,12 @@ The founder approved the dark documentation design. Improve its structure and co
 
 ## Navigation
 
-Top navigation: **Start here · RevioLink · RevioCRS · RevioPMS · RevioDirect · Integrations · Updates**. Each product changes the left-hand guide list. The right column follows headings of the current article. Search spans products and shows the product/category. Shared concepts are written once and linked from each product; do not duplicate four conflicting versions.
+Top navigation: **Start here · Platform · RevioLink · RevioCRS · RevioPMS · RevioDirect · Integrations · API reference · Updates**. Each product changes the left-hand guide list, grouped by workflow (for example Calendar, Connections and Troubleshooting). The right column follows headings of the current article. Search spans products and shows the product/category. Shared concepts are written once and linked from each product; do not duplicate four conflicting versions.
 
 | Area | Left navigation, in reading order | Boundary |
 | --- | --- | --- |
 | Start here | Product overview; shared concepts; access and roles; setup checklist; get help | Common hotel-facing concepts |
+| Platform | Dashboard; companies and properties; lists/search; accounts and permissions; billing; payments; analytics; activity/events; settings and security | Cross-product customer workspace; operator procedures remain private |
 | RevioLink | Overview; room/rate mapping; calendar and bulk edits; restrictions; Sync Center; troubleshooting | State channel capabilities and external delivery limitations |
 | RevioCRS | Overview; availability and holds; reservations and changes; guests; rates; analytics and exports; Direct setup | Report basis and time period must be explicit |
 | RevioPMS | Overview; arrivals and departures; room assignment; housekeeping; folios and charges; maintenance; Close Day | Posting, recording a payment and collecting money are different actions |
@@ -19,6 +20,22 @@ Top navigation: **Start here · RevioLink · RevioCRS · RevioPMS · RevioDirect
 | Updates | Documentation changes; product release notes approved for customers | No automatic publication of internal work logs |
 
 **Operator** documentation is a separate internal collection with authenticated access. Hiding an “Operator” tab in JavaScript is not access control. Keep operator articles and content out of the public bundle entirely.
+
+## What the OneClub reference gets right
+
+The reference is not just “a lot of pages.” It connects a domain landing page, its sub-pages, a quick-start path, related articles, search and previous/next links. Revio should use the same relationship model while keeping hotel terminology and our product boundaries:
+
+| OneClub pattern | Revio equivalent | Documentation home |
+| --- | --- | --- |
+| Dashboard and widgets | Hotel dashboard, exceptions and product health | Platform |
+| Members and member profiles | Guests, reservations and company/property context | RevioCRS + Platform |
+| Operations, schedule, bookings and events | Front desk, housekeeping, maintenance, close day and channel activity | RevioPMS + RevioLink |
+| Billing, invoices, transactions and payments | Subscription billing, guest folios, payment status and reconciliation | Platform + RevioPMS |
+| Marketing, messaging and content | Direct booking content, approved hotel media, templates and support | RevioDirect + Start here |
+| Analytics and exports | Occupancy, pickup, revenue, channel and operational reports | Platform + RevioCRS |
+| Settings, users and integrations | Property setup, roles, notifications, security, imports, exports and connectors | Platform + Integrations |
+
+Each landing page should answer **what this area is**, **who uses it**, **what records it owns**, **what it connects to**, and **where to go next**. Each task page should then use the same small contract: prerequisites → steps → expected result → recovery → related links. This is how a larger library remains understandable instead of becoming a long list of disconnected articles.
 
 ## Article format
 

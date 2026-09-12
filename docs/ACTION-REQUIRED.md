@@ -3,7 +3,12 @@
 Everything the platform cannot decide for itself. Nothing here is a code task — each item needs a
 person: a credential, a legal confirmation, a dashboard setting, or a judgement about the business.
 
-Ordered by what goes wrong if it is missed. Last reviewed **2026-08-24**.
+Ordered by what goes wrong if it is missed. Last reviewed **2026-09-12**.
+
+⚠️ **This file is only useful if it is true.** Reviewed on 2026-09-12 against the code and against
+production, after three weeks in which the first real hotel was onboarded, payments were built and
+the VAT treatment was corrected. Two entries were wrong in opposite directions and one blocker was
+missing entirely; all three are marked below rather than quietly edited.
 
 ---
 
@@ -87,10 +92,27 @@ seed carries `VAT 9%` on accommodation. **Checked on 2026-09-08, nothing to chan
 5. **Fiscalization** is adjacent and separate — a Bulgarian hotel taking cash has НАП device
    obligations. See `docs/specs/BG-FISCALIZATION-RESEARCH.md`; `TaxInvoice.fiscalRef` is the seam.
 
+### 2b. Revio's own Stripe account is not verified — ⚠️ ADDED 2026-09-12
+
+`charges_enabled: false`. Every part of taking a card payment is built and proven in test mode —
+Checkout, the signed webhook, refunds, disputes, the paid receipt — and **not one real card can be
+charged until Stripe finishes verifying the business**. Bank transfer still works, so this does not
+block invoicing; it blocks being paid by card.
+
+This was missing from this file entirely while being the nearest thing to a live blocker. Stripe
+dashboard → complete the business verification.
+
 ### 3. Billing details for each real client
 A client cannot be invoiced without their **legal** entity name, country and address — the trading
-name is not who owes the money, and the country decides the VAT treatment. Client page → Billing
-details. The three demo tenants are already filled in so the flow can be rehearsed.
+name is not who owes the money, and the country decides the VAT treatment.
+
+⚠️ **Partly self-serve since 2026-09-12.** A hotel can now fill this in itself: Settings → Billing
+in any product it uses, gated on `manageSubscription`. The operator's Client page → Billing details
+still works and still wins. The client page says which of the two last touched it, because a legal
+name the customer typed and one we transcribed from a phone call are different levels of confidence
+in a tax document.
+
+So this is no longer purely waiting on you — but nobody is invoiced until one of you fills it in.
 
 ### 4. Fiscalization — ⚠️ THIS ITEM WAS WRONG, and is no longer a blocker
 
@@ -148,9 +170,17 @@ is still the right plan.
 environment is the single change that most reduces the chance of a customer seeing a bad deploy.
 
 ### 10. Branch protection on `main`
-CI is green but nothing enforces it — a red CI still deploys. **This changes your workflow**: with
-required checks, direct pushes are rejected and everything goes through a PR. Worth it before real
-clients; decide deliberately rather than drifting into it.
+
+⚠️ **This entry said "a red CI still deploys". That is wrong, and has been for some time.**
+`promote.yml` runs on `workflow_run` with `if: github.event.workflow_run.conclusion == 'success'`, so
+a failing CI leaves `production` exactly where it was and the previous build stays live. Verified in
+the workflow on 2026-09-12. An overstated risk in this file is as costly as an understated one — it
+is the entry nobody acts on, and then nobody trusts the ones beside it.
+
+What is actually true: **`main` can carry a red commit**, and nothing requires review before a push.
+The deploy is safe; the branch is not necessarily buildable. With required checks, direct pushes are
+rejected and everything goes through a PR. **This changes your workflow** — worth it before real
+clients, and worth deciding deliberately rather than drifting into.
 
 ### 11. Email — finish the authentication chain
 - **cPanel DKIM** for the SuperHosting mailboxes: `default._domainkey.reviosoft.app` is empty, so

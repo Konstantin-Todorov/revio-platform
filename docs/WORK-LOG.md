@@ -7,6 +7,10 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Codex · DONE · Documentation preview published to Railway
+The expanded static documentation preview is running in the separate Railway `docs` service.
+Deployment `ddef1447-f90c-4d96-949f-084d2d8b1bdd` is healthy at `https://docs-production-b1ad.up.railway.app`; all 47 article routes were probed and the live Platform and Billing pages were checked in-browser. The custom `docs.reviewsoft.app` binding and the marketing-site link remain pending Railway re-authentication and DNS verification. No hotel app, database, secrets or customer data were changed.
+
 ### 2026-09-12 · Codex · DONE · Website release + documentation organisation
 **Founder approves marketing release; documentation follows as an isolated workstream.**
 Files: sibling `revio-websites` repository (owned marketing changes, CI-gated release); here only `design/docs-preview/`, `docs/DOCUMENTATION-PLAN.md`, this log.
