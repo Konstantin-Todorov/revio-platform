@@ -168,8 +168,14 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
           DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
 
+      # `revio_ci` above is a real database with every migration applied, so the database-backed
+      # tests (public signup end to end) run here rather than skipping. Without this env they skip
+      # silently — and a test that skips in CI is a test that does not exist.
       - name: Test
         run: pnpm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
 
       # LAST, because it is the slowest and because it catches a class the others cannot: `pnpm
       # typecheck` and `pnpm test` both pass on code that fails `next build`. That has bitten this

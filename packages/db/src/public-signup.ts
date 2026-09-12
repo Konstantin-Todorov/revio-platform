@@ -1,6 +1,8 @@
 import { forSystem } from "./rls.js";
 import { issueToken } from "./auth-tokens.js";
-import { signupSlug, TRIAL_DAYS, validateSignup, type ProductKey } from "@revio/core";
+import {
+  emailIdentityKey, signupSlug, signupVerdict, TRIAL_DAYS, validateSignup, type ProductKey,
+} from "@revio/core";
 
 /**
  * A hotel signing itself up, with nobody at Revio involved.
@@ -34,8 +36,12 @@ import { signupSlug, TRIAL_DAYS, validateSignup, type ProductKey } from "@revio/
  * two outcomes below are deliberately indistinguishable to the person filling in the form.
  */
 export type SignupOutcome =
+  /** Nobody had this mailbox. Confirm the address and the trial begins. */
   | { ok: true; kind: "created"; token: string; ownerName: string; hotelName: string; email: string; intent: ProductKey }
-  | { ok: true; kind: "already-registered"; email: string }
+  /** They started once and never opened the link. A FRESH link for the SAME account — never a second one. */
+  | { ok: true; kind: "resent"; token: string; ownerName: string; hotelName: string; email: string; intent: ProductKey }
+  /** A finished account. They sign in; no trial is started, ever. */
+  | { ok: true; kind: "already-a-customer"; email: string; reason: "active" | "suspended" }
   | { ok: false; message: string };
 
 /** Platform-wide signups allowed per hour. See the note in `createPublicSignup`. */
@@ -82,9 +88,60 @@ export async function createPublicSignup(args: {
     };
   }
 
-  // See the note above: the SAME answer as a success, and a real mail to the real owner.
-  if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
-    return { ok: true, kind: "already-registered", email };
+  /*
+   * ⚠️ Looked up by IDENTITY KEY, not by the string that was typed.
+   *
+   * `maria+trial2@gmail.com` is `maria@gmail.com`'s mailbox. Matching on the raw address hands the
+   * same person a fresh thirty days of all three products for the price of typing four characters —
+   * and it is the single commonest way a trial is taken twice.
+   *
+   * `findFirst` rather than `findUnique`: `emailKey` is deliberately NOT unique (two staff at one
+   * hotel may legitimately share a mailbox), so the question is "does ANY account reach this
+   * mailbox", and the finished one is the one that decides.
+   */
+  const key = emailIdentityKey(email);
+  const reached = await prisma.user.findMany({
+    where: { OR: [{ emailKey: key }, { email }] },
+    select: { id: true, email: true, name: true, passwordHash: true, tenantId: true, tenant: { select: { status: true, name: true, signupIntent: true } } },
+    // No ordering needed: a finished account wins over an unfinished one regardless of which
+    // row the database hands back first, and `User` carries no timestamp to order by anyway.
+  });
+  // A real account beats an abandoned one: if any of them finished, this mailbox is a customer.
+  const finished = reached.find((u) => u.passwordHash !== null);
+  const unfinished = reached.find((u) => u.passwordHash === null && u.tenant.status === "pending_signup");
+  const existingAccount = finished ?? unfinished ?? null;
+
+  const verdict = signupVerdict({
+    email,
+    existing: existingAccount
+      ? { hasPassword: existingAccount.passwordHash !== null, tenantStatus: existingAccount.tenant.status }
+      : null,
+  });
+
+  if (verdict.kind === "refused") return { ok: false, message: verdict.message };
+
+  if (verdict.kind === "already-a-customer") {
+    return { ok: true, kind: "already-a-customer", email, reason: verdict.reason };
+  }
+
+  if (verdict.kind === "resend-confirmation" && unfinished) {
+    /*
+     * ⚠️ A NEW LINK FOR THE SAME ACCOUNT — never a second tenant.
+     *
+     * Creating another one here is precisely the gap: the same hotel would end up with two tenants
+     * and, the moment both were confirmed, six trials. The first attempt already made everything;
+     * all that failed was the email reaching a human.
+     */
+    const fresh = await issueToken({ purpose: "invite", email: unfinished.email, userId: unfinished.id });
+    return {
+      ok: true,
+      kind: "resent",
+      token: fresh,
+      ownerName: unfinished.name,
+      hotelName: unfinished.tenant.name,
+      email: unfinished.email,
+      intent: (unfinished.tenant.signupIntent as ProductKey | null) ?? intent,
+    };
   }
 
   let slug = signupSlug(hotelName);
@@ -104,7 +161,7 @@ export async function createPublicSignup(args: {
       hasChannelManager: false,
       hasReservation: false,
       hasPms: false,
-      users: { create: [{ name: ownerName, email, role: "owner" }] },
+      users: { create: [{ name: ownerName, email, emailKey: key, role: "owner" }] },
       properties: { create: [{ name: hotelName, baseCurrency: "EUR", timezone: "Europe/Sofia" }] },
     },
     include: { properties: true, users: true },

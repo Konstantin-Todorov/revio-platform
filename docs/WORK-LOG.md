@@ -7,6 +7,45 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Claude · DONE · No second free trial, and the first DB-backed tests
+**Founder: "if the email is somewhere in our system, don't give them anything… we can have gaps if
+they trialled CRS and PMS, didn't buy, and sign up again months later."** Right, and there were more
+gaps than that.
+Files: `packages/core/src/onboarding/signup-identity.{ts,test.ts}`,
+`packages/db/src/{public-signup.ts,public-signup.integration.test.ts}` +
+`migrations/20260912220000_user_email_key/`, `apps/channel-manager/app/signup/*`,
+`packages/core/src/email/auth-emails.ts`, `.github/workflows/ci.yml`.
+
+⚠️ **`maria+trial2@gmail.com` was a different person.** Sub-addressing is the commonest way a trial
+is taken twice and needs no skill at all; Gmail dots are the same trick. `User.emailKey` now holds
+the mailbox an address actually reaches, and signup matches on THAT. For recognition only — nobody
+signs in with it and no mail is sent to it. Not unique, deliberately: two staff at one hotel may
+share a mailbox, and a unique index would refuse the second at the moment a manager was adding them.
+
+**Three endings, not two.** The old pair hid a real failure: somebody whose first mail went to spam
+was told "check your email" again while nothing was sent — or sent to sign in for a password that had
+never existed, locked out of a product they had never entered. Now: *created* · *resent* (fresh link,
+SAME account, never a second tenant) · *already-a-customer* → `/signup/existing`, which offers sign
+in, reset, and all three product doors, and names nothing about the account.
+
+**I was wrong to refuse the "already registered" message outright.** That rule is right for sign-in
+and reset, where being vague costs nothing; on registration OWASP itself calls it the one place the
+trade runs both ways. Narrowed rather than accepted whole: only after a full submit, never as you
+type, under the hourly ceiling.
+
+⚠️ **FIRST DATABASE-BACKED TESTS IN THE REPO** — 11, against real Postgres, covering the founder's
+gap directly. `.github/workflows/ci.yml` now passes `revio_ci` to the Test step; it was building a
+full database and then not letting the tests see it. Proved red by re-introducing the alias bug.
+**The file refuses to run against any database not named `*_test`/`*_ci`** — it deletes every
+tenant, and `pnpm test` with a dev URL would otherwise wipe a working database.
+
+⚠️ **The RLS question is settled.** A non-superuser table owner under FORCE RLS, no bypass:
+`UPDATE` → **0 rows, no error**; reads filtered too. Superuser → fine. So past backfills worked
+only if Railway's migration role is a superuser, and it fails silently either way. **Founder still
+needs to check `Folio.outcome`.** Every new migration sets `app.bypass` explicitly.
+
+`pnpm verify` green, 2,333 tests; drift-lint clean against a local shadow.
+
 ### 2026-09-12 · Claude · DONE · A hotel can now sign itself up
 **Founder decisions: one trial switches on ALL THREE products; login gets a chooser now and a
 central login next.** → **CODEX: `docs/partner/SIGNUP-AND-LOGIN-BRIEF.md` is yours** — the header

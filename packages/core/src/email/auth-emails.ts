@@ -95,16 +95,25 @@ export function inviteEmail({ name, context, invitedBy, url }: AuthEmailArgs): A
  * will never find them — the whole commercial argument for the platform is that the second and
  * third product cost them nothing to try.
  */
-export function signupEmail({ name, context, url }: AuthEmailArgs): AuthEmail {
+export function signupEmail({ name, context, url, resent }: AuthEmailArgs & { resent?: boolean }): AuthEmail {
   const greeting = name ? `Hello ${name},` : "Hello,";
 
+  /*
+   * A second link has to say it is a second link. Identical to the first, it reads as a duplicate
+   * we sent by mistake — and the person wonders whether they now have two accounts. They do not:
+   * it is a new key to the same door.
+   */
+  const opening = resent
+    ? `Here is your link again — you started setting up ${context} on Revio and the first one wasn't used. This replaces it; your earlier link no longer works.`
+    : `You have started setting up ${context} on Revio. Confirm this address and choose a password, and your account is ready.`;
+
   return compose(
-    `Confirm your email to open ${context} on Revio`,
+    resent ? `Your Revio confirmation link, again` : `Confirm your email to open ${context} on Revio`,
     `One link, and your 30-day trial of all three Revio products begins.`,
-    `Welcome to Revio`,
+    resent ? `Here's that link again` : `Welcome to Revio`,
     [
       { p: greeting },
-      { p: `You have started setting up ${context} on Revio. Confirm this address and choose a password, and your account is ready.` },
+      { p: opening },
       { action: { label: "Confirm and choose a password", url } },
       { note: `This link works once and expires in ${TOKEN_POLICY.invite.ttlLabel}.` },
       {

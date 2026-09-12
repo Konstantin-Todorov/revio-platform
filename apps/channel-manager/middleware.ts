@@ -19,7 +19,8 @@ export function middleware(req: NextRequest) {
     // Public signup. A hotel that has never heard of us has, by definition, no session — this is
     // the one page on this host meant to be reached from an advert.
     pathname === "/signup" ||
-    pathname === "/signup/sent";
+    pathname === "/signup/sent" ||
+    pathname === "/signup/existing";
   const isLogin = pathname === "/login";
   const hasSession = req.cookies.has(SESSION_COOKIE);
 

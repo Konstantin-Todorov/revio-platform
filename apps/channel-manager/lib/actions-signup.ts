@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createPublicSignup } from "@revio/db";
-import { passwordResetEmail, signupEmail, validateSignup } from "@revio/core";
+import { signupEmail, validateSignup } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { productOrigin } from "@revio/ui/product-links";
 
@@ -37,27 +37,27 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
   const outcome = await createPublicSignup(valid.fields);
   if (!outcome.ok) return { error: outcome.message };
 
-  if (outcome.kind === "created") {
-    // The link opens the product they named. It is only the door — the trial covers all three.
-    const url = `${productOrigin(outcome.intent)}/accept-invite/${outcome.token}`;
-    const mail = signupEmail({ name: outcome.ownerName, context: outcome.hotelName, url });
-    await sendEmail({ to: [outcome.email], subject: mail.subject, text: mail.text, html: mail.html });
-  } else {
-    /*
-     * Somebody tried to sign up with an address that already has an account.
-     *
-     * They get a password-reset mail rather than silence, because the overwhelmingly likely person
-     * on the other end is the owner themselves, having forgotten they already have one. Silence
-     * would leave them staring at "check your email" with nothing arriving.
-     *
-     * It is a RESET link, not a second invitation: it cannot create anything and it cannot be used
-     * to take over an account somebody else owns — the mail goes only to the address that already
-     * holds it.
-     */
-    const url = `${productOrigin("cm")}/forgot-password`;
-    const mail = passwordResetEmail({ context: "Revio", url });
-    await sendEmail({ to: [outcome.email], subject: mail.subject, text: mail.text, html: mail.html });
+  /*
+   * Three endings, three different screens. They used to be two, and the two hid a real failure:
+   * somebody who mistyped their address, or whose first mail went to spam, was told "check your
+   * email" a second time while nothing was sent — or, worse, sent to sign in for a password that
+   * had never existed. They were locked out of a product they had never got into.
+   */
+  if (outcome.kind === "already-a-customer") {
+    // No trial is started here, ever. This is the founder's gap: a hotel that trialled CRS and PMS,
+    // did not buy, and comes back to this form months later must not be handed thirty more days.
+    redirect(`/signup/existing?reason=${outcome.reason}`);
   }
 
-  redirect("/signup/sent");
+  const url = `${productOrigin(outcome.intent)}/accept-invite/${outcome.token}`;
+  const mail = signupEmail({
+    name: outcome.ownerName,
+    context: outcome.hotelName,
+    url,
+    // A second link needs to explain itself, or it reads as a duplicate we sent by mistake.
+    resent: outcome.kind === "resent",
+  });
+  await sendEmail({ to: [outcome.email], subject: mail.subject, text: mail.text, html: mail.html });
+
+  redirect(outcome.kind === "resent" ? "/signup/sent?again=1" : "/signup/sent");
 }

@@ -93,6 +93,16 @@ model User {
   tenantId          String
   name              String
   email             String    @unique
+
+  /// The mailbox this address actually reaches, for RECOGNITION only — `maria+trial2@gmail.com`
+  /// and `m.a.r.i.a@gmail.com` both key to `maria@gmail.com`. Never used to sign in and never
+  /// written to; `email` remains the address we send to and the one they type.
+  ///
+  /// ⚠️ NOT unique. Two staff at one hotel may legitimately share a mailbox via sub-addressing,
+  /// and a unique constraint here would refuse the second one at the moment a manager was trying
+  /// to add them. It exists so public signup can tell "already a customer" from "new hotel" — a
+  /// question that must be answered before a second free trial is handed out, not after.
+  emailKey          String?
   // Shared account role for the whole platform (CM/CRS taxonomy) PLUS the PMS operational roles
   // (manager | reception | housekeeper | hk_supervisor | maintenance | outlet_pos). One identity,
   // one role — the PMS User Management (§3.9) is a scoped view onto this shared identity.
@@ -128,6 +138,7 @@ model User {
   activeDays    ActiveUserDay[]
 
   @@index([tenantId])
+  @@index([emailKey])
 }
 
 // Operator staff (us). Cross-tenant by design — NOT tied to any tenant.

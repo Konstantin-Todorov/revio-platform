@@ -104,11 +104,35 @@ A third, once central login ships: **"One login, three products"** — replaces 
 
 ---
 
+## The three endings, and the copy for each
+
+A signup now ends one of three ways. The site should not promise any single one.
+
+| What happened | Screen | What it says |
+| --- | --- | --- |
+| New mailbox | `/signup/sent` | *Check your email* — open the link, choose a password, trial starts |
+| Started before, never confirmed | `/signup/sent?again=1` | *We've sent that link again* — same hotel, fresh link, the old one is dead |
+| Already a finished account | `/signup/existing` | *You already have a Revio account* — sign in, reset password, or pick a product |
+
+⚠️ **No second trial is ever started from this form.** A hotel that trialled RevioCRS and RevioPMS,
+did not buy, and comes back four months later is sent to sign in. That is enforced in the database
+and covered by tests that run against a real one.
+
+⚠️ **Aliases are the same mailbox.** `maria+trial2@gmail.com` and `m.a.r.i.a@gmail.com` are
+recognised as `maria@gmail.com`. Sub-addressing is the commonest way a trial is taken twice and it
+needs no skill at all.
+
+Temporary-mailbox providers (Mailinator, 10MinuteMail and similar) are refused with a message that
+explains why: that address is where their bookings and invoices will go.
+
+---
+
 ## Known gap, stated plainly
 
-Repeated signups with different addresses for the same hotel would each get a fresh 30-day trial of
-everything. There is a platform-wide ceiling of **12 signups per hour** (which stops a script, not a
-determined person) and duplicate email addresses create nothing. Closing it properly needs either a
+Repeated signups from **genuinely different mailboxes** for the same hotel would each get a fresh
+30-day trial. Aliases of one mailbox are closed; two real addresses are not, and cannot be without
+either a card at signup or manual review. There is a platform-wide ceiling of **12 signups per
+hour**, which stops a script rather than a determined person. Closing it properly needs either a
 card at signup or manual review of new tenants — a commercial decision, not a technical one.
 Unverified signups sit as `pending_signup` tenants with no entitlements and no trial clock, so they
 are visible and sweepable rather than silently costly.
