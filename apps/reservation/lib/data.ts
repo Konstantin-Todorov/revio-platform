@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
+import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
   matchDuplicates, normalisePhone, type DuplicateCandidate,
   resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
   ratePlanRows, type RoundingRule,
@@ -700,6 +700,44 @@ export interface CrsReservationFilters {
   to?: string;
   /** Which date the from→to range applies to (spec §3.3, same semantics as RevioLink). */
   dateType?: CrsDateType;
+}
+
+/**
+ * The counts behind the segment tabs — the shape of the day, before anything is clicked.
+ *
+ * ⚠️ Counted with the SAME date semantics the list uses, because a tab saying 4 that lists 3 is
+ * worse than no tab. In-house is an overlap with a strict `>` on departure (checkout day is not a
+ * stayed night); arriving and departing are exact dates; cancelled reads `cancelledAt`.
+ *
+ * Deliberately independent of the search box: these describe today at this property, not today
+ * within whatever somebody last typed. A count that moved while you typed would stop being a fact
+ * about the hotel and become a fact about the form.
+ */
+export async function getReservationSegmentCounts(todayIso: string): Promise<Record<string, number>> {
+  const property = await getProperty();
+  const propertyId = property.id;
+  const day = new Date(`${todayIso}T00:00:00Z`);
+  const dayEnd = new Date(`${todayIso}T23:59:59.999Z`);
+  const live = [...SOLD_STATUSES];
+
+  const [all, arriving, inhouse, departing, cancelled] = await Promise.all([
+    prisma.reservation.count({ where: { propertyId } }),
+    prisma.reservation.count({
+      where: { propertyId, status: { in: live }, lines: { some: { checkIn: day } } },
+    }),
+    prisma.reservation.count({
+      // Covering tonight: arrived on or before today, leaving strictly after it.
+      where: { propertyId, status: { in: live }, lines: { some: { checkIn: { lte: day }, checkOut: { gt: day } } } },
+    }),
+    prisma.reservation.count({
+      where: { propertyId, status: { in: live }, lines: { some: { checkOut: day } } },
+    }),
+    prisma.reservation.count({
+      where: { propertyId, status: "cancelled", cancelledAt: { gte: day, lte: dayEnd } },
+    }),
+  ]);
+
+  return { all, arriving, inhouse, departing, cancelled };
 }
 
 export async function getReservationsList(filters: CrsReservationFilters = {}) {

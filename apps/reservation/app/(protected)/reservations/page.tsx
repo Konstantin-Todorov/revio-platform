@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CalendarPlus, CalendarCheck } from "lucide-react";
-import { getActiveHolds, getReservationsList, type CrsDateType } from "@/lib/data";
+import { getActiveHolds, getReservationsList, getReservationSegmentCounts, todayInTz, type CrsDateType } from "@/lib/data";
+import { activeSegment, reservationSegments, segmentHref } from "@/lib/segments";
 import { HoldCountdown } from "@/components/reservations/HoldCountdown";
 import { ReservationsTable, type ResRow } from "@/components/reservations/ReservationsTable";
 import { RequestQueue, type BookingRequest } from "@/components/reservations/RequestQueue";
@@ -39,6 +40,15 @@ export default async function ReservationsPage({
     getReservationsList({ ...sp, dateType }),
     getActiveHolds(),
   ]);
+  /*
+   * The shape of the day, above the list. A receptionist opening this screen is not searching — they
+   * are asking what is happening today, and four numbers answer that before anything is clicked.
+   * Each tab sets the filters this page already understands, so the same query answers it.
+   */
+  const todayIso = todayInTz(property.timezone);
+  const counts = await getReservationSegmentCounts(todayIso);
+  const segments = reservationSegments(todayIso);
+  const current = activeSegment(sp, todayIso);
   const filtered = Boolean(sp.q || sp.status || sp.from || sp.to);
   // Serialize the (already filtered) rows for the client sortable table (§3.1 — sort respects filters).
   const rows: ResRow[] = reservations.map((r) => {
@@ -97,6 +107,44 @@ export default async function ReservationsPage({
       />
 
       <RequestQueue requests={requests} />
+
+      {/*
+        Today's shape, before the filters. Deliberately ABOVE the search box: the question these
+        answer ("what is happening today?") comes before the question the form answers ("where is
+        this specific booking?"), and a receptionist asks them in that order.
+      */}
+      <nav aria-label="Reservation segments" className="flex flex-wrap gap-1.5">
+        {segments.map((seg) => {
+          const active = current === seg.key;
+          const n = counts[seg.key] ?? 0;
+          return (
+            <Link
+              key={seg.key}
+              href={segmentHref(seg)}
+              aria-current={active ? "page" : undefined}
+              {...(seg.hint ? { title: seg.hint } : {})}
+              className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12.5px] font-semibold transition-colors ${
+                active
+                  ? "border-brand-600/30 bg-brand-50 text-brand-800"
+                  : "border-surface-border bg-white text-ink-600 hover:bg-surface-muted"
+              }`}
+            >
+              {seg.label}
+              {/*
+                A zero is said, not hidden. "Arriving today 0" is a fact a receptionist acts on;
+                an absent number reads as "not loaded" and sends them looking.
+              */}
+              <span
+                className={`tnum rounded px-1.5 py-0.5 text-[11px] font-bold ${
+                  active ? "bg-brand-600/15 text-brand-800" : n === 0 ? "bg-surface-sunken text-ink-400" : "bg-surface-sunken text-ink-700"
+                }`}
+              >
+                {n}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
 
       <Card className="p-3">
         <form method="GET" className="flex flex-wrap items-center gap-2">

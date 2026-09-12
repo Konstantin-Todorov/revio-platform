@@ -9,7 +9,7 @@ Newest at the top. Keep entries short — the commit message carries the detail.
 
 ### 2026-09-12 · Codex · DONE · Documentation preview published to Railway
 The expanded static documentation preview is running in the separate Railway `docs` service.
-Deployment `ddef1447-f90c-4d96-949f-084d2d8b1bdd` is healthy at `https://docs-production-b1ad.up.railway.app`; all 47 article routes were probed and the live Platform and Billing pages were checked in-browser. The custom `docs.reviewsoft.app` binding and the marketing-site link remain pending Railway re-authentication and DNS verification. No hotel app, database, secrets or customer data were changed.
+Deployment `56ee5a24-0141-485f-82c2-9db62a458af0` is healthy at `https://docs-production-b1ad.up.railway.app`; all 47 article routes were probed and the live Platform and Billing pages were checked in-browser. The custom `docs.reviewsoft.app` binding is configured and awaits DNS verification; the marketing-site link is prepared but not pushed until that domain is healthy. No hotel app, database, secrets or customer data were changed.
 
 ### 2026-09-12 · Codex · DONE · Website release + documentation organisation
 **Founder approves marketing release; documentation follows as an isolated workstream.**
@@ -34,6 +34,33 @@ Notes: <anything the other agent needs — a decision, a gotcha, a dependency>
 Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
+
+### 2026-09-12 · Claude · DONE · The shape of the day, above the reservation list
+**P2 item from `IDEAS-1CLUB-2026-09.md`: segment tabs with live counts.**
+Files: `apps/reservation/lib/{segments.ts,segments.test.ts,data.ts}`,
+`apps/reservation/app/(protected)/reservations/page.tsx`,
+`apps/reservation/components/reservations/segment-tabs.test.tsx`.
+
+`All 76 · Arriving today 4 · In house 12 · Departing today 3 · Cancelled 0`, above the filters. The
+list had five filters and every one asks the reader to know what they are looking for first; a
+receptionist opening this screen is asking what is happening today.
+
+⚠️ **A segment is a SHORTCUT to the filters the page already has, never a second filtering system.**
+Each tab sets `dateType`/`from`/`to` and the same query answers it. A parallel path would be a second
+definition of "arriving today", and on this week's evidence the two would disagree inside a
+fortnight — the screen highlighting one thing and listing another.
+
+The active tab is **derived from the params**, never stored, for the same reason. Anything the
+segments do not describe lights nothing rather than guessing: a wrong highlight is worse than none.
+A tab left open overnight stops being lit when the date rolls over, because its params are pinned to
+a date — tested.
+
+In-house is a stay OVERLAP with a strict `>` on departure, not a check-in date. A guest who arrived
+on Tuesday is in house on Thursday, and `check_in` would miss them while looking plausible every
+Monday. Counts use the same semantics as the list, because a tab saying 4 that lists 3 is worse than
+no tab — and they ignore the search box, so a count stays a fact about the hotel rather than about
+the form.
+
 
 ### 2026-09-12 · Claude · DONE · The mapping rule comes out of the data layer and gets tested
 **The least-verified code in the path the tester is about to exercise.**
