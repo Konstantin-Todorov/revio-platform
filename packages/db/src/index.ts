@@ -108,3 +108,4 @@ export {
   type SupportResult,
   type SupportMessageInput,
 } from "./support.js";
+export { createPublicSignup, activatePendingSignup, type SignupOutcome } from "./public-signup.js";

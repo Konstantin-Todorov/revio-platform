@@ -83,6 +83,42 @@ export function inviteEmail({ name, context, invitedBy, url }: AuthEmailArgs): A
 }
 
 /**
+ * The first email a hotel that found us on its own ever gets.
+ *
+ * Deliberately NOT `inviteEmail`. That one says "you have been added", which is true when an
+ * operator or a manager put somebody in — and a lie to a person who typed their own address into
+ * our website thirty seconds ago. Being told you were added to something you just signed up for
+ * reads as a mistake, or as spam.
+ *
+ * It also carries the one fact that decides whether they come back: **the trial covers all three
+ * products.** A hotel that signed up "for the channel manager" and is silently given the other two
+ * will never find them — the whole commercial argument for the platform is that the second and
+ * third product cost them nothing to try.
+ */
+export function signupEmail({ name, context, url }: AuthEmailArgs): AuthEmail {
+  const greeting = name ? `Hello ${name},` : "Hello,";
+
+  return compose(
+    `Confirm your email to open ${context} on Revio`,
+    `One link, and your 30-day trial of all three Revio products begins.`,
+    `Welcome to Revio`,
+    [
+      { p: greeting },
+      { p: `You have started setting up ${context} on Revio. Confirm this address and choose a password, and your account is ready.` },
+      { action: { label: "Confirm and choose a password", url } },
+      { note: `This link works once and expires in ${TOKEN_POLICY.invite.ttlLabel}.` },
+      {
+        p:
+          "Your trial covers all three products — the channel manager, the reservation system and " +
+          "the property management system — for 30 days. They share one login and one set of rooms " +
+          "and rates, so there is nothing to migrate if you keep more than one.",
+      },
+      { note: "If this wasn't you, ignore this email. Nothing is active until the link above is used." },
+    ],
+  );
+}
+
+/**
  * The reset.
  *
  * Note what it does NOT say: it never confirms that an account exists. This exact text is sent for

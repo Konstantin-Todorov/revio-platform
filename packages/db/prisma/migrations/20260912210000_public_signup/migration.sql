@@ -1,0 +1,14 @@
+-- A hotel can now sign itself up, with nobody at Revio involved.
+--
+-- `signupIntent` records what they said they needed most ("stop OTAs double-booking my rooms", and
+-- so on). It decides which product their welcome opens on. It does NOT decide what they get — the
+-- trial covers all three, because the second and third product cost us almost nothing to deliver
+-- and a hotel that has to choose before seeing anything can choose wrong. `canSelfStartTrial`
+-- allows one trial per product EVER, so a wrong guess would have burned the only trial of the
+-- product they actually needed.
+--
+-- No new status column: `Tenant.status` gains the value 'pending_signup', which every app's session
+-- check already refuses because it only ever admits 'active'. An unverified signup is therefore
+-- inert without a single line of new gating — the safest kind of feature, the kind that reuses a
+-- rule already proven in production rather than adding one that can be forgotten.
+ALTER TABLE "Tenant" ADD COLUMN "signupIntent" TEXT;

@@ -15,7 +15,11 @@ export function middleware(req: NextRequest) {
     pathname === "/login/2fa" ||
     pathname === "/forgot-password" ||
     pathname.startsWith("/reset-password/") ||
-    pathname.startsWith("/accept-invite/");
+    pathname.startsWith("/accept-invite/") ||
+    // Public signup. A hotel that has never heard of us has, by definition, no session — this is
+    // the one page on this host meant to be reached from an advert.
+    pathname === "/signup" ||
+    pathname === "/signup/sent";
   const isLogin = pathname === "/login";
   const hasSession = req.cookies.has(SESSION_COOKIE);
 

@@ -12,6 +12,7 @@ import bcrypt from "bcryptjs";
 import { validatePassword, inviteEmail, passwordResetEmail, passwordChangedEmail } from "@revio/core";
 import { isBreachedPassword, breachMessage } from "@revio/core/server";
 import { forSystem } from "./rls.js";
+import { activatePendingSignup } from "./public-signup.js";
 import { recordAuthEvent, AUTH_EVENT, type AuthEventScope } from "./auth-events.js";
 import { issueToken, resolveToken, consumeToken, revokeTokensFor } from "./auth-tokens.js";
 import { checkLoginAllowed, recordLoginFailure, type LoginScope } from "./login-gate.js";
@@ -215,6 +216,20 @@ export async function completePasswordSet(args: {
       data: { passwordHash, sessionsValidFrom },
     });
     name = user.name ?? undefined;
+
+    /*
+     * A hotel that signed itself up becomes a customer HERE, and nowhere else.
+     *
+     * Choosing a password from an emailed link is the proof that the mailbox is theirs, so it is
+     * the moment the account may stop being inert: `pending_signup` → `active`, all three products
+     * switched on, three trial clocks started, in one transaction.
+     *
+     * It hangs off `completePasswordSet` rather than off a signup-specific route because this is
+     * the single path in the codebase that ever writes a password hash. A separate activation route
+     * would be a second way in, and the one that quietly rots. `activatePendingSignup` is a no-op
+     * for every other tenant, so a staff invitation and a password reset fall straight through.
+     */
+    await activatePendingSignup(user.tenantId);
     await recordAuthEvent({
       scope, type: AUTH_EVENT.passwordChanged,
       userId: user.id, tenantId: user.tenantId, email: resolved.token.email,

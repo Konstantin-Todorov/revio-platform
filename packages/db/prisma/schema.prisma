@@ -34,7 +34,16 @@ model Tenant {
   hasPms             Boolean   @default(false)
   // Commercial profile, set by the operator. plan ≈ room-count tier / package; status gates access.
   plan               String    @default("starter") // starter | growth | scale
-  status             String    @default("active") // active | suspended
+  /// active | suspended | pending_signup
+  ///
+  /// `pending_signup` is a hotel that filled in the public form and has not yet opened the emailed
+  /// link. Every app already refuses a session whose tenant is not `active`, so such an account is
+  /// inert without one line of new gating — it fails closed by reusing a rule written long before.
+  status             String    @default("active")
+
+  /// What a self-signed-up hotel said it needed most. Decides which product the welcome opens on;
+  /// it never decides what they GET, which is all three. Null for operator-created clients.
+  signupIntent       String?
   // Ours, for testing — kept alongside real clients in production forever, because a staging copy of
   // a five-app platform is a second thing to keep in sync and it always drifts. A demo tenant behaves
   // EXACTLY like a real one in every product; the flag only stops the operator console counting it as

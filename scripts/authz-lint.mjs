@@ -56,6 +56,14 @@ const EXEMPT = {
   // housekeeper who cannot open Settings is exactly the person most likely to be standing in front
   // of a broken screen, and a support form that refuses them loses the report we most need.
   "actions-support.ts:submitSupportRequest": "anybody signed in may ask for help, whatever their role",
+  // Public signup. The ONE action in a hotel-facing app whose entire purpose is to be used by
+  // somebody with no account and no tenant — a capability gate would require the thing it creates.
+  // Its protections are different in kind rather than absent: a platform-wide hourly ceiling on
+  // tenant creation, and an answer that is identical whether or not the address already exists, so
+  // the form cannot be used to discover who our customers are. What it creates is inert until an
+  // emailed link is opened (`status = "pending_signup"`, no entitlements, no trial clock), and every
+  // app already refuses a session whose tenant is not active.
+  "actions-signup.ts:submitSignup": "public signup — there is no account to check yet; ceilinged and non-enumerable instead",
   // Same rule, the other direction. Answering our reply is part of the same conversation, and the
   // person who reported the fault is often the one with the fewest permissions — gating the reply
   // would let us ask a question the reporter is not allowed to answer. `recordHotelReply` scopes the

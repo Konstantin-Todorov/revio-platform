@@ -7,6 +7,44 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Claude · DONE · A hotel can now sign itself up
+**Founder decisions: one trial switches on ALL THREE products; login gets a chooser now and a
+central login next.** → **CODEX: `docs/partner/SIGNUP-AND-LOGIN-BRIEF.md` is yours** — the header
+buttons, the chooser, the copy that must stay true, and two missing docs articles.
+Files: `packages/core/src/onboarding/signup.{ts,test.ts}`, `packages/core/src/email/auth-emails.ts`,
+`packages/db/src/{public-signup.ts,auth-flows.ts,index.ts}` + `migrations/20260912210000_public_signup/`,
+`apps/channel-manager/{app/signup,components/auth/SignupForm.tsx,lib/actions-signup.ts,middleware.ts}`,
+`scripts/authz-lint.mjs`.
+
+**There was no public signup path at all.** `selfStartTrial` is per-product and its routes live
+INSIDE the protected apps — it is for an existing customer adding a second product. A new hotel
+could only be onboarded by the operator, so the website's "Start free trial" button had nowhere to go.
+
+⚠️ **An unverified signup is inert by reusing a rule, not by adding one.** The tenant is created
+immediately with `status = "pending_signup"`, every entitlement off and no trial clock. Every app
+already refuses a session whose `tenant.status !== "active"`, so it fails closed without one line of
+new gating. Activation hangs off `completePasswordSet` — the single path in the codebase that ever
+writes a password hash — so there is no second way in that could rot.
+
+⚠️ **Both outcomes are indistinguishable to whoever fills in the form.** "That email is already
+registered" would make this page a directory of which hoteliers use Revio, one guess at a time —
+the same refusal the booking engine made for guest recognition (K6). A duplicate gets the same
+screen and a real password-reset mail, so a forgotten account still resolves — in the inbox that
+owns the address, not on a stranger's screen. A test asserts no refusal message contains "already",
+"exists", "registered", "taken", "in use" or "account".
+
+`signupEmail` is a new template, NOT `inviteEmail`: "you have been added" is true for a staff invite
+and a lie to somebody who typed their own address in thirty seconds ago. Protection is a
+platform-wide ceiling of 12 tenants/hour, counted from the data — an in-memory bucket resets on
+deploy and is per-instance, and storing an IP would create personal data this guard does not need.
+
+19 tests. `pnpm verify` green, 2,319 tests, CM builds. Rendered and looked at.
+
+⚠️ **NOT verified end to end** — `createPublicSignup` → email → `activatePendingSignup` is
+DB-backed and the sandbox has no test database. First thing to check on production with a throwaway
+address: that the trial rows appear, all three entitlements flip, and the tenant leaves
+`pending_signup`.
+
 ### 2026-09-12 · Claude · DONE · The RevioDirect funnel — the data was always there
 **Top item on `docs/STATUS.md`'s competitive-gap list: "no analytics on the booking page at all".**
 Files: `packages/core/src/metrics/booking-funnel.{ts,test.ts}`, `packages/db/prisma/schema.prisma` +
