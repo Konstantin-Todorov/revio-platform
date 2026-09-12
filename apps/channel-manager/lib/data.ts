@@ -2,7 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { deriveRate, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
-import { structureGap, describeStructureGap } from "@revio/connectivity";
+import { structureGap, describeStructureGap, mappingRows } from "@revio/connectivity";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -861,42 +861,38 @@ export async function getMapping(channelCode?: string) {
    * is not a row you can act on. Every active product is now a row; the ones with no mapping yet say
    * so and can be mapped like any other.
    */
-  const roomMapByProduct = new Map(existingRoomMaps.map((m) => [m.roomTypeId, m]));
-  const rateMapByProduct = new Map(existingRateMaps.map((m) => [m.ratePlanId, m]));
+  /*
+   * The decision itself lives in `@revio/connectivity` (`mappingRows`, 12 tests) rather than here —
+   * it is the rule a tester reported against, and a rule inside a 900-line data function is one
+   * nobody can check. This shapes its output back into the fields the screen already reads.
+   */
+  const roomTypeMappings: MappedRoomRow[] = mappingRows(
+    roomTypes.map((rt) => ({ id: rt.id, name: rt.name, active: rt.active })),
+    existingRoomMaps.map((m) => ({ id: m.id, productId: m.roomTypeId, externalId: m.externalRoomId, status: m.status })),
+    "room",
+  ).map((r) => ({
+    id: r.id,
+    productId: r.productId,
+    roomTypeId: r.productId,
+    roomType: { id: r.productId, name: r.name },
+    externalRoomId: r.externalId,
+    status: r.status,
+    unmapped: r.unmapped,
+  }));
 
-  const roomTypeMappings = roomTypes
-    .filter((rt) => rt.active || roomMapByProduct.has(rt.id))
-    .map((rt) => {
-      const m = roomMapByProduct.get(rt.id);
-      return m
-        ? { ...m, productId: rt.id, unmapped: false }
-        : {
-            id: null as string | null,
-            productId: rt.id,
-            roomTypeId: rt.id,
-            roomType: { id: rt.id, name: rt.name },
-            externalRoomId: null as string | null,
-            status: "never_sent",
-            unmapped: true,
-          };
-    });
-
-  const ratePlanMappings = ratePlans
-    .filter((rp) => (rp.active && rp.priceLogic === "manual") || rateMapByProduct.has(rp.id))
-    .map((rp) => {
-      const m = rateMapByProduct.get(rp.id);
-      return m
-        ? { ...m, productId: rp.id, unmapped: false }
-        : {
-            id: null as string | null,
-            productId: rp.id,
-            ratePlanId: rp.id,
-            ratePlan: { id: rp.id, name: rp.name },
-            externalRateId: null as string | null,
-            status: "never_sent",
-            unmapped: true,
-          };
-    });
+  const ratePlanMappings: MappedRateRow[] = mappingRows(
+    ratePlans.map((rp) => ({ id: rp.id, name: rp.name, active: rp.active, priceLogic: rp.priceLogic })),
+    existingRateMaps.map((m) => ({ id: m.id, productId: m.ratePlanId, externalId: m.externalRateId, status: m.status })),
+    "rate",
+  ).map((r) => ({
+    id: r.id,
+    productId: r.productId,
+    ratePlanId: r.productId,
+    ratePlan: { id: r.productId, name: r.name },
+    externalRateId: r.externalId,
+    status: r.status,
+    unmapped: r.unmapped,
+  }));
 
   /*
    * "All mapped" was counting ROWS whose status is not `complete`, so a product that never reached

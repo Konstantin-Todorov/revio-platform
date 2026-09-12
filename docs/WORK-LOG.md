@@ -31,6 +31,29 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-12 · Claude · DONE · The mapping rule comes out of the data layer and gets tested
+**The least-verified code in the path the tester is about to exercise.**
+Files: `packages/connectivity/src/mapping-rows.ts` (NEW, 12 tests), `apps/channel-manager/lib/data.ts`.
+
+Yesterday's fix made Mapping list every active product rather than only the rows provisioning had
+created — the right behaviour, written inline in a 900-line data function and covered by nothing. It
+is the screen the hotel will be working through, so it is the last place to leave a rule nobody can
+check.
+
+`mappingRows` is that rule, pure and pinned against the reporting hotel's exact configuration:
+three room types and three rate plans, connected to Channex before two rooms and both live plans
+existed.
+
+Two decisions in it that are easy to get backwards:
+- ⚠️ **An inactive product that IS mapped stays on the list.** It is live on the channel right now,
+  and a hotel that cannot see it cannot undo it. Hiding it is worse than a row they no longer need.
+- **An inactive product that was never mapped is not offered** — nothing to undo, nothing to sell,
+  and offering it is the dead-end choice BUG-008 was about.
+
+`unmappedCount` also moved: it was counting mapping ROWS, so a product with no row made the number
+zero and the pill green. Absence and incompleteness are different questions and both belong in it.
+
+
 ### 2026-09-12 · Claude · DONE · RevioCRS gets tests, and they found two bugs on the way in
 **The app with the most screens and, until today, no test had ever run against it.**
 Files: `apps/reservation/lib/{metrics.ts,metrics-range.test.ts,format.test.ts}`,

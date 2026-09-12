@@ -18,6 +18,13 @@ export {
   type ChannexBooking,
 } from "./channex-mappers.js";
 export {
+  mappingRows,
+  unmappedCount,
+  type MappableProduct,
+  type ExistingMapping,
+  type MappingRow,
+} from "./mapping-rows.js";
+export {
   syncChannel,
   syncRealChannels,
   pullSummary,
