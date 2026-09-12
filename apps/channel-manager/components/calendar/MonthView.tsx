@@ -28,6 +28,12 @@ export function MonthView({
   const rowByKey = new Map(section.rows.map((r) => [r.key, r]));
   const idx = new Map(dates.map((d, i) => [d, i]));
   const cellOf = (key: string, date: string) => rowByKey.get(key)?.cells[idx.get(date) ?? -1];
+  /*
+   * The month shows ONE price row — whichever plan `getCalendarBoard` narrowed to — and finds it by
+   * kind. It used to look for the key "standard", which stopped existing when rate rows became one
+   * per plan keyed by plan code; a hardcoded key would have rendered every day unpriced.
+   */
+  const priceRow = section.rows.find((r) => r.kind === "price");
 
   return (
     <div>
@@ -53,7 +59,15 @@ export function MonthView({
           const ctd = visible.has("ctd") && cellOf("ctd", d)?.flag === "ctd";
           const inv = cellOf("inventory", d);
           const sold = cellOf("sold", d)?.value;
-          const price = cellOf("standard", d);
+          /*
+           * ⚠️ The price row is found by KIND, not by the key "standard".
+           *
+           * Rate rows are keyed by rate-plan code now, so a hardcoded "standard" matches nothing and
+           * the month view would show every day unpriced — the same silent blank the grid had. The
+           * month deliberately renders one plan, and `getCalendarBoard` has already narrowed it to
+           * the first active one.
+           */
+          const price = priceRow ? cellOf(priceRow.key, d) : undefined;
           const minLos = visible.has("minlos") ? cellOf("minlos", d)?.value : undefined;
 
           return (
@@ -84,8 +98,20 @@ export function MonthView({
                 </div>
               )}
               <div className="flex items-center gap-1 text-[10.5px] text-ink-400">
-                <span className="w-7 shrink-0">Rate</span>
-                {price && <EditableCell roomTypeId={section.roomType.id} date={d} field="price" kind="price" value={price.value} prefix="€" />}
+                {/* The plan's own name, not the word "Rate" — BUG-001. Truncated because the month
+                    cell is narrow; the full name is the title. */}
+                <span className="w-7 shrink-0 truncate" title={priceRow?.label ?? "Rate"}>{priceRow?.label ?? "Rate"}</span>
+                {price && (
+                  <EditableCell
+                    roomTypeId={section.roomType.id}
+                    date={d}
+                    field="price"
+                    kind="price"
+                    value={price.value}
+                    prefix="€"
+                    {...(priceRow?.ratePlanId ? { ratePlanId: priceRow.ratePlanId } : {})}
+                  />
+                )}
               </div>
             </div>
           );

@@ -255,16 +255,38 @@ export async function savePropertyDefaults(fd: FormData): Promise<void> {
 
 // --- Calendar rate edit (standard plan) ---------------------------------------
 
-export async function saveCalendarRate(args: { roomTypeId: string; date: string; value: string }): Promise<void> {
+export async function saveCalendarRate(args: {
+  roomTypeId: string;
+  date: string;
+  value: string;
+  /** The plan whose row was edited. See the note below — this is not optional in spirit. */
+  ratePlanId?: string;
+}): Promise<void> {
   await requireCapability("manageRates");
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) return flashError("That date isn’t one we can read. Reload the calendar and try again.");
 
   const roomType = await prisma.roomType.findFirst({ where: { id: args.roomTypeId, propertyId } });
-  const standard = await prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } });
+  /*
+   * ⚠️ The plan comes from the ROW that was edited, verified against this property.
+   *
+   * It used to be the first active manual plan, always — so with the grid rendering one row per
+   * plan, every edit would land on the first one whichever row was typed into. That is the write
+   * half of the defect reported on 2026-09-12; fixing the read alone would have produced a calendar
+   * that displays two plans and silently writes both into one.
+   */
+  const standard = args.ratePlanId
+    ? await prisma.ratePlan.findFirst({ where: { id: args.ratePlanId, propertyId, priceLogic: "manual", active: true } })
+    : await prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } });
   if (!roomType) return flashError("That room type no longer exists — somebody may have removed it while this page was open.");
-  if (!standard) return flashError("This property has no standard rate plan yet, so there is nothing to price. Add one in Rooms & Rates.");
+  if (!standard) {
+    return flashError(
+      args.ratePlanId
+        ? "That rate row can no longer hold a price — the plan may have been switched off or made derived while this page was open. Reload the calendar."
+        : "This property has no active manual rate plan yet, so there is nothing to price. Add one in Rooms & Rates.",
+    );
+  }
 
   const priceMinor = Math.round(Number(args.value) * 100);
   if (!Number.isFinite(priceMinor) || priceMinor < 0) return flashError("That price isn’t a number we can use. Enter an amount of zero or more.");

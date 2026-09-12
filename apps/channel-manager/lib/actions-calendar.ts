@@ -35,12 +35,34 @@ function revalidateCalendar() {
    */
 }
 
-/** The base manual rate plan id (prefer "BAR", else first manual). Null on a hotel without one. */
-async function standardPlanId(propertyId: string): Promise<string | null> {
-  const std =
-    (await prisma.ratePlan.findFirst({ where: { propertyId, code: "BAR" } })) ??
-    (await prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual" }, orderBy: { sortOrder: "asc" } }));
-  return std?.id ?? null;
+/**
+ * The plan a price edit writes to.
+ *
+ * ⚠️ This replaced `standardPlanId`, which resolved `code: "BAR"` **with no `active` filter** and was
+ * the write half of the read/write split reported on 2026-09-12: the calendar read one plan, the
+ * editor wrote another, and a hotel watched prices disappear between two products sharing one
+ * database.
+ *
+ * Given a plan id from the edited row it is checked — same property, active, and manual, because a
+ * derived plan computes its price and cannot be typed into. Given nothing (an older client, a month
+ * view) it falls back to the first ACTIVE manual plan, never to whatever is called BAR.
+ */
+async function editablePlanId(propertyId: string, asked?: string): Promise<string | null> {
+  if (asked) {
+    const plan = await prisma.ratePlan.findFirst({
+      where: { id: asked, propertyId, active: true, priceLogic: "manual" },
+      select: { id: true },
+    });
+    // Refused rather than silently redirected: writing this price to a DIFFERENT plan than the one
+    // on screen is exactly the failure being fixed.
+    return plan?.id ?? null;
+  }
+  const first = await prisma.ratePlan.findFirst({
+    where: { propertyId, active: true, priceLogic: "manual" },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true },
+  });
+  return first?.id ?? null;
 }
 
 /**
@@ -90,7 +112,18 @@ const FIELD_CAPABILITY: Record<string, Capability> = {
   inventory: "manageInventory",
 };
 
-export async function saveCell(input: { roomTypeId: string; date: string; field: string; value: string }): Promise<void> {
+export async function saveCell(input: {
+  roomTypeId: string;
+  date: string;
+  field: string;
+  value: string;
+  /**
+   * ⚠️ Which plan's row was edited. The grid renders one row per active plan now, so a price edit is
+   * ambiguous without it — and the fallback below is what made an edit land on a plan the person
+   * was not looking at.
+   */
+  ratePlanId?: string;
+}): Promise<void> {
   await requireCapability(FIELD_CAPABILITY[input.field] ?? "manageRates");
   const { id: propertyId, tenantId } = await getProperty();
   const date = utcDay(input.date);
@@ -115,8 +148,20 @@ export async function saveCell(input: { roomTypeId: string; date: string; field:
       return flashError("That price isn’t a number we can read. Enter an amount, or clear the cell to leave it unpriced.");
     }
     const priceMinor = Math.max(0, Math.round(parsed * 100));
-    const ratePlanId = await standardPlanId(propertyId);
-    if (!ratePlanId) return; // no base rate plan to price against
+    /*
+     * ⚠️ The plan comes from the ROW that was edited, and is verified to belong to this property and
+     * to be able to hold a price.
+     *
+     * It used to resolve `standardPlanId` — `code: "BAR"` with no `active` filter — so every price
+     * typed into the RevioLink calendar was written to whichever plan was called BAR, including a
+     * switched-off one. That is the write half of the same defect that made the grid read it.
+     */
+    const ratePlanId = await editablePlanId(propertyId, input.ratePlanId);
+    if (!ratePlanId) {
+      return flashError(
+        "That price row is not linked to a rate plan that can hold a price. Reload the calendar — if it persists, check the plan is still active in Rooms & Rates.",
+      );
+    }
     // A calendar cell edits "the" price, which since OBP H1 is a real occupancy row — the primary.
     // Resolved rather than assumed, so this cell cannot disagree with the bulk editor beside it.
     const occupancy = await occupancyKeyFor(prisma, input.roomTypeId);
@@ -125,7 +170,10 @@ export async function saveCell(input: { roomTypeId: string; date: string; field:
       update: { priceMinor, source: "calendar" },
       create: { tenantId, propertyId, roomTypeId: input.roomTypeId, ratePlanId, date, occupancy, priceMinor, source: "calendar" },
     });
-    await logAudit(propertyId, tenantId, { entity: `${rt.name} · Standard Rate`, field: "price", newValue: `€${priceMinor / 100}` });
+    // Names the plan actually written, not the words "Standard Rate" — an audit line that names the
+    // wrong plan is worse than one that names none.
+    const planName = (await prisma.ratePlan.findUnique({ where: { id: ratePlanId }, select: { name: true } }))?.name;
+    await logAudit(propertyId, tenantId, { entity: `${rt.name} · ${planName ?? "rate"}`, field: "price", newValue: `€${priceMinor / 100}` });
   } else if (input.field === "inventory") {
     await upsertCell(tenantId, propertyId, input.roomTypeId, date, { inventory: Math.max(0, int2(input.value)) });
     await logAudit(propertyId, tenantId, { entity: `${rt.name}`, field: "rooms_to_sell", newValue: input.value });
@@ -271,7 +319,7 @@ async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayl
       }
     }
 
-    if (requested.length === 0) { const std = await standardPlanId(propertyId); ratePlanIds = std ? [std] : []; }
+    if (requested.length === 0) { const std = await editablePlanId(propertyId); ratePlanIds = std ? [std] : []; }
     if (ratePlanIds.length === 0) {
       const because = droppedPlans.length > 0
         ? ` ${droppedPlans.map((d) => `${d.name} is ${d.why}`).join("; ")}.`
@@ -562,7 +610,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
   const [channel, ratePlan, stdId] = await Promise.all([
     prisma.channel.findUnique({ where: { id: channelId } }),
     prisma.ratePlan.findUnique({ where: { id: ratePlanId } }),
-    standardPlanId(propertyId),
+    editablePlanId(propertyId),
   ]);
   if (!channel || !ratePlan) return { ok: false, error: "Unknown channel or rate plan." };
 

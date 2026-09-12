@@ -122,13 +122,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
               </thead>
               <tbody>
                 {roomTypeMappings.map((m) => (
-                  <tr key={m.id} id={`map-room-${m.id}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
+                  <tr key={m.productId} id={`map-room-${m.productId}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{m.roomType.name}</td>
                     <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRoomId ?? <span className="text-danger-500">—</span>}</td>
                     <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
-                        <MappingEditDialog kind="room" id={m.id} label={m.roomType.name} externalId={m.externalRoomId} channelName={channel.name} options={products.rooms} />
+                        <MappingEditDialog kind="room" id={m.id} productId={m.productId} label={m.roomType.name} externalId={m.externalRoomId} channelName={channel.name} channelId={channel.id} options={products.rooms} />
                       </div>
                     </td>
                   </tr>
@@ -151,13 +151,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
               </thead>
               <tbody>
                 {ratePlanMappings.map((m) => (
-                  <tr key={m.id} id={`map-rate-${m.id}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
+                  <tr key={m.productId} id={`map-rate-${m.productId}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{m.ratePlan.name}</td>
                     <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRateId ?? <span className="text-danger-500">—</span>}</td>
                     <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
-                        <MappingEditDialog kind="rate" id={m.id} label={m.ratePlan.name} externalId={m.externalRateId} channelName={channel.name} options={products.rates} />
+                        <MappingEditDialog kind="rate" id={m.id} productId={m.productId} label={m.ratePlan.name} externalId={m.externalRateId} channelName={channel.name} channelId={channel.id} options={products.rates} />
                       </div>
                     </td>
                   </tr>

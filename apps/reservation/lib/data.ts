@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
   matchDuplicates, normalisePhone, type DuplicateCandidate,
   resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
+  ratePlanRows, type RoundingRule,
 } from "@revio/core";
 import { getSession } from "./session";
 
@@ -96,6 +97,14 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
 export interface InventoryQuery {
   start?: string; // YYYY-MM-DD
   days?: number;
+  /**
+   * Rate-plan codes whose rate rows show. Empty ⇒ every ACTIVE plan.
+   *
+   * ⚠️ This did not exist. The Rates filter was rendered, updated its own label when you ticked a
+   * plan, and never reached this query — so the grid could not change and did not. Reported
+   * 2026-09-12 as BUG-002, "the control is not wired to the render", which was exactly right.
+   */
+  rp?: string[];
 }
 
 export interface CellRestrictions {
@@ -103,6 +112,17 @@ export interface CellRestrictions {
   cta: boolean;
   ctd: boolean;
   minLos: number | null;
+}
+
+export interface InventoryRatePlanRow {
+  id: string;
+  code: string;
+  /** ⚠️ The plan's own name. The grid rendered the literal word "Rate" — BUG-001. */
+  label: string;
+  /** Manual rows are editable; derived rows follow a parent and are read-only. */
+  editable: boolean;
+  /** Parent's name and the adjustment, for the paperclip on a derived row. */
+  derived?: { parent: string; offset: string };
 }
 
 export interface InventorySection {
@@ -117,6 +137,8 @@ export interface InventorySection {
     manualOverride: boolean;
     /** The headline rate — the primary occupancy's under per-person, the room's under per-room. */
     rate: string;
+    /** Price per rate-plan id, one for every row in `ratePlanRows`. */
+    ratesByPlan: Record<string, string>;
     /**
      * Every occupancy priced, present ONLY under per-person (OBP §6.5).
      *
@@ -160,14 +182,32 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
   });
   const rtIds = roomTypes.map((r) => r.id);
 
-  const [standard, defaults, rules, prices, periods, cells, holds, lines] = await Promise.all([
-    // occupancyOptions included: without them the resolver has no rows and a per-person calendar
-    // shows every cell as "—".
-    prisma.ratePlan.findFirst({
-      where: { propertyId, priceLogic: "manual", active: true },
-      include: { occupancyOptions: true },
-      orderBy: { sortOrder: "asc" },
-    }),
+  /*
+   * ⚠️ EVERY active plan, not "the" plan.
+   *
+   * This read `findFirst({ priceLogic: "manual", active: true })` — the first active manual plan by
+   * sort order, which at the reporting hotel was *BB Flex*. Every price written to their other plan
+   * was stored correctly and rendered nowhere, because `priceLookup` below returned null for any id
+   * but that one. RevioLink resolved a DIFFERENT plan by a different rule, which is why a price
+   * saved in one product vanished in the other. See `ratePlanRows`.
+   */
+  const planRecords = await prisma.ratePlan.findMany({
+    where: { propertyId },
+    include: { occupancyOptions: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  const planInputs = planRecords.map((p) => ({
+    id: p.id, code: p.code, name: p.name, active: p.active,
+    priceLogic: p.priceLogic, sortOrder: p.sortOrder, parentRatePlanId: p.parentRatePlanId,
+  }));
+  const planView = ratePlanRows(planInputs, q.rp);
+  const planRowList = planView.rows;
+  const planRecordById = new Map(planRecords.map((p) => [p.id, p]));
+  // The headline row keeps its historical meaning — the first plan on screen — so the occupancy
+  // popover and the waterfall cell shape are untouched.
+  const standard = planRowList[0] ? (planRecordById.get(planRowList[0].id) ?? null) : null;
+
+  const [defaults, rules, prices, periods, cells, holds, lines] = await Promise.all([
     prisma.propertyDefaults.findUnique({ where: { propertyId } }),
     prisma.restrictionRule.findMany({ where: { propertyId, active: true, dateFrom: { lt: end }, dateTo: { gte: start } } }),
     prisma.ratePrice.findMany({ where: { roomTypeId: { in: rtIds }, date: { gte: start, lt: end } } }),
@@ -215,6 +255,14 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
           .filter((pr) => pr.ratePlanId === standard.id)
           .map((pr) => [`${pr.roomTypeId}:${ymd(pr.date)}:${pr.occupancy ?? ""}`, pr.priceMinor] as const)
       : [],
+  );
+  /*
+   * Every plan on screen, keyed by plan as well as room and date — the index that lets a second
+   * rate row exist at all. The headline index above is deliberately left alone: it feeds the
+   * occupancy resolver, and a per-room property must keep rendering byte for byte as before.
+   */
+  const planPriceByKey = new Map(
+    prices.map((pr) => [`${pr.ratePlanId}:${pr.roomTypeId}:${ymd(pr.date)}:${pr.occupancy ?? ""}`, pr.priceMinor] as const),
   );
   const priceLookup: PriceLookup = (rtId, rpId, k, occ) =>
     rpId === standard?.id ? (priceByKey.get(`${rtId}:${k}:${occ}`) ?? null) : null;
@@ -333,6 +381,41 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
         }),
         manualOverride: manual != null,
         rate: priceMinor != null ? String(Math.round(priceMinor / 100)) : "—",
+        /*
+         * One entry per rate row on screen. The headline `rate` above stays the first plan's, so
+         * nothing that already reads it changes; this is what makes the SECOND plan visible at all —
+         * the gap that let a hotel save a BB Non-Refundable price and never see it again.
+         */
+        ratesByPlan: Object.fromEntries(
+          planRowList.map((pl): readonly [string, string] => {
+            const occ = effectivePrimary(
+              planRecordById.get(pl.id)?.primaryOccupancy ?? null,
+              rt.defaultOccupancy,
+              Math.max(1, rt.maxGuests),
+            );
+            const own = planPriceByKey.get(`${pl.id}:${rt.id}:${d}:${occ}`)
+              ?? planPriceByKey.get(`${pl.id}:${rt.id}:${d}:`);
+            if (own != null) return [pl.id, String(Math.round(own / 100))] as const;
+            // A derived row shows its parent's price through its own adjustment.
+            if (pl.parentRatePlanId) {
+              const rec = planRecordById.get(pl.id);
+              const base = planPriceByKey.get(`${pl.parentRatePlanId}:${rt.id}:${d}:${occ}`)
+                ?? planPriceByKey.get(`${pl.parentRatePlanId}:${rt.id}:${d}:`);
+              if (base != null && rec) {
+                return [pl.id, String(Math.round(deriveRate(base, {
+                  parentRatePlanId: pl.parentRatePlanId,
+                  adjustmentType: (rec.derivedType as "percent" | "fixed") ?? "percent",
+                  direction: (rec.derivedDirection as "increase" | "decrease") ?? "decrease",
+                  value: rec.derivedValue ?? 0,
+                  rounding: (rec.derivedRounding as RoundingRule | null) ?? "none",
+                  ...(rec.derivedFloorMinor != null ? { floorMinor: rec.derivedFloorMinor } : {}),
+                  ...(rec.derivedCeilingMinor != null ? { ceilingMinor: rec.derivedCeilingMinor } : {}),
+                }) / 100))] as const;
+              }
+            }
+            return [pl.id, "—"] as const;
+          }),
+        ) as Record<string, string>,
         // Present only under per-person. Absent means "render exactly as before", which is what a
         // per-room property must keep doing byte for byte.
         ...(occupancyRates ? { occupancyRates } : {}),
@@ -359,6 +442,28 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
     days,
     start: ymd(start),
     todayIso,
+    /*
+     * The rate rows the grid must draw, and the options its filter must offer — computed once, from
+     * one reconciliation, so the control and the grid cannot describe different sets.
+     */
+    ratePlanRows: planRowList.map((pl): InventoryRatePlanRow => {
+      const rec = planRecordById.get(pl.id);
+      const parent = pl.parentRatePlanId ? planRecordById.get(pl.parentRatePlanId) : null;
+      const offset = rec && rec.priceLogic === "derived"
+        ? rec.derivedType === "percent"
+          ? `${rec.derivedDirection === "increase" ? "+" : "−"}${rec.derivedValue}%`
+          : `${rec.derivedDirection === "increase" ? "+" : "−"}€${((rec.derivedValue ?? 0) / 100).toLocaleString("en-US")}`
+        : null;
+      return {
+        id: pl.id,
+        code: pl.code,
+        label: pl.label,
+        editable: pl.priceLogic !== "derived",
+        ...(offset ? { derived: { parent: parent?.name ?? "its parent plan", offset } } : {}),
+      };
+    }),
+    ratePlanOptions: planView.options,
+    selectedRatePlans: planView.selected,
   };
 }
 

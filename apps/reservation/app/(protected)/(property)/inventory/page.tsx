@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { BedDouble, ChevronDown, ChevronLeft, ChevronRight, Wrench } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getInventoryBoard, addDays, ymd } from "@/lib/data";
+import { type InventoryRatePlanRow, getInventoryBoard, addDays, ymd } from "@/lib/data";
 import { ensurePickupSnapshot } from "@/lib/pickup";
 import { PageHeader } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -10,7 +10,7 @@ import { OccupancyRatePopover } from "@/components/inventory/OccupancyRatePopove
 import { CollapseAll } from "@/components/inventory/CollapseAll";
 import { ParamMultiSelect } from "@/components/inventory/ParamMultiSelect";
 import { CrsCalendarBulkButton } from "@/components/inventory/CrsCalendarBulkButton";
-import { deriveRate, type DerivedRateConfig, availabilityPressure } from "@revio/core";
+import { availabilityPressure } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +49,19 @@ export default async function InventoryCalendarPage({
   searchParams: Promise<{ start?: string; days?: string; rp?: string; rt?: string }>;
 }) {
   const sp = await searchParams;
-  const board = await getInventoryBoard({ start: sp.start, days: sp.days ? Number(sp.days) : undefined });
+  /*
+   * ⚠️ `rp` is passed to the QUERY now.
+   *
+   * The Rates filter used to be read here, used to compute which rows this page drew, and never
+   * reached `getInventoryBoard` — so the board always returned one plan's prices whatever was
+   * ticked, and the control could not change the grid. Reported as BUG-002: "the control is not
+   * wired to the render".
+   */
+  const board = await getInventoryBoard({
+    start: sp.start,
+    days: sp.days ? Number(sp.days) : undefined,
+    rp: (sp.rp ?? "").split(",").filter(Boolean),
+  });
   await ensurePickupSnapshot();
 
   // Room-type view filter (§5.1, match RevioLink) — narrows which room-type sections render.
@@ -64,33 +76,12 @@ export default async function InventoryCalendarPage({
   });
   const bulkPlanOpts = bulkPlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }));
 
-  // Rate-plan multi-select (spec §3.5, aligned to RevioLink): governs RATE rows only — the
-  // waterfall and restriction rows stay pinned regardless. Default = the standard plan.
-  const rp = (sp.rp ?? "").split(",").filter(Boolean);
-  const allPlans = await prisma.ratePlan.findMany({
-    where: { propertyId: board.property.id, active: true },
-    orderBy: { sortOrder: "asc" },
-    select: { code: true, name: true, priceLogic: true, derivedType: true, derivedDirection: true, derivedValue: true, derivedRounding: true, derivedFloorMinor: true, derivedCeilingMinor: true },
-  });
-  const standardCode = allPlans.find((p) => p.priceLogic === "manual")?.code ?? "BAR";
-  const selected = new Set(rp.length > 0 ? rp : [standardCode]);
-  const derivedRows = allPlans
-    .filter((p) => p.priceLogic === "derived" && selected.has(p.code))
-    .map((p) => ({
-      code: p.code,
-      name: p.name,
-      offset: p.derivedType === "percent" ? `${p.derivedDirection === "increase" ? "+" : "−"}${p.derivedValue}%` : `${p.derivedDirection === "increase" ? "+" : "−"}€${((p.derivedValue ?? 0) / 100).toLocaleString("en-US")}`,
-      cfg: {
-        parentRatePlanId: "",
-        adjustmentType: (p.derivedType as "percent" | "fixed") ?? "percent",
-        direction: (p.derivedDirection as "increase" | "decrease") ?? "decrease",
-        value: p.derivedValue ?? 0,
-        rounding: (p.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
-        ...(p.derivedFloorMinor != null ? { floorMinor: p.derivedFloorMinor } : {}),
-        ...(p.derivedCeilingMinor != null ? { ceilingMinor: p.derivedCeilingMinor } : {}),
-      } satisfies DerivedRateConfig,
-    }));
-  const showStandardRate = selected.has(standardCode);
+  /*
+   * The rate rows come from the BOARD, which computed them, the filter's options and the selected
+   * set from one reconciliation. This page used to derive its own answer from the URL and the
+   * database — a second opinion that disagreed with the data it was drawing.
+   */
+  const rateRows = board.ratePlanRows;
 
   const startDate = new Date(`${board.start}T00:00:00Z`);
   const prev = ymd(addDays(startDate, -board.days));
@@ -138,9 +129,9 @@ export default async function InventoryCalendarPage({
           selected={rt}
         />
         <ParamMultiSelect
-          label="Rates" param="rp" emptyLabel="Standard only"
-          options={allPlans.map((p) => ({ value: p.code, label: p.priceLogic === "derived" ? `${p.name} (derived)` : p.name }))}
-          selected={[...selected]}
+          label="Rates" param="rp" emptyLabel="All rate plans"
+          options={board.ratePlanOptions}
+          selected={board.selectedRatePlans}
         />
         <CollapseAll containerId="crs-inventory-sections" />
       </div>
@@ -187,7 +178,7 @@ export default async function InventoryCalendarPage({
                   </tr>
                 </thead>
                 <tbody>
-                  <SectionRows section={section} dates={board.dates} todayIso={board.todayIso} showStandardRate={showStandardRate} derivedRows={derivedRows} />
+                  <SectionRows section={section} dates={board.dates} todayIso={board.todayIso} rateRows={rateRows} />
                 </tbody>
               </table>
             </div>
@@ -207,16 +198,14 @@ export default async function InventoryCalendarPage({
   );
 }
 
-type DerivedRow = { code: string; name: string; offset: string; cfg: DerivedRateConfig };
 
 function SectionRows({
-  section, dates, todayIso, showStandardRate, derivedRows,
+  section, dates, todayIso, rateRows,
 }: {
   section: Awaited<ReturnType<typeof getInventoryBoard>>["sections"][number];
   dates: string[];
   todayIso: string;
-  showStandardRate: boolean;
-  derivedRows: DerivedRow[];
+  rateRows: InventoryRatePlanRow[];
 }) {
   return (
     <>
@@ -244,37 +233,46 @@ function SectionRows({
           })}
         </tr>
       ))}
-      {/* Rate rows (editable standard + read-only derived, per the multi-select) + Restrictions. */}
-      {showStandardRate && (
-        <tr className="border-b border-surface-border/40">
-          <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">Rate</td>
-          {section.cells.map((cell, i) => (
-            <td key={i} className={`px-1 py-1 text-center ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
-              <span className="inline-flex items-center">
-                <RateCell roomTypeId={section.roomType.id} date={dates[i]!} value={cell.rate} />
-                {/* Present only under per-person. A per-room property renders exactly as before. */}
-                {cell.occupancyRates && (
-                  <OccupancyRatePopover
-                    rates={cell.occupancyRates}
-                    primaryOccupancy={section.roomType.defaultOccupancy ?? section.roomType.maxGuests}
-                  />
-                )}
-              </span>
-            </td>
-          ))}
-        </tr>
-      )}
-      {derivedRows.map((dr) => (
-        <tr key={dr.code} className="border-b border-surface-border/40">
-          <td className="sticky left-0 z-10 bg-white px-4 py-1.5 pl-4 text-[11.5px] font-medium text-ink-400">
-            <span title={`Derived from the standard rate · ${dr.offset}`} className="mr-1 cursor-help select-none">📎</span>
-            {dr.name} <span className="tnum rounded bg-surface-sunken px-1 text-[10px] font-semibold text-ink-500">{dr.offset}</span>
+      {/*
+        ⚠️ ONE ROW PER ACTIVE PLAN, each carrying the plan's own name.
+        This was a single row labelled with the literal word "Rate" — BUG-001 — plus rows for plans
+        derived from it. A hotel with two independent manual plans had one of them rendered and the
+        other invisible, however correctly its prices were stored.
+      */}
+      {rateRows.map((pl) => (
+        <tr key={pl.id} className="border-b border-surface-border/40">
+          <td
+            className={`sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium ${pl.editable ? "text-ink-500" : "pl-4 text-ink-400"}`}
+            title={pl.derived ? `Derived from ${pl.derived.parent} · ${pl.derived.offset}` : pl.label}
+          >
+            {pl.derived && <span className="mr-1 cursor-help select-none">📎</span>}
+            {pl.label}
+            {pl.derived && (
+              <span className="tnum ml-1 rounded bg-surface-sunken px-1 text-[10px] font-semibold text-ink-500">{pl.derived.offset}</span>
+            )}
           </td>
-          {section.cells.map((cell, i) => (
-            <td key={i} className={`px-1 py-1 text-center text-ink-400 ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
-              <span className="tnum text-[12px]">{cell.rate === "—" ? "—" : Math.round(deriveRate(Number(cell.rate) * 100, dr.cfg) / 100)}</span>
-            </td>
-          ))}
+          {section.cells.map((cell, i) => {
+            const value = cell.ratesByPlan[pl.id] ?? "—";
+            return (
+              <td key={i} className={`px-1 py-1 text-center ${pl.editable ? "" : "text-ink-400"} ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
+                {pl.editable ? (
+                  <span className="inline-flex items-center">
+                    <RateCell roomTypeId={section.roomType.id} date={dates[i]!} value={value} ratePlanId={pl.id} />
+                    {/* Present only under per-person, and only on the headline row — a popover per
+                        plan per cell is the grid growing in the direction the spec forbids. */}
+                    {cell.occupancyRates && pl.id === rateRows[0]?.id && (
+                      <OccupancyRatePopover
+                        rates={cell.occupancyRates}
+                        primaryOccupancy={section.roomType.defaultOccupancy ?? section.roomType.maxGuests}
+                      />
+                    )}
+                  </span>
+                ) : (
+                  <span className="tnum text-[12px]">{value}</span>
+                )}
+              </td>
+            );
+          })}
         </tr>
       ))}
       <tr className="border-b border-surface-border/40 last:border-b-surface-border">

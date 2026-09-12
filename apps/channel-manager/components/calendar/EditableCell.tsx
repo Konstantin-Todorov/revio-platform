@@ -6,10 +6,12 @@ import { saveCell } from "@/lib/actions-calendar";
 type Kind = "availability" | "price" | "restriction" | "flag";
 
 export function EditableCell({
-  roomTypeId, date, field, kind, value, flag, prefix = "", warn,
+  roomTypeId, date, field, kind, value, flag, prefix = "", warn, ratePlanId,
 }: {
   roomTypeId: string;
   date: string;
+  /** Which plan's row this cell belongs to. Required on a price row — see `editablePlanId`. */
+  ratePlanId?: string;
   field: "inventory" | "price" | "minLos" | "cta" | "ctd" | "stopSell";
   kind: Kind;
   value: string;
@@ -29,7 +31,7 @@ export function EditableCell({
   function commit(raw: string) {
     const clean = kind === "price" ? raw.replace(/[^0-9.]/g, "") : raw;
     start(async () => {
-      await saveCell({ roomTypeId, date, field, value: clean });
+      await saveCell({ roomTypeId, date, field, value: clean, ...(ratePlanId ? { ratePlanId } : {}) });
       setEditing(false);
     });
   }

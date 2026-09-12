@@ -20,6 +20,8 @@ export {
 export {
   syncChannel,
   syncRealChannels,
+  pushVerdict,
+  type RealPushOutcome,
   listChannelProducts,
   pauseChannel,
   resumeChannel,

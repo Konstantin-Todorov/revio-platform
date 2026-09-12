@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { deriveRate, isAdvancePurchaseClosed, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
+import { deriveRate, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
 import { structureGap, describeStructureGap } from "@revio/connectivity";
 import { getSession } from "./session";
 
@@ -12,11 +12,6 @@ function utcDate(d: Date): Date {
 function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * DAY);
 }
-function currentMonday(): Date {
-  const today = utcDate(new Date());
-  return addDays(today, -((today.getUTCDay() + 6) % 7));
-}
-
 /** The active property for the current session — scoped to the session's tenant. Every read/write in
  *  this app resolves the property through here, so a hotel can only ever touch its own data. */
 export async function getProperty() {
@@ -299,6 +294,12 @@ export type CalendarRow = {
   editable?: boolean;
   /** Set on a derived rate row (spec §2.3): the grid marks it with a paperclip; hover shows parent + offset. */
   derived?: { parent: string; offset: string };
+  /**
+   * Which rate plan a price row edits. ⚠️ Required now that the grid renders one row PER PLAN: an
+   * edit used to be unambiguous because there was only ever one price row, and writing without it
+   * is how a price lands on a plan the person was not looking at.
+   */
+  ratePlanId?: string;
   cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean; warn?: string }[];
 };
 
@@ -308,7 +309,7 @@ export interface CalendarQuery {
   days?: number;
   rt?: string[];    // room-type codes to show (empty = all)
   rows?: string[];  // visible optional row groups (sold|minlos|cta|ctd|stopsell)
-  rp?: string[];    // rate-plan codes whose rate rows show (spec §2.3 named multi-select; empty = default Standard + NR/BRF)
+  rp?: string[];    // rate-plan codes whose rate rows show (spec §2.3 named multi-select; empty = every ACTIVE plan)
   rateRows?: "grid" | "month"; // grid: rate rows governed solely by the Rates filter; month: standard only, no derived
 }
 
@@ -336,9 +337,20 @@ export async function getCalendarBoard(q: CalendarQuery) {
 
   // Window start: requested date clamped to [today-7d, today+2y-days]; default = Monday of this week.
   const today = utcDate(new Date());
-  const minStart = addDays(today, -45); // allows the month view to start at the 1st of the current month
+  /*
+   * ⚠️ The grid begins at TODAY, not at the Monday of this week.
+   *
+   * `currentMonday()` meant that on a Friday the calendar opened with four columns nobody can sell —
+   * reported on 2026-09-12 as BUG-009, with the grid starting 7 September on the 12th. Past columns
+   * spend width on the screen that most needs it and invite edits to dates that cannot be booked.
+   *
+   * The month view is the one exception and keeps its 45-day allowance, because a month grid has to
+   * be able to start at the 1st of the current month.
+   */
+  const monthMode = (q.rateRows ?? "grid") === "month";
+  const minStart = monthMode ? addDays(today, -45) : today;
   const maxStart = addDays(today, HORIZON_DAYS_MAX - days);
-  let start = currentMonday();
+  let start = today;
   if (q.start && /^\d{4}-\d{2}-\d{2}$/.test(q.start)) {
     const req = new Date(`${q.start}T00:00:00Z`);
     if (!Number.isNaN(req.getTime())) start = new Date(Math.min(Math.max(req.getTime(), minStart.getTime()), maxStart.getTime()));
@@ -360,36 +372,55 @@ export async function getCalendarBoard(q: CalendarQuery) {
     };
   }
 
-  const standard =
-    (await prisma.ratePlan.findFirst({ where: { propertyId, code: "BAR" } })) ??
-    (await prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual" }, orderBy: { sortOrder: "asc" } }));
-  // Named rate-plan multi-select (spec §3.2): the user picks exactly which rate rows appear,
-  // globally across room types. Governs RATE rows only — inventory + restriction rows stay pinned.
-  const allPlans = await prisma.ratePlan.findMany({ where: { propertyId, active: true }, orderBy: { sortOrder: "asc" } });
-  const defaultRp = [standard?.code, "NR", "BRF"].filter(Boolean) as string[]; // today's behaviour
-  const selectedRp = new Set(q.rp && q.rp.length > 0 ? q.rp : defaultRp);
-  // Grid (spec §2.2): rate rows — standard + derived — are shown purely by the Rates multi-select.
-  // Month keeps its historical shape: the standard row only, no derived rows.
+  /*
+   * ⚠️ ONE ROW PER ACTIVE PLAN. This block used to read:
+   *
+   *     const standard = await prisma.ratePlan.findFirst({ where: { propertyId, code: "BAR" } })
+   *
+   * — the first plan whose code happened to be "BAR", **with no `active` filter**, and every price
+   * on the grid was read from it. At a hotel that had switched BAR off and sold on two BB plans, the
+   * calendar therefore showed exactly one row, and it was the dead one. See `ratePlanRows`.
+   */
+  const planRecords = await prisma.ratePlan.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
+  const planInputs = planRecords.map((p) => ({
+    id: p.id, code: p.code, name: p.name, active: p.active,
+    priceLogic: p.priceLogic, sortOrder: p.sortOrder, parentRatePlanId: p.parentRatePlanId,
+  }));
+  const allPlans = planRecords.filter((p) => p.active);
+  const planById = new Map(planRecords.map((p) => [p.id, p]));
+
+  // The month view keeps its historical shape: the first active plan only, so a 31-column grid does
+  // not become three rows deep per room type.
   const rateMode = q.rateRows ?? "grid";
-  const derived = rateMode === "grid"
-    ? allPlans.filter((p) => p.priceLogic === "derived" && selectedRp.has(p.code))
-    : [];
-  const showStandardRow = rateMode === "grid" ? (standard != null && selectedRp.has(standard.code)) : standard != null;
+  const planView = ratePlanRows(planInputs, rateMode === "grid" ? q.rp : undefined);
+  const planRows = rateMode === "grid" ? planView.rows : planView.rows.slice(0, 1);
+
+  /*
+   * Restriction defaults (Min LOS, advance purchase) still come from a single plan, because the
+   * restriction rows are per ROOM, not per plan. It is now the first ACTIVE plan rather than
+   * whichever row was called BAR — a switched-off plan must not supply the hotel's defaults.
+   */
+  const standard = allPlans[0] ?? null;
 
   const rtIds = roomTypes.map((r) => r.id);
+  // Every plan on screen, plus the parents the derived ones are computed from.
+  const pricePlanIds = ratePlanIdsToLoad(planRows, planInputs);
   const [prices, cells, resLines] = await Promise.all([
-    standard
+    pricePlanIds.length > 0
       /*
-       * ⚠️ Occupancy-filtered. This map is keyed on (room, date) and assumed one row per key — true
-       * until OBP gave RatePrice an occupancy dimension, after which a per-person room returns one
-       * row PER GUEST COUNT and `new Map()` silently keeps whichever arrived last. The calendar
-       * would show the 1-guest price on one refresh and the 3-guest price on the next.
+       * ⚠️ Occupancy-filtered, and keyed by PLAN as well as room and date.
        *
-       * The headline is the room's primary occupancy, which is where a per-room row also lives.
+       * It used to read one plan's prices into a map keyed on (room, date). That is what made a
+       * price written to BB Flex invisible on a grid reading Standard Rate — the row was not wrong,
+       * it was reading a different plan's prices and correctly finding none.
+       *
+       * The occupancy filter is separate and still required: OBP gave RatePrice an occupancy
+       * dimension, so a per-person room returns one row PER GUEST COUNT and a map would silently
+       * keep whichever arrived last. The headline is the room's primary occupancy.
        */
       ? prisma.ratePrice.findMany({
           where: {
-            roomTypeId: { in: rtIds }, ratePlanId: standard.id, date: { gte: start, lte: end },
+            roomTypeId: { in: rtIds }, ratePlanId: { in: pricePlanIds }, date: { gte: start, lte: end },
             occupancy: { in: allRoomTypes.map((rt) => rt.defaultOccupancy ?? rt.maxGuests) },
           },
         })
@@ -408,8 +439,11 @@ export async function getCalendarBoard(q: CalendarQuery) {
   ]);
 
   const priceKey = (rt: string, k: string) => `${rt}:${k}`;
-  // Narrowed above to each room's primary, so at most one row per (room, date) reaches this map.
-  const priceMap = new Map(prices.map((p) => [priceKey(p.roomTypeId, p.date.toISOString().slice(0, 10)), p.priceMinor]));
+  // Narrowed above to each room's primary, so at most one row per (plan, room, date) reaches this map.
+  const planPriceKey = (rp: string, rt: string, k: string) => `${rp}:${rt}:${k}`;
+  const priceMap = new Map(
+    prices.map((p) => [planPriceKey(p.ratePlanId, p.roomTypeId, p.date.toISOString().slice(0, 10)), p.priceMinor]),
+  );
   const cellMap = new Map(cells.map((c) => [priceKey(c.roomTypeId, c.date.toISOString().slice(0, 10)), c]));
 
   const fmt = (m: number | undefined) => (m === undefined ? "—" : (m / 100).toLocaleString("en-US"));
@@ -441,31 +475,47 @@ export async function getCalendarBoard(q: CalendarQuery) {
         }),
       });
     }
-    if (showStandardRow) {
-      rows.push({
-        key: "standard", label: standard?.name ?? "Standard Rate", kind: "price", field: "price", editable: true,
-        cells: dateKeys.map((k) => ({ date: k, value: fmt(priceMap.get(priceKey(roomType.id, k))) })),
-      });
-    }
-    for (const dp of derived) {
+    /*
+     * ⚠️ ONE ROW PER PLAN, EACH CARRYING ITS OWN NAME.
+     *
+     * This was a single row labelled with whatever plan the old `standard` lookup resolved to, plus
+     * rows for plans DERIVED from it. A hotel with two independent manual plans — the ordinary case
+     * — could not be represented at all: one of its plans was the grid, and the other did not exist
+     * as far as any read surface was concerned.
+     */
+    for (const plan of planRows) {
+      const rec = planById.get(plan.id);
+      const own = (k: string) => priceMap.get(planPriceKey(plan.id, roomType.id, k));
+
+      if (plan.priceLogic !== "derived" || !plan.parentRatePlanId) {
+        rows.push({
+          key: plan.code, label: plan.label, kind: "price", field: "price", editable: true,
+          ratePlanId: plan.id,
+          cells: dateKeys.map((k) => ({ date: k, value: fmt(own(k)) })),
+        });
+        continue;
+      }
+
+      const parent = planById.get(plan.parentRatePlanId);
       const cfg: DerivedRateConfig = {
-        parentRatePlanId: standard?.id ?? "",
-        adjustmentType: (dp.derivedType as "percent" | "fixed") ?? "percent",
-        direction: (dp.derivedDirection as "increase" | "decrease") ?? "decrease",
-        value: dp.derivedValue ?? 0,
-        rounding: (dp.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
-        ...(dp.derivedFloorMinor != null ? { floorMinor: dp.derivedFloorMinor } : {}),
-        ...(dp.derivedCeilingMinor != null ? { ceilingMinor: dp.derivedCeilingMinor } : {}),
+        parentRatePlanId: plan.parentRatePlanId,
+        adjustmentType: (rec?.derivedType as "percent" | "fixed") ?? "percent",
+        direction: (rec?.derivedDirection as "increase" | "decrease") ?? "decrease",
+        value: rec?.derivedValue ?? 0,
+        rounding: (rec?.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
+        ...(rec?.derivedFloorMinor != null ? { floorMinor: rec.derivedFloorMinor } : {}),
+        ...(rec?.derivedCeilingMinor != null ? { ceilingMinor: rec.derivedCeilingMinor } : {}),
       };
-      const off = dp.derivedType === "percent"
-        ? `${dp.derivedDirection === "increase" ? "+" : "−"}${dp.derivedValue}%`
-        : `${dp.derivedDirection === "increase" ? "+" : "−"}€${((dp.derivedValue ?? 0) / 100).toLocaleString("en-US")}`;
+      const off = rec?.derivedType === "percent"
+        ? `${rec?.derivedDirection === "increase" ? "+" : "−"}${rec?.derivedValue}%`
+        : `${rec?.derivedDirection === "increase" ? "+" : "−"}€${((rec?.derivedValue ?? 0) / 100).toLocaleString("en-US")}`;
       rows.push({
-        key: dp.code, label: dp.name, kind: "price", muted: true,
-        derived: { parent: standard?.name ?? "Standard Rate", offset: off }, // paperclip + hover (spec §2.3)
+        key: plan.code, label: plan.label, kind: "price", muted: true,
+        ratePlanId: plan.id,
+        derived: { parent: parent?.name ?? "its parent plan", offset: off }, // paperclip + hover (spec §2.3)
         cells: dateKeys.map((k) => {
-          const parent = priceMap.get(priceKey(roomType.id, k));
-          return { date: k, value: parent === undefined ? "—" : fmt(deriveRate(parent, cfg)), muted: true };
+          const base = priceMap.get(planPriceKey(plan.parentRatePlanId!, roomType.id, k));
+          return { date: k, value: base === undefined ? "—" : fmt(deriveRate(base, cfg)), muted: true };
         }),
       });
     }
@@ -543,8 +593,10 @@ export async function getCalendarBoard(q: CalendarQuery) {
   return {
     property, allRoomTypes, sections, dates: dateKeys, days, start: dateKeys[0]!, visible: [...visible],
     currency: property.baseCurrency,
-    ratePlanOptions: allPlans.map((p) => ({ value: p.code, label: p.priceLogic === "derived" ? `${p.name} (derived)` : p.name })),
-    selectedRp: [...selectedRp],
+    // ⚠️ Options, selection and rows all come from ONE reconciliation, so the pill cannot say 3
+    // while the list offers 2 and none is ticked. See `ratePlanRows`.
+    ratePlanOptions: planView.options,
+    selectedRp: planView.selected,
     capabilityNotes,
   };
 }
@@ -701,6 +753,31 @@ function loadRoomTypeMappings(channelId: string) {
     where: { channelId }, include: { roomType: true }, orderBy: { roomType: { sortOrder: "asc" } },
   });
 }
+/**
+ * One row per product on the Mapping screen — an existing mapping, or a product that has never been
+ * sent to the channel at all. `id` is null for the second kind: there is no row to update yet, so
+ * `updateStreamMapping` creates one from `productId`.
+ */
+export interface MappedRoomRow {
+  id: string | null;
+  productId: string;
+  roomTypeId: string;
+  roomType: { id: string; name: string };
+  externalRoomId: string | null;
+  status: string;
+  unmapped: boolean;
+}
+
+export interface MappedRateRow {
+  id: string | null;
+  productId: string;
+  ratePlanId: string;
+  ratePlan: { id: string; name: string };
+  externalRateId: string | null;
+  status: string;
+  unmapped: boolean;
+}
+
 function loadRatePlanMappings(channelId: string) {
   return prisma.channelRatePlanMapping.findMany({
     where: { channelId }, include: { ratePlan: true }, orderBy: { ratePlan: { sortOrder: "asc" } },
@@ -714,21 +791,76 @@ export async function getMapping(channelCode?: string) {
   if (channels.length === 0) {
     return {
       property, channels, channel: null,
-      roomTypeMappings: [] as Awaited<ReturnType<typeof loadRoomTypeMappings>>,
-      ratePlanMappings: [] as Awaited<ReturnType<typeof loadRatePlanMappings>>,
+      roomTypeMappings: [] as MappedRoomRow[],
+      ratePlanMappings: [] as MappedRateRow[],
       neverSent: [] as ReturnType<typeof structureGap>["neverSent"],
     };
   }
   const channel = channels.find((c) => c.code === channelCode) ?? channels[0]!;
-  const [roomTypeMappings, ratePlanMappings, roomTypes, ratePlans] = await Promise.all([
+  const [existingRoomMaps, existingRateMaps, roomTypes, ratePlans] = await Promise.all([
     loadRoomTypeMappings(channel.id),
     loadRatePlanMappings(channel.id),
-    prisma.roomType.findMany({ where: { propertyId: property.id }, select: { id: true, name: true, active: true } }),
+    prisma.roomType.findMany({ where: { propertyId: property.id }, select: { id: true, name: true, active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.ratePlan.findMany({
       where: { propertyId: property.id },
       select: { id: true, name: true, active: true, priceLogic: true },
+      orderBy: { sortOrder: "asc" },
     }),
   ]);
+
+  /*
+   * ⚠️ A ROW FOR EVERY ACTIVE PRODUCT, not only for products that already have a mapping row.
+   *
+   * This screen used to render `ChannelRatePlanMapping` / `ChannelRoomTypeMapping` rows — and those
+   * are created once, by `provisionChannexProperty`, from whatever existed the moment the channel
+   * was connected. Provisioning is ONE-SHOT (root CLAUDE.md), so every room type and rate plan added
+   * afterwards had no row, and a screen that lists rows therefore could not show it.
+   *
+   * That is what a tester saw on 2026-09-12: a hotel with three room types and two live rate plans,
+   * offered two room types to map and two rate-plan rows both naming a plan they had switched off
+   * (BUG-010, BUG-011). Nothing was broken in the mapping WRITE — the products were simply invisible
+   * because they had never been sent.
+   *
+   * The gap was already computed (`structureGap`) and shown as a small "N never sent" badge. A badge
+   * is not a row you can act on. Every active product is now a row; the ones with no mapping yet say
+   * so and can be mapped like any other.
+   */
+  const roomMapByProduct = new Map(existingRoomMaps.map((m) => [m.roomTypeId, m]));
+  const rateMapByProduct = new Map(existingRateMaps.map((m) => [m.ratePlanId, m]));
+
+  const roomTypeMappings = roomTypes
+    .filter((rt) => rt.active || roomMapByProduct.has(rt.id))
+    .map((rt) => {
+      const m = roomMapByProduct.get(rt.id);
+      return m
+        ? { ...m, productId: rt.id, unmapped: false }
+        : {
+            id: null as string | null,
+            productId: rt.id,
+            roomTypeId: rt.id,
+            roomType: { id: rt.id, name: rt.name },
+            externalRoomId: null as string | null,
+            status: "never_sent",
+            unmapped: true,
+          };
+    });
+
+  const ratePlanMappings = ratePlans
+    .filter((rp) => (rp.active && rp.priceLogic === "manual") || rateMapByProduct.has(rp.id))
+    .map((rp) => {
+      const m = rateMapByProduct.get(rp.id);
+      return m
+        ? { ...m, productId: rp.id, unmapped: false }
+        : {
+            id: null as string | null,
+            productId: rp.id,
+            ratePlanId: rp.id,
+            ratePlan: { id: rp.id, name: rp.name },
+            externalRateId: null as string | null,
+            status: "never_sent",
+            unmapped: true,
+          };
+    });
 
   /*
    * "All mapped" was counting ROWS whose status is not `complete`, so a product that never reached
@@ -739,8 +871,8 @@ export async function getMapping(channelCode?: string) {
   const { neverSent } = structureGap({
     roomTypes,
     ratePlans,
-    mappedRoomTypeIds: roomTypeMappings.map((m) => m.roomTypeId),
-    mappedRatePlanIds: ratePlanMappings.map((m) => m.ratePlanId),
+    mappedRoomTypeIds: existingRoomMaps.map((m) => m.roomTypeId),
+    mappedRatePlanIds: existingRateMaps.map((m) => m.ratePlanId),
   });
 
   return { property, channels, channel, roomTypeMappings, ratePlanMappings, neverSent };

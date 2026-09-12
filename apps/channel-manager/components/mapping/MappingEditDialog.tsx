@@ -6,13 +6,18 @@ import { updateStreamMapping, type ActionResult } from "@/lib/actions-config";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 export function MappingEditDialog({
-  kind, id, label, externalId, channelName, options = [],
+  kind, id, productId, label, externalId, channelName, channelId, options = [],
 }: {
   kind: "room" | "rate";
-  id: string;
+  /** The existing mapping row, or null when this product has never been sent to the channel. */
+  id: string | null;
+  /** The room type / rate plan itself — what a never-sent product is mapped BY. */
+  productId: string;
   label: string;
   externalId: string | null;
   channelName: string;
+  /** Which channel this row maps to — resolved server-side against the property, never trusted. */
+  channelId?: string;
   /** Products pulled from the OTA (spec §3.6) — offered as a dropdown; empty = manual id entry. */
   options?: { id: string; name: string }[];
 }) {
@@ -35,7 +40,11 @@ export function MappingEditDialog({
         </p>
         <form action={formAction} className="space-y-3.5">
           <input type="hidden" name="kind" value={kind} />
-          <input type="hidden" name="id" value={id} />
+          <input type="hidden" name="id" value={id ?? ""} />
+          {/* Provisioning is one-shot, so a product added afterwards has no mapping row to update.
+              The action creates one from this. */}
+          <input type="hidden" name="productId" value={productId} />
+          {channelId && <input type="hidden" name="channelId" value={channelId} />}
           {options.length > 0 ? (
             <>
               <Field label={`${channelName}'s ${noun}s`} hint="Pulled from the channel — pick the matching product">

@@ -3,6 +3,7 @@ import { prisma } from "./db";
 import {
   syncChannel as sharedSyncChannel,
   syncRealChannels as sharedSyncRealChannels,
+  type RealPushOutcome,
   pullChannel as sharedPullChannel,
   listChannelProducts as sharedListChannelProducts,
   pauseChannel as sharedPauseChannel,
@@ -25,7 +26,7 @@ export function syncChannel(channelId: string): Promise<SyncOutcome> {
   return sharedSyncChannel(prisma, channelId);
 }
 
-export function syncRealChannels(propertyId: string, scope?: PushScope): Promise<void> {
+export function syncRealChannels(propertyId: string, scope?: PushScope): Promise<RealPushOutcome> {
   return sharedSyncRealChannels(prisma, propertyId, scope);
 }
 

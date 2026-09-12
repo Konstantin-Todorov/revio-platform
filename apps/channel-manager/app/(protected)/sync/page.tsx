@@ -9,7 +9,19 @@ import { CAPABILITY_ERROR_CODE } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
-const TONE: Record<string, Tone> = { success: "success", pending: "warning", failed: "danger" };
+/*
+ * ⚠️ An unknown status used to fall through to the neutral pill AND to the green row tint below,
+ * because the row colour asked only "is it failed?". A push that went nowhere therefore looked
+ * exactly like one that arrived. These four are what `recordPush` writes when nothing was delivered.
+ */
+const TONE: Record<string, Tone> = {
+  success: "success",
+  pending: "warning",
+  failed: "danger",
+  warning: "warning",
+  noop: "neutral",
+  skipped: "neutral",
+};
 const TABS = [
   ["activity", "Activity"],
   ["errors", "Errors"],
@@ -109,7 +121,9 @@ async function ActivityTab({ ch }: { ch?: string }) {
           </thead>
           <tbody>
             {events.map((e) => (
-              <tr key={e.id} className={`border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted ${e.status === "failed" ? "bg-danger-50/50" : "bg-success-50/20"}`}>
+              <tr key={e.id} className={`border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted ${
+                e.status === "failed" ? "bg-danger-50/50" : e.status === "success" ? "bg-success-50/20" : ""
+              }`}>
                 <td className="px-4 py-3"><span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink-500">{e.kind}</span></td>
                 <td className="px-4 py-3 font-semibold text-ink-900">{e.channel?.name ?? "—"}</td>
                 <td className="px-4 py-3 text-ink-600">{e.summary}</td>
@@ -179,7 +193,19 @@ async function ErrorsTab() {
         </div>
       )}
       {capability.map((e) => <ErrorCard key={e.id} e={e} limitation />)}
-      {errorItems.length === 0 && <Card className="p-10 text-center text-[13px] text-ink-400">No open errors — everything is syncing cleanly.</Card>}
+      {/*
+        ⚠️ "No open errors" is NOT "everything is syncing cleanly".
+        A property with nothing mapped, no channel connected, or a paused connection raises no error
+        and delivers nothing — and this card used to congratulate it. The claim now covers only what
+        it can see: that nothing has failed. Whether anything was DELIVERED is the push rows' job,
+        and they say so in their own words now (BUG-014).
+      */}
+      {errorItems.length === 0 && (
+        <Card className="p-10 text-center text-[13px] text-ink-400">
+          No open errors. Check the Activity log to confirm your changes are reaching a channel —
+          nothing failing is not the same as something arriving.
+        </Card>
+      )}
     </div>
   );
 }

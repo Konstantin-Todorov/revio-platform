@@ -5,7 +5,14 @@ import { saveCalendarRate } from "@/lib/actions-rates";
 
 /** Inline-editable standard-plan rate in the Inventory Calendar — writes the SAME RatePrice rows
  *  the CM's grid edits (derived plans recalc from it automatically). */
-export function RateCell({ roomTypeId, date, value }: { roomTypeId: string; date: string; value: string }) {
+export function RateCell({ roomTypeId, date, value, ratePlanId }: {
+  roomTypeId: string;
+  date: string;
+  value: string;
+  /** Which plan's row this cell sits in. The grid draws one row per plan, so an edit without it is
+   *  ambiguous — and an ambiguous price edit is how a rate lands on a plan nobody was looking at. */
+  ratePlanId?: string;
+}) {
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -17,7 +24,7 @@ export function RateCell({ roomTypeId, date, value }: { roomTypeId: string; date
   function commit(raw: string) {
     const clean = raw.replace(/[^0-9.]/g, "");
     start(async () => {
-      if (clean !== "") await saveCalendarRate({ roomTypeId, date, value: clean });
+      if (clean !== "") await saveCalendarRate({ roomTypeId, date, value: clean, ...(ratePlanId ? { ratePlanId } : {}) });
       setEditing(false);
     });
   }

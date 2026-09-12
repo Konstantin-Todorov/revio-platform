@@ -131,6 +131,47 @@ export async function fixMappings(fd: FormData): Promise<void> {
 }
 
 /** Manually set one stream mapping's external id (kind: "room" → room type, "rate" → rate plan). */
+/**
+ * Create the mapping row for a product that provisioning never sent.
+ *
+ * The channel is resolved from the property rather than trusted from the form — the form carries it
+ * only as a hint, and a mapping written against another hotel's channel would be a cross-tenant
+ * write. Everything is scoped to the caller's own property.
+ */
+async function createMappingRow(
+  kind: "room" | "rate",
+  args: { tenantId: string; propertyId: string; productId: string; channelId: string | null; externalId: string | null; status: string },
+): Promise<{ ok: true; channelName: string; productName: string } | { ok: false; error: string }> {
+  if (!args.productId) return { ok: false, error: "That row is not linked to a room type or rate plan. Reload the page." };
+
+  const channel = args.channelId
+    ? await prisma.channel.findFirst({ where: { id: args.channelId, propertyId: args.propertyId } })
+    : await prisma.channel.findFirst({ where: { propertyId: args.propertyId, status: "connected" }, orderBy: { name: "asc" } });
+  if (!channel) return { ok: false, error: "No connected channel to map against. Connect one first." };
+
+  if (kind === "room") {
+    const rt = await prisma.roomType.findFirst({ where: { id: args.productId, propertyId: args.propertyId } });
+    if (!rt) return { ok: false, error: "That room type no longer exists." };
+    await prisma.channelRoomTypeMapping.create({
+      data: {
+        tenantId: args.tenantId, channelId: channel.id, roomTypeId: rt.id,
+        externalRoomId: args.externalId, status: args.status,
+      },
+    });
+    return { ok: true, channelName: channel.name, productName: rt.name };
+  }
+
+  const rp = await prisma.ratePlan.findFirst({ where: { id: args.productId, propertyId: args.propertyId } });
+  if (!rp) return { ok: false, error: "That rate plan no longer exists." };
+  await prisma.channelRatePlanMapping.create({
+    data: {
+      tenantId: args.tenantId, channelId: channel.id, ratePlanId: rp.id,
+      externalRateId: args.externalId, status: args.status,
+    },
+  });
+  return { ok: true, channelName: channel.name, productName: rp.name };
+}
+
 export async function updateStreamMapping(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const _g = await guard("manageDistribution");
   if (!_g.ok) return { ok: false, error: _g.error };
@@ -141,16 +182,45 @@ export async function updateStreamMapping(_prev: ActionResult | null, fd: FormDa
   const externalId = str(fd, "externalIdCustom") || str(fd, "externalId") || null;
   const status = externalId ? "complete" : "incomplete";
 
+  /*
+   * ⚠️ A product with no mapping row is MAPPED, not refused.
+   *
+   * `provisionChannexProperty` creates these rows once, from whatever existed when the channel was
+   * connected — so every room type and rate plan added afterwards has no row, and this action used
+   * to answer "Mapping not found." for products the hotel could see on screen. That is one half of
+   * why a hotel could not map its third room type or either of its live rate plans (BUG-010/011).
+   */
+  const productId = str(fd, "productId");
+  const channelId = str(fd, "channelId") || null;
+
   if (kind === "room") {
-    const m = await prisma.channelRoomTypeMapping.findUnique({ where: { id }, include: { channel: true, roomType: true } });
-    if (!m || m.tenantId !== tenantId) return { ok: false, error: "Mapping not found." };
-    await prisma.channelRoomTypeMapping.update({ where: { id }, data: { externalRoomId: externalId, status } });
-    await logAudit(propertyId, tenantId, { entity: `Mapping · ${m.channel.name} · ${m.roomType.name}`, field: "room mapping", newValue: status });
+    const m = id
+      ? await prisma.channelRoomTypeMapping.findUnique({ where: { id }, include: { channel: true, roomType: true } })
+      : null;
+    if (id && (!m || m.tenantId !== tenantId)) return { ok: false, error: "Mapping not found." };
+
+    if (m) {
+      await prisma.channelRoomTypeMapping.update({ where: { id: m.id }, data: { externalRoomId: externalId, status } });
+      await logAudit(propertyId, tenantId, { entity: `Mapping · ${m.channel.name} · ${m.roomType.name}`, field: "room mapping", newValue: status });
+    } else {
+      const created = await createMappingRow("room", { tenantId, propertyId, productId, channelId, externalId, status });
+      if (!created.ok) return created;
+      await logAudit(propertyId, tenantId, { entity: `Mapping · ${created.channelName} · ${created.productName}`, field: "room mapping", newValue: status });
+    }
   } else {
-    const m = await prisma.channelRatePlanMapping.findUnique({ where: { id }, include: { channel: true, ratePlan: true } });
-    if (!m || m.tenantId !== tenantId) return { ok: false, error: "Mapping not found." };
-    await prisma.channelRatePlanMapping.update({ where: { id }, data: { externalRateId: externalId, status } });
-    await logAudit(propertyId, tenantId, { entity: `Mapping · ${m.channel.name} · ${m.ratePlan.name}`, field: "rate mapping", newValue: status });
+    const m = id
+      ? await prisma.channelRatePlanMapping.findUnique({ where: { id }, include: { channel: true, ratePlan: true } })
+      : null;
+    if (id && (!m || m.tenantId !== tenantId)) return { ok: false, error: "Mapping not found." };
+
+    if (m) {
+      await prisma.channelRatePlanMapping.update({ where: { id: m.id }, data: { externalRateId: externalId, status } });
+      await logAudit(propertyId, tenantId, { entity: `Mapping · ${m.channel.name} · ${m.ratePlan.name}`, field: "rate mapping", newValue: status });
+    } else {
+      const created = await createMappingRow("rate", { tenantId, propertyId, productId, channelId, externalId, status });
+      if (!created.ok) return created;
+      await logAudit(propertyId, tenantId, { entity: `Mapping · ${created.channelName} · ${created.productName}`, field: "rate mapping", newValue: status });
+    }
   }
   await recordPush(propertyId, tenantId, "Mapping updated");
   revalidatePath("/mapping");

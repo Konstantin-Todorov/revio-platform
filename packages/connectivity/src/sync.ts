@@ -575,22 +575,116 @@ export async function syncChannel(
  * Called after ARI-affecting edits — in ANY product — so channex-mode channels receive the change
  * without a manual Re-sync. A no-op when every channel is mock (the default), so demo flows are safe.
  */
-export async function syncRealChannels(prisma: Db, propertyId: string, scope?: PushScope): Promise<void> {
+/**
+ * What actually happened when a write tried to reach the channels.
+ *
+ * ⚠️ This used to return `void`, and that is why the Sync Center could say *"everything is syncing
+ * cleanly"* over a hotel that had never delivered a single price. The caller wrote a `success` event
+ * **before** this function ran and had no way to learn otherwise: paused connection, no channel,
+ * nothing mapped and every push failing all looked identical from the outside — like nothing.
+ *
+ * Reported from Cabacum Beach Residence on 2026-09-12 (BUG-014), and correctly identified there as
+ * the defect to fix first: while the log says success regardless, no other fix can be verified.
+ */
+export interface RealPushOutcome {
+  /** Connected non-mock channels we tried. */
+  attempted: number;
+  /** Channels that accepted the push. */
+  delivered: number;
+  /** Channels that were tried and failed. `syncChannel` records the detail itself. */
+  failed: number;
+  /** The channel-manager connection is paused or disconnected, so distribution is off on purpose. */
+  paused: boolean;
+  /** Names of channels that had nothing mapped to send to. */
+  unmapped: string[];
+}
+
+/**
+ * What a push event is allowed to claim, given what the push actually did.
+ *
+ * ⚠️ **`success` means a channel accepted something.** Not "we tried", not "there was nothing to do".
+ *
+ * BUG-014 (Cabacum Beach Residence, 2026-09-12): the Sync Center showed "0 errors · everything is
+ * syncing cleanly" and a log of green rows on a property where no price had ever reached a channel,
+ * and it masked thirteen other defects — no fix could be told apart from the failure.
+ *
+ * Exported and shared by both products' `recordPush`, because this decision existing twice is how it
+ * drifts back to "success means we tried".
+ */
+export function pushVerdict(real: RealPushOutcome): { status: string; detail: string; delivered: boolean } {
+  if (real.delivered > 0) {
+    // The channels record their own attributed events inside `syncChannel`; nothing to add here.
+    return { status: "success", detail: "", delivered: true };
+  }
+  if (real.paused) {
+    return {
+      status: "skipped",
+      detail: "Nothing sent — this property's channel-manager connection is paused, so distribution is off.",
+      delivered: false,
+    };
+  }
+  if (real.unmapped.length > 0) {
+    return {
+      status: "warning",
+      detail: `Nothing sent — no mapped target on ${real.unmapped.join(", ")}. Map the room types and rate plans in Mapping before prices can reach a channel.`,
+      delivered: false,
+    };
+  }
+  if (real.failed > 0) {
+    return {
+      status: "failed",
+      detail: `Not delivered — ${real.failed} channel${real.failed === 1 ? "" : "s"} refused the push. See the Error Center.`,
+      delivered: false,
+    };
+  }
+  return {
+    status: "noop",
+    detail: "Saved, but not sent anywhere — no channel is connected to this property yet.",
+    delivered: false,
+  };
+}
+
+export async function syncRealChannels(
+  prisma: Db,
+  propertyId: string,
+  scope?: PushScope,
+): Promise<RealPushOutcome> {
+  const out: RealPushOutcome = { attempted: 0, delivered: 0, failed: 0, paused: false, unmapped: [] };
+
   // CM-connection lifecycle (CRS spec §3.8): a paused/disconnected channel-manager connection
   // stops ALL distribution for the property, reversibly — mappings stay dormant.
   const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { cmStatus: true } });
-  if (property && property.cmStatus !== "connected") return;
+  if (property && property.cmStatus !== "connected") {
+    out.paused = true;
+    return out;
+  }
   const real = await prisma.channel.findMany({
     where: { propertyId, status: "connected", connectivityMode: { not: "mock" } },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   for (const c of real) {
+    out.attempted++;
+    /*
+     * A channel with no room-type mapping carrying an external id has nowhere to send anything. That
+     * is not a failure and it is certainly not a success — it is the state the hotel has to be told
+     * about, because it is the one that looks exactly like working.
+     */
+    const mapped = await prisma.channelRoomTypeMapping.count({
+      where: { channelId: c.id, externalRoomId: { not: null } },
+    });
+    if (mapped === 0) {
+      out.unmapped.push(c.name);
+      continue;
+    }
     try {
       await syncChannel(prisma, c.id, scope ? { scope } : {});
+      out.delivered++;
     } catch {
       // syncChannel records its own SyncEvent/ErrorItems; never block the caller's write on a push failure.
+      out.failed++;
     }
   }
+  return out;
 }
 
 // --- Pull: bookings back from the channel -----------------------------------

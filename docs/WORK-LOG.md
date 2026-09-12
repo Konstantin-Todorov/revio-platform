@@ -18,6 +18,29 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-12 · Codex · DONE · Marketing homepage motion prototype
+**Founder requests a viewable homepage upgrade for the official marketing site, not documentation.**
+Files: `design/home-preview/`, `docs/WORK-LOG.md`.
+Notes: Local standalone design with copied existing marketing screenshots/brand assets. No writes to sibling revio-websites, no app changes, no deployment. Compare discrete product frame and browser frame, large product switcher and narrative animation. Fetched main equals HEAD e50ab8f; rebase deferred for deliberately uncommitted artifacts. New paths also remain uncommitted for review.
+Verified: Local port 3011. Browser smoke passed product switching, keyboard tabs, frame toggle, desktop/mobile mega menu, three-step finite workflow and reduced motion; no JS errors or mobile overflow. Desktop/product/workflow/mobile screenshots inspected; corrected logo aspect ratio and reran checks. Preview only; full monorepo build not run, no commit or deployment.
+
+### 2026-09-12 · Codex · DONE · Documentation polish and public-site design review
+**Founder approved docs design; requests dark default, real logo, proper icons and comparison of 1Club/Cloudbeds with Revio marketing.**
+Files: `design/docs-preview/`, `docs/WORK-LOG.md`.
+Notes: Local preview only. Public-site review is read-only; no marketing deployment or customer product UI changes. Prior artifacts remain uncommitted and preserved. Fetch/check before work; rebase deferred for intentionally dirty shared docs paths.
+Verified: Dark default with remembered light/dark choice, supplied Revio artwork in both themes, consistent SVG navigation/product icons, larger type. Nine-article browser smoke suite passed without JS errors; desktop/mobile screenshots visually inspected. 1Club and Revio inspected through public browser rendering and DOM; Cloudbeds headless returned 403, but normal Chrome loaded its page and navigation/content successfully. Marketing recommendations are proposals, not implemented changes. All preview paths remain intentionally uncommitted.
+
+### 2026-09-12 · Codex · DONE · Short brief and documentation design preview
+**Founder requests a short Word discussion list and an interactive documentation design now.**
+Files: `docs/partner/Revio-Ideas-Short-2026-09-12.docx`, `design/docs-preview/`, `docs/WORK-LOG.md`.
+Notes: Preserve the detailed brief. Isolated static prototype, no customer app/shared package/lockfile changes, no production deployment. Current HEAD equals fetched origin/main at e50ab8f; pull-rebase deferred because the prior brief/log are intentionally uncommitted. These new paths also remain uncommitted for design review. This supersedes the earlier suggestion to wait for partner review before showing a docs design.
+Verified: Short DOCX rendered and visually inspected as one page. Nine preview articles; browser checks passed for routing/Back, search and empty result, mobile navigation/overflow, reduced motion, and zero JavaScript errors. Desktop/mobile/light/dark screenshots inspected. Local preview at port 3010. Full monorepo gate not run: no runtime apps changed and no commit/push requested. The detailed 17-page document remains intact.
+
+### 2026-09-11 · Codex · DONE · Partner strategy brief
+**Created the Bulgarian partner-review brief covering product ideas, integrations, migration, enterprise controls and the proposed documentation portal.**
+Files: `docs/partner/Revio-Platform-Expansion-Discussion-2026-09-11.docx`, `docs/WORK-LOG.md`
+Notes: Discussion snapshot only; proposals are explicitly separated from current capabilities. No runtime, design, Railway, DNS or production change was made. DOCX and this log entry are intentionally uncommitted pending partner review. The recommended next safe implementation is a separate `apps/docs` service after that review.
+
 ### 2026-09-11 · Claude · DONE · The sidebar scrolled and nothing said so
 **Founder: "they may not think of scrolling" — a screen nobody scrolls to is a feature nobody finds.**
 Files: `packages/ui/src/nav-tail.tsx`, the three `components/shell/Sidebar.tsx`,
