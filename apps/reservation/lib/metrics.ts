@@ -16,7 +16,7 @@ import { addDays, getProperty, getScope, todayInTz, ymd } from "./data";
 // Spec §3.1: Custom, L7D, L28D, YTD, N7D, N28D, Today, Tomorrow. 28 = four whole weeks so
 // week-over-week / year-over-year comparisons aren't distorted by day-of-week mismatch —
 // do NOT "tidy" this back to 30. (Legacy keys 7d/30d/mtd still resolve for old links.)
-export type RangePreset = "today" | "tomorrow" | "l7d" | "l28d" | "ytd" | "n7d" | "n28d" | "custom";
+export type RangePreset = "today" | "tomorrow" | "l7d" | "l28d" | "mtd" | "ytd" | "n7d" | "n28d" | "custom";
 
 export interface ResolvedRange extends DateRange {
   preset: RangePreset;
@@ -40,7 +40,18 @@ export function resolveRange(todayIso: string, preset?: string, from?: string, t
     case "l28d": return mk("l28d", ymd(addDays(today, -28)), todayIso, "Last 28 days", "past");
     case "n7d": case "7d": return mk("n7d", todayIso, ymd(addDays(today, 7)), "Next 7 days", "future");
     case "n28d": case "30d": return mk("n28d", todayIso, ymd(addDays(today, 28)), "Next 28 days", "future");
-    case "mtd": return mk("ytd", `${todayIso.slice(0, 8)}01`, ymd(addDays(today, 1)), "Month to date", "past");
+    /*
+     * ⚠️ `mk("mtd", …)`, not `mk("ytd", …)`.
+     *
+     * This returned the YTD preset for a month-to-date range: correct dates, correct label, wrong
+     * identity. `preset` is what the screens put back into the URL and what highlights the active
+     * button — so a Month-to-date view linked to `range=ytd`, and following that link silently
+     * widened the range to the whole year while the numbers changed under the same heading.
+     *
+     * Unreachable today (no screen offers MTD), which is exactly why it was worth fixing before one
+     * does: the failure would appear as numbers that change on refresh.
+     */
+    case "mtd": return mk("mtd", `${todayIso.slice(0, 8)}01`, ymd(addDays(today, 1)), "Month to date", "past");
     case "ytd": return mk("ytd", `${todayIso.slice(0, 4)}-01-01`, ymd(addDays(today, 1)), "Year to date", "past");
     case "custom": {
       if (from && to && iso.test(from) && iso.test(to) && to >= from) {
@@ -440,7 +451,15 @@ export function buildActionAlerts(args: {
     });
   }
   if (args.failedSyncs24h > 0) alerts.push({ severity: "critical", message: `${args.failedSyncs24h} failed sync${args.failedSyncs24h === 1 ? "" : "s"} in the last 24h`, href: "/inventory" });
-  if (args.openErrors > 0) alerts.push({ severity: "warning", message: `${args.openErrors} unresolved error${args.openErrors === 1 ? "" : "s"} need attention`, href: "/inventory" });
+  // The verb agrees too: "1 unresolved error need attention" is what this read, on a panel a manager
+  // scans in a second. Small, but it is the first thing they see when something is wrong.
+  if (args.openErrors > 0) {
+    alerts.push({
+      severity: "warning",
+      message: `${args.openErrors} unresolved error${args.openErrors === 1 ? " needs" : "s need"} attention`,
+      href: "/inventory",
+    });
+  }
   const order = { critical: 0, warning: 1, info: 2 } as const;
   return alerts.sort((a, b) => order[a.severity] - order[b.severity]).slice(0, 10);
 }

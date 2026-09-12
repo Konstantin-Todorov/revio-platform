@@ -14,6 +14,12 @@ Notes for Claude: no customer app, shared package, database, mapping or real-hot
 
 Result: marketing e597ab1 shipped on reviosoft.app after CI + promotion success (34703197397 / 34703225613); origin/production SHA and public content verified. Website /support is live. Docs preview now has 7 top-level collections, product-scoped sidebar, global search and 15 draft articles (6 new). Two task drafts checked against source at platform 83a3477; none claimed fully UI-verified/published. Browser checks: all 15 articles, collection navigation, cross-product search, TOC, widths 390/768/1440, mobile open/Escape; no JS errors. Full publication and remaining guide coverage follow docs/DOCUMENTATION-PLAN.md. All platform-side docs/prototype edits intentionally UNCOMMITTED to avoid triggering customer-app deployments during your hotel work.
 
+### 2026-09-12 · Codex · DONE · Documentation expansion and readability
+**Founder asks for a larger, more complete OneClub-style docs experience with clearer left and right columns.**
+Files: `design/docs-preview/{content.js,app.js,refinements.css}`, this log.
+Notes: Preview-only work; no customer app, shared package, database, Cloud-owned file or deployment. Keep claims source-labelled and do not turn draft content into a public API promise. Existing untracked preview files stay uncommitted for founder review.
+Result: OneClub-style product collections now cover Start here, Platform, RevioLink, RevioCRS, RevioPMS, RevioDirect, Integrations, API reference and Updates. The preview contains 47 navigable articles, grouped sidebars, status badges, global search, right-hand article TOC and a clear next-article path. Platform drafts cover dashboards, companies/properties, lists/search, accounts/permissions, billing, payments, analytics, activity/events and settings/security. Typography was increased for desktop and mobile without changing the mobile interaction model. Browser QA passed all 47 routes, zero undefined links, global billing search, desktop columns, 390px mobile width, mobile menu scroll and zero console errors. Preview remains local and uncommitted pending founder/partner content review.
+
 Format:
 ```
 ### YYYY-MM-DD · <agent> · <status> · <area>
@@ -24,6 +30,38 @@ Notes: <anything the other agent needs — a decision, a gotcha, a dependency>
 Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
+
+### 2026-09-12 · Claude · DONE · RevioCRS gets tests, and they found two bugs on the way in
+**The app with the most screens and, until today, no test had ever run against it.**
+Files: `apps/reservation/lib/{metrics.ts,metrics-range.test.ts,format.test.ts}`,
+`apps/reservation/{vitest.config.ts,test/server-only-stub.ts}`.
+
+⚠️ **`server-only` made most of this app untestable.** The marker throws at import outside an RSC
+build — its whole job — so vitest could not load any server module, which is nearly all of `lib/`.
+A one-line alias to a stub in `vitest.config.ts` unblocks it; the real package still guards the
+production build, so nothing is weakened. Worth knowing before concluding a CRS module "can't be
+tested".
+
+33 tests, on the pure logic everything else inherits:
+- **`resolveRange` / `stlyRange` / `comparisonRange`** — the date arithmetic behind every reported
+  number. ⚠️ STLY is **364 days, not 365**: 52 whole weeks, so a Saturday compares to a Saturday. At
+  365 every year-on-year figure compares the wrong kind of day and still looks authoritative.
+- **`buildActionAlerts`** — severity ordering, and that a board full of low-availability dates can
+  never push a failed sync off the 10-item list.
+- **`format`** — money is integer minor units, and every date helper reads **UTC**, because a local
+  getter would shift an inventory date by a day for readers west of UTC. Silently, and only for some.
+
+Two bugs found by writing them:
+1. **`resolveRange("mtd")` returned `preset: "ytd"`** — right dates, wrong identity. `preset` is what
+   the screens put in the URL and use to highlight the active button, so a Month-to-date view linked
+   to `range=ytd` and following that link silently widened it to the year. Unreachable today (no
+   screen offers MTD), which is why it was worth fixing before one does.
+2. **"1 unresolved error need attention"** — the noun was pluralised and the verb was not, on the
+   Action Center panel a manager scans first.
+
+Remaining CRS logic is DB-bound (`actions-reservations`, `data.ts`, the metric aggregations) and
+wants the live-DB pattern PMS uses in `close-day-db.test.ts` — skips loudly without a database.
+
 
 ### 2026-09-12 · Claude · DONE · A real OTA booking bounced, and every screen said it was fine
 **Founder: a Booking.com reservation sat in Channex and reached no product.**
