@@ -7,6 +7,13 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Codex · DONE · Website release + documentation organisation
+**Founder approves marketing release; documentation follows as an isolated workstream.**
+Files: sibling `revio-websites` repository (owned marketing changes, CI-gated release); here only `design/docs-preview/`, `docs/DOCUMENTATION-PLAN.md`, this log.
+Notes for Claude: no customer app, shared package, database, mapping or real-hotel test changes. Stock hotel imagery removed; future customer photos only with approval. Public support page links actual support email and service levels; docs link waits for verified publication. Docs preview will get product-specific navigation and source-labelled guide drafts, not copied internal runbooks. The two untracked design prototypes remain intentionally uncommitted: do not stage them. Bug fixes from your hotel tests take priority over feature roadmap work; docs articles need review against the resulting code.
+
+Result: marketing e597ab1 shipped on reviosoft.app after CI + promotion success (34703197397 / 34703225613); origin/production SHA and public content verified. Website /support is live. Docs preview now has 7 top-level collections, product-scoped sidebar, global search and 15 draft articles (6 new). Two task drafts checked against source at platform 83a3477; none claimed fully UI-verified/published. Browser checks: all 15 articles, collection navigation, cross-product search, TOC, widths 390/768/1440, mobile open/Escape; no JS errors. Full publication and remaining guide coverage follow docs/DOCUMENTATION-PLAN.md. All platform-side docs/prototype edits intentionally UNCOMMITTED to avoid triggering customer-app deployments during your hotel work.
+
 Format:
 ```
 ### YYYY-MM-DD · <agent> · <status> · <area>
@@ -17,6 +24,39 @@ Notes: <anything the other agent needs — a decision, a gotcha, a dependency>
 Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
+
+### 2026-09-12 · Claude · DONE · A real OTA booking bounced, and every screen said it was fine
+**Founder: a Booking.com reservation sat in Channex and reached no product.**
+Files: `packages/connectivity/src/sync.ts` (+ `pull-summary.test.ts`),
+`packages/core/src/connectivity/cadence.ts` (NEW, 9 tests),
+`apps/channel-manager/lib/{actions-config,connectivity,sync-copy.test}.ts`,
+`apps/channel-manager/app/(protected)/{sync,channels}/page.tsx`,
+`apps/channel-manager/app/api/jobs/pull/route.ts`.
+
+The poller was fine — `channex-pull` had run 209s earlier and every job reports healthy. The booking
+arrived, its room/rate were not mapped, and **the rejection branch ended in `imported++`**. So the
+log read `Pulled 1 revisions (1 new · 0 updated · 0 unchanged) · success` for a booking that landed
+as a `failed_import` placeholder with no room and no dates — invisible to every screen.
+
+BUG-014 on the pull side, same week, same shape: **a count that cannot express failure reports
+success.** `failedImport` is counted, named in the summary, on `PullOutcome`, and makes the event a
+`warning`. Shared `pullSummary` so the rule is not duplicated into its own test.
+
+⚠️ **And there was no way back.** The revisions feed serves only UNACKED revisions and we ack
+everything processed, including rejects — so a booking that arrived before the mapping was finished
+is acked, gone from the feed, and unreachable (Pull cannot see it; Re-sync only pushes).
+`pullChannel(…, { forceFullFetch: true })` reads the bookings endpoint instead;
+`reimportChannelBookings` exposes it, and the button shows on a channel only while it has errors.
+
+⚠️ **`SyncEvent.detail` was never rendered.** Every explanation ever written into it — "no mapped
+target", "N bookings could not be imported" — was stored and shown to nobody. That is why a rejected
+booking read as silence. Now under the summary.
+
+⚠️ **Nothing said WHEN any of this happens.** `syncCadence` in core: bookings are polled every 5
+minutes (mirrors `FIVE_MINUTES` in `instrumentation.ts` — change one and the other lies), pushes are
+immediate inside the saving request. `overdue` needs TWO missed cycles, because flagging one late
+tick is how a status light gets ignored.
+
 
 ### 2026-09-12 · Claude · DONE · Looking for more of the same class — found one, in restrictions
 **Founder: "let's see if there's anything else like this that could hinder us."**

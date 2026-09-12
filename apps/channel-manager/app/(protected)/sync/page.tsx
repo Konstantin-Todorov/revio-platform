@@ -5,7 +5,7 @@ import { getProperty, getDashboard } from "@/lib/data";
 import { resolveErrorItem } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { relativeTime } from "@/lib/format";
-import { CAPABILITY_ERROR_CODE } from "@revio/core";
+import { CAPABILITY_ERROR_CODE, syncCadence } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +85,18 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ t
 async function ActivityTab({ ch }: { ch?: string }) {
   const property = await getProperty();
   const channels = await prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } });
+  /*
+   * The newest successful collection across this property's real channels — which is what "when do
+   * bookings arrive" actually means to a hotelier. A mock channel would flatter it, so it is left
+   * out.
+   */
+  const lastPull = await prisma.channel.findFirst({
+    where: { propertyId: property.id, status: "connected", connectivityMode: { not: "mock" }, lastSyncAt: { not: null } },
+    orderBy: { lastSyncAt: "desc" },
+    select: { lastSyncAt: true },
+  });
+  const cadence = syncCadence({ lastSyncAt: lastPull?.lastSyncAt ?? null, now: new Date() });
+
   const events = await prisma.syncEvent.findMany({
     where: {
       propertyId: property.id,
@@ -97,10 +109,24 @@ async function ActivityTab({ ch }: { ch?: string }) {
     take: 100,
   });
   return (
+    <>
+    {/*
+      ⚠️ When any of this happens, said plainly and first.
+      The founder asked on 2026-09-12 whether pushes and pulls are instant or whether you wait, after
+      a real booking took longer to appear than expected. Nothing on this screen answered it, so the
+      only way to find out was to watch — and somebody who does not know bookings arrive within five
+      minutes cannot tell "not yet" from "broken".
+    */}
+    <Card className={`mb-4 p-4 ${cadence.overdue ? "border-warning-200 bg-warning-50" : ""}`}>
+      <p className={`text-[13px] leading-relaxed ${cadence.overdue ? "text-warning-800" : "text-ink-600"}`}>
+        {cadence.sentence}
+      </p>
+    </Card>
+
     <Card>
       <CardHeader
         title="Logs — pushes & pulls"
-        subtitle="Green = delivered · red = failed"
+        subtitle="Green = a channel accepted it · amber = it did not get there · red = it failed"
         action={
           <form method="GET" action="/sync" className="flex items-center gap-1.5">
             <input type="hidden" name="tab" value="activity" />
@@ -126,7 +152,18 @@ async function ActivityTab({ ch }: { ch?: string }) {
               }`}>
                 <td className="px-4 py-3"><span className="rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-bold uppercase text-ink-500">{e.kind}</span></td>
                 <td className="px-4 py-3 font-semibold text-ink-900">{e.channel?.name ?? "—"}</td>
-                <td className="px-4 py-3 text-ink-600">{e.summary}</td>
+                <td className="px-4 py-3 text-ink-600">
+                  {e.summary}
+                  {/*
+                    ⚠️ `detail` was never rendered. Every explanation written into a sync event —
+                    "no mapped target, map the room types first", "N bookings could not be imported"
+                    — was stored and shown to nobody, which is why a rejected booking looked like
+                    silence. It is the only actionable text on this screen.
+                  */}
+                  {e.detail && (
+                    <span className="mt-0.5 block text-[12px] leading-snug text-ink-400">{e.detail}</span>
+                  )}
+                </td>
                 <td className="px-4 py-3"><StatusPill tone={TONE[e.status] ?? "neutral"}>{e.status}</StatusPill></td>
                 <td className="px-4 py-3 text-[12px] text-ink-400">{relativeTime(e.createdAt)}</td>
               </tr>
@@ -136,6 +173,7 @@ async function ActivityTab({ ch }: { ch?: string }) {
         </table>
       </div>
     </Card>
+    </>
   );
 }
 
