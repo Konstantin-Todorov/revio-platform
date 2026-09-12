@@ -7,6 +7,40 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Claude · DONE · The all-three trial silently changed the onboarding
+**Founder: "the onboarding has to be maybe for most of the products, so they don't have a problem
+when they go into the different products."** Checking that found a gap the all-three decision had
+just created — and it is the kind that loses a booking rather than showing an error.
+Files: `packages/core/src/onboarding/welcome.{ts,test.ts}`.
+
+⚠️ **"Where your bookings go" was being skipped for every self-signed-up hotel.** The step was
+omitted whenever the hotel owned RevioCRS or RevioPMS, on sound reasoning: a channel booking lands
+in the CRS where a human looks. That held while an operator granted products one at a time — owning
+one meant somebody chose it.
+
+**Public signup gives every hotel all three the moment it confirms its email.** So a hotel that
+signed up saying "stop the OTAs double-booking my rooms" owns a CRS it may never open, and the
+screen asking where its bookings should be emailed disappeared. Channel bookings would arrive
+somewhere nobody was watching, and nothing anywhere would have said so.
+
+The rule is now the cheap one: **ask unless it is already answered.** The step is skippable, so a
+hotel that genuinely watches its CRS dismisses it in a click — a far smaller price than a booking
+nobody sees.
+
+The existing test asserted the OLD behaviour, so it went red. Rewritten rather than deleted: it now
+pins the reversal and says why, plus the founder's scenario directly (all three owned on day one,
+whichever product they land in). `alsoRuns`'s contract comment is corrected too — it said "Empty on
+a first onboarding", which public signup made false, and any rule reading it as evidence of USE is
+now marked wrong.
+
+I also got a test wrong on the way and corrected the test, not the code: `satisfied` marks a step
+done, it does not drop it, and the house rule is that satisfied-but-unshared is asked anyway,
+pre-filled, because the value may be a provisioning default nobody has read.
+
+The rest of the flow is sound under all-three: `isInherited` requires the DATA to exist, so a
+brand-new hotel inherits nothing and gets the full first-product flow, then a short one in the
+second and third. `pnpm verify` green, 2,335 tests.
+
 ### 2026-09-12 · Claude · DONE · No second free trial, and the first DB-backed tests
 **Founder: "if the email is somewhere in our system, don't give them anything… we can have gaps if
 they trialled CRS and PMS, didn't buy, and sign up again months later."** Right, and there were more

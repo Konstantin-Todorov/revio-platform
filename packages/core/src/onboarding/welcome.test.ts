@@ -162,11 +162,46 @@ describe("where channel bookings go", () => {
     expect(keys("RevioLink", fresh(SMALL))).toContain("delivery");
   });
 
-  it("is not asked once a CRS or PMS exists to catch the booking", () => {
+  it("⚠️ is STILL asked when the hotel merely owns a CRS or PMS it has never opened", () => {
+    /*
+     * This test asserted the opposite until public signup shipped, and the reversal is the point.
+     *
+     * The old rule skipped this screen whenever the hotel owned RevioCRS or RevioPMS, because a
+     * channel booking lands in the CRS where a human looks. That held while an operator granted
+     * products one at a time — owning one meant somebody chose it.
+     *
+     * A self-signed-up hotel is given all three the moment it confirms its email. So a hotel that
+     * signed up saying "stop the OTAs double-booking my rooms" owns a CRS it may never open, and
+     * this screen would have been skipped for every single one of them. Channel bookings would
+     * arrive somewhere nobody was watching, and nothing would have said so.
+     */
     for (const sibling of ["RevioCRS", "RevioPMS"] as ProductName[]) {
       const facts: WelcomeFacts = { ...fresh(SMALL), alsoRuns: [sibling] };
-      expect(keys("RevioLink", facts)).not.toContain("delivery");
+      expect(keys("RevioLink", facts)).toContain("delivery");
     }
+  });
+
+  it("is still SHOWN when already answered — pre-filled, not skipped", () => {
+    /*
+     * The house rule for every step: satisfied-but-unshared is asked anyway, because the value may
+     * be a provisioning default nobody has ever read. An address that channel bookings go to is
+     * exactly that kind of value — wrong and unread is the worst of both — so the screen appears
+     * with the answer in it rather than vanishing.
+     *
+     * `satisfied` marks a step done; only `omitWhen`, inheritance or property size remove one.
+     */
+    const facts: WelcomeFacts = { ...fresh(SMALL), hasReservationDelivery: true };
+    expect(keys("RevioLink", facts)).toContain("delivery");
+  });
+
+  it("⚠️ a hotel that signed up for all three is still asked, whichever product it lands in", () => {
+    // The founder's concern, pinned: every public signup owns all three on day one, and the
+    // onboarding must not quietly change shape because of entitlements nobody chose.
+    const allThree: WelcomeFacts = { ...fresh(SMALL), alsoRuns: ["RevioCRS", "RevioPMS"] };
+    expect(keys("RevioLink", allThree)).toContain("delivery");
+    // And the other two still never ask it — only RevioLink receives bookings from outside.
+    expect(keys("RevioCRS", { ...fresh(SMALL), alsoRuns: ["RevioLink", "RevioPMS"] })).not.toContain("delivery");
+    expect(keys("RevioPMS", { ...fresh(SMALL), alsoRuns: ["RevioLink", "RevioCRS"] })).not.toContain("delivery");
   });
 
   it("belongs to RevioLink alone — nothing else receives bookings from outside", () => {

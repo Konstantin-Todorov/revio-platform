@@ -111,7 +111,17 @@ export interface WelcomeFacts {
   hasReservationDelivery: boolean;
   /** Staff accounts beyond the single Owner the operator created. */
   hasStaff: boolean;
-  /** The OTHER Revio products this hotel runs. Empty on a first onboarding. */
+  /**
+   * The OTHER Revio products this hotel is entitled to.
+   *
+   * ⚠️ This is NOT "products they have set up", and since public signup it is not even "products
+   * somebody chose": a self-signed-up hotel owns all three from the moment it confirms its email,
+   * so on a first onboarding this lists two products it has never opened. Any rule that reads it as
+   * evidence of use is wrong — one did, and skipped a screen that mattered (see DELIVERY).
+   *
+   * It is safe for what it is actually for: naming which product a piece of already-entered data
+   * came from. That stays honest because `isInherited` also requires the data to EXIST.
+   */
   alsoRuns: ProductName[];
 }
 
@@ -269,7 +279,21 @@ const DELIVERY: StepDef = {
   lead: "Channel bookings are emailed here the moment they arrive.",
   skippable: true,
   satisfied: (f) => f.hasReservationDelivery,
-  omitWhen: (f) => f.alsoRuns.includes("RevioCRS") || f.alsoRuns.includes("RevioPMS"),
+  /*
+   * ⚠️ This used to be omitted whenever the hotel owned RevioCRS or RevioPMS, on the reasoning that
+   * a channel booking lands in the CRS where a human looks, so no email is needed.
+   *
+   * That reasoning depended on OWNING a product meaning somebody chose it and uses it — true while
+   * an operator granted products one at a time, and **false since public signup**, where every hotel
+   * is given all three on the day it confirms its email. A hotel that signed up saying "stop the
+   * OTAs double-booking my rooms" now owns a CRS it may never open, and the screen that asks where
+   * its bookings should go was silently skipped. Channel bookings would arrive somewhere nobody was
+   * looking, and nothing anywhere would say so.
+   *
+   * So the rule is now the cheap one: ask unless it is already answered. The step is skippable, so a
+   * hotel that genuinely watches its CRS dismisses it in one click — and a click is a far smaller
+   * price than a booking nobody sees.
+   */
 };
 
 const TEAM: StepDef = {
