@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { pullChannel, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
+import { pullChannel, reimportChannelBookings as sharedReimport, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
 import { sendEmail, deliveryRecipients } from "@revio/email";
 import { getSession } from "./session";
 import type { PushField, PushScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
+import { flashError, setFlash } from "@revio/ui/flash";
 import { guard, requireCapability } from "./authz";
 import { renderSystemEmail, renderSystemEmailText } from "@revio/core";
 
@@ -401,6 +402,52 @@ export async function reconnectChannelAction(fd: FormData): Promise<void> {
     channelCode: ch?.code,
   });
   revalidateChannels();
+}
+
+/**
+ * Re-import bookings the feed can no longer offer.
+ *
+ * ⚠️ Use this after fixing a mapping. A booking that arrived before the room and rate were mapped
+ * was recorded as `failed_import` **and acknowledged to Channex**, so the revisions feed will never
+ * send it again — an ordinary Pull cannot bring it back and Re-sync only pushes. This re-fetches the
+ * last few days from the channel's bookings endpoint, and the normal import path upgrades the
+ * `failed_import` rows in place once their products resolve.
+ *
+ * Reported by the founder on 2026-09-12: a live Booking.com reservation sat in Channex and reached
+ * no Revio product, with nothing on any screen to explain it or to retry it.
+ */
+export async function reimportChannelBookings(fd: FormData): Promise<void> {
+  await requireCapability("manageDistribution");
+  const { id: propertyId, tenantId } = await getProperty();
+  const channelId = str(fd, "channelId");
+  if (!channelId) return flashError("Choose a channel to re-import from.");
+
+  const outcome = await sharedReimport(channelId);
+  await logAudit(propertyId, tenantId, {
+    entity: "Channel sync", field: "reimport",
+    newValue: outcome.ok
+      ? `${outcome.imported} new · ${outcome.updated} updated · ${outcome.failedImport} still unmapped`
+      : `failed: ${outcome.error ?? "unknown"}`,
+    source: "api",
+  });
+  revalidatePath("/sync");
+  revalidatePath("/reservations");
+
+  if (!outcome.ok) {
+    return flashError(`Could not re-import: ${outcome.error ?? "the channel did not answer"}.`);
+  }
+  if (outcome.failedImport > 0) {
+    return setFlash(
+      "info",
+      `${outcome.imported + outcome.updated} booking(s) brought in. ${outcome.failedImport} still reference a room or rate that is not mapped — finish those in Mapping and run this again.`,
+    );
+  }
+  return setFlash(
+    "success",
+    outcome.imported + outcome.updated === 0
+      ? "Nothing new to bring in — every booking the channel has is already here."
+      : `${outcome.imported} new and ${outcome.updated} updated booking(s) brought in.`,
+  );
 }
 
 /** Pull bookings from the channel now (new → imported, cancelled → restored, unmapped → Error Center). */

@@ -35,6 +35,17 @@ export function pullChannel(channelId: string): Promise<PullOutcome> {
 }
 
 /**
+ * Re-fetch recent bookings from the channel itself rather than the unacked-revisions feed.
+ *
+ * For the case the feed cannot serve: a booking that arrived before the mapping was finished was
+ * acknowledged, so the feed will never offer it again. This is how a hotel gets it after fixing the
+ * mapping.
+ */
+export function reimportChannelBookings(channelId: string): Promise<PullOutcome> {
+  return sharedPullChannel(prisma, channelId, { forceFullFetch: true });
+}
+
+/**
  * Manual full sync — the on-demand recovery push, through the normal queue (spec §3.5).
  *
  * The horizon is the PROPERTY's own `syncHorizonDays`. It was hardcoded to 365, which made the

@@ -1,6 +1,6 @@
-import { Download, Radio } from "lucide-react";
+import { Download, Radio, RotateCcw } from "lucide-react";
 import { getChannels, getProperty } from "@/lib/data";
-import { pullChannelBookings } from "@/lib/actions-config";
+import { pullChannelBookings, reimportChannelBookings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { ChannelSettingsDialog, AddChannelDialog } from "@/components/channels/ChannelDialogs";
 import { ConnectChannelDialog } from "@/components/channels/ConnectChannelDialog";
@@ -133,10 +133,29 @@ export default async function ChannelsPage() {
                   {ch.status !== "paused" && <FullSyncButton channelId={ch.id} channelName={ch.name} />}
                   <form action={pullChannelBookings}>
                     <input type="hidden" name="channelId" value={ch.id} />
-                    <button type="submit" aria-label="Pull bookings" title="Pull the last 7 days of bookings from this channel" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-brand-600">
+                    <button type="submit" aria-label="Pull bookings" title="Pull new bookings from this channel" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-brand-600">
                       <Download className="h-4 w-4" />
                     </button>
                   </form>
+                  {/*
+                    Re-import — only offered when a booking is actually stuck, because it is the
+                    answer to a specific situation and not a second Pull. A booking that arrived
+                    before the mapping was finished was acknowledged to the channel, so the feed will
+                    never offer it again and the ordinary Pull cannot bring it back.
+                  */}
+                  {ch.errorCount > 0 && (
+                    <form action={reimportChannelBookings}>
+                      <input type="hidden" name="channelId" value={ch.id} />
+                      <button
+                        type="submit"
+                        aria-label="Re-import bookings"
+                        title="Re-fetch recent bookings from the channel — use after finishing a mapping, to bring in bookings that bounced"
+                        className="flex h-8 w-8 items-center justify-center rounded-md text-warning-600 transition-colors hover:bg-warning-50"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </button>
+                    </form>
+                  )}
                   {ch.status === "paused"
                     ? <ResumeChannelButton channelId={ch.id} channelName={ch.name} />
                     : <PauseChannelButton channelId={ch.id} channelName={ch.name} />}

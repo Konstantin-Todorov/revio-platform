@@ -51,16 +51,22 @@ export async function POST(req: NextRequest) {
     include: { property: { include: { tenant: true } } },
   });
 
-  let imported = 0, updated = 0, failed = 0;
+  let imported = 0, updated = 0, failed = 0, rejected = 0;
   for (const channel of channels) {
     let outcome;
     try {
       outcome = await pullChannel(db, channel.id);
     } catch (e) {
       failed++;
-      outcome = { ok: false as const, imported: 0, updated: 0, unchanged: 0, mode: "unknown", error: e instanceof Error ? e.message : "pull threw" };
+      outcome = { ok: false as const, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: "unknown", error: e instanceof Error ? e.message : "pull threw" };
     }
-    if (outcome.ok) { imported += outcome.imported; updated += outcome.updated; } else { failed++; }
+    if (outcome.ok) {
+      imported += outcome.imported;
+      updated += outcome.updated;
+      // A booking that arrived and bounced off a missing mapping. The pull worked; the booking did
+      // not land. Counted separately so a run that rejected one never reports as a clean run.
+      rejected += outcome.failedImport;
+    } else { failed++; }
 
     /*
      * Only write to the audit trail when something actually happened.
@@ -128,5 +134,5 @@ export async function POST(req: NextRequest) {
   }
 
   await releaseJobLease(JOB.channexPull);
-  return NextResponse.json({ ok: true, channels: channels.length, imported, updated, failed });
+  return NextResponse.json({ ok: true, channels: channels.length, imported, updated, failed, rejected });
 }

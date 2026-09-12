@@ -694,6 +694,14 @@ export interface PullOutcome {
   imported: number;
   updated: number;
   unchanged: number;
+  /**
+   * Bookings that arrived and could NOT be imported — almost always an unmapped room or rate.
+   *
+   * Separate from `error`, which means the pull itself failed. This is the pull working perfectly
+   * and the booking still not landing, which is the case that used to be invisible: it was counted
+   * as `imported` and reported as success.
+   */
+  failedImport: number;
   mode: string;
   error?: string;
 }
@@ -705,9 +713,59 @@ const PULL_LOOKBACK_DAYS = 7;
  * (availability self-corrects because "sold" is derived from confirmed reservations), status changes
  * update in place, and bookings that can't be mapped land as failed_import + an Error Center item.
  */
-export async function pullChannel(prisma: Db, channelId: string): Promise<PullOutcome> {
+/**
+ * The claim a pull is allowed to make.
+ *
+ * ⚠️ **A pull that rejected a booking is not a success.** On 2026-09-12 a real Booking.com
+ * reservation reached Channex and never reached Revio: the poller worked, the booking's room and
+ * rate were unmapped, and that branch ended in `imported++`. The log read "1 new · success" for a
+ * booking that had landed as a `failed_import` placeholder with no room and no dates — invisible to
+ * every screen. The Sync Center is the only place a hotel would learn an OTA booking had bounced.
+ *
+ * Shared with the test that pins it, so the rule cannot drift back to counting a failure as a new
+ * booking.
+ */
+export function pullSummary(args: {
+  channelName: string;
+  revisions: number;
+  imported: number;
+  updated: number;
+  unchanged: number;
+  failedImport: number;
+  useFeed: boolean;
+}): { status: string; summary: string } {
+  const rejected = args.failedImport > 0;
+  return {
+    status: rejected ? "warning" : "success",
+    summary:
+      `Pulled ${args.revisions} ${args.useFeed ? "revisions" : "bookings"} from ${args.channelName} ` +
+      `(${args.imported} new · ${args.updated} updated · ${args.unchanged} unchanged` +
+      `${rejected ? ` · ⚠ ${args.failedImport} could not be imported` : ""})`,
+  };
+}
+
+export async function pullChannel(
+  prisma: Db,
+  channelId: string,
+  opts?: {
+    /**
+     * Fetch from the bookings endpoint instead of the revisions feed.
+     *
+     * ⚠️ The reason this exists. The feed returns only UNACKED revisions, and `pullChannel` acks
+     * everything it processed — including bookings it could not import for want of a mapping. So a
+     * booking that arrived before the mapping was finished is acked, gone from the feed, and can
+     * never be pulled again: it sits as a `failed_import` placeholder forever, and no button in the
+     * product could recover it. "Re-sync" only pushes.
+     *
+     * With this, a hotel that fixes its mapping can re-fetch the last few days from `/bookings` and
+     * the ordinary import path picks the stay up — the existing-reservation branch upgrades a
+     * `failed_import` row in place once its room and rate resolve.
+     */
+    forceFullFetch?: boolean;
+  },
+): Promise<PullOutcome> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
-  if (!channel) return { ok: false, imported: 0, updated: 0, unchanged: 0, mode: "mock", error: "Unknown channel." };
+  if (!channel) return { ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: "mock", error: "Unknown channel." };
   const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId } });
   const { tenantId, propertyId } = channel;
 
@@ -720,10 +778,12 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
 
   const adapter = await adapterFor(prisma, channel, "pull");
   if (!adapter) {
-    return { ok: false, imported: 0, updated: 0, unchanged: 0, mode: channel.connectivityMode, error: "Channel is not fully set up." };
+    return { ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: channel.connectivityMode, error: "Channel is not fully set up." };
   }
 
-  const useFeed = typeof adapter.pullRevisions === "function" && typeof adapter.acknowledgeBooking === "function";
+  const useFeed = !opts?.forceFullFetch
+    && typeof adapter.pullRevisions === "function"
+    && typeof adapter.acknowledgeBooking === "function";
   const since = new Date(Date.now() - PULL_LOOKBACK_DAYS * DAY_MS).toISOString();
   let raws;
   const ackIds: string[] = [];
@@ -740,12 +800,29 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
     await prisma.syncEvent.create({
       data: { tenantId, propertyId, channelId, kind: "pull", status: "failed", summary: `Pull from ${channel.name} failed`, detail: message },
     });
-    return { ok: false, imported: 0, updated: 0, unchanged: 0, mode: channel.connectivityMode, error: message };
+    return { ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: channel.connectivityMode, error: message };
   }
 
   let imported = 0;
   let updated = 0;
   let unchanged = 0;
+  /*
+   * ⚠️ Bookings that ARRIVED and could not be imported.
+   *
+   * This counter did not exist. A booking whose room or rate is not mapped creates a `failed_import`
+   * reservation and a critical Error Center item and then `continue`s — incrementing NONE of the
+   * three counters above. The pull event therefore read:
+   *
+   *     "Pulled 1 revisions from Channex (0 new · 0 updated · 0 unchanged)"   status: success
+   *
+   * which is indistinguishable from a quiet day. A real Booking.com reservation for Cabacum Beach
+   * Residence landed on 2026-09-12, was rejected for want of a mapping, and the founder reported the
+   * only symptom the software offered: "it doesn't get pushed into our software anywhere".
+   *
+   * Same defect as BUG-014 on the push side, on the pull side: a count that cannot express failure
+   * reports success.
+   */
+  let failedImport = 0;
   /** Every stay this pull touched, so the re-push below covers the booked nights and only those. */
   const touched: ScopedStay[] = [];
 
@@ -870,6 +947,7 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
       // A modification we cannot map is worse than one we drop: replacing good lines with nothing
       // would erase the stay. Flag it and keep what we have for a human to resolve.
       if (unmapped || lines.length === 0) {
+        failedImport++;
         if (existing.status !== "failed_import") {
           await prisma.reservation.update({ where: { id: existing.id }, data: { status: "failed_import" } });
           await prisma.errorItem.create({
@@ -934,7 +1012,16 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
           recommendedAction: "Complete the room/rate mapping for this channel, then pull again.", resolved: false,
         },
       });
-      imported++;
+      /*
+       * ⚠️ `failedImport++`, NOT `imported++`.
+       *
+       * This line read `imported++`, so a booking that arrived and could not be imported was counted
+       * as a successful import and the pull event said "1 new" with status success. The reservation
+       * it made is a `failed_import` placeholder carrying no room, no dates and no nights — nothing
+       * downstream shows it, because there is nothing to show. A real Booking.com booking landed
+       * this way on 2026-09-12 and the only visible symptom was silence.
+       */
+      failedImport++;
       continue;
     }
 
@@ -979,10 +1066,29 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
     });
   }
 
+  /*
+   * ⚠️ A pull that rejected a booking is NOT a success.
+   *
+   * The status and the summary both have to carry it, because the Sync Center's Activity log is the
+   * only place a hotel would ever learn that an OTA booking arrived and bounced. Reporting success
+   * with counts that cannot express failure is how a real reservation went missing in silence.
+   */
+  const verdict = pullSummary({
+    channelName: channel.name, revisions: raws.length, imported, updated, unchanged, failedImport, useFeed,
+  });
+  const rejected = failedImport > 0;
   await prisma.syncEvent.create({
     data: {
-      tenantId, propertyId, channelId, kind: "pull", status: "success",
-      summary: `Pulled ${raws.length} ${useFeed ? "revisions" : "bookings"} from ${channel.name} (${imported} new · ${updated} updated · ${unchanged} unchanged)`,
+      tenantId, propertyId, channelId, kind: "pull", status: verdict.status,
+      summary: verdict.summary,
+      ...(rejected
+        ? {
+            detail:
+              `${failedImport} booking${failedImport === 1 ? "" : "s"} arrived and could not be imported — ` +
+              "the room type or rate plan they were sold under is not mapped for this channel. " +
+              "Finish the mapping, then use Re-sync to bring them in. They are in the Error Center until then.",
+          }
+        : {}),
     },
   });
   await prisma.channel.update({ where: { id: channelId }, data: { lastSyncAt: new Date() } });
@@ -1002,7 +1108,7 @@ export async function pullChannel(prisma: Db, channelId: string): Promise<PullOu
     await markBillable(channel.tenantId, "first_booking_synced");
   }
 
-  return { ok: true, imported, updated, unchanged, mode: channel.connectivityMode };
+  return { ok: true, imported, updated, unchanged, failedImport, mode: channel.connectivityMode };
 }
 
 
