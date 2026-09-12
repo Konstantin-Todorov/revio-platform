@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BED_SETUPS, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, planBulkOccupancy, type Capability } from "@revio/core";
+import { BED_SETUPS, earliestSelectable, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, pastDateRefusal, pastRangeRefusal, planBulkOccupancy, todayInTimeZone, type Capability } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
@@ -155,7 +155,7 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
 export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const _g = await guard("manageRates");
   if (!_g.ok) return { ok: false, error: _g.error };
-  const { id: propertyId, tenantId } = await getProperty();
+  const { id: propertyId, tenantId, timezone } = await getProperty();
   const rowId = str(fd, "id");
   const name = str(fd, "name");
   const type = str(fd, "type");
@@ -164,6 +164,22 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
   const dateFrom = str(fd, "dateFrom");
   const dateTo = str(fd, "dateTo");
   if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
+
+  /*
+   * ⚠️ Forward inventory only — the same rule, and the same reasoning, as the RevioLink copy in
+   * `apps/channel-manager/lib/actions-config.ts`. The `min` on the field stops people trying; this
+   * stops it happening. An existing rule keeps its own start as the floor, so a rule that already
+   * began in the past can still have its value or rooms changed.
+   */
+  const existingRule = rowId
+    ? await prisma.restrictionRule.findFirst({ where: { id: rowId, tenantId }, select: { dateFrom: true } })
+    : null;
+  const restrictionFloor = earliestSelectable(
+    todayInTimeZone(timezone),
+    existingRule ? existingRule.dateFrom.toISOString().slice(0, 10) : null,
+  );
+  const restrictionRefusal = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: restrictionFloor });
+  if (restrictionRefusal) return { ok: false, error: restrictionRefusal };
 
   const isBool = BOOL_TYPES.has(type);
   const data = {
@@ -267,6 +283,13 @@ export async function saveCalendarRate(args: {
   const { id: propertyId, tenantId } = property;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) return flashError("That date isn’t one we can read. Reload the calendar and try again.");
 
+  /*
+   * ⚠️ One night's price. A night that has gone was sold at whatever it was sold at, and repricing
+   * it changes no booking — it only sends a channel a rate for a date nobody can book.
+   */
+  const pastCell = pastDateRefusal({ iso: args.date, earliest: todayInTimeZone(property.timezone) });
+  if (pastCell) return flashError(pastCell);
+
   const roomType = await prisma.roomType.findFirst({ where: { id: args.roomTypeId, propertyId } });
   /*
    * ⚠️ The plan comes from the ROW that was edited, verified against this property.
@@ -328,6 +351,10 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
   const dateTo = str(fd, "dateTo");
   if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
   if (dateTo < dateFrom) return { ok: false, error: "End date is before start date." };
+  // ⚠️ Forward inventory only — the same guard as applyCrsBulkUpdateMulti below. Both exist, so
+  // both are checked: a rule enforced on one of two paths into the same table is not enforced.
+  const pastForm = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(property.timezone) });
+  if (pastForm) return { ok: false, error: pastForm };
   const roomTypeIds = strList(fd, "roomTypeIds");
   if (roomTypeIds.length === 0) return { ok: false, error: "Select at least one room type." };
   const dows = strList(fd, "daysOfWeek").map(Number);
@@ -458,10 +485,13 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
     const g = await guard(cap);
     if (!g.ok) return { ok: false, error: g.error };
   }
-  const { id: propertyId, tenantId } = await getProperty();
+  const { id: propertyId, tenantId, timezone } = await getProperty();
   const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
   if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
   if (dateTo < dateFrom) return { ok: false, error: "End date is before start date." };
+  // ⚠️ Forward inventory only — see the RevioLink twin in `actions-calendar.ts` writeBulk.
+  const pastRange = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(timezone) });
+  if (pastRange) return { ok: false, error: pastRange };
   if (roomTypeIds.length === 0) return { ok: false, error: "Select at least one room type." };
 
   const cell: Partial<{ inventory: number; minLos: number | null; maxLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean; advancePurchaseMin: number | null; advancePurchaseMax: number | null }> = {};

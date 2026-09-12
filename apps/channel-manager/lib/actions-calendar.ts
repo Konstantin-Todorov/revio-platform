@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { occupancyKeyFor, occupancyKeysFor } from "@revio/db";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, isOverbooking, ROOM_OCCUPYING_STATUSES, type Capability, type DerivedRateConfig } from "@revio/core";
+import { computeWaterfall, deriveRate, isOverbooking, pastDateRefusal, pastRangeRefusal, ROOM_OCCUPYING_STATUSES, todayInTimeZone, type Capability, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, eachDate, utcDay } from "./mutation-helpers";
 import type { PushField } from "./connectivity";
@@ -125,7 +125,17 @@ export async function saveCell(input: {
   ratePlanId?: string;
 }): Promise<void> {
   await requireCapability(FIELD_CAPABILITY[input.field] ?? "manageRates");
-  const { id: propertyId, tenantId } = await getProperty();
+  const { id: propertyId, tenantId, timezone } = await getProperty();
+
+  /*
+   * ⚠️ A cell is one night's price, availability or restriction — it is forward inventory, and a
+   * night that has gone cannot be re-sold or re-priced. The grid renders past columns read-only,
+   * but this action is reachable on its own and the grid's idea of "today" used to be the server's
+   * UTC day, which for a Bulgarian hotel is yesterday until 03:00 every morning.
+   */
+  const pastCell = pastDateRefusal({ iso: input.date, earliest: todayInTimeZone(timezone) });
+  if (pastCell) return flashError(pastCell);
+
   const date = utcDay(input.date);
   const rt = await prisma.roomType.findUnique({ where: { id: input.roomTypeId } });
   if (!rt) return;
@@ -251,11 +261,21 @@ interface WriteOutcome {
  * three different prices on three different dates is one decision by the user, and sending it as
  * three API calls is both wasteful and, per Channex's certification, wrong ("1 call, batched").
  */
-async function writeBulk(propertyId: string, tenantId: string, payload: BulkPayload): Promise<WriteOutcome> {
+async function writeBulk(propertyId: string, tenantId: string, today: string, payload: BulkPayload): Promise<WriteOutcome> {
   const empty = { changed: [], affected: 0, dates: [], roomTypeIds: [], ratePlanIds: [], cells: [] };
   const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
   if (!dateFrom || !dateTo) return { ...empty, error: "Pick a date range." };
   if (dateTo < dateFrom) return { ...empty, error: "End date is before start date." };
+  /*
+   * ⚠️ A bulk edit writes FORWARD inventory — rates, availability and restrictions that are then
+   * pushed to every mapped channel. Applied to a date that has gone it changes nothing a hotel
+   * wants and sends an OTA a price for a night nobody can book, which is the kind of divergence
+   * between us and Booking.com that takes a day to explain.
+   *
+   * `today` is the PROPERTY's date, not the server's: see packages/core/src/stays/past-dates.ts.
+   */
+  const pastRange = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: today });
+  if (pastRange) return { ...empty, error: pastRange };
   if (roomTypeIds.length === 0) return { ...empty, error: "Select at least one room type." };
 
   // Assemble the DailyCell patch from whichever restriction fields were supplied.
@@ -535,8 +555,8 @@ export async function applyBulkUpdateMulti(payload: BulkPayload): Promise<BulkRe
     const g = await guard(cap);
     if (!g.ok) return { ok: false, error: g.error };
   }
-  const { id: propertyId, tenantId } = await getProperty();
-  const out = await writeBulk(propertyId, tenantId, payload);
+  const { id: propertyId, tenantId, timezone } = await getProperty();
+  const out = await writeBulk(propertyId, tenantId, todayInTimeZone(timezone), payload);
   if (out.error) return { ok: false, error: out.error };
 
   // One apply = one audit entry recording every attribute changed (spec §3.1 build note).
@@ -566,12 +586,13 @@ export async function applyBulkUpdateBatch(payloads: BulkPayload[]): Promise<Bul
     const g = await guard(cap);
     if (!g.ok) return { ok: false, error: g.error };
   }
-  const { id: propertyId, tenantId } = await getProperty();
+  const { id: propertyId, tenantId, timezone } = await getProperty();
+  const today = todayInTimeZone(timezone);
   if (payloads.length === 0) return { ok: false, error: "Nothing to apply." };
 
   const outcomes: WriteOutcome[] = [];
   for (const [i, payload] of payloads.entries()) {
-    const out = await writeBulk(propertyId, tenantId, payload);
+    const out = await writeBulk(propertyId, tenantId, today, payload);
     // Fail fast and say WHICH change was rejected: silently applying two of three and pushing them
     // would leave the hotel believing all three landed.
     if (out.error) return { ok: false, error: `Change ${i + 1}: ${out.error}` };

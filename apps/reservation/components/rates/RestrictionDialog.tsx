@@ -5,6 +5,7 @@ import { Plus, Pencil } from "lucide-react";
 import { saveRestrictionRule, type ActionResult } from "@/lib/actions-rates";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
+import { earliestSelectable } from "@revio/core";
 
 type Rule = {
   id: string; name: string; type: string; roomTypeId: string | null; channelCodes: string[]; sourceCategories: string[];
@@ -26,11 +27,17 @@ const SOURCE_CATEGORIES: [string, string][] = [
 
 const iso = (d: Date) => new Date(d).toISOString().slice(0, 10);
 
-export function RestrictionDialog({ rule, roomTypes, channels }: { rule?: Rule; roomTypes: Opt[]; channels: Channel[] }) {
+export function RestrictionDialog({ rule, today, roomTypes, channels }: { rule?: Rule; today: string; roomTypes: Opt[]; channels: Channel[] }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(saveRestrictionRule, null);
   const isEdit = !!rule;
-  const today = new Date().toISOString().slice(0, 10);
+  /*
+   * ⚠️ `today` comes from the server at the PROPERTY's timezone; it used to be read off the
+   * browser's clock here. `earliestSelectable` is what keeps this "most cases, not all": a NEW rule
+   * cannot start before today, while an existing rule that already starts in the past stays
+   * editable at its own date — changing its value must not force a date that has happened to move.
+   */
+  const earliest = earliestSelectable(today, rule ? iso(rule.dateFrom) : null);
 
   useEffect(() => { if (state?.ok) setOpen(false); }, [state]);
 
@@ -58,8 +65,8 @@ export function RestrictionDialog({ rule, roomTypes, channels }: { rule?: Rule; 
             </Field>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="From"><DateField name="dateFrom" defaultValue={rule ? iso(rule.dateFrom) : today} required className={inputCls} /></Field>
-            <Field label="To"><DateField name="dateTo" defaultValue={rule ? iso(rule.dateTo) : today} required className={inputCls} /></Field>
+            <Field label="From"><DateField name="dateFrom" defaultValue={rule ? iso(rule.dateFrom) : today} min={earliest} required className={inputCls} /></Field>
+            <Field label="To"><DateField name="dateTo" defaultValue={rule ? iso(rule.dateTo) : today} min={earliest} required className={inputCls} /></Field>
             <Field label="Value" hint="Days/nights"><input name="value" type="number" min={0} defaultValue={rule?.valueInt ?? 2} className={inputCls} /></Field>
           </div>
           <Field label="Room type">

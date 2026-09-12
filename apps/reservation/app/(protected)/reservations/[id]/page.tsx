@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, PencilLine } from "lucide-react";
 import { getReservationDetail, getCreateFormData, PAYMENT_GUARANTEES } from "@/lib/data";
+import { earliestSelectable } from "@revio/core";
 import { cancelCrsReservation, markNoShow, modifyReservation } from "@/lib/actions-reservations";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { money, relativeTime } from "@/lib/format";
@@ -35,6 +36,18 @@ export default async function ReservationDetailPage({
   const isLive = ["confirmed", "modified", "overbooked"].includes(r.status);
   const checkInIso = line?.checkIn.toISOString().slice(0, 10) ?? "";
   const canNoShow = isLive && r.status !== "overbooked" && checkInIso < todayIso;
+  /*
+   * ⚠️ `keep-existing`, not `forward-only` — this is the case the platform rule exists for.
+   *
+   * A guest who arrived on Tuesday has an arrival in the past. That is a fact about a stay that has
+   * happened, not a mistake to correct, and refusing it would mean a receptionist cannot extend
+   * their departure without first being told their arrival is invalid. So the floor is the earlier
+   * of today and the date the booking already holds: you can never push a date FURTHER back than it
+   * already is, and you are never locked out of a record because time passed.
+   *
+   * See `packages/core/src/stays/past-dates.ts` for the four intents and which screens take which.
+   */
+  const stayFloor = earliestSelectable(todayIso, checkInIso || null);
   const guarantee = PAYMENT_GUARANTEES.find((g) => g.value === r.paymentGuarantee)?.label ?? "—";
 
   return (
@@ -129,8 +142,8 @@ export default async function ReservationDetailPage({
                   {roomTypes.map((rt) => <option key={rt.id} value={rt.id}>{rt.name}</option>)}
                 </select>
               </div>
-              <div><label className={labelCls}>Arrival</label><DateField name="checkIn" defaultValue={checkInIso} className={inputCls} /></div>
-              <div><label className={labelCls}>Departure</label><DateField name="checkOut" defaultValue={line.checkOut.toISOString().slice(0, 10)} className={inputCls} /></div>
+              <div><label className={labelCls}>Arrival</label><DateField name="checkIn" defaultValue={checkInIso} min={stayFloor} className={inputCls} /></div>
+              <div><label className={labelCls}>Departure</label><DateField name="checkOut" defaultValue={line.checkOut.toISOString().slice(0, 10)} min={stayFloor} className={inputCls} /></div>
               <div><label className={labelCls}>Rooms</label><input type="number" name="quantity" min={1} defaultValue={line.quantity} className={inputCls} /></div>
               <div><label className={labelCls}>Total ({r.currency})</label><input type="number" name="price" step="0.01" min="0" defaultValue={(r.totalMinor / 100).toFixed(2)} className={inputCls} /></div>
               <button className="h-[38px] rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">Apply change</button>

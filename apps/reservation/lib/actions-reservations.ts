@@ -10,7 +10,7 @@ import { stayScope } from "@revio/connectivity";
 import { claimHold } from "@revio/db";
 import { logAudit, recordPush, str, int, money, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
-import { hasChanges, planMerge, planGuestErasure } from "@revio/core";
+import { earliestSelectable, hasChanges, pastRangeRefusal, planMerge, planGuestErasure, todayInTimeZone } from "@revio/core";
 import { withTenantTransaction } from "@revio/db";
 import { flashError } from "@revio/ui/flash";
 
@@ -290,6 +290,26 @@ export async function modifyReservation(fd: FormData): Promise<void> {
   const priceMinor = money(fd, "price", reservation!.totalMinor);
   if (checkOut <= checkIn) {
     redirect(`/reservations/${id}?error=${encodeURIComponent("Departure must be after arrival.")}`);
+  }
+
+  /*
+   * ⚠️ `keep-existing` — the one date rule on this screen that is NOT "today or later".
+   *
+   * A stay already under way has an arrival in the past, and that is true rather than wrong. The
+   * floor is therefore the earlier of today and the arrival the booking already holds: an existing
+   * stay stays fully editable, but neither date can be moved further back than it already sits.
+   * Without this, extending an in-house guest's departure would be refused for a reason that has
+   * nothing to do with what the receptionist is trying to do.
+   */
+  const stayFloor = earliestSelectable(
+    todayInTimeZone(property.timezone),
+    line!.checkIn.toISOString().slice(0, 10),
+  );
+  const stayRefusal = pastRangeRefusal({
+    from: checkIn, to: checkOut, earliest: stayFloor, fromLabel: "Arrival", toLabel: "Departure",
+  });
+  if (stayRefusal) {
+    redirect(`/reservations/${id}?error=${encodeURIComponent(stayRefusal)}`);
   }
 
   const roomType = await prisma.roomType.findFirst({ where: { id: roomTypeId, propertyId: property.id } });

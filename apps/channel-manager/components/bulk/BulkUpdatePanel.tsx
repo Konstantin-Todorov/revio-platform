@@ -187,8 +187,8 @@ export function BulkUpdatePanel({
         {/* Scope */}
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="From"><DateField value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} /></Field>
-            <Field label="To"><DateField value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={inputCls} /></Field>
+            <Field label="From"><DateField value={dateFrom} min={today} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} /></Field>
+            <Field label="To"><DateField value={dateTo} min={today} onChange={(e) => setDateTo(e.target.value)} className={inputCls} /></Field>
           </div>
           <div>
             <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Days of week</span>

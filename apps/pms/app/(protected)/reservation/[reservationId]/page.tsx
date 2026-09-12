@@ -7,7 +7,7 @@ import {
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getReservationDetail, type TimelineEvent, type StayState } from "@/lib/folio";
 import { checkOut, reopenStay, changeStayOccupancy } from "@/lib/actions-frontdesk";
-import { money } from "@/lib/format";
+import { todayInTz, money } from "@/lib/format";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
 import { GuestRegisterCard } from "@/components/register/GuestRegisterCard";
 
@@ -237,7 +237,7 @@ export default async function ReservationViewPage({
       </div>
 
       {/* Timeline — the history of the stay (spec §3.2), the thing almost no PMS does well. */}
-      <GuestRegisterCard reservationId={reservationId} rows={o.register} />
+      <GuestRegisterCard reservationId={reservationId} rows={o.register} today={todayInTz(data.property.timezone)} />
 
       <Card className="mt-4">
         <CardHeader title="Timeline" subtitle="Booking received → assigned → checked in → moved → charges → checked out" />

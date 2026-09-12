@@ -1,6 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
+import { todayInTimeZone } from "@revio/core";
 import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
   matchDuplicates, normalisePhone, type DuplicateCandidate,
   resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
@@ -20,10 +21,14 @@ export function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** "Today" as a calendar date IN THE PROPERTY'S TIME ZONE — never the server's (spec rule). */
-export function todayInTz(timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone }).format(new Date());
-}
+/**
+ * "Today" as a calendar date IN THE PROPERTY'S TIME ZONE — never the server's (spec rule).
+ *
+ * Re-exported from `@revio/core` rather than defined here: this was one of THREE definitions of
+ * today in the platform, and the other two were wrong in ways nobody would see in daylight. See
+ * `packages/core/src/stays/past-dates.ts`.
+ */
+export const todayInTz = (timeZone: string) => todayInTimeZone(timeZone);
 
 /** The active property for the current session — scoped to the session's tenant. Every read/write in
  *  this app resolves the property through here, so a hotel can only ever touch its own data. In group

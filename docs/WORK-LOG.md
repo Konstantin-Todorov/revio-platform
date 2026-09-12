@@ -7,6 +7,37 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Claude · DONE · A date field has to decide which way it looks
+**Founder report: "in the editing calendar and some other places we can add previous dates, like
+yesterday — it applies in most cases not in all, so check where we add date and fix this."**
+Files: `packages/core/src/stays/{past-dates.ts,past-dates.test.ts}`, `scripts/dates-lint.mjs`,
+`apps/{channel-manager,reservation,pms}` rate/restriction/inventory/register screens and actions,
+`apps/reservation/lib/data.ts`, `apps/pms/lib/format.ts`, `CLAUDE.md`.
+
+⚠️ **The cause was not a missing `min` — there were THREE definitions of "today" and the rate
+screens used the wrong one.** `new Date().toISOString().slice(0,10)` is the server's (or browser's)
+UTC day. A Bulgarian hotel is UTC+3, so **from midnight to 03:00 every night** — the night auditor's
+shift, when Close Day runs — the restriction dialog, the bulk panel and the CM calendar all thought
+today was *yesterday*: they defaulted to it and saved it without complaint. `todayInTimeZone` is now
+the only source, and the two identical `todayInTz` copies (CRS + PMS) re-export it.
+
+**It is a classification, not a blanket rule** — a report that cannot read last month is as broken
+as a calendar that can sell yesterday. Four intents in `past-dates.ts`: `forward-only` (restrictions,
+bulk, calendar cells, OOO periods, new stays) · `keep-existing` (a guest who arrived Tuesday keeps a
+past arrival — `earliestSelectable(today, current)`, so a date can never be pushed FURTHER back but
+you are never locked out of a record because time passed) · `history` (searches, dashboards, reports,
+notes about past calls — untouched, and listed with reasons) · `not-future` (a date of birth, which
+had no guard in either direction and feeds the police register export).
+
+Both layers, because `min` is only a hint: 17 fields bounded, and **9 server actions now refuse a
+past date with a message that says the way out** ("The start date of Fri 11 Sept has already passed.
+The earliest you can pick is Sun 13 Sept."). Past calendar cells render as text, not controls — a
+cell that takes a click, opens an input, accepts a number and *then* errors has wasted the reader's
+time. `pnpm dates:lint` (new, 15th gate) fails any date field carrying neither `min`, `max`, nor an
+entry in `OPEN_ENDED` with a reason; proved red by removing one `min`.
+
+`pnpm verify` green, 2,275 tests (+17), all five apps build.
+
 ### 2026-09-12 · Claude · DONE · Hide fields, and say what is filtering
 **P2 item from `IDEAS-1CLUB-2026-09.md`: column visibility + filter badges.**
 Files: `packages/ui/src/{column-visibility.tsx,menu.tsx,package.json}`,
@@ -34,12 +65,12 @@ array; a test counts `<th>` against `<td>` and I proved it red by re-introducing
 
 `pnpm verify` green, 2,258 tests (+26), CRS build clean.
 
-### 2026-09-12 · Codex · CLAIMED · Correct docs subdomain binding
-The founder confirmed the publication address is `docs.reviosoft.app`, under the live `reviosoft.app` domain. I am correcting stale references, adding only the correct custom-domain binding to the isolated Railway docs service, and verifying DNS/TLS before releasing the official-site link. No hotel app, database, secrets or customer data are in scope.
+### 2026-09-12 · Codex · DONE · Correct docs subdomain binding
+The founder confirmed the publication address is `docs.reviosoft.app`, under the live `reviosoft.app` domain. The correct custom-domain binding is verified on the isolated Railway docs service, DNS/TLS are healthy, and the official site now links to it. No hotel app, database, secrets or customer data were changed.
 
 ### 2026-09-12 · Codex · DONE · Documentation preview published to Railway
 The expanded static documentation preview is running in the separate Railway `docs` service.
-Deployment `56ee5a24-0141-485f-82c2-9db62a458af0` is healthy at `https://docs-production-b1ad.up.railway.app`; all 47 article routes were probed and the live Platform and Billing pages were checked in-browser. The old `docs.reviewsoft.app` binding was based on a non-existent base domain and is not the publication target; the founder confirmed `docs.reviosoft.app`. No hotel app, database, secrets or customer data were changed.
+Deployment `56ee5a24-0141-485f-82c2-9db62a458af0` is healthy at `https://docs-production-b1ad.up.railway.app`; all 47 article routes were probed and the live Platform and Billing pages were checked in-browser. The earlier wrong-domain binding was based on a non-existent base domain and is not the publication target; the founder confirmed `docs.reviosoft.app`. No hotel app, database, secrets or customer data were changed.
 
 ### 2026-09-12 · Codex · DONE · Website release + documentation organisation
 **Founder approves marketing release; documentation follows as an isolated workstream.**

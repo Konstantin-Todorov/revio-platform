@@ -30,7 +30,7 @@ function Lbl({ children, hint }: { children: React.ReactNode; hint?: string }) {
  * The card shows what is missing rather than refusing to save what is present. A half-typed entry is
  * worth keeping — the alternative is the receptionist writing the passport on paper "for later".
  */
-export function GuestRegisterCard({ reservationId, rows }: { reservationId: string; rows: RegisterRow[] }) {
+export function GuestRegisterCard({ reservationId, rows, today }: { reservationId: string; rows: RegisterRow[]; today: string }) {
   const problemsById = new Map(rows.map((r) => [r.id, validateRegisterEntry(r)]));
   const complete = rows.filter((r) => problemsById.get(r.id)!.length === 0).length;
 
@@ -105,7 +105,12 @@ export function GuestRegisterCard({ reservationId, rows }: { reservationId: stri
                   </label>
                   <label>
                     <Lbl>Date of birth</Lbl>
-                    <input name="dateOfBirth" type="date" defaultValue={r.dateOfBirth ?? ""} className={input} />
+                    {/*
+                      ⚠️ The reverse of the rule everywhere else: a birth date may be as far in the
+                      past as it likes, and can never be in the future. `max` rather than `min` —
+                      see the `not-future` intent in packages/core/src/stays/past-dates.ts.
+                    */}
+                    <input name="dateOfBirth" type="date" max={today} defaultValue={r.dateOfBirth ?? ""} className={input} />
                   </label>
                   <label>
                     <Lbl>Sex</Lbl>

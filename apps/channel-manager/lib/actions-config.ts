@@ -10,7 +10,7 @@ import type { PushField, PushScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 import { flashError, setFlash } from "@revio/ui/flash";
 import { guard, requireCapability } from "./authz";
-import { renderSystemEmail, renderSystemEmailText } from "@revio/core";
+import { earliestSelectable, pastRangeRefusal, renderSystemEmail, renderSystemEmailText, todayInTimeZone } from "@revio/core";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -49,7 +49,7 @@ function ruleScope(rule: {
 export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const _g = await guard("manageRates");
   if (!_g.ok) return { ok: false, error: _g.error };
-  const { id: propertyId, tenantId } = await getProperty();
+  const { id: propertyId, tenantId, timezone } = await getProperty();
   const rowId = str(fd, "id");
   const name = str(fd, "name");
   const type = str(fd, "type");
@@ -59,6 +59,27 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
   const dateFrom = str(fd, "dateFrom");
   const dateTo = str(fd, "dateTo");
   if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
+
+  /*
+   * ⚠️ A restriction governs inventory that has NOT happened yet, so it cannot start in the past.
+   *
+   * The `min` on the two date fields stops people trying; this stops it happening. `min` is a hint
+   * to a picker — it survives neither a typed value in every browser nor a replayed post — and a
+   * rule written into last week does nothing except push a restriction for a gone date to
+   * Booking.com, which we then cannot explain.
+   *
+   * Editing an EXISTING rule keeps its own start as the floor: a rule that already began in the
+   * past is a fact, and being unable to change its value because time passed would be worse.
+   */
+  const existing = rowId
+    ? await prisma.restrictionRule.findFirst({ where: { id: rowId, tenantId }, select: { dateFrom: true } })
+    : null;
+  const earliest = earliestSelectable(
+    todayInTimeZone(timezone),
+    existing ? existing.dateFrom.toISOString().slice(0, 10) : null,
+  );
+  const refusal = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest });
+  if (refusal) return { ok: false, error: refusal };
 
   const channelCodes = strList(fd, "channelCodes");
   const roomTypeId = str(fd, "roomTypeId") || null;

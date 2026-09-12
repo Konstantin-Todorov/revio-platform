@@ -1,3 +1,4 @@
+import { todayInTimeZone } from "@revio/core";
 import Link from "next/link";
 import { BedDouble, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { getCalendarBoard, getBookingOptions, getRoomsAndRates, CALENDAR_ROW_GROUPS } from "@/lib/data";
@@ -94,7 +95,15 @@ export default async function CalendarPage({
   }
 
   const bookingOptions = await getBookingOptions();
-  const todayKey = ymd(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())));
+  /*
+   * ⚠️ The property's calendar date, NOT the server's.
+   *
+   * This read `new Date(Date.UTC(...))` — the server's UTC day. A Sofia hotel is UTC+3 in summer,
+   * so from midnight to 03:00 local this said *yesterday*: the calendar's `min` was a day behind,
+   * "today" was highlighted on the wrong column, and the date a night auditor could pick was one
+   * that had already gone. Three hours of every night, on the shift that runs Close Day.
+   */
+  const todayKey = todayInTimeZone(property.timezone);
 
   // ---- MONTH VIEW ----------------------------------------------------------
   if (view === "month") {
@@ -127,7 +136,7 @@ export default async function CalendarPage({
                 <Link href="/calendar" className="rounded px-2.5 py-1 text-[12.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted">Grid</Link>
                 <span className="rounded bg-brand-800 px-2.5 py-1 text-[12.5px] font-semibold text-white">Month</span>
               </div>
-              {bookingOptions.demoMode && <BookingDialog options={bookingOptions} />}
+              {bookingOptions.demoMode && <BookingDialog options={bookingOptions} today={todayKey} />}
             </div>
           }
         />
@@ -246,7 +255,7 @@ export default async function CalendarPage({
                 </Link>
               ))}
             </div>
-            {bookingOptions.demoMode && <BookingDialog options={bookingOptions} />}
+            {bookingOptions.demoMode && <BookingDialog options={bookingOptions} today={todayKey} />}
           </div>
         }
       />
@@ -378,6 +387,9 @@ export default async function CalendarPage({
                                 {...(row.ratePlanId ? { ratePlanId: row.ratePlanId } : {})}
                                 {...(cell.flag ? { flag: cell.flag } : {})}
                                 {...(cell.warn ? { warn: cell.warn } : {})}
+                                // A gone night reads but does not edit — the server refuses the
+                                // write, so the cell must not offer it. See EditableCell.
+                                past={cell.date < todayKey}
                                 prefix={row.kind === "price" ? "€" : ""}
                               />
                             </td>

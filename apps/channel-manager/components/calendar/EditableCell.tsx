@@ -6,7 +6,7 @@ import { saveCell } from "@/lib/actions-calendar";
 type Kind = "availability" | "price" | "restriction" | "flag";
 
 export function EditableCell({
-  roomTypeId, date, field, kind, value, flag, prefix = "", warn, ratePlanId,
+  roomTypeId, date, field, kind, value, flag, prefix = "", warn, ratePlanId, past = false,
 }: {
   roomTypeId: string;
   date: string;
@@ -19,6 +19,16 @@ export function EditableCell({
   prefix?: string;
   /** Non-blocking attention note (e.g. allotment above the physical room count). */
   warn?: string;
+  /**
+   * This night has already gone.
+   *
+   * The month view deliberately shows 45 days back — looking at what a past week was priced at is
+   * a normal thing to do. But looking is not editing: the server refuses a write to a past date
+   * (`saveCell`), and a cell that accepts a click, opens an input, takes a number and *then*
+   * produces an error has wasted the user's time and taught them nothing. Say it before it is read
+   * — the cell simply is not a control.
+   */
+  past?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -34,6 +44,30 @@ export function EditableCell({
       await saveCell({ roomTypeId, date, field, value: clean, ...(ratePlanId ? { ratePlanId } : {}) });
       setEditing(false);
     });
+  }
+
+  /*
+   * A gone night renders as text, not as a button: no hover, no cursor, no focus stop. It still
+   * shows its value, because the value is history worth reading.
+   */
+  if (past) {
+    if (kind === "flag") {
+      const on = !!flag;
+      const dot = field === "stopSell" ? "bg-danger-500" : field === "ctd" ? "bg-accent-500" : "bg-brand-600";
+      return (
+        <span className="flex h-7 w-full items-center justify-center opacity-45" title="This date has passed">
+          {on ? <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} /> : <span className="text-ink-300">·</span>}
+        </span>
+      );
+    }
+    return (
+      <span
+        title="This date has passed — rates and availability can only be changed from today onwards"
+        className="flex h-7 w-full items-center justify-center text-ink-400"
+      >
+        {value === "—" ? "—" : `${prefix}${value}`}
+      </span>
+    );
   }
 
   // Flags — click toggles immediately.

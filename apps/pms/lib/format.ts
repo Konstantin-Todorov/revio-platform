@@ -1,3 +1,5 @@
+import { todayInTimeZone } from "@revio/core";
+
 // BGN stays here although it is no longer offered as a choice: Bulgaria is on the euro, but a
 // historical row denominated in лева must still render as лева rather than as a bare number.
 const SYMBOLS: Record<string, string> = { EUR: "€", USD: "$", GBP: "£", BGN: "лв" };
@@ -36,12 +38,14 @@ export function ymd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Today's calendar date (YYYY-MM-DD) in the property's timezone — all PMS date logic uses this. */
-export function todayInTz(timezone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date());
-}
+/**
+ * Today's calendar date (YYYY-MM-DD) in the property's timezone — all PMS date logic uses this.
+ *
+ * Re-exported from `@revio/core`: this and the CRS copy were the same function written twice, and
+ * a third (wrong, UTC-based) one was in use on the rate screens. See
+ * `packages/core/src/stays/past-dates.ts`.
+ */
+export const todayInTz = (timezone: string) => todayInTimeZone(timezone);
 
 /** Add `days` to a YYYY-MM-DD string, returning YYYY-MM-DD. */
 export function addDaysYmd(dateYmd: string, days: number): string {

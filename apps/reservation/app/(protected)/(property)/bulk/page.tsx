@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getRatesData } from "@/lib/data";
 import { deleteRestrictionRule } from "@/lib/actions-rates";
 import { CrsBulkPanel } from "@/components/rates/CrsBulkPanel";
+import { todayInTz } from "@/lib/data";
 import { RestrictionDialog } from "@/components/rates/RestrictionDialog";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
@@ -25,7 +26,12 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
   // the SAME code path and audit trail, never a parallel implementation (spec §3.5).
   const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
   const rtName = new Map(roomTypes.map((r) => [r.id, r.name]));
-  const today = new Date().toISOString().slice(0, 10);
+  /*
+   * ⚠️ The property's date, not the server's UTC date — see `packages/core/src/stays/past-dates.ts`.
+   * Bulk edits and restrictions both write FORWARD inventory; a "today" three hours behind the
+   * hotel meant this screen opened on a date it should refuse, every night until 03:00 local.
+   */
+  const today = todayInTz(property.timezone);
   // The party size the headline price is for. Set in Settings; when nobody has set it, derived from
   // the rooms — weighted by how many of each exist — rather than read off whichever room sorted
   // first, which anchored a hotel of forty doubles on a single. A derived number is labelled
@@ -63,7 +69,7 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
         <CardHeader surface="flat"
           title="Your active restriction rules"
           subtitle="Standing rules for a date range, optionally aimed at one booking source — for example, closed to travel agents during a trade fair"
-          action={<RestrictionDialog roomTypes={roomTypes} channels={channels} />}
+          action={<RestrictionDialog today={today} roomTypes={roomTypes} channels={channels} />}
         />
         {rules.length === 0 ? (
           <div className="px-4 py-5 text-[13px] text-ink-500">No rules yet — add one to apply a restriction across a range of dates.</div>
@@ -90,7 +96,7 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
                     <td className="px-4 py-2.5"><StatusPill tone={r.active ? "success" : "neutral"}>{r.active ? "active" : "off"}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <RestrictionDialog rule={r} roomTypes={roomTypes} channels={channels} />
+                        <RestrictionDialog today={today} rule={r} roomTypes={roomTypes} channels={channels} />
                         <DeleteButton action={deleteRestrictionRule} id={r.id} label={r.name} note="Dates covered by this rule fall back to the plan/property defaults." />
                       </div>
                     </td>

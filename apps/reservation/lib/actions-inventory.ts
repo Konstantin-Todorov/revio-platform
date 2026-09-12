@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { stayScope } from "@revio/connectivity";
+import { pastRangeRefusal, todayInTimeZone } from "@revio/core";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
@@ -36,7 +37,7 @@ function revalidateInventory() {
 
 export async function addInventoryPeriod(fd: FormData): Promise<void> {
   await requireCapability("manageInventory");
-  const { id: propertyId, tenantId } = await getProperty();
+  const { id: propertyId, tenantId, timezone } = await getProperty();
 
   const roomTypeId = str(fd, "roomTypeId");
   const kind = str(fd, "kind") === "closure" ? "closure" : "out_of_order";
@@ -50,6 +51,13 @@ export async function addInventoryPeriod(fd: FormData): Promise<void> {
   // Reported separately from a missing date: the dates are both there and both readable, so
   // "give me the dates" would send somebody looking for a field they had already filled in.
   if (dateTo < dateFrom) return flashError("That period ends before it starts — check the two dates.");
+  /*
+   * ⚠️ Taking a room out of order removes availability going forward and pushes that to every
+   * mapped channel. Backdating it cannot un-sell the nights it covers — it only tells an OTA a
+   * room was closed on a date that has been and gone.
+   */
+  const pastPeriod = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(timezone) });
+  if (pastPeriod) return flashError(pastPeriod);
 
   const roomType = await prisma.roomType.findFirst({ where: { id: roomTypeId, propertyId } });
   if (!roomType) return;

@@ -5,7 +5,8 @@ import { BulkUpdatePanel } from "@/components/bulk/BulkUpdatePanel";
 import { RestrictionDialog } from "@/components/restrictions/RestrictionDialog";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { ymd } from "@/lib/format";
-import { channelSupports } from "@revio/core";
+import { channelSupports, todayInTimeZone } from "@revio/core";
+import { getProperty } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ const TYPE_LABEL: Record<string, string> = {
 /** V2 IA: Bulk Update and Restrictions are ONE screen — one-off mass edits on top, standing rules below. */
 export default async function Page({ searchParams }: { searchParams: Promise<{ rt?: string }> }) {
   const { rt } = await searchParams;
-  const [{ roomTypes, ratePlans }, { rules, channels }] = await Promise.all([getRoomsAndRates(), getRestrictions()]);
+  const [property, { roomTypes, ratePlans }, { rules, channels }] = await Promise.all([getProperty(), getRoomsAndRates(), getRestrictions()]);
   // Capability flags (spec §3.3 / §5.2): a rule aimed at a channel that can't honour its type is
   // flagged here, not silently created — and it is a limitation, never an error.
   const ignoredBy = (rule: { type: string; channelCodes: string[] }): string[] => {
@@ -26,7 +27,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
   };
   // Inline per-row bulk from the calendar pre-scopes to one room type (?rt=CODE).
   const preselect = rt ? roomTypes.filter((r) => r.code === rt).map((r) => r.id) : undefined;
-  const today = new Date().toISOString().slice(0, 10);
+  /*
+   * ⚠️ The property's date, not the server's UTC date — see `packages/core/src/stays/past-dates.ts`.
+   * A bulk edit and a restriction both write FORWARD inventory, so "today" being a day behind meant
+   * the screen opened on a date it should refuse, every night between midnight and 03:00 local.
+   */
+  const today = todayInTimeZone(property.timezone);
   const rtOpts = roomTypes.map((r) => ({ id: r.id, name: r.name }));
   const rpOpts = ratePlans.map((p) => ({ id: p.id, name: p.roomTypeLinks.length ? `${p.roomTypeLinks.map((l) => l.roomType.name).join(", ")} · ${p.name}` : p.name }));
   const chOpts = channels.map((c) => ({ code: c.code, name: c.name }));
@@ -49,7 +55,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
       )}
 
       <Card surface="flat" className="mt-4">
-        <CardHeader surface="flat" title="Your active restriction rules" action={<RestrictionDialog roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />} />
+        <CardHeader surface="flat" title="Your active restriction rules" action={<RestrictionDialog today={today} roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
@@ -77,7 +83,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
                   <td className="px-4 py-2.5"><StatusPill tone={r.active ? "success" : "neutral"}>{r.active ? "Active" : "Inactive"}</StatusPill></td>
                   <td className="px-2 py-2.5">
                     <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <RestrictionDialog rule={r} roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />
+                      <RestrictionDialog today={today} rule={r} roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />
                       <DeleteButton action={deleteRestrictionRule} id={r.id} label={r.name} />
                     </div>
                   </td>

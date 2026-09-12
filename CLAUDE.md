@@ -122,6 +122,11 @@ appeared — never speculatively.
 
 - Money is integer **minor units** (cents) + an ISO currency code — never floats.
 - Dates for inventory are calendar dates (`YYYY-MM-DD`), timezone-resolved at the property.
+- **"Today" is `todayInTimeZone(property.timezone)` — never `new Date().toISOString()`.** The server's
+  UTC day is a day behind a Bulgarian hotel until 03:00 every morning, which is the night auditor's
+  shift. A date field must also have *decided* which way it looks: forward-only, keep-existing,
+  history or not-future — the four intents, and which screen takes which, are in
+  `packages/core/src/stays/past-dates.ts`, and `pnpm dates:lint` fails on a field that declares none.
 - Domain logic is **pure and tested** in `packages/core`; apps stay thin (UI + wiring).
 - Don't widen a product's scope past what its `CLAUDE.md` says is in V1.
 

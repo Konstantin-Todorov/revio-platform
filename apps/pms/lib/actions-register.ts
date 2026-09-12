@@ -3,11 +3,12 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { claimRegisterNo, withTenantTransaction } from "@revio/db";
-import { normaliseCountryCode } from "@revio/core";
+import { futureDateRefusal, normaliseCountryCode, todayInTimeZone } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { roleHasCapability, type Capability } from "./roles";
 import { logAudit, str } from "./mutation-helpers";
+import { flashError } from "@revio/ui/flash";
 
 /**
  * Register actions — регистър на настанените туристи (чл. 116 ЗТ).
@@ -49,6 +50,25 @@ export async function saveStayGuest(fd: FormData): Promise<void> {
   const sexRaw = str(fd, "sex");
   const typeRaw = str(fd, "documentType");
   const nationality = normaliseCountryCode(str(fd, "nationality"));
+
+  /*
+   * ⚠️ `not-future` — the reverse of the rule on every rate and inventory screen.
+   *
+   * A birth date may be as far back as it likes; it can never be later than today. This row feeds
+   * the police register export, where a guest born tomorrow is not an eccentricity but a rejected
+   * filing — and the receptionist finds out days later, from the authority, not from us.
+   */
+  const dobRaw = str(fd, "dateOfBirth");
+  const property = await prisma.property.findUniqueOrThrow({
+    where: { id: session.activePropertyId },
+    select: { timezone: true },
+  });
+  const dobRefusal = futureDateRefusal({
+    label: "Date of birth",
+    iso: dobRaw,
+    today: todayInTimeZone(property.timezone),
+  });
+  if (dobRefusal) return flashError(dobRefusal);
 
   await prisma.stayGuest.update({
     where: { id: row!.id },

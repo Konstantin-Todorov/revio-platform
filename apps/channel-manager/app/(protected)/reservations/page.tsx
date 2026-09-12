@@ -1,4 +1,5 @@
-import { getReservations, getBookingOptions, type ReservationDateType } from "@/lib/data";
+import { getReservations, getBookingOptions, getProperty, type ReservationDateType } from "@/lib/data";
+import { todayInTimeZone } from "@revio/core";
 import { getSession } from "@/lib/session";
 import { cancelReservation } from "@/lib/actions-calendar";
 import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
@@ -38,7 +39,8 @@ export default async function ReservationsPage({
     ...(sp.to ? { to: sp.to } : {}),
     dateType,
   };
-  const [reservations, options, session] = await Promise.all([getReservations(filters), getBookingOptions(), getSession()]);
+  const [reservations, options, session, property] = await Promise.all([getReservations(filters), getBookingOptions(), getSession(), getProperty()]);
+  const todayIso = todayInTimeZone(property.timezone);
   const filtered = Boolean(sp.channel || sp.status || sp.q || sp.from || sp.to);
   // Scope (spec §5.4): with the CRS the canonical list lives THERE — this is the channel monitor.
   const integrated = session?.entitlements.reservation ?? false;
@@ -52,7 +54,7 @@ export default async function ReservationsPage({
         subtitle={integrated
           ? "Channel-bookings monitor — did each booking land and was it acknowledged? The canonical reservation list lives in RevioCRS."
           : "Your reservations — channel bookings land here (standalone mode, no CRS connected); cancel to restore availability"}
-        action={options.demoMode ? <BookingDialog options={options} /> : undefined}
+        action={options.demoMode ? <BookingDialog options={options} today={todayIso} /> : undefined}
       />
 
       {/* Filters — plain GET form, server-rendered results. */}

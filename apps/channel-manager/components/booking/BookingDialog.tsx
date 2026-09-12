@@ -9,10 +9,11 @@ import { DateField } from "@revio/ui/date-field";
 type Opt = { id: string; name: string; code?: string };
 type Options = { channels: Opt[]; roomTypes: Opt[]; ratePlans: Opt[] };
 
-export function BookingDialog({ options, defaultRoomTypeId }: { options: Options; defaultRoomTypeId?: string }) {
+export function BookingDialog({ options, today, defaultRoomTypeId }: { options: Options; today: string; defaultRoomTypeId?: string }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(simulateBooking, null);
-  const today = new Date().toISOString().slice(0, 10);
+  // `today` is the PROPERTY's date, passed from the server — see packages/core/src/stays/past-dates.ts.
+
 
   useEffect(() => {
     if (state?.ok) setOpen(false);
@@ -59,7 +60,7 @@ export function BookingDialog({ options, defaultRoomTypeId }: { options: Options
             </Field>
           </div>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Check-in"><DateField name="checkIn" defaultValue={today} className={inputCls} required /></Field>
+            <Field label="Check-in"><DateField name="checkIn" defaultValue={today} min={today} className={inputCls} required /></Field>
             <Field label="Nights"><input name="nights" type="number" min={1} defaultValue={2} className={inputCls} /></Field>
             <Field label="Rooms"><input name="quantity" type="number" min={1} defaultValue={1} className={inputCls} /></Field>
           </div>
