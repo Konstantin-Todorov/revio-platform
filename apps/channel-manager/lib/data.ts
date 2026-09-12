@@ -405,7 +405,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
   const rtIds = roomTypes.map((r) => r.id);
   // Every plan on screen, plus the parents the derived ones are computed from.
   const pricePlanIds = ratePlanIdsToLoad(planRows, planInputs);
-  const [prices, cells, resLines] = await Promise.all([
+  const [prices, cells, planCells, resLines] = await Promise.all([
     pricePlanIds.length > 0
       /*
        * ⚠️ Occupancy-filtered, and keyed by PLAN as well as room and date.
@@ -428,6 +428,23 @@ export async function getCalendarBoard(q: CalendarQuery) {
     // ROOM-LEVEL read — the calendar has one row per room, so `cellMap` is keyed on room + date.
     // Plan-scoped cells must not enter it; they belong to the rate-plan rows, not these.
     prisma.dailyCell.findMany({ where: { roomTypeId: { in: rtIds }, date: { gte: start, lte: end }, ratePlanId: null } }),
+    /*
+     * ⚠️ Plan-scoped restriction cells — NOT to render, but so the grid can admit they exist.
+     *
+     * Bulk Update writes restrictions against the chosen plans when a hotel picks SOME of them
+     * (`restrictionPlansFor`), and the restriction rows here are per ROOM and read `ratePlanId:
+     * null`. Both halves are right on their own, and together they lose the edit: the apply reports
+     * success, the data is stored correctly, and the calendar shows the room-level value as though
+     * nothing had changed. That is the same shape as the rate-plan defect reported on 2026-09-12 —
+     * a write targeting plan X and a render reading elsewhere — found while looking for more of it.
+     *
+     * Rendering a restriction row per plan is the full answer and a bigger change to this grid. Not
+     * hiding it is the part that cannot wait: a cell that differs per plan says so.
+     */
+    prisma.dailyCell.findMany({
+      where: { roomTypeId: { in: rtIds }, date: { gte: start, lte: end }, ratePlanId: { not: null } },
+      select: { roomTypeId: true, date: true, minLos: true, cta: true, ctd: true, stopSell: true },
+    }),
     prisma.reservationLine.findMany({
       where: {
         roomTypeId: { in: rtIds },
@@ -445,6 +462,21 @@ export async function getCalendarBoard(q: CalendarQuery) {
     prices.map((p) => [planPriceKey(p.ratePlanId, p.roomTypeId, p.date.toISOString().slice(0, 10)), p.priceMinor]),
   );
   const cellMap = new Map(cells.map((c) => [priceKey(c.roomTypeId, c.date.toISOString().slice(0, 10)), c]));
+  /*
+   * Which (room, date) cells carry a restriction set for SOME rate plans rather than for the room.
+   * The row below cannot show the per-plan values, so it says that it cannot — rather than showing
+   * the room-level value and implying nothing else is set.
+   */
+  const planScoped = new Set<string>();
+  for (const c of planCells) {
+    if (c.minLos != null || c.cta || c.ctd || c.stopSell) {
+      planScoped.add(priceKey(c.roomTypeId, c.date.toISOString().slice(0, 10)));
+    }
+  }
+  const perPlanNote = (rt: string, k: string) =>
+    planScoped.has(priceKey(rt, k))
+      ? "Some rate plans have their own restriction on this date — set in Bulk Update. This row shows the room's."
+      : undefined;
 
   const fmt = (m: number | undefined) => (m === undefined ? "—" : (m / 100).toLocaleString("en-US"));
   const todayStr = today.toISOString().slice(0, 10);
@@ -524,7 +556,8 @@ export async function getCalendarBoard(q: CalendarQuery) {
         key: "minlos", label: "Min LOS", kind: "restriction", field: "minLos", editable: true,
         cells: dateKeys.map((k) => {
           const los = cellFor(k)?.minLos ?? standard?.defMinLos ?? null;
-          return { date: k, value: los ? String(los) : "—" };
+          const note = perPlanNote(roomType.id, k);
+          return { date: k, value: los ? String(los) : "—", ...(note ? { warn: note } : {}) };
         }),
       });
     }
@@ -533,7 +566,8 @@ export async function getCalendarBoard(q: CalendarQuery) {
         key: "cta", label: "CTA", kind: "flag", field: "cta", editable: true,
         cells: dateKeys.map((k) => {
           const on = cellFor(k)?.cta ?? false;
-          return { date: k, value: on ? "✕" : "·", ...(on ? { flag: "cta" as const } : {}) };
+          const note = perPlanNote(roomType.id, k);
+          return { date: k, value: on ? "✕" : "·", ...(on ? { flag: "cta" as const } : {}), ...(note ? { warn: note } : {}) };
         }),
       });
     }
@@ -542,7 +576,8 @@ export async function getCalendarBoard(q: CalendarQuery) {
         key: "ctd", label: "CTD", kind: "flag", field: "ctd", editable: true,
         cells: dateKeys.map((k) => {
           const on = cellFor(k)?.ctd ?? false;
-          return { date: k, value: on ? "✕" : "·", ...(on ? { flag: "ctd" as const } : {}) };
+          const note = perPlanNote(roomType.id, k);
+          return { date: k, value: on ? "✕" : "·", ...(on ? { flag: "ctd" as const } : {}), ...(note ? { warn: note } : {}) };
         }),
       });
     }
@@ -551,7 +586,8 @@ export async function getCalendarBoard(q: CalendarQuery) {
         key: "stopsell", label: "Stop Sell", kind: "flag", field: "stopSell", editable: true,
         cells: dateKeys.map((k) => {
           const on = (cellFor(k)?.stopSell ?? false) || isAdvancePurchaseClosed(todayStr, k, apWindow);
-          return { date: k, value: on ? "●" : "·", ...(on ? { flag: "stop" as const } : {}) };
+          const note = perPlanNote(roomType.id, k);
+          return { date: k, value: on ? "●" : "·", ...(on ? { flag: "stop" as const } : {}), ...(note ? { warn: note } : {}) };
         }),
       });
     }

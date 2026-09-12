@@ -18,6 +18,32 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-09-12 · Claude · DONE · Looking for more of the same class — found one, in restrictions
+**Founder: "let's see if there's anything else like this that could hinder us."**
+Files: `apps/channel-manager/lib/data.ts`.
+
+The class is **a write and a read that disagree about which record they mean**. Searching for it
+across the schema found a second live instance, in restrictions rather than prices:
+
+- **Write:** Bulk Update calls `restrictionPlansFor`. Pick ALL your plans (or none) and it writes a
+  ROOM-level cell (`ratePlanId: null`); pick SOME and it writes one cell PER CHOSEN PLAN. Correct —
+  a per-plan restriction is a real thing that gets pushed to channels.
+- **Read:** the calendar's Min LOS / CTA / CTD / Stop Sell rows are per ROOM and filter
+  `ratePlanId: null` — also correct, and itself a deliberate fix (`room-level-cells.test.ts`:
+  without it two cells share a key and whichever the database returned last silently wins).
+
+Both halves right, and together they lose the edit: apply reports success, the data is stored, and
+the grid shows the room-level value as though nothing happened. Same shape as BUG-003/007.
+
+Rendering a restriction row per plan is the full answer and a bigger change to that grid. What could
+not wait is the silence: a cell whose restriction differs per plan now carries a note saying so, so
+the screen stops implying the room-level value is the whole story.
+
+⚠️ Worth knowing for anything new: `DailyCell.ratePlanId` is nullable and means two different things
+— null is "the room", non-null is "that plan". Any new read of it has to decide which it wants, and
+say so.
+
+
 ### 2026-09-12 · Claude · DONE · Fourteen reported bugs, one cause — read paths assumed a single rate plan
 **Ventsislav's bug log from Cabacum Beach Residence. His §2.2 hypothesis was exactly right.**
 Files: `packages/core/src/rates/calendar-rows.ts` (NEW, 11 tests),
