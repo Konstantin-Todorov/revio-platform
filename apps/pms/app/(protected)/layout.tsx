@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
-import { productLinks, productUpsells } from "@revio/ui/product-links";
+import { productLinks, productUpsells, productOrigin } from "@revio/ui/product-links";
+import { ProductLocked } from "@revio/ui/product-locked";
+import { KeepItButton } from "@/components/shell/KeepItButton";
 import { headers } from "next/headers";
-import { Lock } from "lucide-react";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { ShellProvider } from "@/components/shell/ShellContext";
@@ -14,8 +15,8 @@ import { FlashToast } from "@revio/ui/flash-toast";
 import { UsageBeacon } from "@revio/ui/usage-beacon";
 import { recordScreenView } from "@/lib/actions-usage";
 import { readFlash, FLASH_COOKIE } from "@revio/ui/flash";
-import { runningTrialFor } from "@revio/db";
-import { trialBanner, isTrialDecider } from "@revio/core";
+import { allTrialsFor, runningTrialFor } from "@revio/db";
+import { trialBanner, isTrialDecider, productAccessState } from "@revio/core";
 import { TrialStrip } from "@revio/ui/trial-banner";
 import { keepThisTrial } from "@/lib/actions-self-trial";
 
@@ -28,14 +29,36 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const pathname = (await headers()).get("x-pathname") ?? "";
   if (pathname && !roleAllowsPath(session.role, pathname)) redirect(roleHome(session.role));
 
+  /*
+   * ⚠️ The one screen that decides whether a hotel that liked us comes back.
+   *
+   * This used to be a hand-written sentence — "This hotel hasn't subscribed … Contact Revio" —
+   * repeated in all three apps. It was false for a hotel whose trial had just ended, it offered no
+   * way to act, and fixing it in one app would have left the other two lying. `ProductLocked` is
+   * shared, and `productAccessState` decides which of the three situations this actually is.
+   */
   if (!session.entitlements.pms) {
-
+    const access = productAccessState({
+      product: "pms",
+      trials: await allTrialsFor(session.tenantId),
+      entitlements: {
+        cm: session.entitlements.channelManager,
+        crs: session.entitlements.reservation,
+        pms: session.entitlements.pms,
+      },
+    });
     return (
-      <div className="flex h-screen flex-col items-center justify-center bg-surface-muted px-6 text-center">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-warning-50 text-warning-600"><Lock className="h-7 w-7" /></div>
-        <h1 className="text-[18px] font-bold text-ink-900">RevioPMS isn’t enabled for {session.tenantName}</h1>
-        <p className="mt-1.5 max-w-sm text-[13px] text-ink-500">This hotel hasn’t subscribed to the Property Management System. Contact Revio to enable it.</p>
-      </div>
+      <>
+        <ProductLocked
+          state={access}
+          hotelName={session.tenantName}
+          fmtDate={(d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+          hrefFor={(k) => productOrigin(k as "cm" | "crs" | "pms")}
+          {...(access.reason === "trial-ended"
+            ? { action: <KeepItButton product="pms" /> }
+            : {})}
+        />
+      </>
     );
   }
 

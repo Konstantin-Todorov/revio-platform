@@ -189,15 +189,49 @@ export async function requestKeepTrial(args: {
   product: ProductKey;
   userId: string;
 }): Promise<{ ok: boolean; alreadyAsked: boolean }> {
-  const trial = await runningTrialFor(args.tenantId, args.product);
+  /*
+   * ⚠️ A FINISHED trial can be asked for too — and that is the more valuable ask.
+   *
+   * This used to look only at running trials, because the only caller was the banner inside a live
+   * trial. The locked screen changed that: a hotel whose thirty days ran out is the one most worth
+   * hearing from, and it was the one case that could not press the button at all. The fallback is
+   * the most recently ended trial of the same product.
+   */
+  const trial =
+    (await runningTrialFor(args.tenantId, args.product)) ??
+    (await prisma.productTrial.findFirst({
+      where: { tenantId: args.tenantId, product: args.product },
+      select: { id: true, startedAt: true, endsAt: true, keepRequestedAt: true },
+      orderBy: { startedAt: "desc" },
+    }));
   if (!trial) return { ok: false, alreadyAsked: false };
   if (trial.keepRequestedAt) return { ok: true, alreadyAsked: true };
 
   const { count } = await prisma.productTrial.updateMany({
-    where: { id: trial.id, tenantId: args.tenantId, endedAt: null, keepRequestedAt: null },
+    // No `endedAt: null` here any more — see the note above. `keepRequestedAt: null` still makes
+    // this idempotent under a race, which is the condition that actually matters.
+    where: { id: trial.id, tenantId: args.tenantId, keepRequestedAt: null },
     data: { keepRequestedAt: new Date(), keepRequestedById: args.userId },
   });
   // count === 0 means somebody else pressed it first, between the read and the write. That is the
   // same outcome for this customer, so it is reported as already asked rather than as a failure.
   return { ok: true, alreadyAsked: count === 0 };
+}
+
+/**
+ * Every trial this tenant has ever had, finished ones included.
+ *
+ * `runningTrialFor` deliberately returns nothing once a trial ends, which is right for the banner
+ * and wrong for the locked screen: the moment a hotel most needs to be told what happened is the
+ * moment that function starts saying nothing at all.
+ */
+export async function allTrialsFor(
+  tenantId: string,
+): Promise<{ product: ProductKey; endedAt: Date | null; outcome: string | null; keepRequestedAt: Date | null }[]> {
+  const rows = await prisma.productTrial.findMany({
+    where: { tenantId },
+    select: { product: true, endedAt: true, outcome: true, keepRequestedAt: true },
+    orderBy: { startedAt: "desc" },
+  });
+  return rows.map((r) => ({ ...r, product: r.product as ProductKey }));
 }

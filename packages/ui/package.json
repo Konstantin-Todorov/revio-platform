@@ -52,7 +52,8 @@
     "./trial-banner": "./src/trial-banner.tsx",
     "./billing-panel": "./src/billing-panel.tsx",
     "./billing-identity-form": "./src/billing-identity-form.tsx",
-    "./nav-tail": "./src/nav-tail.tsx"
+    "./nav-tail": "./src/nav-tail.tsx",
+    "./product-locked": "./src/product-locked.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

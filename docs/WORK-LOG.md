@@ -7,6 +7,39 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · The screen a hotel meets when its trial ends
+**Founder: check what a hotel actually sees at trial end — suspend, never delete, they come back.**
+The data was already safe; the SCREEN was the problem, and it was the last thing we say to the
+person most likely to pay us.
+Files: `packages/core/src/trials/product-access.{ts,test.ts}`, `packages/ui/src/product-locked.tsx`,
+`packages/db/src/self-trial.ts`, all three `app/(protected)/layout.tsx`, three `KeepItButton.tsx`.
+
+⚠️ **Three situations were sharing one sentence** — *"This hotel hasn't subscribed to the Channel
+Manager. Contact Revio to enable it."* — written out by hand in all three apps. For a hotel whose
+30-day trial had just ended it is **false** (they did subscribe; it finished), a **dead end** (no
+address, no link, no button), and identical to "never had it" and "we switched it off".
+
+Now one shared `ProductLocked`, with `productAccessState` deciding which it is. Trial ended says so,
+names the date, and states that **nothing was deleted** — the fear that actually stops somebody
+coming back. It always carries the products that DO still open, because a trial ends per product and
+a hotel locked out of RevioLink may be in RevioCRS every morning; a wall with no doors is how
+somebody decides the whole platform is broken rather than that one licence lapsed.
+
+`requestKeepTrial` now accepts a FINISHED trial. It only looked at running ones, because its only
+caller was the in-trial banner — so the hotel most worth hearing from was the one case that could
+not press the button at all.
+
+**A flaw in my own screen, found by looking at it rendered:** the "never had it" copy promised "try
+it free for 30 days" with nothing to press. An offer with no button is a worse dead end than no
+offer. The flow lives inside `(protected)` so it cannot be hosted by the product they are locked out
+of — it now launches from one they can open, and is omitted entirely when there is none.
+
+Also corrected a test of my own rather than the code: React escapes `'` as `&#x27;`, so asserting on
+raw markup makes a test pass because it was written around the escaping rather than because the
+words are right. The helper un-escapes first.
+
+`pnpm verify` green, 2,367 tests; all three apps build.
+
 ### 2026-09-12 · Claude · DONE · A client can be deleted — and the cascade did not reach everything
 **Founder: "we cannot delete a client. That's strange. I think we have to do that in our operator."**
 Correct — there was no delete path anywhere in the codebase. Building one found something worse.

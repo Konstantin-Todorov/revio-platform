@@ -49,6 +49,7 @@ export * from "./metrics/booking-funnel.js";
 export * from "./onboarding/signup.js";
 export * from "./onboarding/signup-identity.js";
 export * from "./billing/client-deletion.js";
+export * from "./trials/product-access.js";
 export * from "./guests/erasure.js";
 export * from "./rates/occupancy-options.js";
 export * from "./rates/pricing-model-switch.js";
