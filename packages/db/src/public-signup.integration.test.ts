@@ -82,14 +82,22 @@ const describeDb = gate.ok ? describe : describe.skip;
 describeDb("public signup, end to end", () => {
   beforeEach(async () => {
     if (!reachable) return;
-    // Order matters: children before parents.
+    /*
+     * ⚠️ ONE truncate, CASCADE — not a hand-written list of deletes in dependency order.
+     *
+     * The list version passed locally against an empty database and failed in CI against a seeded
+     * one: demo reservation lines hold foreign keys into the rate plans it was clearing, and no
+     * amount of reordering fixes that without naming every table that will ever reference a tenant.
+     * That list rots the first time somebody adds a model, and it rots into a red build in CI
+     * rather than into a visible mistake here.
+     *
+     * `TRUNCATE ... CASCADE` from `Tenant` is order-independent by construction: the database
+     * already knows what points at a tenant, which is exactly the knowledge the list was trying to
+     * duplicate. `AuthToken` is named separately because a token hangs off a user by id rather than
+     * by a foreign key that cascades.
+     */
     await prisma!.$executeRawUnsafe(`SELECT set_config('app.bypass', 'on', true)`);
-    await prisma!.productTrial.deleteMany({});
-    await prisma!.ratePlan.deleteMany({});
-    await prisma!.authToken.deleteMany({});
-    await prisma!.user.deleteMany({});
-    await prisma!.property.deleteMany({});
-    await prisma!.tenant.deleteMany({});
+    await prisma!.$executeRawUnsafe(`TRUNCATE TABLE "Tenant", "AuthToken" RESTART IDENTITY CASCADE`);
   });
 
   const NEW = {

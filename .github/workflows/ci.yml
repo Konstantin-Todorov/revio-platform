@@ -163,19 +163,29 @@ jobs:
           psql "$ADMIN_URL" -c 'CREATE DATABASE revio_ci'
           pnpm --filter @revio/db db:deploy
           pnpm --filter @revio/db db:seed
+          # A SECOND database, migrated but NEVER seeded, for the tests that need an empty one.
+          # The seeded database above is the wrong shape for them: the signup tests clear tenants
+          # between cases, and demo reservations hold foreign keys into the rate plans they clear —
+          # so they passed against an empty local database and failed here, which is the worst
+          # possible place to find out. Separate databases, separate purposes.
+          psql "$ADMIN_URL" -c 'CREATE DATABASE revio_signup_ci'
+          DATABASE_URL="$ADMIN_URL_BASE/revio_signup_ci" DIRECT_DATABASE_URL="$ADMIN_URL_BASE/revio_signup_ci" \
+            pnpm --filter @revio/db db:deploy
         env:
           ADMIN_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          ADMIN_URL_BASE: postgresql://postgres:postgres@localhost:5432
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
           DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
 
-      # `revio_ci` above is a real database with every migration applied, so the database-backed
-      # tests (public signup end to end) run here rather than skipping. Without this env they skip
-      # silently — and a test that skips in CI is a test that does not exist.
+      # Pointed at the EMPTY `revio_signup_ci`, not the seeded `revio_ci`. Without a database here
+      # the database-backed tests skip silently, and a test that skips in CI is a test that does
+      # not exist; pointed at the seeded one they fail on foreign keys they have no business
+      # knowing about.
       - name: Test
         run: pnpm test
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
-          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_signup_ci
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_signup_ci
 
       # LAST, because it is the slowest and because it catches a class the others cannot: `pnpm
       # typecheck` and `pnpm test` both pass on code that fails `next build`. That has bitten this
