@@ -34,6 +34,7 @@
     "./chart-path": "./src/chart-path.ts",
     "./controls": "./src/controls.tsx",
     "./menu": "./src/menu.tsx",
+    "./column-visibility": "./src/column-visibility.tsx",
     "./tabs": "./src/tabs.tsx",
     "./stale-deployment-boundary": "./src/stale-deployment-boundary.tsx",
     "./product-links": "./src/product-links.tsx",

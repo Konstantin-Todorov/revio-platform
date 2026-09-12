@@ -167,8 +167,8 @@ in the EU. Gate behind the existing consent model and never record card or perso
 | | Idea | What it becomes here |
 | --- | --- | --- |
 | ☐ | **Payment Link** template | Chase a deposit or balance with one link. We take a card guarantee but have no way to ask for money later |
-| ☐ | **Segment tabs with live counts** | Reservations/Guests get `All 76 · Arriving today 4 · In house 12 · Unpaid 3`, so the shape is readable before clicking |
-| ☐ | **Column visibility + filter badges** | Their DataGrid gives "Hide fields" and a filter count free. Ours are hand-rolled; add both to the reservation and guest tables |
+| ✅ | **Segment tabs with live counts** | Reservations/Guests get `All 76 · Arriving today 4 · In house 12 · Unpaid 3`, so the shape is readable before clicking |
+| ✅ | **Column visibility + filter badges** | Their DataGrid gives "Hide fields" and a filter count free. Ours are hand-rolled; add both to the reservation and guest tables |
 | ☐ | **Notifications as a centre** | `Configure · Unread · History` at `/notifications`, not only a bell. Ours has no history and no per-user configuration |
 | ☐ | **Per-hotel sending inbox** | Their *Email Inboxes* tab lets a club send from its own address. We send *as the hotel's name* from `reviosoft.app`; this is the per-hotel sending domain already noted in the gap register |
 | ☐ | **GTM on the booking engine** | Let each hotel load their own Google Tag Manager container on RevioDirect, so their marketing team measures their own funnel |

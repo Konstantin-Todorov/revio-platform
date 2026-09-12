@@ -41,7 +41,11 @@ export function Menu({
         return;
       }
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      const items = [...(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+      // Both roles: a menu of toggles (the column picker) is still a menu, and arrow keys have to
+      // reach its rows or the control is mouse-only.
+      const items = [
+        ...(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"],[role="menuitemcheckbox"]') ?? []),
+      ].filter((el) => !el.hasAttribute("disabled"));
       if (items.length === 0) return;
       e.preventDefault();
       const i = items.indexOf(document.activeElement as HTMLElement);

@@ -7,9 +7,39 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-12 · Claude · DONE · Hide fields, and say what is filtering
+**P2 item from `IDEAS-1CLUB-2026-09.md`: column visibility + filter badges.**
+Files: `packages/ui/src/{column-visibility.tsx,menu.tsx,package.json}`,
+`apps/reservation/lib/{filter-chips.ts,filter-chips.test.ts}`,
+`apps/reservation/components/{column-visibility.test.tsx,reservations/ReservationsTable.tsx,guests/GuestsTable.tsx}`,
+`apps/reservation/app/(protected)/{reservations,guests}/page.tsx`.
+
+**Chips.** Every active filter is now a removable badge under the form. The form shows its values but
+only if you read five controls and work out which are doing anything; one `Clear` answers "why am I
+not seeing this booking" with "start again", which is why people stop refining filters. A chip drops
+ONLY its own filter — `from`/`to`/`dateType` are deliberately ONE chip, because removing half a range
+leaves an open-ended filter returning a third result set nobody asked for. No chips while a segment
+tab is lit: that tab already states the same fact in better words.
+
+**Columns.** `Columns · 2 hidden` on both tables, per browser, per table. ⚠️ **What is stored is the
+HIDDEN set, never the visible set** — store "visible" and the next column we ship is invisible to
+everyone who has ever opened the menu, with no error anywhere to say so. Guest is locked (it carries
+the link out of the row) and is *listed as locked*, not omitted. Hiding the sorted column clears the
+sort. The preference lands after hydration, never during render.
+
+The refactor underneath is the point: `ReservationsTable`'s header and body were two hand-written
+lists in matching order. That is fine until a column can be hidden — drop the fourth `<th>` and not
+the fourth `<td>` and every value after it reads under the wrong heading. Both now derive from one
+array; a test counts `<th>` against `<td>` and I proved it red by re-introducing exactly that drift.
+
+`pnpm verify` green, 2,258 tests (+26), CRS build clean.
+
+### 2026-09-12 · Codex · CLAIMED · Correct docs subdomain binding
+The founder confirmed the publication address is `docs.reviosoft.app`, under the live `reviosoft.app` domain. I am correcting stale references, adding only the correct custom-domain binding to the isolated Railway docs service, and verifying DNS/TLS before releasing the official-site link. No hotel app, database, secrets or customer data are in scope.
+
 ### 2026-09-12 · Codex · DONE · Documentation preview published to Railway
 The expanded static documentation preview is running in the separate Railway `docs` service.
-Deployment `56ee5a24-0141-485f-82c2-9db62a458af0` is healthy at `https://docs-production-b1ad.up.railway.app`; all 47 article routes were probed and the live Platform and Billing pages were checked in-browser. The custom `docs.reviewsoft.app` binding is configured and awaits DNS verification; the marketing-site link is prepared but not pushed until that domain is healthy. No hotel app, database, secrets or customer data were changed.
+Deployment `56ee5a24-0141-485f-82c2-9db62a458af0` is healthy at `https://docs-production-b1ad.up.railway.app`; all 47 article routes were probed and the live Platform and Billing pages were checked in-browser. The old `docs.reviewsoft.app` binding was based on a non-existent base domain and is not the publication target; the founder confirmed `docs.reviosoft.app`. No hotel app, database, secrets or customer data were changed.
 
 ### 2026-09-12 · Codex · DONE · Website release + documentation organisation
 **Founder approves marketing release; documentation follows as an isolated workstream.**

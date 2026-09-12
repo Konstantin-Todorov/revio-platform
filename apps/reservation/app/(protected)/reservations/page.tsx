@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { CalendarPlus, CalendarCheck } from "lucide-react";
+import { CalendarPlus, CalendarCheck, X } from "lucide-react";
 import { getActiveHolds, getReservationsList, getReservationSegmentCounts, todayInTz, type CrsDateType } from "@/lib/data";
 import { activeSegment, reservationSegments, segmentHref } from "@/lib/segments";
+import { filterChips, showClearAll } from "@/lib/filter-chips";
 import { HoldCountdown } from "@/components/reservations/HoldCountdown";
 import { ReservationsTable, type ResRow } from "@/components/reservations/ReservationsTable";
 import { RequestQueue, type BookingRequest } from "@/components/reservations/RequestQueue";
@@ -50,6 +51,18 @@ export default async function ReservationsPage({
   const segments = reservationSegments(todayIso);
   const current = activeSegment(sp, todayIso);
   const filtered = Boolean(sp.q || sp.status || sp.from || sp.to);
+  /*
+   * What is narrowing this list, in removable pieces. Empty while a segment tab is lit — that
+   * tab is already the badge for the same fact. See lib/filter-chips.ts.
+   */
+  const chips = filterChips(
+    { q: sp.q, status: sp.status, from: sp.from, to: sp.to, dateType },
+    {
+      basePath: "/reservations",
+      dateTypeLabels: Object.fromEntries(DATE_TYPES.map((d) => [d.value, d.label])),
+      segmentActive: current !== null && current !== "all",
+    },
+  );
   // Serialize the (already filtered) rows for the client sortable table (§3.1 — sort respects filters).
   const rows: ResRow[] = reservations.map((r) => {
     const line = r.lines[0];
@@ -161,9 +174,34 @@ export default async function ReservationsPage({
           <span className="text-[11.5px] text-ink-400">→</span>
           <DateField name="to" defaultValue={sp.to ?? ""} className={inputCls} />
           <button className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Filter</button>
-          {filtered && <Link href="/reservations" className="text-[12px] font-semibold text-brand-700 hover:underline">Clear</Link>}
-          <span className="ml-auto text-[11.5px] text-ink-400">{reservations.length} shown</span>
         </form>
+
+        {/*
+          Each filter as its own removable badge. The one thing the form cannot do is let you
+          drop ONE narrowing and keep the rest — which is the refinement people actually make.
+        */}
+        {chips.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-surface-border pt-2.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Filtered by</span>
+            {chips.map((c) => (
+              <Link
+                key={c.key}
+                href={c.href}
+                title={`Remove the ${c.label.toLowerCase()} filter`}
+                className="group flex items-center gap-1.5 rounded-md border border-brand-600/25 bg-brand-50 py-1 pl-2 pr-1.5 text-[12px] text-brand-800 transition-colors hover:border-danger-600/40 hover:bg-danger-50 hover:text-danger-700"
+              >
+                <span className="font-semibold">{c.label}</span>
+                <span className="text-brand-700 group-hover:text-danger-700">{c.value}</span>
+                <X className="h-3 w-3 opacity-50 group-hover:opacity-100" />
+              </Link>
+            ))}
+            {showClearAll(chips) && (
+              <Link href="/reservations" className="ml-1 text-[12px] font-semibold text-brand-700 hover:underline">
+                Clear all
+              </Link>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Live holds (spec §3.3): locked inventory with a running TTL — actionable, always visible. */}
