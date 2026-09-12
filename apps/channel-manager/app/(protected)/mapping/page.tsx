@@ -9,7 +9,17 @@ import { MappingEditDialog } from "@/components/mapping/MappingEditDialog";
 
 export const dynamic = "force-dynamic";
 
-const STATUS_TONE: Record<string, Tone> = { complete: "success", incomplete: "warning" };
+const STATUS_TONE: Record<string, Tone> = { complete: "success", incomplete: "warning", never_sent: "danger" };
+/*
+ * ⚠️ Words, not database values. The rows for products the channel has never received carry
+ * `never_sent`, and printing that raw would put a column name in front of a hotelier. "Not sent yet"
+ * says the same thing and tells them it is a thing to finish rather than a fault they caused.
+ */
+const STATUS_LABEL: Record<string, string> = {
+  complete: "mapped",
+  incomplete: "needs an id",
+  never_sent: "not sent yet",
+};
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ ch?: string }> }) {
   const sp = await searchParams;
@@ -125,7 +135,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                   <tr key={m.productId} id={`map-room-${m.productId}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{m.roomType.name}</td>
                     <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRoomId ?? <span className="text-danger-500">—</span>}</td>
-                    <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status}</StatusPill></td>
+                    <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{STATUS_LABEL[m.status] ?? m.status}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
                         <MappingEditDialog kind="room" id={m.id} productId={m.productId} label={m.roomType.name} externalId={m.externalRoomId} channelName={channel.name} channelId={channel.id} options={products.rooms} />
@@ -154,7 +164,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                   <tr key={m.productId} id={`map-rate-${m.productId}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{m.ratePlan.name}</td>
                     <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRateId ?? <span className="text-danger-500">—</span>}</td>
-                    <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{m.status}</StatusPill></td>
+                    <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{STATUS_LABEL[m.status] ?? m.status}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
                         <MappingEditDialog kind="rate" id={m.id} productId={m.productId} label={m.ratePlan.name} externalId={m.externalRateId} channelName={channel.name} channelId={channel.id} options={products.rates} />
