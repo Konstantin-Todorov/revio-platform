@@ -12,7 +12,7 @@ const PRODUCTS = [
 ];
 
 const render = (products: typeof PRODUCTS) =>
-  renderToStaticMarkup(<SendToChannex products={products} />)
+  renderToStaticMarkup(<SendToChannex products={products} channelId="ch-1" />)
     .replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 
 describe("SendToChannex", () => {

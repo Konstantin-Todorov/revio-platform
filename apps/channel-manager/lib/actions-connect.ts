@@ -528,15 +528,28 @@ export async function sendProductToChannex(fd: FormData): Promise<CatchupOutcome
 
   const kind = String(fd.get("kind") ?? "");
   const productId = String(fd.get("productId") ?? "");
+  const channelId = String(fd.get("channelId") ?? "");
   if (kind !== "room" && kind !== "rate") return { ok: false, error: "Say whether this is a room type or a rate plan." };
   if (!productId) return { ok: false, error: "Nothing was selected to send." };
+  if (!channelId) return { ok: false, error: "No channel was named — reload the page and try again." };
 
   const property = await getProperty();
+  /*
+   * ⚠️ THE CHANNEL THE SCREEN IS SHOWING, not "a channel with an external property id".
+   *
+   * Every OTA row created by `createChannexChannel` carries the SAME `externalPropertyId` — it is
+   * the Channex property, shared by all of them — while the mapping rows belong to one `channelId`
+   * each. Picking the first row with an external id therefore writes the mapping against whichever
+   * OTA happened to sort first, leaving the channel the hotel is actually looking at still reading
+   * "never sent" while the room now exists on Channex. Worse than doing nothing: the room is
+   * created and the screen still says it is missing, so the next click creates it again.
+   */
   const channel = await prisma.channel.findFirst({
-    where: { propertyId: property.id, externalPropertyId: { not: null } },
+    where: { id: channelId, propertyId: property.id },
     select: { id: true, externalPropertyId: true, connectivityMode: true },
   });
-  if (!channel?.externalPropertyId) {
+  if (!channel) return { ok: false, error: "That channel no longer exists — reload the page." };
+  if (!channel.externalPropertyId) {
     return {
       ok: false,
       error: "This property is not on Channex yet — use “Set up on Channex” first, and everything you have now goes in one pass.",

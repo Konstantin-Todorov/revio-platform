@@ -18,8 +18,12 @@ import { sendProductToChannex, type CatchupOutcome } from "@/lib/actions-connect
  */
 export function SendToChannex({
   products,
+  channelId,
 }: {
   products: { id: string; name: string; kind: "roomType" | "ratePlan" }[];
+  /** ⚠️ The channel this screen is showing. Every OTA row shares one Channex property id, so the
+   *  mapping must be written against the row the hotel is looking at, not the first one found. */
+  channelId: string;
 }) {
   const [result, setResult] = useState<(CatchupOutcome & { name: string }) | null>(null);
   const [pending, startTransition] = useTransition();
@@ -32,6 +36,7 @@ export function SendToChannex({
       const fd = new FormData();
       fd.set("kind", p.kind === "roomType" ? "room" : "rate");
       fd.set("productId", p.id);
+      fd.set("channelId", channelId);
       setResult({ ...(await sendProductToChannex(fd)), name: p.name });
     });
   };

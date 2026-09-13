@@ -102,7 +102,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
       */}
       {neverSent.length > 0 && (
         <div className="mb-3">
-          <SendToChannex products={neverSent.map((p) => ({ id: p.id, name: p.name, kind: p.kind }))} />
+          <SendToChannex channelId={channel.id} products={neverSent.map((p) => ({ id: p.id, name: p.name, kind: p.kind }))} />
         </div>
       )}
 
