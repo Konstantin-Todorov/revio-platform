@@ -76,8 +76,11 @@ These are facts the product enforces. If the site says otherwise, the site is wr
 - **"You pay from the day you decide — never for a day of your trial."** — the joining month is
   prorated from the day the trial ended (`packages/core/src/billing/proration.ts`). True since
   2026-09-13 and not before.
-- **"One login for every Revio product."** — one identity across all three; entitlements decide what
-  it opens.
+- **"One account for every Revio product."** — one identity across all three; entitlements decide
+  what it opens. ⚠️ **Not "one login".** This line said "one login" until 2026-09-13, which
+  contradicts the central-login section below: there are three sign-in pages today, one per origin,
+  and a single front door is deliberately deferred. Codex caught the contradiction between the two
+  halves of this document; the site is already corrected.
 - **"Nothing to migrate when you add the second one."** — same database, same rooms and rates. This
   is the platform's central claim and the reason the price list discounts the 2nd and 3rd product
   (0% / 10% / 20%).
@@ -100,14 +103,25 @@ These are facts the product enforces. If the site says otherwise, the site is wr
 4. Opens the link → chooses a password → signs in → lands in the product they named, with the other
    two in the switcher.
 
-⚠️ Step 3 says the same thing whether the address was new or already had an account — deliberately.
-Marketing copy must not promise "we've created your account", because sometimes we have not.
+⚠️ Step 3 must not promise "we've created your account", because sometimes we have not.
+
+⚠️ **It does NOT say the same thing for every address, and this line used to claim it did.** The
+three endings are set out below: a new mailbox reaches `/signup/sent`, while an address that already
+finished an account is redirected to `/signup/existing?reason=…`. That is a deliberate founder
+decision — a hotel that already has an account is told so rather than left waiting for an email that
+will not come — and it was decided after this section was written. The copy rule that survives is
+the narrow one: **never say the account was created**, because on one of the three paths it was not.
 
 ---
 
 ## For `docs.reviosoft.app`
 
-Two articles are missing and are now answerable:
+⚠️ **Three articles, not two** — this said "two" and was written before the trial-ending article
+existed. Codex owns all four slots; three are written and awaiting UI review, and the fourth is
+deliberately out of the public navigation while central login is deferred. See
+`docs/partner/TRIAL-COPY-RESPONSE-2026-09-13.md`.
+
+The slots, and what each must contain:
 
 1. **"Starting your free trial"** — the four steps above; that the trial covers all three products
    and why; **that they keep only the ones they used and pay for those alone**; that no card is
@@ -117,10 +131,15 @@ Two articles are missing and are now answerable:
 2. **"Signing in to the right product"** — that one email and one password open every product the
    hotel has; which product does what, in one line each; that a hotel sees only what it owns.
 
-A third, once central login ships: **"One login, three products"** — replaces article 2.
+3. **"What happens when the trial ends"** — the article support will be asked about most. Contents
+   are in the section below; all of it is enforced in code.
 
-A fourth, and the one support will be asked about most: **"What happens when the trial ends"** —
-the trial ends per product; nothing is deleted; they keep the ones they used; **the month they
+4. **"One login, three products"** — ⛔ **deferred, and deliberately not in the public navigation.**
+   It replaces article 2 and must not be written before the behaviour exists: Claude provides the
+   shipped URL and the verified hand-off before a single instruction is written. See
+   `docs/specs/CENTRAL-LOGIN-DESIGN.md`.
+
+**Article 3 in full** — the trial ends per product; nothing is deleted; they keep the ones they used; **the month they
 decide in is charged only from that day, never for a trial day**; every month after it is a whole
 month; there is no self-serve checkout yet, so they tell us and we switch it on. All of that is
 enforced in code — `trials/`, `billing/proration.ts` and `generateInvoices` — so the article can
@@ -272,6 +291,21 @@ worth keeping — and prorate the joining month. That is the SiteMinder shape.
 
 - *"You pay from the day you decide — never for a day of your trial."*
 - *"Your first invoice covers the rest of that month only."*
+
+### ⚠️ "Free until your first booking syncs" is NOT the trial — Codex is right to separate them
+
+Codex flagged `src/config/offer.ts` presenting this as a general homepage promise. It is not one.
+The two are different offers and the platform treats them as different things:
+
+| | Who it is for | What starts the clock |
+| --- | --- | --- |
+| **30-day free trial** | Self-serve signup | The day the account is confirmed. Ends on day 31. |
+| **Free until your first booking syncs** | **Assisted onboarding** — a hotel we set up | `markBillable(…, "first_booking_synced")`, and only for a client WITH channel management |
+
+Read together on one page they contradict each other: a hotel on a 30-day trial whose first booking
+syncs on day 3 would reasonably conclude the free period just ended. It did not — the trial runs its
+30 days regardless, `billableEntitlements` drops a product while its trial is open, and
+`firstBillableDay` never bills a trial day. **The homepage must say which offer it means.**
 
 ### Copy the site still must NOT use
 

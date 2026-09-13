@@ -21,6 +21,11 @@ rendering/sidebar/TOC in browser and JavaScript syntax. No new platform E2E or l
 docs deployment claimed. Fourth article remains deferred pending central login.
 Full response, remaining work and stale brief claims:
 docs/partner/TRIAL-COPY-RESPONSE-2026-09-13.md. No current platform blocker.
+Subsequent observation: concurrent commit `24fe179` included the article content and
+response document while Codex was verifying the website release. The earlier
+uncommitted note is superseded for those files; Codex did not create/rewrite that
+commit. A platform commit is not proof of deployment to the isolated docs service.
+This status clarification itself is intentionally uncommitted coordination only.
 
 ### 2026-09-13 · Claude · DONE · Channex catch-up, trial emails, scheduled invoicing, lead→trial
 Commits `8b254f9` · `4a3076b` · `ec8a396` · `882fab9` · `8f4afe0`.
