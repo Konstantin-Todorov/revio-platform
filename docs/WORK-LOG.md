@@ -7,6 +7,36 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · §4.4 — reading the destination instead of the attempt
+Files: `packages/connectivity/src/{published-check.ts,published-check.test.ts,channex-channel-adapter.ts}`.
+
+⚠️ **Every other signal in this system reports on the ATTEMPT.** "Pushed 2,000 updates · success"
+says a request was accepted — and from our side a mis-mapped push and a correct one are
+indistinguishable, because both succeed. That is how €666 sat published against the wrong room for
+days with the Sync Center green (BUG-019), and how 411 consecutive "Pulled 0 revisions · success"
+events came from a revoked key (BUG-014).
+
+`readPublishedRates` reads what Channex is publishing **right now**. ⚠️ A failed read returns an
+ERROR, never an empty list — `data.length ?? 0` reads "zero rows" for a dead key exactly as for an
+empty account, the trap named three times in the root `CLAUDE.md`, and an empty answer here would
+report "nothing published" and look like a finding rather than a failure to look.
+
+`comparePublished` keeps three findings apart, deliberately: **mismatch** (landed somewhere
+unexpected or was overwritten), **missing** (never arrived — a mapping or a push that did not
+happen), and **unexpected** (the channel publishing something we did not send). They have different
+causes and different fixes, and one count covering them would send somebody to the wrong screen.
+`unexpected` is the one that names the €666 fault *from the other end* — the price sitting on the
+room it was wrongly written to.
+
+A test reproduces that fault from the destination: 1BR asked for 666 and holds 150, while 2BR holds
+666 it was never sent. Two findings that name each other.
+
+`summarisePublished` says **"Nothing to check"** on an empty result rather than "0 problems", which
+reads as a clean bill of health and is not one.
+
+`pnpm verify` green, 2,443 tests. **Not yet wired to a screen** — the verify strip on the Mapping
+page is the remaining piece.
+
 ### 2026-09-13 · Claude · DONE · §4.5 — a real channel stops trusting a property-wide mapping
 Files: `packages/connectivity/src/{rate-mapping.ts,sync.ts,room-scoped-mapping.test.ts}`.
 

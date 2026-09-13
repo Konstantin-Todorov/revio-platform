@@ -277,6 +277,56 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     };
   }
 
+  /**
+   * What Channex is publishing right now, for one property and date range.
+   *
+   * ⚠️ **This reads the DESTINATION.** Every other signal in this system reports on the attempt:
+   * "Pushed 2,000 updates · success" says a request was accepted, and from our side a mis-mapped
+   * push and a correct one look identical, because both succeed. That is how a €666 price set on
+   * the 1-Bedroom sat published against the 2-Bedroom for days with the Sync Center green
+   * throughout (BUG-019), and how 411 consecutive "Pulled 0 revisions · success" events came from
+   * a revoked key (BUG-014).
+   *
+   * ⚠️ **A failed read returns an ERROR, never an empty list.** `data.length ?? 0` reads "zero rows"
+   * for a dead key exactly as for an empty account — the trap named three times in the root
+   * `CLAUDE.md`. An empty answer here would report "nothing published" and look like a finding.
+   */
+  async readPublishedRates(
+    dateFrom: string,
+    dateTo: string,
+  ): Promise<{ ok: true; rates: { externalRateId: string; date: string; priceMinor: number | null }[] } | { ok: false; error: string }> {
+    const res = await this.get(
+      `/restrictions?filter[property_id]=${this.propertyId}` +
+        `&filter[date][gte]=${dateFrom}&filter[date][lte]=${dateTo}`,
+    );
+    // The status code, never the array length. See the note above.
+    if (!res.ok) return { ok: false, error: `Channex ${res.status ?? "?"} reading published rates` };
+
+    /*
+     * Channex returns restrictions keyed by rate plan then by date:
+     *   { data: { "<rate_plan_id>": { "2026-09-20": { rate: "666.00", ... } } } }
+     */
+    const data = (res.body as { data?: Record<string, Record<string, { rate?: string | number | null }>> } | null)?.data;
+    if (!data || typeof data !== "object") return { ok: true, rates: [] };
+
+    const rates: { externalRateId: string; date: string; priceMinor: number | null }[] = [];
+    for (const [externalRateId, byDate] of Object.entries(data)) {
+      if (!byDate || typeof byDate !== "object") continue;
+      for (const [date, cell] of Object.entries(byDate)) {
+        const raw = cell?.rate;
+        // A major-unit decimal string is what Channex sends. Money is integer minor units here, and
+        // `Math.round` rather than truncation: 122.78 must not become 12277.
+        const priceMinor =
+          raw == null || raw === "" ? null : Math.round(Number(raw) * 100);
+        rates.push({
+          externalRateId, date,
+          priceMinor: priceMinor != null && Number.isFinite(priceMinor) ? priceMinor : null,
+        });
+      }
+    }
+    return { ok: true, rates };
+  }
+
   private async post(path: string, body: unknown): Promise<ApiResult> {
     return this.request("POST", path, body);
   }
