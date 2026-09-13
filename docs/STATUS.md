@@ -1,14 +1,24 @@
 # Revio — where the project actually is
 
-**Updated 2026-09-09**, at commit `eaadab6` — which CI passed and `promote.yml` fast-forwarded onto
+**Updated 2026-09-13**, at commit `f5ae9df` — which CI passed and `promote.yml` fast-forwarded onto
 `production`, *checked with `git ls-remote --heads origin production`*. Every line below names how it
 was checked. Nothing here is copied forward from another document.
 
-⚠️ **What was re-checked on 2026-09-08 and what was not.** Re-checked: the deployed commit, the nine
-scheduled jobs (`/api/health/jobs`), the booking engine responding, the full test and lint gate, and
-the three database race harnesses. **Not re-queried today:** the commercial figures under *The honest
-commercial position* — those are as at 2026-09-07 and are labelled there. Saying which is which is
-the whole point of this file.
+⚠️ **What was re-checked on 2026-09-13 and what was not.** Re-checked: the deployed commit
+(`git ls-remote`); the **ten** scheduled jobs at `operator.reviosoft.app/api/health/jobs`, all `ok`
+with `channex-pull` last run 54 seconds earlier; `/login` and `/api/health` returning 200 on all
+four staff origins; and the full gate — `pnpm verify` EXIT=0, 2546 tests, lint 0 errors, authz-lint
+268 of 288 actions gated, silent-lint at its budget of 100, jobs-lint 10 of 10 scheduled.
+
+**NOT re-checked today, and it matters:** the mapping data of any real hotel *on Channex*. That needs
+a live API key and is what the Mapping screen's **Verify** button exists for — a human has to press
+it. The commercial figures under *The honest commercial position* are still as at 2026-09-07 and are
+labelled there.
+
+⚠️ **Commits after `f5ae9df` are pushed but not yet promoted** — `ec8a396`, `882fab9`, `8f4afe0`.
+Each push cancels the previous commit's CI, so only the newest runs to completion; check
+`git ls-remote --heads origin production` before assuming any of the 13 September work below is
+live.
 
 ---
 
@@ -123,6 +133,41 @@ constraint is a hotel that uses it, not a feature.
 ---
 
 ## What is being worked on
+
+### Shipped 2026-09-13 — the self-serve path, end to end
+
+Eight bugs from Ventsislav's 13 September log (BUG-015…022) plus §4 Mapping and §5 Bulk, then the
+trial and billing work the founder asked for. Named here because this is the block that decides
+whether clients can be told to set themselves up.
+
+- **§5 — one room-first rate-plan tree**, shared by RevioLink and RevioCRS (`@revio/ui/plan-tree`).
+  Two independent lists could not say which plan belonged to which room, which is what produced
+  BUG-022. *Checked: 2546 tests, both apps build, panel rendered and read.*
+- **Three faults found while wiring it, none in any log.** RevioCRS never consulted
+  `ratePlanRoomType`, so a plan attached to one room had its price written on another; a room with
+  no tickable plan would have become unselectable while allocation and restrictions are written per
+  room type (`ROOM_ONLY`); and the calendar fed `new Date().toISOString()` to the bulk modal's date
+  bounds, offering an edit starting yesterday between midnight and 03:00 local.
+- **⚠️ The Day 31 promise was not built.** `signIn` refused an account whose entitlement was off, so
+  the ended-trial screen — end date, *nothing has been deleted*, **I want to keep it** — was
+  reachable only by a hotel still holding a cookie from before the sweep. Opening that door required
+  the entitlement asked in `authz.ts` before every write, where a layout cannot be bypassed by
+  replaying a server action; RevioPMS had always asked, RevioLink and RevioCRS never had.
+  *Checked: `authz.test.ts` in both apps, run with the guard deleted to watch them fail.*
+- **The joining month is prorated** (`packages/core/src/billing/proration.ts`). A trial converted on
+  the 29th used to bill all 30 days. This is the SiteMinder / Little Hotelier shape — calendar-month
+  invoicing with the post-trial remainder prorated — and it makes "you pay from the day you decide"
+  true. *Checked: 25 tests, two exhaustive.*
+- **One trial, one email.** The sweep sent per `ProductTrial` row, so a hotel got nine emails where
+  it should get three. Batched per hotel; the per-product state machine is untouched.
+- **The invoice run is scheduled**, not a button — a month nobody pressed it in was never invoiced.
+  *Checked: `jobs-lint` 10 of 10, and authz-lint caught the first attempt exposing it as a public
+  server action.*
+- **An enquiry can be sent a free trial** from the `/leads` queue — a link to the ordinary public
+  signup, never an account.
+- **A room added after Connect can reach Channex** (`channex-catchup`). Provisioning is one-shot, so
+  nothing in the product could send it; the Mapping screen described the problem and offered nothing
+  to press. Read-before-create, and the 401 trap handled where it would have cost a duplicate.
 
 ### In progress
 Nothing of ours is half-built. **Codex has two items uncommitted in the shared tree** (claimed in

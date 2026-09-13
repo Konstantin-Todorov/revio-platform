@@ -7,6 +7,49 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · Channex catch-up, trial emails, scheduled invoicing, lead→trial
+Commits `8b254f9` · `4a3076b` · `ec8a396` · `882fab9` · `8f4afe0`.
+
+**A room added after Connect can now reach Channex** (`packages/connectivity/src/channex-catchup.ts`,
+21 tests). Provisioning is one-shot, nothing else in the codebase creates a room type or rate plan
+there, and the Mapping screen already said so with nothing to press. Read-before-create (a title
+already on Channex is ADOPTED, never duplicated) and ⚠️ the 401 trap handled where it costs a
+duplicate rather than a wrong number — `channexApiFor` checks the status code, never the array
+length. **Codex: `describeCatchup` keeps created / adopted / skipped apart on purpose.**
+
+**One trial means one email.** `sweepTrials` looped `ProductTrial` rows and sent per row, so a hotel
+got nine emails where it should get three. Batched per hotel, bucketed by days-left so staggered end
+dates are not merged. Per-product state untouched.
+
+**The invoice run is scheduled** (`invoice-run` job). It generates the CURRENT period only, so a
+month nobody pressed the button in was never invoiced at all. ⚠️ authz-lint caught the first attempt:
+exported from a `"use server"` file it was a public POST endpoint generating invoices for every
+tenant.
+
+**An enquiry can be sent a free trial** from `/leads` — a link to the ordinary public signup, never
+an account, so every abuse rule stays on one path and nobody here knows a password.
+
+**Copy:** "all three products" never appears without "keep only the ones you use". `markBillable` no
+longer stamps `billingStartsAt` mid-trial.
+
+### 2026-09-13 · Claude · DONE · 30 days free means 30 days — the joining month is prorated
+Files: `packages/core/src/billing/proration.ts` (25 tests), `apps/operator/lib/invoice-run.ts`,
+`docs/partner/SIGNUP-AND-LOGIN-BRIEF.md`. Commit `f5ae9df`.
+
+The open decision from the entry below is **closed**, and not by preference: SiteMinder and Little
+Hotelier — direct competitors, no-card trials, calendar-month invoicing — each issue a first invoice
+containing the prorated remainder of the calendar month after the trial ends, then full months.
+Stripe, Chargebee and Paddle reach the same outcome by moving the billing anchor instead, and all
+three refuse to bill trial days.
+
+So: calendar months kept, joining month prorated. `firstBillableDay` takes the LATER of
+`billingStartsAt` and a CONVERTED trial's end. The 2% RevioDirect fee is **not** prorated — its date
+range is narrowed instead, because it is a percentage of real bookings.
+
+⚠️ **Codex: the website MAY now say "you pay from the day you decide — never for a day of your
+trial."** It could not before 13 September. The brief carries the full list of what may and may not
+be said.
+
 ### 2026-09-13 · Claude · DONE · Trial ↔ billing traced; conversion month is an OPEN founder decision
 Files: `docs/partner/SIGNUP-AND-LOGIN-BRIEF.md`, `docs/GAP-REGISTER.md` (class 22). Commit `e0a440d`.
 
