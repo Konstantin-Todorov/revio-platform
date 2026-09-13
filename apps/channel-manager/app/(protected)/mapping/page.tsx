@@ -8,6 +8,7 @@ import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/component
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MappingEditDialog } from "@/components/mapping/MappingEditDialog";
 import { VerifyStrip } from "@/components/mapping/VerifyStrip";
+import { SendToChannex } from "@/components/mapping/SendToChannex";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,17 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/*
+        The gap was described and not fixable. Provisioning is one-shot, so a room added after the
+        channel was connected could never reach Channex from anywhere in the product — and this
+        screen told the hotel exactly that, with nothing to press.
+      */}
+      {neverSent.length > 0 && (
+        <div className="mb-3">
+          <SendToChannex products={neverSent.map((p) => ({ id: p.id, name: p.name, kind: p.kind }))} />
         </div>
       )}
 

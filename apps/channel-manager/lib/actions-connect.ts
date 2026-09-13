@@ -11,6 +11,10 @@ import {
   testChannelConnection,
   createChannexChannel,
   provisionChannexProperty,
+  channexApiFor,
+  sendRoomTypeToChannex,
+  sendRatePlanToChannex,
+  describeCatchup,
   planStructureSync,
   describeStructurePlan,
   applyStructurePlan,
@@ -20,6 +24,7 @@ import {
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { guard } from "./authz";
+import { logAudit } from "./mutation-helpers";
 
 /**
  * Connecting a real OTA, from RevioLink, without anyone opening the Channex dashboard.
@@ -494,4 +499,133 @@ export async function syncChannexStructure(): Promise<StructureSyncResult> {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/**
+ * Send a room type or rate plan that was added AFTER the channel was connected.
+ *
+ * ## Why this action has to exist
+ *
+ * `provisionChannexProperty` is one-shot: it sends what exists the moment Connect is pressed, and
+ * nothing else in the codebase creates a room type or rate plan on Channex. A hotel that adds a
+ * room next week therefore has a room no OTA can ever see — and `structureGap` already TELLS them
+ * so, in those words, with no button beside it. An accurate description of a problem the software
+ * refuses to fix is worse than not noticing.
+ *
+ * It bites exactly the people it is hardest for. A hotel we onboard by hand finishes Rooms & Rates
+ * before anyone presses Connect; a hotel doing it themselves adds the room when they think of it,
+ * which is afterwards. This is on the critical path for letting clients set themselves up.
+ *
+ * The decisions live in `@revio/connectivity` (`channex-catchup`, 17 tests) — read-before-create so
+ * a repeated attempt adopts instead of duplicating, mapping written per step so nothing orphans,
+ * and created / adopted / skipped kept apart in what the hotel is told.
+ */
+export type CatchupOutcome = { ok: true; message: string } | { ok: false; error: string };
+
+export async function sendProductToChannex(fd: FormData): Promise<CatchupOutcome> {
+  const g = await guard("manageDistribution");
+  if (!g.ok) return { ok: false, error: g.error };
+
+  const kind = String(fd.get("kind") ?? "");
+  const productId = String(fd.get("productId") ?? "");
+  if (kind !== "room" && kind !== "rate") return { ok: false, error: "Say whether this is a room type or a rate plan." };
+  if (!productId) return { ok: false, error: "Nothing was selected to send." };
+
+  const property = await getProperty();
+  const channel = await prisma.channel.findFirst({
+    where: { propertyId: property.id, externalPropertyId: { not: null } },
+    select: { id: true, externalPropertyId: true, connectivityMode: true },
+  });
+  if (!channel?.externalPropertyId) {
+    return {
+      ok: false,
+      error: "This property is not on Channex yet — use “Set up on Channex” first, and everything you have now goes in one pass.",
+    };
+  }
+  if (channel.connectivityMode === "mock") {
+    return { ok: false, error: "This is a demo channel, so there is nothing on the other side to send it to." };
+  }
+
+  const [roomTypes, ratePlans, roomMaps] = await Promise.all([
+    prisma.roomType.findMany({
+      where: { propertyId: property.id, active: true },
+      select: { id: true, name: true, totalRooms: true, maxGuests: true },
+    }),
+    prisma.ratePlan.findMany({
+      where: { propertyId: property.id, active: true },
+      select: { id: true, name: true, priceLogic: true, roomTypeLinks: { select: { roomTypeId: true } } },
+    }),
+    prisma.channelRoomTypeMapping.findMany({
+      where: { channelId: channel.id },
+      select: { roomTypeId: true, externalRoomId: true },
+    }),
+  ]);
+
+  const cfg = await channexApiConfig(property.tenantId, channel.connectivityMode);
+  const api = channexApiFor(cfg);
+  const plans = ratePlans.map((r) => ({
+    id: r.id, name: r.name, priceLogic: r.priceLogic, roomTypeIds: r.roomTypeLinks.map((l) => l.roomTypeId),
+  }));
+
+  const writes = {
+    writeRoomMapping: async (roomTypeId: string, externalRoomId: string) => {
+      const existing = await prisma.channelRoomTypeMapping.findFirst({
+        where: { channelId: channel.id, roomTypeId }, select: { id: true },
+      });
+      if (existing) {
+        await prisma.channelRoomTypeMapping.update({ where: { id: existing.id }, data: { externalRoomId, status: "complete" } });
+      } else {
+        await prisma.channelRoomTypeMapping.create({
+          data: { tenantId: property.tenantId, channelId: channel.id, roomTypeId, externalRoomId, status: "complete" },
+        });
+      }
+    },
+    writeRateMapping: async (ratePlanId: string, roomTypeId: string, externalRateId: string) => {
+      const existing = await prisma.channelRatePlanMapping.findFirst({
+        where: { channelId: channel.id, ratePlanId, roomTypeId }, select: { id: true },
+      });
+      if (existing) {
+        await prisma.channelRatePlanMapping.update({ where: { id: existing.id }, data: { externalRateId, status: "complete" } });
+      } else {
+        await prisma.channelRatePlanMapping.create({
+          data: { tenantId: property.tenantId, channelId: channel.id, ratePlanId, roomTypeId, externalRateId, status: "complete" },
+        });
+      }
+    },
+  };
+
+  try {
+    const result = kind === "room"
+      ? await sendRoomTypeToChannex({
+          api, channexPropertyId: channel.externalPropertyId, currency: property.baseCurrency,
+          roomType: mustFind(roomTypes, productId, "room type"), ratePlans: plans, writes,
+        })
+      : await sendRatePlanToChannex({
+          api, channexPropertyId: channel.externalPropertyId, currency: property.baseCurrency,
+          ratePlan: mustFind(plans, productId, "rate plan"),
+          rooms: roomTypes.map((rt) => ({
+            ...rt,
+            externalRoomId: roomMaps.find((m) => m.roomTypeId === rt.id)?.externalRoomId ?? null,
+          })),
+          writes,
+        });
+
+    await logAudit(property.id, property.tenantId, {
+      entity: `Channex · ${kind === "room" ? "room type" : "rate plan"}`,
+      field: "sent after provisioning",
+      newValue: describeCatchup(result),
+      source: "mapping",
+    });
+    revalidatePath("/mapping");
+    return { ok: true, message: describeCatchup(result) };
+  } catch (e) {
+    // Named, never swallowed: this is the screen where a hotel finds out why a room is not on sale.
+    return { ok: false, error: e instanceof Error ? e.message : "Channex refused it and gave no reason." };
+  }
+}
+
+function mustFind<T extends { id: string; name: string }>(rows: T[], id: string, what: string): T {
+  const row = rows.find((r) => r.id === id);
+  if (!row) throw new Error(`That ${what} no longer exists — somebody removed it while this page was open.`);
+  return row;
 }
