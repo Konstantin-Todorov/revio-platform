@@ -1,6 +1,6 @@
 # Revio — where the project actually is
 
-**Updated 2026-09-13**, at commit `f5ae9df` — which CI passed and `promote.yml` fast-forwarded onto
+**Updated 2026-09-13**, at commit `8f4afe0` — which CI passed and `promote.yml` fast-forwarded onto
 `production`, *checked with `git ls-remote --heads origin production`*. Every line below names how it
 was checked. Nothing here is copied forward from another document.
 
@@ -15,10 +15,10 @@ a live API key and is what the Mapping screen's **Verify** button exists for —
 it. The commercial figures under *The honest commercial position* are still as at 2026-09-07 and are
 labelled there.
 
-⚠️ **Commits after `f5ae9df` are pushed but not yet promoted** — `ec8a396`, `882fab9`, `8f4afe0`.
-Each push cancels the previous commit's CI, so only the newest runs to completion; check
-`git ls-remote --heads origin production` before assuming any of the 13 September work below is
-live.
+⚠️ **Pushing again cancels the previous commit's CI**, so only the newest commit runs to
+completion and only it is promoted. `git ls-remote --heads origin production` is the only way to
+know what is actually serving — a green "Promote" run for an older commit does not mean that commit
+is live, and the promote for the newest one may still be seconds away when you look.
 
 ---
 
