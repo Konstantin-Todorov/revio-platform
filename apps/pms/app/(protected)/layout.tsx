@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
-import { productLinks, productUpsells, productOrigin } from "@revio/ui/product-links";
-import { ProductLocked } from "@revio/ui/product-locked";
-import { KeepItButton } from "@/components/shell/KeepItButton";
+import { productLinks, productUpsells } from "@revio/ui/product-links";
 import { headers } from "next/headers";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
@@ -15,8 +13,8 @@ import { FlashToast } from "@revio/ui/flash-toast";
 import { UsageBeacon } from "@revio/ui/usage-beacon";
 import { recordScreenView } from "@/lib/actions-usage";
 import { readFlash, FLASH_COOKIE } from "@revio/ui/flash";
-import { allTrialsFor, runningTrialFor } from "@revio/db";
-import { trialBanner, isTrialDecider, productAccessState } from "@revio/core";
+import { runningTrialFor } from "@revio/db";
+import { trialBanner, isTrialDecider, roleCanOpenProduct } from "@revio/core";
 import { TrialStrip } from "@revio/ui/trial-banner";
 import { keepThisTrial } from "@/lib/actions-self-trial";
 
@@ -24,43 +22,40 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const session = await getSession();
   if (!session) redirect("/logout");
 
+  /*
+   * ⚠️ **Does this ROLE belong in this product at all?** A `redirect`, never a returned component.
+   *
+   * The accounts are one shared identity across the platform — that is the product's central claim,
+   * and it means a role created in another product authenticates here perfectly well. Nothing in
+   * this app filtered a screen by role until 2026-09-14, so such an account could read the hotel's
+   * whole book. RLS never covered this and could not: two staff at one hotel are the same tenant, so
+   * the database hands them identical rows. Only the role tells them apart.
+   *
+   * It must be a redirect. A layout that returns a "no access" screen instead of `{children}` leaves
+   * Next to render the page segment anyway and stream it into the RSC payload — the first version of
+   * this guard did that, and a real guest's name was sitting in the response behind the refusal.
+   * `redirect()` throws, so nothing below it runs.
+   *
+   * Sequenced before the entitlement branch on purpose: what a role may open is not a commercial
+   * question, and offering a trial to a cleaner is the wrong conversation with the wrong person.
+   */
+  if (!roleCanOpenProduct(session.role, "pms")) redirect("/no-access");
+
   // Route-guard scoped roles (spec §3.4 / §3.7): a housekeeper / outlet-POS user typing another
   // screen's URL is bounced back to their home. Full-access roles pass through.
   const pathname = (await headers()).get("x-pathname") ?? "";
   if (pathname && !roleAllowsPath(session.role, pathname)) redirect(roleHome(session.role));
 
   /*
-   * ⚠️ The one screen that decides whether a hotel that liked us comes back.
+   * ⚠️ The one screen that decides whether a hotel that liked us comes back — now a REDIRECT.
    *
-   * This used to be a hand-written sentence — "This hotel hasn't subscribed … Contact Revio" —
-   * repeated in all three apps. It was false for a hotel whose trial had just ended, it offered no
-   * way to act, and fixing it in one app would have left the other two lying. `ProductLocked` is
-   * shared, and `productAccessState` decides which of the three situations this actually is.
+   * The screen itself is unchanged (`app/locked/page.tsx`, still `ProductLocked`). What changed is
+   * that this branch used to RETURN it in place of `{children}`, which does not stop the page from
+   * rendering: Next executes the page segment regardless and streams it into the RSC payload. With
+   * the entitlement switched off, the response was 211 KB and carried a real guest's name behind a
+   * screen saying the hotel had not subscribed. The product was locked; its data was not.
    */
-  if (!session.entitlements.pms) {
-    const access = productAccessState({
-      product: "pms",
-      trials: await allTrialsFor(session.tenantId),
-      entitlements: {
-        cm: session.entitlements.channelManager,
-        crs: session.entitlements.reservation,
-        pms: session.entitlements.pms,
-      },
-    });
-    return (
-      <>
-        <ProductLocked
-          state={access}
-          hotelName={session.tenantName}
-          fmtDate={(d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
-          hrefFor={(k) => productOrigin(k as "cm" | "crs" | "pms")}
-          {...(access.reason === "trial-ended"
-            ? { action: <KeepItButton product="pms" /> }
-            : {})}
-        />
-      </>
-    );
-  }
+  if (!session.entitlements.pms) redirect("/locked");
 
   const properties = (await getSwitchableProperties(session.tenantId)).map((p) => ({ id: p.id, name: p.name, tenantName: p.tenant.name }));
   const activeName = properties.find((p) => p.id === session.activePropertyId)?.name ?? session.tenantName;
