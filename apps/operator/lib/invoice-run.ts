@@ -144,7 +144,20 @@ export async function runInvoiceGeneration(): Promise<{ period: string; created:
      * remainder of the joining month prorated — and it is the only one that keeps "30 days free"
      * literally true without giving away the rest of the month.
      */
-    const joined = firstBillableDay(t.billingStartsAt, convertedEndByTenant.get(t.id) ?? null);
+    /*
+     * ⚠️ ONLY the tenant's FIRST billable month is prorated. Their first, not each product's.
+     *
+     * `billingStartsAt` falling inside this period is what "this is the month they joined" means.
+     * Without that condition a hotel paying for RevioLink since March, converting a RevioPMS trial
+     * on 20 September, would have its WHOLE September invoice scaled to 11/30 — RevioLink included,
+     * which they have paid full price for all year. Proration is for the month somebody starts
+     * paying us, not for every month a trial happens to end in.
+     *
+     * Adding a product mid-month therefore costs a full month, which is the ordinary SaaS
+     * convention for an upgrade and the direction that does not quietly give away revenue.
+     */
+    const firstMonth = t.billingStartsAt !== null && t.billingStartsAt.toISOString().slice(0, 7) === period;
+    const joined = firstMonth ? firstBillableDay(t.billingStartsAt, convertedEndByTenant.get(t.id) ?? null) : null;
     const proration = prorationFor(period, joined);
 
     /*

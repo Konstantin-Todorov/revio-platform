@@ -42,29 +42,26 @@ export async function markBillable(tenantId: string, reason: BillableReason): Pr
   try {
     const tenant = await forSystem().tenant.findUnique({
       where: { id: tenantId },
-      select: {
-        hasChannelManager: true,
-        billingStartsAt: true,
-        productTrials: { where: { endedAt: null }, select: { id: true }, take: 1 },
-      },
+      select: { hasChannelManager: true, billingStartsAt: true },
     });
     if (!tenant || tenant.billingStartsAt) return false;
 
     /*
-     * ⚠️ A free trial is not the start of a paid relationship.
+     * ⚠️ A RUNNING TRIAL DOES NOT SKIP THIS, and it is worth saying why.
      *
-     * "Set once, never moved" is what makes this dangerous rather than harmless: a real booking
-     * syncing on day 3 of a 30-day trial stamped `billingStartsAt` inside the free period, and
-     * nothing could ever move it afterwards. The invoice is correct regardless — `firstBillableDay`
-     * takes the LATER of this and the converted trial's end — but the date itself is wrong, and it
-     * is read by the operator console as "billable since", by `isBillablePeriod`, and by anyone
-     * asking when this client actually started paying us.
+     * Stamping `billingStartsAt` during a free trial looks wrong — the console reads the column as
+     * "billable since", and a booking syncing on day 3 of a 30-day trial fixes it inside the free
+     * period forever. That was changed to skip on 2026-09-13 and changed straight back, because
+     * skipping is much worse than a cosmetically early date:
      *
-     * Skipped rather than deferred: when the trial ends the hotel either converts (and the
-     * conversion is the start) or loses the entitlement, and the next qualifying event stamps it
-     * properly. Returning false here is honest — this call did not set it.
+     * `setup_completed` fires EXACTLY ONCE, from `finishWelcome`. A self-serve signup is always
+     * inside a trial when it finishes setup, so skipping means the event never happens again and a
+     * CRS-only or PMS-only hotel that later converts is **never billed at all**.
+     *
+     * Nothing is charged for a trial day regardless: `firstBillableDay` takes the LATER of this
+     * date and a converted trial's end, and `billableEntitlements` drops a product while its trial
+     * runs. The date can be early; the money cannot be wrong.
      */
-    if (tenant.productTrials.length > 0) return false;
 
     /*
      * The one rule that keeps the two paths from overlapping.

@@ -242,6 +242,12 @@ invoice covers only the days from the day the trial ended (or, for an assisted c
 trial, the day they went live) to the end of that calendar month. The invoice line says so in
 words: *"from 2026-09-20 — 11 of 30 days"*.
 
+⚠️ **"Joining" means the hotel's first billable month, not each product's.** A hotel already paying
+for one product that converts a trial of a second mid-month is charged a **full month** for that
+month — the ordinary SaaS convention for an upgrade. Prorating there would discount the product
+they have been paying full price for all year. So the site may say "you pay from the day you
+decide" about a **first** trial, and must not extend it to adding a further product later.
+
 ⚠️ **It did not work this way until 2026-09-13.** Converting a trial set `endedAt = now` and kept
 the entitlement, so from that instant the product was priced for the whole calendar month —
 including the days earlier in that month that were free. A trial converted on the 29th billed all

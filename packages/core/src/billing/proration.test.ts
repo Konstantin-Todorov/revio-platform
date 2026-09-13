@@ -197,3 +197,56 @@ describe("a real first invoice", () => {
     expect(invoiceMinor("starter", [], "2026-09", d("2026-09-10"), null)).toBe(0);
   });
 });
+
+describe("⚠️ only the FIRST billable month is prorated — their first, not each product's", () => {
+  /**
+   * Mirrors `runInvoiceGeneration` exactly, including the condition that decides whether this month
+   * is prorated at all. The rule lives in the generator because it needs `billingStartsAt`; this
+   * pins the arithmetic it produces.
+   */
+  const invoiceMinor = (
+    plan: string,
+    products: Parameters<typeof entitlementsFor>[0],
+    period: string,
+    billingStartsAt: Date | null,
+    convertedTrialEnd: Date | null,
+  ) => {
+    const firstMonth = billingStartsAt !== null && billingStartsAt.toISOString().slice(0, 7) === period;
+    const joined = firstMonth ? firstBillableDay(billingStartsAt, convertedTrialEnd) : null;
+    return proratedMinor(monthlyPriceMinor(plan, entitlementsFor(products)), prorationFor(period, joined));
+  };
+
+  it("⚠️ a SECOND product converting mid-month does not discount the first", () => {
+    /*
+     * The fault this pins, found by re-reading the change rather than by a test: a hotel paying for
+     * RevioLink since March converts a RevioPMS trial on 20 September. Taking the latest converted
+     * trial end as the joining day scaled the WHOLE September invoice to 11/30 — RevioLink
+     * included, which they have paid full price for all year. Proration is for the month somebody
+     * starts paying us, not for every month a trial happens to end in.
+     */
+    const both = monthlyPriceMinor("growth", entitlementsFor(["channelManager", "pms"]));
+    expect(invoiceMinor("growth", ["channelManager", "pms"], "2026-09", d("2026-03-01"), d("2026-09-20")))
+      .toBe(both);
+  });
+
+  it("still prorates the month they actually joined in", () => {
+    const list = monthlyPriceMinor("growth", entitlementsFor(["channelManager"]));
+    expect(invoiceMinor("growth", ["channelManager"], "2026-09", d("2026-09-08"), d("2026-09-29")))
+      .toBe(Math.round((list * 2) / 30));
+  });
+
+  it("and every month after it is a whole month", () => {
+    const list = monthlyPriceMinor("growth", entitlementsFor(["channelManager"]));
+    expect(invoiceMinor("growth", ["channelManager"], "2026-10", d("2026-09-08"), d("2026-09-29"))).toBe(list);
+  });
+
+  it("⚠️ a trial day is still never billed in the joining month", () => {
+    // Both conditions have to hold together: it is their first billable month AND the joining day
+    // is pushed past the trial. Dropping either one bills a day we said was free.
+    const list = monthlyPriceMinor("growth", entitlementsFor(["channelManager"]));
+    const withTrial = invoiceMinor("growth", ["channelManager"], "2026-09", d("2026-09-08"), d("2026-09-29"));
+    const withoutTrial = invoiceMinor("growth", ["channelManager"], "2026-09", d("2026-09-08"), null);
+    expect(withTrial).toBeLessThan(withoutTrial);
+    expect(withoutTrial).toBe(Math.round((list * 23) / 30));
+  });
+});
