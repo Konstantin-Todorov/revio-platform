@@ -234,7 +234,22 @@ export async function syncChannel(
    *
    * A pair with no mapping is now SKIPPED rather than pushed at somebody else's rate plan.
    */
-  const rateIndex = indexRateMappings(rateMaps);
+  /*
+   * ⚠️ A real channel does NOT fall back to a property-wide mapping.
+   *
+   * Such a row cannot say which room a Channex rate plan belongs to, so pushing through it means
+   * knowingly publishing a price that may land on the wrong room — exactly the 13 September fault.
+   * An unresolved pair is skipped and reported as unmapped, which the Mapping screen and the
+   * channel's unmapped count already surface; a wrong price on an OTA is invisible until somebody
+   * books at it.
+   *
+   * Mock channels keep the fallback: a catch-all is their normal shape and their adapter has no
+   * per-room model to disagree with.
+   */
+  const rateIndex = indexRateMappings(rateMaps, { allowCatchAll: channel.connectivityMode === "mock" });
+
+  /** (room · plan) pairs with no mapped target — named in the summary rather than dropped in silence. */
+  const skippedUnmapped = new Set<string>();
 
   const todayIso = ymd(new Date());
   const start = new Date(`${todayIso}T00:00:00Z`);
@@ -454,7 +469,18 @@ export async function syncChannel(
         // Resolve per (room type, plan). Null means this pair is not mapped to the channel — skip
         // it rather than write one room type's price onto another's rate plan.
         const externalRateId = resolveExternalRateId(rateIndex, rm.roomTypeId, pm.ratePlanId);
-        if (!externalRateId) continue;
+        if (!externalRateId) {
+          /*
+           * ⚠️ COUNTED, not merely skipped.
+           *
+           * Skipping is right — pushing this pair at another room's rate plan is the €666 fault.
+           * But a silent skip turns a wrong push into a push of nothing, reported as success, which
+           * is the same defect wearing different clothes. The summary below names how many pairs
+           * were left out and why, so "Pushed 0 updates · success" can never stand on its own.
+           */
+          skippedUnmapped.add(`${roomById.get(rm.roomTypeId)?.name ?? rm.roomTypeId} · ${rp.name}`);
+          continue;
+        }
 
         const update: AriUpdate = {
           externalRoomId: rm.externalRoomId!,
@@ -545,7 +571,12 @@ export async function syncChannel(
       // rejected by more than one product), and `sent - rejected` then printed "Pushed -56/56".
       // A count of things that happened cannot be negative, and one that is destroys confidence in
       // every other number on the screen.
-      summary: `Pushed ${pushedOf(updates.length, result.rejected.length).text} updates to ${channel.name} (${channel.connectivityMode}) · ${dateKeys[0]} → ${dateKeys[dateKeys.length - 1]} (${dateKeys.length} days)`,
+      summary:
+        `Pushed ${pushedOf(updates.length, result.rejected.length).text} updates to ${channel.name} (${channel.connectivityMode}) · ${dateKeys[0]} → ${dateKeys[dateKeys.length - 1]} (${dateKeys.length} days)` +
+        // ⚠️ A push that sent nothing because nothing was mapped must not read as a clean success.
+        (skippedUnmapped.size > 0
+          ? ` · ${skippedUnmapped.size} not sent — no mapped rate plan for ${[...skippedUnmapped].slice(0, 4).join(", ")}${skippedUnmapped.size > 4 ? " and others" : ""}. Map them under their room in Mapping.`
+          : ""),
       // Both ids, each labelled. Storing only channelResponseId lost the availability task
       // entirely, and an unlabelled pair is what gets pasted into the wrong form field.
       detail: result.tasks?.length

@@ -30,12 +30,34 @@ export interface RatePlanMappingRow {
  * is 15,330 lookups, and a linear scan of the mapping list on each is the kind of quiet O(n²) that
  * only shows up on the biggest hotel.
  */
-export function indexRateMappings(rows: readonly RatePlanMappingRow[]) {
+export function indexRateMappings(
+  rows: readonly RatePlanMappingRow[],
+  opts?: {
+    /**
+     * Whether a property-wide row may stand in for a room that has none.
+     *
+     * ⚠️ **False for every real channel.** A catch-all cannot express which room a Channex rate plan
+     * belongs to, so pushing through one means knowingly publishing a price that may land on the
+     * wrong room — which is what happened on 13 September, where €666 set on the 1-Bedroom was
+     * published against the 2-Bedroom. A wrong price on an OTA is a booking taken at the wrong rate:
+     * worse than no price at all, because no price is visible and a wrong one is not.
+     *
+     * True for mock channels, where a catch-all is the normal and correct shape — the mock adapter
+     * invents and reads back its own ids, and has no per-room model to disagree with.
+     *
+     * The pair then resolves to null, which the push already treats as "skip and report unmapped",
+     * so the hotel sees it on the Mapping screen and in the channel's own unmapped count rather
+     * than losing prices silently.
+     */
+    allowCatchAll?: boolean;
+  },
+) {
+  const allowCatchAll = opts?.allowCatchAll ?? true;
   const specific = new Map<string, RatePlanMappingRow>();
   const catchAll = new Map<string, RatePlanMappingRow>();
   for (const r of rows) {
     if (r.roomTypeId) specific.set(`${r.roomTypeId}|${r.ratePlanId}`, r);
-    else catchAll.set(r.ratePlanId, r);
+    else if (allowCatchAll) catchAll.set(r.ratePlanId, r);
   }
   return { specific, catchAll };
 }

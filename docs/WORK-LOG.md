@@ -7,6 +7,32 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · §4.5 — a real channel stops trusting a property-wide mapping
+Files: `packages/connectivity/src/{rate-mapping.ts,sync.ts,room-scoped-mapping.test.ts}`.
+
+§4.5 says existing mappings "must be treated as untrusted". Showing them as `unconfirmed` was half
+of that; the other half is that they were **still pushing**. A catch-all cannot say which room a
+Channex rate plan belongs to, so publishing through one means knowingly sending a price that may
+land on the wrong room. **A wrong price on an OTA is worse than no price** — no price is visible,
+a wrong one is invisible until somebody books at it.
+
+`indexRateMappings(rows, { allowCatchAll })` — false for every real channel, true for mock, where a
+catch-all is the normal shape and the adapter has no per-room model to disagree with. Defaults to
+true, so every existing caller is unchanged.
+
+⚠️ **The counted blast radius on production:** all six of Hotel Sofia's mock channels and Black Sea's
+two are untouched. Channex Sandbox (demo) loses 4 pairs. **DesManagement 2015 — the real hotel — has
+2 catch-all rows, so BB Flex stops pushing until it is mapped per room.** That is deliberate: today
+those pushes land on the 2-Bedroom whatever room they came from.
+
+⚠️ **And I nearly shipped the same defect in new clothes.** The `unmapped` check only looks at ROOM
+mappings, which DesManagement has — so the push would have run, skipped every BB Flex pair, and
+reported success having sent nothing. Skipped pairs are now counted and named in the sync summary:
+*"2 not sent — no mapped rate plan for Apartment, 1 Bedroom · BB Flex. Map them under their room in
+Mapping."* A push that sent nothing can no longer read as a clean success.
+
+`pnpm verify` green, 2,433 tests; CM builds.
+
 ### 2026-09-13 · Claude · DONE · BUG-019 closed — the Mapping screen is room-scoped
 Files: `apps/channel-manager/lib/data.ts`, `apps/channel-manager/app/(protected)/mapping/page.tsx`,
 `apps/channel-manager/components/mapping/MappingEditDialog.tsx`, `apps/channel-manager/lib/actions-config.ts`.

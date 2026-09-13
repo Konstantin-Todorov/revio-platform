@@ -223,3 +223,40 @@ describe("collidingExternalIds", () => {
     expect(collidingExternalIds(rows())).toEqual([]);
   });
 });
+
+describe("a real channel never falls back to a property-wide mapping", () => {
+  it("⚠️ refuses the catch-all that published €666 against the wrong room", async () => {
+    const { indexRateMappings, resolveExternalRateId } = await import("./rate-mapping.js");
+    const rows = [{ ratePlanId: "flex", roomTypeId: null, externalRateId: "cb75de7d" }];
+
+    // Mock channel: a catch-all is the normal shape, and its adapter reads back its own ids.
+    const mock = indexRateMappings(rows, { allowCatchAll: true });
+    expect(resolveExternalRateId(mock, "1-bedroom", "flex")).toBe("cb75de7d");
+
+    /*
+     * Real channel: the pair resolves to NOTHING rather than to another room's rate plan.
+     *
+     * Skipping is reported as unmapped and shows on the Mapping screen. Publishing through the
+     * catch-all is invisible until somebody books at the wrong price — which is why "no price" is
+     * the safer failure of the two.
+     */
+    const real = indexRateMappings(rows, { allowCatchAll: false });
+    expect(resolveExternalRateId(real, "1-bedroom", "flex")).toBeNull();
+    expect(resolveExternalRateId(real, "2-bedroom", "flex")).toBeNull();
+  });
+
+  it("a room-specific row still resolves on a real channel — that is the whole point", async () => {
+    const { indexRateMappings, resolveExternalRateId } = await import("./rate-mapping.js");
+    const idx = indexRateMappings(
+      [{ ratePlanId: "flex", roomTypeId: "1-bedroom", externalRateId: "ae6b1ed1" }],
+      { allowCatchAll: false },
+    );
+    expect(resolveExternalRateId(idx, "1-bedroom", "flex")).toBe("ae6b1ed1");
+  });
+
+  it("defaults to allowing it, so every existing caller is unchanged", async () => {
+    const { indexRateMappings, resolveExternalRateId } = await import("./rate-mapping.js");
+    const idx = indexRateMappings([{ ratePlanId: "flex", roomTypeId: null, externalRateId: "x" }]);
+    expect(resolveExternalRateId(idx, "any-room", "flex")).toBe("x");
+  });
+});
