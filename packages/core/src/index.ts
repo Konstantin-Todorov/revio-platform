@@ -79,6 +79,7 @@ export * from "./trials/trials.js";
 export * from "./trials/self-serve.js";
 export * from "./trials/banner.js";
 export * from "./billing/plan-pricing.js";
+export * from "./billing/proration.js";
 export * from "./billing/billing-identity.js";
 export * from "./invoicing/invoice-state.js";
 export * from "./metrics/fault-summary.js";

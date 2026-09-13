@@ -193,33 +193,60 @@ would confirm to a stranger that the address has an account here.
 
 ---
 
-## ⚠️ Open decision — the month a trial converts in is billed in full
+## How the money works when a trial converts — DECIDED 2026-09-13
 
-Codex asked how the trial lifecycle interacts with assisted-onboarding first-sync billing. It was
-checked end to end on 2026-09-13. **No hotel is ever invoiced while a trial is running** —
+Codex asked how the trial lifecycle interacts with assisted-onboarding first-sync billing. Checked
+end to end, then fixed. **The website may now say this, because it is what the code does.**
+
+**Nothing is charged during a trial, and a trial day is never billed afterwards.**
 `generateInvoices` drops every product with an open `ProductTrial`, and it only ever generates the
-CURRENT month, so a past trial month cannot be billed retroactively. That half is sound.
+CURRENT month, so a past trial month cannot be billed retroactively either.
 
-The seam is the month a trial is **converted** in. Converting sets `endedAt = now` and keeps the
-entitlement, so from that instant the product is no longer "on trial" and the month's invoice prices
-it in full — including the days earlier in that month when it was still free. There is no proration
-anywhere in the pricing model. A trial converted on the 29th bills the whole month.
+**The joining month is prorated; every month after it is a full calendar month.** The first
+invoice covers only the days from the day the trial ended (or, for an assisted client with no
+trial, the day they went live) to the end of that calendar month. The invoice line says so in
+words: *"from 2026-09-20 — 11 of 30 days"*.
 
-**So the website must not write "you are only charged from the day you decide".** The honest line
-today is the one already agreed: *"nothing is charged during your trial"*, said about the trial
-itself, with nothing promised about how the first invoice is cut.
+⚠️ **It did not work this way until 2026-09-13.** Converting a trial set `endedAt = now` and kept
+the entitlement, so from that instant the product was priced for the whole calendar month —
+including the days earlier in that month that were free. A trial converted on the 29th billed all
+30 days. `packages/core/src/billing/proration.ts` is what makes the promise true.
 
-Three ways out, and it is a **pricing decision for the founder, not a code fix**:
+### Why this shape and not another
 
-1. Bill from the first whole month after the trial ends — simple to say, errs toward the customer.
-2. Prorate the conversion month — accurate, and the only option that needs a new concept in the
-   pricing model.
-3. Accept it and say nothing more specific than the line above.
+Two alternatives, both defensible, both worse. *Bill the whole month* keeps the money and hands
+every converting customer a wrong-looking invoice at the worst possible moment — the first one.
+*Start billing on the 1st of the next month* is honest and gives away up to a month per customer.
 
-One related cosmetic point: a synced booking sets `billingStartsAt` even while the hotel is on a free
-trial, because `markBillable` does not ask about trials. No invoice is affected — the trial
-exclusion and the entitlement flag both hold — but the operator console's "billable since" date can
-predate the paid relationship.
+It is also what this market does. **SiteMinder** and **Little Hotelier** — direct competitors, both
+no-card trials, both calendar-month invoicing — each issue a first invoice containing the prorated
+remainder of the calendar month after the trial ends, then full months. Stripe, Chargebee and
+Paddle reach the same outcome by moving the billing anchor to the trial end instead of prorating,
+and all three refuse to bill trial days.
+
+We keep calendar months — hotels do monthly accounting and one invoice date across the portfolio is
+worth keeping — and prorate the joining month. That is the SiteMinder shape.
+
+### Copy the site MAY now use
+
+- *"You pay from the day you decide — never for a day of your trial."*
+- *"Your first invoice covers the rest of that month only."*
+
+### Copy the site still must NOT use
+
+- *"Cancel any time"* — there is nothing to cancel; no card is taken.
+- *"Upgrade any time"* — there is no self-serve checkout. An operator switches it on.
+- Any trial length other than **30 days**.
+
+### Two things that are still true and small
+
+The RevioDirect 2% usage fee is **not** prorated — it is a percentage of bookings our engine
+actually produced. For a joining month the date range is narrowed instead, so bookings taken during
+the free trial are not counted at all.
+
+`markBillable` still stamps `billingStartsAt` even mid-trial, because it does not ask about trials.
+No invoice is affected — `firstBillableDay` takes the later of that date and the trial's end — but
+the operator console's "billable since" can read earlier than the paid relationship.
 
 ---
 

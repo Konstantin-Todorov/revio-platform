@@ -126,7 +126,9 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
               p: "Nothing has been deleted. Your rooms, rates, reservations and guests are shared with the products you already use, so they are exactly where they were — and if you decide to keep it, switching it back on restores everything instantly, with nothing to import.",
             },
             { p: "If it was useful, reply to this email and we will put it back." },
-            { note: "You have not been charged for the trial, and nothing starts on its own." },
+            {
+              note: "You have not been charged for the trial, and nothing starts on its own. If you do decide to keep it, you pay from the day you decide — we never charge for a day of the trial.",
+            },
           ],
         };
         await sendEmail({

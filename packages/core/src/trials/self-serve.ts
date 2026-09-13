@@ -128,5 +128,13 @@ export function selfTrialPromises(product: ProductKey, days: number): string[] {
     "It uses the rooms, rates and bookings you already keep here — there is nothing to import.",
     `We will email you ${days > 7 ? "a week" : "a few days"} before it ends, and again the day before.`,
     "If you do nothing it simply switches off. Nothing is deleted, and nothing starts charging on its own.",
+    /*
+     * ⚠️ This line is only allowed to exist because the invoice prorates the joining month.
+     *
+     * Billing whole calendar months made it false at exactly one point — the month a trial converts
+     * in was charged in full, free days included. `proration.ts` is what makes the sentence true,
+     * and this list is the contract that must fail if that stops being so.
+     */
+    `If you decide to keep ${name}, you pay from the day you decide — never for a day of the trial.`,
   ];
 }
