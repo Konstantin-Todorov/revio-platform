@@ -1,0 +1,443 @@
+/*
+ * The v2 design, scoped.
+ *
+ * ⚠️ EVERY rule in this file is prefixed `.v2`, and this file is imported by exactly one route.
+ * That is the whole point: the founder asked to see this running on real data **without it
+ * touching the current styling if they do not like it**. Nothing here can reach another screen,
+ * and deleting `app/(v2)/` removes it completely.
+ *
+ * The tokens are redeclared rather than imported from @revio/ui on purpose — this is a candidate,
+ * not the system. If it is adopted, the tokens move into `packages/ui/src/tokens.css` and this
+ * file goes away.
+ */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Tokens. Light is the default; dark is a real theme, not an inversion —
+   elevation comes from LIGHTER surfaces rather than shadows (Vercel/Linear).
+   ───────────────────────────────────────────────────────────────────────────── */
+.v2{
+  --canvas:#f6f7f9;      /* page */
+  --rail:#f1f2f5;        /* sidebar — dimmer than the working surface (Linear) */
+  --surface:#ffffff;     /* cards */
+  --raised:#ffffff;
+  --line:rgba(15,23,42,.09);
+  --line-soft:rgba(15,23,42,.06);
+
+  --ink:#0d1420;
+  --ink-2:#48515f;
+  --ink-3:#6b7482;
+  --ink-4:#98a0ac;
+
+  --brand:#1c4ed8;       /* actions, focus, the one series that matters */
+  --brand-soft:rgba(28,78,216,.09);
+  --brand-ink:#1c4ed8;
+
+  --pos:#0f7a52;  --pos-bg:rgba(15,122,82,.10);
+  --neg:#c02b52;  --neg-bg:rgba(192,43,82,.10);
+  --warn:#9a6407; --warn-bg:rgba(154,100,7,.11);
+
+  --link:#0e8fae; --crs:#5b5fe0; --pms:#0f9e6e;
+
+  --shadow:0 1px 2px rgba(15,23,42,.04);
+  --shadow-pop:0 1px 2px rgba(15,23,42,.06),0 12px 28px -10px rgba(15,23,42,.16);
+  --r:12px; --r-sm:8px; --r-xs:6px;
+  --font:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif;
+}
+/* ⚠️ The MEDIA QUERY WRAPS THE SELECTOR, not the other way round.
+.v2 Written as `:root:not(…){ @media … }` this depends on CSS Nesting, and where nesting is not
+   honoured the whole block is dead — so a viewer whose OS is dark, and who never touches the
+   toggle, gets a LIGHT page while the toggle icon says "dark". Caught by looking at the rendered
+   page: the icon was a moon over a white screen. */
+@media (prefers-color-scheme:dark){
+  .v2:not([data-theme="light"]){
+    --canvas:#0a0b0d; --rail:#0e1013; --surface:#141619; --raised:#1a1d21;
+    --line:rgba(255,255,255,.10); --line-soft:rgba(255,255,255,.06);
+    --ink:#eceef2; --ink-2:#b3b9c4; --ink-3:#8b939f; --ink-4:#69717d;
+    --brand:#6f95ff; --brand-soft:rgba(111,149,255,.14); --brand-ink:#8fadff;
+    --pos:#42c08b; --pos-bg:rgba(66,192,139,.14);
+    --neg:#f0708f; --neg-bg:rgba(240,112,143,.14);
+    --warn:#e0a53f; --warn-bg:rgba(224,165,63,.14);
+    --link:#3fc4e0; --crs:#8f92f5; --pms:#3ecb97;
+    --shadow:none; --shadow-pop:0 16px 40px -12px rgba(0,0,0,.6);
+  }
+}
+[data-theme="dark"] .v2, .v2[data-theme="dark"]{
+  --canvas:#0a0b0d; --rail:#0e1013; --surface:#141619; --raised:#1a1d21;
+  --line:rgba(255,255,255,.10); --line-soft:rgba(255,255,255,.06);
+  --ink:#eceef2; --ink-2:#b3b9c4; --ink-3:#8b939f; --ink-4:#69717d;
+  --brand:#6f95ff; --brand-soft:rgba(111,149,255,.14); --brand-ink:#8fadff;
+  --pos:#42c08b; --pos-bg:rgba(66,192,139,.14);
+  --neg:#f0708f; --neg-bg:rgba(240,112,143,.14);
+  --warn:#e0a53f; --warn-bg:rgba(224,165,63,.14);
+  --link:#3fc4e0; --crs:#8f92f5; --pms:#3ecb97;
+  --shadow:none; --shadow-pop:0 16px 40px -12px rgba(0,0,0,.6);
+}
+
+.v2 *{box-sizing:border-box}
+.v2{background:var(--canvas);color:var(--ink);font-family:var(--font);font-size:13.5px;line-height:1.5;
+     padding-block:18px 34px;padding-left:14px;padding-right:14px;-webkit-font-smoothing:antialiased}
+.v2 .tn{font-variant-numeric:tabular-nums lining-nums}
+
+.v2 .app{max-width:1300px;margin:0 auto;display:grid;grid-template-columns:228px 1fr;
+     background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:var(--shadow-pop)}
+@media(max-width:900px){.app{grid-template-columns:1fr}}
+
+/* ── sidebar: dimmer than content, grouped by JOB not by table ───────────── */
+.v2 .rail{background:var(--rail);border-right:1px solid var(--line);padding:10px 10px 14px;min-width:0}
+@media(max-width:900px){.rail{border-right:0;border-bottom:1px solid var(--line)}}
+.v2 .ws{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:var(--r-sm);cursor:pointer}
+.v2 .ws:hover{background:var(--line-soft)}
+.v2 .ws .m{width:24px;height:24px;border-radius:7px;background:var(--brand);color:#fff;display:grid;place-items:center;
+       font-weight:700;font-size:12px;flex:none}
+.v2 .ws .t{min-width:0}
+.v2 .ws .t b{display:block;font-size:13px;font-weight:600;letter-spacing:-.008em;line-height:1.25}
+.v2 .ws .t s{display:block;text-decoration:none;font-size:10.5px;color:var(--ink-4)}
+.v2 .ws .c{margin-left:auto;color:var(--ink-4);flex:none}
+
+.v2 .find{display:flex;align-items:center;gap:7px;margin:9px 2px 12px;padding:6px 9px;border-radius:var(--r-sm);
+      border:1px solid var(--line);background:var(--surface);color:var(--ink-4);font-size:12.5px;cursor:text}
+.v2 .find kbd{margin-left:auto;font:inherit;font-size:10.5px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink-4)}
+
+.v2 .sect{padding:0 8px;margin:15px 0 5px;font-size:11px;font-weight:600;letter-spacing:.005em;color:var(--ink-4)}
+.v2 .sect:first-of-type{margin-top:2px}
+.v2 .nav{display:flex;flex-direction:column;gap:1px}
+.v2 .nav a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r-sm);text-decoration:none;
+       color:var(--ink-2);font-size:13px;font-weight:500;transition:background 90ms,color 90ms}
+.v2 .nav a svg{width:16px;height:16px;flex:none;opacity:.65}
+.v2 .nav a:hover{background:var(--line-soft);color:var(--ink)}
+.v2 .nav a.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+.v2 .nav a.on svg{opacity:1;color:var(--brand)}
+.v2 .nav .n{margin-left:auto;font-size:11px;font-weight:600;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.v2 .nav .n.hot{color:var(--warn)}
+
+/* ── top bar ─────────────────────────────────────────────────────────────── */
+.v2 .main{min-width:0;display:flex;flex-direction:column}
+.v2 .top{display:flex;align-items:center;gap:10px;padding:11px 18px;border-bottom:1px solid var(--line);
+     position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--surface) 86%,transparent);
+     backdrop-filter:blur(10px)}
+.v2 .crumb{font-size:13px;color:var(--ink-3)}
+.v2 .crumb b{color:var(--ink);font-weight:600}
+.v2 .top .sp{flex:1}
+
+/* fixed-width active pill: padded for the longest label so nothing shifts (Geist) */
+.v2 .seg{display:inline-flex;background:var(--canvas);border:1px solid var(--line);border-radius:var(--r-sm);padding:2px;gap:2px}
+.v2 .seg button{appearance:none;border:0;background:transparent;font:inherit;font-size:12px;font-weight:600;color:var(--ink-3);
+            padding:4px 0;width:54px;border-radius:6px;cursor:pointer;transition:background 120ms,color 120ms}
+.v2 .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.v2 .seg button:hover:not([aria-pressed="true"]){color:var(--ink)}
+
+.v2 .ic{width:29px;height:29px;border-radius:var(--r-sm);display:grid;place-items:center;color:var(--ink-3);
+    border:1px solid transparent;cursor:pointer;flex:none}
+.v2 .ic:hover{background:var(--line-soft);color:var(--ink)}
+.v2 .me{width:28px;height:28px;border-radius:99px;background:var(--line-soft);border:1px solid var(--line);
+    color:var(--ink-2);display:grid;place-items:center;font-size:10.5px;font-weight:600;flex:none}
+
+.v2 .page{padding:16px 18px 22px}
+.v2 .hrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:13px}
+.v2 h1{font-size:21px;font-weight:600;letter-spacing:-.022em;margin:0}
+
+/* Stripe's chip distinction: a suggested chip offers, an active chip states + clears */
+.v2 .chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:99px;
+      padding:3px 9px;font-size:11.5px;font-weight:500;color:var(--ink-3);background:var(--surface);cursor:pointer}
+.v2 .chip:hover{color:var(--ink);border-color:var(--ink-4)}
+.v2 .chip.act{background:var(--brand-soft);border-color:transparent;color:var(--brand-ink);font-weight:600}
+.v2 .chip.act x{font-style:normal;opacity:.6}
+.v2 .clear{font-size:11.5px;font-weight:600;color:var(--ink-3);background:none;border:0;cursor:pointer;font-family:var(--font)}
+.v2 .clear:hover{color:var(--ink)}
+
+.v2 .grid{display:grid;gap:12px}
+.v2 .g-hero{grid-template-columns:1.85fr 1fr}
+@media(max-width:1040px){.g-hero{grid-template-columns:1fr}}
+.v2 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);min-width:0}
+.v2 .pad{padding:16px 18px}
+
+/* ── HERO ─────────────────────────────────────────────────────────────────
+   One dominant number and one large chart. Not four equal cards — that is
+   the shape every financial console (Mercury, Brex, Pennylane) converges on. */
+.v2 .hero{position:relative;overflow:hidden;display:flex;flex-direction:column}
+.v2 .eyebrow{font-size:11px;font-weight:600;color:var(--ink-3);display:flex;align-items:center;gap:7px}
+.v2 .dotm{width:6px;height:6px;border-radius:99px;background:var(--brand);flex:none}
+.v2 .big{font-size:46px;font-weight:600;letter-spacing:-.032em;line-height:1;margin-top:10px}
+.v2 .hero-sub{margin-top:9px;font-size:12.5px;color:var(--ink-3);max-width:44ch;line-height:1.5}
+.v2 .hero-sub b{color:var(--ink);font-weight:600}
+.v2 .legend{display:flex;gap:14px;margin-top:12px;font-size:11px;color:var(--ink-3)}
+.v2 .legend i{display:inline-block;width:14px;height:2px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+.v2 .badge{display:inline-flex;align-items:center;gap:3px;border-radius:99px;padding:2px 8px;font-size:11.5px;font-weight:600}
+.v2 .badge.p{background:var(--pos-bg);color:var(--pos)} .v2 .badge.n{background:var(--neg-bg);color:var(--neg)}
+.v2 .badge.w{background:var(--warn-bg);color:var(--warn)} .v2 .badge.f{background:var(--line-soft);color:var(--ink-3)}
+
+/* ── secondary metric tiles: the card is FILLED — a faint area chart occupies
+      the lower half and the numbers sit over it (Mercury/Vercel) ─────────── */
+.v2 .tiles{display:grid;gap:12px;grid-template-rows:repeat(3,1fr)}
+.v2 .tile{position:relative;overflow:hidden;padding:13px 15px 12px;display:flex;flex-direction:column;justify-content:space-between}
+/* ⚠️ The fill sits UNDER text, so it is dialled back and the text layer gets a fade of the card
+   colour behind it. A chart you cannot read the label over is decoration that cost legibility. */
+.v2 .tile .sparkbg{position:absolute;left:0;right:0;bottom:0;height:56%;opacity:.34;pointer-events:none}
+.v2 .tile::after{content:"";position:absolute;left:0;right:0;bottom:0;height:34px;pointer-events:none;
+  background:linear-gradient(to top,var(--surface) 38%,transparent)}
+.v2 .tile .lbl{position:relative;z-index:1;font-size:11.5px;font-weight:600;color:var(--ink-3);display:flex;align-items:center;gap:6px}
+.v2 .tile .row{position:relative;z-index:1;display:flex;align-items:baseline;gap:8px;margin-top:6px}
+.v2 .tile .v{font-size:25px;font-weight:600;letter-spacing:-.025em;line-height:1}
+.v2 .tile .cx{position:relative;z-index:2;margin-top:5px;font-size:11px;color:var(--ink-3)}
+
+/* ── queue ───────────────────────────────────────────────────────────────── */
+.v2 .chead{display:flex;align-items:center;gap:9px;padding:13px 18px 11px;border-bottom:1px solid var(--line-soft)}
+.v2 .chead h2{font-size:13.5px;font-weight:600;letter-spacing:-.01em;margin:0}
+.v2 .chead .sp{flex:1}
+.v2 .ghost{font-size:11.5px;font-weight:600;color:var(--ink-3);text-decoration:none}
+.v2 .ghost:hover{color:var(--brand-ink)}
+
+.v2 .q{display:flex;align-items:center;gap:11px;padding:10px 18px;border-bottom:1px solid var(--line-soft);
+   transition:background 80ms;cursor:default}
+.v2 .q:last-child{border-bottom:0}
+.v2 .q:hover{background:var(--line-soft)}
+.v2 .q .sev{width:6px;height:6px;border-radius:99px;flex:none}
+/* Neutral ground, ink initials, and a hairline. A saturated colour block per row is the clearest
+   "generated avatar" signal there is — the product colour belongs on the product tag, not here. */
+.v2 .av{width:28px;height:28px;border-radius:8px;flex:none;display:grid;place-items:center;
+    background:var(--line-soft);border:1px solid var(--line);color:var(--ink-2);
+    font-size:10.5px;font-weight:600;letter-spacing:.01em}
+.v2 .q .txt{min-width:0;flex:1}
+.v2 .q .txt b{display:block;font-size:12.5px;font-weight:500;line-height:1.35}
+.v2 .q .txt s{display:block;text-decoration:none;font-size:11.5px;color:var(--ink-3);line-height:1.35}
+.v2 .q .when{font-size:11.5px;font-weight:600;white-space:nowrap;flex:none}
+/* hover-revealed action — visible on focus too, never only on hover */
+.v2 .q .act{opacity:0;transform:translateX(-3px);transition:opacity 90ms,transform 90ms;flex:none}
+.v2 .q:hover .act, .v2 .q .act:focus-within{opacity:1;transform:none}
+.v2 .mini{appearance:none;font:inherit;font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:var(--r-xs);
+      border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer}
+.v2 .mini:hover{border-color:var(--ink-4);color:var(--ink)}
+
+/* ── table ───────────────────────────────────────────────────────────────── */
+.v2 .scroll{overflow-x:auto}
+.v2 table{width:100%;border-collapse:collapse;min-width:620px}
+/* ⚠️ `top:0`, not the height of the topbar.
+   `.scroll` carries `overflow-x:auto`, which makes it a scroll CONTAINER — and a sticky element
+   inside one sticks to that container, not to the page. Offsetting by the topbar's height pushed
+   the header 49px down inside its own box and straight over the first row, at rest, with the page
+   not scrolled at all. Seen only by looking at the rendered page; I had written it off once as a
+   screenshot artefact, and it was not. */
+.v2 thead th{position:sticky;top:0;z-index:10;background:var(--surface);text-align:left;
+  font-size:11px;font-weight:600;letter-spacing:.005em;color:var(--ink-4);
+  padding:8px 10px;border-bottom:1px solid var(--line)}
+.v2 thead th:first-child{padding-left:18px} .v2 thead th:last-child{padding-right:18px}
+.v2 tbody td{padding:9px 10px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+.v2 tbody td:first-child{padding-left:18px} .v2 tbody td:last-child{padding-right:18px}
+.v2 tbody tr{transition:background 80ms}
+.v2 tbody tr:hover{background:var(--line-soft)}
+.v2 tbody tr:last-child td{border-bottom:0}
+.v2 th.r, .v2 td.r{text-align:right}
+.v2 .who{display:flex;align-items:center;gap:9px;min-width:0}
+.v2 .who .l{min-width:0}
+.v2 .who .l b{display:block;font-size:13px;font-weight:500;line-height:1.3}
+.v2 .who .l s{display:block;text-decoration:none;font-size:11px;color:var(--ink-4);line-height:1.3}
+.v2 .tag{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:2px 8px;font-size:11px;font-weight:600;
+     background:var(--line-soft);color:var(--ink-2)}
+.v2 .tag i{width:5px;height:5px;border-radius:99px;display:inline-block}
+.v2 .rowact{opacity:0;transition:opacity 90ms}
+.v2 tbody tr:hover .rowact{opacity:1}
+.v2 .kebab{color:var(--ink-4);background:none;border:0;cursor:pointer;padding:2px;border-radius:4px}
+.v2 .kebab:hover{background:var(--line);color:var(--ink)}
+
+/* designed zero state — a completed state, not a blank */
+.v2 .allclear{display:flex;align-items:center;gap:9px;padding:14px 18px;font-size:12.5px;color:var(--ink-3)}
+.v2 .allclear .tick{width:22px;height:22px;border-radius:99px;background:var(--pos-bg);color:var(--pos);display:grid;place-items:center;flex:none}
+
+.v2 svg.chart{display:block;width:100%;height:auto}
+/* Solid hairlines, well under the data. A dash has to MEAN something — here only the
+   forecast boundary is dashed, which is the one place it carries information. */
+.v2 .gl{stroke:var(--line-soft);stroke-width:1}
+.v2 .ax{fill:var(--ink-4);font-size:9.5px;font-family:var(--font)}
+
+.v2 :focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:4px}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ═══════════ popovers, palette, motion ═══════════
+   Crisp, not bouncy: 130–170ms on a decelerating curve, a 4px move and a 0.98 scale.
+   Anything longer reads as sluggish; anything springy reads as a toy. */
+.v2{ --ease:cubic-bezier(.16,1,.3,1); }
+
+.v2 .pop{
+  position:absolute;z-index:60;min-width:230px;padding:5px;
+  background:var(--raised);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow-pop);
+  opacity:0;transform:translateY(-4px) scale(.985);transform-origin:top;
+  transition:opacity 130ms var(--ease),transform 130ms var(--ease);
+  pointer-events:none;
+}
+.v2 .pop[data-open="true"]{opacity:1;transform:none;pointer-events:auto}
+.v2 .pop-l{left:8px;top:52px}
+.v2 .pop-r{right:14px;top:46px}
+.v2 .pop h6{margin:0;padding:7px 9px 5px;font-size:10.5px;font-weight:600;color:var(--ink-4);letter-spacing:.01em}
+.v2 .pop hr{border:0;border-top:1px solid var(--line-soft);margin:4px -5px}
+.v2 .mi{
+  display:flex;align-items:center;gap:9px;width:100%;padding:7px 9px;border:0;border-radius:var(--r-sm);
+  background:transparent;font:inherit;font-size:12.5px;color:var(--ink-2);cursor:pointer;text-align:left;
+  transition:background 70ms linear,color 70ms linear;
+}
+.v2 .mi:hover, .v2 .mi:focus-visible{background:var(--line-soft);color:var(--ink);outline:none}
+.v2 .mi svg{width:16px;height:16px;flex:none;opacity:.7}
+.v2 .mi .k{margin-left:auto;font-size:10.5px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.v2 .mi .sw{width:26px;height:26px;border-radius:7px;flex:none;display:grid;place-items:center;
+        font-size:10px;font-weight:700;color:#fff}
+.v2 .mi .two{min-width:0;line-height:1.25}
+.v2 .mi .two b{display:block;font-weight:500}
+.v2 .mi .two s{display:block;text-decoration:none;font-size:10.5px;color:var(--ink-4)}
+.v2 .mi[aria-current="true"]{background:var(--brand-soft);color:var(--brand-ink)}
+.v2 .mi[aria-current="true"] .two b{font-weight:600}
+.v2 .mi.off{opacity:.5;cursor:default}
+.v2 .mi.off:hover{background:transparent;color:var(--ink-2)}
+.v2 .tick-r{margin-left:auto;color:var(--brand)}
+
+.v2 .notif{width:320px}
+.v2 .nrow{display:flex;gap:9px;padding:8px 9px;border-radius:var(--r-sm);transition:background 70ms linear}
+.v2 .nrow:hover{background:var(--line-soft)}
+.v2 .nrow .d{width:6px;height:6px;border-radius:99px;margin-top:6px;flex:none}
+.v2 .nrow .b{min-width:0;font-size:12px;line-height:1.4;color:var(--ink-2)}
+.v2 .nrow .b b{font-weight:600;color:var(--ink)}
+.v2 .nrow .b s{display:block;text-decoration:none;font-size:10.5px;color:var(--ink-4);margin-top:1px}
+
+/* command palette */
+.v2 .scrim{position:fixed;inset:0;z-index:80;background:rgba(10,12,16,.36);backdrop-filter:blur(2px);
+       opacity:0;pointer-events:none;transition:opacity 150ms var(--ease)}
+.v2 .scrim[data-open="true"]{opacity:1;pointer-events:auto}
+.v2 .pal{
+  position:fixed;z-index:90;left:50%;top:14vh;width:min(560px,calc(100vw - 32px));
+  transform:translate(-50%,-8px) scale(.985);opacity:0;pointer-events:none;
+  background:var(--raised);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-pop);
+  overflow:hidden;transition:opacity 160ms var(--ease),transform 160ms var(--ease);
+}
+.v2 .pal[data-open="true"]{opacity:1;transform:translate(-50%,0) scale(1);pointer-events:auto}
+.v2 .pal-in{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line-soft)}
+.v2 .pal-in svg{color:var(--ink-4);flex:none}
+.v2 .pal-in input{flex:1;min-width:0;border:0;background:transparent;font:inherit;font-size:14.5px;color:var(--ink);outline:none}
+.v2 .pal-in input::placeholder{color:var(--ink-4)}
+.v2 .pal-in .esc{font-size:10.5px;color:var(--ink-4);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.v2 .pal-body{max-height:min(56vh,380px);overflow-y:auto;padding:5px}
+.v2 .pal-empty{padding:26px 15px;text-align:center;font-size:12.5px;color:var(--ink-4)}
+
+/* load-in: staggered, short, and from a VISIBLE resting state — nothing waits on a scroll */
+@keyframes lift{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.v2 .in{animation:lift 380ms var(--ease) both}
+@keyframes drawline{to{stroke-dashoffset:0}}
+.v2 .drawn{stroke-dasharray:900;stroke-dashoffset:900;animation:drawline 900ms 120ms var(--ease) forwards}
+@media(prefers-reduced-motion:reduce){
+.v2 .in, .v2 .drawn{animation:none!important;opacity:1!important;transform:none!important;stroke-dashoffset:0!important}
+.v2 .pop, .v2 .pal, .v2 .scrim{transition:none!important}
+}
+
+.v2 .foot{max-width:1300px;margin:20px auto 0;padding:0 4px;font-size:12.5px;color:var(--ink-3);line-height:1.6}
+.v2 .foot b{color:var(--ink)}
+.v2 .foot code{font-size:11.5px;background:var(--line-soft);padding:1px 5px;border-radius:4px}
+/* ═══════════════════════════════════════════════════════════════════════════
+   The door.
+   
+   A login is a moment rather than a workspace, so it is the one screen that may
+   be bolder than the rest — and the one place a dark ground earns its keep. The
+   card is deliberately NOT vertically centred: dead centre is the safe choice
+   every template makes, and sitting it above the midline is what stops the page
+   reading as a form on a background.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.v2.door{
+  min-height:100vh;display:grid;grid-template-columns:1.15fr .85fr;
+  background:#0a0c10;color:#eceef2;padding:0;position:relative;overflow:hidden;
+}
+@media(max-width:900px){.v2.door{grid-template-columns:1fr;padding:0}}
+
+/* One soft light, low and off to the side. Not a gradient blob in the corner. */
+.v2.door::before{
+  content:"";position:absolute;left:-10%;top:35%;width:70%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle,rgba(28,78,216,.30),transparent 62%);
+  filter:blur(30px);pointer-events:none;
+}
+.v2 .door-l{position:relative;z-index:1;display:flex;flex-direction:column;justify-content:space-between;
+  padding:44px 48px;min-width:0}
+@media(max-width:900px){.v2 .door-l{display:none}}
+.v2 .door-brand{display:flex;align-items:center;gap:11px}
+.v2 .door-brand .m{width:32px;height:32px;border-radius:9px;background:#1c4ed8;color:#fff;
+  display:grid;place-items:center;font-weight:700;font-size:15px;flex:none}
+.v2 .door-brand b{font-size:17px;font-weight:600;letter-spacing:-.012em;display:block;line-height:1.15}
+.v2 .door-brand s{text-decoration:none;font-size:10px;font-weight:600;letter-spacing:.15em;
+  text-transform:uppercase;color:rgba(255,255,255,.38);display:block}
+.v2 .door-say{font-size:clamp(30px,3.6vw,46px);font-weight:600;letter-spacing:-.03em;line-height:1.04;
+  margin:0;max-width:13ch}
+.v2 .door-sub{margin:14px 0 0;font-size:14px;line-height:1.55;color:rgba(255,255,255,.52);max-width:38ch}
+
+/* The four surfaces this door opens, as rails. It says what is behind the login
+   without a stock photograph or an illustration of nothing. */
+.v2 .rails{display:flex;flex-direction:column;gap:1px;margin-top:30px;max-width:400px}
+.v2 .railrow{display:flex;align-items:center;gap:12px;padding:11px 2px;
+  border-top:1px solid rgba(255,255,255,.07);font-size:12.5px}
+.v2 .railrow:last-child{border-bottom:1px solid rgba(255,255,255,.07)}
+.v2 .railrow i{width:3px;height:22px;border-radius:99px;flex:none}
+.v2 .railrow b{font-weight:500;color:rgba(255,255,255,.88)}
+.v2 .railrow s{text-decoration:none;margin-left:auto;color:rgba(255,255,255,.34);font-size:11.5px}
+.v2 .door-foot{font-size:11.5px;color:rgba(255,255,255,.3)}
+
+/* The card: light on dark, and above the midline rather than in it. */
+.v2 .door-r{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;padding:30px 26px}
+@media(min-width:901px){.v2 .door-r{align-items:flex-start;padding-top:15vh}}
+.v2 .door-card{
+  width:100%;max-width:392px;background:#fff;color:#0d1420;
+  border-radius:16px;padding:30px 30px 26px;
+  box-shadow:0 1px 2px rgba(0,0,0,.2),0 30px 70px -24px rgba(0,0,0,.65);
+  animation:lift 460ms cubic-bezier(.16,1,.3,1) both;
+}
+.v2 .door-card h2{margin:0;font-size:21px;font-weight:600;letter-spacing:-.022em}
+.v2 .door-card .lede{margin:5px 0 22px;font-size:13px;color:#626d7e}
+.v2 .door-mob{display:none;align-items:center;gap:10px;margin-bottom:20px}
+@media(max-width:900px){.v2 .door-mob{display:flex}}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Shell: desktop rail, phone drawer.
+   
+   ⚠️ A phone gets a DRAWER, never a squeezed rail. 228px of chrome on a 390px
+   screen leaves nothing to work in, and shrinking it produces a column of
+   unlabelled icons — the exact mistake `apps/operator/CLAUDE.md` records for the
+   existing console. Same links, same order, same counts, just somewhere else.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.v2 .app.shell{max-width:none;margin:0;border:0;border-radius:0;box-shadow:none;min-height:100vh}
+.v2 .rail-desktop{display:block}
+.v2 .rail-drawer{display:none}
+.v2 .burger{display:none}
+.v2 .drawer-scrim{display:none}
+.v2 .dot-badge{position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:99px;
+  background:var(--neg);border:1.5px solid var(--surface)}
+
+@media(max-width:900px){
+  .v2 .app.shell{grid-template-columns:1fr}
+  .v2 .rail-desktop{display:none}
+  .v2 .burger{display:grid}
+  .v2 .rail-drawer{
+    display:block;position:fixed;z-index:70;left:0;top:0;bottom:0;width:min(268px,84vw);
+    overflow-y:auto;border-right:1px solid var(--line);
+    transform:translateX(-100%);transition:transform 190ms var(--ease);
+  }
+  .v2 .rail-drawer[data-open="true"]{transform:none;box-shadow:var(--shadow-pop)}
+  .v2 .drawer-scrim{
+    display:block;position:fixed;inset:0;z-index:65;background:rgba(10,12,16,.36);
+    opacity:0;pointer-events:none;transition:opacity 190ms var(--ease);
+  }
+  .v2 .drawer-scrim[data-open="true"]{opacity:1;pointer-events:auto}
+  .v2 .drawer-x{position:absolute;top:10px;right:10px}
+  .v2 .hide-sm{display:none}
+  .v2 .page{padding:14px 14px 22px}
+  .v2 .top{padding:10px 14px}
+  .v2 .big{font-size:36px}
+  .v2 .g-hero{grid-template-columns:1fr}
+  .v2 .tiles{grid-template-rows:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .v2 .rail-drawer,.v2 .drawer-scrim{transition:none!important}
+}
+
+/* page furniture the v2 screens share */
+.v2 .ptitle{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.v2 .ptitle h1{margin:0}
+.v2 .ptitle .sp{flex:1}
+.v2 .lede{margin:-6px 0 14px;font-size:12.5px;color:var(--ink-3);max-width:70ch;line-height:1.55}
+.v2 .kpis{display:grid;gap:12px;grid-template-columns:repeat(4,1fr)}
+@media(max-width:1000px){.v2 .kpis{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.v2 .kpis{grid-template-columns:1fr}}
+.v2 .empty{padding:34px 18px;text-align:center;color:var(--ink-4);font-size:12.5px}

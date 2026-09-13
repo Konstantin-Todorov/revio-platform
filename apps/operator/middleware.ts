@@ -9,6 +9,11 @@ export function middleware(req: NextRequest) {
   // sign in — so these must be reachable without a session or the whole flow is a dead link.
   const isPublic =
     pathname === "/login" ||
+    // ⚠️ The candidate login, while it is being judged. It renders the SAME `LoginForm` as
+    // `/login` — same server action, same rate-limit gate, same 2FA hand-off — so it is exactly as
+    // public and exactly as guarded as the real one. Delete this line and `app/v2-login/` together
+    // if the design is not adopted.
+    pathname === "/v2-login" ||
     // Step two of signing in: reached with a correct password and no session yet, so requiring one
     // would make two-factor authentication unreachable. It is not unguarded — the page itself
     // demands a valid pending token and sends anyone without one back to the start.
@@ -21,7 +26,7 @@ export function middleware(req: NextRequest) {
     // to /login after taking their money would read as the payment having gone wrong. The page
     // shows static copy and looks nothing up, so there is nothing on it to protect.
     pathname === "/paid";
-  const isLogin = pathname === "/login";
+  const isLogin = pathname === "/login" || pathname === "/v2-login";
   const hasSession = req.cookies.has(SESSION_COOKIE);
 
   if (!hasSession && !isPublic) {
