@@ -28,7 +28,8 @@ const NEEDS = [
     icon: CalendarCheck,
     need: "Take bookings direct and keep them in order",
     product: "RevioCRS",
-    detail: "Every reservation from every source, plus your own commission-free booking page.",
+    // ⚠️ Not "commission-free" — see the note on the signup page. We charge 2% on RevioDirect.
+    detail: "Every reservation from every source, plus your own direct booking page.",
   },
   {
     key: "pms",

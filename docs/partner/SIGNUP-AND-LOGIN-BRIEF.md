@@ -72,6 +72,9 @@ These are facts the product enforces. If the site says otherwise, the site is wr
 - **"We email you a link to confirm your address and choose a password."** — the account is inert
   until that link is opened. Nobody at Revio ever knows a customer's password.
 - **Do NOT write "free forever", "no commitment required" or any trial length other than 30 days.**
+- ⚠️ **Do NOT write "commission-free" about RevioDirect.** We charge **2%** on bookings our engine
+  produces (`DIRECT_BOOKING_FEE_PCT`). The true sentence is the stronger one: 2% against the 15–18%
+  an OTA takes. The live signup page said "commission-free" twice until Codex caught it on 13 Sept.
 
 ---
 
@@ -124,6 +127,39 @@ needs no skill at all.
 
 Temporary-mailbox providers (Mailinator, 10MinuteMail and similar) are refused with a message that
 explains why: that address is where their bookings and invoices will go.
+
+---
+
+## Day 31 — exactly what happens, so the site can say it
+
+Codex asked for this before the website promises anything about the end of a trial. These are the
+states as built, not as intended.
+
+**Nothing is deleted, ever.** The trial sweep flips the product's entitlement off and writes
+`outcome: "expired"`. Every room, rate, booking and login stays exactly where it was. A hotel that
+comes back a year later finds its data intact — that is the founder's rule and it is enforced by
+there being no deletion path in the sweep at all.
+
+**They can still sign in.** The account stays `active`; only the entitlement goes. Opening the
+product they lost shows a screen that says the trial ended, names the date, states plainly that
+nothing was deleted, and offers **"I want to keep it"** — which records the ask against the trial
+(`keepRequestedAt`) for the operator to act on. It does NOT switch anything back on: converting a
+trial is a deliberate decision a person at Revio makes.
+
+**It is never a dead end.** A trial ends per product, so the screen always lists the products that
+still open. A hotel that loses RevioLink but kept RevioCRS goes straight there.
+
+**One trial per product, ever.** A second trial of the same product is refused by
+`canSelfStartTrial`, and the ended-trial screen does not offer one — offering it would be a promise
+the writer refuses a click later.
+
+⚠️ **Copy the site must NOT use:** "free forever", "cancel any time" (there is nothing to cancel —
+no card is taken), any trial length other than **30 days**, or any promise about what happens to
+data after the trial beyond "nothing is deleted".
+
+⚠️ **Still unsettled, so the site must not promise it:** how a trial converts to a paid account.
+There is no self-serve checkout — an operator grants it. Until that exists, the honest sentence is
+"tell us and we'll switch it on", never "upgrade any time".
 
 ---
 

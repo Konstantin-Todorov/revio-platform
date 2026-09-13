@@ -21,19 +21,24 @@ import {
  * password hash — validation, breach check and all. A parallel path here would be a second way to
  * set a password, which is precisely the thing that flow exists to prevent.
  *
- * ## ⚠️ It must never say whether an address is already registered
+ * ## ⚠️ It DOES say when an address already has an account — a considered trade, not an oversight
  *
- * "That email is already in use" turns this form into a directory of which hoteliers are Revio
- * customers, to anyone who can type. The booking engine already refused this exact shape (K6, guest
- * recognition). So a duplicate produces the SAME answer as a success — go and check your email —
- * and the person who really owns that address gets a mail telling them somebody tried, with a link
- * to sign in or reset. Nothing is created, nothing is leaked, and the real owner is told.
+ * This comment used to claim the opposite, and it was stale: it described the design before the
+ * founder changed it on 13 September, while the code below had already been changed to match. A
+ * comment asserting a security property the code does not have is the most misleading kind there
+ * is — somebody reads it and reasons from a guarantee that is not there. Caught by Codex.
+ *
+ * What actually happens: a finished account is sent to `/signup/existing`, which says "you already
+ * have a Revio account" and offers sign in, reset and the three product doors. The reasoning — why
+ * registration is the one surface where this trade runs both ways, and how the leak is narrowed —
+ * is written once in `signupVerdict` (`@revio/core`), not restated here.
+ *
+ * The sign-in and password-reset screens remain non-enumerable. That has not changed and must not.
  */
 
 /**
  * ⚠️ No URLs in here. `packages/db` reads no environment and knows no origins — the caller composes
- * the link from the token, the same rule that keeps `packages/core` free of deployment config. The
- * two outcomes below are deliberately indistinguishable to the person filling in the form.
+ * the link from the token, the same rule that keeps `packages/core` free of deployment config.
  */
 export type SignupOutcome =
   /** Nobody had this mailbox. Confirm the address and the trial begins. */

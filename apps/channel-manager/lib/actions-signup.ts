@@ -16,12 +16,16 @@ export interface SignupResult { ok?: boolean; error?: string }
  * that reason. Its protections are different in kind: a platform-wide hourly ceiling on tenant
  * creation, and an answer that cannot be used to discover who our customers are.
  *
- * ⚠️ **Both outcomes look identical to the person filling in the form.** A new address and an
- * address that already has an account produce the same screen and the same words. Saying "that
- * email is already registered" would turn this page into a tool for finding out which hoteliers use
- * Revio, one guess at a time — the same refusal the booking engine made for guest recognition (K6).
- * The person who really owns the address gets a mail, so a genuine forgotten-account is still
- * resolved; it is resolved in their inbox rather than on a stranger's screen.
+ * ⚠️ **Three different endings, and one of them names an existing account.** This comment used to
+ * say the outcomes were indistinguishable; that described the design before the founder changed it
+ * on 13 September, and the code had already moved on. A stale comment claiming a security property
+ * the code does not have is worse than no comment — somebody reasons from a guarantee that is not
+ * there. Caught by Codex reviewing the live site against the source.
+ *
+ * `signupVerdict` in `@revio/core` carries the reasoning: registration is the one surface where
+ * vagueness costs the user more than it costs an attacker, and the leak is narrowed by answering
+ * only after a complete submit and under the platform's hourly ceiling. Sign-in and password reset
+ * stay non-enumerable, and that distinction is the whole point.
  */
 export async function submitSignup(_prev: SignupResult | null, fd: FormData): Promise<SignupResult> {
   // The SAME validator the writer runs — see the note in `createPublicSignup`. Checked here too so

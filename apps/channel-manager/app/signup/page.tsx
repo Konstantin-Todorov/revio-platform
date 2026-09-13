@@ -34,7 +34,15 @@ export default function SignupPage() {
           </p>
           <ul className="mt-5 space-y-1.5 text-[13px] text-white/70">
             <li>· 30 days, all three products, no card</li>
-            <li>· Your own booking page, commission-free</li>
+            {/*
+              ⚠️ NOT "commission-free". We charge 2% on RevioDirect bookings
+              (`DIRECT_BOOKING_FEE_PCT`), and this is a signup page — the worst possible place for a
+              claim a hotel can disprove on its first invoice.
+
+              The true sentence is also the stronger one: 2% against the 15–18% an OTA takes.
+              Caught by Codex on 13 Sept while reviewing the live site against the pricing model.
+            */}
+            <li>· Your own booking page — 2%, against an OTA's 15%</li>
             <li>· Set up in an afternoon, not a quarter</li>
           </ul>
         </div>

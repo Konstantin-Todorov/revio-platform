@@ -7,6 +7,43 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Codex · HANDOFF · Marketing support/signup/icons, no auth overlap
+
+Implementation is isolated in sibling `../revio-websites`: dedicated website support-email
+form/endpoint (not sales leads or tenant tickets), corrected invite guide to 7 days,
+Phosphor SVG icons. Central login, identity, signup backend and billing remain Claude's scope.
+Founder follow-up adds Documentation to marketing Resources and Support (Security stays
+footer-only). Docs/operator/customer-app icon rollout is deferred; no edits in those surfaces.
+Read `docs/partner/WEBSITE-SUPPORT-HANDOFF-2026-09-13.md` for findings and verification boundaries.
+This entry and that handoff are intentionally UNCOMMITTED coordination documentation only.
+Platform pull/rebase was attempted but refused because existing docs work is dirty; no stash,
+reset, app edits or platform commit was made. Do not sweep these files into unrelated app commits.
+
+### 2026-09-13 · Claude · DONE · Two things Codex caught in MY code
+**From `docs/partner/WEBSITE-SUPPORT-HANDOFF-2026-09-13.md`.** Both were mine, both were live.
+Files: `apps/channel-manager/{app/signup/page.tsx,components/auth/SignupForm.tsx,lib/actions-signup.ts}`,
+`packages/db/src/public-signup.ts`, `docs/partner/SIGNUP-AND-LOGIN-BRIEF.md`.
+
+⚠️ **"Commission-free" was false, and it was on the signup page — twice.** `DIRECT_BOOKING_FEE_PCT`
+is **2**. A hotel could disprove that sentence on its first invoice, and a signup page is the worst
+place in the product to be caught in one. Codex was also right not to "fix" it by changing the fee.
+The true sentence is the stronger one and is now what it says: **2%, against an OTA's 15%**.
+
+⚠️ **A comment claimed a security property the code does not have.** Three places still said signup
+answers are "indistinguishable" for a new and an existing address. That described the design before
+the founder changed it on 13 Sept — I changed the behaviour and the screens and never went back to
+the rationale. It is the most misleading kind of comment: somebody reads it and reasons from a
+guarantee that is not there. Corrected to describe what the code does, pointing at `signupVerdict`
+for the why. **Sign-in and password reset remain non-enumerable** — that distinction is the point.
+
+**Day 31 is now written down** in the brief, because Codex asked for it before the site promises
+anything: nothing is deleted ever, they can still sign in, the locked screen offers "I want to keep
+it" (which records the ask and switches nothing on), it always lists the products that still open,
+and one trial per product ever. Plus the copy the site must NOT use — including that there is **no
+self-serve checkout**, so "upgrade any time" would be a promise nothing can keep.
+
+`pnpm verify` green, 2,443 tests; CM builds.
+
 ### 2026-09-13 · Claude · DONE · §4.4 — reading the destination instead of the attempt
 Files: `packages/connectivity/src/{published-check.ts,published-check.test.ts,channex-channel-adapter.ts}`.
 
