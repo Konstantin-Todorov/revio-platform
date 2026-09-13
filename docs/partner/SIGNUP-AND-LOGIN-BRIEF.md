@@ -208,6 +208,20 @@ Two consequences for a single front door: it must route on **entitlements**, not
 was asked for, and a suspended account is the one case where it must stop at the door, because
 suspension is about the account itself rather than about one product.
 
+The decision itself is now **one function** — `loginDestination` in `@revio/core`, four answers
+(`open` / `locked` / `elsewhere` / `refused`), pinned across all 64 combinations of entitlement and
+request. A central login calls it and re-decides nothing. ⚠️ **Codex: a fourth state exists that the
+table above does not name** — a hotel that asks for a product it has NEVER had while owning another
+is sent where it was going (`elsewhere`), not onto a sales screen. An offer in the way of somebody
+trying to open the software they pay for is an advert, not help.
+
+⚠️ **Central login is NOT built, and that is a decision rather than a gap.** The session hand-off
+between origins has a real security trade-off and there is no user for it yet — no hotel owns a
+second product. The options, the recommendation and what must be true of whatever is built are in
+[`docs/specs/CENTRAL-LOGIN-DESIGN.md`](../specs/CENTRAL-LOGIN-DESIGN.md). **The site must not
+promise "one login for every product" as a thing that exists today** — "one account" is true and
+"one login" is not, yet.
+
 ⚠️ A **`pending_signup`** account (verified email not yet clicked) has no password set, so it fails
 the password check and gets *"Invalid email or password"*. That is deliberate — a distinct message
 would confirm to a stranger that the address has an account here.
