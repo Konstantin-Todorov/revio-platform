@@ -132,6 +132,25 @@ export async function fixMappings(fd: FormData): Promise<void> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return;
 
+  /*
+   * ⚠️ MOCK CHANNELS ONLY. This function fabricates ids.
+   *
+   * It fills a blank mapping with a deterministic string — `channex-rp-BB48` — which is exactly
+   * right for a mock adapter that reads its own invented ids back, and catastrophic for a real one:
+   * no such rate plan exists in Channex, so every push for that plan afterwards targets nothing.
+   * The hotel sees "1 unmapped fixed" and green everywhere.
+   *
+   * Reported as BUG-021 on 13 Sept ("Auto-fix would very likely bind it to an arbitrary Channex
+   * id"). It is worse than arbitrary — it is guaranteed not to exist. A real channel's ids can only
+   * come from Channex, so the honest answer is to refuse and say where they come from.
+   */
+  if (channel.connectivityMode !== "mock") {
+    return flashError(
+      `${channel.name} is a real channel, so its ids have to come from Channex — a made-up one would push to nothing. ` +
+        "Use Re-pull products, then map each room's rate plans from the list.",
+    );
+  }
+
   // Fill any unmapped room types and rate plans with a deterministic mock external id.
   const [rooms, rates] = await Promise.all([
     prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: { not: "complete" } }, include: { roomType: true } }),
@@ -162,7 +181,22 @@ export async function fixMappings(fd: FormData): Promise<void> {
  */
 async function createMappingRow(
   kind: "room" | "rate",
-  args: { tenantId: string; propertyId: string; productId: string; channelId: string | null; externalId: string | null; status: string },
+  args: {
+    tenantId: string; propertyId: string; productId: string; channelId: string | null;
+    externalId: string | null; status: string;
+    /**
+     * ⚠️ Which room type this rate mapping is FOR. Rate plans only.
+     *
+     * Channex holds one rate plan per room type; Revio holds one per property. A row written
+     * without this is a catch-all that applies to EVERY room, so all three room types' prices
+     * funnel into whichever single Channex plan it names — which is exactly how a €666 price set
+     * on the 1-Bedroom was published against the 2-Bedroom on 13 September, silently.
+     *
+     * Null is still permitted, because mock channels legitimately use catch-alls and every
+     * pre-existing row is one. It is the SCREEN's job never to write a new one for a real channel.
+     */
+    roomTypeId?: string | null;
+  },
 ): Promise<{ ok: true; channelName: string; productName: string } | { ok: false; error: string }> {
   if (!args.productId) return { ok: false, error: "That row is not linked to a room type or rate plan. Reload the page." };
 
@@ -185,13 +219,27 @@ async function createMappingRow(
 
   const rp = await prisma.ratePlan.findFirst({ where: { id: args.productId, propertyId: args.propertyId } });
   if (!rp) return { ok: false, error: "That rate plan no longer exists." };
+
+  // Verified against this property, never trusted from the form — a mapping written against another
+  // hotel's room type would be a cross-tenant write.
+  let roomTypeId: string | null = null;
+  if (args.roomTypeId) {
+    const rt = await prisma.roomType.findFirst({ where: { id: args.roomTypeId, propertyId: args.propertyId } });
+    if (!rt) return { ok: false, error: "That room type no longer exists." };
+    roomTypeId = rt.id;
+  }
+
   await prisma.channelRatePlanMapping.create({
     data: {
       tenantId: args.tenantId, channelId: channel.id, ratePlanId: rp.id,
+      ...(roomTypeId ? { roomTypeId } : {}),
       externalRateId: args.externalId, status: args.status,
     },
   });
-  return { ok: true, channelName: channel.name, productName: rp.name };
+  const productName = roomTypeId
+    ? `${(await prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId }, select: { name: true } })).name} · ${rp.name}`
+    : rp.name;
+  return { ok: true, channelName: channel.name, productName };
 }
 
 export async function updateStreamMapping(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
@@ -203,6 +251,13 @@ export async function updateStreamMapping(_prev: ActionResult | null, fd: FormDa
   // Dropdown selection, or a hand-typed id when the OTA product isn't in the pulled list.
   const externalId = str(fd, "externalIdCustom") || str(fd, "externalId") || null;
   const status = externalId ? "complete" : "incomplete";
+  /*
+   * ⚠️ Which room this rate mapping is for. Absent on the room stream and on mock channels.
+   *
+   * Without it every rate row is a catch-all covering all room types, which is BUG-019: a price set
+   * on one room publishes against another, silently. The screen sends one row per (room, plan).
+   */
+  const mappingRoomTypeId = str(fd, "mappingRoomTypeId") || null;
 
   /*
    * ⚠️ A product with no mapping row is MAPPED, not refused.
@@ -239,7 +294,10 @@ export async function updateStreamMapping(_prev: ActionResult | null, fd: FormDa
       await prisma.channelRatePlanMapping.update({ where: { id: m.id }, data: { externalRateId: externalId, status } });
       await logAudit(propertyId, tenantId, { entity: `Mapping · ${m.channel.name} · ${m.ratePlan.name}`, field: "rate mapping", newValue: status });
     } else {
-      const created = await createMappingRow("rate", { tenantId, propertyId, productId, channelId, externalId, status });
+      const created = await createMappingRow("rate", {
+        tenantId, propertyId, productId, channelId, externalId, status,
+        ...(mappingRoomTypeId ? { roomTypeId: mappingRoomTypeId } : {}),
+      });
       if (!created.ok) return created;
       await logAudit(propertyId, tenantId, { entity: `Mapping · ${created.channelName} · ${created.productName}`, field: "rate mapping", newValue: status });
     }

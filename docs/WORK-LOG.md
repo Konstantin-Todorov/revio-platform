@@ -7,6 +7,49 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · BUG-019 groundwork + BUG-021 stopped from doing damage
+**Ventsislav's 13 Sept log, BUG-015…022.** Investigated against the code AND production before
+writing anything, because the log itself asks for that.
+Files: `packages/connectivity/src/{mapping-rows.ts,room-scoped-mapping.test.ts}`,
+`apps/channel-manager/lib/actions-config.ts`.
+
+⚠️ **BUG-015 IS NOT AN OVERBOOKING — and that was the log's own most urgent question.** Proven three
+ways: `Rooms to sell` is `DailyCell.inventory ?? totalRooms`, the GROSS allocation (so interpretation
+(a) in the log is the right one); the push sends `computeWaterfall(...).remaining`, which subtracts
+confirmed; and run with the real production numbers (physical 10, allocation 1, confirmed 1) it
+returns **0**. The pull triggers `syncRealChannels` immediately after import. **The real defect is
+BUG-017** — the grid never shows the net — so this drops S1 → S2. NOT yet verified from the Channex
+side; §4.4's read-back is what would make it self-evident.
+
+⚠️ **BUG-019 is real and the fix is far smaller than the log assumes.** The engine ALREADY supports
+room-scoped mapping: `ChannelRatePlanMapping.roomTypeId` exists and `resolveExternalRateId` prefers
+a specific row over a catch-all. The defect is that **the screen never wrote `roomTypeId`**, so every
+row was a catch-all. Production confirms: `BB Flex roomTypeId = NULL → cb75de7d` (the 2-Bedroom's BB
+BAR). **No data-model change is needed.**
+
+`ratePlanMappingRows` now produces one row per (room type, rate plan). Two design decisions worth
+keeping: a catch-all reads as **`unconfirmed`, never complete** — it does still push, so hiding it
+would be wrong, but showing it green is what let €666 sit unnoticed; and confirming one room
+**creates** a row rather than mutating the catch-all, because mutating it would strip the fallback
+from every other room mid-cleanup — a second silent fault introduced by fixing the first. The
+inherited id is shown as context and **never prefilled**: for the 1-Bedroom it IS the 2-Bedroom's
+plan, so offering it would invite confirming the bug in one click.
+
+⚠️ **BUG-021 is worse than reported, and is now blocked.** `fixMappings` fabricates ids —
+`channex-rp-BB48`. The log guessed "an arbitrary Channex id"; it is one guaranteed not to exist, so
+every later push for that plan targets nothing while the screen says "fixed". Auto-fix now refuses
+on any channel whose `connectivityMode !== "mock"` and says where real ids come from. Mock channels
+are untouched, so demo hotels behave exactly as before.
+
+Also found, not in the log: **`Standard Rate` has TWO identical mapping rows**, both to the
+BookingCom-scoped id.
+
+16 tests including a regression that reproduces the €666 fault from the real production rows.
+`pnpm verify` green, 2,405 tests; CM builds.
+
+**NEXT:** the Mapping screen itself (render the per-room rows), BUG-020's central "active plans
+only" rule + dedupe, then BUG-017's Bookable row.
+
 ### 2026-09-13 · Claude · DONE · Trial analytics — what they did, and what to sell them
 **Founder: "we need to know more about the people that went and used the free trials, what happened,
 and what we can sell them."** This is the payoff of giving all three products away.

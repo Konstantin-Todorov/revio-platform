@@ -78,3 +78,148 @@ export function mappingRows(
 export function unmappedCount(rows: readonly MappingRow[]): number {
   return rows.filter((r) => r.status !== "complete").length;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Rate-plan mapping, scoped to the room type
+ * ───────────────────────────────────────────────────────────────────────────*/
+
+/**
+ * ⚠️ **Channex holds one rate plan PER ROOM TYPE; Revio holds one per property.**
+ *
+ * That mismatch is the whole of BUG-019, and it was proven in production on 13 Sept: a €666 price
+ * set on *Apartment, 1 Bedroom* was published against *Apartment, 2 Bedrooms*, silently, with no
+ * error anywhere. The cause is a mapping row with `roomTypeId = NULL` — a **catch-all** — so every
+ * room type's prices funnel into whichever single Channex rate plan that row happens to name.
+ *
+ * The engine has always been able to express the right shape: `ChannelRatePlanMapping.roomTypeId`
+ * exists and `resolveExternalRateId` prefers a room-specific row over a catch-all. What was missing
+ * is that **the screen never offered the choice**, so every row it wrote was a catch-all.
+ *
+ * This produces one row per **(room type, rate plan)** pair the hotel actually sells, which is the
+ * only shape that can be mapped correctly.
+ *
+ * ## ⚠️ A catch-all is reported as UNCONFIRMED, never as complete
+ *
+ * An existing catch-all row does still push — `resolveExternalRateId` falls back to it — so hiding
+ * it would be wrong. But showing it as `complete` is what let the €666 fault sit unnoticed: the
+ * screen said everything was mapped while two of three room types were publishing to the wrong
+ * place. It is surfaced as its own state so the hotel is asked to confirm it, once.
+ */
+
+export interface RoomScopedProduct {
+  id: string;
+  name: string;
+  active: boolean;
+  priceLogic?: string;
+}
+
+export interface ExistingRateMapping {
+  id: string;
+  ratePlanId: string;
+  /** Null = a catch-all row: applies to every room type. The shape BUG-019 is about. */
+  roomTypeId: string | null;
+  externalId: string | null;
+  status: string;
+}
+
+export interface RoomScopedMappingRow {
+  /** The mapping row's id, or null when this pair has never been sent. */
+  id: string | null;
+  roomTypeId: string;
+  roomTypeName: string;
+  ratePlanId: string;
+  ratePlanName: string;
+  externalId: string | null;
+  /** `complete` · `incomplete` · `never_sent` · `unconfirmed` (inherited from a catch-all row). */
+  status: string;
+  unmapped: boolean;
+  /** True when the only thing covering this pair is a property-wide row — see the note above. */
+  fromCatchAll: boolean;
+  /**
+   * What that catch-all is currently publishing to, for context only.
+   *
+   * ⚠️ Deliberately NOT offered as the value to save. For the 1-Bedroom the inherited id is the
+   * 2-Bedroom's rate plan — prefilling it would invite the hotel to confirm the exact fault this
+   * screen exists to end, in one click, believing they had checked it.
+   */
+  inheritedExternalId?: string | null;
+}
+
+export function ratePlanMappingRows(args: {
+  roomTypes: readonly RoomScopedProduct[];
+  ratePlans: readonly RoomScopedProduct[];
+  /** Which room types each plan is sold on — `RatePlanRoomType`. */
+  sellsOn: (roomTypeId: string, ratePlanId: string) => boolean;
+  existing: readonly ExistingRateMapping[];
+}): RoomScopedMappingRow[] {
+  const specific = new Map<string, ExistingRateMapping>();
+  const catchAll = new Map<string, ExistingRateMapping>();
+  for (const m of args.existing) {
+    if (m.roomTypeId) specific.set(`${m.roomTypeId}|${m.ratePlanId}`, m);
+    else catchAll.set(m.ratePlanId, m);
+  }
+
+  const rows: RoomScopedMappingRow[] = [];
+
+  for (const rt of args.roomTypes) {
+    // An inactive room type sells nothing, so there is nothing to map it to.
+    if (!rt.active) continue;
+
+    for (const rp of args.ratePlans) {
+      /*
+       * Same two rules as the property-wide list: a DERIVED plan follows its parent and is never
+       * mapped on its own, and an inactive plan is offered only when it already has a live mapping
+       * (hiding that would leave a hotel unable to undo something still being pushed).
+       */
+      if (rp.priceLogic === "derived") continue;
+      if (!args.sellsOn(rt.id, rp.id)) continue;
+
+      const hit = specific.get(`${rt.id}|${rp.id}`);
+      const inherited = hit ? null : catchAll.get(rp.id);
+
+      if (!rp.active && !hit && !inherited) continue;
+
+      if (hit) {
+        rows.push({
+          id: hit.id, roomTypeId: rt.id, roomTypeName: rt.name, ratePlanId: rp.id, ratePlanName: rp.name,
+          externalId: hit.externalId, status: hit.externalId ? hit.status : "incomplete",
+          unmapped: !hit.externalId, fromCatchAll: false,
+        });
+        continue;
+      }
+
+      if (inherited) {
+        /*
+         * ⚠️ `id: null` and `externalId: null` — saving CREATES a room-specific row rather than
+         * mutating the catch-all.
+         *
+         * Mutating it would silently strip the fallback from every OTHER room still relying on it,
+         * mid-way through the hotel's own cleanup. Creating alongside leaves the catch-all doing
+         * exactly what it did until every pair has been confirmed, at which point it is dead weight
+         * and can be removed deliberately.
+         */
+        rows.push({
+          id: null, roomTypeId: rt.id, roomTypeName: rt.name, ratePlanId: rp.id, ratePlanName: rp.name,
+          externalId: null,
+          status: "unconfirmed",
+          unmapped: true,
+          fromCatchAll: true,
+          inheritedExternalId: inherited.externalId,
+        });
+        continue;
+      }
+
+      rows.push({
+        id: null, roomTypeId: rt.id, roomTypeName: rt.name, ratePlanId: rp.id, ratePlanName: rp.name,
+        externalId: null, status: "never_sent", unmapped: true, fromCatchAll: false,
+      });
+    }
+  }
+
+  return rows;
+}
+
+/** How many pairs still need a human — never-sent, incomplete, or inherited from a catch-all. */
+export function unconfirmedPairs(rows: readonly RoomScopedMappingRow[]): number {
+  return rows.filter((r) => r.unmapped).length;
+}
