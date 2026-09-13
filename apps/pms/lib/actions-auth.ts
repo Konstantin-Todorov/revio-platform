@@ -49,7 +49,20 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
   }
   await recordLoginSuccess("pms", email);
   if (user.tenant.status !== "active") return { error: "This account is suspended — contact Revio." };
-  if (!user.tenant.hasPms) return { error: "RevioPMS isn’t enabled for this hotel." };
+  /*
+   * ⚠️ NOT a login refusal. This is a real user of an active hotel; the product is simply not on
+   * their account today, and the screen that explains that is inside the app.
+   *
+   * Refusing here made the Day 31 promise false. `ProductLocked` says the trial ended, names the
+   * date, states that nothing has been deleted and offers "I want to keep it" — which records
+   * `keepRequestedAt`, the strongest buying signal the operator console has. All of it lives in the
+   * `(protected)` layout, so it was reachable only by a hotel that still had a live cookie from
+   * before the sweep ran. The ones who came back after the trial-end email — exactly the ones the
+   * screen is for — were met at the door with "RevioPMS isn't enabled for this hotel", which is the
+   * sentence `ProductLocked` was built to replace, one layer earlier.
+   *
+   * The entitlement is now asked where it actually holds: `authz.ts`, before every write.
+   */
 
   // "Remember me" is a real choice, not a longer default. A shared reception terminal and a
   // manager's own laptop want opposite answers, and the cookie's maxAge must match the token's

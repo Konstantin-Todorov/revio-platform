@@ -32,6 +32,24 @@ import { getSession, type Session } from "./session";
  */
 
 /**
+ * ⚠️ The product entitlement, asked HERE and not only in the layout.
+ *
+ * The layout renders `ProductLocked` when the entitlement is off, and the comment at the top of this
+ * file is the reason that is not enough: Next runs a server action FIRST and re-renders the page —
+ * and therefore re-runs the layout guard — afterwards, so the layout's refusal arrives after the
+ * write has committed. A hotel whose trial ended could keep re-pricing a season from a tab that was
+ * already open, or by replaying the action, for as long as its session lived.
+ *
+ * RevioPMS has asked this since it was built (`session.entitlements.pms`); RevioLink and RevioCRS
+ * simply never had it added. It is a billing boundary rather than a tenant boundary — RLS still
+ * confines every one of these reads and writes to the hotel's own rows — but it is the difference
+ * between a trial that ends and a trial that ends on paper.
+ *
+ * The refusal never says "you have not subscribed": for a hotel whose trial just finished that is
+ * false, and it is the exact sentence `ProductLocked` was built to stop us saying.
+ */
+
+/**
  * Gate a `Promise<void>` action. Redirects on refusal, which throws, so the caller stops here.
  *
  * Refusal goes to the dashboard rather than to `/login`: the person IS signed in, and sending them
@@ -41,6 +59,9 @@ import { getSession, type Session } from "./session";
 export async function requireCapability(cap: Capability): Promise<Session> {
   const session = await getSession();
   if (!session) redirect("/login");
+  // Straight to the dashboard, where the layout explains the state properly and offers "I want to
+  // keep it" — a query-string sentence would be a worse version of a screen that already exists.
+  if (!session.entitlements.reservation) redirect("/dashboard");
   if (!roleCan(session.role, cap)) {
     redirect(`/dashboard?denied=${encodeURIComponent(refusalMessage(session.role, cap))}`);
   }
@@ -56,6 +77,9 @@ export async function guard(
 ): Promise<{ ok: true; session: Session } | { ok: false; error: string }> {
   const session = await getSession();
   if (!session) return { ok: false, error: "Your session has expired. Sign in again." };
+  if (!session.entitlements.reservation) {
+    return { ok: false, error: "RevioCRS is switched off for this hotel, so this change was not saved. Nothing has been deleted — reload to see where it stands." };
+  }
   if (!roleCan(session.role, cap)) {
     return { ok: false, error: refusalMessage(session.role, cap) };
   }

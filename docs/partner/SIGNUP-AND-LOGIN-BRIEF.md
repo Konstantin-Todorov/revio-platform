@@ -146,6 +146,15 @@ nothing was deleted, and offers **"I want to keep it"** — which records the as
 (`keepRequestedAt`) for the operator to act on. It does NOT switch anything back on: converting a
 trial is a deliberate decision a person at Revio makes.
 
+> ⚠️ **Corrected 2026-09-13, after Codex asked for this section to be confirmed as built.** It was
+> not. `signIn` refused an account whose entitlement was off — *"RevioLink isn't enabled for this
+> hotel"* — so the screen above was reachable only by a hotel that still had a live cookie from
+> before the sweep ran. Everyone who came back after the trial-end email, which is exactly who it is
+> for, was stopped at the door by the sentence `ProductLocked` was built to replace. Login no longer
+> refuses; the entitlement is now checked in `authz.ts` before every write, where a layout cannot be
+> bypassed by replaying a server action. RevioPMS had always checked it there; RevioLink and
+> RevioCRS never had.
+
 **It is never a dead end.** A trial ends per product, so the screen always lists the products that
 still open. A hotel that loses RevioLink but kept RevioCRS goes straight there.
 
@@ -160,6 +169,27 @@ data after the trial beyond "nothing is deleted".
 ⚠️ **Still unsettled, so the site must not promise it:** how a trial converts to a paid account.
 There is no self-serve checkout — an operator grants it. Until that exists, the honest sentence is
 "tell us and we'll switch it on", never "upgrade any time".
+
+---
+
+## Central login — the three states it must handle
+
+Codex asked for these to be named before the website says anything about one login. They are the
+states that exist today, each already reachable at a per-product login:
+
+| State | What the platform does | What the person sees |
+| --- | --- | --- |
+| **Ended trial** (account active, entitlement off) | Signs in. `authz.ts` refuses writes to that product. | `ProductLocked`: the end date, *nothing has been deleted*, **I want to keep it**, and the products that still open. |
+| **Suspended account** (`tenant.status !== "active"`) | Refuses the sign-in, after the password is verified. | *"This account is suspended — contact Revio."* No session is issued and `getSession` would refuse one anyway. |
+| **Never had the product** (no trial, entitlement off) | Signs in. Same write refusal. | `ProductLocked` making a real offer — *try it free* — because for this hotel a first trial is genuinely available. |
+
+Two consequences for a single front door: it must route on **entitlements**, not on which product
+was asked for, and a suspended account is the one case where it must stop at the door, because
+suspension is about the account itself rather than about one product.
+
+⚠️ A **`pending_signup`** account (verified email not yet clicked) has no password set, so it fails
+the password check and gets *"Invalid email or password"*. That is deliberate — a distinct message
+would confirm to a stranger that the address has an account here.
 
 ---
 
