@@ -193,6 +193,36 @@ would confirm to a stranger that the address has an account here.
 
 ---
 
+## ⚠️ Open decision — the month a trial converts in is billed in full
+
+Codex asked how the trial lifecycle interacts with assisted-onboarding first-sync billing. It was
+checked end to end on 2026-09-13. **No hotel is ever invoiced while a trial is running** —
+`generateInvoices` drops every product with an open `ProductTrial`, and it only ever generates the
+CURRENT month, so a past trial month cannot be billed retroactively. That half is sound.
+
+The seam is the month a trial is **converted** in. Converting sets `endedAt = now` and keeps the
+entitlement, so from that instant the product is no longer "on trial" and the month's invoice prices
+it in full — including the days earlier in that month when it was still free. There is no proration
+anywhere in the pricing model. A trial converted on the 29th bills the whole month.
+
+**So the website must not write "you are only charged from the day you decide".** The honest line
+today is the one already agreed: *"nothing is charged during your trial"*, said about the trial
+itself, with nothing promised about how the first invoice is cut.
+
+Three ways out, and it is a **pricing decision for the founder, not a code fix**:
+
+1. Bill from the first whole month after the trial ends — simple to say, errs toward the customer.
+2. Prorate the conversion month — accurate, and the only option that needs a new concept in the
+   pricing model.
+3. Accept it and say nothing more specific than the line above.
+
+One related cosmetic point: a synced booking sets `billingStartsAt` even while the hotel is on a free
+trial, because `markBillable` does not ask about trials. No invoice is affected — the trial
+exclusion and the entitlement flag both hold — but the operator console's "billable since" date can
+predate the paid relationship.
+
+---
+
 ## Known gap, stated plainly
 
 Repeated signups from **genuinely different mailboxes** for the same hotel would each get a fresh

@@ -2,7 +2,7 @@
 
 ## Boundary
 
-The founder approved the dark documentation design. Improve its structure and content, not customer-product navigation. Work remains isolated in `design/docs-preview/` until the publishing structure is reviewed. Marketing release is independent in sibling `revio-websites`. Never deploy the entire platform just to publish this prototype.
+The founder approved the dark documentation design. Improve its structure and content, not customer-product navigation. The current static preview remains isolated in `design/docs-preview/` and is published through a separate Railway `docs` service; it is not part of any customer app deployment. Marketing release is independent in sibling `revio-websites`. Never deploy the entire platform just to publish documentation.
 
 ## Navigation
 
@@ -58,7 +58,7 @@ Statuses: **Draft → Code checked → UI verified → Published**. “Code chec
 | P1 | Initial shared + product guide drafts | Source-labelled, no invented controls or production claims |
 | P1 | Validate real-hotel workflows with Claude's fixes | UI steps agree with current code and observed behavior |
 | P2 | Separate versioned docs service, real article URLs and content files | Build, links, accessibility, search and review gate pass independently |
-| P2 | Publish on docs.reviosoft.app and link marketing Support | Correct domain/TLS/service verified; no internal content in output |
+| P2 | Publish on docs.reviosoft.app and link marketing navigation | Live on the isolated Railway service; custom-domain DNS/TLS and the marketing link are verified; no internal content in output |
 | P3 | Approved API reference and richer imports/exports guide | Actual implemented public contract and supported integrations verified |
 | P3 | Customer photos, case studies and approved release notes | Hotel consent + accurate claims; no stock customer substitutes |
 

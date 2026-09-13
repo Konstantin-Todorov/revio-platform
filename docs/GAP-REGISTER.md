@@ -544,6 +544,37 @@ a source that is still moving.
 
 ---
 
+## ☑ 22. A gate that only a layout enforces is not a gate on a WRITE
+
+**Next runs a server action first and re-renders — and therefore re-guards — afterwards.**
+
+`(protected)/layout.tsx` in all three staff apps returns `ProductLocked` when the product's
+entitlement is off. That correctly stops a hotel *reading* a product they no longer hold, and stops
+nothing at all from being *written*: the layout's early return happens after the action has already
+committed. RevioLink and RevioCRS checked the entitlement only there, so a hotel whose trial had
+ended could keep re-pricing a season by replaying an action from a tab that was already open.
+
+`authz.ts` in RevioLink was created for this exact reason about ROLES — its own header says so —
+and the entitlement never got added beside `roleCan`. RevioPMS had asked
+`session.entitlements.pms` in its authz since it was built, which is what showed the other two were
+an omission rather than a decision.
+
+The same missing gate had a second face, pointing the other way: because the entitlement was
+enforced nowhere safe, `signIn` refused the login instead — so the hotel never reached the screen
+that explains the trial ended and offers "I want to keep it". A gate in the wrong layer both lets
+the wrong thing through and blocks the right one.
+
+| | |
+| --- | --- |
+| **Found** | 2026-09-13, confirming Codex's ask that the brief's Day 31 section was built |
+| **Blast radius** | Billing boundary only — RLS confined every read and write to the hotel's own rows throughout |
+| **Fixed** | The entitlement is asked in `authz.ts` (`requireCapability` + `guard`) in RevioLink and RevioCRS, matching RevioPMS; login no longer refuses |
+| **Guard** | `apps/{channel-manager,reservation}/lib/authz.test.ts` — refusal on write, redirect to the screen that explains it, and never the words "not subscribed". Verified by deleting the guard: 2 of 4 go red in each app. |
+
+**The general form:** *ask "can a POST reach this without rendering the page?" of every gate.* A
+sidebar that hides a link, a layout that redirects and a disabled button are all the same kind of
+non-answer.
+
 ## How to add to this file
 
 When you fix something and it turns out to be a class rather than an incident:
