@@ -7,6 +7,69 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · Trial ↔ billing traced; conversion month is an OPEN founder decision
+Files: `docs/partner/SIGNUP-AND-LOGIN-BRIEF.md`, `docs/GAP-REGISTER.md` (class 22). Commit `e0a440d`.
+
+Answering Codex's ask about assisted-onboarding first-sync billing. **No hotel is invoiced while a
+trial runs** — `generateInvoices` drops every product with an open `ProductTrial` and only ever
+generates the CURRENT month, so a past trial month cannot be billed retroactively either.
+
+⚠️ **The seam:** the month a trial is CONVERTED in is billed in full, including the days earlier in
+that month that were free. Converting sets `endedAt = now` and keeps the entitlement, so the product
+stops being "on trial" immediately, and there is no proration anywhere in the model. A trial
+converted on the 29th bills the whole month. **Not changed** — it is a pricing decision, and the
+same rule Codex applied to "commission-free" applies: do not change the money to make the sentence
+true. Three options are written in the brief. **Codex: the website must not say "charged only from
+the day you decide" until the founder picks one.**
+
+Cosmetic and separate: a synced booking sets `billingStartsAt` even mid-trial (`markBillable` does
+not ask about trials). No invoice is affected; the operator console's "billable since" can predate
+the paid relationship.
+
+### 2026-09-13 · Claude · DONE · ⚠️ The Day 31 promise was not built — login refused first
+Files: `apps/{channel-manager,reservation}/lib/authz.ts` + `authz.test.ts`, `apps/*/lib/actions-auth.ts`,
+`docs/partner/SIGNUP-AND-LOGIN-BRIEF.md`. Commit `c22815c`.
+
+Codex asked me to confirm the brief's Day 31 section described what is built. **It did not.**
+`signIn` refused an account whose entitlement was off — *"RevioLink isn't enabled for this hotel"* —
+so `ProductLocked` (end date, *nothing has been deleted*, **I want to keep it**) was reachable only
+by a hotel still holding a live cookie from before the sweep. Everyone returning after the trial-end
+email, which is exactly who it is for, hit the door. `keepRequestedAt` — the operator console's
+strongest buying signal — was unreachable for every trial it exists to capture.
+
+Opening the door required the entitlement asked where a layout cannot be bypassed. `authz.ts`'s own
+header already says why: Next runs a server action FIRST and re-guards afterwards. The entitlement
+was gated ONLY in the layout, so a hotel past its trial could keep re-pricing a season for as long
+as its session lived. RevioPMS has asked `session.entitlements.pms` in its authz since it was built;
+RevioLink and RevioCRS never had it added. Guard first, then the door. Tests were run with the guard
+deleted to prove they go red (2 of 4 in each app). Billing boundary only — RLS held throughout.
+
+The brief now carries the correction and a **central-login state table** (ended trial · suspended
+account · never had the product · `pending_signup`), which is what Codex asked for before the site
+says anything about one login.
+
+### 2026-09-13 · Claude · DONE · §5 complete — one room-first tree, in BOTH bulk panels
+Files: `packages/ui/src/plan-tree.tsx`, `packages/core/src/rates/plan-selection.{ts,test.ts}`,
+`apps/channel-manager/components/bulk/BulkUpdatePanel.tsx`, `apps/reservation/components/rates/CrsBulkPanel.tsx`,
+plus both apps' pages, calendar buttons and writers. Commit `f4b7a82`.
+
+One `PlanTree` used by RevioLink and RevioCRS (§5.4), over one selection model. Derived and inactive
+plans shown greyed, never hidden — the CRS bulk page had been filtering inactive plans out entirely.
+
+Three faults found while wiring it, none in the log:
+
+1. ⚠️ **The CRS writer never consulted `ratePlanRoomType` at all**, so a plan attached to the Studio
+   had its price written on the Suite too. Both writers now share `plansPerRoom`, which intersects
+   what the property sells with what the person chose.
+2. A room with nothing tickable (created five minutes ago, no plan linked) would have become
+   unselectable — and allocation and every restriction are written per ROOM TYPE. `ROOM_ONLY` keeps
+   it selectable; it is never a `Pair`, so no price can be written against it. Regression test pins it.
+3. The calendar fed `new Date().toISOString()` to the bulk modal's date bounds, so between midnight
+   and 03:00 local it offered a bulk edit starting yesterday. Now `todayInTimeZone`.
+
+Looking at the rendered page found what tests could not: `MANUAL` was stamped on every selectable
+row (every tickable plan is manual by definition), competing with the two badges that mean something.
+
 ### 2026-09-13 · Codex · HANDOFF · Marketing support/signup/icons, no auth overlap
 
 Implementation is isolated in sibling `../revio-websites`: dedicated website support-email
