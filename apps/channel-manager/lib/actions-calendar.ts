@@ -229,6 +229,15 @@ export interface BulkPayload {
   daysOfWeek: number[];
   roomTypeIds: string[];
   ratePlanIds: string[]; // manual plans the price change targets
+  /**
+   * The exact (room type, rate plan) combinations chosen, when the caller has them.
+   *
+   * ⚠️ The two axes above can only express a RECTANGLE. A room-first selector lets somebody pick
+   * different plans on different rooms, and flattening that to axes silently gains combinations
+   * they never chose. When this is present it narrows the price write to exactly these pairs;
+   * absent, the cross product is used, which is what every existing caller means.
+   */
+  pairs?: { roomTypeId: string; ratePlanId: string }[];
   rate?: { mode: BulkRateMode; value: number };
   minLos?: number | null; // >0 sets, ≤0 clears
   maxLos?: number | null;
@@ -360,8 +369,28 @@ async function writeBulk(propertyId: string, tenantId: string, today: string, pa
   // room invents products that do not exist — "Twin Room on the Double Room's Best Available Rate" —
   // and those rows then get pushed to the channel at whatever `existing ?? 0` produced.
   const links = await prisma.ratePlanRoomType.findMany({ where: { ratePlanId: { in: ratePlanIds }, roomTypeId: { in: roomTypeIds } } });
+
+  /*
+   * ⚠️ When the caller sent PAIRS, they are authoritative — the axes cannot express what was chosen.
+   *
+   * `roomTypeIds × ratePlanIds` can only describe a rectangle. Pick "1-Bedroom · BB Flex" and
+   * "2-Bedroom · BB NR" in the room-first tree and the axes become two rooms and two plans, which
+   * is FOUR pairs — writing the price to two combinations nobody selected, silently, at whatever
+   * figure was typed. `isRectangular` in `@revio/core` is the check for that, and the ordinary case
+   * fails it as soon as somebody picks different plans on different rooms.
+   *
+   * Optional, so every existing caller — the calendar's inline bulk, the API, the older form — is
+   * unchanged and keeps the cross-product it already means.
+   */
+  const chosenPairs = payload.pairs && payload.pairs.length > 0
+    ? new Set(payload.pairs.map((p) => `${p.roomTypeId}|${p.ratePlanId}`))
+    : null;
+
   const plansForRoom = new Map<string, string[]>();
-  for (const l of links) plansForRoom.set(l.roomTypeId, [...(plansForRoom.get(l.roomTypeId) ?? []), l.ratePlanId]);
+  for (const l of links) {
+    if (chosenPairs && !chosenPairs.has(`${l.roomTypeId}|${l.ratePlanId}`)) continue;
+    plansForRoom.set(l.roomTypeId, [...(plansForRoom.get(l.roomTypeId) ?? []), l.ratePlanId]);
+  }
 
   /**
    * Which rate plans a RESTRICTION change should be written against, per room.

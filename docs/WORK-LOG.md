@@ -19,6 +19,29 @@ This entry and that handoff are intentionally UNCOMMITTED coordination documenta
 Platform pull/rebase was attempted but refused because existing docs work is dirty; no stash,
 reset, app edits or platform commit was made. Do not sweep these files into unrelated app commits.
 
+### 2026-09-13 · Claude · DONE · §5 groundwork — selection is PAIRS, and flattening loses information
+Files: `packages/core/src/rates/plan-selection.{ts,test.ts}`, `apps/channel-manager/lib/actions-calendar.ts`.
+
+⚠️ **The trap, found before writing any UI.** `BulkPayload` takes `roomTypeIds[]` and
+`ratePlanIds[]` — two axes, which can only describe a **rectangle**. A room-first tree lets somebody
+pick *1-Bedroom · BB Flex* and *2-Bedroom · BB NR*; flattened to axes that is two rooms × two plans
+= **four pairs**, writing the price to two combinations nobody chose, silently, at whatever figure
+was typed. Building the tree first and discovering this after would have shipped it.
+
+`BulkPayload.pairs` is now optional and **authoritative when present**. Absent, the cross product is
+used — so the calendar's inline bulk, the API and the older form are all unchanged. `isRectangular`
+exists so a caller can ask whether the legacy shape is safe, and the ordinary case fails it the
+moment different plans are picked on different rooms.
+
+The selection model itself (`plan-selection.ts`, 19 tests) keeps the rules §5.3 asks for, and two of
+them are decisions rather than mechanics: an **indeterminate room fills up rather than clearing**
+(somebody who picked one of two and clicks the room is adding the rest — clearing their work is the
+one outcome they certainly did not intend), and **derived and inactive plans are shown, greyed and
+unselectable, never hidden** — a plan you cannot see is a plan you cannot reason about, and without
+it "apply to the whole room" is a promise whose scope nobody can check.
+
+`pnpm verify` green, 2,466 tests; CM builds. **The tree component itself is next.**
+
 ### 2026-09-13 · Claude · DONE · §4 is complete — Verify reads the destination, from a button
 Files: `packages/connectivity/src/sync.ts` (`verifyPublished`),
 `apps/channel-manager/{lib/actions-config.ts,components/mapping/VerifyStrip.tsx,components/mapping/verify-strip.test.tsx,app/(protected)/mapping/page.tsx}`.
