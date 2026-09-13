@@ -539,11 +539,27 @@ export async function getCalendarBoard(q: CalendarQuery) {
       key: "inventory", label: "Allocation", kind: "availability", field: "inventory", editable: true,
       cells: dateKeys.map((k) => {
         const inv = cellFor(k)?.inventory ?? roomType.totalRooms;
-        // Total-rooms safety net (spec): loading more than the physical count saves, but warns.
-        const over = inv > roomType.totalRooms;
+        const { outOfOrder, closed } = periodsByDate.get(k) ?? { outOfOrder: 0, closed: 0 };
+        const usable = Math.max(0, roomType.totalRooms - outOfOrder - closed);
+        const unit = roomType.unitKind === "bed" ? "beds" : "rooms";
+        /*
+         * ⚠️ The warning now says what WILL happen, not just that two numbers differ.
+         *
+         * It used to read "11 to sell, but only 10 exist" and the 11 still went to the channel.
+         * The allocation is a cap now (`computeWaterfall`), so the honest sentence names the number
+         * the channel actually receives — and, when rooms are out of order, says why it is lower
+         * than what was typed. A hotel that reads "8" and is sent 7 deserves to be told which.
+         */
         return {
           date: k, value: String(inv),
-          ...(over ? { warn: `Attention: ${inv} to sell, but only ${roomType.totalRooms} physical ${roomType.unitKind === "bed" ? "beds" : "rooms"} exist` } : {}),
+          ...(inv > usable
+            ? {
+                warn:
+                  outOfOrder + closed > 0
+                    ? `${inv} allocated, but only ${usable} ${unit} are usable on this date (${outOfOrder + closed} out of order or closed) — ${usable} is what the channel is sent`
+                    : `${inv} allocated, but only ${roomType.totalRooms} physical ${unit} exist — ${usable} is what the channel is sent`,
+              }
+            : {}),
         };
       }),
     });

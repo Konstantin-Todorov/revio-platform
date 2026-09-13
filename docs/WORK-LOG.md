@@ -7,6 +7,35 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · ⚠️ An allocation could out-sell the rooms that physically work
+**Found while answering BUG-018. It is in NEITHER bug log, and it is the real oversell path.**
+Files: `packages/core/src/inventory/{waterfall.ts,waterfall.test.ts}`, `apps/channel-manager/lib/data.ts`.
+
+`computeWaterfall` read `available = manualSellLimit ?? base`, so a date-level allocation **replaced**
+the physical base instead of capping it — and therefore ignored out-of-order rooms entirely:
+
+    physical 10 · out of order 3 · allocation 8   →   available 8, and 8 went to the channel
+
+Seven rooms worked. **RevioPMS creates those OOO periods automatically** whenever a housekeeper or a
+maintenance job takes a unit out of order — the one cross-product write named in the root
+`CLAUDE.md` — so a burst pipe on Tuesday left the OTA selling a room nobody could sleep in. Silently,
+because the number typed last month still looked reasonable.
+
+Now `min(allocation, physical − ooo − closed)`. Holding inventory back still works, which is what the
+override is FOR; promising rooms that do not exist does not. `requested` and `cappedBy` are returned
+so a screen can explain the difference rather than quietly showing a smaller number than was typed —
+and the calendar's warning now names **the number the channel actually receives**, where it used to
+note a discrepancy and send the larger figure anyway.
+
+⚠️ **This is a deliberate behaviour change to the platform's most load-bearing function.** All 12
+existing waterfall tests pass untouched: the cap only bites when the allocation exceeds what
+physically works, which is exactly the unsafe case. It also answers **BUG-018** — 11 against 10 is
+now capped at 10 rather than accepted and pushed. A hotel that genuinely wants to oversell needs the
+explicit setting the 13 Sept log asks for; a number anyone can type is not it.
+
+6 new tests, including one pinning that a real overbooking still reports as a negative `remaining`
+rather than being absorbed by the cap. `pnpm verify` green, 2,421 tests; all three apps build.
+
 ### 2026-09-13 · Claude · DONE · BUG-017 · BUG-020 · BUG-022 — the calendar can be read again
 Files: `apps/channel-manager/lib/data.ts`, `apps/channel-manager/components/bulk/BulkUpdatePanel.tsx`,
 `apps/reservation/components/rates/CrsBulkPanel.tsx`,

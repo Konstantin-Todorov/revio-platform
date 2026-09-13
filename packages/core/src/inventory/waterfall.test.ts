@@ -84,3 +84,56 @@ describe("ROOM_OCCUPYING_STATUSES vs SOLD_STATUSES", () => {
     expect(extra).toEqual(["requested"]);
   });
 });
+
+describe("the allocation is a cap, never a licence to oversell", () => {
+  it("⚠️ an allocation can no longer out-sell the rooms that physically work", () => {
+    /*
+     * Found on 13 Sept while answering BUG-018, and in neither bug log.
+     *
+     * `available = manualSellLimit ?? base` replaced the base outright, so the allocation ignored
+     * out-of-order units entirely. Ten rooms, three out of order, an allocation of eight: eight
+     * went to the channel and seven existed.
+     *
+     * RevioPMS writes a RoomInventoryPeriod whenever a housekeeper or a maintenance job takes a
+     * unit out of order — so a burst pipe on Tuesday left the OTA selling a room nobody could
+     * sleep in, silently, because the number typed last month still looked reasonable.
+     */
+    const w = computeWaterfall({ physical: 10, outOfOrder: 3, manualSellLimit: 8 });
+    expect(w.available).toBe(7);
+    expect(w.cappedBy).toBe(1);
+    expect(w.requested).toBe(8);
+  });
+
+  it("caps an allocation above the physical count (BUG-018)", () => {
+    // 11 typed against 10 rooms. The grid already warned; the number still went out as 11.
+    const w = computeWaterfall({ physical: 10, manualSellLimit: 11 });
+    expect(w.available).toBe(10);
+    expect(w.cappedBy).toBe(1);
+  });
+
+  it("⚠️ holding inventory back still works — that is what the override is FOR", () => {
+    // The common, legitimate case must be untouched: sell only 5 of 10 through the channels.
+    const w = computeWaterfall({ physical: 10, manualSellLimit: 5 });
+    expect(w.available).toBe(5);
+    expect(w.cappedBy).toBe(0);
+  });
+
+  it("says nothing was capped when nothing was", () => {
+    expect(computeWaterfall({ physical: 10, outOfOrder: 2, manualSellLimit: 8 }).cappedBy).toBe(0);
+    expect(computeWaterfall({ physical: 10 }).requested).toBeNull();
+    expect(computeWaterfall({ physical: 10 }).cappedBy).toBe(0);
+  });
+
+  it("closures and OOO taking everything leaves nothing sellable, whatever was typed", () => {
+    const w = computeWaterfall({ physical: 4, outOfOrder: 3, closed: 3, manualSellLimit: 4 });
+    expect(w.available).toBe(0);
+    expect(w.cappedBy).toBe(4);
+  });
+
+  it("⚠️ still reports a real overbooking as negative rather than absorbing it", () => {
+    // remaining may go below zero — that IS the signal, and capping `available` must not hide it.
+    const w = computeWaterfall({ physical: 10, outOfOrder: 8, manualSellLimit: 5, confirmed: 3 });
+    expect(w.available).toBe(2);
+    expect(w.remaining).toBe(-1);
+  });
+});

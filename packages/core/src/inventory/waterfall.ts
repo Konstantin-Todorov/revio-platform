@@ -6,9 +6,22 @@
  *   physical − outOfOrder − closed         = available   (what CAN be sold)
  *   available − holds − confirmed          = remaining   (what a new booking may still take)
  *
- * The CM's date-level "rooms to sell" (DailyCell.inventory) is a manual override of the FIRST line:
- * when the hotel sets it, it replaces (physical − ooo − closed) as the sellable base for that date.
- * This keeps the CM's existing model as-is — OOO/closures are additive, not a rewrite.
+ * The CM's date-level allocation (DailyCell.inventory) is a manual override of the FIRST line:
+ * when the hotel sets it, it is the sellable base for that date — but it is a CAP, never a licence.
+ *
+ * ⚠️ **The override used to REPLACE the base outright, which let it ignore out-of-order rooms.**
+ *
+ *     physical 10, out of order 3, allocation 8   →   available 8
+ *
+ * Only seven rooms worked, and eight went to the channel. That is not a theoretical path: RevioPMS
+ * writes a `RoomInventoryPeriod` whenever a housekeeper or a maintenance job takes a unit out of
+ * order, so a burst pipe on Tuesday left the OTA selling a room nobody could sleep in — silently,
+ * because the allocation the hotel typed last month still looked reasonable.
+ *
+ * It is now `min(allocation, physical − ooo − closed)`. A hotel can still hold back inventory, which
+ * is what the override is for; it can no longer promise rooms that do not exist. `cappedBy` says
+ * when that happened so a screen can explain the difference instead of quietly showing a smaller
+ * number than was typed.
  */
 
 export interface WaterfallInput {
@@ -34,6 +47,15 @@ export interface WaterfallResult {
   available: number;
   holds: number;
   confirmed: number;
+  /** What the hotel actually typed as its allocation for this date, or null when it set none. */
+  requested: number | null;
+  /**
+   * How many rooms the allocation asked for beyond what physically exists on this date.
+   *
+   * Non-zero means the number on the screen is smaller than the one the hotel typed, and a screen
+   * that does not say so is hiding a decision it made on the hotel's behalf.
+   */
+  cappedBy: number;
   /** available − holds − confirmed. May go negative: that IS the overbooking signal. */
   remaining: number;
 }
@@ -46,10 +68,19 @@ export function computeWaterfall(input: WaterfallInput): WaterfallResult {
   const confirmed = input.confirmed ?? 0;
 
   const base = Math.max(0, physical - outOfOrder - closed);
-  const available = input.manualSellLimit != null ? input.manualSellLimit : base;
+
+  /*
+   * ⚠️ A cap, not a replacement. See the note at the top of this file: replacing the base let a
+   * date-level allocation out-sell the rooms that physically worked, and out-of-order units are
+   * created automatically by RevioPMS.
+   */
+  const requested = input.manualSellLimit ?? null;
+  const available = requested != null ? Math.max(0, Math.min(requested, base)) : base;
+  const cappedBy = requested != null && requested > base ? requested - base : 0;
+
   const remaining = available - holds - confirmed;
 
-  return { physical, outOfOrder, closed, available, holds, confirmed, remaining };
+  return { physical, outOfOrder, closed, available, holds, confirmed, remaining, requested, cappedBy };
 }
 
 /**
