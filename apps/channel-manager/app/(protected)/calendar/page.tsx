@@ -217,8 +217,17 @@ export default async function CalendarPage({
   // Data for the in-calendar bulk modal (spec §2.1) — same room types + rate plans the Bulk screen uses.
   const { roomTypes: bulkRoomTypes, ratePlans: bulkRatePlans } = await getRoomsAndRates();
   const bulkRtOpts = bulkRoomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }));
-  const bulkPlanOpts = bulkRatePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }));
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const bulkPlanOpts = bulkRatePlans.map((p) => ({
+    id: p.id, name: p.name, code: p.code, priceLogic: p.priceLogic, active: p.active,
+    parentName: p.parent?.name ?? null,
+    roomTypeIds: p.roomTypeLinks.map((l) => l.roomTypeId),
+  }));
+  /*
+   * ⚠️ The property's date, not the server's UTC date. This fed `min` on the bulk modal's From/To
+   * fields, so between midnight and 03:00 local — the night auditor's shift — the calendar offered
+   * a bulk edit starting yesterday. See `packages/core/src/stays/past-dates.ts`.
+   */
+  const todayIso = todayInTimeZone(property.timezone);
 
   // Links preserve the current query, changing one param.
   const qs = (over: Record<string, string | undefined>) => {

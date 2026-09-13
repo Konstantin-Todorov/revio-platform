@@ -49,6 +49,24 @@ export interface Pair {
 export const pairKey = (roomTypeId: string, ratePlanId: string) => `${roomTypeId}|${ratePlanId}`;
 
 /**
+ * ⚠️ A room with NO selectable plan is still a valid scope, and forgetting that is a regression.
+ *
+ * Not every bulk field is priced per plan. Allocation and every restriction are written per ROOM
+ * TYPE — `applyBulkUpdateMulti` loops `roomTypeIds` for those and `plansForRoom` only for price. So
+ * a room type created five minutes ago with no rate plan linked yet, or one whose plans are all
+ * derived, has nothing to tick in the tree and yet is exactly the room whose allocation somebody
+ * needs to set.
+ *
+ * The two-list selector could express that (tick the room, tick no plan). A tree cannot, unless the
+ * room itself can be selected — so it can, under this sentinel. It is NEVER a `Pair`: `selectedPairs`
+ * filters it out, so nothing can mistake it for a plan id and write a price against it.
+ */
+export const ROOM_ONLY = "__room_only__";
+
+/** True for a room the tree offers as a whole, because it has no plan to offer instead. */
+export const isRoomOnly = (room: SelectableRoom) => selectablePlans(room).length === 0;
+
+/**
  * Plans a person may actually tick on this room.
  *
  * ⚠️ Derived and inactive plans are **shown and not selectable**, never hidden. A plan you cannot
@@ -62,7 +80,7 @@ export function selectablePlans(room: SelectableRoom): SelectablePlan[] {
 
 export function roomCheckState(room: SelectableRoom, selected: ReadonlySet<string>): CheckState {
   const options = selectablePlans(room);
-  if (options.length === 0) return "unchecked";
+  if (options.length === 0) return selected.has(pairKey(room.id, ROOM_ONLY)) ? "checked" : "unchecked";
   const on = options.filter((p) => selected.has(pairKey(room.id, p.id))).length;
   if (on === 0) return "unchecked";
   return on === options.length ? "checked" : "indeterminate";
@@ -79,6 +97,12 @@ export function toggleRoom(room: SelectableRoom, selected: ReadonlySet<string>):
   const next = new Set(selected);
   const options = selectablePlans(room);
   const state = roomCheckState(room, selected);
+  if (options.length === 0) {
+    const k = pairKey(room.id, ROOM_ONLY);
+    if (state === "checked") next.delete(k);
+    else next.add(k);
+    return next;
+  }
   for (const p of options) {
     const k = pairKey(room.id, p.id);
     if (state === "checked") next.delete(k);
@@ -100,13 +124,21 @@ export function togglePlan(room: SelectableRoom, planId: string, selected: Reado
 
 export function selectAll(rooms: readonly SelectableRoom[]): Set<string> {
   const next = new Set<string>();
-  for (const r of rooms) for (const p of selectablePlans(r)) next.add(pairKey(r.id, p.id));
+  for (const r of rooms) {
+    if (isRoomOnly(r)) { next.add(pairKey(r.id, ROOM_ONLY)); continue; }
+    for (const p of selectablePlans(r)) next.add(pairKey(r.id, p.id));
+  }
   return next;
 }
 
 export function invertSelection(rooms: readonly SelectableRoom[], selected: ReadonlySet<string>): Set<string> {
   const next = new Set<string>();
   for (const r of rooms) {
+    if (isRoomOnly(r)) {
+      const k = pairKey(r.id, ROOM_ONLY);
+      if (!selected.has(k)) next.add(k);
+      continue;
+    }
     for (const p of selectablePlans(r)) {
       const k = pairKey(r.id, p.id);
       if (!selected.has(k)) next.add(k);
@@ -130,6 +162,23 @@ export interface SelectionGroup {
   roomTypeId: string;
   roomTypeName: string;
   plans: { id: string; name: string }[];
+  /** The room is in scope with no plan of its own — allocation and restrictions only. */
+  roomOnly?: boolean;
+}
+
+/**
+ * Every room type the edit touches — the `roomTypeIds` half of the payload.
+ *
+ * A room counts because one of its plans is ticked, OR because the room itself is (see `ROOM_ONLY`).
+ * Restrictions and allocation are written from this list, so a room missing here is a room the
+ * hotel selected and nothing happened to.
+ */
+export function roomsInSelection(rooms: readonly SelectableRoom[], selected: ReadonlySet<string>): string[] {
+  return rooms
+    .filter((r) =>
+      selected.has(pairKey(r.id, ROOM_ONLY)) ||
+      selectablePlans(r).some((p) => selected.has(pairKey(r.id, p.id))))
+    .map((r) => r.id);
 }
 
 /**
@@ -145,6 +194,7 @@ export function selectionSummary(rooms: readonly SelectableRoom[], selected: Rea
       .filter((p) => selected.has(pairKey(r.id, p.id)))
       .map((p) => ({ id: p.id, name: p.name }));
     if (plans.length > 0) out.push({ roomTypeId: r.id, roomTypeName: r.name, plans });
+    else if (selected.has(pairKey(r.id, ROOM_ONLY))) out.push({ roomTypeId: r.id, roomTypeName: r.name, plans: [], roomOnly: true });
   }
   return out;
 }
@@ -152,8 +202,15 @@ export function selectionSummary(rooms: readonly SelectableRoom[], selected: Rea
 /** "Selected 2 rate plans across 1 room type" — §5.3 rule 8. */
 export function selectionCount(groups: readonly SelectionGroup[]): string {
   const plans = groups.reduce((s, g) => s + g.plans.length, 0);
-  if (plans === 0) return "Nothing selected";
-  return `Selected ${plans} rate plan${plans === 1 ? "" : "s"} across ${groups.length} room type${groups.length === 1 ? "" : "s"}`;
+  const withPlans = groups.filter((g) => g.plans.length > 0).length;
+  const roomOnly = groups.filter((g) => g.roomOnly).length;
+  if (plans === 0 && roomOnly === 0) return "Nothing selected";
+  // ⚠️ Never "0 rate plans": a room-only selection is a real, applicable edit, and reporting it as
+  // zero is the same class of lie as "0 problems" on a check that ran against nothing.
+  const bare = `${roomOnly} room type${roomOnly === 1 ? "" : "s"} with no editable plans`;
+  if (plans === 0) return `Selected ${bare}`;
+  const main = `Selected ${plans} rate plan${plans === 1 ? "" : "s"} across ${withPlans} room type${withPlans === 1 ? "" : "s"}`;
+  return roomOnly === 0 ? main : `${main}, plus ${bare}`;
 }
 
 /**
@@ -177,4 +234,75 @@ export function matchesSearch(room: SelectableRoom, plan: SelectablePlan | null,
   if (!q) return true;
   const hay = [room.name, room.code, plan?.name, plan?.code].filter(Boolean).join(" ").toLowerCase();
   return hay.includes(q);
+}
+
+/** A rate plan as the apps hold it: plan facts, plus which room types it is linked to. */
+export interface LinkedPlan {
+  id: string;
+  name: string;
+  code?: string | null;
+  priceLogic: string;
+  active?: boolean;
+  parentName?: string | null;
+  roomTypeIds: string[];
+}
+
+/**
+ * Room types + linked plans → the tree.
+ *
+ * ⚠️ This is deliberately the ONE place the shape is built, because both bulk panels and the Mapping
+ * screen have to agree about which plans belong to which room. When RevioLink and RevioCRS each
+ * derived it themselves they disagreed: CM filtered inactive plans out of the picker entirely and
+ * CRS did not, so the same property offered different plans on two screens.
+ *
+ * Every linked plan is included — `selectablePlans` decides what can be TICKED, and §5.3 rules 3
+ * and 4 are explicit that a derived or inactive plan is shown greyed rather than dropped.
+ */
+export function buildSelectionTree(
+  roomTypes: readonly { id: string; name: string; code?: string | null }[],
+  plans: readonly LinkedPlan[],
+): SelectableRoom[] {
+  return roomTypes.map((rt) => ({
+    id: rt.id,
+    name: rt.name,
+    ...(rt.code ? { code: rt.code } : {}),
+    plans: plans
+      .filter((p) => p.roomTypeIds.includes(rt.id))
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        ...(p.code ? { code: p.code } : {}),
+        active: p.active !== false,
+        priceLogic: p.priceLogic,
+        parentName: p.parentName ?? null,
+      })),
+  }));
+}
+
+/**
+ * Which plans a price is written against, per room — the writer's half of the tree.
+ *
+ * ⚠️ This is where the rectangle is refused. `links` is what the property actually sells (the
+ * `RatePlanRoomType` rows); `pairs` is what the person chose. The intersection is the only set that
+ * is both real and intended:
+ *
+ * - a pair with no link is a combination the property does not sell — writing it creates a price
+ *   row for a product that cannot be booked;
+ * - a link with no pair is a combination nobody chose — this is the flattening bug, and it prices
+ *   "2-Bedroom · BB Flex" because somebody ticked BB Flex on the Studio.
+ *
+ * `pairs` empty or absent means an older caller that only has axes; it then keeps every link, which
+ * is the cross-product it already meant.
+ */
+export function plansPerRoom(
+  links: readonly Pair[],
+  pairs?: readonly Pair[] | null,
+): Map<string, string[]> {
+  const chosen = pairs && pairs.length > 0 ? new Set(pairs.map((p) => pairKey(p.roomTypeId, p.ratePlanId))) : null;
+  const out = new Map<string, string[]>();
+  for (const l of links) {
+    if (chosen && !chosen.has(pairKey(l.roomTypeId, l.ratePlanId))) continue;
+    out.set(l.roomTypeId, [...(out.get(l.roomTypeId) ?? []), l.ratePlanId]);
+  }
+  return out;
 }

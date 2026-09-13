@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { occupancyKeyFor, occupancyKeysFor } from "@revio/db";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, isOverbooking, pastDateRefusal, pastRangeRefusal, ROOM_OCCUPYING_STATUSES, todayInTimeZone, type Capability, type DerivedRateConfig } from "@revio/core";
+import { computeWaterfall, deriveRate, isOverbooking, pastDateRefusal, pastRangeRefusal, plansPerRoom, ROOM_OCCUPYING_STATUSES, todayInTimeZone, type Capability, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, recordPull, str, int, eachDate, utcDay } from "./mutation-helpers";
 import type { PushField } from "./connectivity";
@@ -382,15 +382,7 @@ async function writeBulk(propertyId: string, tenantId: string, today: string, pa
    * Optional, so every existing caller — the calendar's inline bulk, the API, the older form — is
    * unchanged and keeps the cross-product it already means.
    */
-  const chosenPairs = payload.pairs && payload.pairs.length > 0
-    ? new Set(payload.pairs.map((p) => `${p.roomTypeId}|${p.ratePlanId}`))
-    : null;
-
-  const plansForRoom = new Map<string, string[]>();
-  for (const l of links) {
-    if (chosenPairs && !chosenPairs.has(`${l.roomTypeId}|${l.ratePlanId}`)) continue;
-    plansForRoom.set(l.roomTypeId, [...(plansForRoom.get(l.roomTypeId) ?? []), l.ratePlanId]);
-  }
+  const plansForRoom = plansPerRoom(links, payload.pairs);
 
   /**
    * Which rate plans a RESTRICTION change should be written against, per room.

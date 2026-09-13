@@ -75,13 +75,23 @@ export default async function InventoryCalendarPage({
   const rt = (sp.rt ?? "").split(",").filter(Boolean);
   const sections = rt.length > 0 ? board.sections.filter((s) => rt.includes(s.roomType.code)) : board.sections;
   // Data for the in-calendar bulk modal (§5.2) — same room types + rate plans the Bulk screen uses.
-  const bulkRoomTypes = board.sections.map((s) => ({ id: s.roomType.id, name: s.roomType.name }));
+  const bulkRoomTypes = board.sections.map((s) => ({ id: s.roomType.id, name: s.roomType.name, code: s.roomType.code }));
   const bulkPlans = await prisma.ratePlan.findMany({
-    where: { propertyId: board.property.id, active: true },
+    // Inactive plans included on purpose — the tree shows them greyed rather than hiding them
+    // (§5.3 rule 4); `selectablePlans` in @revio/core is what stops them being ticked.
+    where: { propertyId: board.property.id },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true, priceLogic: true, parent: { select: { name: true } } },
+    select: {
+      id: true, name: true, code: true, priceLogic: true, active: true,
+      parent: { select: { name: true } },
+      roomTypeLinks: { select: { roomTypeId: true } },
+    },
   });
-  const bulkPlanOpts = bulkPlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }));
+  const bulkPlanOpts = bulkPlans.map((p) => ({
+    id: p.id, name: p.name, code: p.code, priceLogic: p.priceLogic, active: p.active,
+    parentName: p.parent?.name ?? null,
+    roomTypeIds: p.roomTypeLinks.map((l) => l.roomTypeId),
+  }));
 
   /*
    * The rate rows come from the BOARD, which computed them, the filter's options and the selected

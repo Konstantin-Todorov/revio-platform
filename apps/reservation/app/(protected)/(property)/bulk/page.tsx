@@ -55,11 +55,21 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
         ) : (
         <CrsBulkPanel
           {...(preselect && preselect.length > 0 ? { preselectRoomTypeIds: preselect } : {})}
-          roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, maxGuests: r.maxGuests }))}
+          roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code, maxGuests: r.maxGuests }))}
           perPerson={perPerson}
           primaryOccupancy={mainGuests.value}
           primaryOccupancyNote={mainGuests.note}
-          ratePlans={ratePlans.filter((p) => p.active).map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, parentName: p.parent?.name ?? null }))}
+          /*
+            ⚠️ Inactive plans are passed through, not filtered out. §5.3 rule 4: a plan you cannot
+            see is a plan you cannot reason about — it is shown greyed and marked "inactive" so the
+            hotel knows it exists and is switched off, rather than wondering where it went.
+            `selectablePlans` in @revio/core is what stops it being ticked.
+          */
+          ratePlans={ratePlans.map((p) => ({
+            id: p.id, name: p.name, code: p.code, priceLogic: p.priceLogic, active: p.active,
+            parentName: p.parent?.name ?? null,
+            roomTypeIds: p.roomTypeLinks.map((l) => l.roomTypeId),
+          }))}
           today={today}
         />
         )}

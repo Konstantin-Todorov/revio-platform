@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BED_SETUPS, earliestSelectable, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, pastDateRefusal, pastRangeRefusal, planBulkOccupancy, todayInTimeZone, type Capability } from "@revio/core";
+import { BED_SETUPS, earliestSelectable, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, pastDateRefusal, pastRangeRefusal, planBulkOccupancy, plansPerRoom, todayInTimeZone, type Capability } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
@@ -432,6 +432,15 @@ export interface CrsBulkPayload {
   daysOfWeek: number[];
   roomTypeIds: string[];
   ratePlanIds: string[];
+  /**
+   * ⚠️ The exact (room type, rate plan) combinations chosen — authoritative when present.
+   *
+   * `roomTypeIds × ratePlanIds` can only describe a RECTANGLE. Pick "Studio · BB Flex" and
+   * "Suite · BB Non-Refundable" in the room-first tree and the two axes become two rooms and two
+   * plans, which is FOUR pairs — pricing two combinations nobody selected, silently, at whatever
+   * figure was typed. Optional, so every older caller keeps the cross-product it already means.
+   */
+  pairs?: { roomTypeId: string; ratePlanId: string }[];
   rate?: { mode: CrsBulkRateMode; value: number };
   /**
    * Per-occupancy prices, when the selected plans price per person (OBP §6.4).
@@ -527,6 +536,26 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
     if (ratePlanIds.length === 0) return { ok: false, error: "Select at least one manual rate plan for the price change (derived plans follow their parent)." };
   }
 
+  /*
+   * ⚠️ Which plans this price is written against, PER ROOM — not the cross-product.
+   *
+   * Two faults live in the flat `roomTypeIds × ratePlanIds` loop this replaces. The rectangle one is
+   * above; the quieter one is that it never consulted `ratePlanRoomType` at all, so a plan attached
+   * to the Studio had its price written on the Suite as well, creating a RatePrice row for a
+   * combination the property does not sell.
+   */
+  const plansForRoom = ratePlanIds.length === 0
+    ? new Map<string, string[]>()
+    : plansPerRoom(
+        await prisma.ratePlanRoomType.findMany({
+          where: { ratePlanId: { in: ratePlanIds }, roomTypeId: { in: roomTypeIds } },
+          select: { roomTypeId: true, ratePlanId: true },
+        }),
+        payload.pairs,
+      );
+  /** Named in the result: a room whose price was asked for and had no plan to put it on. */
+  const roomsWithNoPlan: string[] = [];
+
   let warning: string | undefined;
   if (payload.availability !== undefined) {
     const v = Math.max(0, Math.trunc(payload.availability));
@@ -561,6 +590,8 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
 
   let affected = 0;
   for (const roomTypeId of roomTypeIds) {
+    const roomPlans = plansForRoom.get(roomTypeId) ?? [];
+    if ((doRate || doOccupancy) && roomPlans.length === 0) roomsWithNoPlan.push(roomTypeId);
     for (const date of dates) {
       if (hasCell) {
         await upsertRoomCell(tenantId, propertyId, roomTypeId, date, cell);
@@ -575,11 +606,11 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
          * are silent failures if done by hand here.
          */
         const room = roomsById.get(roomTypeId);
-        if (room) {
+        if (room && roomPlans.length > 0) {
           const dateKey = ymd(date);
           const planned = planBulkOccupancy({
             rooms: [{ roomTypeId, roomName: room.name, maxOccupancy: room.maxGuests }],
-            ratePlanIds,
+            ratePlanIds: roomPlans,
             dateKeys: [dateKey],
             edits: payload.occupancyRates!.map((o) => ({ occupancy: o.occupancy, op: o.mode, value: o.value })),
             currentMinor: (_rt: string, rp: string, _d: string, occ: number) => existingByKey.get(`${roomTypeId}:${rp}:${dateKey}:${occ}`) ?? null,
@@ -596,7 +627,7 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
         }
       } else if (doRate) {
         const { mode, value } = payload.rate!;
-        for (const rpId of ratePlanIds) {
+        for (const rpId of roomPlans) {
           const occupancy = occupancyKeys.get(roomTypeId) ?? 1;
           const existing = await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: rpId, date, occupancy } } });
           const base = existing?.priceMinor ?? 0;
@@ -641,6 +672,16 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   }
   if (unpricedCount > 0) {
     notes.push(`${unpricedCount} price${unpricedCount === 1 ? "" : "s"} had nothing to work from — a percentage needs an existing price. Set one first.`);
+  }
+  /*
+   * ⚠️ Narrowing to real pairs must not turn a wrong write into a silent no-write.
+   *
+   * The room is still in scope for allocation and restrictions, so `affected` counts it and the
+   * result would read as a clean success while that room's price never moved. Name it.
+   */
+  if (roomsWithNoPlan.length > 0) {
+    const names = roomsWithNoPlan.map((id) => roomsById.get(id)?.name ?? id).join(", ");
+    notes.push(`No price was written for ${names} — no rate plan you selected is linked to ${roomsWithNoPlan.length === 1 ? "that room" : "those rooms"}.`);
   }
 
   return { ok: true, affected, ...(notes.length > 0 ? { warning: notes.join(" ") } : {}) };

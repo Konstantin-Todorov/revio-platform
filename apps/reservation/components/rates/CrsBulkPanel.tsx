@@ -5,11 +5,20 @@ import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { applyCrsBulkUpdateMulti, type CrsBulkPayload, type CrsBulkRateMode, type CrsBulkResult } from "@/lib/actions-rates";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
-import { matrixRows, expandOffsets, type BulkTargetRoom } from "@revio/core";
+import {
+  matrixRows, expandOffsets, buildSelectionTree, roomsInSelection, selectAll, selectedPairs,
+  selectionSummary, type BulkTargetRoom,
+} from "@revio/core";
+import { PlanTree } from "@revio/ui/plan-tree";
 import { OccupancyMatrix, type MatrixEntry } from "./OccupancyMatrix";
 
-type Opt = { id: string; name: string; maxGuests?: number };
-type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null };
+type Opt = { id: string; name: string; code?: string | null; maxGuests?: number };
+type PlanOpt = {
+  id: string; name: string; code?: string | null; priceLogic: string; parentName: string | null;
+  active?: boolean;
+  /** ⚠️ Which rooms the plan is linked to — the selector is room-first (§5, BUG-022). */
+  roomTypeIds: string[];
+};
 
 const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
 const RATE_MODES: [CrsBulkRateMode, string][] = [
@@ -46,14 +55,33 @@ export function CrsBulkPanel({
   const [primaryValue, setPrimaryValue] = useState("");
 
   const in30 = useMemo(() => new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10), []);
-  const manualPlans = ratePlans.filter((p) => p.priceLogic === "manual");
   const derivedPlans = ratePlans.filter((p) => p.priceLogic !== "manual");
+
+  /*
+   * ⚠️ ONE room-first tree — the SAME component RevioLink's bulk panel uses (§5.4).
+   *
+   * The two screens are the same operation with the same trap: two independent lists can only
+   * describe a rectangle, so picking different plans on different rooms and flattening to
+   * rooms × plans writes the price to combinations nobody chose. `pairs` is the authoritative form;
+   * the id lists below are derived from it.
+   */
+  const tree = useMemo(() => buildSelectionTree(roomTypes, ratePlans), [roomTypes, ratePlans]);
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    const all = selectAll(tree);
+    if (!preselectRoomTypeIds) return all;
+    const scope = new Set(preselectRoomTypeIds);
+    return new Set([...all].filter((k) => scope.has(k.split("|")[0]!)));
+  });
+  const pairs = useMemo(() => selectedPairs(tree, selected), [tree, selected]);
+  // Restrictions and allocation are written per ROOM TYPE in CRS too, so this list is not the same
+  // thing as "rooms that have a plan ticked" — see ROOM_ONLY in @revio/core.
+  const rtIds = useMemo(() => roomsInSelection(tree, selected), [tree, selected]);
+  const planIds = useMemo(() => [...new Set(pairs.map((p) => p.ratePlanId))], [pairs]);
+  const groups = useMemo(() => selectionSummary(tree, selected), [tree, selected]);
 
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(in30);
   const [dows, setDows] = useState<string[]>([]);
-  const [rtIds, setRtIds] = useState<string[]>(preselectRoomTypeIds ?? roomTypes.map((r) => r.id));
-  const [planIds, setPlanIds] = useState<string[]>(manualPlans.map((p) => p.id));
 
   const [rateMode, setRateMode] = useState<"" | CrsBulkRateMode>("");
   const [rateValue, setRateValue] = useState("");
@@ -85,7 +113,7 @@ export function CrsBulkPanel({
   const num = (s: string): number | undefined => (s.trim() === "" ? undefined : Number(s));
 
   function buildPayload(): CrsBulkPayload {
-    const p: CrsBulkPayload = { dateFrom, dateTo, daysOfWeek: dows.map(Number), roomTypeIds: rtIds, ratePlanIds: planIds };
+    const p: CrsBulkPayload = { dateFrom, dateTo, daysOfWeek: dows.map(Number), roomTypeIds: rtIds, ratePlanIds: planIds, pairs };
     if (perPerson) {
       /*
        * One shape or the other, never both — the action would otherwise be choosing which the user
@@ -138,12 +166,19 @@ export function CrsBulkPanel({
       .map((r) => ({ roomTypeId: r.id, roomName: r.name, maxOccupancy: r.maxGuests ?? 2 }));
   }
 
+  /** "Studio: BB Flex · Suite: BB NR" — per room, because the same plan can be on one and not another. */
+  function planNames(): string {
+    return groups.filter((g) => g.plans.length > 0)
+      .map((g) => `${g.roomTypeName}: ${g.plans.map((pl) => pl.name).join(", ")}`)
+      .join(" · ");
+  }
+
   function summarize(p: CrsBulkPayload): string[] {
     const lines: string[] = [];
     const showNum = (v: number | null | undefined, unit = "") => (v && v > 0 ? `${v}${unit}` : "cleared");
     if (p.rate) {
       const label = RATE_MODES.find(([m]) => m === p.rate!.mode)?.[1] ?? p.rate.mode;
-      const names = planIds.map((id) => manualPlans.find((m) => m.id === id)?.name).filter(Boolean).join(", ") || "standard plan";
+      const names = planNames() || "standard plan";
       const unit = p.rate.mode === "inc_pct" || p.rate.mode === "dec_pct" ? "%" : "€";
       lines.push(`Price — ${label}: ${p.rate.value}${unit} · on ${names}`);
       /*
@@ -160,7 +195,7 @@ export function CrsBulkPanel({
       }
     }
     if (p.occupancyRates?.length) {
-      const names = manualPlans.filter((mp) => planIds.includes(mp.id)).map((mp) => mp.name).join(", ") || "every manual plan";
+      const names = planNames() || "every manual plan";
       lines.push(
         `Price per guest count — ${p.occupancyRates.map((o) => `${o.occupancy}p €${o.value}`).join(" · ")} · on ${names}`,
       );
@@ -227,16 +262,21 @@ export function CrsBulkPanel({
             </div>
             <span className="mt-1 block text-[11px] text-ink-400">Leave all off to apply to every day.</span>
           </div>
+          {/*
+            §5.3 wanted the plans beside Price rather than a scroll away from it, and the tree keeps
+            that: in a two-column panel the scope sits opposite the value fields, so "change THESE
+            plans BY this much" is one glance, and it is now also one control instead of two lists
+            that could not say which plan belonged to which room.
+          */}
           <div>
-            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Room types</span>
-            <div className="grid grid-cols-2 gap-1.5">
-              {roomTypes.map((rt) => (
-                <label key={rt.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
-                  <input type="checkbox" checked={rtIds.includes(rt.id)} onChange={() => setRtIds((a) => toggle(a, rt.id))} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
-                  {rt.name}
-                </label>
-              ))}
-            </div>
+            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">
+              Which rate plans would you like to apply these changes to?
+            </span>
+            <PlanTree rooms={tree} selected={selected} onChange={setSelected} />
+            <span className="mt-1.5 block text-[11px] leading-snug text-ink-400">
+              A price lands on the plans you tick. Allocation and restrictions are written per room type,
+              so they apply to every room with something ticked under it.
+            </span>
           </div>
         </div>
 
@@ -270,42 +310,22 @@ export function CrsBulkPanel({
 
           {tab === "rates" && (
             <div className="space-y-3">
-              {/* §5.3 — the rate plans live HERE now, beside Price. They were in the scope block at
-                  the top while Price was scrolled far below, so one logical operation ("change THESE
-                  plans BY this much") was split across a scroll. */}
-            <div>
-              <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Rate plans <span className="font-normal text-ink-400">(for the price change — manual only)</span></span>
-              <div className="grid grid-cols-2 gap-1.5">
-                {manualPlans.map((rp) => (
-                  <label key={rp.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
-                    <input type="checkbox" checked={planIds.includes(rp.id)} onChange={() => setPlanIds((a) => toggle(a, rp.id))} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
-                    {rp.name}
-                  </label>
-                ))}
-                {derivedPlans.map((rp) => (
-                  <span key={rp.id} title={`Derived from ${rp.parentName ?? "its parent"} — its price follows the parent automatically`} className="flex cursor-not-allowed items-center gap-2 rounded-md border border-dashed border-surface-border px-2.5 py-1.5 text-[12.5px] text-ink-300">
-                    📎 {rp.name} <span className="text-[10px] uppercase">derived</span>
-                  </span>
-                ))}
-              </div>
               {/*
                 §5.3 — the #1 easy win, and it is one sentence.
-                The derived rows are greyed with a DERIVED tag, which tells the user "you cannot edit
-                these" and says nothing about what happens when they change Standard. So they do not
-                know whether Non-Refundable follows or goes stale, and that doubt is the entire friction
-                with the feature. The model is strong; it was simply invisible.
+                The derived rows are greyed in the tree with the parent they follow, which says "you
+                cannot edit these" and nothing about what happens when you change the parent. So the
+                user does not know whether Non-Refundable follows or goes stale, and that doubt is
+                the entire friction with the feature. The model is strong; it was simply invisible.
               */}
               {derivedPlans.length > 0 && (
-                <span className="mt-1.5 flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-brand-800">
+                <span className="flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-brand-800">
                   <span aria-hidden>📎</span>
                   <span>
-                    Derived plans follow Standard — change it and they recompute. You only ever edit the
-                    plan they come from.
+                    Derived plans follow the plan they come from — change it and they recompute. You only
+                    ever edit the parent, and the preview names every plan that moves with it.
                   </span>
                 </span>
               )}
-              <span className="mt-1 block text-[11px] text-ink-400">Restrictions apply per room type regardless of rate plan.</span>
-            </div>
 
               {/*
                 Under per-person the single Price control cannot express the edit: there is one price

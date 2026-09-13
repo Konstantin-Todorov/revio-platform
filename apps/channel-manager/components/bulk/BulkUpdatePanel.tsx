@@ -5,14 +5,16 @@ import { CheckCircle2, XCircle, AlertTriangle, Plus, Trash2 } from "lucide-react
 import { applyBulkUpdateMulti, applyBulkUpdateBatch, type BulkPayload, type BulkRateMode, type BulkResult } from "@/lib/actions-calendar";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
+import { PlanTree } from "@revio/ui/plan-tree";
+import { buildSelectionTree, roomsInSelection, selectAll, selectedPairs, selectionSummary } from "@revio/core";
 
 type Opt = { id: string; name: string; code: string };
 type PlanOpt = {
-  id: string; name: string; priceLogic: string; parentName: string | null;
-  roomLabel?: string;
-  /** How many room types this plan is attached to — lets the label say "all rooms" instead of listing them. */
-  roomCount?: number;
+  id: string; name: string; code?: string | null; priceLogic: string; parentName: string | null;
   active?: boolean;
+  /** ⚠️ Which rooms this plan is actually linked to. The selector is room-scoped; a plan without
+   *  this cannot be placed under a room, which is the whole shape of BUG-019 and BUG-022. */
+  roomTypeIds: string[];
 };
 
 const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
@@ -38,23 +40,39 @@ export function BulkUpdatePanel({
   onApplied?: (r: BulkResult) => void;
 }) {
   const in30 = useMemo(() => new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10), []);
+
   /*
-   * Only plans that can actually hold a price.
+   * ⚠️ ONE room-first tree, not two lists (§5, BUG-022).
    *
-   * An INACTIVE plan was offered here and silently discarded by the writer — the operator ticked
-   * "Standard Rate", typed a number, was told the update applied, and that plan had no prices. The
-   * writer now names what it dropped; this stops it being offered in the first place, which is the
-   * better half of the fix: the best error message is the one nobody has to read.
+   * Two independent blocks could not show that a plan belongs to a room, and on 13 September both
+   * plan checkboxes rendered a truncated list of room types instead of their own names — so the one
+   * screen where you choose between two plans displayed them identically.
+   *
+   * A tree also expresses a selection two lists cannot: "1-Bedroom · BB Flex" AND "2-Bedroom · BB
+   * Non-Refundable". Flattening that to rooms × plans produces FOUR pairs, applying the price to two
+   * combinations nobody chose — which is why `pairs` goes to the writer and the two id lists are
+   * derived from it, never the other way round.
    */
-  const manualPlans = ratePlans.filter((p) => p.priceLogic === "manual" && p.active !== false);
-  const derivedPlans = ratePlans.filter((p) => p.priceLogic !== "manual");
+  const tree = useMemo(() => buildSelectionTree(roomTypes, ratePlans), [roomTypes, ratePlans]);
+  const [selected, setSelected] = useState<Set<string>>(() => {
+    const all = selectAll(tree);
+    if (!preselectRoomTypeIds) return all;
+    // Opened from one calendar row: that room is the scope, with all of its plans.
+    const scope = new Set(preselectRoomTypeIds);
+    return new Set([...all].filter((k) => scope.has(k.split("|")[0]!)));
+  });
+
+  const pairs = useMemo(() => selectedPairs(tree, selected), [tree, selected]);
+  // The legacy halves of the payload, derived — `roomTypeIds` drives allocation and restrictions
+  // (written per room type), `ratePlanIds` only names the plans a price change may land on.
+  const rtIds = useMemo(() => roomsInSelection(tree, selected), [tree, selected]);
+  const planIds = useMemo(() => [...new Set(pairs.map((p) => p.ratePlanId))], [pairs]);
+  const groups = useMemo(() => selectionSummary(tree, selected), [tree, selected]);
 
   // Scope
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(in30);
   const [dows, setDows] = useState<string[]>([]);
-  const [rtIds, setRtIds] = useState<string[]>(preselectRoomTypeIds ?? roomTypes.map((r) => r.id));
-  const [planIds, setPlanIds] = useState<string[]>(manualPlans.map((p) => p.id));
 
   // Attribute fields — "" / undefined means "no change" (untouched).
   const [rateMode, setRateMode] = useState<"" | BulkRateMode>("");
@@ -90,7 +108,7 @@ export function BulkUpdatePanel({
   const num = (s: string): number | undefined => (s.trim() === "" ? undefined : Number(s));
 
   function buildPayload(): BulkPayload {
-    const p: BulkPayload = { dateFrom, dateTo, daysOfWeek: dows.map(Number), roomTypeIds: rtIds, ratePlanIds: planIds };
+    const p: BulkPayload = { dateFrom, dateTo, daysOfWeek: dows.map(Number), roomTypeIds: rtIds, ratePlanIds: planIds, pairs };
     if (rateMode !== "" && rateValue.trim() !== "" && Number.isFinite(Number(rateValue))) p.rate = { mode: rateMode, value: Number(rateValue) };
     if (num(minLos) !== undefined) p.minLos = num(minLos)!;
     if (num(maxLos) !== undefined) p.maxLos = num(maxLos)!;
@@ -108,7 +126,10 @@ export function BulkUpdatePanel({
     const lines: string[] = [];
     if (p.rate) {
       const label = RATE_MODES.find(([m]) => m === p.rate!.mode)?.[1] ?? p.rate.mode;
-      const names = planIds.map((id) => { const m = manualPlans.find((x) => x.id === id); return m ? (m.roomLabel ? `${m.roomLabel} · ${m.name}` : m.name) : null; }).filter(Boolean).join(", ") || "standard plan";
+      // Named per room, because the same plan name can be selected on one room and not another.
+      const names = groups.filter((g) => g.plans.length > 0)
+        .map((g) => `${g.roomTypeName}: ${g.plans.map((pl) => pl.name).join(", ")}`)
+        .join(" · ") || "standard plan";
       lines.push(`Price — ${label}: ${p.rate.value} · on ${names}`);
     }
     const showNum = (v: number | null | undefined, unit = "") => (v && v > 0 ? `${v}${unit}` : "cleared");
@@ -209,50 +230,13 @@ export function BulkUpdatePanel({
             <span className="mt-1 block text-[11px] text-ink-400">Leave all off to apply to every day.</span>
           </div>
           <div>
-            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Room types</span>
-            <div className="grid grid-cols-2 gap-1.5">
-              {roomTypes.map((rt) => (
-                <label key={rt.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
-                  <input type="checkbox" checked={rtIds.includes(rt.id)} onChange={() => setRtIds((a) => toggle(a, rt.id))} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
-                  {rt.name}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div>
-            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Rate plans <span className="font-normal text-ink-400">(price changes are manual plans only)</span></span>
-            <div className="grid grid-cols-2 gap-1.5">
-              {manualPlans.map((rp) => (
-                <label key={rp.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
-                  <input type="checkbox" checked={planIds.includes(rp.id)} onChange={() => setPlanIds((a) => toggle(a, rp.id))} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
-                  {/*
-                    ⚠️ THE PLAN'S NAME IS THE LABEL. It used to render `roomLabel · name`, so a plan
-                    attached to every room read "Apartment, 3 Bedrooms, Apartment, 2 …" — the name
-                    truncated off the end. Both plans then looked identical on the one screen where
-                    you choose between them (BUG-022, 13 Sept).
-
-                    The room scope is still worth saying, but as a short qualifier: when a plan
-                    covers every room type, "all rooms" is the useful fact — the list is noise.
-                  */}
-                  <span className="flex min-w-0 flex-col leading-tight">
-                    <span className="truncate font-semibold text-ink-800">{rp.name}</span>
-                    {rp.roomLabel && (
-                      <span className="truncate text-[11px] font-normal text-ink-400">
-                        {rp.roomCount != null && rp.roomCount >= roomTypes.length ? "all rooms" : rp.roomLabel}
-                      </span>
-                    )}
-                  </span>
-                </label>
-              ))}
-              {derivedPlans.map((rp) => (
-                <span key={rp.id} title={`Derived from ${rp.parentName ?? "its parent"} — its price follows the parent automatically`} className="flex cursor-not-allowed items-center gap-2 rounded-md border border-dashed border-surface-border px-2.5 py-1.5 text-[12.5px] text-ink-300">
-                  📎 {rp.name} <span className="text-[10px] uppercase">derived</span>
-                </span>
-              ))}
-            </div>
-            <span className="mt-1 block text-[11px] text-ink-400">
-              Select <span className="font-semibold">some</span> plans and restrictions apply to those alone. Leave them
-              all selected and they apply to the whole room — including derived plans, which are never listed here.
+            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">
+              Which rate plans would you like to apply these changes to?
+            </span>
+            <PlanTree rooms={tree} selected={selected} onChange={setSelected} />
+            <span className="mt-1.5 block text-[11px] leading-snug text-ink-400">
+              A price lands on the plans you tick. Allocation and restrictions are written per room type,
+              so they apply to every room with something ticked under it — derived plans included.
             </span>
           </div>
         </div>

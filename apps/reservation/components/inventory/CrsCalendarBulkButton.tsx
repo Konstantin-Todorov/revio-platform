@@ -4,8 +4,13 @@ import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { CrsBulkPanel } from "@/components/rates/CrsBulkPanel";
 
-type Opt = { id: string; name: string };
-type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null };
+type Opt = { id: string; name: string; code?: string | null };
+type PlanOpt = {
+  id: string; name: string; code?: string | null; priceLogic: string; parentName: string | null;
+  active?: boolean;
+  /** Which rooms the plan is linked to — the bulk selector is a room-first tree. */
+  roomTypeIds: string[];
+};
 
 /**
  * CRS-REFINEMENT-R2 §5.2: the per-row "Bulk edit" opens the bulk tool in a modal OVER the Inventory

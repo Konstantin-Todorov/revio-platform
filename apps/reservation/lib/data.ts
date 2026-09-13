@@ -1059,7 +1059,9 @@ export async function getRatesData() {
         _count: { select: { roomTypeLinks: true } },
         // The linked rooms' caps: a plan cannot be primed above the smallest room it sells, and the
         // per-plan pricing board has to show that ceiling rather than let it be discovered on save.
-        roomTypeLinks: { select: { roomType: { select: { maxGuests: true, defaultOccupancy: true } } } },
+        // `roomTypeId` as well: the bulk selector is a room-first tree, so it has to place each
+        // plan under the rooms it is actually linked to.
+        roomTypeLinks: { select: { roomTypeId: true, roomType: { select: { maxGuests: true, defaultOccupancy: true } } } },
       },
       orderBy: { sortOrder: "asc" },
     }),
