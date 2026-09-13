@@ -98,12 +98,15 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
     tenantName: string;
     email: string | null;
     expired: string[];
-    reminders: Map<number, { products: string[]; endsAt: Date }>;
+    reminders: Map<number, { products: string[]; endsAt: Date; trialIds: string[]; due: number }>;
   }>();
   const bucketFor = (tenantId: string, tenantName: string, email: string | null) => {
     const existing = outbox.get(tenantId);
     if (existing) return existing;
-    const fresh = { tenantName, email, expired: [] as string[], reminders: new Map<number, { products: string[]; endsAt: Date }>() };
+    const fresh = {
+      tenantName, email, expired: [] as string[],
+      reminders: new Map<number, { products: string[]; endsAt: Date; trialIds: string[]; due: number }>(),
+    };
     outbox.set(tenantId, fresh);
     return fresh;
   };
@@ -163,21 +166,17 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
     const left = daysRemaining(facts, now);
     if (owner?.email) {
       /*
-       * The threshold is consumed here, before the send, and stays consumed even if the send later
-       * fails.
+       * ⚠️ The threshold is recorded AFTER the send attempt, not before — the ordering the
+       * per-trial version had, kept deliberately through the batching.
        *
-       * Deliberate: the alternative is retrying every five minutes for the rest of the trial, which
-       * turns one failed send into a hundred attempts and, if the provider recovers mid-way, a
-       * burst of identical warnings. One warning missed is recoverable; a hotel receiving twenty is
-       * not. A failure is REPORTED as a failure rather than counted as sent.
+       * Recording first would mean a crash between the write and the HTTP call silently costs the
+       * hotel its warning, with nothing to retry because the threshold now says it was sent. The
+       * send happens first and the ids travel in the bucket so they can be marked afterwards.
        */
-      await db.productTrial.update({
-        where: { id: t.id },
-        data: due === 7 ? { remindedAt7: now } : { remindedAt1: now },
-      });
       const bucket = bucketFor(t.tenantId, t.tenant.name, owner.email);
-      const at = bucket.reminders.get(left) ?? { products: [], endsAt: t.endsAt };
+      const at = bucket.reminders.get(left) ?? { products: [], endsAt: t.endsAt, trialIds: [], due };
       at.products.push(product.name);
+      at.trialIds.push(t.id);
       bucket.reminders.set(left, at);
       continue;
     }
@@ -261,6 +260,19 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
         text: renderSystemEmailText(mail),
         html: renderSystemEmail(mail),
       }).catch(() => ({ ok: false, mode: "resend" as const, error: "send threw" }));
+
+      /*
+       * Consumed even when the provider refused.
+       *
+       * Deliberate: the alternative is retrying every five minutes for the rest of the trial, which
+       * turns one failed send into a hundred attempts and, if the provider recovers mid-way, a
+       * burst of identical warnings. One warning missed is recoverable; a hotel receiving twenty is
+       * not. It is REPORTED as failed rather than sent, which it was not.
+       */
+      await db.productTrial.updateMany({
+        where: { id: { in: at.trialIds } },
+        data: at.due === 7 ? { remindedAt7: now } : { remindedAt1: now },
+      });
 
       if (sent.ok) {
         result.reminded += at.products.length;
