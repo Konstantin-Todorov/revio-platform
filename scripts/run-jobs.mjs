@@ -83,6 +83,8 @@ const JOBS = [
    * remove a hotel's access, so it runs when the rest of the tick has already succeeded.
    */
   { name: "trial-sweep", url: OPERATOR && `${OPERATOR}/api/jobs/trials` },
+  // Drafting invoices is scheduled, not a button somebody has to remember in the right month.
+  { name: "invoice-run", url: OPERATOR && `${OPERATOR}/api/jobs/invoices` },
 
   /*
    * Last, and on the operator like the trial sweep: the mailbox is ours, not a hotel's.

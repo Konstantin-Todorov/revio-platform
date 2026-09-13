@@ -171,4 +171,17 @@ export const JOB = {
    * costs nothing.
    */
   supportInbox: "support-inbox",
+  /**
+   * Drafts this month's invoices for every client who owes something.
+   *
+   * Scheduled rather than a button, because a month nobody pressed the button in is a month nobody
+   * was invoiced for — `generateInvoices` only ever generates the CURRENT period, so that revenue
+   * is not late, it is gone. The founder's instruction was plain: it has to be automatic so nothing
+   * is missed.
+   *
+   * Safe to run repeatedly: it creates a draft that is absent, refreshes one whose price has moved,
+   * and never touches an invoice that has been sent or paid. Leased so two runners cannot race to
+   * create the same `tenantId + period` row.
+   */
+  invoiceRun: "invoice-run",
 } as const;

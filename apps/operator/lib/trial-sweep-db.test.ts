@@ -115,6 +115,57 @@ describe.skipIf(!enabled)("trial sweep against PostgreSQL with real RLS and rows
     expect(mail.send).not.toHaveBeenCalled();
   });
 
+  it("⚠️ ONE trial means ONE email — not one per product", async () => {
+    /*
+     * A signup switches on all three products as three ProductTrial rows sharing an end date. The
+     * sweep looped rows and sent per row, so a hotel received THREE "7 days left" emails, three
+     * more the day before and three "your trial has finished" — nine where there should be three,
+     * each naming one product as though it were a separate subscription. That is the clearest
+     * possible way to contradict what we tell them at signup.
+     */
+    const hotel = await tenant("All three, one trial");
+    await db.productTrial.createMany({
+      data: (["cm", "crs", "pms"] as const).map((product) => ({ tenantId: hotel.id, product, endsAt: inDays(7) })),
+    });
+
+    const r = await sweepTrials(now);
+
+    expect(mail.send).toHaveBeenCalledTimes(1);
+    // Every product is still warned — the state is per product, only the conversation is not.
+    expect(r.reminded).toBe(3);
+    const [sent] = mail.send.mock.calls[0]!;
+    expect(sent.subject).toBe("7 days left on your Revio trial");
+    for (const name of ["RevioLink", "RevioCRS", "RevioPMS"]) expect(sent.text).toContain(name);
+    // And the choice is offered, because they never have to keep all three.
+    expect(sent.text).toMatch(/which/i);
+
+    // Each row still carries its own threshold, so none of them warns twice.
+    const rows = await db.productTrial.findMany({ where: { tenantId: hotel.id } });
+    expect(rows.every((t) => t.remindedAt7?.getTime() === now.getTime())).toBe(true);
+    mail.send.mockClear();
+    expect(await sweepTrials(now)).toMatchObject({ reminded: 0 });
+    expect(mail.send).not.toHaveBeenCalled();
+  });
+
+  it("⚠️ separates products whose trials end on DIFFERENT days", async () => {
+    // A later assisted onboarding gives one product a different end date. Merging those into one
+    // email would state a date that is wrong for two of the three.
+    const hotel = await tenant("Staggered ends");
+    await db.productTrial.createMany({
+      data: [
+        { tenantId: hotel.id, product: "cm" as const, endsAt: inDays(7) },
+        { tenantId: hotel.id, product: "crs" as const, endsAt: inDays(7) },
+        { tenantId: hotel.id, product: "pms" as const, endsAt: inDays(1) },
+      ],
+    });
+
+    await sweepTrials(now);
+
+    expect(mail.send).toHaveBeenCalledTimes(2);
+    const subjects = mail.send.mock.calls.map(([m]) => m.subject).sort();
+    expect(subjects).toEqual(["1 day left on your Revio trial", "7 days left on your Revio trial"]);
+  });
+
   it("expires only the trial's product on only its tenant, and a second sweep changes nothing", async () => {
     const expiring = await tenant("Expiring PMS");
     const neighbour = await tenant("Unrelated tenant");

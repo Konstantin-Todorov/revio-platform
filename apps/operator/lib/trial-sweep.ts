@@ -79,6 +79,35 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
 
   const result: TrialSweepResult = { reminded: 0, expired: 0, unreachable: 0, failed: 0, details: [] };
 
+  /*
+   * ⚠️ ONE trial, so ONE email — the state is per product, the conversation is not.
+   *
+   * A signup switches on all three products as three `ProductTrial` rows sharing an end date, and
+   * this loop sent its own email per row. A hotel therefore received THREE "7 days left" emails,
+   * three more the day before, and three "your trial has finished" — nine where there should be
+   * three, each naming one product as though it were a separate subscription. That is the single
+   * clearest way to contradict the thing we tell them at signup: one trial, all three products.
+   *
+   * So the per-trial work below is unchanged — each row still closes in its own transaction with
+   * its own entitlement, and each still records its own reminder threshold — and only the SENDING
+   * is gathered up per hotel. Reminders are bucketed by days-left as well as by hotel, because
+   * products with different end dates (a later assisted onboarding) must not be merged into one
+   * claim that they all end on the same day.
+   */
+  const outbox = new Map<string, {
+    tenantName: string;
+    email: string | null;
+    expired: string[];
+    reminders: Map<number, { products: string[]; endsAt: Date }>;
+  }>();
+  const bucketFor = (tenantId: string, tenantName: string, email: string | null) => {
+    const existing = outbox.get(tenantId);
+    if (existing) return existing;
+    const fresh = { tenantName, email, expired: [] as string[], reminders: new Map<number, { products: string[]; endsAt: Date }>() };
+    outbox.set(tenantId, fresh);
+    return fresh;
+  };
+
   for (const t of running) {
     const product = PRODUCT_BY_KEY[t.product as ProductKey];
     if (!product) continue;
@@ -115,29 +144,7 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
       });
       if (!expired) continue;
 
-      if (owner?.email) {
-        const mail = {
-          preview: `Your ${product.name} trial has finished.`,
-          heading: `Your ${product.name} trial has finished`,
-          product: product.name,
-          blocks: [
-            { p: `The trial has ended and ${product.name} is no longer on your Revio login.` },
-            {
-              p: "Nothing has been deleted. Your rooms, rates, reservations and guests are shared with the products you already use, so they are exactly where they were — and if you decide to keep it, switching it back on restores everything instantly, with nothing to import.",
-            },
-            { p: "If it was useful, reply to this email and we will put it back." },
-            {
-              note: "You have not been charged for the trial, and nothing starts on its own. If you do decide to keep it, you pay from the day you decide — we never charge for a day of the trial.",
-            },
-          ],
-        };
-        await sendEmail({
-          to: [owner.email],
-          subject: `Your ${product.name} trial has finished`,
-          text: renderSystemEmailText(mail),
-          html: renderSystemEmail(mail),
-        }).catch(() => { /* the entitlement is already correct; the mail is the softer half */ });
-      }
+      bucketFor(t.tenantId, t.tenant.name, owner?.email ?? null).expired.push(product.name);
 
       result.expired++;
       result.details.push(
@@ -155,48 +162,23 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
 
     const left = daysRemaining(facts, now);
     if (owner?.email) {
-      const mail = {
-        preview: `${left} day${left === 1 ? "" : "s"} left on your ${product.name} trial.`,
-        heading: `${left} day${left === 1 ? "" : "s"} left on your ${product.name} trial`,
-        product: product.name,
-        blocks: [
-          { p: `Your trial of ${product.name} ends on ${t.endsAt.toISOString().slice(0, 10)}.` },
-          {
-            p: "If you would like to keep it, reply to this email and we will switch it on properly. Nothing happens automatically and you will not be charged without agreeing to it.",
-          },
-          { action: { label: `Open ${product.name}`, url: originFor(t.product as ProductKey) } },
-          {
-            note: "If you let it run out, nothing is deleted — your data is shared with the products you already use and stays exactly as it is.",
-          },
-        ],
-      };
-      const sent = await sendEmail({
-        to: [owner.email],
-        subject: `${left} day${left === 1 ? "" : "s"} left on your ${product.name} trial`,
-        text: renderSystemEmailText(mail),
-        html: renderSystemEmail(mail),
-      }).catch(() => ({ ok: false, mode: "resend" as const, error: "send threw" }));
-
       /*
-       * The threshold is consumed even when the provider refused.
+       * The threshold is consumed here, before the send, and stays consumed even if the send later
+       * fails.
        *
        * Deliberate: the alternative is retrying every five minutes for the rest of the trial, which
-       * turns one failed send into a hundred attempts and, if the provider recovers mid-way, a burst
-       * of identical warnings. One warning missed is recoverable; a hotel receiving twenty is not.
-       *
-       * But it is REPORTED as failed rather than sent, which it was not.
+       * turns one failed send into a hundred attempts and, if the provider recovers mid-way, a
+       * burst of identical warnings. One warning missed is recoverable; a hotel receiving twenty is
+       * not. A failure is REPORTED as a failure rather than counted as sent.
        */
       await db.productTrial.update({
         where: { id: t.id },
         data: due === 7 ? { remindedAt7: now } : { remindedAt1: now },
       });
-      if (sent.ok) {
-        result.reminded++;
-        result.details.push(`${t.tenant.name}: ${product.name} trial — ${left}-day warning sent`);
-      } else {
-        result.failed++;
-        result.details.push(`${t.tenant.name}: ${product.name} trial — ${left}-day warning FAILED to send (${sent.error ?? "unknown"})`);
-      }
+      const bucket = bucketFor(t.tenantId, t.tenant.name, owner.email);
+      const at = bucket.reminders.get(left) ?? { products: [], endsAt: t.endsAt };
+      at.products.push(product.name);
+      bucket.reminders.set(left, at);
       continue;
     }
 
@@ -217,5 +199,85 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
     );
   }
 
+  // ── one hotel, one email per event ─────────────────────────────────────────────────────────
+  for (const bucket of outbox.values()) {
+    if (!bucket.email) continue; // already counted as unreachable above
+
+    if (bucket.expired.length > 0) {
+      const names = listOf(bucket.expired);
+      const many = bucket.expired.length > 1;
+      const mail = {
+        preview: `Your Revio trial has finished.`,
+        heading: many ? "Your Revio trial has finished" : `Your ${names} trial has finished`,
+        product: "Revio",
+        blocks: [
+          { p: `The trial has ended and ${names} ${many ? "are" : "is"} no longer on your Revio login.` },
+          {
+            p: "Nothing has been deleted. Your rooms, rates, reservations and guests are shared across the products, so they are exactly where they were — and if you decide to keep any of them, switching it back on restores everything instantly, with nothing to import.",
+          },
+          {
+            p: many
+              ? "You do not have to take all of it back. Reply and tell us which of them you actually used, and we will switch on only those."
+              : "If it was useful, reply to this email and we will put it back.",
+          },
+          {
+            note: "You have not been charged for the trial, and nothing starts on its own. If you do decide to keep it, you pay from the day you decide — we never charge for a day of the trial.",
+          },
+        ],
+      };
+      await sendEmail({
+        to: [bucket.email],
+        subject: many ? "Your Revio trial has finished" : `Your ${names} trial has finished`,
+        text: renderSystemEmailText(mail),
+        html: renderSystemEmail(mail),
+      }).catch(() => { /* the entitlements are already correct; the mail is the softer half */ });
+    }
+
+    for (const [left, at] of bucket.reminders) {
+      const names = listOf(at.products);
+      const many = at.products.length > 1;
+      const day = `${left} day${left === 1 ? "" : "s"}`;
+      const subject = `${day} left on your Revio trial`;
+      const mail = {
+        preview: `${day} left on your Revio trial.`,
+        heading: `${day} left on your ${many ? "Revio" : names} trial`,
+        product: "Revio",
+        blocks: [
+          { p: `Your trial of ${names} ends on ${at.endsAt.toISOString().slice(0, 10)}.` },
+          {
+            p: many
+              ? "If you would like to keep any of them, reply and tell us which — you only pay for what you keep, and there is no obligation to take all three. Nothing happens automatically and you will not be charged without agreeing to it."
+              : "If you would like to keep it, reply to this email and we will switch it on properly. Nothing happens automatically and you will not be charged without agreeing to it.",
+          },
+          { action: { label: "Open Revio", url: originFor("cm") } },
+          {
+            note: "If you let it run out, nothing is deleted — your data is shared across the products and stays exactly as it is.",
+          },
+        ],
+      };
+      const sent = await sendEmail({
+        to: [bucket.email],
+        subject,
+        text: renderSystemEmailText(mail),
+        html: renderSystemEmail(mail),
+      }).catch(() => ({ ok: false, mode: "resend" as const, error: "send threw" }));
+
+      if (sent.ok) {
+        result.reminded += at.products.length;
+        result.details.push(`${bucket.tenantName}: ${day} warning sent — ${names}`);
+      } else {
+        // One email failing means every product it covered went unwarned. Counted as such.
+        result.failed += at.products.length;
+        result.details.push(`${bucket.tenantName}: ${day} warning FAILED to send — ${names} (${sent.error ?? "unknown"})`);
+      }
+    }
+  }
+
   return result;
+}
+
+/** "RevioLink, RevioCRS and RevioPMS" — an and, not a third comma. */
+function listOf(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
