@@ -146,15 +146,50 @@ export interface CatchupResult {
   skipped: { name: string; why: string }[];
 }
 
+const PAGE = 100;
+/** 50 pages is 5,000 products. A property past that is not a hotel, it is a fault. */
+const MAX_PAGES = 50;
+
+/**
+ * ⚠️ Every page, or nothing — a truncated listing is how read-before-create becomes create-twice.
+ *
+ * The first version asked for `pagination[limit]=100` and stopped there. One Channex rate plan
+ * belongs to ONE room type, so a property's plans multiply: ten rooms with ten plans is exactly a
+ * hundred. Past that the listing silently loses rows, `existingRates` fails to find a plan that is
+ * really there, and this module creates a second one — the precise duplicate it exists to refuse,
+ * reintroduced by an unchecked default.
+ *
+ * So it pages until a short page ends it, and **throws rather than returning a partial list** if it
+ * somehow runs past the cap. Returning what it has would be the silent truncation again, one order
+ * of magnitude further out.
+ */
+async function allPages(api: CatchupApi, path: string, propertyId: string): Promise<ChannexRow[]> {
+  const out: ChannexRow[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const res = await api(
+      "GET",
+      `${path}?filter[property_id]=${propertyId}&pagination[page]=${page}&pagination[limit]=${PAGE}`,
+    );
+    const rows = listOf(res);
+    out.push(...rows);
+    if (rows.length < PAGE) return out;
+  }
+  throw new ChannexCatchupError(
+    `Channex returned more than ${MAX_PAGES * PAGE} products for this property, which should not happen. ` +
+      "Nothing was sent — sending against a partial listing would create duplicates.",
+  );
+}
+
 /** Channex's own listing, reduced to what matching needs. */
 async function existingRooms(api: CatchupApi, propertyId: string) {
-  const res = await api("GET", `/room_types?filter[property_id]=${propertyId}&pagination[limit]=100`);
-  return listOf(res).map((r) => ({ id: String(r.id), title: attr(r, "title") }));
+  return (await allPages(api, "/room_types", propertyId)).map((r) => ({
+    id: String(r.id),
+    title: attr(r, "title"),
+  }));
 }
 
 async function existingRates(api: CatchupApi, propertyId: string) {
-  const res = await api("GET", `/rate_plans?filter[property_id]=${propertyId}&pagination[limit]=100`);
-  return listOf(res).map((r) => ({
+  return (await allPages(api, "/rate_plans", propertyId)).map((r) => ({
     id: String(r.id),
     title: attr(r, "title"),
     roomTypeId: attr(r, "room_type_id") || null,

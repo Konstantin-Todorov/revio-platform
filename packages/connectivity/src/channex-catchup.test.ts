@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   ChannexCatchupError, channexApiFor, describeCatchup, sendRatePlanToChannex, sendRoomTypeToChannex,
+  type ChannexRow,
 } from "./channex-catchup.js";
 
 const room = (id: string, name: string, over = {}) => ({ id, name, totalRooms: 3, maxGuests: 2, ...over });
@@ -13,12 +14,18 @@ function fakeChannex(seed: { rooms?: { id: string; title: string }[]; rates?: { 
   const rates = [...(seed.rates ?? [])];
   const posts: { path: string; body: any }[] = [];
   let n = 0;
+  /** Pages the way Channex does, so a test of paging is a test of paging. */
+  const page = (path: string, rows: ChannexRow[]) => {
+    const n = Number(new URLSearchParams(path.split("?")[1]).get("pagination[page]") ?? 1);
+    const limit = Number(new URLSearchParams(path.split("?")[1]).get("pagination[limit]") ?? 100);
+    return { data: rows.slice((n - 1) * limit, n * limit) };
+  };
   const api = vi.fn(async (method: string, path: string, body?: any) => {
     if (method === "GET" && path.startsWith("/room_types")) {
-      return { data: rooms.map((r) => ({ id: r.id, attributes: { title: r.title } })) };
+      return page(path, rooms.map((r) => ({ id: r.id, attributes: { title: r.title } })));
     }
     if (method === "GET" && path.startsWith("/rate_plans")) {
-      return { data: rates.map((r) => ({ id: r.id, attributes: { title: r.title, room_type_id: r.room_type_id } })) };
+      return page(path, rates.map((r) => ({ id: r.id, attributes: { title: r.title, room_type_id: r.room_type_id } })));
     }
     posts.push({ path, body });
     const id = `new-${++n}`;
@@ -280,5 +287,55 @@ describe("channexApiFor — the 401 trap, where it costs a duplicate", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ errors: "title is taken" }), { status: 422 })));
     await expect(channexApiFor(config)("POST", "/room_types", {})).rejects.toThrow(/422.*title is taken/);
     vi.unstubAllGlobals();
+  });
+});
+
+describe("⚠️ paging — where a truncated listing becomes a duplicate", () => {
+  it("reads past the first hundred rate plans and finds the one that is there", async () => {
+    /*
+     * One Channex rate plan belongs to ONE room type, so a property's plans multiply: ten rooms
+     * with ten plans is exactly a hundred. The first version of this module asked for 100 and
+     * stopped, so past that it would fail to find a plan that really exists and create a second —
+     * the precise duplicate read-before-create is for, reintroduced by an unchecked default.
+     */
+    const filler = Array.from({ length: 130 }, (_, i) => ({
+      id: `cx-${i}`, title: `Filler ${i}`, room_type_id: "cx-a",
+    }));
+    const cx = fakeChannex({
+      rates: [...filler, { id: "cx-wanted", title: "BB Flex", room_type_id: "cx-a" }],
+    });
+    const rec = recorder();
+    const r = await sendRatePlanToChannex({
+      api: cx.api, channexPropertyId: "p1", currency: "EUR",
+      ratePlan: plan("rp-1", "BB Flex", { roomTypeIds: ["rt-a"] }),
+      rooms: [{ ...room("rt-a", "Studio"), externalRoomId: "cx-a" }],
+      writes: rec.writes,
+    });
+
+    expect(cx.posts).toHaveLength(0); // nothing created
+    expect(r.steps[0]).toMatchObject({ externalId: "cx-wanted", adopted: true });
+    expect(rec.rateMaps).toEqual([["rp-1", "rt-a", "cx-wanted"]]);
+  });
+
+  it("stops at the first short page rather than asking forever", async () => {
+    const cx = fakeChannex({ rooms: [{ id: "cx-a", title: "Studio" }] });
+    await sendRoomTypeToChannex({
+      api: cx.api, channexPropertyId: "p1", currency: "EUR",
+      roomType: room("rt-a", "Studio"), ratePlans: [plan("rp-1", "BB Flex")], writes: recorder().writes,
+    });
+    const roomPages = cx.api.mock.calls.filter(([m, p]) => m === "GET" && String(p).startsWith("/room_types"));
+    expect(roomPages).toHaveLength(1);
+  });
+
+  it("⚠️ throws rather than returning a partial list if it runs past the cap", async () => {
+    // Returning what it has would be the silent truncation again, one order of magnitude further
+    // out — and silent truncation is how this creates duplicates.
+    const api = vi.fn(async () => ({
+      data: Array.from({ length: 100 }, (_, i) => ({ id: `x-${i}`, attributes: { title: `T${i}` } })),
+    }));
+    await expect(sendRoomTypeToChannex({
+      api, channexPropertyId: "p1", currency: "EUR",
+      roomType: room("rt-a", "Studio"), ratePlans: [plan("rp-1", "BB Flex")], writes: recorder().writes,
+    })).rejects.toThrow(/Nothing was sent/);
   });
 });
