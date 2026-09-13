@@ -48,7 +48,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
       ) : (
       <BulkUpdatePanel
         roomTypes={roomTypes.map((r) => ({ id: r.id, name: r.name, code: r.code }))}
-        ratePlans={ratePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, active: p.active, parentName: p.parent?.name ?? null, roomLabel: p.roomTypeLinks.map((l) => l.roomType.name).join(", ") }))}
+        ratePlans={ratePlans.map((p) => ({ id: p.id, name: p.name, priceLogic: p.priceLogic, active: p.active, parentName: p.parent?.name ?? null, roomLabel: p.roomTypeLinks.map((l) => l.roomType.name).join(", "), roomCount: p.roomTypeLinks.length }))}
         today={today}
         {...(preselect ? { preselectRoomTypeIds: preselect } : {})}
       />

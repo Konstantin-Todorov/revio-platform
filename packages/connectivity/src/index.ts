@@ -83,3 +83,4 @@ export {
   applyRates, usableRates, toChannexOptions, toDerivedOption, resolveRateMode,
   type OccupancyRate, type SellMode, type ChannexOccupancyOption,
 } from "./channex-occupancy.js";
+export { classifyChannexRatePlan, mappableRatePlans, ratePlansForRoom, type ChannexRatePlan, type ChannexRatePlanKind } from "./channex-products.js";

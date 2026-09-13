@@ -15,13 +15,20 @@ import { availabilityPressure } from "@revio/core";
 export const dynamic = "force-dynamic";
 
 /** Row order per room type — straight from the waterfall (docs/CRS-REFERENCE.md "Inventory Calendar"). */
+/*
+ * ⚠️ "Bookable", not "Remaining" — the same word RevioLink's calendar uses.
+ *
+ * The two products described the same number with two different words, which is how a hotelier
+ * comparing the screens cannot tell whether they are looking at the same quantity (BUG-017, 13
+ * Sept). One name for one fact, in both products.
+ */
 const ROWS = [
   { key: "physical", label: "Physical" },
   { key: "outOfOrder", label: "Out of order" },
   { key: "closed", label: "Closed" },
-  { key: "available", label: "Available" },
+  { key: "available", label: "Allocation" },
   { key: "confirmed", label: "Sold" },
-  { key: "remaining", label: "Remaining" },
+  { key: "remaining", label: "Bookable" },
 ] as const;
 
 /**

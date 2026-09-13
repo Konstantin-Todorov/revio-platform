@@ -7,7 +7,13 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
 
 type Opt = { id: string; name: string; code: string };
-type PlanOpt = { id: string; name: string; priceLogic: string; parentName: string | null; roomLabel?: string; active?: boolean };
+type PlanOpt = {
+  id: string; name: string; priceLogic: string; parentName: string | null;
+  roomLabel?: string;
+  /** How many room types this plan is attached to — lets the label say "all rooms" instead of listing them. */
+  roomCount?: number;
+  active?: boolean;
+};
 
 const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
 const RATE_MODES: [BulkRateMode, string][] = [
@@ -106,7 +112,7 @@ export function BulkUpdatePanel({
       lines.push(`Price — ${label}: ${p.rate.value} · on ${names}`);
     }
     const showNum = (v: number | null | undefined, unit = "") => (v && v > 0 ? `${v}${unit}` : "cleared");
-    if (p.availability !== undefined) lines.push(`Rooms to sell → ${p.availability}`);
+    if (p.availability !== undefined) lines.push(`Allocation → ${p.availability}`);
     if (p.minLos !== undefined) lines.push(`Min stay → ${showNum(p.minLos)}`);
     if (p.maxLos !== undefined) lines.push(`Max stay → ${showNum(p.maxLos)}`);
     if (p.cta !== undefined) lines.push(`Closed to arrival → ${p.cta ? "on" : "off"}`);
@@ -219,8 +225,22 @@ export function BulkUpdatePanel({
               {manualPlans.map((rp) => (
                 <label key={rp.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-medium text-ink-600 hover:bg-surface-muted">
                   <input type="checkbox" checked={planIds.includes(rp.id)} onChange={() => setPlanIds((a) => toggle(a, rp.id))} className="h-3.5 w-3.5 rounded border-surface-border text-brand-600" />
-                  <span className="min-w-0 truncate">
-                    {rp.roomLabel && <span className="text-ink-400">{rp.roomLabel} · </span>}{rp.name}
+                  {/*
+                    ⚠️ THE PLAN'S NAME IS THE LABEL. It used to render `roomLabel · name`, so a plan
+                    attached to every room read "Apartment, 3 Bedrooms, Apartment, 2 …" — the name
+                    truncated off the end. Both plans then looked identical on the one screen where
+                    you choose between them (BUG-022, 13 Sept).
+
+                    The room scope is still worth saying, but as a short qualifier: when a plan
+                    covers every room type, "all rooms" is the useful fact — the list is noise.
+                  */}
+                  <span className="flex min-w-0 flex-col leading-tight">
+                    <span className="truncate font-semibold text-ink-800">{rp.name}</span>
+                    {rp.roomLabel && (
+                      <span className="truncate text-[11px] font-normal text-ink-400">
+                        {rp.roomCount != null && rp.roomCount >= roomTypes.length ? "all rooms" : rp.roomLabel}
+                      </span>
+                    )}
                   </span>
                 </label>
               ))}
@@ -250,7 +270,7 @@ export function BulkUpdatePanel({
             <Field label="Value"><input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} disabled={rateMode === ""} placeholder="—" className={`${inputCls} disabled:opacity-50`} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Rooms to sell"><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
+            <Field label="Allocation" hint="The gross number you offer — Bookable subtracts what is sold"><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
             <div />
             <Field label="Min stay (nights)"><input type="number" min="0" value={minLos} onChange={(e) => setMinLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
             <Field label="Max stay (nights)"><input type="number" min="0" value={maxLos} onChange={(e) => setMaxLos(e.target.value)} placeholder="—" className={inputCls} /></Field>

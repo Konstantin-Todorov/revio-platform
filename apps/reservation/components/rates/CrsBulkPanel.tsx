@@ -170,7 +170,7 @@ export function CrsBulkPanel({
         lines.push(`…skipped where the room sleeps fewer: ${short.map((r) => `${r.roomName} (${r.maxOccupancy})`).join(", ")}`);
       }
     }
-    if (p.availability !== undefined) lines.push(`Rooms to sell → ${p.availability}`);
+    if (p.availability !== undefined) lines.push(`Allocation → ${p.availability}`);
     if (p.minLos !== undefined) lines.push(`Min stay → ${showNum(p.minLos)}`);
     if (p.maxLos !== undefined) lines.push(`Max stay → ${showNum(p.maxLos)}`);
     if (p.cta !== undefined) lines.push(`Closed to arrival → ${p.cta ? "on" : "off"}`);
@@ -356,7 +356,7 @@ export function CrsBulkPanel({
 
           {tab === "availability" && (
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Rooms to sell"><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
+              <Field label="Allocation" hint="The gross number you offer — Bookable subtracts what is sold"><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
               <div />
               <p className="col-span-2 text-[11px] text-ink-400">
                 Sets the number of rooms offered for sale on each selected day, per room type. Leave empty to change nothing.

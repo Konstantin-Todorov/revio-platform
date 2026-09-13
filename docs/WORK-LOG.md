@@ -7,6 +7,42 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · BUG-017 · BUG-020 · BUG-022 — the calendar can be read again
+Files: `apps/channel-manager/lib/data.ts`, `apps/channel-manager/components/bulk/BulkUpdatePanel.tsx`,
+`apps/reservation/components/rates/CrsBulkPanel.tsx`,
+`apps/reservation/app/(protected)/(property)/inventory/page.tsx`,
+`packages/connectivity/src/{channex-products.ts,channex-products.test.ts,channex-channel-adapter.ts}`.
+
+**BUG-017 — the Bookable row exists.** ⚠️ Computed with `computeWaterfall`, the SAME function the
+push uses, from the same inputs — periods and holds are now loaded for the calendar so it can be. A
+second, simpler arithmetic here (allocation − sold) would drift from what the channel is told the
+moment an out-of-order room or a live hold existed: a screen and a channel disagreeing about one
+night, which is the fault class this grid keeps producing. Zero is emphasised, not muted — "nothing
+left" is what a hotelier scans for.
+
+**BUG-017's label half.** "Rooms to sell" → **Allocation**; the CRS's "Remaining" → **Bookable**, so
+both products name the same quantity the same way. The old label read as the net while holding the
+gross, which is why a tester spent a session concluding we were overbooking.
+
+**BUG-022.** The checkbox rendered `roomLabel · name`, so a plan on every room read "Apartment, 3
+Bedrooms, Apartment, 2 …" with the name truncated off the end — both plans identical on the one
+screen where you choose between them. Name is now the label; the room scope is a small qualifier,
+and says **"all rooms"** rather than listing them when it covers everything.
+
+**BUG-020/021 groundwork — `classifyChannexRatePlan`.** A Channex property's `/rate_plans` holds
+three different kinds and the dropdown offered all of them equally: property plans, **channel-scoped
+entries** (`BB BAR - BookingCom …` — the Booking.com end of the chain, which RevioLink must never
+bind to, and which the inactive Standard Rate WAS bound to), and **derived** plans. The adapter now
+reads `room_type_id` and `parent_rate_plan_id`, which it was dropping on the floor — and
+`room_type_id` is the whole reason mapping can be correct at all. ⚠️ A plan with no room type is
+offered to NOBODY: that is the property-wide assumption BUG-019 is made of.
+
+The channel-suffix match is a heuristic and is treated as one — it keeps entries out of a dropdown
+and is never used to delete anything. A test pins that "Early Bird - Summer" is a hotel's own plan
+name, not a channel scope.
+
+`pnpm verify` green, 2,415 tests; CM and CRS build.
+
 ### 2026-09-13 · Claude · DONE · BUG-019 groundwork + BUG-021 stopped from doing damage
 **Ventsislav's 13 Sept log, BUG-015…022.** Investigated against the code AND production before
 writing anything, because the log itself asks for that.

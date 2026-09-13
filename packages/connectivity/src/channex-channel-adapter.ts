@@ -10,6 +10,7 @@
  * Auth: header `user-api-key: <key>`. Sandbox base: https://staging.channex.io/api/v1.
  */
 
+import { classifyChannexRatePlan, type ChannexRatePlan } from "./channex-products.js";
 import type { AriUpdate, ChannelAdapter, PushResult, RawReservation, RawRevision } from "@revio/core";
 import {
   mergeDateRanges,
@@ -286,16 +287,59 @@ export class ChannexChannelAdapter implements ChannelAdapter {
 
   /** Pull the property's room types + rate plans from Channex (with their Channex ids) —
    * feeds the Mapping screen's dropdowns (spec §3.6). */
-  async listProducts(): Promise<{ rooms: { id: string; name: string }[]; rates: { id: string; name: string }[] }> {
+  /**
+   * The property's room types and rate plans.
+   *
+   * ⚠️ Rate plans carry `room_type_id`, and it is the whole reason mapping can be correct.
+   *
+   * Channex holds ONE rate plan per room type; we used to drop that field on the floor and offer
+   * every plan under every room. Three visually identical "BB BAR" options differing only by a UUID
+   * is how a €666 price set on the 1-Bedroom was published against the 2-Bedroom on 13 September.
+   *
+   * `parent_rate_plan_id` is read for the same reason: a plan Channex derives from another is a
+   * complete state needing no mapping, not the error the screen was calling it.
+   */
+  async listProducts(): Promise<{
+    rooms: { id: string; name: string }[];
+    rates: ChannexRatePlan[];
+  }> {
     const [roomsRes, ratesRes] = [
       await this.request("GET", `/room_types?filter[property_id]=${this.propertyId}`),
       await this.request("GET", `/rate_plans?filter[property_id]=${this.propertyId}`),
     ];
-    const items = (r: ApiResult): { id: string; name: string }[] => {
+
+    const rooms = (r: ApiResult): { id: string; name: string }[] => {
       const data = (r.body as { data?: { id: string; attributes?: { title?: string } }[] } | null)?.data;
       return Array.isArray(data) ? data.map((d) => ({ id: d.id, name: d.attributes?.title ?? d.id })) : [];
     };
-    return { rooms: roomsRes.ok ? items(roomsRes) : [], rates: ratesRes.ok ? items(ratesRes) : [] };
+
+    const rates = (r: ApiResult): ChannexRatePlan[] => {
+      const data = (r.body as {
+        data?: {
+          id: string;
+          attributes?: {
+            title?: string;
+            room_type_id?: string | null;
+            parent_rate_plan_id?: string | null;
+          };
+        }[];
+      } | null)?.data;
+      if (!Array.isArray(data)) return [];
+      return data.map((d) => {
+        const name = d.attributes?.title ?? d.id;
+        const parentId = d.attributes?.parent_rate_plan_id ?? null;
+        return {
+          id: d.id,
+          name,
+          roomTypeId: d.attributes?.room_type_id ?? null,
+          derived: Boolean(parentId),
+          parentId,
+          ...classifyChannexRatePlan(name),
+        };
+      });
+    };
+
+    return { rooms: roomsRes.ok ? rooms(roomsRes) : [], rates: ratesRes.ok ? rates(ratesRes) : [] };
   }
 
   private request(method: string, path: string, body?: unknown): Promise<ApiResult> {

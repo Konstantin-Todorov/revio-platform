@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { deriveRate, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
+import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
 import { structureGap, describeStructureGap, mappingRows } from "@revio/connectivity";
 import { getSession } from "./session";
 
@@ -405,7 +405,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
   const rtIds = roomTypes.map((r) => r.id);
   // Every plan on screen, plus the parents the derived ones are computed from.
   const pricePlanIds = ratePlanIdsToLoad(planRows, planInputs);
-  const [prices, cells, planCells, resLines] = await Promise.all([
+  const [prices, cells, planCells, resLines, invPeriods, activeHolds] = await Promise.all([
     pricePlanIds.length > 0
       /*
        * ⚠️ Occupancy-filtered, and keyed by PLAN as well as room and date.
@@ -453,7 +453,46 @@ export async function getCalendarBoard(q: CalendarQuery) {
         checkOut: { gt: start },
       },
     }),
+    /*
+     * Out-of-order and closure periods, and live holds.
+     *
+     * ⚠️ Loaded so the Bookable row can compute EXACTLY what the push computes. A grid that
+     * subtracts only sold, while `syncRealChannels` also subtracts OOO, closures and holds, is a
+     * screen and a channel disagreeing about the same night — which is the whole class of fault
+     * this calendar keeps producing.
+     */
+    prisma.roomInventoryPeriod.findMany({
+      where: { roomTypeId: { in: rtIds }, dateFrom: { lte: end }, dateTo: { gte: start } },
+    }),
+    prisma.hold.findMany({
+      where: {
+        roomTypeId: { in: rtIds }, status: "active", expiresAt: { gt: new Date() },
+        checkIn: { lte: end }, checkOut: { gt: start },
+      },
+    }),
   ]);
+
+  /*
+   * Periods expanded per (room, date) once, rather than scanned inside the cell loop: a 30-day
+   * window across six room types is 180 cells, and a linear scan of every period on each is the
+   * quiet O(n²) that only shows itself on the largest hotel.
+   */
+  const periodsByRoom = new Map<string, Map<string, { outOfOrder: number; closed: number }>>();
+  for (const rt of roomTypes) {
+    periodsByRoom.set(
+      rt.id,
+      expandInventoryPeriods(
+        invPeriods
+          .filter((p) => p.roomTypeId === rt.id)
+          .map((p) => ({
+            kind: p.kind, rooms: p.rooms,
+            dateFrom: p.dateFrom.toISOString().slice(0, 10),
+            dateTo: p.dateTo.toISOString().slice(0, 10),
+          })),
+        dateKeys,
+      ),
+    );
+  }
 
   const priceKey = (rt: string, k: string) => `${rt}:${k}`;
   // Narrowed above to each room's primary, so at most one row per (plan, room, date) reaches this map.
@@ -485,9 +524,19 @@ export async function getCalendarBoard(q: CalendarQuery) {
   const sections = roomTypes.map((roomType) => {
     const rows: CalendarRow[] = [];
     const cellFor = (k: string) => cellMap.get(priceKey(roomType.id, k));
+    const periodsByDate = periodsByRoom.get(roomType.id) ?? new Map();
 
     rows.push({
-      key: "inventory", label: "Rooms to sell", kind: "availability", field: "inventory", editable: true,
+      /*
+       * ⚠️ "Allocation", not "Rooms to sell".
+       *
+       * The old label reads as "how many are currently for sale" — the NET — while the row holds
+       * the gross number the hotel set. A tester spent a session concluding the system was
+       * overbooking because 1 sold and 1 "to sell" looked like a contradiction (BUG-017, 13 Sept).
+       * It was not: the net had already gone to the channel. Two words, two different facts, and
+       * the grid now names both.
+       */
+      key: "inventory", label: "Allocation", kind: "availability", field: "inventory", editable: true,
       cells: dateKeys.map((k) => {
         const inv = cellFor(k)?.inventory ?? roomType.totalRooms;
         // Total-rooms safety net (spec): loading more than the physical count saves, but warns.
@@ -507,6 +556,42 @@ export async function getCalendarBoard(q: CalendarQuery) {
         }),
       });
     }
+
+    /*
+     * ⚠️ BOOKABLE — the single most important number on an availability screen, and this grid did
+     * not have it.
+     *
+     * Reported as BUG-017 on 13 Sept, and it is what made BUG-015 look like an overbooking: two
+     * confirmed bookings landed, "Rooms sold" went to 1, "Rooms to sell" stayed at 1, and nothing
+     * anywhere said the night was gone. It was gone — the push had already sent 0 — but the screen
+     * could not show it, so a data fault and a display gap were indistinguishable from the UI.
+     *
+     * ⚠️ Computed with `computeWaterfall`, the SAME function the push uses, from the same inputs.
+     * A second, simpler arithmetic here (allocation − sold) would drift from what the channel is
+     * told the moment an out-of-order room or a live hold exists — a screen and a channel
+     * disagreeing about one night, which is exactly the class of fault this calendar keeps
+     * producing. One function, one answer.
+     */
+    rows.push({
+      key: "bookable", label: "Bookable", kind: "availability",
+      cells: dates.map((d, i) => {
+        const k = dateKeys[i]!;
+        const sold = resLines.filter((l) => l.roomTypeId === roomType.id && l.checkIn <= d && d < l.checkOut).reduce((s2, l) => s2 + l.quantity, 0);
+        const held = activeHolds.filter((h) => h.roomTypeId === roomType.id && h.checkIn <= d && d < h.checkOut).reduce((s2, h) => s2 + h.quantity, 0);
+        const { outOfOrder, closed } = periodsByDate.get(k) ?? { outOfOrder: 0, closed: 0 };
+        const remaining = computeWaterfall({
+          physical: roomType.totalRooms, outOfOrder, closed,
+          manualSellLimit: cellFor(k)?.inventory ?? null,
+          holds: held, confirmed: sold,
+        }).remaining;
+        const bookable = Math.max(0, remaining);
+        return {
+          date: k, value: String(bookable),
+          // Nothing left is the fact a hotelier scans for. It gets the emphasis, not a muted grey.
+          ...(bookable === 0 ? { warn: "Nothing left to sell on this date — the channel has been told 0" } : {}),
+        };
+      }),
+    });
     /*
      * ⚠️ ONE ROW PER PLAN, EACH CARRYING ITS OWN NAME.
      *
