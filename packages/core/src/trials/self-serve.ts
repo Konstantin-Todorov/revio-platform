@@ -136,5 +136,13 @@ export function selfTrialPromises(product: ProductKey, days: number): string[] {
      * and this list is the contract that must fail if that stops being so.
      */
     `If you decide to keep ${name}, you pay from the day you decide — never for a day of the trial.`,
+    /*
+     * The half that makes "all three" an offer rather than a bill in waiting.
+     *
+     * Trials really do end per product — three `ProductTrial` rows, closed independently — and the
+     * invoice prices only the entitlements that remain. So a hotel can be shown everything and keep
+     * one, which is the whole argument for switching all three on at signup.
+     */
+    "Each product is separate at the end — keep the ones you used, and pay for those alone.",
   ];
 }

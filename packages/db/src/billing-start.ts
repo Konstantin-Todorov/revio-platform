@@ -42,9 +42,29 @@ export async function markBillable(tenantId: string, reason: BillableReason): Pr
   try {
     const tenant = await forSystem().tenant.findUnique({
       where: { id: tenantId },
-      select: { hasChannelManager: true, billingStartsAt: true },
+      select: {
+        hasChannelManager: true,
+        billingStartsAt: true,
+        productTrials: { where: { endedAt: null }, select: { id: true }, take: 1 },
+      },
     });
     if (!tenant || tenant.billingStartsAt) return false;
+
+    /*
+     * ⚠️ A free trial is not the start of a paid relationship.
+     *
+     * "Set once, never moved" is what makes this dangerous rather than harmless: a real booking
+     * syncing on day 3 of a 30-day trial stamped `billingStartsAt` inside the free period, and
+     * nothing could ever move it afterwards. The invoice is correct regardless — `firstBillableDay`
+     * takes the LATER of this and the converted trial's end — but the date itself is wrong, and it
+     * is read by the operator console as "billable since", by `isBillablePeriod`, and by anyone
+     * asking when this client actually started paying us.
+     *
+     * Skipped rather than deferred: when the trial ends the hotel either converts (and the
+     * conversion is the start) or loses the entitlement, and the next qualifying event stamps it
+     * properly. Returning false here is honest — this call did not set it.
+     */
+    if (tenant.productTrials.length > 0) return false;
 
     /*
      * The one rule that keeps the two paths from overlapping.

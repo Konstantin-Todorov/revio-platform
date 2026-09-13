@@ -107,7 +107,8 @@ export function SignupForm({ defaultEmail = "" }: { defaultEmail?: string }) {
         <p className="mt-2 text-[12px] leading-snug text-ink-500">
           You get <strong className="font-semibold text-ink-700">all three for 30 days</strong> whichever you pick —
           this only decides where we open first. They share one login and one set of rooms and rates, so there is
-          nothing to move if you keep more than one.
+          nothing to move if you keep more than one. At the end you{"’"}ll keep only the ones you actually used,
+          and pay for those alone.
         </p>
       </fieldset>
 

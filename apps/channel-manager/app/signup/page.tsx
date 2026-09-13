@@ -50,6 +50,13 @@ export default async function SignupPage({
           <ul className="mt-5 space-y-1.5 text-[13px] text-white/70">
             <li>· 30 days, all three products, no card</li>
             {/*
+              ⚠️ "All three" without this line reads as "we are about to charge you for three
+              products". The founder's own framing: show them everything, then let them keep what
+              they actually used. It is also literally true — trials end per product, and the
+              invoice prices only the entitlements that remain.
+            */}
+            <li>· Keep only the ones you use — you pay for those alone</li>
+            {/*
               ⚠️ NOT "commission-free". We charge 2% on RevioDirect bookings
               (`DIRECT_BOOKING_FEE_PCT`), and this is a signup page — the worst possible place for a
               claim a hotel can disprove on its first invoice.

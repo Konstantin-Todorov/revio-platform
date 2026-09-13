@@ -8,7 +8,13 @@ Written 2026-09-12. Founder decisions recorded here so the site and the product 
 
 ## The two founder decisions
 
-1. **One trial switches on all three products.** Not one. Not "one now, add others later".
+1. **One trial switches on all three products — and they keep only what they used.** Not one. Not
+   "one now, add others later". The second half is not a softener, it is how the structure actually
+   works: a signup creates **three separate `ProductTrial` rows**, they end independently, and the
+   invoice prices only the entitlements that remain. So a hotel can be shown everything and keep
+   one. ⚠️ **The site must never say the first half without the second** — "all three products"
+   alone reads as "we are about to charge you for three products", which is the opposite of the
+   offer.
 2. **Login: a product chooser on the site now; a single central login next.**
 
 Both are settled. The reasoning is below because copy written against the reasoning survives; copy
@@ -64,6 +70,12 @@ These are facts the product enforces. If the site says otherwise, the site is wr
 
 - **"30 days. All three products. No card."** — all three entitlements switch on together, and no
   payment method is collected anywhere in the flow.
+- **"Keep only the ones you use — you pay for those alone."** — enforced, not aspirational: three
+  independent `ProductTrial` rows, closed one at a time by an operator, and `generateInvoices`
+  prices only what is still switched on. **Say this wherever "all three" appears.**
+- **"You pay from the day you decide — never for a day of your trial."** — the joining month is
+  prorated from the day the trial ended (`packages/core/src/billing/proration.ts`). True since
+  2026-09-13 and not before.
 - **"One login for every Revio product."** — one identity across all three; entitlements decide what
   it opens.
 - **"Nothing to migrate when you add the second one."** — same database, same rooms and rates. This
