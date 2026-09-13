@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { AlertTriangle, Link2 } from "lucide-react";
 import { getMapping, getUnmappedBookingAlerts } from "@/lib/data";
@@ -23,7 +24,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ ch?: string }> }) {
   const sp = await searchParams;
-  const { channels, channel, roomTypeMappings, ratePlanMappings, neverSent } = await getMapping(sp.ch);
+  const { channels, channel, roomTypeMappings, ratePlanMappings, neverSent, mappingCollisions } = await getMapping(sp.ch);
 
   if (!channel) {
     return (
@@ -57,6 +58,33 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
         <p className="-mt-3 mb-3 text-[11.5px] text-ink-400">
           {products.rooms.length + products.rates.length} products pulled from {channel.name} — pick them from the dropdown when mapping.
         </p>
+      )}
+
+      {/*
+        ⚠️ Two of our room types pointing at ONE Channex rate plan.
+        
+        One Channex rate plan belongs to exactly one room type, so this means one room's prices
+        overwrite the other's on every push — the later one wins and nothing else says so. Found in
+        production on 13 Sept: the inactive Standard Rate held two rows, for two different rooms,
+        both on 0ea321e7…. It is shown rather than blocked, because a hotel may be mid-way through
+        re-mapping and a screen that refuses to render is a hotel with no way to fix itself.
+      */}
+      {mappingCollisions.length > 0 && (
+        <div className="mb-3 rounded-md border border-danger-600/30 bg-danger-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-danger-700">
+            <AlertTriangle className="h-4 w-4" />
+            {mappingCollisions.length === 1 ? "One channel rate plan is" : `${mappingCollisions.length} channel rate plans are`} mapped to more than one room
+          </div>
+          <ul className="mt-1.5 space-y-1 pl-6 text-[12.5px] text-danger-700">
+            {mappingCollisions.map((c) => (
+              <li key={c.externalId}>
+                <span className="tnum">{c.externalId.slice(0, 8)}…</span> is used by{" "}
+                {c.rooms.map((r) => `${r.roomTypeName} · ${r.ratePlanName}`).join(" and ")} — whichever pushes last
+                overwrites the other. Give each room its own rate plan.
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {alerts.length > 0 && (
@@ -160,17 +188,74 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                 </tr>
               </thead>
               <tbody>
-                {ratePlanMappings.map((m) => (
-                  <tr key={m.productId} id={`map-rate-${m.productId}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
-                    <td className="px-4 py-2.5 font-semibold text-ink-900">{m.ratePlan.name}</td>
-                    <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRateId ?? <span className="text-danger-500">—</span>}</td>
-                    <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{STATUS_LABEL[m.status] ?? m.status}</StatusPill></td>
-                    <td className="px-2 py-2.5">
-                      <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
-                        <MappingEditDialog kind="rate" id={m.id} productId={m.productId} label={m.ratePlan.name} externalId={m.externalRateId} channelName={channel.name} channelId={channel.id} options={products.rates} />
-                      </div>
-                    </td>
-                  </tr>
+                {/*
+                  ⚠️ GROUPED BY ROOM TYPE, because that is how Channex holds rate plans.
+
+                  This was one row per rate plan for the whole property, and a property-wide row
+                  cannot express a per-room model: one Revio plan points at one Channex plan, and
+                  that plan belongs to one room. So all three room types' prices funnelled into a
+                  single room's rate plan — proven on 13 September, when €666 set on the 1-Bedroom
+                  was published against the 2-Bedroom with no error anywhere.
+
+                  Reading the room name above its plans is also the whole of §4.3 rule 6: the
+                  sentence "Apartment, 1 Bedroom · BB Flex → …" would have made that fault visible
+                  in one glance.
+                */}
+                {Object.entries(
+                  ratePlanMappings.reduce<Record<string, typeof ratePlanMappings>>((acc, m) => {
+                    (acc[m.roomTypeName] ??= []).push(m);
+                    return acc;
+                  }, {}),
+                ).map(([roomName, rows]) => (
+                  <Fragment key={roomName}>
+                    <tr className="border-b border-surface-border/60 bg-surface-muted/60">
+                      <td colSpan={4} className="px-4 py-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-500">
+                        {roomName}
+                        {rows.some((r) => r.unmapped) && (
+                          <span className="ml-2 font-semibold normal-case text-warning-700">
+                            {rows.filter((r) => r.unmapped).length} to confirm
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    {rows.map((m) => (
+                      <tr
+                        key={`${m.roomTypeId}-${m.ratePlanId}`}
+                        id={`map-rate-${m.ratePlanId}`}
+                        className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted"
+                      >
+                        <td className="px-4 py-2.5 pl-7 font-semibold text-ink-900">{m.ratePlan.name}</td>
+                        <td className="tnum px-4 py-2.5 text-ink-500">
+                          {m.externalRateId ?? <span className="text-danger-500">—</span>}
+                          {/*
+                            What a property-wide row is publishing to right now. Shown so the hotel
+                            can see where its prices ARE going — and deliberately not offered as the
+                            value to save, because for this room that id is another room's plan.
+                          */}
+                          {m.fromCatchAll && m.inheritedExternalId && (
+                            <span className="mt-0.5 block text-[10.5px] leading-tight text-warning-700">
+                              currently publishing to {m.inheritedExternalId.slice(0, 8)}… — set for this room
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{STATUS_LABEL[m.status] ?? m.status}</StatusPill>
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
+                            <MappingEditDialog
+                              kind="rate" id={m.id} productId={m.productId}
+                              label={`${m.roomTypeName} · ${m.ratePlan.name}`}
+                              externalId={m.externalRateId}
+                              channelName={channel.name} channelId={channel.id}
+                              roomTypeId={m.roomTypeId}
+                              options={products.rates}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

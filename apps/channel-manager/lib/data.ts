@@ -2,7 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
-import { structureGap, describeStructureGap, mappingRows } from "@revio/connectivity";
+import { collidingExternalIds, describeStructureGap, mappingRows, ratePlanMappingRows, structureGap } from "@revio/connectivity";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
@@ -913,11 +913,31 @@ export interface MappedRateRow {
   externalRateId: string | null;
   status: string;
   unmapped: boolean;
+  /**
+   * ⚠️ Which room type this mapping is FOR.
+   *
+   * Channex holds one rate plan per room type; a row without this covers every room, which is how
+   * a €666 price set on the 1-Bedroom was published against the 2-Bedroom (BUG-019, 13 Sept).
+   */
+  roomTypeId: string;
+  roomTypeName: string;
+  /** Only a property-wide row covers this pair — it pushes, but nobody has confirmed where. */
+  fromCatchAll: boolean;
+  /** What that property-wide row currently publishes to. Context only; never offered as the value. */
+  inheritedExternalId?: string | null;
 }
 
 function loadRatePlanMappings(channelId: string) {
   return prisma.channelRatePlanMapping.findMany({
     where: { channelId }, include: { ratePlan: true }, orderBy: { ratePlan: { sortOrder: "asc" } },
+  });
+}
+
+/** Which room types each plan is sold on — the link table that makes room-scoped mapping possible. */
+function loadPlanRoomLinks(propertyId: string) {
+  return prisma.ratePlanRoomType.findMany({
+    where: { ratePlan: { propertyId } },
+    select: { ratePlanId: true, roomTypeId: true },
   });
 }
 
@@ -931,6 +951,7 @@ export async function getMapping(channelCode?: string) {
       roomTypeMappings: [] as MappedRoomRow[],
       ratePlanMappings: [] as MappedRateRow[],
       neverSent: [] as ReturnType<typeof structureGap>["neverSent"],
+      mappingCollisions: [] as ReturnType<typeof collidingExternalIds>,
     };
   }
   const channel = channels.find((c) => c.code === channelCode) ?? channels[0]!;
@@ -981,19 +1002,46 @@ export async function getMapping(channelCode?: string) {
     unmapped: r.unmapped,
   }));
 
-  const ratePlanMappings: MappedRateRow[] = mappingRows(
-    ratePlans.map((rp) => ({ id: rp.id, name: rp.name, active: rp.active, priceLogic: rp.priceLogic })),
-    existingRateMaps.map((m) => ({ id: m.id, productId: m.ratePlanId, externalId: m.externalRateId, status: m.status })),
-    "rate",
-  ).map((r) => ({
+  /*
+   * ⚠️ ONE ROW PER (ROOM TYPE, RATE PLAN) — the shape Channex actually has.
+   *
+   * It was one row per rate plan for the whole property, which cannot express a per-room model: one
+   * Revio plan can only point at one Channex plan, and that plan belongs to one room. So every room
+   * type's prices funnelled into a single room's rate plan — proven in production on 13 September
+   * when a €666 price set on the 1-Bedroom was published against the 2-Bedroom, silently.
+   *
+   * The engine already resolved per room (`resolveExternalRateId` prefers a room-specific row over
+   * a property-wide one). All that was missing was a screen that offered the choice.
+   */
+  const planRoomLinks = await loadPlanRoomLinks(property.id);
+  const sellsOnPair = new Set(planRoomLinks.map((l) => `${l.roomTypeId}|${l.ratePlanId}`));
+  const scopedRows = ratePlanMappingRows({
+    roomTypes: roomTypes.map((rt) => ({ id: rt.id, name: rt.name, active: rt.active })),
+    ratePlans: ratePlans.map((rp) => ({ id: rp.id, name: rp.name, active: rp.active, priceLogic: rp.priceLogic })),
+    sellsOn: (roomTypeId, ratePlanId) => sellsOnPair.has(`${roomTypeId}|${ratePlanId}`),
+    existing: existingRateMaps.map((m) => ({
+      id: m.id, ratePlanId: m.ratePlanId, roomTypeId: m.roomTypeId,
+      externalId: m.externalRateId, status: m.status,
+    })),
+  });
+
+  const ratePlanMappings: MappedRateRow[] = scopedRows.map((r) => ({
     id: r.id,
-    productId: r.productId,
-    ratePlanId: r.productId,
-    ratePlan: { id: r.productId, name: r.name },
+    productId: r.ratePlanId,
+    ratePlanId: r.ratePlanId,
+    ratePlan: { id: r.ratePlanId, name: r.ratePlanName },
     externalRateId: r.externalId,
     status: r.status,
     unmapped: r.unmapped,
+    roomTypeId: r.roomTypeId,
+    roomTypeName: r.roomTypeName,
+    fromCatchAll: r.fromCatchAll,
+    ...(r.inheritedExternalId != null ? { inheritedExternalId: r.inheritedExternalId } : {}),
   }));
+
+  /** Two of our room types pointing at ONE Channex plan — one overwrites the other on every push. */
+  const mappingCollisions = collidingExternalIds(scopedRows);
+
 
   /*
    * "All mapped" was counting ROWS whose status is not `complete`, so a product that never reached
@@ -1008,7 +1056,7 @@ export async function getMapping(channelCode?: string) {
     mappedRatePlanIds: existingRateMaps.map((m) => m.ratePlanId),
   });
 
-  return { property, channels, channel, roomTypeMappings, ratePlanMappings, neverSent };
+  return { property, channels, channel, roomTypeMappings, ratePlanMappings, neverSent, mappingCollisions };
 }
 
 export async function getSettings() {

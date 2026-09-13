@@ -7,6 +7,36 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · BUG-019 closed — the Mapping screen is room-scoped
+Files: `apps/channel-manager/lib/data.ts`, `apps/channel-manager/app/(protected)/mapping/page.tsx`,
+`apps/channel-manager/components/mapping/MappingEditDialog.tsx`, `apps/channel-manager/lib/actions-config.ts`.
+
+The screen now shows **one row per (room type, rate plan)**, grouped under the room, and the edit
+dialog carries `mappingRoomTypeId` so the save writes a room-scoped row. That was the only missing
+half: `ChannelRatePlanMapping.roomTypeId` and `resolveExternalRateId` have always supported it.
+
+Reading the room name above its plans is also §4.3 rule 6 in practice — the sentence "Apartment, 1
+Bedroom · BB Flex → …" is what would have made €666 visible in one glance instead of over days.
+
+A catch-all row renders as **"currently publishing to cb75de7d… — set for this room"**: the hotel can
+see where its prices ARE going, and the id is deliberately not offered as the value to save, because
+for that room it is another room's plan.
+
+**Collisions are on screen.** Two room types pointing at one Channex plan gets a red banner naming
+both rooms and saying whichever pushes last overwrites the other. Shown rather than blocked — a
+hotel mid-way through re-mapping must not meet a screen that refuses to render.
+
+⚠️ I left `mappingCollisions` computed and unrendered, and the build caught it as an unused
+variable. Worth noting because the lint did the job a reviewer would have: a number computed and
+never shown is a decision made and hidden.
+
+`pnpm verify` green, 2,430 tests; CM builds.
+
+**Still open from the 13 Sept log:** §4.4's live read-back from Channex (the only trustworthy
+confirmation, given BUG-014), §4.5's migration of existing catch-all rows, and §5's bulk-selector
+tree. The migration matters most — every existing rate mapping is a catch-all and reads as
+`unconfirmed` now, which is correct but means the first hotel to open Mapping sees work to do.
+
 ### 2026-09-13 · Claude · DONE · BUG-016 verified, and a correction to the 13 Sept log
 Files: `packages/core/src/inventory/waterfall.test.ts`, `packages/connectivity/src/{mapping-rows.ts,room-scoped-mapping.test.ts}`.
 

@@ -6,7 +6,7 @@ import { updateStreamMapping, type ActionResult } from "@/lib/actions-config";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 export function MappingEditDialog({
-  kind, id, productId, label, externalId, channelName, channelId, options = [],
+  kind, id, productId, label, externalId, channelName, channelId, roomTypeId, options = [],
 }: {
   kind: "room" | "rate";
   /** The existing mapping row, or null when this product has never been sent to the channel. */
@@ -18,6 +18,14 @@ export function MappingEditDialog({
   channelName: string;
   /** Which channel this row maps to — resolved server-side against the property, never trusted. */
   channelId?: string;
+  /**
+   * ⚠️ Which room type a RATE mapping is for.
+   *
+   * Channex holds one rate plan per room type. Saved without it, the row is a catch-all covering
+   * every room — which is how a price set on the 1-Bedroom was published against the 2-Bedroom
+   * (BUG-019). The room stream never needs it; the rate stream always does.
+   */
+  roomTypeId?: string;
   /** Products pulled from the OTA (spec §3.6) — offered as a dropdown; empty = manual id entry. */
   options?: { id: string; name: string }[];
 }) {
@@ -44,6 +52,7 @@ export function MappingEditDialog({
           {/* Provisioning is one-shot, so a product added afterwards has no mapping row to update.
               The action creates one from this. */}
           <input type="hidden" name="productId" value={productId} />
+      {roomTypeId && <input type="hidden" name="mappingRoomTypeId" value={roomTypeId} />}
           {channelId && <input type="hidden" name="channelId" value={channelId} />}
           {options.length > 0 ? (
             <>
