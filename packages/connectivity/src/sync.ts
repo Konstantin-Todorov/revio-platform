@@ -16,6 +16,7 @@ import {
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { decidePull, type Stay } from "./pull-merge.js";
 import { indexRateMappings, resolveExternalRateId } from "./rate-mapping.js";
+import { comparePublished, summarisePublished, type ExpectedRate, type PublishedSummary } from "./published-check.js";
 
 /** The tenant-scoped Prisma proxy each app already builds (`@revio/db` `forTenant`). */
 type Db = ReturnType<typeof forTenant>;
@@ -1313,4 +1314,106 @@ function toResolvablePlan(rp: {
       rounding: o.rounding as never,
     })),
   };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * §4.4 — verify against the destination
+ * ───────────────────────────────────────────────────────────────────────────*/
+
+export interface VerifyResult {
+  ok: boolean;
+  /** Why we could not look. Distinct from "we looked and found nothing wrong". */
+  error?: string;
+  summary?: PublishedSummary;
+  from?: string;
+  to?: string;
+}
+
+/**
+ * Ask the channel what it is publishing, and compare it with what we hold.
+ *
+ * ⚠️ **The only confirmation in this system that reads the destination.** Everything else reports on
+ * the attempt, and from our side a mis-mapped push and a correct one are indistinguishable because
+ * both succeed — which is how €666 sat on the wrong room for days with the Sync Center green.
+ *
+ * ⚠️ **A failed read is an ERROR, never "nothing published".** `data.length ?? 0` reads zero rows for
+ * a dead key exactly as for an empty account, and reporting a failure to look as a clean result is
+ * the trap named three times in the root `CLAUDE.md`.
+ *
+ * Mock channels are refused outright rather than compared: their adapter invents and reads back its
+ * own ids, so a green result would mean nothing at all and would be worse than no button.
+ */
+export async function verifyPublished(
+  prisma: Db,
+  channelId: string,
+  days = 14,
+): Promise<VerifyResult> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, error: "That channel no longer exists." };
+
+  if (channel.connectivityMode === "mock") {
+    return {
+      ok: false,
+      error: `${channel.name} is a demo channel — it reads back whatever we sent it, so a green result would prove nothing. Verification is for real channels.`,
+    };
+  }
+
+  const adapter = await adapterFor(prisma, channel, "push");
+  if (!adapter || typeof (adapter as { readPublishedRates?: unknown }).readPublishedRates !== "function") {
+    return { ok: false, error: `${channel.name} cannot be read back — only Channex supports it today.` };
+  }
+
+  const todayIso = ymd(new Date());
+  const to = ymd(new Date(Date.parse(`${todayIso}T00:00:00Z`) + days * 86_400_000));
+
+  const read = await (adapter as unknown as {
+    readPublishedRates: (a: string, b: string) => Promise<
+      { ok: true; rates: { externalRateId: string; date: string; priceMinor: number | null }[] } | { ok: false; error: string }
+    >;
+  }).readPublishedRates(todayIso, to);
+
+  if (!read.ok) return { ok: false, error: read.error, from: todayIso, to };
+
+  /*
+   * What we believe we sent, built from the SAME room-scoped mappings the push resolves through —
+   * so a pair with no mapping produces no expectation rather than a false "missing".
+   */
+  const [rateMaps, roomTypes, prices] = await Promise.all([
+    prisma.channelRatePlanMapping.findMany({
+      where: { channelId }, include: { ratePlan: { select: { id: true, name: true } } },
+    }),
+    prisma.roomType.findMany({ where: { propertyId: channel.propertyId }, select: { id: true, name: true, defaultOccupancy: true, maxGuests: true } }),
+    prisma.ratePrice.findMany({
+      where: {
+        propertyId: channel.propertyId,
+        date: { gte: new Date(`${todayIso}T00:00:00Z`), lte: new Date(`${to}T00:00:00Z`) },
+      },
+      select: { roomTypeId: true, ratePlanId: true, date: true, priceMinor: true, occupancy: true },
+    }),
+  ]);
+
+  const index = indexRateMappings(
+    rateMaps.map((m) => ({ ratePlanId: m.ratePlanId, roomTypeId: m.roomTypeId, externalRateId: m.externalRateId })),
+    { allowCatchAll: false },
+  );
+  const roomName = new Map(roomTypes.map((r) => [r.id, r.name]));
+  const planName = new Map(rateMaps.map((m) => [m.ratePlanId, m.ratePlan.name]));
+  // The headline price only — one row per (plan, room, date), the same figure the push sends.
+  const primaryOf = new Map(roomTypes.map((r) => [r.id, r.defaultOccupancy ?? r.maxGuests]));
+
+  const expected: ExpectedRate[] = [];
+  for (const p of prices) {
+    if (p.occupancy !== primaryOf.get(p.roomTypeId)) continue;
+    const externalRateId = resolveExternalRateId(index, p.roomTypeId, p.ratePlanId);
+    if (!externalRateId) continue;
+    expected.push({
+      externalRateId,
+      date: ymd(p.date),
+      priceMinor: p.priceMinor,
+      roomTypeName: roomName.get(p.roomTypeId) ?? p.roomTypeId,
+      ratePlanName: planName.get(p.ratePlanId) ?? p.ratePlanId,
+    });
+  }
+
+  return { ok: true, summary: summarisePublished(comparePublished(expected, read.rates)), from: todayIso, to };
 }

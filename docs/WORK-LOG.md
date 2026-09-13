@@ -19,6 +19,33 @@ This entry and that handoff are intentionally UNCOMMITTED coordination documenta
 Platform pull/rebase was attempted but refused because existing docs work is dirty; no stash,
 reset, app edits or platform commit was made. Do not sweep these files into unrelated app commits.
 
+### 2026-09-13 · Claude · DONE · §4 is complete — Verify reads the destination, from a button
+Files: `packages/connectivity/src/sync.ts` (`verifyPublished`),
+`apps/channel-manager/{lib/actions-config.ts,components/mapping/VerifyStrip.tsx,components/mapping/verify-strip.test.tsx,app/(protected)/mapping/page.tsx}`.
+
+The read-back now has a button. It sits **above** the mapping tables, because it is what somebody
+reaches for immediately after mapping — to know it took.
+
+**Three outcomes, and "could not look" is one of them.** A failed read renders as an error, never as
+"nothing wrong": `data.length ?? 0` reads zero rows for a revoked key exactly as for an empty
+account, and this strip exists because things that report success without achieving it have cost
+this project days.
+
+⚠️ **Mock channels are refused outright.** Their adapter reads back whatever we sent it, so a green
+result would prove nothing — worse than no button, because it would look like proof.
+
+The findings are sentences, not counts. "3 mismatches" is a number; *"Apartment, 1 Bedroom · BB Flex
+2026-09-20 — we have €666, they publish €150"* is what makes somebody open Mapping at the right row.
+An `unexpected` finding has no room name — we never sent to that plan — so it is named by the
+channel's own id, which is precisely what identifies the room the price wrongly landed on.
+
+Looked at all three states rendered. The €666 case produces **two findings that name each other**,
+which is the whole argument for reading the destination rather than the attempt.
+
+`pnpm verify` green, 2,447 tests; CM builds.
+
+**§4 of the 13 Sept log is now done.** Remaining from that document: §5's bulk-selector tree.
+
 ### 2026-09-13 · Claude · DONE · Two things Codex caught in MY code
 **From `docs/partner/WEBSITE-SUPPORT-HANDOFF-2026-09-13.md`.** Both were mine, both were live.
 Files: `apps/channel-manager/{app/signup/page.tsx,components/auth/SignupForm.tsx,lib/actions-signup.ts}`,

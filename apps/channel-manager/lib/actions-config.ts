@@ -11,6 +11,7 @@ import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-help
 import { flashError, setFlash } from "@revio/ui/flash";
 import { guard, requireCapability } from "./authz";
 import { earliestSelectable, pastRangeRefusal, renderSystemEmail, renderSystemEmailText, todayInTimeZone } from "@revio/core";
+import { verifyPublished } from "@revio/connectivity";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -727,4 +728,53 @@ export async function sendTestEmail(): Promise<void> {
     newValue: res.ok ? `sent to ${to} (${res.mode})` : `failed: ${res.error}`,
   });
   revalidatePath("/settings", "layout");
+}
+
+export interface VerifyActionResult {
+  ok?: boolean;
+  error?: string;
+  headline?: string;
+  examples?: {
+    kind: string; date: string; ours: number | null; theirs: number | null;
+    roomTypeName?: string; ratePlanName?: string;
+    /** The channel's own id — the only handle an `unexpected` finding has, since we never sent it. */
+    externalRateId: string;
+  }[];
+  window?: string;
+}
+
+/**
+ * Ask the channel what it is actually publishing.
+ *
+ * ⚠️ This is the only check in the product that reads the DESTINATION. Every other signal — the Sync
+ * Center, the push summary, the channel's status pill — reports on the attempt, and a mis-mapped
+ * push succeeds exactly like a correct one. On 13 September a €666 price sat published against the
+ * wrong room for days with all of those green.
+ */
+export async function verifyChannelPublished(_prev: VerifyActionResult | null, fd: FormData): Promise<VerifyActionResult> {
+  const _g = await guard("manageDistribution");
+  if (!_g.ok) return { error: _g.error };
+  const { id: propertyId } = await getProperty();
+
+  const channelId = str(fd, "channelId");
+  // Resolved against this property, never trusted from the form.
+  const channel = await prisma.channel.findFirst({ where: { id: channelId, propertyId } });
+  if (!channel) return { error: "That channel is not on this property." };
+
+  const result = await verifyPublished(prisma, channel.id);
+  if (!result.ok || !result.summary) {
+    // A failure to LOOK is reported as one, never as "nothing wrong".
+    return { error: result.error ?? "Could not read the channel." };
+  }
+
+  return {
+    ok: true,
+    headline: result.summary.headline,
+    examples: result.summary.examples.map((e) => ({
+      kind: e.kind, date: e.date, ours: e.ours, theirs: e.theirs, externalRateId: e.externalRateId,
+      ...(e.roomTypeName ? { roomTypeName: e.roomTypeName } : {}),
+      ...(e.ratePlanName ? { ratePlanName: e.ratePlanName } : {}),
+    })),
+    window: `${result.from} → ${result.to}`,
+  };
 }

@@ -7,6 +7,7 @@ import { fixMappings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MappingEditDialog } from "@/components/mapping/MappingEditDialog";
+import { VerifyStrip } from "@/components/mapping/VerifyStrip";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
           {products.rooms.length + products.rates.length} products pulled from {channel.name} — pick them from the dropdown when mapping.
         </p>
       )}
+
+      {/*
+        §4.4 — the only check that reads the destination. Placed above the mapping tables because it
+        is what somebody reaches for immediately after mapping, to know it took.
+      */}
+      <VerifyStrip channelId={channel.id} channelName={channel.name} />
 
       {/*
         ⚠️ Two of our room types pointing at ONE Channex rate plan.
