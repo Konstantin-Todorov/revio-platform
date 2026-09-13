@@ -43,7 +43,7 @@ const NEEDS = [
 const inputCls =
   "h-10 w-full rounded-md border border-surface-border bg-white px-3 text-[13.5px] text-ink-900 outline-none transition-colors placeholder:text-ink-300 focus:border-brand-600";
 
-export function SignupForm() {
+export function SignupForm({ defaultEmail = "" }: { defaultEmail?: string }) {
   const [state, formAction, pending] = useActionState<SignupResult | null, FormData>(submitSignup, null);
   const [intent, setIntent] = useState<string>("cm");
 
@@ -61,7 +61,7 @@ export function SignupForm() {
           </label>
           <label className="block">
             <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">Work email</span>
-            <input name="email" type="email" required autoComplete="email" placeholder="you@yourhotel.com" className={inputCls} />
+            <input name="email" type="email" required autoComplete="email" defaultValue={defaultEmail} placeholder="you@yourhotel.com" className={inputCls} />
           </label>
         </div>
       </div>

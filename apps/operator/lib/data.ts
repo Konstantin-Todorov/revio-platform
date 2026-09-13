@@ -1103,6 +1103,8 @@ export interface LeadRow {
   /** Did OUR automatic "thanks, we have your request" reach them? False is more urgent than unhandled. */
   acknowledged: boolean;
   handledAt: Date | null;
+  /** When we emailed them a link to start the trial. Null means nobody has offered one yet. */
+  trialSentAt: Date | null;
   createdAt: Date;
 }
 
@@ -1126,6 +1128,7 @@ export async function listLeads(limit = 200): Promise<{ rows: LeadRow[]; openCou
       company: l.company,
       rooms: l.rooms,
       currentSystem: l.currentSystem,
+      trialSentAt: l.trialSentAt,
       channels: l.channels,
       interestedIn: l.interestedIn,
       acknowledged: l.acknowledged,

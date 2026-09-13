@@ -1,0 +1,87 @@
+/* Founder-approved follow-up: dark first, real artwork, more readable sizing. */
+body{font-size:16px}
+.header-inner,.top-nav,.layout{max-width:1480px}
+.layout{grid-template-columns:245px minmax(0,1fr) 205px;gap:48px}
+.nav-group a{font-size:14px;padding-block:9px}
+.nav-group h3{font-size:13px}
+.nav-icon{display:flex;align-items:center;width:22px;flex-shrink:0}
+.card-icon svg{width:28px;height:28px}
+.card p,.callout{font-size:14px}
+.toc{font-size:13px}
+.logo-crop{width:150px;height:34px;display:block;overflow:hidden;position:relative}
+.logo-crop img{position:absolute;width:177px;height:177px;max-width:none;left:-12px;top:50%;transform:translateY(-50%)}
+.logo-white{display:none}.dark .logo-white{display:block}.dark .logo-dark{display:none}
+.docs-label{margin-left:16px;padding-left:16px}
+.search-open{margin-left:60px}
+@media(max-width:1150px){.layout{grid-template-columns:225px minmax(0,1fr);gap:35px}.search-open{margin-left:0}}
+@media(max-width:720px){.layout{display:block}.logo-crop{width:104px;height:25px}.logo-crop img{width:124px;height:124px;left:-9px}.docs-label{font-size:14px;margin-left:8px;padding-left:8px}.header-inner{gap:8px}.card p{font-size:13px}.nav-group a{min-height:44px}}
+
+/* Readability pass: large product docs should feel like a product, not a code sample. */
+body{font-size:17px;line-height:1.78}
+.header-inner,.top-nav,.layout{max-width:1540px}
+.layout{grid-template-columns:276px minmax(0,1fr) 235px;gap:58px}
+#sidebar{font-size:15px;padding-top:36px}
+.nav-group{margin-bottom:30px}
+.nav-group h3{font-size:13px;letter-spacing:.02em;margin-bottom:11px}
+.nav-group a{font-size:15px;line-height:1.35;padding:10px 14px;gap:12px}
+.nav-icon{width:22px;height:22px}
+main{padding-top:54px;max-width:900px}
+.eyebrow{font-size:14px;letter-spacing:.02em;margin-bottom:13px}
+h1{font-size:48px;line-height:1.13;letter-spacing:-1.5px;margin-bottom:16px}
+.lead{font-size:21px;line-height:1.65;margin-bottom:34px;max-width:760px}
+.article-meta{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:-2px 0 28px;font-size:12px;color:var(--muted)}
+.status-badge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:999px;padding:5px 10px;background:var(--soft);color:var(--muted);font-size:12px}
+.status-badge:before{content:'';width:7px;height:7px;border-radius:50%;background:#f2b84b}
+.status-badge.checked{color:var(--accent);border-color:#9fc2f1;background:var(--tint)}
+.status-badge.checked:before{background:#37b779}
+.meta-note{font-size:12px;margin-left:3px}
+h2{font-size:27px;line-height:1.35;margin:44px 0 15px;letter-spacing:-.55px}
+h3{font-size:18px}
+p{font-size:17px;line-height:1.78;margin:11px 0 21px}
+.intro{font-size:18px}
+.callout{font-size:16px;line-height:1.7;padding:18px 21px;margin:29px 0 39px}
+.callout p{font-size:16px;line-height:1.65;margin:5px 0 0}
+.cards{gap:17px;margin:23px 0 38px}
+.card{padding:25px;min-height:192px;border-radius:13px}
+.card h3{font-size:18px}
+.card p{font-size:15px;line-height:1.7}
+.card-icon svg{width:31px;height:31px}
+.steps{margin-top:28px}
+.steps li{padding-left:51px;padding-bottom:29px}
+.steps li:before{width:31px;height:31px;line-height:30px;font-size:13px}
+.steps li:not(:last-child):after{top:32px;left:15px}
+.steps p{font-size:16px;line-height:1.7;margin-top:6px}
+.table-wrap{margin:25px 0}
+table{font-size:15px}
+th,td{padding:14px 18px}
+.toc{font-size:14px;padding-top:57px}
+.toc-title{font-size:14px;margin-bottom:15px}
+#toc-links a{padding:7px 0 7px 17px}
+.toc-note{font-size:13px;margin-top:44px;padding-top:21px}
+.sidebar-bottom{font-size:13px;line-height:1.55}
+.sidebar-bottom span{display:block;margin:5px 0 14px}
+.sidebar-bottom a{display:inline-block;color:var(--accent);font-size:13px}
+.sidebar-bottom b{font-weight:500}
+.article-footer{font-size:13px;margin-top:48px;padding-top:21px}
+.next{padding:20px 23px;margin-top:29px}
+.next small{font-size:12px}
+.next span{font-size:16px}
+@media(max-width:1150px){.layout{grid-template-columns:240px minmax(0,1fr);gap:42px}main{max-width:none}.toc{display:none}}
+@media(max-width:720px){
+  body{font-size:16px}
+  .layout{display:block}
+  main{padding-top:35px}
+  h1{font-size:35px;letter-spacing:-.9px}
+  .lead{font-size:19px;line-height:1.6}
+  h2{font-size:25px;margin-top:38px}
+  p{font-size:16px;line-height:1.72}
+  .intro{font-size:17px}
+  .callout{font-size:15px;padding:16px 17px}
+  .callout p{font-size:15px}
+  .cards{grid-template-columns:1fr;gap:12px}
+  .card{min-height:0;padding:21px}
+  .card p{font-size:14px}
+  .steps p{font-size:15px}
+  .article-meta{margin-bottom:23px}
+  #sidebar{width:min(350px,100%);padding:27px 24px;height:calc(100dvh - 116px)}
+}

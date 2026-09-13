@@ -1,7 +1,7 @@
-import { Inbox, Check, Undo2, Mail } from "lucide-react";
+import { Inbox, Check, Undo2, Mail, Send } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { listLeads } from "@/lib/data";
-import { setLeadHandled } from "@/lib/actions-leads";
+import { setLeadHandled, sendLeadTrialInvite } from "@/lib/actions-leads";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +67,11 @@ export default async function LeadsPage() {
                           {l.email}
                         </a>
                         {l.handledAt && <StatusPill tone="success">Replied</StatusPill>}
+                        {l.trialSentAt && (
+                          <StatusPill tone="info">
+                            Trial sent {l.trialSentAt.toISOString().slice(0, 10)}
+                          </StatusPill>
+                        )}
                         {/*
                           Our own automatic acknowledgement never reached them. More urgent than an
                           unhandled lead: this person is sitting there having heard nothing at all
@@ -104,6 +109,29 @@ export default async function LeadsPage() {
                     >
                       Reply
                     </a>
+
+                    {/*
+                      The one action this queue existed without: offering the trial.
+                      Everything needed to decide is already on the row — who they are, how many
+                      rooms, what they run now, which products they ticked — and the answer was a
+                      hand-written email each time.
+
+                      It sends a LINK to the ordinary public signup, never an account: nobody here
+                      should know a customer's password, and every abuse rule (one trial per product
+                      ever, aliases of a mailbox, the hourly ceiling) already lives on that one path.
+                    */}
+                    {!l.trialSentAt && (
+                      <form action={sendLeadTrialInvite} className="shrink-0">
+                        <input type="hidden" name="id" value={l.id} />
+                        <button
+                          type="submit"
+                          title={`Email ${l.email} a link to start the 30-day trial`}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-2.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700"
+                        >
+                          <Send className="h-3.5 w-3.5" /> Send trial
+                        </button>
+                      </form>
+                    )}
 
                     <form action={setLeadHandled} className="shrink-0">
                       <input type="hidden" name="id" value={l.id} />

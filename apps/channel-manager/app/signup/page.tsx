@@ -13,7 +13,22 @@ export const metadata = { title: "Start your free trial · Revio" };
  * rather than the product's. When a central login lands at its own origin, this moves there and
  * leaves a redirect.
  */
-export default function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string }>;
+}) {
+  /*
+   * `?email=` prefills the field, and nothing more.
+   *
+   * It exists for the trial link the operator console sends an enquiry: the address we invited
+   * should be the address that gets the trial, without anyone retyping it. It is NOT trusted —
+   * whatever is submitted still has to be confirmed by clicking a link sent to it, so a crafted
+   * URL can prefill a box and achieve nothing else. And the page looks identical whether or not the
+   * address already has an account, because saying otherwise here would turn the front door into a
+   * way to ask us who banks with us.
+   */
+  const { email } = await searchParams;
   return (
     <div className="flex min-h-screen items-stretch bg-surface-muted">
       <div className="relative hidden w-1/2 flex-col justify-between bg-gradient-to-br from-brand-900 to-brand-800 p-12 text-white lg:flex">
@@ -57,7 +72,7 @@ export default function SignupPage() {
           <h2 className="text-[20px] font-bold tracking-tight text-ink-900">Start your free trial</h2>
           <p className="mb-5 mt-1 text-[13px] text-ink-500">Thirty days of all three Revio products. No card, no call.</p>
 
-          <SignupForm />
+          <SignupForm defaultEmail={email ?? ""} />
 
           <p className="mt-5 text-center text-[12.5px] text-ink-500">
             Already have an account?{" "}

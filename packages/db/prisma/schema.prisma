@@ -326,6 +326,14 @@ model Lead {
   /// Set when somebody has dealt with it. Null is the working queue.
   handledAt     DateTime?
   handledById   String?
+  /// When we emailed this enquiry a link to start the free trial themselves.
+  ///
+  /// Recorded rather than inferred because "have we offered them a trial yet" is the question
+  /// somebody working the queue actually asks, and the answer must survive the person who sent it
+  /// going on holiday. It is NOT proof they started one — the link goes through the ordinary public
+  /// signup, which refuses a second trial on an address that already had one.
+  trialSentAt   DateTime?
+  trialSentById String?
   createdAt     DateTime  @default(now())
 
   @@index([createdAt])

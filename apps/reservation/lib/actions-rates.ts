@@ -130,7 +130,7 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
   const id = str(fd, "id");
   if (!id) return;
   const rp = await prisma.ratePlan.findUnique({ where: { id }, include: { _count: { select: { children: true, resLines: true } } } });
-  if (!rp) return;
+  if (!rp) return flashError("That rate plan no longer exists — somebody removed it while this page was open.");
 
   // Deletion guard (spec §3.6): a rate plan mapped to the channel manager cannot be deleted —
   // the CM-side call would fail. Unmap in RevioLink → Mapping first.
@@ -212,7 +212,7 @@ export async function deleteRestrictionRule(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
   const rule = await prisma.restrictionRule.findUnique({ where: { id } });
-  if (!rule) return;
+  if (!rule) return flashError("That restriction rule no longer exists — somebody removed it while this page was open.");
   await prisma.restrictionRule.delete({ where: { id } });
   await logAudit(propertyId, tenantId, { entity: `Restriction · ${rule.name}`, field: "delete", source: "rule" });
   await recordPush(propertyId, tenantId, `Restriction rule "${rule.name}" removed`);
@@ -854,7 +854,14 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
     where: { id },
     include: { _count: { select: { resLines: true, units: true } } },
   });
-  if (!rt || rt.propertyId !== property.id) return;
+  /*
+   * Both halves answer the same way on purpose. "It is gone" and "it is not yours" must be
+   * indistinguishable here, or the button becomes a way to ask whether an id exists at another
+   * property.
+   */
+  if (!rt || rt.propertyId !== property.id) {
+    return flashError("That room type no longer exists — somebody removed it while this page was open.");
+  }
 
   // Same deletion guard as the rate plans: a room type mapped to the channel manager can't go —
   // the OTA side would keep selling a product we no longer have.
