@@ -110,12 +110,21 @@ Marketing copy must not promise "we've created your account", because sometimes 
 Two articles are missing and are now answerable:
 
 1. **"Starting your free trial"** — the four steps above; that the trial covers all three products
-   and why; that no card is needed; that the link expires in 7 days and works once (the authority is `TOKEN_POLICY.invite` — never re-type it); what to do if
-   the email does not arrive (spam, then the sign-in page's *Forgot password*).
+   and why; **that they keep only the ones they used and pay for those alone**; that no card is
+   needed; that the link expires in 7 days and works once (the authority is `TOKEN_POLICY.invite` —
+   never re-type it); what to do if the email does not arrive (spam, then the sign-in page's
+   *Forgot password*).
 2. **"Signing in to the right product"** — that one email and one password open every product the
    hotel has; which product does what, in one line each; that a hotel sees only what it owns.
 
 A third, once central login ships: **"One login, three products"** — replaces article 2.
+
+A fourth, and the one support will be asked about most: **"What happens when the trial ends"** —
+the trial ends per product; nothing is deleted; they keep the ones they used; **the month they
+decide in is charged only from that day, never for a trial day**; every month after it is a whole
+month; there is no self-serve checkout yet, so they tell us and we switch it on. All of that is
+enforced in code — `trials/`, `billing/proration.ts` and `generateInvoices` — so the article can
+state it flatly rather than hedging.
 
 ---
 

@@ -104,10 +104,19 @@ export function productAccessCopy(
     case "trial-ended":
       return {
         title: `Your ${s.product.name} trial has ended`,
+        /*
+         * The money sentence belongs HERE, on the screen where they decide.
+         *
+         * This is where a hotel weighs up keeping it, and until the joining month was prorated we
+         * could not honestly say what keeping it costs — the month they decided in was billed in
+         * full, free days included. It is true now (`billing/proration.ts`), and it is the fact
+         * that makes "keep it" a small decision rather than an unknown one.
+         */
         body:
           `The trial finished on ${s.endedAt ? fmtDate(s.endedAt) : "its end date"}. ` +
           `Nothing has been deleted — every room, rate and booking for ${hotelName} is exactly where you left it, ` +
-          `and switching ${s.product.name} back on brings it all back.`,
+          `and switching ${s.product.name} back on brings it all back. ` +
+          `If you keep it you pay from the day you decide, never for a day of the trial.`,
       };
     case "switched-off":
       return {
