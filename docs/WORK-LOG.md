@@ -7,6 +7,38 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · Trial analytics — what they did, and what to sell them
+**Founder: "we need to know more about the people that went and used the free trials, what happened,
+and what we can sell them."** This is the payoff of giving all three products away.
+Files: `packages/core/src/trials/trial-reading.{ts,test.ts}`,
+`apps/operator/{lib/trial-reading-data.ts,components/analytics/TrialsPanel.tsx,components/analytics/trials-panel.test.tsx,app/(protected)/analytics/page.tsx}`.
+
+⚠️ **The product we sell them is the one they USED, not the one they ticked at signup.** A hotel
+that chose "stop the OTAs double-booking my rooms" and then spent three weeks in the front desk is a
+RevioPMS sale, and their own days of use are the argument. That only works because every trial gets
+all three — this screen is where that decision earns its keep.
+
+**A trial is not a customer and `engagementOf` is the wrong lens.** Engagement judges a rolling
+thirty days and calls a silent fortnight "quiet". A trial has a deadline: five silent days at day 26
+is most of the remaining chance gone, and the same silence at day 4 is nothing. `readTrial` weighs
+silence against how much clock is left, so **drifting** is caught while it can still be fixed rather
+than reported at expiry.
+
+Two refusals worth keeping: a trial with four page views is **never** called an opportunity — it is
+a rescue, and the action says "check they got the confirmation email", not "sell them RevioPMS"; and
+one person poking about is not a hotel adopting anything (`people >= 2` before asking for the order).
+
+⚠️ **Usage is counted only INSIDE each trial's own window**, or a hotel with a year of RevioLink
+would look like a wildly engaged RevioPMS trial on activity that has nothing to do with it.
+
+⚠️ **Found by looking at the rendered screen, with all 15 tests green:** a trial ended early still
+has a future `endsAt`, so the row read **"ended · was used"** beside **"11 days left"** on one line.
+`TrialReading.finished` now exists and the countdown is gated on it. Also renamed a test fixture
+from `use()` — ESLint treats every `use*` function as a React hook, so it failed `next build`
+rather than vitest, which is a slow way to find out.
+
+`pnpm verify` green, 2,391 tests; operator builds.
+
 ### 2026-09-13 · Claude · DONE · The screen a hotel meets when its trial ends
 **Founder: check what a hotel actually sees at trial end — suspend, never delete, they come back.**
 The data was already safe; the SCREEN was the problem, and it was the last thing we say to the

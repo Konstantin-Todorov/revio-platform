@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getUsageReport } from "@/lib/usage";
+import { getTrialReadings } from "@/lib/trial-reading-data";
+import { TrialsPanel } from "@/components/analytics/TrialsPanel";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { Donut } from "@/components/ui/Donut";
 import { DailyBars } from "@/components/ui/DailyBars";
@@ -49,6 +51,7 @@ const VERDICT_TONE: Record<string, "danger" | "warning" | "info" | "success" | "
  */
 export default async function AnalyticsPage() {
   const u = await getUsageReport();
+  const trials = await getTrialReadings();
   const delta = u.activeUsers7d - u.activeUsersPrev7d;
 
   return (
@@ -57,6 +60,19 @@ export default async function AnalyticsPage() {
         title="Product analytics"
         subtitle="Which screens are used, by whom, and who has gone quiet"
       />
+
+      {/*
+        First, because with no paying customers yet EVERY hotel here is a trial — and a trial is the
+        only thing on this page with a deadline. Usage analytics can be read on any Tuesday; a trial
+        four days from expiring cannot.
+      */}
+      <Card className="mb-4">
+        <CardHeader
+          title="Trials — what they did, and what to sell them"
+          subtitle="Every hotel gets all three products, so what they actually opened is the answer to what they will pay for"
+        />
+        <TrialsPanel rows={trials.rows} needAttention={trials.needAttention} />
+      </Card>
 
       {!u.recording && (
         <Card className="p-4">
