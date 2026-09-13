@@ -1,3 +1,4 @@
+import { ROLE_LABEL } from "@revio/core";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { MobileMenuButton } from "./MobileMenuButton";
 import { NotificationBell } from "./NotificationBell";
@@ -7,11 +8,6 @@ import { TopbarSearch } from "./TopbarSearch";
 
 type Property = { id: string; name: string; tenantName: string };
 type NotifItem = { text: string; href: string; tone: "danger" | "warning" | "info" | "success" };
-
-const ROLE_LABEL: Record<string, string> = {
-  owner: "Owner", admin: "Admin", revenue_manager: "Revenue Mgr",
-  distribution_manager: "Distribution", read_only: "Read-only",
-};
 
 export function Topbar({
   properties, activeId, activeName, role, userName, notifItems, products, upsells,

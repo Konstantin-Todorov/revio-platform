@@ -56,6 +56,18 @@ const EXEMPT = {
   // housekeeper who cannot open Settings is exactly the person most likely to be standing in front
   // of a broken screen, and a support form that refuses them loses the report we most need.
   "actions-support.ts:submitSupportRequest": "anybody signed in may ask for help, whatever their role",
+  // ⚠️ The ⌘K palette's search. A READ that writes nothing, so a write capability is the wrong
+  // question — but it is emphatically not ungated, and the gate it has is the one that matters for a
+  // read: `roleCanOpenProduct` (default-deny, `@revio/core/auth/read-scope`) as the first statement,
+  // then, in RevioPMS, `visibleTo` drops every hit whose screen this role may not open.
+  //
+  // Both halves are needed and neither is decorative. The action is a POST endpoint, so a role that
+  // the layout turns away can still call it directly — that is the same reasoning that put every
+  // write behind a guard. And filtering the LINK is not enough on its own, because the result row is
+  // itself the data: a guest's name and e-mail, who is in 214 tonight. Rendering the row has already
+  // leaked it, whatever happens on click. Pinned by apps/pms/lib/search-scope.test.ts and
+  // packages/core/src/auth/read-scope.test.ts, both of which go red if the check is removed.
+  "actions-search.ts:searchEverything": "a read, gated on roleCanOpenProduct + per-hit visibleTo rather than a write capability",
   // Public signup. The ONE action in a hotel-facing app whose entire purpose is to be used by
   // somebody with no account and no tenant — a capability gate would require the thing it creates.
   // Its protections are different in kind rather than absent: a platform-wide hourly ceiling on

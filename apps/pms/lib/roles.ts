@@ -3,17 +3,20 @@
 
 // PMS operational roles (spec §3.9) layered on the shared account roles. owner/admin are the
 // platform-wide managers; the rest are PMS-operational. The account is one shared identity.
-export const PMS_ROLES = ["owner", "admin", "manager", "reception", "housekeeper", "hk_supervisor", "maintenance", "outlet_pos"] as const;
-export type PmsRole = (typeof PMS_ROLES)[number];
+//
+// ⚠️ The LIST lives in `@revio/core` (auth/read-scope) and is re-exported here. It used to be typed
+// out in this file, and a second copy of a role list is the copy that goes stale — a role missing
+// from one of them is precisely the "unknown role" the default-deny below has to refuse.
+import { roleCanOpenProduct } from "@revio/core";
+
+export { PMS_ROLES, type PmsRole } from "@revio/core";
 
 export const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
 
-export const ROLE_LABEL: Record<string, string> = {
-  owner: "Owner", admin: "Admin", manager: "Manager", reception: "Reception",
-  housekeeper: "Housekeeper", hk_supervisor: "HK Supervisor", maintenance: "Maintenance", outlet_pos: "Outlet / POS",
-  // Legacy CM/CRS account roles, shown as-is for identities created in other products.
-  revenue_manager: "Revenue Mgr", distribution_manager: "Distribution", read_only: "Read-only",
-};
+// ⚠️ Re-exported from `@revio/core`, not restated. This map was the fullest of the three copies
+// that existed — the other two knew only the commercial roles — which is precisely why keeping
+// three was a bug waiting for the first screen that had to name a role from another product.
+export { ROLE_LABEL } from "@revio/core";
 
 // Outlets that sell POS items (spec §3.7). Minibar is one outlet among several.
 export const POS_OUTLETS = ["minibar", "spa", "bar", "restaurant"] as const;
@@ -46,9 +49,20 @@ export const SCOPED_NAV: Record<string, string[]> = {
 export function roleHome(role: string): string {
   return SCOPED_NAV[role]?.[0] ?? "/dashboard";
 }
+/**
+ * May this role SEE this screen?
+ *
+ * ⚠️ **Default deny.** This used to end `if (!allowed) return true; // full-access role`, which read
+ * as "a role with no scope is a manager" and meant something quite different: any role RevioPMS had
+ * never heard of got everything. A `revenue_manager` — hired to price rooms, and a perfectly valid
+ * account on the same shared identity — opened the front desk, folios, guest identity documents and
+ * Close Day. The fix is to ask first whether the role belongs in this product at all
+ * (`roleCanOpenProduct`, tested in core), and only then which of its screens it may see.
+ */
 export function roleAllowsPath(role: string, pathname: string): boolean {
+  if (!roleCanOpenProduct(role, "pms")) return false;
   const allowed = SCOPED_NAV[role];
-  if (!allowed) return true; // full-access role
+  if (!allowed) return true; // a full-access PMS role: owner, admin, manager
   return allowed.some((p) => pathname === p || pathname.startsWith(p + "/"));
 }
 

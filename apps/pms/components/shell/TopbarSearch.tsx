@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { CommandPalette } from "@revio/ui/command-palette";
 import { searchEverything } from "@/lib/actions-search";
 
@@ -11,23 +11,20 @@ import { searchEverything } from "@/lib/actions-search";
  * "without changing its position, staying right there where it is". People already know where the
  * box is; moving it would spend that for nothing.
  *
- * What changed is behind it: the form posted to `/search` and made you wait for a page to find one
- * known thing. Now results arrive as you type and Enter opens the first one. `/search` is still
- * there and Enter on nothing still goes to it — it remains the right screen for "show me
- * everything", and the palette is the fast path to one thing.
+ * The form posted to `/search` and made you wait for a page to find one known thing — at a front
+ * desk with somebody standing in front of you. Now results arrive as you type and Enter opens the
+ * first one. `/search` is still there and Enter on nothing still goes to it.
  *
- * Still hidden on the Inventory Calendar (CRS-REFINEMENT-R2 §5.5), because the grid needs the width.
+ * Unlike RevioLink and RevioCRS there is no screen this hides on: RevioPMS's calendar is narrower
+ * than a year-wide ARI grid, and the front desk is exactly where the fast path is worth most.
  */
 export function TopbarSearch() {
-  const pathname = usePathname();
   const router = useRouter();
-  if (pathname?.startsWith("/inventory")) return <div className="hidden flex-1 md:block" aria-hidden />;
-
   return (
     <div className="flex flex-1 justify-start">
       <CommandPalette
         search={searchEverything}
-        placeholder="Search reservations, guests, rooms, rates…"
+        placeholder="Search rooms, guests, reservations…"
         seeAllHref={(q) => `/search?q=${encodeURIComponent(q)}`}
         onNavigate={(href) => router.push(href)}
       />

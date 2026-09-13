@@ -54,7 +54,9 @@
     "./billing-identity-form": "./src/billing-identity-form.tsx",
     "./nav-tail": "./src/nav-tail.tsx",
     "./product-locked": "./src/product-locked.tsx",
-    "./plan-tree": "./src/plan-tree.tsx"
+    "./plan-tree": "./src/plan-tree.tsx",
+    "./command-palette": "./src/command-palette.tsx",
+    "./role-locked": "./src/role-locked.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
