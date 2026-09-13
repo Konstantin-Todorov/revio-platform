@@ -84,3 +84,4 @@ export {
   type OccupancyRate, type SellMode, type ChannexOccupancyOption,
 } from "./channex-occupancy.js";
 export { classifyChannexRatePlan, mappableRatePlans, ratePlansForRoom, type ChannexRatePlan, type ChannexRatePlanKind } from "./channex-products.js";
+export { ratePlanMappingRows, unconfirmedPairs, collidingExternalIds, type RoomScopedMappingRow, type ExistingRateMapping } from "./mapping-rows.js";

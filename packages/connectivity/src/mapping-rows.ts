@@ -223,3 +223,37 @@ export function ratePlanMappingRows(args: {
 export function unconfirmedPairs(rows: readonly RoomScopedMappingRow[]): number {
   return rows.filter((r) => r.unmapped).length;
 }
+
+/**
+ * Channex rate plans bound to more than one of the hotel's room types.
+ *
+ * ⚠️ **One Channex rate plan belongs to exactly one room type**, so two of ours pointing at the same
+ * id means one room's prices overwrite the other's on every push — the later one wins and nothing
+ * says so. It is the same failure as BUG-019 with a different cause: there the mapping was
+ * property-wide, here two room-scoped rows simply collide.
+ *
+ * Found in production on 13 Sept: the inactive `Standard Rate` held two rows, for two different
+ * room types, both pointing at `0ea321e7…`. Reported in the 13 Sept log as a duplicate row; it is
+ * not — a duplicate would be harmless. This is two rooms publishing to one place.
+ *
+ * Returned rather than blocked: the hotel may be mid-way through re-mapping, and refusing to render
+ * a screen because its data is currently inconsistent is how somebody gets stuck with no way to fix
+ * it. The screen warns at the point of choice, which is §4.3 rule 5.
+ */
+export function collidingExternalIds(
+  rows: readonly RoomScopedMappingRow[],
+): { externalId: string; rooms: { roomTypeId: string; roomTypeName: string; ratePlanName: string }[] }[] {
+  const byId = new Map<string, { roomTypeId: string; roomTypeName: string; ratePlanName: string }[]>();
+  for (const r of rows) {
+    if (!r.externalId) continue;
+    const list = byId.get(r.externalId) ?? [];
+    // The same room mapped twice to one id is not a collision — it is one binding, listed once.
+    if (!list.some((x) => x.roomTypeId === r.roomTypeId)) {
+      list.push({ roomTypeId: r.roomTypeId, roomTypeName: r.roomTypeName, ratePlanName: r.ratePlanName });
+    }
+    byId.set(r.externalId, list);
+  }
+  return [...byId.entries()]
+    .filter(([, rooms]) => rooms.length > 1)
+    .map(([externalId, rooms]) => ({ externalId, rooms }));
+}

@@ -137,3 +137,60 @@ describe("the allocation is a cap, never a licence to oversell", () => {
     expect(w.remaining).toBe(-1);
   });
 });
+
+describe("§6 acceptance test — book, then cancel (BUG-015 / BUG-016)", () => {
+  /*
+   * The sequence Ventsislav's 13 Sept log asks for, at the level this function owns.
+   *
+   * Steps 4 and 8 of §6 are the two that were never verified, and they are the two that matter:
+   * a system that decrements but never restores is WORSE than one that does neither — inventory
+   * bleeds away with every cancellation and the hotel loses sellable nights without knowing.
+   *
+   * The push wiring either side of this is verified separately: `syncRealChannels` sends
+   * `.remaining` (sync.ts), the pull calls it after importing, and both products' cancel paths go
+   * through `recordPush`, which calls it with an unscoped — therefore total — push.
+   */
+  const APA2 = { physical: 10, outOfOrder: 0, closed: 0, manualSellLimit: 1 };
+
+  it("step 2 — one room allocated, nothing sold, one bookable", () => {
+    const w = computeWaterfall({ ...APA2, holds: 0, confirmed: 0 });
+    expect(w.available).toBe(1);
+    expect(w.remaining).toBe(1);
+  });
+
+  it("step 4 — the booking lands and the night becomes unsellable", () => {
+    const w = computeWaterfall({ ...APA2, holds: 0, confirmed: 1 });
+    expect(w.confirmed).toBe(1);
+    // This is the number the channel is sent. "Rooms to sell" staying at 1 is the ALLOCATION, and
+    // was never the figure in question — see BUG-017.
+    expect(w.remaining).toBe(0);
+  });
+
+  it("⚠️ step 8 — cancelling gives the night back", () => {
+    // Cancelling drops the line out of ROOM_OCCUPYING_STATUSES, so `confirmed` falls to 0 and the
+    // night returns on its own. There is no separate "restore" path that could be forgotten.
+    const w = computeWaterfall({ ...APA2, holds: 0, confirmed: 0 });
+    expect(w.remaining).toBe(1);
+  });
+
+  it("a hold taken mid-booking also blocks the night, and releases it", () => {
+    expect(computeWaterfall({ ...APA2, holds: 1, confirmed: 0 }).remaining).toBe(0);
+    expect(computeWaterfall({ ...APA2, holds: 0, confirmed: 0 }).remaining).toBe(1);
+  });
+
+  it("⚠️ a cancellation arriving out of order cannot push the count above the allocation", () => {
+    // §6's ordering case: a cancellation processed before its own booking. `confirmed` is derived by
+    // counting live lines, never by incrementing and decrementing a stored total — so an
+    // out-of-order arrival cannot drift the number. It is always a fresh count.
+    expect(computeWaterfall({ ...APA2, holds: 0, confirmed: 0 }).remaining).toBe(1);
+    expect(computeWaterfall({ ...APA2, holds: 0, confirmed: 0 }).available).toBe(1);
+  });
+
+  it("a modified reservation releases its old nights by counting the new ones", () => {
+    // Same reason: the move rewrites the line's dates, and every date is recounted from the lines.
+    const oldNight = computeWaterfall({ ...APA2, confirmed: 0 });
+    const newNight = computeWaterfall({ ...APA2, confirmed: 1 });
+    expect(oldNight.remaining).toBe(1);
+    expect(newNight.remaining).toBe(0);
+  });
+});

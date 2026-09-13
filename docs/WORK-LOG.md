@@ -7,6 +7,29 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Claude · DONE · BUG-016 verified, and a correction to the 13 Sept log
+Files: `packages/core/src/inventory/waterfall.test.ts`, `packages/connectivity/src/{mapping-rows.ts,room-scoped-mapping.test.ts}`.
+
+**BUG-016 — cancellation DOES return availability, and now has the test the log asked for.**
+Traced rather than assumed: cancelling drops the line out of `ROOM_OCCUPYING_STATUSES`, so
+`confirmed` is recounted from live lines and the night returns on its own — there is no separate
+"restore" path that could be forgotten. Both products re-push: the CRS through `recordPush(…,
+stayScope(lines))`, RevioLink through `recordPush(…)` with no scope, and an unscoped push is a
+TOTAL one (`inScope` is true when `exactCells == null`). §6's whole sequence is now a test,
+including the ordering case — an out-of-order cancellation cannot drift the count, because
+`confirmed` is always a fresh count of live lines and never an incremented total.
+
+⚠️ **Correction to the log, and to what I said earlier today.** The two `Standard Rate` mapping rows
+are **not duplicates** — a duplicate would be harmless. They are two DIFFERENT room types pointing
+at the SAME Channex id (`0ea321e7…`). One Channex rate plan belongs to exactly one room type, so
+that means one room's prices overwrite the other's on every push, later one wins, nothing says so.
+Same failure as BUG-019 with a different cause: there the mapping was property-wide, here two
+room-scoped rows collide. `collidingExternalIds` now finds it — returned rather than blocked,
+because refusing to render a screen whose data is currently inconsistent is how somebody gets stuck
+with no way to fix it (§4.3 rule 5 warns at the point of choice instead).
+
+`pnpm verify` green, 2,430 tests.
+
 ### 2026-09-13 · Claude · DONE · ⚠️ An allocation could out-sell the rooms that physically work
 **Found while answering BUG-018. It is in NEITHER bug log, and it is the real oversell path.**
 Files: `packages/core/src/inventory/{waterfall.ts,waterfall.test.ts}`, `apps/channel-manager/lib/data.ts`.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ratePlanMappingRows, unconfirmedPairs, type ExistingRateMapping } from "./mapping-rows.js";
+import { collidingExternalIds, ratePlanMappingRows, unconfirmedPairs, type ExistingRateMapping } from "./mapping-rows.js";
 
 const ROOMS = [
   { id: "r1", name: "Apartment, 1 Bedroom", active: true },
@@ -182,5 +182,44 @@ describe("confirming one room never strips the others", () => {
       expect(row.status).toBe("unconfirmed");
       expect(row.inheritedExternalId).toBe("cb75de7d");
     }
+  });
+});
+
+describe("collidingExternalIds", () => {
+  it("⚠️ catches two room types bound to ONE Channex rate plan", () => {
+    /*
+     * Production, 13 Sept: `Standard Rate` held two rows for two different room types, both
+     * pointing at 0ea321e7…. The log called it a duplicate row — a duplicate would be harmless.
+     * This is two rooms publishing to one place, so one silently overwrites the other on every
+     * push, and the later one wins.
+     */
+    const r = ratePlanMappingRows({
+      roomTypes: ROOMS, ratePlans: PLANS, sellsOn,
+      existing: [
+        { id: "a", ratePlanId: "flex", roomTypeId: "r1", externalId: "0ea321e7", status: "complete" },
+        { id: "b", ratePlanId: "flex", roomTypeId: "r2", externalId: "0ea321e7", status: "complete" },
+      ],
+    });
+    const clashes = collidingExternalIds(r);
+    expect(clashes).toHaveLength(1);
+    expect(clashes[0]!.externalId).toBe("0ea321e7");
+    expect(clashes[0]!.rooms.map((x) => x.roomTypeName).sort())
+      .toEqual(["Apartment, 1 Bedroom", "Apartment, 2 Bedrooms"]);
+  });
+
+  it("says nothing when every room has its own Channex plan — the correct shape", () => {
+    const r = ratePlanMappingRows({
+      roomTypes: ROOMS, ratePlans: PLANS, sellsOn,
+      existing: [
+        { id: "a", ratePlanId: "flex", roomTypeId: "r1", externalId: "ae6b1ed1", status: "complete" },
+        { id: "b", ratePlanId: "flex", roomTypeId: "r2", externalId: "cb75de7d", status: "complete" },
+        { id: "c", ratePlanId: "flex", roomTypeId: "r3", externalId: "d383225c", status: "complete" },
+      ],
+    });
+    expect(collidingExternalIds(r)).toEqual([]);
+  });
+
+  it("ignores unmapped rows rather than treating 'no id' as a shared one", () => {
+    expect(collidingExternalIds(rows())).toEqual([]);
   });
 });
