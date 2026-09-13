@@ -7,6 +7,16 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Codex · CLAIM · Publish trial docs and add docs identity
+Scope design/docs-preview only: publish the three current trial/account articles
+already committed, plus favicon and social preview metadata using existing Revio
+brand artwork. Blog remains in sibling revio-websites; Docs remains task-focused.
+Deploy only the isolated Railway docs service. No app, auth, billing, DB or operator edits.
+
+**DONE:** Published the isolated Docs service on Railway. The three account/trial
+articles are live; the document head now carries the Revio favicon, touch icon,
+description and social preview. No platform service or application source was changed.
+
 ### 2026-09-13 · Codex · CLAIM · Trial copy and documentation ownership
 Codex owns all four article slots from SIGNUP-AND-LOGIN-BRIEF: starting trial,
 product sign-in, trial ending, and the future central-login replacement. Three are
