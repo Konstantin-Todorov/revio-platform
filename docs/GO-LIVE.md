@@ -222,11 +222,22 @@ back (`docs/RESTORE.md` + Railway redeploy of the previous image).
 - **Login rate limiting, password reset, revocable sessions** (N1·N2·N3).
 
 ## Still open, not blocking
-Drop the unused `ProductMapping` table · PMS §2 remainder (click-to-manage modal) · P3 in-app
-assistant · two indexes exist in migrations but not in `schema.prisma`
-(`Folio_propertyId_outcome_idx`, `Reservation_propertyId_departedAt_idx`), so `migrate diff` reports
-drift — harmless (they are extra indexes, not missing ones) but it should be reconciled before it
-hides a real drift.
+P3 in-app assistant.
+
+~~Drop the unused `ProductMapping` table~~ — **already done**, verified 2026-08-31 and again today:
+no such model in `schema.prisma`. Third stale line in this one paragraph, which is the point below.
+
+~~Two indexes exist in migrations but not in `schema.prisma`~~ — **already reconciled**, checked
+2026-09-13 by running `drift-lint` against a real shadow database: *"the schema and the migrations
+describe the same database."* Both indexes are declared (`schema.prisma:1454`, `:1999`). The entry
+outlived the fix. ⚠️ It stayed here because `pnpm verify` **skips** `drift-lint` with no
+`SHADOW_DATABASE_URL` — it says so out loud and CI runs it for real, but locally it means nobody sees
+the answer, so a line like this can sit uncontradicted for weeks. Run it with
+`SHADOW_DATABASE_URL=postgresql://$(whoami)@localhost:5432/revio_drift_shadow` before believing any
+claim about drift.
+
+~~PMS §2 remainder (click-to-manage modal)~~ — **done** (`7e3f0d8`), per
+`docs/PMS-ROUND2-STATUS.md`. Same shape: the item outlived the work.
 
 ## Done since this list was written
 **N4** TOTP 2FA on the operator console · **N5** password policy with breach checking, the

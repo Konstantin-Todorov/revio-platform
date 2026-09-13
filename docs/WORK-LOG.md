@@ -7,6 +7,21 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-13 · Codex · CLAIM · Trial copy and documentation ownership
+Codex owns all four article slots from SIGNUP-AND-LOGIN-BRIEF: starting trial,
+product sign-in, trial ending, and the future central-login replacement. Three are
+current; the central-login article is blocked on shipping that feature and MUST NOT
+be published as available. Scope: design/docs-preview/content.js and isolated
+docs/partner copy handoff; sibling revio-websites marketing copy. Existing docs shell
+was Codex-owned per 12 Sept log; no other active docs claim found. No auth/billing
+logic, login chooser redesign, customer-app or icon rollout changes.
+Docs remain intentionally uncommitted; do not sweep into platform commits.
+DONE locally: three current articles in Start here → Account and trial, verified
+rendering/sidebar/TOC in browser and JavaScript syntax. No new platform E2E or live
+docs deployment claimed. Fourth article remains deferred pending central login.
+Full response, remaining work and stale brief claims:
+docs/partner/TRIAL-COPY-RESPONSE-2026-09-13.md. No current platform blocker.
+
 ### 2026-09-13 · Claude · DONE · Channex catch-up, trial emails, scheduled invoicing, lead→trial
 Commits `8b254f9` · `4a3076b` · `ec8a396` · `882fab9` · `8f4afe0`.
 
