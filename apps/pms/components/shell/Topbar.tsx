@@ -29,7 +29,7 @@ export function Topbar({
   return (
     <header className="sticky top-0 z-20 flex h-[60px] items-center gap-3 border-b border-surface-border bg-white/95 px-4 backdrop-blur lg:gap-4 lg:px-6">
       <MobileMenuButton />
-      <TopbarSearch />
+      <TopbarSearch activePropertyId={activeId} />
 
       <div className="ml-auto">
         <WorkspaceSwitcher properties={properties} activeId={activeId} activeName={activeName} />

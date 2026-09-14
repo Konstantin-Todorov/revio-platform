@@ -44,8 +44,14 @@ export function CommandPalette({
   placeholder?: string;
   /** Where Enter goes when nothing is highlighted — the full results page. */
   seeAllHref?: (query: string) => string;
-  /** Called with the chosen result's href. The app decides how it navigates. */
-  onNavigate: (href: string) => void;
+  /**
+   * Called with the chosen result's href, and the hit itself when there is one.
+   *
+   * ⚠️ The hit is passed so the app can do what only it knows how to do: a record in another
+   * property needs the active workspace switched before its screen can open it. The palette
+   * deliberately does not know about properties or cookies — it hands over what it chose.
+   */
+  onNavigate: (href: string, hit?: SearchHit) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -114,7 +120,7 @@ export function CommandPalette({
 
   const close = () => { setOpen(false); setQ(""); setHits([]); setActive(0); gen.current++; };
 
-  const choose = (h: SearchHit) => { close(); onNavigate(h.href); };
+  const choose = (h: SearchHit) => { close(); onNavigate(h.href, h); };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") { e.preventDefault(); close(); return; }

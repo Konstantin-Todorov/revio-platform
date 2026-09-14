@@ -51,17 +51,17 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
   const [roomTypes, ratePlans, channels, reservations, properties] = await Promise.all([
     prisma.roomType.findMany({
       where: { ...where, name: like },
-      select: { id: true, name: true, code: true, totalRooms: true, property: { select: { name: true } } },
+      select: { id: true, name: true, code: true, totalRooms: true, propertyId: true, property: { select: { name: true } } },
       take,
     }),
     prisma.ratePlan.findMany({
       where: { ...where, name: like },
-      select: { id: true, name: true, code: true, active: true, property: { select: { name: true } } },
+      select: { id: true, name: true, code: true, active: true, propertyId: true, property: { select: { name: true } } },
       take,
     }),
     prisma.channel.findMany({
       where: { ...where, name: like },
-      select: { id: true, name: true, code: true, status: true, property: { select: { name: true } } },
+      select: { id: true, name: true, code: true, status: true, propertyId: true, property: { select: { name: true } } },
       take,
     }),
     prisma.reservation.findMany({
@@ -71,7 +71,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
          they sleep here" — that is RevioCRS's question. Joining lines here would cost a query per
          keystroke to answer the wrong one. */
       select: {
-        id: true, guestName: true, externalId: true, importedAt: true, status: true,
+        id: true, guestName: true, externalId: true, importedAt: true, status: true, propertyId: true,
         channel: { select: { name: true } }, property: { select: { name: true } },
       },
       orderBy: { importedAt: "desc" },
@@ -87,7 +87,10 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
 
   // Only name the property when there is more than one to confuse it with.
   const multi = (await prisma.property.count({ where: { tenantId: session.tenantId } })) > 1;
-  const ctx = (name: string) => (multi ? { context: name } : {});
+  /* ⚠️ The id travels with the name. `context` tells the reader WHICH hotel a row is in; the id is
+     what lets the click actually open it, because every screen this links to is scoped to the active
+     property. Kept together so a new hit kind cannot pick up one without the other. */
+  const ctx = (id: string, name: string) => (multi ? { context: name, propertyId: id } : { propertyId: id });
   const day = (d: Date) => d.toISOString().slice(0, 10);
 
   return [
@@ -97,7 +100,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       title: r.guestName || r.externalId || "Reservation",
       subtitle: `${r.channel?.name ?? "direct"} · ${r.status} · arrived ${day(r.importedAt)}`,
       href: `/reservations?q=${encodeURIComponent(r.externalId ?? r.guestName ?? "")}`,
-      ...ctx(r.property.name),
+      ...ctx(r.propertyId, r.property.name),
     })),
     ...properties.map((p): SearchHit => ({
       id: p.id, kind: "hotel", title: p.name, subtitle: p.timezone, href: "/settings/property",
@@ -108,7 +111,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       title: r.name,
       subtitle: `${r.code} · ${r.totalRooms} room${r.totalRooms === 1 ? "" : "s"}`,
       href: "/rooms-rates",
-      ...ctx(r.property.name),
+      ...ctx(r.propertyId, r.property.name),
     })),
     ...ratePlans.map((r): SearchHit => ({
       id: r.id,
@@ -116,11 +119,11 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       title: r.name,
       subtitle: r.active ? (r.code ?? "rate plan") : "inactive",
       href: "/rooms-rates",
-      ...ctx(r.property.name),
+      ...ctx(r.propertyId, r.property.name),
     })),
     ...channels.map((c): SearchHit => ({
       id: c.id, kind: "channel", title: c.name, subtitle: c.status, href: "/channels",
-      ...ctx(c.property.name),
+      ...ctx(c.propertyId, c.property.name),
     })),
     // Screens, so the palette is also how you move around. Filtered by the same ranking as
     // everything else, so typing "map" reaches Mapping without it competing with real data.

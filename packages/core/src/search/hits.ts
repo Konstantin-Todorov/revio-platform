@@ -79,6 +79,19 @@ export interface SearchHit {
    * named rooms are indistinguishable and opening the wrong one is silent.
    */
   context?: string;
+  /**
+   * ⚠️ Which property this record actually lives in — so the click can land somewhere that works.
+   *
+   * Search reaches every property the account holds, but every screen it links to is scoped to the
+   * ACTIVE one. Without this, a hit from a sister hotel led to "We couldn't find that" on a detail
+   * screen and to an empty list everywhere else: the next screen denying what the search had just
+   * proved exists. Reported from production on 2026-09-14.
+   *
+   * Set it on any hit whose destination is property-scoped, and leave it off for a hit that is not
+   * (a page, a hotel itself). The row already carries `context` — the hotel's NAME — so somebody
+   * clicking it can see where they are about to go; this is what makes going there work.
+   */
+  propertyId?: string;
 }
 
 /**

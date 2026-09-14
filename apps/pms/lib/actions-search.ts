@@ -56,7 +56,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       where: { ...where, active: true, OR: [{ label: like }, { roomType: { name: like } }] },
       select: {
         id: true, label: true, hkStatus: true, floor: true,
-        roomType: { select: { name: true } }, property: { select: { name: true } },
+        roomType: { select: { name: true } }, propertyId: true, property: { select: { name: true } },
       },
       take,
     }),
@@ -67,6 +67,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       },
       select: {
         id: true, firstName: true, lastName: true, email: true, emailIsOtaAlias: true, phone: true,
+        propertyId: true,
         property: { select: { name: true } },
       },
       take,
@@ -75,6 +76,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       where: { ...where, OR: [{ guestName: like }, { externalId: like }] },
       select: {
         id: true, guestName: true, externalId: true, status: true, departedAt: true, importedAt: true,
+        propertyId: true,
         property: { select: { name: true } },
         lines: { select: { checkIn: true, checkOut: true }, orderBy: { checkIn: "asc" }, take: 1 },
       },
@@ -90,7 +92,10 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
   ]);
 
   // Only name the property when there is more than one to confuse it with.
-  const ctx = (name: string) => (propertyCount > 1 ? { context: name } : {});
+  /* ⚠️ The id travels with the name — `context` says WHICH hotel a row is in, and the id is what
+     makes the click work, because every screen this links to is scoped to the active property.
+     Kept in one expression so a new hit kind cannot pick up one without the other. */
+  const ctx = (id: string, name: string) => (propertyCount > 1 ? { context: name, propertyId: id } : { propertyId: id });
   const day = (d: Date) => d.toISOString().slice(0, 10);
 
   return visibleTo(session.role, [
@@ -106,7 +111,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
         title: r.guestName || r.externalId || "Reservation",
         subtitle: line ? `${day(line.checkIn)} → ${day(line.checkOut)} · ${state}` : `${state} · no nights`,
         href: `/reservation/${r.id}`,
-        ...ctx(r.property.name),
+        ...ctx(r.propertyId, r.property.name),
       };
     }),
     ...guests.map((g): SearchHit => ({
@@ -118,7 +123,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
          worse than showing nothing. */
       subtitle: (g.emailIsOtaAlias ? (g.phone ?? "channel forwarding address only") : (g.email ?? g.phone)) ?? "no contact details",
       href: `/guests?q=${encodeURIComponent([g.firstName, g.lastName].filter(Boolean).join(" ") || g.email || "")}`,
-      ...ctx(g.property.name),
+      ...ctx(g.propertyId, g.property.name),
     })),
     ...units.map((u): SearchHit => ({
       id: u.id,
@@ -134,7 +139,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
          board to the person cleaning it and the record to the person fixing it, and neither can
          open the other's screen. `null` never survives the scope filter, so it is safe to coerce. */
       href: firstAllowed(session.role, ["/housekeeping", "/rooms"]) ?? "/housekeeping",
-      ...ctx(u.property.name),
+      ...ctx(u.propertyId, u.property.name),
     })),
     ...properties.map((p): SearchHit => ({
       id: p.id, kind: "hotel", title: p.name, subtitle: p.timezone, href: "/settings",

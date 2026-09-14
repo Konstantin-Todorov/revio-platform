@@ -27,7 +27,7 @@ export function Topbar({
     <header className="sticky top-0 z-20 flex h-[60px] items-center gap-3 border-b border-surface-border bg-white/95 px-4 backdrop-blur lg:gap-4 lg:px-6">
       <MobileMenuButton />
       {/* Global Search — reservations by ID, guest, phone, etc. (hidden on the Inventory Calendar, §5.5). */}
-      <TopbarSearch />
+      <TopbarSearch activePropertyId={activeId} />
 
       <div className="ml-auto">
         <WorkspaceSwitcher properties={properties} activeId={activeId} activeName={activeName} scope={scope} canGroup={canGroup} />

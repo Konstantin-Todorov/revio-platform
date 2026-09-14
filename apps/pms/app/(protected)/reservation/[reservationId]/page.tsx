@@ -5,7 +5,8 @@ import {
   ShieldCheck, Utensils, CircleDot, PlusCircle, KeyRound, LogOut, Ban, Sparkles, RotateCcw, Users,
 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
-import { getReservationDetail, type TimelineEvent, type StayState } from "@/lib/folio";
+import { findReservationElsewhere, getReservationDetail, type TimelineEvent, type StayState } from "@/lib/folio";
+import { WrongProperty } from "@/components/reservation/WrongProperty";
 import { checkOut, reopenStay, changeStayOccupancy } from "@/lib/actions-frontdesk";
 import { todayInTz, money } from "@/lib/format";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
@@ -57,7 +58,24 @@ export default async function ReservationViewPage({
   const { reservationId } = await params;
   const { error } = await searchParams;
   const data = await getReservationDetail(reservationId);
-  if (!data) notFound();
+  if (!data) {
+    /* ⚠️ Before calling it missing, ask whether it is simply somewhere else. Search reaches every
+       property the account holds; this screen is scoped to the active one, so a hit from a sister
+       hotel used to land on "We couldn't find that" — the next screen denying what the search had
+       just proved exists. */
+    const elsewhere = await findReservationElsewhere(reservationId);
+    if (elsewhere) {
+      return (
+        <WrongProperty
+          reservationId={reservationId}
+          guestName={elsewhere.guestName ?? ""}
+          propertyId={elsewhere.propertyId}
+          propertyName={elsewhere.propertyName}
+        />
+      );
+    }
+    notFound();
+  }
   const { guestName, commercial: c, operational: o, events, isManager } = data;
   const state = STATE_META[o.stayState];
 

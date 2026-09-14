@@ -215,6 +215,34 @@ export type StayState = "booked" | "assigned" | "in_house" | "departed" | "cance
  * (PMS-owned: room, stay state, folio, housekeeping), and the TIMELINE (history of the stay). No
  * side effects — the folio is only read, never seeded here (that stays with the folio screen).
  */
+/**
+ * The booking exists, but not in the property you are looking at.
+ *
+ * ⚠️ This is the other half of a decision made in the ⌘K palette. Search deliberately reaches **every
+ * property the account holds** — the founder's reasoning being that a booking you cannot find is
+ * worse than one you have to switch to see. Every screen it links to, though, is scoped to the
+ * ACTIVE property, so a hit from a sister hotel landed on "We couldn't find that": the search proved
+ * the booking exists and the next screen denied it. Reported from production on 2026-09-14.
+ *
+ * A dead end is the wrong answer when we know exactly where the thing is. Returning the property
+ * lets the screen say which hotel it belongs to and offer to go there, and it covers every way in —
+ * a pasted link, a bookmark, a notification from last week — not only the palette.
+ *
+ * The lookup is tenant-wide and no wider: RLS refuses another tenant's rows underneath regardless,
+ * so this can only ever name a hotel the account already holds.
+ */
+export async function findReservationElsewhere(reservationId: string) {
+  const { session } = await activeProperty();
+  const r = await prisma.reservation.findFirst({
+    where: { id: reservationId, property: { tenantId: session.tenantId } },
+    select: {
+      guestName: true,
+      property: { select: { id: true, name: true } },
+    },
+  });
+  return r ? { guestName: r.guestName, propertyId: r.property.id, propertyName: r.property.name } : null;
+}
+
 export async function getReservationDetail(reservationId: string) {
   const { session, property } = await activeProperty();
   const today = todayInTz(property.timezone);

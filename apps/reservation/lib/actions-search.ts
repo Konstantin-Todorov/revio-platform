@@ -66,6 +66,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       },
       select: {
         id: true, guestName: true, externalId: true, status: true, importedAt: true,
+        propertyId: true,
         property: { select: { name: true } },
         lines: { select: { checkIn: true, checkOut: true }, orderBy: { checkIn: "asc" }, take: 1 },
       },
@@ -79,18 +80,19 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       },
       select: {
         id: true, firstName: true, lastName: true, email: true, emailIsOtaAlias: true, phone: true,
+        propertyId: true,
         property: { select: { name: true } },
       },
       take,
     }),
     prisma.roomType.findMany({
       where: { ...where, name: like },
-      select: { id: true, name: true, code: true, totalRooms: true, property: { select: { name: true } } },
+      select: { id: true, name: true, code: true, totalRooms: true, propertyId: true, property: { select: { name: true } } },
       take,
     }),
     prisma.ratePlan.findMany({
       where: { ...where, name: like },
-      select: { id: true, name: true, code: true, active: true, property: { select: { name: true } } },
+      select: { id: true, name: true, code: true, active: true, propertyId: true, property: { select: { name: true } } },
       take,
     }),
     prisma.property.findMany({
@@ -102,7 +104,10 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
 
   // Only name the property when there is more than one to confuse it with.
   const multi = session.propertyCount > 1;
-  const ctx = (name: string) => (multi ? { context: name } : {});
+  /* ⚠️ The id travels with the name — `context` says WHICH hotel a row is in, and the id is what
+     makes the click work, because every screen this links to is scoped to the active property.
+     Kept in one expression so a new hit kind cannot pick up one without the other. */
+  const ctx = (id: string, name: string) => (multi ? { context: name, propertyId: id } : { propertyId: id });
   const day = (d: Date) => d.toISOString().slice(0, 10);
 
   return [
@@ -119,7 +124,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
           ? `${day(line.checkIn)} → ${day(line.checkOut)} · ${r.status}`
           : `${r.status} · no nights`,
         href: `/reservations?q=${encodeURIComponent(r.externalId ?? r.guestName ?? "")}`,
-        ...ctx(r.property.name),
+        ...ctx(r.propertyId, r.property.name),
       };
     }),
     ...guests.map((g): SearchHit => ({
@@ -132,7 +137,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
          address is when it is all we hold. */
       subtitle: (g.emailIsOtaAlias ? (g.phone ?? "channel forwarding address only") : (g.email ?? g.phone)) ?? "no contact details",
       href: `/guests?q=${encodeURIComponent([g.firstName, g.lastName].filter(Boolean).join(" ") || g.email || "")}`,
-      ...ctx(g.property.name),
+      ...ctx(g.propertyId, g.property.name),
     })),
     ...properties.map((p): SearchHit => ({
       id: p.id, kind: "hotel", title: p.name, subtitle: p.timezone, href: "/settings",
@@ -143,7 +148,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       title: r.name,
       subtitle: `${r.code} · ${r.totalRooms} room${r.totalRooms === 1 ? "" : "s"}`,
       href: "/rooms-rates",
-      ...ctx(r.property.name),
+      ...ctx(r.propertyId, r.property.name),
     })),
     ...ratePlans.map((r): SearchHit => ({
       id: r.id,
@@ -151,7 +156,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       title: r.name,
       subtitle: r.active ? (r.code ?? "rate plan") : "inactive",
       href: "/rooms-rates",
-      ...ctx(r.property.name),
+      ...ctx(r.propertyId, r.property.name),
     })),
     // Screens, so the palette is also how you move around.
     ...PAGES.map((p): SearchHit => ({ id: p.href, kind: "page", title: p.title, subtitle: p.sub, href: p.href })),

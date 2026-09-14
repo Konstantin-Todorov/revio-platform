@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { CommandPalette } from "@revio/ui/command-palette";
 import { searchEverything } from "@/lib/actions-search";
+import { setActiveProperty } from "@/lib/actions-session";
 
 /**
  * Global search — now a ⌘K palette, in exactly the slot the old form occupied.
@@ -18,7 +19,7 @@ import { searchEverything } from "@/lib/actions-search";
  * Unlike RevioLink and RevioCRS there is no screen this hides on: RevioPMS's calendar is narrower
  * than a year-wide ARI grid, and the front desk is exactly where the fast path is worth most.
  */
-export function TopbarSearch() {
+export function TopbarSearch({ activePropertyId }: { activePropertyId: string }) {
   const router = useRouter();
   return (
     <div className="flex flex-1 justify-start">
@@ -26,7 +27,21 @@ export function TopbarSearch() {
         search={searchEverything}
         placeholder="Search rooms, guests, reservations…"
         seeAllHref={(q) => `/search?q=${encodeURIComponent(q)}`}
-        onNavigate={(href) => router.push(href)}
+        onNavigate={async (href, hit) => {
+          /* ⚠️ A record in another of the account's hotels needs the workspace switched first, or
+             the screen it links to cannot open it — every one of them is scoped to the ACTIVE
+             property. Search deliberately reaches them all, so without this a hit from a sister
+             hotel landed on "We couldn't find that" for a booking, and on an empty list everywhere
+             else: the next screen denying what the search had just proved exists.
+
+             Switching without asking is right HERE and would not be elsewhere: the row carries the
+             hotel's name as a badge, so clicking it is a choice to go there, and the workspace
+             switcher in this same bar shows where you have arrived. */
+          if (hit?.propertyId && hit.propertyId !== activePropertyId) {
+            await setActiveProperty(hit.propertyId);
+          }
+          router.push(href);
+        }}
       />
     </div>
   );
