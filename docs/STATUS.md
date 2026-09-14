@@ -1,7 +1,7 @@
 # Revio — where the project actually is
 
-**Updated 2026-09-13**, at commit `b64c517` — which CI passed and `promote.yml` fast-forwarded onto
-`production`, *checked with `git ls-remote --heads origin production`*. Every line below names how it
+**Updated 2026-09-14**, at commit `c641c3e` — which CI passed and `promote.yml` fast-forwarded onto
+`production`, *checked with `git fetch origin production && git log origin/production -1`*. Every line below names how it
 was checked. Nothing here is copied forward from another document.
 
 ⚠️ **What was re-checked on 2026-09-13 and what was not.** Re-checked: the deployed commit
@@ -134,6 +134,61 @@ constraint is a hotel that uses it, not a feature.
 ---
 
 ## What is being worked on
+
+### ⌘K and the notification centre — shipped 2026-09-14, all four products
+
+The founder asked for two things, for every product, scoped per software and per client, **without
+moving anything's position**. Both are live at `c641c3e`.
+
+**⌘K / Ctrl K.** The topbar form that posted to `/search` is now a palette: results as you type,
+Enter opens the first one. `/search` stays — it is still the right screen for "show me everything",
+and Enter on nothing still goes there. The ranking is shared (`packages/core/src/search/hits.ts`,
+19 tests) because "which result is best" is not a per-product opinion; what each product *searches*
+is entirely its own. It groups before it scores, so the list keeps its shape between keystrokes.
+
+**The notification centre.** Four byte-identical copies of `NotificationBell` became one shared
+panel with two halves that are deliberately different things: **needs attention** (derived state,
+self-healing, no read marks — the old bell, unchanged) and **what happened** (events, with a time,
+read/unread and a history). Only events carry the unread count, because an unread badge on a derived
+state either ignores being read or hides a problem that is still happening. Nothing writes a
+notification row: the feed is derived from what the platform already records, so it cannot drift from
+the screens it links to, and the history exists from day one. Read state is two columns on the
+account row (migration `20260914060000_notification_read_state`), applied in production — all four
+`/api/health` endpoints report `state: ok` with the database reachable, and `prisma migrate deploy`
+runs in each service's start command, so a failed migration would have stopped the service booting.
+
+### ⚠️ The security holes both of those uncovered — closed 2026-09-14
+
+The founder asked the question that found them: *"a housekeeper tried to search something and it
+pops something from the admin point of view and somehow she can bridge the system."*
+
+**Roles did not scope reads at all in RevioLink or RevioCRS.** Accounts are one shared identity —
+that is the platform's central claim — so a housekeeper created in RevioPMS authenticates against
+RevioCRS perfectly well, and neither app filtered a single screen by role. Every guest, every rate,
+every booking was readable by an account whose job is cleaning rooms. **RLS never covered this and
+could not**: a housekeeper and an owner at one hotel are the same tenant, so the database hands them
+identical rows. Only the role can tell them apart.
+
+It ran the other way too. `roleAllowsPath` in RevioPMS ended `if (!allowed) return true`, so a role
+it had never heard of was treated as a manager — a `revenue_manager` opened folios, guest identity
+documents and Close Day.
+
+`roleCanOpenProduct` in `@revio/core` (default-deny, `auth/read-scope.ts`) closes both directions,
+and search and notifications are both filtered by it plus the product's own screen rule. Proven live
+rather than only in tests: a housekeeper searching "mar" gets nothing and "10" gets her rooms; an
+owner searching "mar" gets both bookings; her notification panel shows "16 rooms to clean" and not
+the hotel's open balance.
+
+**⚠️ And a deeper one: a layout that RETURNS a refusal is not a refusal.** In the App Router the page
+segment renders independently of what the layout returns — dropping `{children}` changes the HTML,
+and Next executes the page anyway and streams it into the RSC payload. Measured twice on RevioPMS
+with the real database: a role-refused response was **208 KB containing a real guest's name**, and an
+entitlement-refused one (which is how `ProductLocked` had always worked in all three hotel apps) was
+**211 KB with the same**. A hotel that never bought RevioPMS was being served RevioPMS's data behind
+a screen saying it had not subscribed. Both are now `redirect()` — which throws, and so actually
+stops the render — to their own routes outside `(protected)`; the responses fell to 35 KB and 42 KB
+with nothing of the hotel's book in them. `pnpm layout:lint` fails on the pattern and is in `verify`.
+
 
 ### The invoice job — alarmed, then cleared, and the alarm was mine
 
