@@ -55,6 +55,7 @@ export * from "./trials/product-access.js";
 export * from "./trials/trial-reading.js";
 export * from "./rates/plan-selection.js";
 export * from "./search/hits.js";
+export * from "./notifications/feed.js";
 export * from "./guests/erasure.js";
 export * from "./rates/occupancy-options.js";
 export * from "./rates/pricing-model-switch.js";

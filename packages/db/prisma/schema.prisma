@@ -133,6 +133,20 @@ model User {
   totpEnabledAt     DateTime?
   totpLastStep      Int?
 
+  /// ⚠️ Notification read state, per person — the whole reason a notification centre is not the
+  /// same thing as the attention bell. The bell counts what is wrong at the hotel and reads the
+  /// same for everybody; this counts what THIS person has not seen yet.
+  ///
+  /// Two columns rather than a table, deliberately. `notificationsClearedAt` is "mark all as read"
+  /// and makes clearing a thousand items one write instead of a thousand rows;
+  /// `notificationsReadKeys` holds the individual ones read since, capped in the action that writes
+  /// it and emptied whenever the marker moves, so it cannot grow without bound. The data is small,
+  /// per-user, and has no life of its own away from the account — a separate table would add an RLS
+  /// surface and a join to store a list of strings that only ever belongs to one row.
+  notificationsClearedAt DateTime?
+  notificationsReadKeys  String[]  @default([])
+
+
   tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   recoveryCodes UserRecoveryCode[]
   activeDays    ActiveUserDay[]
@@ -184,6 +198,20 @@ model OperatorUser {
 
   ownedAccounts ClientAccount[]
   recoveryCodes OperatorRecoveryCode[]
+
+
+  /// ⚠️ Notification read state, per person — the whole reason a notification centre is not the
+  /// same thing as the attention bell. The bell counts what is wrong at the hotel and reads the
+  /// same for everybody; this counts what THIS person has not seen yet.
+  ///
+  /// Two columns rather than a table, deliberately. `notificationsClearedAt` is "mark all as read"
+  /// and makes clearing a thousand items one write instead of a thousand rows;
+  /// `notificationsReadKeys` holds the individual ones read since, capped in the action that writes
+  /// it and emptied whenever the marker moves, so it cannot grow without bound. The data is small,
+  /// per-user, and has no life of its own away from the account — a separate table would add an RLS
+  /// surface and a join to store a list of strings that only ever belongs to one row.
+  notificationsClearedAt DateTime?
+  notificationsReadKeys  String[]  @default([])
 }
 
 /// A single-use way back in when the phone with the authenticator app is gone.

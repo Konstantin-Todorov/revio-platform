@@ -68,6 +68,21 @@ const EXEMPT = {
   // leaked it, whatever happens on click. Pinned by apps/pms/lib/search-scope.test.ts and
   // packages/core/src/auth/read-scope.test.ts, both of which go red if the check is removed.
   "actions-search.ts:searchEverything": "a read, gated on roleCanOpenProduct + per-hit visibleTo rather than a write capability",
+  // The notification centre. Three actions, and none of them touches the hotel's data:
+  //
+  // `loadNotifications` is the poll — a READ, and `getNotificationFeed` is where its gate lives
+  // (`roleCanOpenProduct`, then every event and every attention line filtered to the screens this
+  // role may open). The other two write ONE person's read state onto their OWN account row.
+  //
+  // There is no capability for "may mark your own notification read" for the same reason there is
+  // none for signing yourself out: it could only ever be granted, and a permission that is always
+  // true is a permission nobody checks. What they are NOT is unvalidated — `isNotificationKey`
+  // refuses anything that is not `<source>:<row id>`, because an unchecked key would be a way to
+  // append arbitrary bytes to a column on the accounts table one request at a time, and
+  // `pruneReadKeys` caps the column. Both are pinned by notification-keys.test.ts.
+  "actions-notifications.ts:loadNotifications": "a read, gated inside getNotificationFeed by role and by screen",
+  "actions-notifications.ts:markNotificationRead": "writes only your own read state, on your own account row; the key is validated and the column capped",
+  "actions-notifications.ts:markAllNotificationsRead": "writes only your own read state, on your own account row",
   // Public signup. The ONE action in a hotel-facing app whose entire purpose is to be used by
   // somebody with no account and no tenant — a capability gate would require the thing it creates.
   // Its protections are different in kind rather than absent: a platform-wide hourly ceiling on

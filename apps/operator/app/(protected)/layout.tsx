@@ -4,7 +4,7 @@ import { Topbar } from "@/components/shell/Topbar";
 import { ShellFrame } from "@/components/shell/ShellFrame";
 import { ShellProvider } from "@/components/shell/ShellContext";
 import { getOperatorSession } from "@/lib/session";
-import { getNotifications } from "@/lib/data";
+import { OPERATOR_TIME_ZONE, getNotificationFeed } from "@/lib/notifications";
 import { FieldGuard } from "@revio/ui/field-guard";
 import { FlashToast } from "@revio/ui/flash-toast";
 import { readFlash, FLASH_COOKIE } from "@revio/ui/flash";
@@ -12,7 +12,7 @@ import { readFlash, FLASH_COOKIE } from "@revio/ui/flash";
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getOperatorSession();
   if (!session) redirect("/logout");
-  const { items: notifItems } = await getNotifications();
+  const feed = await getNotificationFeed();
 
   return (
     <ShellProvider>
@@ -22,7 +22,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar />
         <ShellFrame>
-          <Topbar name={session.name} role={session.role} notifItems={notifItems} />
+          <Topbar name={session.name} role={session.role} feed={feed} timeZone={OPERATOR_TIME_ZONE} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate

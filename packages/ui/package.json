@@ -56,7 +56,8 @@
     "./product-locked": "./src/product-locked.tsx",
     "./plan-tree": "./src/plan-tree.tsx",
     "./command-palette": "./src/command-palette.tsx",
-    "./role-locked": "./src/role-locked.tsx"
+    "./role-locked": "./src/role-locked.tsx",
+    "./notification-center": "./src/notification-center.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

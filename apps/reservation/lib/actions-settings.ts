@@ -96,7 +96,7 @@ export async function saveTaxFee(fd: FormData): Promise<void> {
 
   if (rowId) {
     const existing = await prisma.taxFee.findFirst({ where: { id: rowId, propertyId: property.id } });
-    if (!existing) return;
+    if (!existing) return flashError("That tax or fee has been removed — somebody deleted it while this page was open. Reload and add it again.");
     await prisma.taxFee.update({ where: { id: rowId }, data });
   } else {
     await prisma.taxFee.create({ data: { tenantId: property.tenantId, propertyId: property.id, ...data } });
@@ -114,7 +114,7 @@ export async function deleteTaxFee(fd: FormData): Promise<void> {
   const property = await getProperty();
   const id = str(fd, "id");
   const tax = await prisma.taxFee.findFirst({ where: { id, propertyId: property.id } });
-  if (!tax) return;
+  if (!tax) return flashError("That tax or fee has already been removed.");
   await prisma.taxFee.delete({ where: { id } });
   await logAudit(property.id, property.tenantId, { entity: `Tax/Fee · ${tax.name}`, field: "deleted" });
   revalidatePath("/settings", "layout");

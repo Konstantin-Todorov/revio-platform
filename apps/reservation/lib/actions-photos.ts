@@ -133,7 +133,7 @@ export async function deleteRoomPhoto(fd: FormData): Promise<void> {
     where: { id, propertyId: property.id },
     select: { id: true, fullKey: true, thumbKey: true, roomTypeId: true },
   });
-  if (!photo) return;
+  if (!photo) return flashError("That photo has already been deleted — somebody removed it while this page was open.");
 
   await prisma.roomTypePhoto.delete({ where: { id: photo.id } });
 
@@ -156,7 +156,7 @@ export async function deleteRoomPhoto(fd: FormData): Promise<void> {
 export async function reorderRoomPhotos(fd: FormData): Promise<void> {
   await requireCapability("manageSettings");
   const owned = await ownedRoomType(str(fd, "roomTypeId"));
-  if (!owned) return;
+  if (!owned) return flashError("That room type no longer exists — the new photo order was not saved. Reload and try again.");
   const { property, roomType } = owned;
 
   const ids = str(fd, "order").split(",").map((s) => s.trim()).filter(Boolean);
@@ -185,7 +185,7 @@ export async function saveRoomPhotoAlt(fd: FormData): Promise<void> {
   const property = await getProperty();
   const id = str(fd, "id");
   const photo = await prisma.roomTypePhoto.findFirst({ where: { id, propertyId: property.id }, select: { id: true } });
-  if (!photo) return;
+  if (!photo) return flashError("That photo has already been deleted — the description was not saved.");
 
   await prisma.roomTypePhoto.update({
     where: { id: photo.id },

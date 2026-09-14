@@ -4,7 +4,7 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { ShellProvider } from "@/components/shell/ShellContext";
 import { getSession, getSwitchableProperties } from "@/lib/session";
-import { getNotifications } from "@/lib/data";
+import { getNotificationFeed } from "@/lib/notifications";
 import { FieldGuard } from "@revio/ui/field-guard";
 import { FlashToast } from "@revio/ui/flash-toast";
 import { UsageBeacon } from "@revio/ui/usage-beacon";
@@ -49,13 +49,18 @@ export default async function ProtectedLayout({ children }: { children: React.Re
    */
   if (!session.entitlements.reservation) redirect("/locked");
 
-  const properties = (await getSwitchableProperties(session.tenantId)).map((p) => ({ id: p.id, name: p.name, tenantName: p.tenant.name }));
+  const allProperties = await getSwitchableProperties(session.tenantId);
+  const properties = allProperties.map((p) => ({ id: p.id, name: p.name, tenantName: p.tenant.name }));
+  /* ⚠️ The notification panel's day headings are the PROPERTY's days — the platform's one rule
+     about dates. UTC calls a 01:30 Sofia booking yesterday's until 03:00, which is the shift most
+     likely to be reading this. */
+  const activeTimeZone = allProperties.find((p) => p.id === session.activePropertyId)?.timezone ?? "UTC";
   const canGroup = properties.length > 1;
   const activeName =
     session.scope === "group"
       ? "All properties"
       : properties.find((p) => p.id === session.activePropertyId)?.name ?? session.tenantName;
-  const { items: notifItems } = await getNotifications();
+  const feed = await getNotificationFeed();
 
   /* One login, every product the hotel bought — resolved here because the account menu is a
      client component and only the server can read the sibling hostnames. */
@@ -96,7 +101,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar footer={session.tenantName} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
-          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} scope={session.scope} canGroup={canGroup} role={session.role} userName={session.userName} notifItems={notifItems} />
+          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} scope={session.scope} canGroup={canGroup} role={session.role} userName={session.userName} feed={feed} timeZone={activeTimeZone} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate

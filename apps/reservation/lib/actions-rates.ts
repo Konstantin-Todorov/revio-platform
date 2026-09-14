@@ -128,7 +128,7 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
   await requireCapability("manageRates");
   const property = await getProperty();
   const id = str(fd, "id");
-  if (!id) return;
+  if (!id) return flashError("Nothing was selected to delete. Reload the page and try again.");
   const rp = await prisma.ratePlan.findUnique({ where: { id }, include: { _count: { select: { children: true, resLines: true } } } });
   if (!rp) return flashError("That rate plan no longer exists — somebody removed it while this page was open.");
 

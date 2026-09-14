@@ -5,9 +5,10 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { ShellProvider } from "@/components/shell/ShellContext";
 import { getSession, getSwitchableProperties } from "@/lib/session";
-import { activeProperty, getNotifications } from "@/lib/data";
+import { activeProperty } from "@/lib/data";
 import { todayInTz, ymd } from "@/lib/format";
 import { roleAllowsPath, roleHome } from "@/lib/roles";
+import { getNotificationFeed } from "@/lib/notifications";
 import { FieldGuard } from "@revio/ui/field-guard";
 import { FlashToast } from "@revio/ui/flash-toast";
 import { UsageBeacon } from "@revio/ui/usage-beacon";
@@ -59,7 +60,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
 
   const properties = (await getSwitchableProperties(session.tenantId)).map((p) => ({ id: p.id, name: p.name, tenantName: p.tenant.name }));
   const activeName = properties.find((p) => p.id === session.activePropertyId)?.name ?? session.tenantName;
-  const { items: notifItems } = await getNotifications();
+  const feed = await getNotificationFeed();
   const { property } = await activeProperty();
   const businessDate = property.businessDate ? ymd(property.businessDate) : todayInTz(property.timezone);
 
@@ -102,7 +103,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar role={session.role} footer={`Business date · ${businessDate}`} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
-          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} notifItems={notifItems} />
+          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} feed={feed} timeZone={property.timezone} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate

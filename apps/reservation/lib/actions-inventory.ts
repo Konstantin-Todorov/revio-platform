@@ -60,7 +60,7 @@ export async function addInventoryPeriod(fd: FormData): Promise<void> {
   if (pastPeriod) return flashError(pastPeriod);
 
   const roomType = await prisma.roomType.findFirst({ where: { id: roomTypeId, propertyId } });
-  if (!roomType) return;
+  if (!roomType) return flashError("That room type no longer exists — somebody removed it while this page was open. Reload and try again.");
   const rooms = Math.min(Math.max(int(fd, "rooms", 1), 1), roomType.totalRooms);
 
   await prisma.roomInventoryPeriod.create({
@@ -88,7 +88,7 @@ export async function deleteInventoryPeriod(fd: FormData): Promise<void> {
     where: { id, propertyId },
     include: { roomType: { select: { name: true } } },
   });
-  if (!period) return;
+  if (!period) return flashError("That closure has already been removed — somebody deleted it while this page was open.");
 
   await prisma.roomInventoryPeriod.delete({ where: { id } });
   await logAudit(propertyId, tenantId, {
