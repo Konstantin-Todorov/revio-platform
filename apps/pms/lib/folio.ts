@@ -1,5 +1,5 @@
 import "server-only";
-import type { TenantTx } from "@revio/db";
+import { withTenantTransaction, type TenantTx } from "@revio/db";
 import { computeStayCharges, isCityTax, averageNightlyPrice } from "@revio/core";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
@@ -51,10 +51,65 @@ export { isCityTax };
  * Idempotent + race-safe via the unique reservationId. Called at check-in / walk-in and lazily on the
  * folio page (for stays checked in before Phase 3).
  */
-export async function ensureFolio(tenantId: string, propertyId: string, reservationId: string, client: TenantTx | typeof prisma = prisma): Promise<string | null> {
+/**
+ * Open the guest's bill, seeding it with what the booking already committed to.
+ *
+ * ## ⚠️ All of it, or none of it — this was a run of separate writes
+ *
+ * It creates the folio row, then posts the accommodation lines, then the taxes and fees, then a
+ * prepaid-OTA payment. Through the RLS proxy **every one of those was its own transaction**, because
+ * `forTenant()` has to wrap each operation individually (the `app.tenant_id` GUC is
+ * transaction-local, which is what makes it safe under pooling). Eight of the nine call sites —
+ * check-in, walk-in, posting a charge, a POS tap — ran it that way.
+ *
+ * A failure partway therefore committed everything before it. And because the first thing this does
+ * is return early when a primary folio already exists, **the damage is permanent**: the retry finds
+ * the half-built bill and hands it back. Nothing heals it, and nothing reports it, because a folio
+ * that exists looks exactly like a folio that worked.
+ *
+ * What that costs, concretely: a bill with the room but no city tax; a two-room stay charged for
+ * one; or — the worst — a guest who prepaid through an OTA whose "Prepaid via OTA" payment line
+ * never posted, asked at the desk to pay in full for a stay they have already paid for.
+ *
+ * This is the same shape as the round-2 checkout bug (§0), which closed a folio while leaving its
+ * reservation in-house and then accrued 41 nights against a departed guest. `packages/db`'s own rule
+ * covers it: *any business operation whose steps must all land or none of them* goes through
+ * `withTenantTransaction`.
+ *
+ * ## ⚠️ And exactly one folio, not two
+ *
+ * `Folio` has no unique constraint on `(reservationId, isPrimary)` — only an index. Two concurrent
+ * calls could both read "no folio" and both create one, leaving a guest with two primary bills and
+ * the hotel's money split across them. A transaction alone does not prevent that: both transactions
+ * see the pre-insert state.
+ *
+ * So the transaction takes an advisory lock on the reservation first, which is the pattern
+ * `packages/db/src/inventory-claim.ts` already uses for the same problem and documents at length:
+ * transaction-scoped, released on commit or rollback, nothing to unlock and nothing to leak onto a
+ * pooled connection. A unique index would be the stronger fix and needs a migration that could fail
+ * against whatever production already holds — see `state-audit.sql`, which should be asked first.
+ *
+ * `client` is passed only by callers that are ALREADY inside a transaction (the night audit). They
+ * join it rather than nesting a second one, which Prisma would refuse.
+ */
+export async function ensureFolio(
+  tenantId: string,
+  propertyId: string,
+  reservationId: string,
+  client?: TenantTx,
+): Promise<string | null> {
+  if (client) return seedPrimaryFolio(client, tenantId, propertyId, reservationId);
+  return withTenantTransaction(tenantId, (tx) => seedPrimaryFolio(tx, tenantId, propertyId, reservationId));
+}
+
+async function seedPrimaryFolio(client: TenantTx, tenantId: string, propertyId: string, reservationId: string): Promise<string | null> {
   // RLS extensions change Prisma's generic signatures, not these model operations. Narrow only
   // the delegates used here; the request proxy does not support transaction/client methods.
   const db = client as Pick<TenantTx, "folio" | "folioLine" | "reservation" | "propertyDefaults" | "taxFee">;
+
+  /* Serialise every caller for THIS reservation for the rest of the transaction, so the check below
+     and the insert that follows it cannot interleave with another check-in for the same stay. */
+  await client.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${reservationId}, 0))`;
   // The PRIMARY (guest) folio; split/company folios (spec §3.6) are added on top and never seeded here.
   const existing = await db.folio.findFirst({ where: { reservationId, isPrimary: true }, select: { id: true } });
   if (existing) return existing.id;
@@ -591,7 +646,11 @@ export async function listFolioHistory(q?: string): Promise<{ property: Awaited<
  * line carries ref `stayextra:<id>:<date>`, so re-running Close Day never double-charges a night.
  * Returns how many lines were posted.
  */
-export async function accrueStayExtras(tenantId: string, propertyId: string, businessDate: string, client: TenantTx | typeof prisma = prisma): Promise<number> {
+/* ⚠️ `client` is REQUIRED and must be a transaction. It used to default to the plain client, which
+   was never exercised — the night audit is its only caller and has always passed its own `tx` — but
+   the default made it possible to run a night audit's accruals as a run of separate commits, which
+   is exactly the partial-commit shape §0 exists to prevent. Requiring it makes that unwritable. */
+export async function accrueStayExtras(tenantId: string, propertyId: string, businessDate: string, client: TenantTx): Promise<number> {
   // Same delegate-only normalisation as ensureFolio; nested writes retain the original client.
   const db = client as Pick<TenantTx, "roomAssignment" | "stayExtra" | "folio" | "folioLine">;
   /*

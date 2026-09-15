@@ -111,6 +111,10 @@ const APPS = {
       // The route the founder's white page came from. Walked with a REAL id, because the bug was
       // only reachable with one.
       "/reservation/:reservationId", "/guests/:guestId", "/rooms/:unitId",
+      /* ⚠️ The folio screen SEEDS the bill on open — it is the main production caller of
+         `ensureFolio`, which creates the folio row and then posts accommodation, taxes and fees.
+         Walking it means a screen that both reads and writes is exercised, not just read. */
+      "/folio/:reservationId",
     ],
   },
   operator: {
