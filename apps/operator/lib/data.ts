@@ -447,7 +447,8 @@ export async function getClientDetail(id: string) {
          lastReservation, reservationsLast30d, invoices, recentFailures, lines,
          firstReservation, operators,
          ratePlans, prices, taxes, catalogItems, unmappedRt, unmappedRp,
-         hasChannexCredential, channelsWithExternalProperty, channelsLive] = await Promise.all([
+         hasChannexCredential, channelsWithExternalProperty, channelsLive,
+         bookingsForTrend] = await Promise.all([
     prisma.roomType.count({ where: { tenantId: id } }),
     prisma.unit.count({ where: { tenantId: id } }),
     prisma.channel.findMany({ where: { tenantId: id }, select: { id: true, name: true, code: true, status: true, commissionPct: true, lastSyncAt: true, errorCount: true } }),
@@ -489,6 +490,14 @@ export async function getClientDetail(id: string) {
     // "Live" is stricter than "connected": a channel that has actually pushed. It is the state
     // Channex bills on, so it is the one worth counting separately.
     prisma.channel.count({ where: { tenantId: id, status: "connected", lastSyncAt: { not: null } } }),
+    /* Twelve months of arrival timestamps, bucketed by month in JS rather than in SQL.
+       ⚠️ One column, one year, one client — bounded by a single hotel's bookings. Grouping by month
+       in the database would need raw SQL, and the operator's client is the bypass client rather than
+       a raw one; the notification centre learned that lesson at runtime the hard way. */
+    prisma.reservation.findMany({
+      where: { tenantId: id, importedAt: { gte: new Date(Date.now() - 370 * 86_400_000) } },
+      select: { importedAt: true },
+    }),
   ]);
 
   // Aggregate by source the same way the CRS does, then hand it to the shared function.
@@ -718,6 +727,20 @@ export async function getClientDetail(id: string) {
     pipelineMinor: pipelineMinor(opportunities),
     drift: tierDrift(tenant.plan, units),
     billing: { monthlyMinor: monthly, products: billedProducts(entitlements), invoices },
+    /*
+     * Twelve months, so the client page can answer the question a renewal call turns on: is this
+     * getting better or worse. Every other figure there is today's value.
+     *
+     * The bucketing is pure and tested in `client-trend.ts`; this only counts arrivals per month at
+     * UTC. ⚠️ UTC and not the property's timezone, deliberately: a month boundary is not a business
+     * day, this is our billing calendar rather than theirs, and invoices are keyed `YYYY-MM` the same
+     * way — two series drawn on one axis have to be bucketed by one rule.
+     */
+    bookingsByMonth: bookingsForTrend.reduce((m, r) => {
+      const key = `${r.importedAt.getUTCFullYear()}-${String(r.importedAt.getUTCMonth() + 1).padStart(2, "0")}`;
+      m.set(key, (m.get(key) ?? 0) + 1);
+      return m;
+    }, new Map<string, number>()),
     counts: { roomTypes, units, channels: channels.length, channelsConnected, reservations, openErrors, reservationsLast30d },
     channels, recentFailures, economics, waitlist,
     direct: {

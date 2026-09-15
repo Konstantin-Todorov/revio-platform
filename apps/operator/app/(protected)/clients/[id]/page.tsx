@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClientDetail } from "@/lib/data";
+import { alignSeries, billedSeries, bookingSeries, hasHistory, monthKeys, mrrMovement } from "@/lib/client-trend";
+import { TrendChart } from "@/components/overview/TrendChart";
 import { SetupProgressCard } from "@/components/clients/SetupProgressCard";
 import { setDemo } from "@/lib/actions";
 import { endTrial, startTrial } from "@/lib/actions-trials";
@@ -82,6 +84,18 @@ export default async function ClientDetailPage({
     clientDeletionFacts(id),
   ]);
   if (!c) notFound();
+
+  /* Twelve months of context, derived by the pure module rather than inline — `client-trend.ts` is
+     where the two decisions worth arguing with live: the series starts when the client did, and
+     "paid" is net of refunds. */
+  const months = monthKeys(new Date(), 12);
+  /* ⚠️ Aligned, not trimmed separately — the two charts sit on one row and must share an x-axis.
+     See `alignSeries`: doing it independently put seven months beside two. */
+  const [billedTrend, bookingTrend] = alignSeries([
+    billedSeries(c.billing.invoices, months),
+    bookingSeries(c.bookingsByMonth, months),
+  ]);
+  const movement = mrrMovement(c.billing.invoices, c.billing.monthlyMinor);
   // The same rule the server re-runs before it deletes anything — shown here so the screen and the
   // action can never disagree about whether this client may go.
   const deleteVerdict = deletion ? canDeleteClient(deletion.facts) : null;
@@ -335,6 +349,58 @@ export default async function ClientDetailPage({
             </div>
           )}
         </Card>
+
+
+        {/*
+          ⚠️ The only thing on this page that is not today's value.
+          Every other figure here — this month's price, the last thirty days, the current error count
+          — answers "is anything wrong now". A renewal call turns on a different question: is this
+          getting better or worse. €118 a month reads one way after €59 in March and quite another
+          after €180.
+
+          Full width, below the two half-width cards, because twelve months across a half-column
+          gives bars too narrow to compare, which is the only thing a reader does with them.
+        */}
+        {/* Hidden outright for a client with no history in either series — the same rule the
+            waitlist and booking-engine blocks above follow, and for the same reason. */}
+        {hasHistory([billedTrend!, bookingTrend!]) && (
+        <Card className="lg:col-span-2">
+          <CardHeader
+            title="Twelve months"
+            action={
+              movement ? (
+                <span className="text-[12px] text-ink-500">
+                  {movement.deltaMinor === 0 ? (
+                    <>flat at <b className="tnum font-semibold text-ink-900">{money(movement.toMinor)}</b>/mo since {movement.since}</>
+                  ) : (
+                    <>
+                      <b className={`tnum font-semibold ${movement.deltaMinor > 0 ? "text-success-600" : "text-warning-600"}`}>
+                        {movement.deltaMinor > 0 ? "+" : "−"}{money(Math.abs(movement.deltaMinor))}
+                      </b>
+                      {" "}/mo since {movement.since} · {money(movement.fromMinor)} → {money(movement.toMinor)}
+                    </>
+                  )}
+                </span>
+              ) : undefined
+            }
+          />
+          <div className="grid gap-px bg-surface-border md:grid-cols-2">
+            <div className="bg-white">
+              <p className="px-4 pt-3 text-[11px] uppercase tracking-wide text-ink-400">
+                What we billed <span className="normal-case text-ink-300">· paid shown inside each bar, net of refunds</span>
+              </p>
+              <TrendChart data={billedTrend!} format="money" primaryLabel="Billed" secondaryLabel="Paid" />
+            </div>
+            <div className="bg-white">
+              {/* Their pipeline is our leading indicator — it moves before our revenue does. */}
+              <p className="px-4 pt-3 text-[11px] uppercase tracking-wide text-ink-400">
+                Their bookings <span className="normal-case text-ink-300">· by month</span>
+              </p>
+              <TrendChart data={bookingTrend!} format="count" primaryLabel="Bookings" accent="#0e7490" />
+            </div>
+          </div>
+        </Card>
+        )}
 
         <Card>
           <CardHeader title="Connectivity" />
