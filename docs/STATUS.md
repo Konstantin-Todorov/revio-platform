@@ -50,6 +50,18 @@ Three that show the shape of it:
 3. **Check the code before repeating any list**, including the parts you expect somebody else to
    own. Two of the misses above were filed as "external, blocked on the founder" and therefore never
    verified — the rule was applied to the build list and not to the report.
+
+   ⚠️ **This rule kept failing, so it is now enforced.** Five more claims went stale between 13 and
+   15 September, every one of them work recorded as open that had already shipped — refunds, the
+   cancelled-folio bug, the search dead end, the duplicated surnames, and "the payment-link email is
+   not built yet", which sat 130 lines above the button that sends it. A rule that depends on
+   somebody remembering is a wish. `pnpm status:lint` checks the ones that cite their code:
+
+       <!-- status: built apps/operator/lib/actions-integrations.ts#emailInvoiceToCustomer -->
+       <!-- status: not-built apps/pms/lib/calendar-extend.ts#extendStayByDrag -->
+
+   `built` fails when the symbol is missing; `not-built` fails when it is present, which is the
+   direction that actually keeps going wrong. **Cite the code in any new claim here.**
 4. **A green check is not evidence until you know what it looked at.** `trial-sweep` passed its lint,
    held its lease and returned `200` for its entire life without ever running.
 5. **Correct is not the same as usable.** The support thread passed every test and was unreadable.
@@ -343,10 +355,10 @@ that are assessments rather than code: `docs/COMPETITIVE-GAPS-2026-09.md` and
 | | Why | Effort |
 | --- | --- | --- |
 | **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
-| **Send the payment link** ⏳ | ✅ An invoice can now be paid by card — link, hosted Checkout, webhook, invoice settling itself. What is *not* built is the email that carries the link: the operator copies the URL off `/invoice/[id]` and pastes it. Deliberate — sending it is a decision with a covering sentence, and a Send button that silently composed one would be worse than none | Small |
-| **Refunds and recurring** ⏳ | A card payment can be taken and not given back: a refund is done in the Stripe dashboard and our invoice would not know. And every month is still an invoice somebody generates and sends — Stripe Subscriptions would make it automatic, but that is a pricing-model decision as much as a build | Medium |
+| ~~**Send the payment link**~~ ✅ | Built and shipped in `b1437da`. The invoice emails itself: `emailInvoiceToCustomer` looks up the client's billing address, attaches the document, includes the card link when one is live and the IBAN when it is not, and **refuses a draft outright** — an email about a number that can still change is worse than no email. This row said "not built yet" for days, and so did a comment 130 lines above the Send button. <!-- status: built apps/operator/lib/actions-integrations.ts#emailInvoiceToCustomer --> | — |
+| ~~**Refunds**~~ ✅ · **recurring** ⏳ | Refunds and disputes ARE handled — the Stripe webhook records `refundedMinor`, `refundedAt` and `disputeStatus` beside a status that deliberately never moves off "paid", because the supply and the payment both still happened. What remains is **recurring**: every month is still an invoice somebody generates and sends. Stripe Subscriptions would automate it, but that is a pricing-model decision before it is a build. <!-- status: built apps/operator/app/api/webhooks/stripe/route.ts#POST --> | Medium |
 | **Use the new menu for a week** | ✅ Built on the fourth attempt — icon rail → vertical section panel → horizontal tabs only inside a page, from the founder's own reference. Nothing left to build; what is left is finding out whether the grouping survives daily use. The four rejected shapes and why are in `apps/operator/CLAUDE.md` so a fifth does not repeat them | — |
-| **Client analytics** | Every number on the client page is today's value. A twelve-month sparkline, one health score with its parts visible, and MRR movement — the three things every mature console leads with, and all four inputs already exist | Medium |
+| ~~**Client analytics**~~ ✅ | Shipped 2026-09-15. Twelve months of billed-vs-paid and their bookings on one shared axis, plus MRR movement in the header. **The health score was deliberately not built**: `clientAttention` and `accountAttention` already derive what needs a call and how soon, and a third scoring system is a second opinion on one question — the copy that drifts is always the permissive one. <!-- status: built apps/operator/lib/client-trend.ts#alignSeries --> | — |
 | **Hotel's own Stripe keys** | The model is settled (their account, not Connect — we never touch the money) and designed in `docs/PLAN-2026-09-09.md` §1. It follows ours rather than leading it, and it reuses the `PlatformCredential` shape wholesale — the encryption, the mode validation and the test-before-store are already built and tested | Medium |
 | **In-app AI assistant** | The biggest differentiator and the least urgent. Founder's framing: future context, not a task. Waiting for a real support queue to learn from | Large |
 

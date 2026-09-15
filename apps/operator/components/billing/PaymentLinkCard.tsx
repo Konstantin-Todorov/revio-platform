@@ -13,11 +13,18 @@ import { CopyLinkButton } from "./CopyLinkButton";
  * second — that is the thing somebody came here to fetch and send. **Is it real money?** always, in
  * red, because a sandbox link and a live link look identical and only one of them charges anybody.
  *
- * ## Why the link is shown rather than emailed from here
+ * ## The link is shown AND emailed, and both are deliberate
  *
- * Sending it is a decision with a covering sentence — *"here is the invoice, here is the link"* —
- * and that email is not built yet. Handing the operator the URL to paste is honest about that. A
- * "Send" button that silently composed something on their behalf would be worse than no button.
+ * ⚠️ This comment used to end "that email is not built yet… a Send button that silently composed
+ * something would be worse than no button" — 130 lines above the Send button, which `b1437da`
+ * shipped. A comment that states the opposite of the code beneath it is worse than no comment: the
+ * next person reads it, believes it, and either rebuilds what exists or reasons from a false
+ * premise. Corrected 2026-09-15; `pnpm status:lint` now checks claims of this shape.
+ *
+ * The URL stays visible because sending is not the only way an invoice travels — it gets pasted into
+ * a reply, read down a phone, put in an existing thread with the finance contact. And the send is
+ * not silent: `emailInvoiceToCustomer` refuses a draft outright, because an email about a number
+ * that can still change is worse than no email.
  */
 export function PaymentLinkCard({
   invoice,
