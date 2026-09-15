@@ -18,6 +18,7 @@
     "verify": "pnpm typecheck && pnpm lint && pnpm copy:lint && pnpm authz:lint && pnpm layout:lint && pnpm silent:lint && pnpm money:lint && pnpm health:lint && pnpm a11y:lint && pnpm scrolllock:lint && pnpm jobs:lint && pnpm zoom:lint && pnpm tokens:lint && pnpm perimeter:lint && pnpm dates:lint && pnpm drift:lint && pnpm test",
     "authz:lint": "node scripts/authz-lint.mjs",
     "layout:lint": "node scripts/layout-guard-lint.mjs",
+    "route-walk": "node scripts/route-walk.mjs",
     "silent:lint": "node scripts/silent-lint.mjs",
     "money:lint": "node scripts/money-lint.mjs",
     "health:lint": "node scripts/health-lint.mjs",

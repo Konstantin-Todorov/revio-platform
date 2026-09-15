@@ -426,4 +426,40 @@ open https://operator.reviosoft.app/analytics               # what anybody actua
 git ls-remote --heads origin production                    # what is actually deployed
 railway logs --service jobs                                # what the cron actually got back
 pnpm verify                                                # every test and check, locally
+pnpm route-walk                                            # every SCREEN, signed in (needs the apps running)
 ```
+
+### ⚠️ `pnpm verify` does not open a single page — `pnpm route-walk` does
+
+On 2026-09-14 this repository had **2,591 passing tests and eleven ratchet lints, and not one of them
+loaded a screen.** Every test proved a function returned the right value; none proved a person could
+open a page. The founder found the consequence in production: a search result that led to "We
+couldn't find that", and then a white page reading *"Application error: a client-side exception has
+occurred."*
+
+`scripts/route-walk.mjs` walks every screen in all four products with a real session and asserts two
+things:
+
+1. the server answered, and
+2. **the page is not one of our own failure screens.**
+
+The second is the point. A 200 is not success — an error boundary answers 200 with an apology
+painted on it, which is exactly how a broken screen looked healthy to every check we had. The
+strongest signal it uses is `<!--$!-->`, React's own marker for a suspense boundary whose server
+render threw: it appears in dev and in production, whatever the boundary then paints, and it cannot
+be defeated by rewording a screen.
+
+It also walks each app **as a second role**, which is the regression test for the read-scoping holes
+closed the same day: a `distribution_manager` must reach all 21 RevioLink and 24 RevioCRS screens,
+and must be refused all 25 RevioPMS ones, sent to `/no-access`. Both directions are asserted, because
+a guard that refuses everybody passes every negative test and breaks the product.
+
+**Proven to fail**, three times, which is the only reason to trust it: a planted throw in the
+reservation page, the `roleCanOpenProduct` check deleted (every PMS screen reported as wrongly
+opened), and an app that was not running — reported as SKIPPED, never as passing. It is not in
+`pnpm verify` because it needs the apps running, the same reason `rls-verify` and `webhook-verify`
+are not.
+
+**What it does NOT cover, and this is the next piece of work:** clicking. Three of the four bugs
+found on 2026-09-14 needed a click — a server action that did not exist on the RLS proxy, "mark all
+read" leaving one item unread, a dropped `read` flag. Those need a browser driving the page.
