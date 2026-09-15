@@ -2,7 +2,7 @@
   "name": "revio-platform",
   "private": true,
   "version": "0.1.0",
-  "description": "Revio \u2014 composable hotel software platform (Channel Manager, Reservation/CRS, PMS) on one shared inventory core.",
+  "description": "Revio — composable hotel software platform (Channel Manager, Reservation/CRS, PMS) on one shared inventory core.",
   "packageManager": "pnpm@9.12.0",
   "engines": {
     "node": ">=20"
@@ -19,6 +19,7 @@
     "authz:lint": "node scripts/authz-lint.mjs",
     "layout:lint": "node scripts/layout-guard-lint.mjs",
     "route-walk": "node scripts/route-walk.mjs",
+    "click-walk": "node scripts/click-walk.mjs",
     "silent:lint": "node scripts/silent-lint.mjs",
     "money:lint": "node scripts/money-lint.mjs",
     "health:lint": "node scripts/health-lint.mjs",
@@ -37,6 +38,7 @@
     "eslint": "^9",
     "eslint-plugin-react-hooks": "^5",
     "globals": "^17.11.0",
+    "playwright": "^1.63.0",
     "typescript": "^5.6.0",
     "typescript-eslint": "^8"
   }

@@ -427,6 +427,7 @@ git ls-remote --heads origin production                    # what is actually de
 railway logs --service jobs                                # what the cron actually got back
 pnpm verify                                                # every test and check, locally
 pnpm route-walk                                            # every SCREEN, signed in (needs the apps running)
+pnpm click-walk                                            # what a person PRESSES, in a real browser
 ```
 
 ### ⚠️ `pnpm verify` does not open a single page — `pnpm route-walk` does
@@ -460,6 +461,24 @@ opened), and an app that was not running — reported as SKIPPED, never as passi
 `pnpm verify` because it needs the apps running, the same reason `rls-verify` and `webhook-verify`
 are not.
 
-**What it does NOT cover, and this is the next piece of work:** clicking. Three of the four bugs
-found on 2026-09-14 needed a click — a server action that did not exist on the RLS proxy, "mark all
-read" leaving one item unread, a dropped `read` flag. Those need a browser driving the page.
+`pnpm click-walk` is the other half, added 2026-09-15 — a real browser driving what a person presses:
+⌘K opened and a result clicked, one notification read, then "mark all read". Those are the three
+paths that broke on 2026-09-14, and every one of them passed 2,591 unit tests and eleven lints,
+because what they broke in is what happens between a press and the database.
+
+⚠️ **Its assertions are positive, not "no error".** "Nothing threw" also passes when the button does
+nothing at all — and the founder's bug was a click that led somewhere useless rather than one that
+threw. So it insists the palette actually opened a booking, the unread count actually fell **across
+a page reload**, and "mark all read" reached **zero** rather than merely fewer. The reload is
+load-bearing: the badge drops optimistically on the client whatever the server did, which is exactly
+how a write that threw still looked like it had worked.
+
+It creates its own unread events — two, so that marking one read still leaves the "Mark all read"
+button to press — and removes them in a `finally`, including on a crash. It refuses to run against
+anything but the local `revio_dev` database, because it writes.
+
+**Proven to fail**: `markNotificationRead` made a no-op → *"marking one read did not persist (2 → 2
+after reload)"*, which is yesterday's `$executeRaw` bug exactly.
+
+Playwright drives it (a root devDependency, chromium-headless-shell only). Like `route-walk`, it is
+not in `pnpm verify` — it needs the apps running.
