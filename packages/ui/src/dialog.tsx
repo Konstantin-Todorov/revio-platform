@@ -1,7 +1,7 @@
 "use client";
 
 import * as Radix from "@radix-ui/react-dialog";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { duration, easing } from "./motion";
 
@@ -16,11 +16,15 @@ import { duration, easing } from "./motion";
  * returned focus to the trigger on close and some left it on `<body>`, so a keyboard user's next Tab
  * restarted from the top of the document.
  *
- * Radix supplies **behaviour only** — the focus trap, the roving return, `aria-labelledby` and
- * `aria-describedby` wiring, Escape, click-outside, `inert` on the rest of the page, and the scroll
- * lock. It ships no styles at all, so every pixel below is still ours and the design tokens are
- * unchanged. That is the whole reason it is worth taking on a dependency for this and not for, say,
- * a button.
+ * Radix supplies **behaviour only** — the focus trap, `aria-labelledby` and `aria-describedby`
+ * wiring, Escape, click-outside, `inert` on the rest of the page, and the scroll lock. All of those
+ * were checked on the real screen and all of them work. It ships no styles at all, so every pixel
+ * below is still ours and the design tokens are unchanged. That is the whole reason it is worth
+ * taking on a dependency for this and not for, say, a button.
+ *
+ * ⚠️ **Focus RETURN is ours, not Radix's** — see the comment on `restoreTo` below. It is the one
+ * piece of the behaviour that did not arrive for free, and it is the piece this component existed
+ * to fix.
  *
  * ## The animation is stateful, not a keyframe
  *
@@ -68,6 +72,32 @@ export function Dialog({
   size?: "sm" | "md" | "lg";
   children?: ReactNode;
 }) {
+  /*
+   * ⚠️ Focus return is done HERE, explicitly, because Radix's own restore did not fire.
+   *
+   * Found by opening the real screen rather than by reasoning: with the trigger focused, Enter
+   * opened the dialog, focus moved inside it, Escape closed it — and focus landed on `<body>`. The
+   * trigger was still in the document and was still the same node, so there was nothing wrong with
+   * the page: Radix simply had not captured it. Its `FocusScope` restores whatever was focused when
+   * `Content` mounted, and mounting here is driven by a parent state flip rather than by a
+   * `Dialog.Trigger`, which is the case it captures reliably.
+   *
+   * Capturing during render is deliberate and is the only moment that works: the child `Content`
+   * mounts in this same commit and moves focus in an effect, and child effects run BEFORE the
+   * parent's — so any `useEffect` here would read an `activeElement` that Radix had already moved.
+   *
+   * Without this, a keyboard user closes a dialog and the next Tab restarts from the top of the
+   * document — which is the exact defect this component was written to remove from four hand-rolled
+   * copies, so shipping it with the same hole would have been worse than leaving them alone.
+   */
+  const restoreTo = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current) {
+    const active = typeof document === "undefined" ? null : document.activeElement;
+    restoreTo.current = active instanceof HTMLElement && active !== document.body ? active : null;
+  }
+  wasOpen.current = open;
+
   // Radix keeps the node mounted while it closes, so this drives both directions.
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -99,6 +129,12 @@ export function Dialog({
           }}
         />
         <Radix.Content
+          onCloseAutoFocus={(e) => {
+            // Take over from Radix: it would either restore to a node it never captured, or leave
+            // focus on <body>. `preventScroll` stops the page jumping to the trigger on close.
+            e.preventDefault();
+            restoreTo.current?.focus({ preventScroll: true });
+          }}
           /* The panel takes focus only programmatically, on open, never by Tab: Radix gives it
              tabIndex={-1} and moves focus here so a screen reader lands on the title. A ring drawn
              around the whole panel every time a dialog opens reads as an error state, not a
@@ -114,7 +150,8 @@ export function Dialog({
         >
           <div className="flex flex-col gap-1.5 px-[22px] pb-4 pt-5 pr-12">
             {/* Every dialog gets the same close affordance in the same place, rather than each
-                caller remembering an X. Radix returns focus to whatever opened the dialog. */}
+                caller remembering an X. Closing through it returns focus to whatever opened the
+                dialog, by the same `onCloseAutoFocus` path as Escape and the backdrop. */}
             <Radix.Close
               aria-label="Close"
               className="absolute right-3.5 top-3.5 rounded-md p-1.5 text-ink-400 transition-[background-color,color] hover:bg-surface-muted hover:text-ink-700 focus-visible:outline-none focus-visible:shadow-focus"
