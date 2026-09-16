@@ -1,3 +1,4 @@
+import { isDisposableEmail } from "@revio/core";
 /**
  * What needs looking at, per client — the difference between a dashboard and a console.
  *
@@ -33,6 +34,13 @@ export interface ClientSignals {
   properties: number;
   roomTypes: number;
   units: number;
+  /**
+   * The owner's email address, so a temporary mailbox can be noticed.
+   *
+   * ⚠️ Null when there is no owner with an address — never an empty string, which would read as
+   * "an address that is not disposable" and quietly answer a question nobody asked.
+   */
+  ownerEmail: string | null;
   channels: number;
   channelsConnected: number;
   openErrors: number;
@@ -68,6 +76,27 @@ const STALE_SYNC_HOURS = 48;
 export function clientAttention(s: ClientSignals, now: Date = new Date()): AttentionFlag[] {
   const flags: AttentionFlag[] = [];
   const age = daysSince(s.createdAt, now);
+
+  /*
+   * ⚠️ Noticed, never blocked.
+   *
+   * Signup used to REFUSE a disposable domain. That is the obvious control and the wrong trade: an
+   * abusive trial costs us thirty days of software that is nearly free to serve, while a real hotel
+   * turned away at the door assumes the product is not for them and never tells us. One of those
+   * mistakes is recoverable and the other is invisible.
+   *
+   * So it is a `note`, not an `act`: something worth knowing before a call, not a reason to do
+   * anything. Derived at read time rather than stored, so it cannot age into a stale verdict
+   * attached to a customer who has been paying for a year.
+   */
+  if (s.ownerEmail && isDisposableEmail(s.ownerEmail)) {
+    flags.push({
+      severity: "note",
+      title: "Signed up with a temporary email",
+      detail:
+        "The owner's address is on a disposable-mail domain. Often nothing — people use them to look around — but worth a real address before they go live, or invoices and password resets will reach nobody.",
+    });
+  }
 
   if (s.status === "suspended") {
     flags.push({

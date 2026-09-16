@@ -10,6 +10,7 @@ const healthy = (o: Partial<ClientSignals> = {}): ClientSignals => ({
   createdAt: daysAgo(200),
   entitlements: { channelManager: true, reservation: true, pms: true },
   properties: 2,
+  ownerEmail: "owner@hotelsofia.bg",
   roomTypes: 6,
   units: 30,
   channels: 4,
@@ -178,5 +179,37 @@ describe("severity ordering", () => {
 
   it("reports no severity at all for a healthy client", () => {
     expect(worstSeverity(clientAttention(healthy(), NOW))).toBeNull();
+  });
+});
+
+describe("a temporary email address", () => {
+  it("⚠️ is NOTICED, never treated as a reason to act", () => {
+    /*
+     * Signup used to REFUSE a disposable domain. That is the obvious control and the wrong trade:
+     * an abusive trial costs us thirty days of software that is nearly free to serve, while a real
+     * hotel turned away at the door assumes the product is not for them and never tells us. One
+     * mistake is recoverable; the other is invisible. So it is a note beside the client, not a wall
+     * in front of them.
+     */
+    const flags = clientAttention(healthy({ ownerEmail: "someone@mailinator.com" }), NOW);
+    const flag = flags.find((f) => f.title.includes("temporary email"));
+    expect(flag).toBeDefined();
+    expect(flag!.severity).toBe("note");
+  });
+
+  it("says nothing about an ordinary address", () => {
+    expect(clientAttention(healthy(), NOW).some((f) => f.title.includes("temporary email"))).toBe(false);
+  });
+
+  it("⚠️ says nothing when there is no owner address at all", () => {
+    // `null` must not read as "an address that is not disposable" — it is the absence of an answer,
+    // and flagging on it would put a note on every client whose owner row has no email.
+    expect(clientAttention(healthy({ ownerEmail: null }), NOW).some((f) => f.title.includes("temporary email"))).toBe(false);
+  });
+
+  it("does not make a healthy client noisy", () => {
+    // The test that matters most in this file: a console that cries wolf gets ignored, which is
+    // worse than one that says nothing.
+    expect(clientAttention(healthy(), NOW)).toHaveLength(0);
   });
 });

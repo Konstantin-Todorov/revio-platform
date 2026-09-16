@@ -189,6 +189,8 @@ export async function getClients() {
           createdAt: t.createdAt,
           entitlements,
           properties: t.properties.length,
+          // The owner's address, so a temporary mailbox is noticed rather than acted on.
+          ownerEmail: t.users[0]?.email ?? null,
           roomTypes, units, channels, channelsConnected, openErrors,
           lastSyncAt: lastSync?.lastSyncAt ?? null,
           lastReservationAt: lastReservation?.importedAt ?? null,
@@ -598,6 +600,7 @@ export async function getClientDetail(id: string) {
     ...clientAttention({
       status: tenant.status, createdAt: tenant.createdAt, entitlements,
       properties: tenant.properties.length, roomTypes, units,
+      ownerEmail: tenant.users.find((u) => u.role === "owner")?.email ?? null,
       channels: channels.length, channelsConnected, openErrors,
       lastSyncAt: lastSync?.lastSyncAt ?? null,
       lastReservationAt: lastReservation?.importedAt ?? null,
