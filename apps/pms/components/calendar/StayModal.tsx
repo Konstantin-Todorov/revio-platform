@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import Link from "next/link";
-import { X, LogIn, LogOut, Receipt, PlusCircle, ArrowUpRight, Pin, AlertTriangle } from "lucide-react";
+import { LogIn, LogOut, Receipt, PlusCircle, ArrowUpRight, Pin, AlertTriangle } from "lucide-react";
+import { Dialog } from "@revio/ui/dialog";
 import type { TapeBar } from "@/lib/tape-chart";
 
 /**
@@ -15,113 +16,98 @@ import type { TapeBar } from "@/lib/tape-chart";
  * It shows the facts a receptionist needs to decide, and the actions that follow from them. Deep
  * folio work still opens the folio: a modal that grew a full billing screen inside it would be a
  * second folio screen, and two places to post a charge is how they drift.
+ *
+ * ## The dialog shell is `@revio/ui/dialog`, not this file
+ *
+ * This used to hand-roll it, and the hand-rolled version had four holes that are invisible with a
+ * mouse and fatal without one: **Tab escaped the panel** into the calendar behind it, **focus went
+ * nowhere on close** so the next Tab restarted from the top of the document, **the grid scrolled
+ * behind the open dialog**, and the `<h2>` was never linked to the dialog — it carried an
+ * `aria-label` copy of the guest's name instead, so the heading was announced twice and the
+ * dates were announced as loose text. It also used `shadow-xl`, which is a Tailwind default and
+ * not one of the three Revio elevations.
  */
 
 export interface StayModalProps {
-  bar: TapeBar;
+  /** `null` while the dialog animates out — see `retained` below. */
+  bar: TapeBar | null;
+  open: boolean;
   onClose: () => void;
   money: (minor: number, currency: string) => string;
 }
 
-export function StayModal({ bar, onClose, money }: StayModalProps) {
-  const closeRef = useRef<HTMLButtonElement>(null);
+export function StayModal({ bar, open, onClose, money }: StayModalProps) {
+  // The call site drops the bar the instant it closes, which would unmount the panel mid-exit and
+  // make the close look like a cut rather than a dismissal. Holding the last one lets the 195ms
+  // exit actually play; it is never read while the dialog is open.
+  const retained = useRef<TapeBar | null>(null);
+  if (bar) retained.current = bar;
+  const stay = bar ?? retained.current;
+  if (!stay) return null;
 
-  useEffect(() => {
-    // Escape closes, and focus starts inside the dialog. Both are the difference between a dialog
-    // and a div that looks like one — a keyboard user must be able to leave without a mouse.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    closeRef.current?.focus();
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const crossType = bar.bookedRoomTypeName !== bar.accommodatedRoomTypeName;
+  const crossType = stay.bookedRoomTypeName !== stay.accommodatedRoomTypeName;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Manage stay — ${bar.guestName}`}
-      onClick={onClose}
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title={stay.guestName}
+      description={`Room ${stay.unitLabel} · ${stay.stayFrom} → ${stay.stayTo} · ${stay.nights} night${
+        stay.nights === 1 ? "" : "s"
+      }`}
+      footerAlign="start"
+      footer={
+        <>
+          {!stay.arrived && <Action href={`/checkin/${stay.reservationId}`} icon={LogIn} label="Check in" primary />}
+          {stay.arrived && <Action href={`/folio/${stay.reservationId}`} icon={LogOut} label="Check out" primary />}
+          <Action href={`/folio/${stay.reservationId}`} icon={Receipt} label="Folio" />
+          {stay.arrived && <Action href={`/minibar/${stay.reservationId}`} icon={PlusCircle} label="Post charge" />}
+          <Action href={`/reservation/${stay.reservationId}`} icon={ArrowUpRight} label="Full view" />
+        </>
+      }
     >
-      {/* Stop a click inside the panel closing it; only the backdrop dismisses. */}
-      <div
-        className="w-full max-w-md overflow-hidden rounded-lg bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-surface-border px-4 py-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-[15px] font-bold text-ink-900">{bar.guestName}</h2>
-            <p className="mt-0.5 text-[12px] text-ink-500">
-              Room {bar.unitLabel} · {bar.stayFrom} → {bar.stayTo} · {bar.nights} night{bar.nights === 1 ? "" : "s"}
-            </p>
-          </div>
-          <button
-            ref={closeRef}
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-md p-1 text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-700"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+      <div className="space-y-2.5 pb-2">
+        <Row label="Status" value={stay.arrived ? "In house" : "Not arrived — room held"} />
 
-        <div className="space-y-2.5 px-4 py-3">
-          <Row label="Status" value={bar.arrived ? "In house" : "Not arrived — room held"} />
-
-          {/* One record, two facts (§2.7). Shown together or not at all: "upgraded to a Deluxe"
-              loses what was sold, and the room type alone loses where they are sleeping. */}
-          {crossType ? (
-            <div className="rounded-md bg-brand-50 px-2.5 py-2 text-[12px] text-brand-800">
-              <div className="font-semibold">Accommodated in a different room type</div>
-              <div className="mt-0.5">
-                Booked <span className="font-semibold">{bar.bookedRoomTypeName}</span> · staying in{" "}
-                <span className="font-semibold">{bar.accommodatedRoomTypeName}</span>. The booking is unchanged.
-              </div>
+        {/* One record, two facts (§2.7). Shown together or not at all: "upgraded to a Deluxe"
+            loses what was sold, and the room type alone loses where they are sleeping. */}
+        {crossType ? (
+          <div className="rounded-md bg-brand-50 px-2.5 py-2 text-[12px] text-brand-800">
+            <div className="font-semibold">Accommodated in a different room type</div>
+            <div className="mt-0.5">
+              Booked <span className="font-semibold">{stay.bookedRoomTypeName}</span> · staying in{" "}
+              <span className="font-semibold">{stay.accommodatedRoomTypeName}</span>. The booking is unchanged.
             </div>
-          ) : (
-            <Row label="Room type" value={bar.bookedRoomTypeName} />
-          )}
+          </div>
+        ) : (
+          <Row label="Room type" value={stay.bookedRoomTypeName} />
+        )}
 
-          {bar.balanceMinor != null && (
-            <Row
-              label="Folio balance"
-              value={money(bar.balanceMinor, bar.currency)}
-              tone={bar.balanceMinor === 0 ? "ok" : "owing"}
-            />
-          )}
+        {stay.balanceMinor != null && (
+          <Row
+            label="Folio balance"
+            value={money(stay.balanceMinor, stay.currency)}
+            tone={stay.balanceMinor === 0 ? "ok" : "owing"}
+          />
+        )}
 
-          {bar.pinned && (
-            <p className="flex items-start gap-1.5 text-[11.5px] text-ink-500">
-              <Pin className="mt-0.5 h-3 w-3 shrink-0" />
-              A person chose this room, so it will not be re-assigned automatically.
-            </p>
-          )}
+        {stay.pinned && (
+          <p className="flex items-start gap-1.5 text-[11.5px] text-ink-500">
+            <Pin className="mt-0.5 h-3 w-3 shrink-0" />
+            A person chose this room, so it will not be re-assigned automatically.
+          </p>
+        )}
 
-          {bar.status === "overstayed" && (
-            <p className="flex items-start gap-1.5 rounded-md bg-danger-50 px-2.5 py-2 text-[12px] text-danger-700">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Past its departure date and still in house. This distorts occupancy until it is resolved.
-            </p>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2 border-t border-surface-border bg-surface-muted px-4 py-3">
-          {!bar.arrived && (
-            <Action href={`/checkin/${bar.reservationId}`} icon={LogIn} label="Check in" primary />
-          )}
-          {bar.arrived && (
-            <Action href={`/folio/${bar.reservationId}`} icon={LogOut} label="Check out" primary />
-          )}
-          <Action href={`/folio/${bar.reservationId}`} icon={Receipt} label="Folio" />
-          {bar.arrived && <Action href={`/minibar/${bar.reservationId}`} icon={PlusCircle} label="Post charge" />}
-          <Action href={`/reservation/${bar.reservationId}`} icon={ArrowUpRight} label="Full view" />
-        </div>
+        {stay.status === "overstayed" && (
+          <p className="flex items-start gap-1.5 rounded-md bg-danger-50 px-2.5 py-2 text-[12px] text-danger-700">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            Past its departure date and still in house. This distorts occupancy until it is resolved.
+          </p>
+        )}
       </div>
-    </div>
+    </Dialog>
   );
 }
 

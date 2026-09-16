@@ -34,6 +34,7 @@
     "./chart-path": "./src/chart-path.ts",
     "./controls": "./src/controls.tsx",
     "./menu": "./src/menu.tsx",
+    "./dialog": "./src/dialog.tsx",
     "./column-visibility": "./src/column-visibility.tsx",
     "./tabs": "./src/tabs.tsx",
     "./stale-deployment-boundary": "./src/stale-deployment-boundary.tsx",
@@ -63,22 +64,27 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@radix-ui/react-dropdown-menu": "^2.1.24",
+    "@radix-ui/react-select": "^2.3.7",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@radix-ui/react-tooltip": "^1.2.16",
     "@revio/core": "workspace:*"
   },
   "peerDependencies": {
     "lucide-react": "^0.460.0",
-    "react": "^19.0.0",
     "next": "^15.1.3",
+    "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "lucide-react": "^0.460.0",
-    "react": "^19.0.0",
-    "typescript": "^5.6.0",
-    "next": "^15.1.3",
     "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "lucide-react": "^0.460.0",
+    "next": "^15.1.3",
+    "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "typescript": "^5.6.0"
   }
 }

@@ -304,7 +304,9 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
         </div>
       </div>
 
-      {openBar && <StayModal bar={openBar} onClose={() => setOpenBar(null)} money={money} />}
+      {/* Rendered unconditionally so the dialog's exit animation has something to animate — it
+          returns null until it has been given a stay at least once. */}
+      <StayModal bar={openBar} open={openBar != null} onClose={() => setOpenBar(null)} money={money} />
 
       {/* §2.5's reconciliation PROMPT, on the calendar rather than on another screen. The move has
           already happened — what is open is money, and the spec asks a human to classify it. */}
