@@ -233,6 +233,7 @@ async function alive(port) {
 
 async function walk(app, cfg, token, roleLabel, ids, expect) {
   const failures = [];
+  const unwalkable = [];
   const slowRoutes = [];
   let checked = 0;
 
@@ -247,7 +248,18 @@ async function walk(app, cfg, token, roleLabel, ids, expect) {
      */
     const missing = [...raw.matchAll(/:(\w+)/g)].map((m) => m[1]).filter((k) => !ids[k]);
     if (missing.length) {
-      failures.push(`${raw} — NOT WALKED: no ${missing.join(", ")} in the local database`);
+      /*
+       * ⚠️ Still reported, never silent — but a FAILURE only when the account could have had one.
+       *
+       * A route we cannot build hid a genuinely broken page once, which is why this is loud. It is
+       * not a fault, though, when the account legitimately has no such record: walking a brand-new
+       * hotel — the empty-state run that answers "does the second product break on empty?" — cannot
+       * open a reservation it has never taken. `--allow-unwalkable` is that case, stated explicitly
+       * rather than quietly narrowing the run.
+       */
+      (allowUnwalkable ? unwalkable : failures).push(
+        `${raw} — not walked: this account has no ${missing.join(", ")}`,
+      );
       continue;
     }
     const route = raw.replace(/:(\w+)/g, (_, k) => ids[k]);
@@ -327,10 +339,11 @@ async function walk(app, cfg, token, roleLabel, ids, expect) {
       if (re.test(html)) failures.push(`${route} — ${name}`);
     }
   }
-  return { checked, failures, slowRoutes };
+  return { checked, failures, slowRoutes, unwalkable };
 }
 
 const only = process.argv.includes("--app") ? process.argv[process.argv.indexOf("--app") + 1] : null;
+const allowUnwalkable = process.argv.includes("--allow-unwalkable");
 const report = [];
 let anyFailure = false;
 let anyRan = false;
@@ -362,7 +375,17 @@ for (const [app, cfg] of Object.entries(APPS)) {
    * all — the screen went unchecked while the run looked thorough. A fixture chosen by luck tests
    * whatever that luck reaches.
    */
-  const ownerId = cfg.operator
+  /*
+   * `WALK_AS=<userId>` walks as a NAMED account instead of the best-stocked one.
+   *
+   * Added to answer a question the tests could not: a hotel that opens its second product two weeks
+   * later arrives at every screen with nothing in it — no rooms, no rates, no channels. "It works"
+   * had only ever been observed on a tenant with seeded data, which is the one tenant whose screens
+   * are guaranteed to have something to render.
+   */
+  const ownerId = process.env.WALK_AS
+    ? process.env.WALK_AS
+    : cfg.operator
     ? psql(`select id from "OperatorUser" where active = true limit 1`)
     : psql(`
         select u.id from "User" u
@@ -404,7 +427,7 @@ for (const [app, cfg] of Object.entries(APPS)) {
   }
 
   anyRan = true;
-  const { checked, failures, slowRoutes } = await walk(app, cfg, token, "owner", ids, false);
+  const { checked, failures, slowRoutes, unwalkable } = await walk(app, cfg, token, "owner", ids, false);
 
   if (failures.length) {
     anyFailure = true;
@@ -436,6 +459,10 @@ for (const [app, cfg] of Object.entries(APPS)) {
         report.push(`      as ${cfg.secondRole.role}: ${what} ✓`);
       }
     }
+  }
+  if (unwalkable.length) {
+    report.push(`      ${unwalkable.length} route(s) this account has no record for:`);
+    for (const u of unwalkable) report.push(`        ${u}`);
   }
   if (slowRoutes.length) {
     // Not a failure, but said out loud: on a warm server this means the page really is slow.

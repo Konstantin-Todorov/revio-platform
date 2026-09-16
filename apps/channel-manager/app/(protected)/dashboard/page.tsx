@@ -25,13 +25,25 @@ export default async function DashboardPage() {
 
   /**
    * A hotel that has never configured anything goes into the guided flow instead of a dashboard of
-   * zeros. Two conditions, and the second matters more than the first: they must not have finished
-   * setup AND have no room types at all. Redirecting on `setupCompleted` alone would trap an
-   * established hotel that simply never clicked the last screen — including both demo tenants — in a
-   * welcome flow they do not need. "Has no rooms" is the honest test for "has not started".
+   * zeros. Two conditions: this product's setup is unfinished, AND the hotel has not started it.
+   *
+   * Redirecting on `setupCompleted` alone would trap an established hotel that simply never clicked
+   * the last screen — including both demo tenants — in a flow they do not need. So a second test is
+   * needed for "has not started".
+   *
+   * ⚠️ **That test must be RevioLink's OWN object, and it used to be a shared one.** It counted room
+   * types — which belong to RevioCRS and are shared from it. A hotel that set RevioCRS up first and
+   * then opened RevioLink therefore had room types, failed this test, and landed on a dashboard with
+   * no channel connected instead of the short setup flow that exists precisely for them: *"most of
+   * this is already done… your team's logins are shared with RevioCRS"*. That flow was built and
+   * tested and was unreachable by the path it was written for.
+   *
+   * Channels are what RevioLink itself owns. A hotel with none has not started RevioLink, whatever
+   * RevioCRS has already given it — and one WITH channels is established here, so the safety net for
+   * legacy accounts still holds.
    */
-  const roomTypeCount = await prisma.roomType.count({ where: { propertyId: property.id } });
-  if (!hasFinishedSetup(property.setupCompleted, "RevioLink") && roomTypeCount === 0) {
+  const channelCount = await prisma.channel.count({ where: { propertyId: property.id } });
+  if (!hasFinishedSetup(property.setupCompleted, "RevioLink") && channelCount === 0) {
     redirect("/welcome/property");
   }
   const [resSummary, setup] = await Promise.all([getReservationSummary(), getSetup()]);
