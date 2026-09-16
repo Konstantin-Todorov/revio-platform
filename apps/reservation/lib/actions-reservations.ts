@@ -7,7 +7,7 @@ import { getProperty, remainingByNight, stayViolation, todayInTz, PAYMENT_GUARAN
 import { releaseExpiredHolds } from "./holds";
 import { getSession } from "./session";
 import { stayScope } from "@revio/connectivity";
-import { claimHold } from "@revio/db";
+import { claimHold, releaseRoomsForCancellation } from "@revio/db";
 import { logAudit, recordPush, str, int, money, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
 import { earliestSelectable, hasChanges, pastRangeRefusal, planMerge, planGuestErasure, todayInTimeZone } from "@revio/core";
@@ -388,6 +388,11 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   }
 
   await prisma.reservation.update({ where: { id }, data: { status: "cancelled", cancelledAt: new Date() } });
+
+  // Give the physical room back, not just the availability. Without this the assignment stays
+  // `active` and every occupancy check in RevioPMS keeps counting it — the room is re-sold on the
+  // OTAs and the front desk cannot check anyone into it. See `releaseRoomsForCancellation`.
+  await releaseRoomsForCancellation(prisma, id);
 
   // A cancelled booking that never arrived has a folio only because one is opened eagerly. An empty
   // one is noise on every "unsettled" count and every close-day readiness check, so it closes with

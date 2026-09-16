@@ -7,7 +7,7 @@
  * inventory (a CRS booking, a PMS OOO / walk-in / check-in) can now call `syncRealChannels(db, propertyId)`
  * and the change reaches Channex immediately — no manual Re-sync in the CM.
  */
-import { forSystem, decryptSecret, forTenant, markBillable } from "@revio/db";
+import { forSystem, decryptSecret, forTenant, markBillable, releaseRoomsForCancellation } from "@revio/db";
 import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
@@ -1016,6 +1016,12 @@ export async function pullChannel(
           lines: { deleteMany: {}, create: lines },
         },
       });
+      // ⚠️ An OTA cancellation is the path a real hotel uses most, and it has to give the ROOM back
+      // as well as the inventory. Left held, the assignment keeps counting in every RevioPMS
+      // occupancy check while the night is re-sold on every channel — the room is on sale and
+      // un-check-in-able at the same time. See `releaseRoomsForCancellation`.
+      if (status === "cancelled") await releaseRoomsForCancellation(prisma, existing.id);
+
       if (overbooked) {
         await prisma.errorItem.create({
           data: {
