@@ -1,7 +1,8 @@
 import { forSystem } from "./rls.js";
 import { issueToken } from "./auth-tokens.js";
 import {
-  emailIdentityKey, signupSlug, signupVerdict, TRIAL_DAYS, validateSignup, type ProductKey,
+  emailIdentityKey, isDisposableEmail, signupSlug, signupVerdict, TRIAL_DAYS, validateSignup,
+  type ProductKey,
 } from "@revio/core";
 
 /**
@@ -66,6 +67,30 @@ export async function createPublicSignup(args: {
   const valid = validateSignup(args);
   if (!valid.ok) return { ok: false, message: valid.message };
   const { hotelName, ownerName, email, intent } = valid.fields;
+
+  /*
+   * ⚠️ A throwaway mailbox is not a hotel.
+   *
+   * `isDisposableEmail` existed, was tested, and had **no callers at all** — the cheapest control
+   * against a trial being taken repeatedly, written and never wired in. Found on 2026-09-16.
+   *
+   * It matters here more than it would elsewhere because the email round-trip IS the verification:
+   * a ten-minute mailbox passes it exactly as well as a real one, and every pass is another thirty
+   * free days of all three products. Stripping `+labels` stops the lazy version of this; a fresh
+   * disposable domain defeats that entirely.
+   *
+   * Refused rather than silently flagged, and refused with a way through — a real hotel that
+   * happens to use an unusual domain is a customer, not an attacker, and must never hit a dead end.
+   * The reply is deliberately the same shape as every other refusal here: it never confirms whether
+   * an account exists.
+   */
+  if (isDisposableEmail(email)) {
+    return {
+      ok: false,
+      message:
+        "That looks like a temporary email address. Use the address you'd use for a booking — your hotel's own — or write to us at support@reviosoft.app and we'll set you up by hand.",
+    };
+  }
 
   /*
    * A ceiling on how fast the platform can acquire hotels.
