@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
-import { closeDayEscalation, type CloseDayEscalation } from "@revio/core";
+import { closeDayEscalation, type CloseDayEscalation, dayBoundsInTimeZone } from "@revio/core";
 import { ymd, todayInTz, minutesOfDayInTz } from "./format";
 import { folioBalance } from "./folio";
 
@@ -65,8 +65,16 @@ export async function getCloseDayView() {
     .filter((x) => x.balance !== 0);
 
   // --- Night-audit report (spec §3.11) — occupancy, revenue accruing tonight, arrivals/departures ---
-  const bizStart = new Date(`${businessDate}T00:00:00Z`);
-  const bizNext = new Date(bizStart.getTime() + 86_400_000);
+  /*
+   * ⚠️ The business date is a CALENDAR date at the property, so its bounds are local midnight —
+   * `${businessDate}T00:00:00Z` is midnight UTC, which is 03:00 in Sofia.
+   *
+   * `checkedInAt` below is a real timestamp, so with UTC bounds a guest who checked in at 01:00
+   * local counted against the wrong business day — and after-midnight arrivals are precisely what a
+   * night auditor is reconciling. `dayBoundsInTimeZone` is DST-correct too, so the night the clocks
+   * move gives a 23- or 25-hour day instead of losing or double-counting an hour of arrivals.
+   */
+  const { start: bizStart, next: bizNext } = dayBoundsInTimeZone(businessDate, property.timezone);
   const [totalRooms, occAssignments, arrivalsToday, departuresToday, extras] = await Promise.all([
     prisma.unit.count({ where: { propertyId: property.id, active: true } }),
     // THE ACCRUAL CLOCK (§1.3-A). Everything below — occupancy, tonight's room revenue, and which

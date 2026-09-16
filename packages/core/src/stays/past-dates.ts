@@ -107,3 +107,61 @@ export function futureDateRefusal(opts: { label: string; iso: string; today: str
   if (!iso || iso <= today) return null;
   return `${label} of ${fmtDay(iso)} is in the future. Check the date — it cannot be later than ${fmtDay(today)}.`;
 }
+
+/**
+ * What the clock in `timeZone` reads at instant `at`, expressed as its offset from UTC in ms.
+ *
+ * Derived from `Intl` rather than from a table, so it is correct across DST changes and for any zone
+ * the runtime knows, with no data to keep up to date.
+ */
+function zoneOffsetMs(timeZone: string, at: Date): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      hour12: false,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+    })
+      .formatToParts(at)
+      .map((p) => [p.type, p.value]),
+  ) as Record<string, string>;
+  // `hour` is "24" at midnight in some runtimes; `% 24` normalises it to 0.
+  const wallAsUtc = Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    Number(parts.hour) % 24, Number(parts.minute), Number(parts.second),
+  );
+  return wallAsUtc - at.getTime();
+}
+
+/**
+ * The UTC instants that bound one calendar day **at the property**.
+ *
+ * ## Why this exists
+ *
+ * Counting "how many bookings came in today" by `Date.UTC(...getUTCDate())` buckets by the SERVER's
+ * day. For a Bulgarian hotel that is wrong for the first three hours of every day: a booking taken
+ * at 01:00 in Sofia is 22:00 UTC yesterday, so the dashboard reports it as yesterday's — and 00:00
+ * to 03:00 is the night auditor's shift, which is exactly when somebody is reading that number.
+ *
+ * It shipped on the RevioLink dashboard's Reservation Summary card, whose entire purpose is a
+ * Today/Yesterday toggle.
+ *
+ * ⚠️ Not `new Date(\`${date}T00:00:00Z\`)` either. That is midnight UTC, which is 03:00 in Sofia —
+ * the same error with a different sign.
+ *
+ * DST-correct: the offset is resolved at the instant the day actually begins, then re-resolved once
+ * in case crossing the boundary changed it, which is what happens on the two nights a year the
+ * clocks move.
+ */
+export function dayBoundsInTimeZone(date: string, timeZone: string): { start: Date; next: Date } {
+  const wall = Date.parse(`${date}T00:00:00Z`);
+  const first = new Date(wall - zoneOffsetMs(timeZone, new Date(wall)));
+  // One correction pass: on a DST night the offset at the corrected instant differs from the offset
+  // at the guess, and the corrected instant is the one that matters.
+  const start = new Date(wall - zoneOffsetMs(timeZone, first));
+
+  const nextWall = Date.parse(`${date}T00:00:00Z`) + 86_400_000;
+  const nextFirst = new Date(nextWall - zoneOffsetMs(timeZone, new Date(nextWall)));
+  const next = new Date(nextWall - zoneOffsetMs(timeZone, nextFirst));
+  return { start, next };
+}

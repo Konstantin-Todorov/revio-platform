@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
+import { dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
 import { collidingExternalIds, describeStructureGap, mappingRows, ratePlanMappingRows, structureGap } from "@revio/connectivity";
 import { getSession } from "./session";
 
@@ -822,10 +822,23 @@ export async function getRoomsAndRates() {
  */
 export async function getReservationSummary() {
   const property = await getProperty();
-  const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const yesterdayStart = new Date(todayStart.getTime() - 86_400_000);
-  const tomorrowStart = new Date(todayStart.getTime() + 86_400_000);
+  /*
+   * ⚠️ The PROPERTY's day, not the server's.
+   *
+   * This read `Date.UTC(...getUTCDate())`, which buckets by UTC. For a Bulgarian hotel that is
+   * wrong for the first three hours of every day: a booking taken at 01:00 in Sofia is 22:00 UTC
+   * yesterday, so this card counted it as yesterday's. 00:00–03:00 is the night auditor's shift,
+   * which is exactly when somebody is reading a Today/Yesterday toggle.
+   *
+   * `dayBoundsInTimeZone` is also DST-correct, so the two nights a year the clocks move give a
+   * 23- or 25-hour day rather than silently dropping or double-counting an hour of bookings.
+   */
+  const today = todayInTimeZone(property.timezone);
+  const { start: todayStart, next: tomorrowStart } = dayBoundsInTimeZone(today, property.timezone);
+  // One millisecond before today began is, by definition, yesterday at the property — which stays
+  // true on a DST night, where yesterday is 23 or 25 hours long rather than 24.
+  const yesterday = todayInTimeZone(property.timezone, new Date(todayStart.getTime() - 1));
+  const { start: yesterdayStart } = dayBoundsInTimeZone(yesterday, property.timezone);
   // "Made" date = importedAt (when the reservation entered the system); cancelled = cancelledAt.
   const count = (field: "importedAt" | "cancelledAt", from: Date, to: Date) =>
     prisma.reservation.count({ where: { propertyId: property.id, [field]: { gte: from, lt: to } } });
