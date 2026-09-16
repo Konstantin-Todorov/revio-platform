@@ -87,7 +87,7 @@ export { isCityTax };
  * `packages/db/src/inventory-claim.ts` already uses for the same problem and documents at length:
  * transaction-scoped, released on commit or rollback, nothing to unlock and nothing to leak onto a
  * pooled connection. A unique index would be the stronger fix and needs a migration that could fail
- * against whatever production already holds — see `state-audit.sql`, which should be asked first.
+ * against whatever production already holds — see `state-integrity.ts`, which should be asked first.
  *
  * `client` is passed only by callers that are ALREADY inside a transaction (the night audit). They
  * join it rather than nesting a second one, which Prisma would refuse.

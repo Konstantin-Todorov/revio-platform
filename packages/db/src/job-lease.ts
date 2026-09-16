@@ -139,6 +139,13 @@ export const JOB = {
   /** The Channex booking-revisions feed. The one Channex complained about. */
   channexPull: "channex-pull",
   arrivalsDigest: "arrivals-digest",
+  /**
+   * Keeps the demo hotels mid-service on whatever day they are opened.
+   *
+   * Demo data carries fixed dates and today moves. Left alone it went six days stale and the demo
+   * calendar rendered empty — nothing broken, nothing a test can see, and the demo is the sale.
+   */
+  demoRefresh: "demo-refresh",
   holdExpiry: "hold-expiry",
   pickupSnapshot: "pickup-snapshot",
   /** Round-2 §3: closes a business day nobody closed, so unclosed days cannot accumulate. */

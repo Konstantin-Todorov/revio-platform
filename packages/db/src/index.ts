@@ -93,6 +93,8 @@ export {
 } from "./inventory-claim.js";
 export * from "@prisma/client";
 export { occupancyKeysFor, occupancyKeyFor } from "./occupancy-key.js";
+export { refreshDemoStays, type DemoRefreshResult } from "./demo-stays.js";
+export { runStateAudit, faultSummary, STATE_CHECKS, type StateFault, type StateCheck } from "./state-integrity.js";
 export { releaseRoomsForCancellation, isStayInHouse, type RoomReleaseDb, type StayLookupDb } from "./room-release.js";
 export { selfStartTrial, runningTrialFor, markProductOpened, openProductAndGreet,
   allTrialsFor, requestKeepTrial, type SelfStartResult } from "./self-trial.js";

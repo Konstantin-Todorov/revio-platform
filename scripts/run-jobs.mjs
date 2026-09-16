@@ -83,6 +83,9 @@ const JOBS = [
    * remove a hotel's access, so it runs when the rest of the tick has already succeeded.
    */
   { name: "trial-sweep", url: OPERATOR && `${OPERATOR}/api/jobs/trials` },
+  // Keeps the demo hotels mid-service. Harmless if it fails — nothing a customer touches depends on
+  // it — but a blank demo calendar is what a hotel sees before deciding to trust us.
+  { name: "demo-refresh", url: OPERATOR && `${OPERATOR}/api/jobs/demo-refresh` },
   // Drafting invoices is scheduled, not a button somebody has to remember in the right month.
   { name: "invoice-run", url: OPERATOR && `${OPERATOR}/api/jobs/invoices` },
 

@@ -1,13 +1,17 @@
 import { CheckCircle2, XCircle, AlertTriangle, ArrowUpDown } from "lucide-react";
 import { getPlatformHealth } from "@/lib/data";
-import { forSystem, listAppErrors } from "@revio/db";
+import { forSystem, listAppErrors, withSystemTransaction, runStateAudit, faultSummary } from "@revio/db";
 import { AppErrorList } from "@/components/health/AppErrorList";
 import { JobHealthCard } from "@/components/health/JobHealthCard";
 import { jobHealth } from "@/lib/job-health";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { successRate, failureVerdict } from "@revio/core";
+import { STATE_CHECKS } from "@revio/db";
 
 export const dynamic = "force-dynamic";
+
+/** Named once so the copy cannot claim a different number of rules from the one that ran. */
+const STATE_CHECK_COUNT = STATE_CHECKS.length;
 
 function relative(d: Date): string {
   const m = Math.round((Date.now() - new Date(d).getTime()) / 60000);
@@ -17,13 +21,26 @@ function relative(d: Date): string {
 }
 
 export default async function HealthPage() {
-  const [h, appErrors, jobLeases] = await Promise.all([
+  const [h, appErrors, jobLeases, stateFaults] = await Promise.all([
     getPlatformHealth(),
     listAppErrors(30),
     // The same read the dead-man's-switch endpoint makes. It answered only to a monitor, outside the
     // console, which is how two jobs came to sit at `never` in production unnoticed.
     forSystem().jobLease.findMany({ select: { name: true, lastRunAt: true }, orderBy: { name: "asc" } }),
+    /*
+     * The state-integrity audit, run live.
+     *
+     * It existed only as a command somebody had to think to run, and in one afternoon it found a
+     * cancelled booking that had held a room since July and a missing in-house guard in RevioLink.
+     * A check that depends on being remembered is a check that eventually is not.
+     *
+     * ⚠️ `withSystemTransaction`, never `forSystem()`: the proxy extends only MODEL operations, so a
+     * raw read through it gets no bypass GUC — and under RLS that does not fail, it returns ZERO
+     * ROWS. This panel would have reported a spotless database no matter what was in it.
+     */
+    withSystemTransaction(async (tx) => runStateAudit(tx)),
   ]);
+  const integrity = faultSummary(stateFaults);
   const jobs = jobHealth(jobLeases, new Date());
   /*
    * `100% · 25 open errors` was on this screen, and both numbers were right.
@@ -119,6 +136,37 @@ export default async function HealthPage() {
                   <div className="text-[11.5px] text-ink-500">{f.property} · {f.channel}{f.detail ? ` · ${f.detail}` : ""}</div>
                 </div>
                 <span className="shrink-0 text-[11.5px] text-ink-400">{relative(f.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Records in a state with no available action — the rule is about the whole database, not
+          about one screen, and it was learned from a folio that said closed and open at once. */}
+      <Card className="mt-4">
+        <CardHeader
+          title={`State integrity${integrity.healthy ? "" : ` · ${integrity.failing.length}`}`}
+          action={
+            <span className="text-[11px] text-ink-400">
+              {STATE_CHECK_COUNT} rules · every record should have an action available to it
+            </span>
+          }
+        />
+        {integrity.healthy ? (
+          <div className="px-4 py-6 text-center text-[12.5px] text-ink-400">
+            Zero rows on all {STATE_CHECK_COUNT} rules — nothing is stuck.
+          </div>
+        ) : (
+          <ul className="divide-y divide-surface-border">
+            {integrity.failing.map((f) => (
+              <li key={f.id} className="flex items-start justify-between gap-3 px-4 py-2.5">
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium text-ink-800">{f.fault}</div>
+                  {/* The remedy, not the metric: this panel is read by somebody deciding what to do. */}
+                  <div className="text-[11.5px] text-ink-500">{f.remedy}</div>
+                </div>
+                <span className="shrink-0 font-mono text-[12.5px] font-semibold text-warning-700">{f.rows}</span>
               </li>
             ))}
           </ul>

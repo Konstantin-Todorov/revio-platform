@@ -14,7 +14,7 @@ That is the point of the list: to find out here rather than there.
 Everything is pushed, CI-green and deployed; migrations confirmed applied in production.
 
 ### 2. Repair the stuck production records
-`packages/db/scripts/state-audit.sql` (read-only, safe on production) lists every contradictory
+`pnpm --filter @revio/db state-audit` (read-only, safe on production) lists every contradictory
 record. As of 2026-08-23 it found:
 
 | Fault | Rows | Fix |
@@ -217,7 +217,7 @@ back (`docs/RESTORE.md` + Railway redeploy of the previous image).
   PMS is in the scan.
 - **Atomic multi-step writes** — `withTenantTransaction`, proven to roll back.
 - **Backup before every migration** — pre-push hook, fails closed.
-- **State-integrity audit** — `state-audit.sql`, ten rules, run it before each release.
+- **State-integrity audit** — `pnpm --filter @revio/db state-audit`, ten rules, run it before each release. Also rendered live on Operator → Platform Health, so it is seen without being remembered.
 - **No card numbers, no image bytes in Postgres** — enforced by convention and reviewed.
 - **Login rate limiting, password reset, revocable sessions** (N1·N2·N3).
 

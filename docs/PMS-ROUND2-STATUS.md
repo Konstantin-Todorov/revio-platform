@@ -231,14 +231,14 @@ should not be read as saying a real client is affected.
 
 ## The state audit — run this, don't wait to be told
 
-`packages/db/scripts/state-audit.sql` (read-only, safe on production) lists every record currently
+`pnpm --filter @revio/db state-audit` (read-only, safe on production) lists every record currently
 in a contradictory state, with the remedy for each. It exists because the round-2 bug was found by a
 hotelier rather than by us, and the principle it established — **no record may exist in a state with
 no available action** — is a claim about the whole database that nothing was checking.
 
 ```
 psql "$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)" \
-  -f packages/db/scripts/state-audit.sql
+  pnpm --filter @revio/db state-audit
 ```
 
 Zero rows on every line is healthy. Production, 2026-08-23:
