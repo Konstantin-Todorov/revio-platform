@@ -462,6 +462,9 @@ importers:
       '@revio/core':
         specifier: workspace:*
         version: link:../core
+      '@revio/email':
+        specifier: workspace:*
+        version: link:../email
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3

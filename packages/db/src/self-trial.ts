@@ -14,10 +14,13 @@
  *
  * `scripts/perimeter-lint.mjs` now makes this mechanically impossible to repeat.
  */
+import { sendEmail } from "@revio/email";
+
 import { forSystem, withSystemTransaction } from "./rls.js";
 import {
   PRODUCT_BY_KEY,
   TRIAL_DAYS,
+  trialOpenedEmail,
   canSelfStartTrial,
   trialEndsAt,
   type ProductKey,
@@ -268,4 +271,84 @@ export async function markProductOpened(
     data: { openedAt: now, startedAt: now, endsAt: trialEndFor(now) },
   });
   return count === 1;
+}
+
+/**
+ * Stamp the first open AND greet the hotel — the one call a product's layout makes.
+ *
+ * ## Why this is here and not in each app
+ *
+ * `markProductOpened` has always returned `true` on exactly the open that started the clock, and its
+ * own comment named the reason: *"so a caller can react to that once (a welcome email, an operator
+ * notification)"*. Three layouts called it and all three threw the answer away, so for as long as
+ * self-serve trials have existed **nothing has greeted a hotel when one started**.
+ *
+ * Putting the reaction in the three layouts instead would be three copies of the same gather-and-send,
+ * which is how the second copy quietly loses a field. One function, three callers, no drift.
+ *
+ * ## It cannot make opening the product fail
+ *
+ * This runs inside a layout render. `sendEmail` never throws by design, and every lookup here is
+ * wrapped as well: a hotel arriving at their dashboard must never see an error page because our mail
+ * provider is having a bad afternoon. A failure is logged and the trial stays started — the clock is
+ * the fact that matters, the email is a courtesy on top of it.
+ *
+ * ⚠️ Addressed to the **owner**, not to whoever happened to click. An end date has money attached to
+ * it, and the receptionist who opened RevioPMS first is not the person who decides about renewal.
+ */
+export async function openProductAndGreet(
+  tenantId: string,
+  product: ProductKey,
+  url: string,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const started = await markProductOpened(tenantId, product, now);
+  if (!started) return false;
+
+  try {
+    const db = forSystem();
+    const [tenant, owner, trial, others] = await Promise.all([
+      db.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
+      db.user.findFirst({
+        where: { tenantId, role: "owner", active: true },
+        select: { name: true, email: true },
+        // Deterministic when a hotel has two owners — cuid ids sort by creation, so this is the
+        // first owner, which is the account the operator or the signup created.
+        orderBy: { id: "asc" },
+      }),
+      db.productTrial.findFirst({ where: { tenantId, product }, select: { endsAt: true } }),
+      db.productTrial.findMany({
+        where: { tenantId, openedAt: { not: null }, product: { not: product } },
+        select: { product: true },
+      }),
+    ]);
+
+    // No owner or no end date means something upstream is wrong, and a mail promising a date we
+    // cannot read would be worse than no mail. Stay quiet and leave the trail in the log.
+    if (!owner?.email || !trial?.endsAt || !tenant) {
+      console.error(`[trial] opened ${product} for ${tenantId} but could not address the welcome email`);
+      return true;
+    }
+
+    const mail = trialOpenedEmail({
+      ...(owner.name ? { name: owner.name } : {}),
+      hotelName: tenant.name,
+      product,
+      endsAt: trial.endsAt,
+      url,
+      alreadyOpen: others.map((o) => o.product as ProductKey),
+      // The hotel's own locale lives on the property, not the tenant; this is the platform default
+      // and the one place a date is formatted for a person rather than stored.
+      formatDate: (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+    });
+
+    const sent = await sendEmail({ to: [owner.email], subject: mail.subject, text: mail.text, html: mail.html });
+    if (!sent.ok) {
+      console.error(`[trial] welcome email for ${tenant.name} (${product}) failed: ${sent.error ?? "unknown"}`);
+    }
+  } catch (err) {
+    console.error(`[trial] welcome email for ${tenantId} (${product}) threw:`, err);
+  }
+
+  return true;
 }

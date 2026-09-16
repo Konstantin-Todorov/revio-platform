@@ -34,6 +34,7 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@revio/core": "workspace:*",
+    "@revio/email": "workspace:*",
     "bcryptjs": "^2.4.3",
     "jose": "^5.9.6",
     "prisma": "^5.22.0"

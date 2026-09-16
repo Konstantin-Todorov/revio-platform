@@ -14,7 +14,8 @@ import { FlashToast } from "@revio/ui/flash-toast";
 import { UsageBeacon } from "@revio/ui/usage-beacon";
 import { recordScreenView } from "@/lib/actions-usage";
 import { readFlash, FLASH_COOKIE } from "@revio/ui/flash";
-import { runningTrialFor, markProductOpened } from "@revio/db";
+import { runningTrialFor, openProductAndGreet } from "@revio/db";
+import { publicBaseUrl } from "@revio/email";
 import { trialBanner, isTrialDecider, roleCanOpenProduct } from "@revio/core";
 import { TrialStrip } from "@revio/ui/trial-banner";
 import { keepThisTrial } from "@/lib/actions-self-trial";
@@ -62,14 +63,14 @@ export default async function ProtectedLayout({ children }: { children: React.Re
    * ⚠️ Opening the product is what starts its trial — not signing up.
    *
    * All three clocks used to begin at signup, so a hotel that spent a fortnight in one product met
-   * the next with half its trial gone. `markProductOpened` stamps the first arrival and moves the
+   * the next with half its trial gone. `openProductAndGreet` stamps the first arrival and moves the
    * thirty days to begin here.
    *
    * Placed AFTER the entitlement check on purpose: a hotel that cannot open this product has not
    * opened it, and stamping first would start a clock on a door that did not let them through.
    * Idempotent by its WHERE (`openedAt: null`), so every visit after the first writes nothing.
    */
-  await markProductOpened(session.tenantId, "pms");
+  await openProductAndGreet(session.tenantId, "pms", `${publicBaseUrl()}/dashboard`);
 
   const properties = (await getSwitchableProperties(session.tenantId)).map((p) => ({ id: p.id, name: p.name, tenantName: p.tenant.name }));
   const activeName = properties.find((p) => p.id === session.activePropertyId)?.name ?? session.tenantName;
