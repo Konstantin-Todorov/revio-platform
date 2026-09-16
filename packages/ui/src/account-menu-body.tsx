@@ -30,6 +30,7 @@ export function AccountMenuBody({
   userEmail,
   roleLabel,
   products,
+  openProduct,
   upsells = [],
   trialHref,
 }: {
@@ -37,6 +38,8 @@ export function AccountMenuBody({
   userEmail?: string | null;
   roleLabel: string;
   products: ProductLink[];
+  /** Mints a hand-off and redirects. Omit and the menu falls back to plain links. */
+  openProduct?: (fd: FormData) => Promise<void>;
   /** Products the hotel does not have. */
   upsells?: ProductUpsell[];
   /**
@@ -78,6 +81,28 @@ export function AccountMenuBody({
                   Here
                 </span>
               </div>
+            ) : openProduct ? (
+              /*
+               * ⚠️ A form, not a link — and the difference is the whole of central login.
+               *
+               * A link sent you to the other product's origin, where you met a second password box.
+               * This submits to an action that mints a 30-second, single-use hand-off bound to that
+               * product and redirects you straight in. It has to be a POST: the credential must
+               * never sit in an href, which browsers prefetch and people copy.
+               *
+               * `openProduct` is optional so the menu still renders for a caller that has not wired
+               * it — degrading to the old link is strictly better than a menu that throws.
+               */
+              <form key={p.key} action={openProduct}>
+                <input type="hidden" name="product" value={p.key} />
+                <button
+                  type="submit"
+                  className="block w-full px-3 py-1.5 text-left transition-colors hover:bg-surface-muted"
+                >
+                  <span className="block truncate text-[13px] text-ink-700">{p.name}</span>
+                  <span className="block truncate text-[11px] text-ink-400">{p.tagline}</span>
+                </button>
+              </form>
             ) : (
               <a
                 key={p.key}

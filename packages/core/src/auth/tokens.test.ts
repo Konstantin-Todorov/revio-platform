@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PASSWORD_MIN_LENGTH, TOKEN_POLICY, checkToken, validatePassword } from "./tokens.js";
+import { PASSWORD_MIN_LENGTH, TOKEN_POLICY, checkToken, validatePassword, handoffPurposeFor, isHandoff } from "./tokens.js";
 import { inviteEmail, passwordChangedEmail, passwordResetEmail } from "../email/auth-emails.js";
 
 const NOW = 1_700_000_000_000;
@@ -127,5 +127,52 @@ describe("auth emails", () => {
       expect(e.text).not.toMatch(/<[a-z]/i);
       expect(e.text).not.toContain("<img");
     }
+  });
+});
+
+describe("hand-off tokens", () => {
+  it("⚠️ names its target product, which IS the product binding", () => {
+    /*
+     * A hand-off minted to open RevioCRS must not open RevioPMS. The binding is the purpose, and
+     * `resolveToken` already refuses a purpose mismatch as "unrecognised" — so the guarantee comes
+     * from machinery that was already tested rather than from new code.
+     */
+    expect(handoffPurposeFor("crs")).toBe("handoff:crs");
+    expect(handoffPurposeFor("pms")).toBe("handoff:pms");
+    expect(handoffPurposeFor("cm")).toBe("handoff:cm");
+    expect(handoffPurposeFor("crs")).not.toBe(handoffPurposeFor("pms"));
+  });
+
+  it("⚠️ lives for SECONDS, not the hour a reset link gets", () => {
+    // It is minted on a click and spent by the redirect that follows. It still lands in browser
+    // history and in whatever logs sit in front of the app, so it has to be dead before anyone
+    // could read it there.
+    for (const p of ["handoff:cm", "handoff:crs", "handoff:pms"] as const) {
+      expect(TOKEN_POLICY[p].ttlMs).toBe(30_000);
+      expect(TOKEN_POLICY[p].ttlMs).toBeLessThan(TOKEN_POLICY.reset.ttlMs);
+    }
+  });
+
+  it("every purpose has a policy — a missing one would be an undefined TTL", () => {
+    // `TOKEN_POLICY[purpose].ttlMs` on a purpose nobody added reads `undefined`, and `expiresAt`
+    // becomes Invalid Date — a token that can never be used, or worse, never expires.
+    for (const p of ["invite", "reset", "handoff:cm", "handoff:crs", "handoff:pms"] as const) {
+      expect(TOKEN_POLICY[p]?.ttlMs).toBeGreaterThan(0);
+    }
+  });
+
+  it("tells a hand-off apart from the links a person keeps", () => {
+    expect(isHandoff("handoff:cm")).toBe(true);
+    expect(isHandoff("invite")).toBe(false);
+    expect(isHandoff("reset")).toBe(false);
+  });
+
+  it("⚠️ says something reassuring when one is reused, because that is a RELOAD", () => {
+    // Pressing back or refreshing after a hand-off is the common case, not an attack. The person is
+    // already signed in; telling them a credential was rejected would be alarming and wrong.
+    const used = checkToken({ purpose: "handoff:crs", expiresAt: Date.now() + 10_000, usedAt: Date.now() }, Date.now());
+    expect(used.usable).toBe(false);
+    expect(used.usable === false && used.message).toMatch(/already been used/i);
+    expect(used.usable === false && used.message).not.toMatch(/password/i);
   });
 });

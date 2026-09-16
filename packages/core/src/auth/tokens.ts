@@ -10,7 +10,34 @@
  * what counts as an acceptable password.
  */
 
-export type TokenPurpose = "invite" | "reset";
+/**
+ * ⚠️ A hand-off purpose names its TARGET PRODUCT, and that is the product binding.
+ *
+ * A central login authenticates once and then opens whichever product the hotel asks for. The
+ * credential that carries them across must be bound to the account *and* to the destination —
+ * otherwise a token minted to open RevioCRS also opens RevioPMS, and one click on a shared screen
+ * becomes a session in a product the person never chose.
+ *
+ * Encoding the destination in the purpose gets that binding from machinery that already exists and
+ * is already tested: `resolveToken` treats a purpose mismatch as **unrecognised** — it does not say
+ * "wrong product", because that would confirm the token exists. A RevioCRS hand-off presented to
+ * RevioPMS is therefore simply not a token, which is the correct answer and needed no new code.
+ *
+ * The alternative was a `product` column on `AuthToken` — a migration against production to store
+ * something the purpose can already express.
+ */
+export type HandoffPurpose = "handoff:cm" | "handoff:crs" | "handoff:pms";
+export type TokenPurpose = "invite" | "reset" | HandoffPurpose;
+
+/** The hand-off purpose for a product key, so no caller builds the string by hand. */
+export function handoffPurposeFor(product: "cm" | "crs" | "pms"): HandoffPurpose {
+  return `handoff:${product}`;
+}
+
+/** Is this purpose a hand-off? Used where the three share one behaviour. */
+export function isHandoff(purpose: TokenPurpose): purpose is HandoffPurpose {
+  return purpose.startsWith("handoff:");
+}
 
 export interface TokenPolicy {
   ttlMs: number;
@@ -29,6 +56,20 @@ export interface TokenPolicy {
 export const TOKEN_POLICY: Record<TokenPurpose, TokenPolicy> = {
   invite: { ttlMs: 7 * 24 * 60 * 60_000, ttlLabel: "7 days" },
   reset: { ttlMs: 60 * 60_000, ttlLabel: "1 hour" },
+  /*
+   * ⚠️ Thirty SECONDS, and the unit is the point.
+   *
+   * A hand-off is not a link anybody keeps — it is minted the instant a button is pressed and spent
+   * by the redirect that follows, so its whole life is one round trip. It still ends up in browser
+   * history and in whatever logs sit in front of the app, which is exactly why it must be dead
+   * before anyone could read it there. Single use is the primary control; this is the second.
+   *
+   * The design note for central login states it as a requirement: "no credential in a URL outlives
+   * its use — single-use, seconds not minutes, and never logged".
+   */
+  "handoff:cm": { ttlMs: 30_000, ttlLabel: "30 seconds" },
+  "handoff:crs": { ttlMs: 30_000, ttlLabel: "30 seconds" },
+  "handoff:pms": { ttlMs: 30_000, ttlLabel: "30 seconds" },
 };
 
 /** The stored shape of a token, minus the secret itself — which is never stored, only its hash. */
@@ -56,9 +97,13 @@ export function checkToken(record: TokenRecord, now: number): TokenCheck {
       usable: false,
       reason: "used",
       message:
-        record.purpose === "invite"
-          ? "This invitation has already been used. Try signing in, or ask for a new one."
-          : "This link has already been used. Request a new one if you still need to change your password.",
+        isHandoff(record.purpose)
+          /* Reassuring on purpose: this is the normal result of a reload or a back button, not a
+             fault. The person is already signed in; they need the door, not an explanation. */
+          ? "That link has already been used. Open the product again from your account."
+          : record.purpose === "invite"
+            ? "This invitation has already been used. Try signing in, or ask for a new one."
+            : "This link has already been used. Request a new one if you still need to change your password.",
     };
   }
   if (record.expiresAt <= now) {
@@ -66,9 +111,11 @@ export function checkToken(record: TokenRecord, now: number): TokenCheck {
       usable: false,
       reason: "expired",
       message:
-        record.purpose === "invite"
-          ? "This invitation has expired. Ask an owner at your hotel to send another."
-          : "This link has expired. Password reset links are valid for 1 hour — request a new one.",
+        isHandoff(record.purpose)
+          ? "That link timed out. Open the product again from your account — it takes a second."
+          : record.purpose === "invite"
+            ? "This invitation has expired. Ask an owner at your hotel to send another."
+            : "This link has expired. Password reset links are valid for 1 hour — request a new one.",
     };
   }
   return { usable: true };

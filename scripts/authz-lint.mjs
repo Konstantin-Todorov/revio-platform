@@ -80,6 +80,17 @@ const EXEMPT = {
   // refuses anything that is not `<source>:<row id>`, because an unchecked key would be a way to
   // append arbitrary bytes to a column on the accounts table one request at a time, and
   // `pruneReadKeys` caps the column. Both are pinned by notification-keys.test.ts.
+  // Central login's hand-off. It mints a credential, so it is emphatically a POST worth thinking
+  // about — and a capability is the wrong gate for it. There is no "may switch product" permission:
+  // the question is whether this ACCOUNT may open that product, and the answer is re-read from the
+  // database by the receiving route (`app/handoff/route.ts`) at the moment of arrival — active
+  // account, active tenant, unrevoked session, entitlement still held, all through the same
+  // `loginDestination` the password door uses.
+  //
+  // Deciding it here as well would put one judgement in two places, and the copy that drifts is
+  // always the permissive one. What this action itself enforces is only that a session exists at
+  // all, which is what makes it a hand-off rather than a way in.
+  "actions-switch.ts:openProduct": "mints a hand-off; every access question is re-read by the receiving route via loginDestination",
   "actions-notifications.ts:loadNotifications": "a read, gated inside getNotificationFeed by role and by screen",
   "actions-notifications.ts:markNotificationRead": "writes only your own read state, on your own account row; the key is validated and the column capped",
   "actions-notifications.ts:markAllNotificationsRead": "writes only your own read state, on your own account row",

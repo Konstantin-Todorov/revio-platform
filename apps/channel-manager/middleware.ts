@@ -9,6 +9,18 @@ export function middleware(req: NextRequest) {
   // sign in — so these must be reachable without a session or the whole flow is a dead link.
   const isPublic =
     pathname === "/login" ||
+    /*
+     * ⚠️ Central login's front door, and it MUST be public.
+     *
+     * A hand-off arrives from another product carrying a 30-second single-use token and no cookie
+     * for this origin — that is the entire point. Gating it on a session would bounce it to /login,
+     * which is precisely the second sign-in central login exists to remove.
+     *
+     * It is not unguarded: the route rate-limits by address, spends the token exactly once, and then
+     * re-reads the account, the tenant, the revocation stamp and the entitlement from the database
+     * before it issues anything.
+     */
+    pathname === "/handoff" ||
     // Step two of signing in: reached with a correct password and NO session yet, so requiring one
     // would make two-factor authentication unreachable. It is not unguarded — the page demands a
     // valid pending token and sends anyone without one back to the start.

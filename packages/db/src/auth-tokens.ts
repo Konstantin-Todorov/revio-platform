@@ -16,7 +16,7 @@
  * exists, and a reset is by definition requested by someone who cannot sign in.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { TOKEN_POLICY, checkToken, type TokenPurpose } from "@revio/core";
+import { TOKEN_POLICY, checkToken, type TokenPurpose, handoffPurposeFor, isHandoff } from "@revio/core";
 import { forSystem } from "./rls.js";
 
 /** 32 bytes of CSPRNG, base64url. ~256 bits — not guessable, and short enough to survive a mail client. */
@@ -103,10 +103,23 @@ export type TokenResolution =
 export async function resolveToken(token: string, purpose: TokenPurpose): Promise<TokenResolution> {
   const row = await forSystem().authToken.findUnique({ where: { tokenHash: hashToken(token) } });
 
+  /*
+   * ⚠️ The refusal has to be in the words of the thing they were DOING.
+   *
+   * This was a two-way branch — invite, else reset — and adding hand-off purposes made every
+   * unmatched hand-off answer "this reset link is not valid", to somebody who never asked for a
+   * password reset. Found by running `handoff-verify`, not by any test: the token was correctly
+   * refused, so every assertion passed while the sentence was wrong.
+   *
+   * A mismatched purpose still says only "not valid" — never "that was for another product", which
+   * would confirm the token exists.
+   */
   const dead =
     purpose === "invite"
       ? "This invitation link is not valid. Ask an owner at your hotel to send another."
-      : "This reset link is not valid or has expired. Request a new one.";
+      : isHandoff(purpose)
+        ? "That link is not valid any more. Open the product again from your account."
+        : "This reset link is not valid or has expired. Request a new one.";
 
   if (!row || row.purpose !== purpose) return { ok: false, message: dead };
 
@@ -156,4 +169,64 @@ export async function pruneAuthTokens(olderThanMs = 30 * 24 * 60 * 60_000): Prom
   const cutoff = new Date(Date.now() - olderThanMs);
   const { count } = await forSystem().authToken.deleteMany({ where: { expiresAt: { lt: cutoff } } });
   return count;
+}
+
+// --- Central login: the hand-off ---------------------------------------------------------------
+
+/**
+ * Mint the credential that carries an already-signed-in person into another product.
+ *
+ * ⚠️ This is a **session-granting credential in a URL**, which is the most dangerous shape a token
+ * can take, so it is deliberately built out of parts that were already tested rather than new ones:
+ *
+ *  - **Bound to the destination** by its purpose (`handoff:crs`). `resolveToken` refuses a purpose
+ *    mismatch as *unrecognised*, so a RevioCRS hand-off presented to RevioPMS is not a token at all.
+ *  - **Single use**, by `consumeToken`'s `usedAt: null` in the WHERE — two requests racing, one wins.
+ *  - **Thirty seconds**, from `TOKEN_POLICY`. It is minted on a click and spent by the redirect that
+ *    follows; it must be dead before anyone reads it out of browser history or a proxy log.
+ *  - **Only its hash is stored**, so the database never holds anything that opens an account.
+ *  - Issuing invalidates any outstanding hand-off for the same address and product, so a person
+ *    cannot accumulate live keys by clicking twice.
+ *
+ * `forSystem()` is correct here for the same reason it is correct for invites: the caller HAS a
+ * session, but the app receiving the hand-off does not yet, so there is no tenant context to scope
+ * the lookup with. The token itself is the only thing being trusted, and it is single-use.
+ */
+export async function issueHandoff(args: {
+  userId: string;
+  email: string;
+  product: "cm" | "crs" | "pms";
+}): Promise<string> {
+  return issueToken({
+    purpose: handoffPurposeFor(args.product),
+    email: args.email,
+    userId: args.userId,
+  });
+}
+
+export type HandoffResult =
+  | { ok: true; userId: string }
+  | { ok: false; message: string };
+
+/**
+ * Spend a hand-off and say who it was for.
+ *
+ * ⚠️ Resolve, then CONSUME, then return — in that order, and the consume is not optional. Returning
+ * the user before spending the token would leave it live for a replay, which is the whole failure
+ * this shape exists to prevent. `consumeToken` returning false means somebody else spent it in the
+ * microseconds between: that is a race lost, not a session earned.
+ *
+ * It says nothing about WHY a token failed beyond the shared message, and never that it was minted
+ * for a different product — that would confirm a token exists.
+ */
+export async function consumeHandoff(token: string, product: "cm" | "crs" | "pms"): Promise<HandoffResult> {
+  const resolved = await resolveToken(token, handoffPurposeFor(product));
+  if (!resolved.ok) return { ok: false, message: resolved.message };
+  if (!resolved.token.userId) {
+    return { ok: false, message: "That link is not valid. Sign in to open this product." };
+  }
+  if (!(await consumeToken(resolved.token.id))) {
+    return { ok: false, message: "That link has already been used. Open the product again from your account." };
+  }
+  return { ok: true, userId: resolved.token.userId };
 }

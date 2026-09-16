@@ -37,8 +37,11 @@ export {
   revokeTokensFor,
   pruneAuthTokens,
   hashToken,
+  issueHandoff,
+  consumeHandoff,
   type ResolvedToken,
   type TokenResolution,
+  type HandoffResult,
 } from "./auth-tokens.js";
 export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
 export { recordUsage } from "./usage.js";

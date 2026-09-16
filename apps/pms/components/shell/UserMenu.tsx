@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Settings, LogOut, ChevronDown } from "lucide-react";
 import { AccountMenuBody } from "@revio/ui/account-menu-body";
+import { openProduct } from "@/lib/actions-switch";
 import { GetHelp, GetHelpTrigger } from "@revio/ui/get-help";
 import { submitSupportRequest } from "@/lib/actions-support";
 import type { ProductLink, ProductUpsell } from "@revio/ui/product-links";
@@ -39,6 +40,7 @@ export function UserMenu({ userName, roleLabel, products, upsells }: { userName:
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-[248px] overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
           <AccountMenuBody
+            openProduct={openProduct}
             userName={userName}
             roleLabel={roleLabel}
             products={products}
