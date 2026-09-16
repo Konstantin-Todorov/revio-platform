@@ -3,7 +3,7 @@ import {
   consumeHandoff, checkLoginAllowed, recordLoginFailure, recordLoginSuccess,
   recordAuthEvent, requestOrigin, forSystem, AUTH_EVENT,
 } from "@revio/db";
-import { loginDestination, checkSessionValidity } from "@revio/core";
+import { loginDestination, checkSessionValidity, relativeLocation } from "@revio/core";
 import { signSession, setSessionCookie } from "@/lib/auth";
 
 
@@ -40,7 +40,17 @@ import { signSession, setSessionCookie } from "@/lib/auth";
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("t") ?? "";
   const origin = requestOrigin(req.headers);
-  const login = new URL("/login", req.nextUrl.origin);
+  /*
+   * ⚠️ RELATIVE Locations, never `new URL(path, req.nextUrl.origin)`.
+   *
+   * Behind Railway's proxy the Node server sees `http://localhost:<port>/...`, so `req.nextUrl.origin`
+   * IS that internal address. Redirecting to it sent a hotel switching from RevioLink to RevioPMS
+   * to `localhost:3003` — the hand-off had worked; the arrival redirect was wrong. All four
+   * `logout/route.ts` files already warned about exactly this; this route was written later and did
+   * it anyway.
+   */
+  const toLogin = (error: string) =>
+    new NextResponse(null, { status: 307, headers: { Location: relativeLocation("/login", { error }) } });
 
   /*
    * ⚠️ Rate-limited like a password form, because it IS one.
@@ -51,15 +61,13 @@ export async function GET(req: NextRequest) {
    */
   const gate = await checkLoginAllowed("cm", `handoff:${origin.ip ?? "unknown"}`);
   if (!gate.allowed) {
-    login.searchParams.set("error", "Too many attempts. Wait a moment and sign in normally.");
-    return NextResponse.redirect(login);
+    return toLogin("Too many attempts. Wait a moment and sign in normally.");
   }
 
   const result = await consumeHandoff(token, "cm");
   if (!result.ok) {
     await recordLoginFailure("cm", `handoff:${origin.ip ?? "unknown"}`);
-    login.searchParams.set("error", result.message);
-    return NextResponse.redirect(login);
+    return toLogin(result.message);
   }
 
   // Re-read the account rather than trusting anything the token implied about it.
@@ -68,14 +76,12 @@ export async function GET(req: NextRequest) {
     include: { tenant: true },
   });
   if (!user || !user.active || user.tenant.status !== "active") {
-    login.searchParams.set("error", "That account cannot sign in. Contact an owner at your hotel.");
-    return NextResponse.redirect(login);
+    return toLogin("That account cannot sign in. Contact an owner at your hotel.");
   }
   // "Sign out everywhere" and a password change both move `sessionsValidFrom`. A hand-off minted a
   // moment before either must not outlive it.
   if (!checkSessionValidity({ issuedAt: Math.floor(Date.now() / 1000), sessionsValidFrom: user.sessionsValidFrom, active: user.active }).ok) {
-    login.searchParams.set("error", "Your sessions were signed out. Sign in again.");
-    return NextResponse.redirect(login);
+    return toLogin("Your sessions were signed out. Sign in again.");
   }
 
   /*
@@ -95,8 +101,7 @@ export async function GET(req: NextRequest) {
   if (decision.kind !== "open") {
     // Not "unauthorised": they are a real customer whose product is locked or elsewhere, and the
     // locked screen inside the app says which of the three situations it is.
-    login.searchParams.set("error", "RevioLink is not open on this account right now.");
-    return NextResponse.redirect(login);
+    return toLogin("RevioLink is not open on this account right now.");
   }
 
   await recordAuthEvent({
@@ -120,7 +125,7 @@ export async function GET(req: NextRequest) {
    * into a fortnight-long session.
    */
   const ttl = 12 * 60 * 60;
-  const res = NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
+  const res = new NextResponse(null, { status: 307, headers: { Location: relativeLocation("/dashboard") } });
   await setSessionCookie(await signSession({ kind: "hotel", sub: user.id }, ttl), ttl);
   // The spent token is in this URL. Keep it out of the next page's referrer.
   res.headers.set("Referrer-Policy", "no-referrer");

@@ -7,6 +7,7 @@ export * from "./auth/tokens.js";
 export * from "./auth/session-validity.js";
 export * from "./auth/capabilities.js";
 export * from "./auth/read-scope.js";
+export * from "./auth/relative-redirect.js";
 export * from "./trials/clock.js";
 export * from "./forms/parse.js";
 export * from "./email/auth-emails.js";
