@@ -58,3 +58,41 @@ export async function releaseRoomsForCancellation(
   });
   return count;
 }
+
+/** The slice needed to ask whether anybody is actually in the room. */
+export interface StayLookupDb {
+  roomAssignment: {
+    findFirst: (args: {
+      where: { reservationId: string; status: string; checkedOutAt: null; checkedInAt: { not: null } };
+      select: { id: true };
+    }) => Promise<{ id: string } | null>;
+  };
+}
+
+/**
+ * Is there a guest standing in a room this booking holds?
+ *
+ * ⚠️ Cancelling such a stay puts an OCCUPIED room back on sale — the double booking this platform
+ * exists to prevent, arrived at from the inside. It also leaves the bill open on a reservation that
+ * officially never happened; production carried exactly that, a cancelled booking in the front
+ * desk's live-bills list.
+ *
+ * The right answer is to refuse, not to tidy up afterwards. A guest who has arrived and is leaving
+ * early is a **check-out**, on the PMS front desk, where the folio is settled and the room is
+ * released and sent for cleaning. That path exists and does all of it.
+ *
+ * This is shared because it had already drifted: `cancelCrsReservation` refused, and the channel
+ * manager's `cancelReservation` — same database, same consequence — did not check at all. One
+ * concept, two copies, and the second lost the guard. Production carries a booking cancelled while
+ * its guest was checked in, which is how this was found.
+ *
+ * Callers that CANNOT refuse — an OTA cancellation is a fact, not a request — should not call this;
+ * they release what they can and leave an occupied room to the front desk.
+ */
+export async function isStayInHouse(db: StayLookupDb, reservationId: string): Promise<boolean> {
+  const found = await db.roomAssignment.findFirst({
+    where: { reservationId, status: "active", checkedOutAt: null, checkedInAt: { not: null } },
+    select: { id: true },
+  });
+  return found !== null;
+}

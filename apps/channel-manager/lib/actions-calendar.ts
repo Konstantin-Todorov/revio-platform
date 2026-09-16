@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { occupancyKeyFor, occupancyKeysFor, releaseRoomsForCancellation } from "@revio/db";
+import { occupancyKeyFor, occupancyKeysFor, releaseRoomsForCancellation, isStayInHouse } from "@revio/db";
 import { prisma } from "./db";
 import { computeWaterfall, deriveRate, isOverbooking, pastDateRefusal, pastRangeRefusal, plansPerRoom, ROOM_OCCUPYING_STATUSES, todayInTimeZone, type Capability, type DerivedRateConfig } from "@revio/core";
 import { getProperty } from "./data";
@@ -754,6 +754,17 @@ export async function cancelReservation(fd: FormData): Promise<void> {
   const res = await prisma.reservation.findUnique({ where: { id }, include: { lines: true, channel: true } });
   if (!res) return flashError("That reservation no longer exists — somebody may have removed it while this page was open.");
   if (res.status === "cancelled") return flashError("That reservation is already cancelled.");
+
+  // ⚠️ Refuse if the guest is IN the room. This guard existed only in RevioCRS, and production
+  // carries the booking that proves the gap: cancelled on 29 July while checked in. Cancelling an
+  // occupied stay puts that room back on sale with somebody in it — the double booking this
+  // platform exists to prevent, reached from the inside — and leaves the bill open on a reservation
+  // that officially never happened. Leaving early is a CHECK-OUT, in RevioPMS.
+  if (await isStayInHouse(prisma, id)) {
+    return flashError(
+      "This guest has already checked in. Check them out in RevioPMS to end the stay — cancelling would put an occupied room back on sale.",
+    );
+  }
 
   // Cancelling drops the booking out of the "rooms sold" derivation, so availability
   // (inventory − sold) restores itself — no manual inventory edit needed.

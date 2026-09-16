@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { releaseRoomsForCancellation } from "./room-release";
+import { isStayInHouse, releaseRoomsForCancellation } from "./room-release";
 
 /** A stand-in that records the query, so the WHERE can be asserted — it is the whole safety story. */
 function fakeDb(count = 1) {
@@ -54,5 +54,36 @@ describe("releaseRoomsForCancellation", () => {
     // failure to the caller.
     const { db } = fakeDb(0);
     await expect(releaseRoomsForCancellation(db, "res_never_assigned")).resolves.toBe(0);
+  });
+});
+
+describe("isStayInHouse", () => {
+  function lookupDb(found: { id: string } | null) {
+    const findFirst = vi.fn().mockResolvedValue(found);
+    return { db: { roomAssignment: { findFirst } }, findFirst };
+  }
+
+  it("is true while somebody is in the room", async () => {
+    const { db } = lookupDb({ id: "a1" });
+    await expect(isStayInHouse(db, "res_1")).resolves.toBe(true);
+  });
+
+  it("is false for a booking nobody has arrived for", async () => {
+    const { db } = lookupDb(null);
+    await expect(isStayInHouse(db, "res_1")).resolves.toBe(false);
+  });
+
+  it("asks only about live, arrived, not-yet-departed stays", async () => {
+    // Each clause carries weight: a `moved` row is history, a checked-OUT stay is over, and an
+    // assignment with no `checkedInAt` is a held room rather than an occupied one. Getting any of
+    // them wrong either blocks a legitimate cancellation or allows an occupied room back on sale.
+    const { db, findFirst } = lookupDb(null);
+    await isStayInHouse(db, "res_1");
+    expect(findFirst.mock.calls[0]![0].where).toEqual({
+      reservationId: "res_1",
+      status: "active",
+      checkedOutAt: null,
+      checkedInAt: { not: null },
+    });
   });
 });

@@ -7,7 +7,7 @@ import { getProperty, remainingByNight, stayViolation, todayInTz, PAYMENT_GUARAN
 import { releaseExpiredHolds } from "./holds";
 import { getSession } from "./session";
 import { stayScope } from "@revio/connectivity";
-import { claimHold, releaseRoomsForCancellation } from "@revio/db";
+import { claimHold, releaseRoomsForCancellation, isStayInHouse } from "@revio/db";
 import { logAudit, recordPush, str, int, money, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
 import { earliestSelectable, hasChanges, pastRangeRefusal, planMerge, planGuestErasure, todayInTimeZone } from "@revio/core";
@@ -375,11 +375,7 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   // The right answer is not to tidy up after the cancellation but to refuse it. A guest who has
   // arrived and is leaving early is a CHECK-OUT, on the PMS front desk, where the folio is settled
   // and the room is released and marked for cleaning. That path already exists and does all of it.
-  const inHouse = await prisma.roomAssignment.findFirst({
-    where: { reservationId: id, status: "active", checkedOutAt: null, checkedInAt: { not: null } },
-    select: { id: true },
-  });
-  if (inHouse) {
+  if (await isStayInHouse(prisma, id)) {
     redirect(
       `/reservations/${id}?error=${encodeURIComponent(
         "This guest has already checked in. Check them out in RevioPMS to end the stay — cancelling would put an occupied room back on sale.",
