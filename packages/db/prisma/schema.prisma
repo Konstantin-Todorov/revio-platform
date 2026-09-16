@@ -2644,6 +2644,17 @@ model ProductTrial {
   /// cm | crs | pms
   product     String
   startedAt   DateTime  @default(now())
+  /// ⚠️ The first time this product was actually OPENED — and the only honest start for its trial.
+  ///
+  /// Signing up switched all three products on and started three clocks at once, so a hotel that
+  /// spent its first fortnight in RevioLink met RevioCRS with fifteen days left. Three trials
+  /// advertised, one delivered. The clock now runs 30 days from here; see `trialClock` in
+  /// @revio/core, which is the ONE place that derives `endsAt`, so a banner and a reminder email
+  /// cannot name different dates.
+  ///
+  /// Null means never opened — an invitation, not a countdown. Existing rows were backfilled from
+  /// `startedAt` so no running trial moved when this shipped.
+  openedAt    DateTime?
   endsAt      DateTime
   /// Set when it stopped, whichever way. Null means running — and only a running trial is swept.
   endedAt     DateTime?

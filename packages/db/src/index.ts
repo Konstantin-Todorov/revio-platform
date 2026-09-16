@@ -93,7 +93,7 @@ export {
 } from "./inventory-claim.js";
 export * from "@prisma/client";
 export { occupancyKeysFor, occupancyKeyFor } from "./occupancy-key.js";
-export { selfStartTrial, runningTrialFor,
+export { selfStartTrial, runningTrialFor, markProductOpened,
   allTrialsFor, requestKeepTrial, type SelfStartResult } from "./self-trial.js";
 export {
   hotelInvoices, hotelBillingAccount, revioPaymentDetails,

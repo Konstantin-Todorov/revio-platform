@@ -22,6 +22,7 @@ import {
   trialEndsAt,
   type ProductKey,
   type SelfTrialVerdict,
+  trialEndFor,
 } from "@revio/core";
 
 const prisma = forSystem();
@@ -234,4 +235,37 @@ export async function allTrialsFor(
     orderBy: { startedAt: "desc" },
   });
   return rows.map((r) => ({ ...r, product: r.product as ProductKey }));
+}
+
+/**
+ * Stamp the first time a hotel opens a product, and start its clock from there.
+ *
+ * ## Why this is called on every request and costs almost nothing
+ *
+ * ⚠️ `updateMany` with `openedAt: null` in the WHERE is the whole design. It is idempotent: the
+ * first open matches one row and writes it, every open afterwards matches none and writes nothing.
+ * There is no read-then-write, so two tabs opening the product at the same instant cannot both
+ * decide they were first and set two different end dates — the same shape that makes the Stripe
+ * webhook settle an invoice exactly once.
+ *
+ * ## It moves `endsAt`, and that is the point
+ *
+ * Trials used to be created at signup with all three clocks already running. The row still exists
+ * from then; what changes here is that the thirty days begin now, when somebody actually looked at
+ * it. `endsAt` is written from `trialEndFor` — the same function every banner and reminder derives
+ * from — so nothing can compute a different date.
+ *
+ * Returns true only on the open that started it, so a caller can react to that once (a welcome
+ * email, an operator notification) without a second query asking "was that the first time".
+ */
+export async function markProductOpened(
+  tenantId: string,
+  product: ProductKey,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const { count } = await forSystem().productTrial.updateMany({
+    where: { tenantId, product, openedAt: null },
+    data: { openedAt: now, startedAt: now, endsAt: trialEndFor(now) },
+  });
+  return count === 1;
 }
