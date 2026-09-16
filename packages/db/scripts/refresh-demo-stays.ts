@@ -33,6 +33,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { todayInTimeZone } from "@revio/core";
 
 const prisma = new PrismaClient();
 const APPLY = process.argv.includes("--apply");
@@ -41,11 +42,24 @@ const APPLY = process.argv.includes("--apply");
 const TAG = "DEMO-STAY-";
 
 const DAY = 86_400_000;
-/** Dates are calendar dates: build them at UTC midnight so `@db.Date` round-trips unchanged. */
-function dayAt(offset: number): Date {
-  const now = new Date();
-  const utcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return new Date(utcMidnight + offset * DAY);
+
+/**
+ * A calendar date `offset` days from the PROPERTY's today.
+ *
+ * ⚠️ Anchored to the property's timezone, never the server's. This script first shipped using the
+ * UTC date and was caught by its own output: at 00:43 in Sofia — 21:43 UTC the day before — it
+ * wrote "departing today" against yesterday's date, so a demo opened late in the evening showed a
+ * front desk one day behind. That is the platform's oldest stated rule, in the root CLAUDE.md:
+ *
+ *   "Today" is `todayInTimeZone(property.timezone)` — never `new Date().toISOString()`. The
+ *   server's UTC day is a day behind a Bulgarian hotel until 03:00 every morning, which is the
+ *   night auditor's shift.
+ *
+ * The value is still built at UTC midnight so a `@db.Date` column round-trips unchanged — it is the
+ * DAY that comes from the property, not the instant.
+ */
+function dayFrom(todayIso: string, offset: number): Date {
+  return new Date(Date.parse(`${todayIso}T00:00:00Z`) + offset * DAY);
 }
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -72,7 +86,7 @@ const STAYS = [
 async function main() {
   const tenants = await prisma.tenant.findMany({
     where: { isDemo: true },
-    select: { id: true, name: true, properties: { select: { id: true, name: true } } },
+    select: { id: true, name: true, properties: { select: { id: true, name: true, timezone: true } } },
   });
 
   if (tenants.length === 0) {
@@ -122,14 +136,17 @@ async function main() {
     for (const u of units) if (!byLabel.has(u.label)) byLabel.set(u.label, u);
     const usable = [...byLabel.values()];
 
+    // The hotel's own day, not the server's — see `dayFrom`.
+    const todayIso = todayInTimeZone(property.timezone);
+
     const planned = STAYS.slice(0, Math.min(STAYS.length, usable.length));
-    console.log(`${tenant.name} — ${property.name}`);
+    console.log(`${tenant.name} — ${property.name} (${property.timezone}, today is ${todayIso})`);
     console.log(
       `  ${usable.length} distinct rooms (${units.length} unit rows) · removing ${existing.length} previously generated stay(s)`,
     );
     for (const [i, s] of planned.entries()) {
       console.log(
-        `  ${iso(dayAt(s.from))} → ${iso(dayAt(s.to))}  room ${usable[i]!.label.padEnd(6)} ${s.guest.padEnd(18)} ${s.note}`,
+        `  ${iso(dayFrom(todayIso, s.from))} → ${iso(dayFrom(todayIso, s.to))}  room ${usable[i]!.label.padEnd(6)} ${s.guest.padEnd(18)} ${s.note}`,
       );
     }
     console.log("");
@@ -147,8 +164,8 @@ async function main() {
 
       for (const [i, s] of planned.entries()) {
         const unit = usable[i]!;
-        const checkIn = dayAt(s.from);
-        const checkOut = dayAt(s.to);
+        const checkIn = dayFrom(todayIso, s.from);
+        const checkOut = dayFrom(todayIso, s.to);
         const nights = Math.max(1, Math.round((checkOut.getTime() - checkIn.getTime()) / DAY));
         const priceMinor = 11_000 * nights;
 
