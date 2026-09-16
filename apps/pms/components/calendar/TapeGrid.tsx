@@ -230,7 +230,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                               ? "border-2 border-dashed border-danger-500 bg-danger-100/70 text-danger-700"
                               : "border-2 border-dashed border-accent-600 bg-accent-100/80 text-accent-800"
                           }`}
-                          style={{ left: startIdx * col + 2, width: dragging.bar.nights * col - 4 }}
+                          style={{ left: startIdx * col + 2, width: dragging.bar.columns * col - 4 }}
                         >
                           <span className="truncate">
                             {blocked ? "Occupied these nights" : dragging.bar.guestName}
@@ -272,7 +272,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                           } ${bar.continuesRight ? "rounded-r-none" : ""} ${bar.movable ? "cursor-grab active:cursor-grabbing" : ""} ${
                             dragging?.assignmentId === bar.assignmentId ? "opacity-40" : ""
                           }`}
-                          style={{ left: startIdx * col + 2, width: bar.nights * col - 4 }}
+                          style={{ left: startIdx * col + 2, width: bar.columns * col - 4 }}
                         >
                           {bar.pinned && <Pin className="h-2.5 w-2.5 shrink-0 opacity-80" />}
                           <span className="truncate">{bar.guestName}</span>

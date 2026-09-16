@@ -10,6 +10,12 @@ import { fileURLToPath } from "node:url";
  * exactly as before.
  */
 export default defineConfig({
-  resolve: { alias: { "@": fileURLToPath(new URL(".", import.meta.url)) } },
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)),
+      // See test/server-only-stub.ts — without this, every server module here is untestable.
+      "server-only": fileURLToPath(new URL("./test/server-only-stub.ts", import.meta.url)),
+    },
+  },
   esbuild: { jsx: "automatic" },
 });

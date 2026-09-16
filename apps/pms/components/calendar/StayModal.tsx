@@ -54,8 +54,8 @@ export function StayModal({ bar, open, onClose, money }: StayModalProps) {
         if (!next) onClose();
       }}
       title={stay.guestName}
-      description={`Room ${stay.unitLabel} · ${stay.stayFrom} → ${stay.stayTo} · ${stay.nights} night${
-        stay.nights === 1 ? "" : "s"
+      description={`Room ${stay.unitLabel} · ${stay.stayFrom} → ${stay.stayTo} · ${stay.stayNights} night${
+        stay.stayNights === 1 ? "" : "s"
       }`}
       footerAlign="start"
       footer={

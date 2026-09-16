@@ -37,7 +37,17 @@ export interface TapeBar {
   from: string;
   /** Inclusive last night shown. A stay's departure day is not a night it occupies. */
   to: string;
-  nights: number;
+  /**
+   * How many COLUMNS the bar spans — clipped, like `from`/`to`, because that is what it draws.
+   *
+   * ⚠️ Not the length of the stay. It was called `nights` and the modal printed it beside the
+   * unclipped `stayFrom → stayTo`, so a four-night stay whose first two nights sat before the
+   * visible window rendered as "2026-09-14 → 2026-09-18 · 2 nights". Scrolling the calendar changed
+   * the number. Use `stayNights` for anything a person reads.
+   */
+  columns: number;
+  /** The real length of the stay in nights, whatever the window happens to show. */
+  stayNights: number;
   status: BarStatus;
   /** A human picked this room, so the optimiser will not move it (§2.3). */
   pinned: boolean;
@@ -129,13 +139,9 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
   for (const a of assignments) {
     const r = a.reservation;
     const stayFrom = ymd(a.checkIn);
-    // The departure DAY is not a night. A 3→6 August stay occupies the 3rd, 4th and 5th, and drawing
-    // it through the 6th would show the room as busy on a day it is sellable again.
     const lastNight = addDaysYmd(ymd(a.checkOut), -1);
-
-    const clippedFrom = stayFrom < from ? from : stayFrom;
-    const clippedTo = lastNight > dates[dates.length - 1]! ? dates[dates.length - 1]! : lastNight;
-    if (clippedTo < clippedFrom) continue; // entirely outside the window after clipping
+    const span = barSpan(stayFrom, ymd(a.checkOut), from, dates[dates.length - 1]!);
+    if (!span) continue; // entirely outside the window after clipping
 
     const balance = r.folios.length
       ? r.folios.reduce(
@@ -158,9 +164,10 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
          * seeing `2p` can tell that adding a third guest is a repricing event rather than a note.
          */
         ...(a.line?.guestsCount != null ? { occupancy: a.line.guestsCount } : {}),
-        from: clippedFrom,
-        to: clippedTo,
-        nights: dateDiff(clippedFrom, clippedTo) + 1,
+        from: span.from,
+        to: span.to,
+        columns: span.columns,
+        stayNights: span.stayNights,
         status: barStatus(a, r.departedAt, today, stayFrom, lastNight),
         pinned: a.pinned,
         // A departed or checked-out stay is history. Dragging it would ask the move action to
@@ -174,8 +181,8 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
         accommodatedRoomTypeName: a.unit.roomType.name,
         unitLabel: a.unit.label,
         currency: r.currency ?? "EUR",
-        continuesLeft: stayFrom < from,
-        continuesRight: lastNight > dates[dates.length - 1]!,
+        continuesLeft: span.continuesLeft,
+        continuesRight: span.continuesRight,
         balanceMinor: balance,
       },
     ]);
@@ -209,6 +216,40 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
   });
 
   return { property, today, from, days, dates, rows, tapeDays: days_ };
+}
+
+/**
+ * Where a stay sits in the visible window, and how long it actually is.
+ *
+ * Pulled out of `getTapeChart` so it can be tested: that function reads the database, which is why
+ * this maths had no tests and how the clipped night count survived.
+ *
+ * ⚠️ The two halves answer different questions and must not be mixed:
+ *   - `from` / `to` / `columns` are DRAWING — clipped to the window, because that is the bar.
+ *   - `stayNights` is a FACT about the booking, and does not change when you scroll the calendar.
+ *
+ * Returns `null` when the stay falls entirely outside the window.
+ */
+export function barSpan(
+  stayFrom: string,
+  checkOut: string,
+  windowFrom: string,
+  windowTo: string,
+): { from: string; to: string; columns: number; stayNights: number; continuesLeft: boolean; continuesRight: boolean } | null {
+  // The departure DAY is not a night. A 3→6 August stay occupies the 3rd, 4th and 5th, and drawing
+  // it through the 6th would show the room as busy on a day it is sellable again.
+  const lastNight = addDaysYmd(checkOut, -1);
+  const from = stayFrom < windowFrom ? windowFrom : stayFrom;
+  const to = lastNight > windowTo ? windowTo : lastNight;
+  if (to < from) return null;
+  return {
+    from,
+    to,
+    columns: dateDiff(from, to) + 1,
+    stayNights: dateDiff(stayFrom, lastNight) + 1,
+    continuesLeft: stayFrom < windowFrom,
+    continuesRight: lastNight > windowTo,
+  };
 }
 
 function dateDiff(a: string, b: string): number {
