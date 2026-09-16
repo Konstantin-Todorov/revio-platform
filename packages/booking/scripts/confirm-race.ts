@@ -36,16 +36,29 @@ import { publicAvailability, publicCreateHold, publicCreateReservation } from ".
 const RACERS = 12;
 const ROOMS = 1;
 
-function farFutureStay(): { checkIn: string; checkOut: string } {
-  // A different window again from claim-verify's and engine-race's, so all three can run back to back.
-  const start = new Date(Date.now() + 470 * 86_400_000);
+/**
+ * Candidate windows, far out and spaced away from `claim-verify` (+400) and `engine-race` (+430) so
+ * all three can run back to back without racing each other.
+ *
+ * ⚠️ A LIST, not one offset. This script used a single hardcoded +470 and simply refused on a
+ * standard seed — "REFUSING TO RUN: nothing bookable" — so the guarantee it exists to prove was
+ * never actually being proved. Refusing loudly beats passing vacuously, but a verifier that cannot
+ * run is still a verifier that is not running, and nothing said so.
+ *
+ * Which offsets are sellable depends entirely on how far the seeded rate calendar reaches, which is
+ * not this script's business to know. So it asks the guest's own availability endpoint and takes the
+ * first window that answers yes.
+ */
+const CANDIDATE_OFFSETS = [470, 455, 440, 380, 300, 200, 120, 60, 30] as const;
+
+function stayAt(offsetDays: number): { checkIn: string; checkOut: string } {
+  const start = new Date(Date.now() + offsetDays * 86_400_000);
   const end = new Date(start.getTime() + 2 * 86_400_000);
   return { checkIn: start.toISOString().slice(0, 10), checkOut: end.toISOString().slice(0, 10) };
 }
 
 async function main() {
   const sys = forSystem();
-  const { checkIn, checkOut } = farFutureStay();
 
   const property = await sys.property.findFirst({
     where: { roomTypes: { some: {} } },
@@ -62,11 +75,32 @@ async function main() {
   // Pick through the guest's own path rather than off the schema: a room type with no directly
   // bookable, fully priced rate plan is not a case this script can race, and finding that out from
   // `publicAvailability` is finding it out the way a guest would.
-  const { options, error } = await publicAvailability(db, property, { checkIn, checkOut, guests: 1 });
-  const option = options?.find((o) => o.plans.length > 0 && o.maxGuests >= 1);
+  let checkIn = "";
+  let checkOut = "";
+  let option: Awaited<ReturnType<typeof publicAvailability>>["options"] extends (infer O)[] | undefined ? O | undefined : never;
+  let lastError: string | undefined;
+  const tried: string[] = [];
+
+  for (const offset of CANDIDATE_OFFSETS) {
+    const window = stayAt(offset);
+    const { options, error } = await publicAvailability(db, property, { ...window, guests: 1 });
+    const found = options?.find((o) => o.plans.length > 0 && o.maxGuests >= 1);
+    tried.push(`${window.checkIn} (+${offset}d)`);
+    lastError = error ?? lastError;
+    if (found) {
+      checkIn = window.checkIn;
+      checkOut = window.checkOut;
+      option = found;
+      break;
+    }
+  }
+
   const plan = option?.plans[0];
   if (!option || !plan) {
-    console.error(`REFUSING TO RUN: nothing bookable on ${checkIn}→${checkOut}${error ? ` (${error})` : ""}.`);
+    console.error(
+      `REFUSING TO RUN: nothing bookable in any candidate window${lastError ? ` (${lastError})` : ""}.\n` +
+        `Tried: ${tried.join(", ")}.\nSeed the database first: pnpm db:seed`,
+    );
     process.exit(2);
   }
 
