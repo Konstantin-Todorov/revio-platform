@@ -58,6 +58,20 @@ export interface ClientSignals {
    * day they asked. Empty for everyone else.
    */
   keepRequests?: { product: string; askedAt: Date; endsAt: Date }[];
+  /**
+   * Other clients whose staff have signed in from an address this client's staff also used.
+   *
+   * ⚠️ Signup stores no IP, deliberately — a form that a hotel fills in before it trusts us is the
+   * wrong place to start collecting addresses. This comes from `AuthEvent`, which records the IP of
+   * a **sign-in**, so it only exists once somebody has an account and has used it.
+   *
+   * Empty for almost everybody. Never a verdict: see the flag below for why.
+   *
+   * Populated on the client DETAIL page only, not on the list. Resolving it needs two queries per
+   * client and the list renders every one of them — and the list is a scan, while the detail page is
+   * what somebody reads before picking up the phone, which is the only moment this changes anything.
+   */
+  sharedSignInWith?: { ip: string; clients: string[] }[];
 }
 
 const DAY = 86_400_000;
@@ -96,6 +110,39 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
       detail:
         "The owner's address is on a disposable-mail domain. Often nothing — people use them to look around — but worth a real address before they go live, or invoices and password resets will reach nobody.",
     });
+  }
+
+  /*
+   * ⚠️ The same trade as the temporary-email flag above, and it matters more here because the
+   * innocent explanations are the COMMON ones.
+   *
+   * Two accounts signing in from one address is usually a consultant onboarding hotels, a group
+   * setting up its properties as separate clients, an agency, or plain carrier-grade NAT — a whole
+   * mobile network can share one address. Every one of those is a customer we want, and several of
+   * them are the *best* kind: somebody bringing us more than one hotel.
+   *
+   * So this never accuses and never blocks. It says what was seen and names the likely reason
+   * first, because the cost of being wrong is a founder opening a call by implying the person on
+   * the other end is a fraud. It escalates only on volume, where the innocent readings run out.
+   *
+   * Derived at read time, never stored, so it cannot age into a verdict attached to a client who
+   * has been paying for a year.
+   */
+  const shared = s.sharedSignInWith ?? [];
+  if (shared.length > 0) {
+    const others = [...new Set(shared.flatMap((x) => x.clients))];
+    if (others.length > 0) {
+      flags.push({
+        severity: others.length >= 3 ? "soon" : "note",
+        title: others.length === 1 ? "Shares a sign-in address with 1 other client" : `Shares a sign-in address with ${others.length} other clients`,
+        detail:
+          `Staff here have signed in from the same address as ${others.slice(0, 3).join(", ")}` +
+          `${others.length > 3 ? ` and ${others.length - 3} more` : ""}. ` +
+          (others.length >= 3
+            ? "Usually a consultant or a group running several hotels — which is worth a conversation either way, because that is a bigger account than one trial."
+            : "Most often a consultant, a group, or simply a shared network. Worth knowing before a call, not a reason to do anything."),
+      });
+    }
   }
 
   if (s.status === "suspended") {

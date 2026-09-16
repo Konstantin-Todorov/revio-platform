@@ -1,5 +1,5 @@
 import "server-only";
-import { forSystem, decryptSecret, keyHint } from "@revio/db";
+import { forSystem, decryptSecret, keyHint, AUTH_EVENT } from "@revio/db";
 import {
   BOOKING_ENGINE_SOURCE_NAME, COMBINATIONS, PLAN_BASE_MINOR, PRODUCT_KEYS, ROOM_TIERS,
   TYPICAL_OTA_COMMISSION_PCT, attributeRevenue, billedProducts, combinationKeyOf, directBookingFeeMinor,
@@ -425,6 +425,61 @@ export type ClientDetail = NonNullable<Awaited<ReturnType<typeof getClientDetail
  * and check is a different conversation from one they have to take on faith, and if the two ever
  * disagreed the pitch would be worthless. One implementation, so they cannot.
  */
+
+/**
+ * Other clients whose staff have signed in from an address this client's staff also used.
+ *
+ * ## Where the addresses come from, and where they deliberately do not
+ *
+ * ⚠️ **Signup stores no IP on purpose** — a form somebody fills in before they trust us is the wrong
+ * place to start collecting addresses, and that decision stands. This reads `AuthEvent`, which
+ * records the address of a **sign-in**: it exists only once a person has an account and has used it,
+ * and a hotel can already read its own staff's events.
+ *
+ * ## Demo tenants are excluded, and that is load-bearing
+ *
+ * Hotel Sofia Group and Black Sea Resort are OURS, signed into from our own desks. Left in, every
+ * real client a founder has ever opened for support would be linked to them and through them to each
+ * other, and the signal would fire on everybody — which is the same as firing on nobody.
+ *
+ * Bounded on both sides: at most the 20 most recent distinct addresses, and at most 50 neighbouring
+ * rows, so a client with years of sign-ins costs the same as a new one.
+ */
+async function sharedSignInWith(tenantId: string): Promise<{ ip: string; clients: string[] }[]> {
+  const mine = await prisma.authEvent.findMany({
+    where: { tenantId, type: AUTH_EVENT.signIn, ip: { not: null } },
+    select: { ip: true },
+    distinct: ["ip"],
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  const ips = mine.map((r) => r.ip).filter((ip): ip is string => !!ip);
+  if (ips.length === 0) return [];
+
+  const neighbours = await prisma.authEvent.findMany({
+    where: { ip: { in: ips }, type: AUTH_EVENT.signIn, tenantId: { notIn: [tenantId], not: null } },
+    select: { ip: true, tenantId: true },
+    distinct: ["ip", "tenantId"],
+    take: 50,
+  });
+  const otherIds = [...new Set(neighbours.map((n) => n.tenantId).filter((t): t is string => !!t))];
+  if (otherIds.length === 0) return [];
+
+  const names = await prisma.tenant.findMany({
+    where: { id: { in: otherIds }, isDemo: false },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(names.map((t) => [t.id, t.name]));
+
+  const byIp = new Map<string, Set<string>>();
+  for (const n of neighbours) {
+    const name = n.tenantId ? nameById.get(n.tenantId) : undefined;
+    if (!n.ip || !name) continue;
+    (byIp.get(n.ip) ?? byIp.set(n.ip, new Set()).get(n.ip)!).add(name);
+  }
+  return [...byIp].map(([ip, clients]) => ({ ip, clients: [...clients] }));
+}
+
 export async function getClientDetail(id: string) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
 
@@ -591,6 +646,8 @@ export async function getClientDetail(id: string) {
    * loaded after it. A signal the operator has to act on must not depend on where in this function
    * somebody happened to put a query.
    */
+  const sharedIps = await sharedSignInWith(id);
+
   const keepAsked = await prisma.productTrial.findMany({
     where: { tenantId: id, endedAt: null, keepRequestedAt: { not: null } },
     select: { product: true, endsAt: true, keepRequestedAt: true },
@@ -608,6 +665,7 @@ export async function getClientDetail(id: string) {
       directReservationsLast30d: economics.rows.filter((r) => r.category === "direct").reduce((s, r) => s + r.reservations, 0),
       unpaidInvoices, monthlyPriceMinor: monthly,
       keepRequests: keepRequestsOf(keepAsked),
+      sharedSignInWith: sharedIps,
     }),
     ...accountAttention({
       status: tenant.status, createdAt: tenant.createdAt,

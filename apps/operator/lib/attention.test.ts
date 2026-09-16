@@ -213,3 +213,60 @@ describe("a temporary email address", () => {
     expect(clientAttention(healthy(), NOW)).toHaveLength(0);
   });
 });
+
+describe("shared sign-in addresses", () => {
+  const withShared = (shared: { ip: string; clients: string[] }[]) =>
+    clientAttention(healthy({ sharedSignInWith: shared }), NOW).filter((f) => f.title.includes("sign-in address"));
+
+  it("says nothing when the client shares an address with nobody", () => {
+    expect(withShared([])).toEqual([]);
+    expect(clientAttention(healthy({}), NOW).filter((f) => f.title.includes("sign-in address"))).toEqual([]);
+  });
+
+  it("is a note for one other client, not something to act on", () => {
+    // The common readings — a consultant, a group, a shared office, carrier-grade NAT — are all
+    // customers we want. One overlap is not evidence of anything.
+    const [flag] = withShared([{ ip: "203.0.113.9", clients: ["Hotel Vitosha"] }]);
+    expect(flag?.severity).toBe("note");
+    expect(flag?.title).toContain("1 other client");
+    expect(flag?.detail).toContain("Hotel Vitosha");
+  });
+
+  it("escalates only on volume, where the innocent readings run out", () => {
+    const [flag] = withShared([{ ip: "203.0.113.9", clients: ["A Hotel", "B Hotel", "C Hotel"] }]);
+    expect(flag?.severity).toBe("soon");
+    expect(flag?.title).toContain("3 other clients");
+  });
+
+  it("never accuses — it names the likely innocent reason", () => {
+    const one = withShared([{ ip: "203.0.113.9", clients: ["Hotel Vitosha"] }])[0];
+    const many = withShared([{ ip: "203.0.113.9", clients: ["A", "B", "C", "D"] }])[0];
+    for (const f of [one, many]) {
+      expect(f?.detail).toMatch(/consultant|group|shared network/i);
+      expect(f?.detail).not.toMatch(/fraud|abuse|abusing|fake|cheat/i);
+    }
+    // Volume reframes it as an opportunity, because that is what several hotels on one desk is.
+    expect(many?.detail).toMatch(/bigger account/i);
+  });
+
+  it("counts each client once across several shared addresses", () => {
+    // The same person on an office address and a phone is one client, not two.
+    const [flag] = withShared([
+      { ip: "203.0.113.9", clients: ["Hotel Vitosha"] },
+      { ip: "198.51.100.4", clients: ["Hotel Vitosha"] },
+    ]);
+    expect(flag?.title).toContain("1 other client");
+  });
+
+  it("names at most three and counts the rest", () => {
+    const [flag] = withShared([{ ip: "203.0.113.9", clients: ["A", "B", "C", "D", "E"] }]);
+    expect(flag?.detail).toContain("A, B, C");
+    expect(flag?.detail).toContain("and 2 more");
+  });
+
+  it("stays quiet when an address is shared with no named client", () => {
+    // A row with an empty client list is a shared address we could not resolve a name for. Saying
+    // "shares an address with 0 other clients" is noise, and noise teaches people to skim.
+    expect(withShared([{ ip: "203.0.113.9", clients: [] }])).toEqual([]);
+  });
+});
