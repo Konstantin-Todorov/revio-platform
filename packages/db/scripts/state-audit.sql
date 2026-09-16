@@ -67,13 +67,22 @@ WITH checks AS (
          'repair-stuck-stays.sql sets it, or resolve it on the folio screen'
   FROM "Folio" WHERE status = 'closed' AND outcome IS NULL
 
-  -- 6. A folio marked settled that still owes money. The label and the arithmetic disagree, and the
-  --    label is the one people read.
+  -- 6. A folio marked SETTLED that still owes money. Settled means the money came through the
+  --    system, so the payment is a folio line and the arithmetic must reach zero. When it does not,
+  --    the label and the ledger disagree and the label is the one people read.
+  --
+  --    ⚠️ `paid_offsystem` and `written_off` are deliberately NOT faults, and this check used to
+  --    include them. Neither posts a folio line — by design, and the design is load-bearing: a
+  --    write-off that posted a payment line would be counted as income by anything summing
+  --    payments, which is the exact failure `folio-outcomes.ts` was written to make impossible.
+  --    Their balance stays non-zero on purpose and the OUTCOME carries the meaning. Including them
+  --    reported two healthy folios as faults on every run, and a check that fires on correct data
+  --    is how people learn to ignore the one that fires on real damage.
   UNION ALL
   SELECT 'folio marked settled that still carries a balance', count(*)::int,
          'reopen and resolve it on the folio screen'
   FROM "Folio" f
-  WHERE f.outcome IN ('settled', 'paid_offsystem', 'written_off')
+  WHERE f.outcome = 'settled'
     AND COALESCE((SELECT sum(CASE WHEN l.kind = 'payment' THEN -l."amountMinor" ELSE l."amountMinor" END)
                   FROM "FolioLine" l WHERE l."folioId" = f.id AND l.voided = false), 0) <> 0
 
