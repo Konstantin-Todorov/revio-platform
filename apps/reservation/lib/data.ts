@@ -828,7 +828,30 @@ export async function getReservationDetail(id: string) {
     where: { propertyId: property.id, entity: { contains: `#${id.slice(-6)}` } },
     orderBy: { createdAt: "asc" },
   });
-  return { property, reservation, timeline, todayIso: todayInTz(property.timezone) };
+  /*
+   * Why this booking is a shell, when it is one.
+   *
+   * A `failed_import` reservation carries a name and a total and nothing else — no room, no dates,
+   * no guest contact — because the channel sold it under a room type or rate plan this property has
+   * not mapped, and guessing which room it meant is how you double-book. The row exists so the
+   * booking is not silently dropped.
+   *
+   * ⚠️ Until now the screen showed that as a wall of dashes and a timeline reading "No events
+   * recorded for this reservation yet", which is FALSE — the Error Center has known exactly what
+   * happened since the second it happened. A real hotel owner read that screen on 2026-09-15,
+   * concluded her bookings were being lost, and disconnected her channel. This is the sentence she
+   * needed.
+   */
+  const importFailure =
+    reservation.status === "failed_import"
+      ? await prisma.errorItem.findFirst({
+          where: { propertyId: property.id, code: "reservation_unmapped", message: { contains: reservation.externalId ?? "" } },
+          orderBy: { createdAt: "desc" },
+          select: { message: true, recommendedAction: true, createdAt: true, resolved: true },
+        })
+      : null;
+
+  return { property, reservation, timeline, importFailure, todayIso: todayInTz(property.timezone) };
 }
 
 export async function getGuests(q?: string) {

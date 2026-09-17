@@ -63,6 +63,45 @@ export default async function ReservationDetailPage({
         }
       />
 
+      {/*
+        * ⚠️ A failed import must explain itself on THIS screen.
+        *
+        * It is the page a hotel opens when a booking looks wrong, and it used to answer with dashes
+        * in every field and "No events recorded for this reservation yet" — while the Error Center
+        * held the reason, to the second. An owner read exactly this on 2026-09-15, decided her
+        * bookings were being lost, and disconnected her channel.
+        *
+        * It leads with the CONSEQUENCE, not the cause: the stay is not in the calendar and the room
+        * is still on sale. That is what makes somebody act today rather than tomorrow.
+        */}
+      {r.status === "failed_import" && (
+        <div className="rounded-lg border border-danger-500/30 bg-danger-50 px-4 py-3.5">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
+            <div className="min-w-0">
+              <h2 className="text-[13.5px] font-bold text-danger-700">
+                This booking is not in your calendar, and the room is still on sale
+              </h2>
+              <p className="mt-1 text-[13px] leading-relaxed text-ink-700">
+                {detail.importFailure?.message?.replace(/^Booking #\S+ could not be imported — /, "") ??
+                  "The channel sold it under a room type or rate plan that is not mapped here."}{" "}
+                We deliberately did not guess which room it meant — guessing is how two guests end up
+                in one room. The guest has been confirmed by the channel, so somebody may still
+                arrive.
+              </p>
+              <p className="mt-2 text-[13px] leading-relaxed text-ink-700">
+                {detail.importFailure?.recommendedAction ??
+                  "Map that room type and rate plan in RevioLink, then re-sync to bring the booking in."}
+              </p>
+              {/* The fix lives in the other product, so link to it rather than describing where it is. */}
+              <p className="mt-2 text-[12.5px] text-ink-500">
+                Nothing here was lost — the booking is held until the mapping is finished.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {sp.error && (
         <div className="flex items-center gap-2 rounded-md border border-danger-500/30 bg-danger-50 px-3.5 py-2.5 text-[13px] font-medium text-danger-600">
           <AlertTriangle className="h-4 w-4 shrink-0" /> {sp.error}
@@ -155,7 +194,13 @@ export default async function ReservationDetailPage({
       <Card>
         <CardHeader title="Timeline" />
         {timeline.length === 0 ? (
-          <div className="px-4 py-5 text-[13px] text-ink-500">No events recorded for this reservation yet.</div>
+          <div className="px-4 py-5 text-[13px] text-ink-500">
+            {r.status === "failed_import"
+              ? /* Not "nothing happened" — something happened and we know when. Saying "no events"
+                   on the one status that HAS a recorded cause is how this screen misled somebody. */
+                `This booking arrived from ${r.channel?.name ?? "the channel"} on ${r.importedAt.toISOString().slice(0, 10)} and could not be imported. Nothing else will be recorded until it is brought in.`
+              : "No events recorded for this reservation yet."}
+          </div>
         ) : (
           <ul className="divide-y divide-surface-border/60">
             {timeline.map((e) => (
