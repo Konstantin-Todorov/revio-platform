@@ -192,3 +192,61 @@ export async function activateChannexChannel(cfg: ChannexApiConfig, channelId: s
 export async function deactivateChannexChannel(cfg: ChannexApiConfig, channelId: string): Promise<void> {
   await call(cfg, "POST", `/channels/${encodeURIComponent(channelId)}/deactivate`);
 }
+
+
+/**
+ * Changes the channel itself recorded as FAILED, from its own task log.
+ *
+ * ## ⚠️ Why this is worth a request a night
+ *
+ * Channex keeps a task per change we send — `Property.UpdateAvailability`,
+ * `Property.UpdateRestrictions` and so on — each with `success` and `errors[]`. It is **the
+ * destination's account of whether our push landed**, and nothing in this codebase had ever read it.
+ *
+ * Every failure hunted on 2026-09-17 had one shape: our side reported success and the truth was
+ * somewhere we were not looking. `SyncEvent` says what we *sent*; this says what they *did with it*.
+ * Two independent records disagreeing is the only way that class of fault becomes visible at all.
+ *
+ * ⚠️ Windowed. The log is historical, and a failure from six weeks ago that somebody has since fixed
+ * must not raise an alarm for ever. `filter[success]=false` is applied server-side — verified, and it
+ * answered `total: 0` for our account, so the ordinary case costs one cheap request.
+ */
+export async function failedChannexTasks(
+  cfg: ChannexApiConfig,
+  propertyId: string,
+  sinceDays = 7,
+): Promise<{ ok: boolean; count: number; samples: string[] }> {
+  /*
+   * ⚠️ `call` THROWS on a non-2xx, and that must not become "no failures".
+   *
+   * An unreachable Channex reporting a clean bill of health is the precise mistake this whole
+   * function exists to catch somebody else making. Caught, and reported as `ok: false` — a caller
+   * that cannot tell "we asked and there were none" from "we could not ask" is no better off than
+   * one that never asked.
+   */
+  let res: unknown;
+  try {
+    res = await call(
+      cfg,
+      "GET",
+      `/tasks?filter[property_id]=${encodeURIComponent(propertyId)}&filter[success]=false` +
+        `&order[inserted_at]=desc&pagination[limit]=100`,
+    );
+  } catch {
+    return { ok: false, count: 0, samples: [] };
+  }
+  const rows = (res as { data?: { attributes?: { inserted_at?: string; task?: string; errors?: unknown } }[] } | null)?.data;
+  // Not an array is the same story by another route: no answer, never "no failures".
+  if (!Array.isArray(rows)) return { ok: false, count: 0, samples: [] };
+
+  const cutoff = Date.now() - sinceDays * 86_400_000;
+  const recent = rows.filter((r) => {
+    const at = r.attributes?.inserted_at;
+    return at ? Date.parse(at) >= cutoff : false;
+  });
+  return {
+    ok: true,
+    count: recent.length,
+    samples: recent.slice(0, 3).map((r) => `${r.attributes?.task ?? "change"} — ${JSON.stringify(r.attributes?.errors ?? []).slice(0, 120)}`),
+  };
+}

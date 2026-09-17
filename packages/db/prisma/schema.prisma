@@ -1243,6 +1243,13 @@ model Channel {
   /// When the nightly `mapping-audit` last got an answer out of the channel about this property.
   /// Null = never asked. An old date is still an answer, and its age is shown rather than hidden.
   catalogueCheckedAt    DateTime?
+  /// Pushes the CHANNEL ITSELF recorded as failed, in its own task log, over the last week.
+  ///
+  /// ⚠️ The destination's verdict, not ours. Every failure this platform hunted on 2026-09-17 had
+  /// the same shape — our side reported success and the truth was somewhere we were not looking.
+  /// Channex keeps a task per change we send, with `success` and `errors[]`, and nothing had ever
+  /// read it. Written by the nightly audit alongside `catalogueCheckedAt`.
+  pushFailures          Int       @default(0)
   /// What that answer was: `ok` · `property_missing` · `unreadable`.
   ///
   /// ⚠️ Stored on the channel rather than left as an Error Center entry, for the same reason failed

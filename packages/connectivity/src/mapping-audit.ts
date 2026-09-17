@@ -33,6 +33,7 @@
 import { forTenant } from "@revio/db";
 import { crossWiredRatePlans, describeCrossWire, type CrossWired } from "@revio/core";
 import { listChannelProducts, verifyChannelProperty } from "./sync.js";
+import { channexApiConfig, failedChannexTasks } from "./channex-channel-api.js";
 import { ensureChannexWebhook } from "./channex-webhook.js";
 
 type Db = ReturnType<typeof forTenant>;
@@ -126,6 +127,30 @@ export async function auditChannelMapping(
   if (webhookCallbackUrl && webhookSecret) {
     const w = await ensureChannexWebhook(channel.propertyId, webhookCallbackUrl, webhookSecret);
     webhook = w.ok ? (w.unchanged ? "already" : "registered") : "failed";
+  }
+
+  /*
+   * ⚠️ What the CHANNEL says about our pushes, not what we say.
+   *
+   * Channex keeps a task per change we send, each with `success` and `errors[]`, and nothing had
+   * ever read it. Every fault hunted on 2026-09-17 had one shape — our side reported success and
+   * the truth was somewhere we were not looking — so a second, independent record is the only thing
+   * that makes the class visible. `filter[success]=false` is applied server-side, so the ordinary
+   * case (none) is one cheap request.
+   *
+   * A failure to ASK leaves the previous count alone rather than writing zero: an unreachable
+   * Channex must never be recorded as a clean bill of health.
+   */
+  if (channel.externalPropertyId && channel.connectivityMode !== "mock") {
+    try {
+      const cfg = await channexApiConfig(channel.tenantId, channel.connectivityMode);
+      const tasks = await failedChannexTasks(cfg, channel.externalPropertyId);
+      if (tasks.ok) {
+        await prisma.channel.update({ where: { id: channelId }, data: { pushFailures: tasks.count } });
+      }
+    } catch {
+      // Never fails the audit: the mapping check is the point of this job.
+    }
   }
 
   const products = await listChannelProducts(prisma, channelId);

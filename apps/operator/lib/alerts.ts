@@ -123,5 +123,30 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
     }
   }
 
+  /*
+   * 4. Pushes the CHANNEL recorded as failed, in its own task log.
+   *
+   * ⚠️ The destination's verdict rather than ours. `SyncEvent` says what we sent; this says what
+   * they did with it, and two independent records disagreeing is the only way that class of fault
+   * becomes visible. Written nightly by the audit.
+   */
+  const pushFailing = await prisma.channel.findMany({
+    where: { pushFailures: { gt: 0 } },
+    select: { id: true, name: true, pushFailures: true, property: { select: { name: true, tenant: { select: { name: true } } } } },
+  });
+  for (const ch of pushFailing) {
+    const n = ch.pushFailures;
+    out.push({
+      key: `push_failed:${ch.id}`,
+      clientName: ch.property.tenant.name,
+      summary:
+        `${ch.name} rejected ${n} change${n === 1 ? "" : "s"} we sent for ${ch.property.name} in the last week`,
+      action:
+        "Our own sync log reports these as sent. The channel's record says they did not take — so " +
+        "prices or availability there are not what this system thinks. Open the Error Center for the reason.",
+      severity: "act",
+    });
+  }
+
   return out;
 }
