@@ -45,9 +45,18 @@ export async function POST(req: NextRequest) {
   }
 
   const db = forSystem();
-  // Same filter the app's own auto-push uses: connected, real connectivity only.
+  /*
+   * Connected, real connectivity, and an account that is not suspended.
+   *
+   * ⚠️ The tenant filter is an optimisation, NOT the rule. `pullChannel` refuses a suspended account
+   * on its own and that is the authority — one decision, in one place, that a second caller cannot
+   * route around. This filter exists so the job does not call it 288 times a day only to be refused
+   * and write an audit row saying so: a trail full of "this account is suspended" is how a hotel's
+   * record of what actually happened becomes unreadable, which has already happened here once with
+   * 20,249 rows of "0 new · 0 updated".
+   */
   const channels = await db.channel.findMany({
-    where: { status: "connected", connectivityMode: { not: "mock" } },
+    where: { status: "connected", connectivityMode: { not: "mock" }, property: { tenant: { status: "active" } } },
     include: { property: { include: { tenant: true } } },
   });
 

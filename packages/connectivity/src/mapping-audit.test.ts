@@ -17,7 +17,7 @@ const CHANNEL = { id: "ch1", name: "Channex", tenantId: "t1", propertyId: "p1" }
 
 function db(over: Record<string, unknown> = {}) {
   return {
-    channel: { findUnique: vi.fn(async () => CHANNEL) },
+    channel: { findUnique: vi.fn(async () => CHANNEL), update: vi.fn(async () => ({})) },
     channelRatePlanMapping: { findMany: vi.fn(async () => []), update: vi.fn(async () => ({})) },
     channelRoomTypeMapping: { findMany: vi.fn(async () => []) },
     errorItem: { findFirst: vi.fn(async () => null), create: vi.fn(async () => ({})) },

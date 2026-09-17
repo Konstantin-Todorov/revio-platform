@@ -77,7 +77,11 @@ export async function auditChannelMapping(prisma: Db, channelId: string): Promis
    * when the catalogue does not exist.
    */
   const prop = await verifyChannelProperty(prisma, channelId);
+  const markChannel = (catalogueStatus: string) =>
+    prisma.channel.update({ where: { id: channelId }, data: { catalogueStatus, catalogueCheckedAt: new Date() } });
+
   if (!prop.ok && prop.status === 404) {
+    await markChannel("property_missing");
     // The count is what raiseOnce actually did, not what we asked it to do: an open entry already
     // saying this raises nothing, and a job whose own log overstates its work is a job nobody trusts.
     const raised = await raiseOnce(prisma, channel, {
@@ -96,8 +100,10 @@ export async function auditChannelMapping(prisma: Db, channelId: string): Promis
   const products = await listChannelProducts(prisma, channelId);
   if (products.rates.length === 0) {
     // See the header: zero is "no answer", never "no plans".
+    await markChannel("unreadable");
     return { ...base, checked: 0, crossWired: [], raised: 0, skipped: "the channel listed no rate plans — treated as unknown" };
   }
+  await markChannel("ok");
 
   const [rateMaps, roomMaps] = await Promise.all([
     prisma.channelRatePlanMapping.findMany({ where: { channelId }, include: { ratePlan: true, roomType: true } }),

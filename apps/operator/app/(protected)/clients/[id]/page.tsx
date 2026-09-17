@@ -4,6 +4,7 @@ import { getClientDetail } from "@/lib/data";
 import { alignSeries, billedSeries, bookingSeries, hasHistory, monthKeys, mrrMovement } from "@/lib/client-trend";
 import { TrendChart } from "@/components/overview/TrendChart";
 import { SetupProgressCard } from "@/components/clients/SetupProgressCard";
+import { ChannelsPanel } from "@/components/clients/ChannelsPanel";
 import { setDemo } from "@/lib/actions";
 import { endTrial, startTrial } from "@/lib/actions-trials";
 import {
@@ -403,13 +404,22 @@ export default async function ClientDetailPage({
         )}
 
         <Card>
-          <CardHeader title="Connectivity" />
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-4 text-[13px]">
-            <div><dt className="text-[11px] uppercase tracking-wide text-ink-400">Channels</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{c.counts.channelsConnected} / {c.counts.channels}</dd></div>
-            <div><dt className="text-[11px] uppercase tracking-wide text-ink-400">Last sync</dt><dd className="mt-0.5 font-semibold text-ink-900">{ago(c.lastSyncAt)}</dd></div>
-            <div><dt className="text-[11px] uppercase tracking-wide text-ink-400">Open errors</dt><dd className={`tnum mt-0.5 font-semibold ${c.counts.openErrors > 0 ? "text-danger-600" : "text-ink-900"}`}>{c.counts.openErrors}</dd></div>
-            <div><dt className="text-[11px] uppercase tracking-wide text-ink-400">Room types</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{c.counts.roomTypes}</dd></div>
-          </dl>
+          <CardHeader
+            title="Connectivity"
+            action={
+              <span className="text-[11px] text-ink-400">
+                {c.counts.channelsConnected} / {c.counts.channels} connected · {c.counts.roomTypes} room types
+              </span>
+            }
+          />
+          {/*
+            ⚠️ This card used to be four numbers, and four numbers cannot answer the question it is
+            opened to answer. "1 / 1 connected · last sync today · 0 open errors" is exactly what
+            Chervena Vila showed while its channel pointed at a property Channex had deleted and
+            reported success every five minutes. The counts moved to the header, where a summary
+            belongs; the rows say which channel, what it is doing, and what can be done about it.
+          */}
+          <ChannelsPanel channels={c.channelDetail} suspended={c.tenant.status !== "active"} />
         </Card>
       </div>
 

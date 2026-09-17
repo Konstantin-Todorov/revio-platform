@@ -187,6 +187,36 @@ export function stayScope(stays: ScopedStay[]): PushScope {
 }
 
 /**
+ * A suspended account has no connectivity. None: nothing out, nothing in.
+ *
+ * ## Why this is a hard stop rather than a warning
+ *
+ * Suspension already locks every member of the hotel's staff out of every product. Until
+ * 2026-09-17 it did nothing at all to the channels, and the scheduled pull selected on
+ * `status: "connected"` and asked nothing about the tenant — so a suspended hotel went on
+ * polling Channex every five minutes and went on publishing availability to Booking.com.
+ *
+ * ⚠️ That is the worst arrangement of the three available. A guest books a room on an OTA, the
+ * booking lands in a system **nobody at the hotel can sign in to**, and they arrive at a desk with
+ * no record of them. We would have created exactly the failure this platform exists to prevent, on
+ * an account we had already decided to cut off.
+ *
+ * ⚠️ **It does NOT stop-sell the channel.** Refusing to sync leaves the OTA selling whatever
+ * availability it last received, which is a real consequence and is deliberately left to a human:
+ * closing a hotel's rooms on Booking.com is an outward-facing act on somebody else's business, and
+ * it belongs to a person who has decided to do it, with a button. The Operator client page says so
+ * beside the channel and offers Pause, which is the reversible control that already exists.
+ *
+ * Returns the reason when refused, `null` when the account may sync.
+ */
+async function suspendedReason(prisma: Db, tenantId: string): Promise<string | null> {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } });
+  // Unknown is not suspended. A read that fails must not silently stop a paying hotel's distribution.
+  if (!tenant || tenant.status === "active") return null;
+  return `This account is ${tenant.status} — connectivity is stopped until it is reinstated.`;
+}
+
+/**
  * Build the next HORIZON_DAYS of ARI for a channel from its two-stream mappings + the live inventory/
  * rates/restrictions, and push it through the resolved adapter (mock or Channex). Records a SyncEvent
  * and an ErrorItem per rejected update.
@@ -203,6 +233,8 @@ export async function syncChannel(
   if (channel.status === "paused" || channel.status === "disconnected") {
     return { ok: false, pushed: 0, rejected: 0, mode: channel.connectivityMode, error: `Channel is ${channel.status}.` };
   }
+  const suspended = await suspendedReason(prisma, channel.tenantId);
+  if (suspended) return { ok: false, pushed: 0, rejected: 0, mode: channel.connectivityMode, error: suspended };
   const horizonDays = Math.min(500, Math.max(1, opts?.horizonDays ?? HORIZON_DAYS));
   const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId } });
   const { tenantId, propertyId } = channel;
@@ -686,8 +718,20 @@ export async function syncRealChannels(
 
   // CM-connection lifecycle (CRS spec §3.8): a paused/disconnected channel-manager connection
   // stops ALL distribution for the property, reversibly — mappings stay dormant.
-  const property = await prisma.property.findUnique({ where: { id: propertyId }, select: { cmStatus: true } });
+  const property = await prisma.property.findUnique({
+    where: { id: propertyId },
+    select: { cmStatus: true, tenantId: true },
+  });
   if (property && property.cmStatus !== "connected") {
+    out.paused = true;
+    return out;
+  }
+  /*
+   * A suspended account publishes nothing. Reported as `paused` because that is what it is from the
+   * property's side — reversible, mappings intact, nothing thrown away — and because every caller
+   * already knows how to say "not sent, distribution is stopped".
+   */
+  if (property && (await suspendedReason(prisma, property.tenantId))) {
     out.paused = true;
     return out;
   }
@@ -799,6 +843,17 @@ export async function pullChannel(
 ): Promise<PullOutcome> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return { ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: "mock", error: "Unknown channel." };
+  /*
+   * ⚠️ The pull is stopped too, not only the push.
+   *
+   * Pulling a booking into an account nobody can sign in to is worse than not pulling it: it looks
+   * handled and is not. Unacked revisions stay in the feed, so nothing is lost — they arrive the
+   * moment the account is reinstated, which is the correct time for a hotel to learn about them.
+   */
+  const suspendedPull = await suspendedReason(prisma, channel.tenantId);
+  if (suspendedPull) {
+    return { ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: channel.connectivityMode, error: suspendedPull };
+  }
   const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId } });
   const { tenantId, propertyId } = channel;
 
@@ -1285,6 +1340,18 @@ export async function resumeChannel(prisma: Db, channelId: string): Promise<Chan
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return { ok: false, error: "Unknown channel." };
   if (channel.status !== "paused") return { ok: false, error: "Channel is not paused." };
+  /*
+   * ⚠️ Refused BEFORE the status is written, not after the push fails.
+   *
+   * Resume sets `connected` and then re-pushes 365 days to undo the stop-sell overlay. On a
+   * suspended account `syncChannel` now refuses, so doing this in the old order would leave the
+   * channel reading `connected` with every date still closed at the OTA — a state that looks
+   * restored and sells nothing. Reinstate the account first; that is the actual fix and this says so.
+   */
+  const suspendedResume = await suspendedReason(prisma, channel.tenantId);
+  if (suspendedResume) {
+    return { ok: false, error: `${suspendedResume} Reinstate the account first — resuming now would reopen the channel without republishing anything.` };
+  }
   await prisma.channel.update({ where: { id: channelId }, data: { status: "connected" } });
   const outcome = await syncChannel(prisma, channelId, { horizonDays: 365 });
   await prisma.syncEvent.create({

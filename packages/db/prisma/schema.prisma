@@ -1224,6 +1224,16 @@ model Channel {
   /// it silently drops. Detected at connection time from the Channex adapter, never assumed.
   supportsOccupancy     Boolean   @default(false)
   lastSyncAt            DateTime?
+  /// When the nightly `mapping-audit` last got an answer out of the channel about this property.
+  /// Null = never asked. An old date is still an answer, and its age is shown rather than hidden.
+  catalogueCheckedAt    DateTime?
+  /// What that answer was: `ok` · `property_missing` · `unreadable`.
+  ///
+  /// ⚠️ Stored on the channel rather than left as an Error Center entry, for the same reason failed
+  /// imports are counted from the reservations: a hotel can press Resolve, which dismisses the
+  /// reminder and repairs nothing. The Operator console must read a fact the customer cannot switch
+  /// off by tidying their own screen.
+  catalogueStatus       String?
   errorCount            Int       @default(0)
   pendingCount          Int       @default(0)
   // CRS reporting category this channel's bookings fall under (see BookingSource).

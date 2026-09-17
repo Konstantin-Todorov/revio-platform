@@ -13,6 +13,7 @@
     "stripe-mode-verify": "tsx scripts/stripe-mode-verify.ts"
   },
   "dependencies": {
+    "@revio/connectivity": "workspace:*",
     "@revio/core": "workspace:*",
     "@revio/db": "workspace:*",
     "@revio/email": "workspace:*",

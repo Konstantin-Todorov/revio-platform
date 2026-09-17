@@ -22,6 +22,77 @@ import {
 const prisma = forSystem();
 
 /**
+ * Every channel this client has, with the facts somebody needs before touching one.
+ *
+ * ⚠️ The health here is what the nightly audit WROTE DOWN, not an Error Center entry. A hotel can
+ * mark an error resolved, which dismisses the reminder and repairs nothing — the same reason failed
+ * imports are counted from the reservations. `reservations` is carried because it decides whether
+ * this channel can be deleted at all: `Reservation.channel` cascades, so removing a channel that
+ * ever produced a booking would delete the bookings.
+ */
+async function channelsFor(tenantId: string) {
+  const rows = await prisma.channel.findMany({
+    where: { tenantId },
+    orderBy: [{ property: { name: "asc" } }, { name: "asc" }],
+    select: {
+      id: true, name: true, code: true, status: true, connectivityMode: true,
+      externalPropertyId: true, lastSyncAt: true, errorCount: true,
+      catalogueCheckedAt: true, catalogueStatus: true,
+      property: { select: { id: true, name: true } },
+      _count: { select: { reservations: true } },
+    },
+  });
+
+  const [rateMaps, roomMaps] = await Promise.all([
+    prisma.channelRatePlanMapping.findMany({
+      where: { tenantId, catalogueCheckedAt: { not: null }, externalRateId: { not: null }, roomTypeId: { not: null } },
+      select: {
+        channelId: true, roomTypeId: true, externalRateId: true, externalRoomIdSeen: true,
+        catalogueCheckedAt: true, ratePlan: { select: { name: true } }, roomType: { select: { name: true } },
+      },
+    }),
+    prisma.channelRoomTypeMapping.findMany({
+      where: { tenantId, externalRoomId: { not: null } },
+      select: { channelId: true, roomTypeId: true, externalRoomId: true },
+    }),
+  ]);
+
+  return rows.map((ch) => {
+    const ourRooms = new Map(
+      roomMaps.flatMap((r) => (r.channelId === ch.id && r.externalRoomId ? [[r.roomTypeId, r.externalRoomId] as const] : [])),
+    );
+    const crossWired = crossWiredFromRecord(
+      rateMaps
+        .filter((m) => m.channelId === ch.id)
+        .map((m) => ({
+          roomTypeId: m.roomTypeId!,
+          roomTypeName: m.roomType?.name ?? "",
+          ratePlanName: m.ratePlan.name,
+          externalRateId: m.externalRateId,
+          externalRoomIdSeen: m.externalRoomIdSeen,
+          checkedAt: m.catalogueCheckedAt,
+        })),
+      ourRooms,
+    );
+    return {
+      id: ch.id,
+      name: ch.name,
+      code: ch.code,
+      status: ch.status,
+      mode: ch.connectivityMode,
+      externalPropertyId: ch.externalPropertyId,
+      lastSyncAt: ch.lastSyncAt,
+      errorCount: ch.errorCount,
+      catalogueCheckedAt: ch.catalogueCheckedAt,
+      catalogueStatus: ch.catalogueStatus,
+      propertyName: ch.property.name,
+      reservations: ch._count.reservations,
+      crossWired,
+    };
+  });
+}
+
+/**
  * Rate-plan mappings pointing at a plan the channel says belongs to a different room.
  *
  * ⚠️ Read back from what the nightly `mapping-audit` recorded on each row, never asked live. This
@@ -747,6 +818,10 @@ export async function getClientDetail(id: string) {
   // "one of your rooms is on sale at another room's price" is the first thing they need to know.
   const detailCrossWired = await crossWiredFor(id);
 
+  // Every channel with the facts somebody needs before touching one — including whether it can be
+  // deleted at all, which depends on whether it ever produced a booking.
+  const channelDetail = await channelsFor(id);
+
   const keepAsked = await prisma.productTrial.findMany({
     where: { tenantId: id, endedAt: null, keepRequestedAt: { not: null } },
     select: { product: true, endsAt: true, keepRequestedAt: true },
@@ -904,7 +979,7 @@ export async function getClientDetail(id: string) {
       return m;
     }, new Map<string, number>()),
     counts: { roomTypes, units, channels: channels.length, channelsConnected, reservations, openErrors, reservationsLast30d },
-    channels, recentFailures, economics, waitlist,
+    channels, channelDetail, recentFailures, economics, waitlist,
     direct: {
       enabledProperties: bookingEngineProperties,
       bookings: engineUsage.bookings,

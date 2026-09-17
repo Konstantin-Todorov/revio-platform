@@ -36,6 +36,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const db = forSystem();
+    /*
+     * ⚠️ Suspended accounts ARE audited, deliberately — unlike the pull, which skips them.
+     *
+     * The pull is skipped because doing the work would be wrong. This is the opposite: a suspended
+     * client is one we are more likely to be in a difficult conversation with, and "your channel has
+     * been pointed at a property that no longer exists" is exactly the thing we need to know before
+     * that call rather than after it. Ventsi Group is suspended and is the reason this job found
+     * anything at all.
+     */
     const channels = await db.channel.findMany({
       where: { status: "connected", connectivityMode: { not: "mock" } },
       select: { id: true },
