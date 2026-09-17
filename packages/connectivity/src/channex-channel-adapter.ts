@@ -398,6 +398,30 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     return { ok: true, status: 200, rows };
   }
 
+  /**
+   * Does the property this channel is bound to still exist on Channex?
+   *
+   * ## ⚠️ Why a successful, empty answer is not evidence of a quiet day
+   *
+   * On 2026-09-01 a revoked key produced **411 consecutive "Pulled 0 revisions · success"** events
+   * on a real hotel. The fix was to check the status code rather than the array length, and it was
+   * the right fix for that cause — and only for that cause.
+   *
+   * Ventsi Group · Chervena Vila is printing the same sentence today, every five minutes, for a
+   * different reason: its `externalPropertyId` **404s**. The property is gone from Channex. But a
+   * FILTER on an id that does not exist is not an error — `/booking_revisions/feed?filter[property_id]
+   * =<gone>` answers HTTP 200 with an empty list, exactly as a genuinely quiet morning does. Status
+   * code and array length now agree, and both are wrong.
+   *
+   * The only question that separates them is whether the property is there, and nothing was asking
+   * it. This asks it.
+   */
+  async verifyProperty(): Promise<{ ok: boolean; status: number; title?: string }> {
+    const res = await this.get(`/properties/${this.propertyId}`);
+    const title = (res.body as { data?: { attributes?: { title?: string } } } | null)?.data?.attributes?.title;
+    return { ok: res.ok, status: res.status, ...(title ? { title } : {}) };
+  }
+
   /** Pull the property's room types + rate plans from Channex (with their Channex ids) —
    * feeds the Mapping screen's dropdowns (spec §3.6). */
   /**

@@ -1367,6 +1367,39 @@ export async function listChannelProducts(
 }
 
 /**
+ * Ask the channel whether the property this channel points at still exists.
+ *
+ * ⚠️ Separated from `listChannelProducts` on purpose: that one answers "what is in the catalogue",
+ * and its honest answer for a property that is GONE is "nothing", which reads identically to a
+ * property that has not been set up yet. This answers a different question, and it is the question
+ * that tells a misconfigured channel from an idle one.
+ *
+ * Returns `{ ok: true, status: 0 }` for an adapter with no concept of a remote property (the mock):
+ * unasked is not the same as failed, and a demo channel must not be reported as broken.
+ */
+export async function verifyChannelProperty(
+  prisma: Db, channelId: string,
+): Promise<{ ok: boolean; status: number; title?: string; error?: string }> {
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, status: 0, error: "no such channel" };
+  try {
+    const mode = adapterMode(channel.connectivityMode);
+    const adapter = createChannelAdapter({
+      mode,
+      channelCode: channel.code,
+      ...(mode !== "mock"
+        ? { channex: { apiKey: await channexKey(channel.tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
+        : {}),
+    });
+    if (!adapter.verifyProperty) return { ok: true, status: 0 };
+    return await adapter.verifyProperty();
+  } catch (e) {
+    // Could not ask. Not an answer, and deliberately not reported as one.
+    return { ok: true, status: 0, error: e instanceof Error ? e.message : "verifyProperty threw" };
+  }
+}
+
+/**
  * A Prisma rate plan as `resolveRate` wants it.
  *
  * Deliberately the same shape the booking engine builds. Two adapters would be two chances for the

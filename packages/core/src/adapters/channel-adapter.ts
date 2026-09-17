@@ -155,4 +155,14 @@ export interface ChannelAdapter {
    * Mapping screen can offer dropdown mapping. Optional — absent means manual-id entry only.
    */
   listProducts?(): Promise<{ rooms: ExternalProduct[]; rates: ExternalProduct[] }>;
+
+  /**
+   * Is the property this channel is bound to still there?
+   *
+   * ⚠️ The one question that separates "a quiet morning" from "we are pointed at nothing". A filter
+   * on an id the channel does not have returns HTTP 200 and an empty list — the status code is fine,
+   * the array is empty, and every check we had agrees that all is well. Optional: an adapter with no
+   * concept of a remote property omits it.
+   */
+  verifyProperty?(): Promise<{ ok: boolean; status: number; title?: string }>;
 }

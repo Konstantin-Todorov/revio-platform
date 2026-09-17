@@ -32,7 +32,7 @@
 
 import { forTenant } from "@revio/db";
 import { crossWiredRatePlans, describeCrossWire, type CrossWired } from "@revio/core";
-import { listChannelProducts } from "./sync.js";
+import { listChannelProducts, verifyChannelProperty } from "./sync.js";
 
 type Db = ReturnType<typeof forTenant>;
 
@@ -65,6 +65,33 @@ export async function auditChannelMapping(prisma: Db, channelId: string): Promis
     return { channelId, channelName: "unknown", checked: 0, crossWired: [], raised: 0, skipped: "no such channel" };
   }
   const base = { channelId, channelName: channel.name };
+
+  /*
+   * ⚠️ FIRST, because everything after it is unreadable without the answer.
+   *
+   * Ventsi Group · Chervena Vila has been logging "Pulled 0 revisions · success" every five minutes
+   * against a property Channex 404s. A filter on an id that does not exist is not an error — the
+   * request succeeds, the list is empty, and the status-code check that fixed the 2026-09-01 outage
+   * agrees that everything is fine. Without this, the audit would go on to report "the channel
+   * listed no rate plans", which is true and is the wrong sentence: it describes an empty catalogue
+   * when the catalogue does not exist.
+   */
+  const prop = await verifyChannelProperty(prisma, channelId);
+  if (!prop.ok && prop.status === 404) {
+    // The count is what raiseOnce actually did, not what we asked it to do: an open entry already
+    // saying this raises nothing, and a job whose own log overstates its work is a job nobody trusts.
+    const raised = await raiseOnce(prisma, channel, {
+      code: "channel_property_missing",
+      productLabel: channel.name,
+      message:
+        `${channel.name} no longer has the property this channel is connected to. Nothing sent is arriving, ` +
+        `and nothing can arrive back — the syncs that report success are reaching an empty filter, not your listings.`,
+      recommendedAction:
+        `The property was deleted or recreated on ${channel.name}. Reconnect the channel so it is set up again, ` +
+        `then re-map the room types and rate plans. Until then this channel is doing nothing, quietly.`,
+    });
+    return { ...base, checked: 0, crossWired: [], raised, skipped: "the channel 404s the property this channel points at" };
+  }
 
   const products = await listChannelProducts(prisma, channelId);
   if (products.rates.length === 0) {
@@ -124,34 +151,47 @@ export async function auditChannelMapping(prisma: Db, channelId: string): Promis
 
   let raised = 0;
   for (const f of crossWired) {
-    /*
-     * ⚠️ Idempotent on an OPEN entry, not on any entry.
-     *
-     * If somebody presses Resolve while the mapping is still wrong, this raises it again on the next
-     * run — because the condition is still true. That is the lesson of 15 September, where resolving
-     * an error dismissed the reminder and fixed nothing.
-     */
-    const open = await prisma.errorItem.findFirst({
-      where: { channelId, code: "mapping_cross_wired", productLabel: `${f.roomTypeName} · ${f.ratePlanName}`, resolved: false },
+    raised += await raiseOnce(prisma, channel, {
+      code: "mapping_cross_wired",
+      productLabel: `${f.roomTypeName} · ${f.ratePlanName}`,
+      message: describeCrossWire(f),
+      recommendedAction:
+        f.reason === "wrong_room"
+          ? `Open Mapping, find ${f.roomTypeName} · ${f.ratePlanName}, and pick the rate plan ${channel.name} lists under ${f.roomTypeName}. Marking this resolved changes nothing — the prices keep going to the wrong room until the id does.`
+          : `Open Mapping and re-pick the rate plan for ${f.roomTypeName} · ${f.ratePlanName}. The id it holds no longer exists on ${channel.name}, so nothing sent for it is arriving.`,
     });
-    if (open) continue;
-    await prisma.errorItem.create({
-      data: {
-        tenantId: channel.tenantId,
-        propertyId: channel.propertyId,
-        channelId,
-        severity: "critical",
-        code: "mapping_cross_wired",
-        message: describeCrossWire(f),
-        productLabel: `${f.roomTypeName} · ${f.ratePlanName}`,
-        recommendedAction:
-          f.reason === "wrong_room"
-            ? `Open Mapping, find ${f.roomTypeName} · ${f.ratePlanName}, and pick the rate plan ${channel.name} lists under ${f.roomTypeName}. Marking this resolved changes nothing — the prices keep going to the wrong room until the id does.`
-            : `Open Mapping and re-pick the rate plan for ${f.roomTypeName} · ${f.ratePlanName}. The id it holds no longer exists on ${channel.name}, so nothing sent for it is arriving.`,
-      },
-    });
-    raised++;
   }
 
   return { ...base, checked, crossWired, raised };
+}
+
+/**
+ * Raise a critical Error Center entry, unless an OPEN one already says the same thing.
+ *
+ * ⚠️ Idempotent on an OPEN entry, not on any entry. Press Resolve while the fault is still true and
+ * it comes back on the next run, because the condition is still true. That is the lesson of
+ * 15 September, where resolving an error dismissed the reminder and imported nothing.
+ */
+async function raiseOnce(
+  prisma: Db,
+  channel: { id: string; tenantId: string; propertyId: string },
+  e: { code: string; productLabel: string; message: string; recommendedAction: string },
+): Promise<number> {
+  const open = await prisma.errorItem.findFirst({
+    where: { channelId: channel.id, code: e.code, productLabel: e.productLabel, resolved: false },
+  });
+  if (open) return 0;
+  await prisma.errorItem.create({
+    data: {
+      tenantId: channel.tenantId,
+      propertyId: channel.propertyId,
+      channelId: channel.id,
+      severity: "critical",
+      code: e.code,
+      message: e.message,
+      productLabel: e.productLabel,
+      recommendedAction: e.recommendedAction,
+    },
+  });
+  return 1;
 }

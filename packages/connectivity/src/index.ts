@@ -31,6 +31,7 @@ export {
   pushVerdict,
   type RealPushOutcome,
   listChannelProducts,
+  verifyChannelProperty,
   pauseChannel,
   resumeChannel,
   disconnectChannel,
