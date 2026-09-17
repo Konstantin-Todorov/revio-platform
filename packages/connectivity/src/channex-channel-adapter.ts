@@ -40,6 +40,22 @@ export interface ChannexConfig {
   minRequestGapMs?: number;
 }
 
+/**
+ * One row of a Channex collection, as much of it as this adapter reads.
+ *
+ * ⚠️ The ids that matter — a rate plan's room type and its parent — are in `relationships`, in
+ * JSON:API's own shape. `attributes` does not carry them, and asking it for them returns
+ * `undefined` rather than failing.
+ */
+interface ChannexRow {
+  id: string;
+  attributes?: { title?: string } & Record<string, unknown>;
+  relationships?: {
+    room_type?: { data?: { id?: string } | null } | null;
+    parent_rate_plan?: { data?: { id?: string } | null } | null;
+  };
+}
+
 interface ApiResult {
   ok: boolean;
   status: number;
@@ -335,6 +351,40 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     return this.request("GET", path);
   }
 
+  /**
+   * Every row of a Channex collection, not the first ten.
+   *
+   * ⚠️ **Channex paginates every list endpoint and defaults to a page of 10.** Nothing in this
+   * adapter ever asked for more, so a property's eleventh rate plan did not exist as far as this
+   * platform was concerned: it could not be offered in the mapping dropdown, could not be checked
+   * against, and a mapping pointing at it would read as "the channel no longer has this plan".
+   * Cabacum Beach Residence has **12** rate plans and we have been seeing 10 of them.
+   *
+   * The parameter is `pagination[...]`, and this cost a round of testing to establish: `page[page]`,
+   * `page[limit]`, `page` and `limit` are all accepted with HTTP 200 and **silently ignored** — the
+   * response comes back looking perfectly healthy, still on page 1, still capped at 10. A wrong
+   * parameter name here does not fail; it truncates. `meta.total` is what proves we got everything,
+   * so the loop is bounded by it rather than by "a short page means the end".
+   */
+  private async getAll(path: string): Promise<{ ok: boolean; status: number; rows: ChannexRow[]; error?: string }> {
+    const rows: ChannexRow[] = [];
+    const LIMIT = 100;
+    for (let page = 1; page <= 50; page++) {
+      const sep = path.includes("?") ? "&" : "?";
+      const res = await this.request("GET", `${path}${sep}pagination[page]=${page}&pagination[limit]=${LIMIT}`);
+      if (!res.ok) return { ok: false, status: res.status, rows: [], ...(res.error ? { error: res.error } : {}) };
+      const body = res.body as { data?: ChannexRow[]; meta?: { total?: number } } | null;
+      const batch = body?.data;
+      if (!Array.isArray(batch)) return { ok: false, status: res.status, rows: [], error: "no data array" };
+      rows.push(...batch);
+      const total = body?.meta?.total;
+      // Stop on the count Channex itself reports. A short page is also the end, and is the guard for
+      // a response that omits `meta` — but an empty page must never loop forever.
+      if (batch.length === 0 || (typeof total === "number" && rows.length >= total) || batch.length < LIMIT) break;
+    }
+    return { ok: true, status: 200, rows };
+  }
+
   /** Pull the property's room types + rate plans from Channex (with their Channex ids) —
    * feeds the Mapping screen's dropdowns (spec §3.6). */
   /**
@@ -354,42 +404,40 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     rates: ChannexRatePlan[];
   }> {
     const [roomsRes, ratesRes] = [
-      await this.request("GET", `/room_types?filter[property_id]=${this.propertyId}`),
-      await this.request("GET", `/rate_plans?filter[property_id]=${this.propertyId}`),
+      await this.getAll(`/room_types?filter[property_id]=${this.propertyId}`),
+      await this.getAll(`/rate_plans?filter[property_id]=${this.propertyId}`),
     ];
 
-    const rooms = (r: ApiResult): { id: string; name: string }[] => {
-      const data = (r.body as { data?: { id: string; attributes?: { title?: string } }[] } | null)?.data;
-      return Array.isArray(data) ? data.map((d) => ({ id: d.id, name: d.attributes?.title ?? d.id })) : [];
+    return {
+      rooms: roomsRes.ok ? roomsRes.rows.map((d) => ({ id: d.id, name: d.attributes?.title ?? d.id })) : [],
+      rates: ratesRes.ok
+        ? ratesRes.rows.map((d) => {
+            const name = d.attributes?.title ?? d.id;
+            /*
+             * ⚠️ `relationships`, NOT `attributes`.
+             *
+             * `attributes.room_type_id` and `attributes.parent_rate_plan_id` **do not exist** on a
+             * Channex rate plan — verified against the live API on 2026-09-17, on both the list and
+             * the single-resource endpoint. Reading them yields `undefined` every time, which meant
+             * the 13 September fix for the €666 incident produced a null on every plan of every
+             * property since the day it shipped: no plan was ever placed in a room, no plan was ever
+             * recognised as derived, and the dropdown went on offering all of them.
+             *
+             * It failed the way a missing field always fails in TypeScript — quietly, as a
+             * legitimate `null`, indistinguishable from "the channel did not say".
+             */
+            const parentId = d.relationships?.parent_rate_plan?.data?.id ?? null;
+            return {
+              id: d.id,
+              name,
+              roomTypeId: d.relationships?.room_type?.data?.id ?? null,
+              derived: Boolean(parentId),
+              parentId,
+              ...classifyChannexRatePlan(name),
+            };
+          })
+        : [],
     };
-
-    const rates = (r: ApiResult): ChannexRatePlan[] => {
-      const data = (r.body as {
-        data?: {
-          id: string;
-          attributes?: {
-            title?: string;
-            room_type_id?: string | null;
-            parent_rate_plan_id?: string | null;
-          };
-        }[];
-      } | null)?.data;
-      if (!Array.isArray(data)) return [];
-      return data.map((d) => {
-        const name = d.attributes?.title ?? d.id;
-        const parentId = d.attributes?.parent_rate_plan_id ?? null;
-        return {
-          id: d.id,
-          name,
-          roomTypeId: d.attributes?.room_type_id ?? null,
-          derived: Boolean(parentId),
-          parentId,
-          ...classifyChannexRatePlan(name),
-        };
-      });
-    };
-
-    return { rooms: roomsRes.ok ? rooms(roomsRes) : [], rates: ratesRes.ok ? rates(ratesRes) : [] };
   }
 
   private request(method: string, path: string, body?: unknown): Promise<ApiResult> {

@@ -65,8 +65,21 @@ export async function checkChannexKey(apiKey: string, mode: string): Promise<Key
 
   let properties: number | null = null;
   try {
-    const body = (await res.json()) as { data?: unknown[] };
-    properties = Array.isArray(body.data) ? body.data.length : null;
+    const body = (await res.json()) as { data?: unknown[]; meta?: { total?: number } };
+    /*
+     * ⚠️ `meta.total`, not `data.length`.
+     *
+     * Channex paginates every collection and defaults to ten per page, so a partner with eleven
+     * properties would be reported here as having exactly ten — a number that looks fine, is wrong,
+     * and is printed on the one screen somebody consults to decide whether a key is healthy. The
+     * array length is kept only as the fallback for a response that carries no `meta`.
+     */
+    properties =
+      typeof body.meta?.total === "number"
+        ? body.meta.total
+        : Array.isArray(body.data)
+          ? body.data.length
+          : null;
   } catch {
     // A 200 we cannot parse still authenticated, which is the question being asked.
   }

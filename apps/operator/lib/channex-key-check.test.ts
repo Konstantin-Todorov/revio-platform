@@ -101,3 +101,22 @@ describe("checkChannexKey", () => {
     expect((await checkChannexKey("k", "nonsense")).ok).toBe(false);
   });
 });
+
+describe("a partner with more properties than one page", () => {
+  /*
+   * Channex caps a collection at ten per page. Counting the array reported exactly ten for a key
+   * that can see eleven — a healthy-looking number on the one screen that answers "is this key
+   * fine?".
+   */
+  it("reports meta.total, not the length of the first page", async () => {
+    respondWith(200, { data: new Array(10).fill({ id: "x" }), meta: { total: 11 } });
+    const r = await checkChannexKey("k", "channex_prod");
+    expect(r.properties).toBe(11);
+    expect(r.message).toMatch(/11 properties/);
+  });
+
+  it("falls back to the array when the response carries no meta", async () => {
+    respondWith(200, { data: [{ id: "x" }, { id: "y" }] });
+    expect((await checkChannexKey("k", "channex_prod")).properties).toBe(2);
+  });
+});

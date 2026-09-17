@@ -87,10 +87,25 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
    * everything then, and say nothing about cross-wiring — unknown is not wrong.
    */
   const scopesByRoom = mappable.some((p) => p.roomTypeId != null);
-  const ratesForRoom = (roomTypeId: string): ChannexRatePlan[] => {
-    if (!scopesByRoom) return mappable;
+  /*
+   * ⚠️ Derived plans are OFFERED, marked — not hidden.
+   *
+   * `mappableRatePlans` keeps them out of `mappable` because nothing is pushed to a plan the channel
+   * computes from a parent. That is the right default and the wrong absolute: Cabacum has its three
+   * "BB Non-Refundable" rows mapped to derived plans today, and a dropdown that silently drops them
+   * is a screen where a hotel cannot re-pick the mapping it already has. Hiding a choice does not
+   * unmake it; it only removes the place to reason about it.
+   *
+   * So they appear, last, saying what they are. The channel-scoped ones stay out — those are the OTA
+   * end of the chain and binding to one skips a hop that exists for a reason.
+   */
+  const ratesForRoom = (roomTypeId: string): { id: string; name: string }[] => {
+    const label = (p: ChannexRatePlan) => ({ id: p.id, name: p.name });
+    const marked = (p: ChannexRatePlan) => ({ id: p.id, name: `${p.name} · derived — the channel computes its rate` });
+    if (!scopesByRoom) return [...mappable.map(label), ...derived.map(marked)];
     const ext = channexRoomOf.get(roomTypeId);
-    return ext ? ratePlansForRoom(mappable, ext) : [];
+    if (!ext) return [];
+    return [...ratePlansForRoom(mappable, ext).map(label), ...ratePlansForRoom(derived, ext).map(marked)];
   };
 
   /*
@@ -360,8 +375,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                                     ? `Map the room type "${m.roomTypeName}" first — until it has an id in ${channel.name} we cannot tell which of its rate plans belong to this room, and offering all of them is how one room's prices end up on another.`
                                     : ratesForRoom(m.roomTypeId).length === 0
                                       ? `${channel.name} lists no rate plan under ${m.roomTypeName}. Create one there, or enter its id below if you know it.`
-                                      : derived.length + excluded.length > 0
-                                        ? `Showing only ${channel.name}'s plans for ${m.roomTypeName}. ${derived.length + excluded.length} other plan${derived.length + excluded.length > 1 ? "s are" : " is"} left out: ${[derived.length ? `${derived.length} derived from another plan` : "", excluded.length ? `${excluded.length} scoped to one OTA` : ""].filter(Boolean).join(", ")} — nothing is pushed to those.`
+                                      : excluded.length > 0
+                                        ? `Showing ${channel.name}'s plans for ${m.roomTypeName} only. ${excluded.length} plan${excluded.length > 1 ? "s are" : " is"} left out because ${excluded.length > 1 ? "they belong" : "it belongs"} to one OTA rather than to ${channel.name} — we push to ${channel.name}, and it pushes on.`
                                         : undefined
                               }
                             />
