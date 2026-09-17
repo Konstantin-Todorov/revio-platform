@@ -52,31 +52,27 @@ export function middleware(req: NextRequest) {
 /**
  * The paths the cookie gate must not touch, and why each one is on the list.
  *
- * ⚠️ Everything here is reached by something that HAS NO SESSION AND CANNOT GET ONE. A 307 to
- * /login is not an error any of them can report — a cron sees a redirect it ignores, a mail client
- * shows a broken image, a monitor follows the redirect and calls the service healthy. The failure is
- * always silent, which is why the list is written out rather than kept in the regex alone.
+ * ⚠️ Everything excluded below is reached by something that HAS NO SESSION AND CANNOT GET ONE. A
+ * 307 to /login is not an error any of them can report — a cron ignores the redirect, a mail client
+ * shows a broken image, an uptime monitor follows it and calls the service healthy while the
+ * database is unreachable. The failure is always silent, which is why each exemption is explained:
+ *
+ *   `api/jobs`     cron; does its own Bearer auth against CRON_SECRET.
+ *   `api/brand`    a hotel's email logo, fetched by mail clients that carry no cookie at all.
+ *   `api/health`   polled by an EXTERNAL uptime monitor with no session.
+ *   `api/webhooks` Channex ringing us when a booking arrives. Added 2026-09-17, and MISSING on the
+ *                  first deploy of that endpoint — caught by curl-ing production and getting a 307
+ *                  where a 401 belonged. It would have failed in the worst way available: Channex
+ *                  gets a redirect, the route never runs, Channex eventually disables an endpoint
+ *                  that keeps failing — and bookings carry on arriving on the five-minute poll, so
+ *                  nobody would ever have noticed. The route does its own shared-secret check and
+ *                  fails closed.
+ *
+ * ⚠️ The pattern below is ONE LITERAL STRING on purpose. Building it from an array reads better and
+ * makes `scripts/jobs-lint.mjs` blind — that check exists precisely to catch a job route left
+ * behind this gate, and it finds the exemption by reading this source. A refactor that blinds a
+ * guard is worse than the duplication it removed; this was tried and reverted the same evening.
  */
-const UNGATED = [
-  // Cron. Does its own Bearer auth against CRON_SECRET.
-  "api/jobs",
-  // A hotel's email logo, fetched by mail clients that carry no cookie at all.
-  "api/brand",
-  // Polled by an EXTERNAL uptime monitor. A monitor following a 307 to /login would report the
-  // service healthy while its database was unreachable.
-  "api/health",
-  /*
-   * ⚠️ Channex ringing us when a booking arrives. Added 2026-09-17, and it was missing on the first
-   * deploy of that endpoint — caught by curl-ing production and getting a 307 instead of a 401.
-   *
-   * It would have failed in the worst available way: Channex gets a redirect, the route never runs,
-   * and it eventually disables an endpoint that keeps failing — while bookings carry on arriving on
-   * the five-minute poll, so nobody would ever have noticed the webhook did not work. The route does
-   * its own shared-secret check and fails closed.
-   */
-  "api/webhooks",
-];
-
 export const config = {
-  matcher: [`/((?!_next/static|_next/image|favicon.ico|${UNGATED.join("|")}|.*\\.[a-zA-Z0-9]+$).*)`],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/jobs|api/brand|api/health|api/webhooks|.*\\.[a-zA-Z0-9]+$).*)"],
 };
