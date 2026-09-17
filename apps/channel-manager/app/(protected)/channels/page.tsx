@@ -130,6 +130,13 @@ export default async function ChannelsPage() {
                     so it can't be hit by accident. All confirmed + audited per channel. */}
                 <div className="flex items-center gap-1">
                   {ch.errorCount > 0 && <StatusPill tone="danger">{ch.errorCount} error</StatusPill>}
+                  {/* Said out loud, not hidden in a tooltip: a booking the channel confirmed that is
+                      not in the calendar is the most consequential thing this card can report. */}
+                  {(m?.stuckBookings ?? 0) > 0 && (
+                    <StatusPill tone="danger">
+                      {m!.stuckBookings} booking{m!.stuckBookings === 1 ? "" : "s"} not imported
+                    </StatusPill>
+                  )}
                   {ch.status !== "paused" && <FullSyncButton channelId={ch.id} channelName={ch.name} />}
                   <form action={pullChannelBookings}>
                     <input type="hidden" name="channelId" value={ch.id} />
@@ -138,18 +145,30 @@ export default async function ChannelsPage() {
                     </button>
                   </form>
                   {/*
-                    Re-import — only offered when a booking is actually stuck, because it is the
-                    answer to a specific situation and not a second Pull. A booking that arrived
-                    before the mapping was finished was acknowledged to the channel, so the feed will
-                    never offer it again and the ordinary Pull cannot bring it back.
+                    Re-import — the answer to a specific situation, not a second Pull. A booking that
+                    arrived before the mapping was finished was acknowledged to the channel, so the
+                    revisions feed will never offer it again and the ordinary Pull cannot bring it
+                    back. This is the only way to recover one.
+
+                    ⚠️ It keys on STUCK BOOKINGS, not on `errorCount`. It used to key on the error
+                    count, which a hotel decrements simply by pressing Resolve — so tidying the Error
+                    Center made the one button that recovers the booking disappear, while the booking
+                    stayed lost. That happened to a real client on 2026-09-15.
+
+                    `errorCount` is still honoured: an error with no stuck booking is a different
+                    fault, and offering the recovery there costs nothing.
                   */}
-                  {ch.errorCount > 0 && (
+                  {(m?.stuckBookings ?? 0) + ch.errorCount > 0 && (
                     <form action={reimportChannelBookings}>
                       <input type="hidden" name="channelId" value={ch.id} />
                       <button
                         type="submit"
-                        aria-label="Re-import bookings"
-                        title="Re-fetch recent bookings from the channel — use after finishing a mapping, to bring in bookings that bounced"
+                        aria-label={m?.stuckBookings ? `Re-import ${m.stuckBookings} stuck booking${m.stuckBookings === 1 ? "" : "s"}` : "Re-import bookings"}
+                        title={
+                          m?.stuckBookings
+                            ? `${m.stuckBookings} booking${m.stuckBookings === 1 ? " is" : "s are"} not in your calendar. Finish the mapping first, then press this to bring ${m.stuckBookings === 1 ? "it" : "them"} in.`
+                            : "Re-fetch recent bookings from the channel — use after finishing a mapping, to bring in bookings that bounced"
+                        }
                         className="flex h-8 w-8 items-center justify-center rounded-md text-warning-600 transition-colors hover:bg-warning-50"
                       >
                         <RotateCcw className="h-4 w-4" />

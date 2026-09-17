@@ -86,8 +86,9 @@ export function importFailureEmail({
         // The reassurance is load-bearing: the hotel that hit this disconnected its channel because
         // it believed bookings were being dropped.
         p:
-          `Nothing has been lost. The booking is held, and re-syncing after the mapping is finished ` +
-          `brings it in with its dates and guest details. Until then it sits in your Error Center.`,
+          `Nothing has been lost. Once the mapping is finished, press "Re-import bookings" on the ` +
+          `Channels screen and it comes in with its dates and guest details. ` +
+          `(Re-sync only sends prices out — it will not bring a booking back.)`,
       },
       { note: "You are getting this because a booking arrived that we could not write down. It is not a routine notification." },
     ],

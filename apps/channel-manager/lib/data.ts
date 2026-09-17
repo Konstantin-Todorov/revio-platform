@@ -866,14 +866,28 @@ export async function getChannels() {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const mapStats = await Promise.all(
     channels.map(async (c) => {
-      const [rt, rp, syncs, syncsOk] = await Promise.all([
+      const [rt, rp, syncs, syncsOk, stuckBookings] = await Promise.all([
         prisma.channelRoomTypeMapping.count({ where: { channelId: c.id, status: "complete" } }),
         prisma.channelRatePlanMapping.count({ where: { channelId: c.id, status: "complete" } }),
         prisma.syncEvent.count({ where: { channelId: c.id, createdAt: { gte: since24h } } }),
         prisma.syncEvent.count({ where: { channelId: c.id, createdAt: { gte: since24h }, status: "success" } }),
+        /*
+         * ⚠️ Bookings this channel confirmed that never became a stay.
+         *
+         * The Re-import button — the ONLY way to recover one, because the revisions feed has already
+         * been acked and will never offer it again — was shown on `errorCount > 0`. Resolving the
+         * error decrements that column, so a hotel that tidied its Error Center made the one button
+         * that could get its booking back disappear. That happened to a real client on 2026-09-15
+         * and the booking is still missing.
+         *
+         * A stuck booking is a fact about reservations, not about whether anybody has dismissed a
+         * notice, so this is what the button keys on now.
+         */
+        prisma.reservation.count({ where: { channelId: c.id, status: "failed_import" } }),
       ]);
       return {
         channelId: c.id,
+        stuckBookings,
         complete: rt + rp,
         total,
         // Last-24h connectivity health: % of this channel's sync events that succeeded (null = no activity).

@@ -1113,8 +1113,11 @@ export async function pullChannel(
             `${missing.join("; ") || "room or rate unknown"}`,
           productLabel: `${channel.name} · ${raw.guestName}`,
           recommendedAction:
-            "Map that room type and rate plan on Channels → Mapping, then press Re-sync on this error to bring the booking in. " +
-            "Until then the stay is NOT in your calendar and the room is still on sale.",
+            // ⚠️ NOT "Re-sync" — that only pushes. The revisions feed has already been acked and
+            // will never offer this booking again; Re-import bookings on the Channels screen is the
+            // only thing that recovers it.
+            "Finish the mapping on Channels → Mapping, then press Re-import bookings on the Channels " +
+            "screen to bring it in. Until then the stay is NOT in your calendar and the room is still on sale.",
           resolved: false,
         },
       });

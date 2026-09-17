@@ -27,6 +27,7 @@ describe("importFailureEmail", () => {
     // being dropped. A mail that implies the same thing would cause the same thing.
     const mail = importFailureEmail(base);
     expect(mail.text).toMatch(/nothing has been lost/i);
+    expect(mail.text).toMatch(/Re-import bookings/);
     expect(mail.text).not.toMatch(/\blost\b(?!\.)|dropped|deleted|failed to receive/i);
   });
 
