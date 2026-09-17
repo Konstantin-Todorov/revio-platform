@@ -14,6 +14,7 @@ import {
   type RestrictionType, type ChannelAdapter, type ExternalProduct,
   resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan, pushedOf, importFailureEmail } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
+import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } from "./channex-channel-api.js";
 import { sendEmail, publicBaseUrl } from "@revio/email";
 import { decidePull, type Stay } from "./pull-merge.js";
 import { indexRateMappings, resolveExternalRateId } from "./rate-mapping.js";
@@ -1363,6 +1364,52 @@ export async function resumeChannel(prisma: Db, channelId: string): Promise<Chan
   return { ok: outcome.ok, ...(outcome.error ? { error: outcome.error } : {}) };
 }
 
+/**
+ * Switch the channel off at the channel's own end, so we stop being billed for it.
+ *
+ * ## ⚠️ `status` is what WE are doing; this is what THEY still have
+ *
+ * Until 2026-09-17 nothing ever closed the far end. `disconnectChannel` closed every date and marked
+ * our row `disconnected`, and the Channex channel stayed switched **on**. Channex bills per property
+ * with an active channel, so a disconnected hotel went on costing us money indefinitely, and a
+ * DELETED client went on costing us money with every record of its existence removed — the charge
+ * with nothing in the product to attribute it to.
+ *
+ * Reported rather than swallowed: a channel we failed to switch off is a channel that is still
+ * running and still billing, and the caller has to be able to say so.
+ */
+async function switchOffAtChannel(
+  prisma: Db,
+  channel: { id: string; tenantId: string; connectivityMode: string; externalChannelId: string | null },
+): Promise<{ off: true } | { off: false; error: string }> {
+  // Nothing to switch off: a demo channel has no far end, and neither has one we never created.
+  if (channel.connectivityMode === "mock" || !channel.externalChannelId) return { off: true };
+  try {
+    const cfg = await channexApiConfig(channel.tenantId, channel.connectivityMode);
+    await deactivateChannexChannel(cfg, channel.externalChannelId);
+    await prisma.channel.update({ where: { id: channel.id }, data: { externalChannelActive: false } });
+    return { off: true };
+  } catch (e) {
+    return { off: false, error: e instanceof Error ? e.message : "the channel refused to switch off" };
+  }
+}
+
+/** Put the far end back on. ⚠️ The billable moment — every caller has to say so to whoever pressed it. */
+async function switchOnAtChannel(
+  prisma: Db,
+  channel: { id: string; tenantId: string; connectivityMode: string; externalChannelId: string | null },
+): Promise<{ on: true } | { on: false; error: string }> {
+  if (channel.connectivityMode === "mock" || !channel.externalChannelId) return { on: true };
+  try {
+    const cfg = await channexApiConfig(channel.tenantId, channel.connectivityMode);
+    await activateChannexChannel(cfg, channel.externalChannelId);
+    await prisma.channel.update({ where: { id: channel.id }, data: { externalChannelActive: true } });
+    return { on: true };
+  } catch (e) {
+    return { on: false, error: e instanceof Error ? e.message : "the channel refused to switch on" };
+  }
+}
+
 /** Disconnect: stop syncing and close the channel out so it isn't left selling on stale rates.
  * Mappings are PRESERVED dormant (a later reconnect never forces a remap); reservations already
  * imported from this channel are never touched. */
@@ -1371,13 +1418,33 @@ export async function disconnectChannel(prisma: Db, channelId: string): Promise<
   if (!channel) return { ok: false, error: "Unknown channel." };
   if (channel.status === "disconnected") return { ok: false, error: "Already disconnected." };
   await pushStopSellOverlay(prisma, channelId);
+  const off = await switchOffAtChannel(prisma, channel);
+  /*
+   * ⚠️ Our row is marked disconnected EITHER WAY.
+   *
+   * The stop-sell has gone out and this hotel's distribution has to stop from our side whatever
+   * Channex says. Leaving the row `connected` because their API was unreachable would keep pushing
+   * to a channel somebody has decided to close. The failure is reported instead of swallowed,
+   * because a far end still switched on is still billing us and still holding the OTA connection.
+   */
   await prisma.channel.update({ where: { id: channelId }, data: { status: "disconnected" } });
   await prisma.syncEvent.create({
     data: {
-      tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push", status: "success",
-      summary: `Channel disconnected — ${channel.name} closed out; mapping kept dormant for a later reconnect`,
+      tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push",
+      status: off.off ? "success" : "warning",
+      summary: off.off
+        ? `Channel disconnected — ${channel.name} closed out and switched off at the channel; mapping kept dormant for a later reconnect`
+        : `Channel disconnected here — ${channel.name} closed out, but it could NOT be switched off at the channel and is still active there`,
     },
   });
+  if (!off.off) {
+    return {
+      ok: false,
+      error:
+        `${channel.name} is closed out and no longer syncs, but it is still switched ON at the channel — ` +
+        `we are still billed for it and the connection is still theirs to use. Switch it off in Channex. (${off.error})`,
+    };
+  }
   return { ok: true };
 }
 
@@ -1386,6 +1453,15 @@ export async function reconnectChannel(prisma: Db, channelId: string): Promise<C
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return { ok: false, error: "Unknown channel." };
   if (channel.status !== "disconnected") return { ok: false, error: "Channel is not disconnected." };
+  /*
+   * ⚠️ Switching the far end back on is the BILLABLE moment — Channex charges per property with an
+   * active channel. Done before our own status changes, because a row that says `connected` while
+   * the channel is off at their end is the same lie in the opposite direction.
+   */
+  const on = await switchOnAtChannel(prisma, channel);
+  if (!on.on) {
+    return { ok: false, error: `${channel.name} could not be switched back on at the channel, so nothing would reach an OTA. (${on.error})` };
+  }
   await prisma.channel.update({ where: { id: channelId }, data: { status: "connected" } });
   const outcome = await syncChannel(prisma, channelId, { horizonDays: 365 });
   await prisma.syncEvent.create({

@@ -19,8 +19,26 @@ import { isDisposableEmail } from "@revio/core";
 
 export type Severity = "act" | "soon" | "note";
 
+/**
+ * Whose problem this is.
+ *
+ * ⚠️ The feed mixed two unlike things and ranked them against each other. "3 bookings never reached
+ * the calendar" and "renews in 12 days" are both true, both worth knowing and **not the same kind of
+ * thing**: one means a guest is about to arrive at a desk with no reservation, the other means a
+ * conversation to have this month. Sorted into one list by severity they compete, and the one that
+ * loses is whichever happens to be a note today.
+ *
+ *   `theirs` — the hotel's software is not doing its job. Somebody's guest or somebody's morning is
+ *              affected right now, and it is our fault or ours to fix.
+ *   `ours`   — the commercial relationship. Money, renewal, usage, risk. Nothing is broken for them.
+ *
+ * The test is simple: if we fixed it tonight and never told them, would their day have been better?
+ */
+export type Concern = "theirs" | "ours";
+
 export interface AttentionFlag {
   severity: Severity;
+  concern: Concern;
   /** Short label — reads as the problem, not the metric. */
   title: string;
   /** One sentence a human can act on. */
@@ -129,6 +147,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (s.ownerEmail && isDisposableEmail(s.ownerEmail)) {
     flags.push({
       severity: "note",
+      concern: "ours",
       title: "Signed up with a temporary email",
       detail:
         "The owner's address is on a disposable-mail domain. Often nothing — people use them to look around — but worth a real address before they go live, or invoices and password resets will reach nobody.",
@@ -157,6 +176,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
     if (others.length > 0) {
       flags.push({
         severity: others.length >= 3 ? "soon" : "note",
+        concern: "ours",
         title: others.length === 1 ? "Shares a sign-in address with 1 other client" : `Shares a sign-in address with ${others.length} other clients`,
         detail:
           `Staff here have signed in from the same address as ${others.slice(0, 3).join(", ")}` +
@@ -184,6 +204,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
     const days = daysSince(failed.oldestAt, now);
     flags.push({
       severity: "act",
+      concern: "theirs",
       title: failed.count === 1 ? "A booking never reached the calendar" : `${failed.count} bookings never reached the calendar`,
       detail:
         `The channel confirmed ${failed.count === 1 ? "it" : "them"} to the guest and we could not import ` +
@@ -212,6 +233,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
     const days = daysSince(wired.checkedAt, now);
     flags.push({
       severity: "act",
+      concern: "theirs",
       title: wired.count === 1 ? "A rate plan is publishing to the wrong room" : `${wired.count} rate plans are publishing to the wrong room`,
       detail:
         `The channel says ${wired.count === 1 ? "this plan belongs" : "these plans belong"} to a ` +
@@ -225,6 +247,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (s.status === "suspended") {
     flags.push({
       severity: "act",
+      concern: "ours",
       title: "Suspended",
       detail: "Every product is locked for this client. Their staff cannot sign in.",
     });
@@ -258,6 +281,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
     const daysLeft = Math.max(0, Math.ceil((k.endsAt.getTime() - now.getTime()) / DAY));
     flags.push({
       severity: "act",
+      concern: "ours",
       title: `They want to keep ${k.product}`,
       detail: `Asked ${daysSince(k.askedAt, now) === 0 ? "today" : `${daysSince(k.askedAt, now)} days ago`}. The trial still ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — price it with them and mark it kept.`,
     });
@@ -269,6 +293,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
     const totalMinor = s.unpaidInvoices.reduce((sum, i) => sum + i.amountMinor, 0);
     flags.push({
       severity: s.unpaidInvoices.length > 1 ? "act" : "soon",
+      concern: "ours",
       title: `${s.unpaidInvoices.length} unpaid invoice${s.unpaidInvoices.length === 1 ? "" : "s"}`,
       detail: `€${(totalMinor / 100).toFixed(2)} outstanding, oldest ${oldest.period} (${oldest.status}).`,
     });
@@ -280,12 +305,14 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (s.properties === 0) {
     flags.push({
       severity: age > GRACE_DAYS ? "act" : "soon",
+      concern: "theirs",
       title: "No property yet",
       detail: `Onboarded ${age} day${age === 1 ? "" : "s"} ago and has not created a property — nothing can be sold.`,
     });
   } else if (s.roomTypes === 0) {
     flags.push({
       severity: age > GRACE_DAYS ? "act" : "soon",
+      concern: "theirs",
       title: "No room types",
       detail: "A property exists but has no rooms, so there is no inventory to sell.",
     });
@@ -296,6 +323,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (s.entitlements.pms && s.units === 0 && age > GRACE_DAYS) {
     flags.push({
       severity: "soon",
+      concern: "ours",
       title: "RevioPMS unused",
       detail: "Billed for RevioPMS but no physical rooms exist — housekeeping and front desk cannot run.",
     });
@@ -303,6 +331,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (s.entitlements.channelManager && s.channelsConnected === 0 && age > GRACE_DAYS) {
     flags.push({
       severity: "soon",
+      concern: "theirs",
       title: "No channel connected",
       detail:
         s.channels === 0
@@ -315,6 +344,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (s.openErrors > 0) {
     flags.push({
       severity: s.openErrors >= 5 ? "act" : "soon",
+      concern: "theirs",
       title: `${s.openErrors} open sync error${s.openErrors === 1 ? "" : "s"}`,
       detail: "Rates or availability may not have reached the channels. Risk of overselling.",
     });
@@ -324,6 +354,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
     if (hours >= STALE_SYNC_HOURS) {
       flags.push({
         severity: "act",
+        concern: "theirs",
         title: `No sync for ${Math.floor(hours / 24)} day${hours >= 48 ? "s" : ""}`,
         detail: "Connected channels but nothing pushed recently — the OTAs are showing stale ARI.",
       });
@@ -334,6 +365,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (s.lastReservationAt && daysSince(s.lastReservationAt, now) >= QUIET_DAYS) {
     flags.push({
       severity: "soon",
+      concern: "ours",
       title: `Quiet for ${daysSince(s.lastReservationAt, now)} days`,
       detail: "No reservation from any source. Either their season ended or they have stopped using it.",
     });
@@ -345,6 +377,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (s.bookingEngineProperties > 0 && s.directReservationsLast30d === 0 && age > GRACE_DAYS) {
     flags.push({
       severity: "note",
+      concern: "ours",
       title: "Booking engine live but unused",
       detail: "RevioDirect is switched on and has taken no bookings in 30 days — is the link on their site?",
     });
@@ -352,6 +385,7 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
   if (!s.entitlements.reservation && !s.entitlements.pms && s.reservationsLast30d > 0 && age > GRACE_DAYS) {
     flags.push({
       severity: "note",
+      concern: "ours",
       title: "Expansion candidate",
       detail: `Active on RevioLink only, ${s.reservationsLast30d} booking(s) in 30 days — a candidate for RevioCRS.`,
     });
@@ -371,4 +405,33 @@ export function sortBySeverity(flags: AttentionFlag[]): AttentionFlag[] {
 export function worstSeverity(flags: AttentionFlag[]): Severity | null {
   if (flags.length === 0) return null;
   return sortBySeverity(flags)[0]!.severity;
+}
+
+/**
+ * The feed in its two halves, each already sorted.
+ *
+ * ⚠️ Deliberately NOT one list with a label on each row. A label has to be read; a section is read
+ * before anything in it. Somebody opening this console at 09:00 is answering one of two questions —
+ * *is anyone's hotel broken* or *who do I need to talk to* — and a single ranked list makes them
+ * filter it in their head every time. It also lets a renewal note outrank a booking that never
+ * reached a calendar simply because today happens to be quiet.
+ *
+ * Empty halves are returned as empty arrays rather than omitted: "nothing wrong with their software"
+ * is a thing worth seeing, and a section that vanishes cannot say it.
+ */
+export function splitByConcern(flags: AttentionFlag[]): { theirs: AttentionFlag[]; ours: AttentionFlag[] } {
+  return {
+    theirs: sortBySeverity(flags.filter((f) => f.concern === "theirs")),
+    ours: sortBySeverity(flags.filter((f) => f.concern === "ours")),
+  };
+}
+
+/**
+ * The worst thing that is wrong with their SOFTWARE, ignoring everything commercial.
+ *
+ * For a list row that has to show one colour: an unpaid invoice and a broken channel should not
+ * produce the same red dot, because only one of them means somebody should stop what they are doing.
+ */
+export function worstForThem(flags: AttentionFlag[]): Severity | null {
+  return worstSeverity(flags.filter((f) => f.concern === "theirs"));
 }

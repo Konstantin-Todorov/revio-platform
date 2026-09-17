@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { clientAttention, sortBySeverity, worstSeverity, type ClientSignals } from "./attention.js";
+import {
+  clientAttention, sortBySeverity, splitByConcern, worstForThem, worstSeverity,
+  type AttentionFlag, type ClientSignals,
+} from "./attention.js";
 
 const NOW = new Date("2026-08-05T12:00:00Z");
 const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86_400_000);
@@ -345,5 +348,40 @@ describe("a rate plan publishing to the wrong room", () => {
       NOW,
     );
     expect(flags.some((f) => f.title.includes("wrong room"))).toBe(true);
+  });
+});
+
+describe("the two halves of the feed", () => {
+  /*
+   * ⚠️ "3 bookings never reached the calendar" and "renews in 12 days" are both true and are not the
+   * same kind of thing. Ranked against each other by severity they compete, and on a quiet day the
+   * commercial note wins — which is exactly backwards.
+   */
+  const flags: AttentionFlag[] = [
+    { severity: "note", concern: "ours", title: "Renews in 12 days", detail: "" },
+    { severity: "act", concern: "theirs", title: "A booking never reached the calendar", detail: "" },
+    { severity: "soon", concern: "ours", title: "No contact in 90 days", detail: "" },
+    { severity: "soon", concern: "theirs", title: "5 open sync errors", detail: "" },
+  ];
+
+  it("separates them, and sorts inside each half", () => {
+    const { theirs, ours } = splitByConcern(flags);
+    expect(theirs.map((f) => f.title)).toEqual(["A booking never reached the calendar", "5 open sync errors"]);
+    expect(ours.map((f) => f.title)).toEqual(["No contact in 90 days", "Renews in 12 days"]);
+  });
+
+  it("returns an empty half rather than dropping it — 'nothing is broken' is worth seeing", () => {
+    const { theirs, ours } = splitByConcern([{ severity: "note", concern: "ours", title: "x", detail: "" }]);
+    expect(theirs).toEqual([]);
+    expect(ours).toHaveLength(1);
+  });
+
+  /*
+   * A list row shows one colour. An unpaid invoice and a broken channel must not produce the same
+   * red dot: only one of them means somebody should stop what they are doing.
+   */
+  it("reads the row's colour from their software alone", () => {
+    expect(worstForThem(flags)).toBe("act");
+    expect(worstForThem([{ severity: "act", concern: "ours", title: "Suspended", detail: "" }])).toBeNull();
   });
 });

@@ -185,12 +185,19 @@ export function accountAttention(a: AccountSignals, now: Date = new Date()): Att
   const flags: AttentionFlag[] = [];
   const age = daysSince(a.createdAt, now);
 
+  /*
+   * ⚠️ Every flag in this function is `ours`. The whole module is the commercial relationship —
+   * contract dates, what stage somebody believes the account is at, whether we have phoned them.
+   * None of it means the hotel's software is failing, which is the other half of the feed and the
+   * half a person should be able to read on its own.
+   */
   // --- the contract ------------------------------------------------------
   if (a.stage !== "churned") {
     const r = renewalStatus(a.renewalDate, now);
     if (r) {
       flags.push({
         severity: r.severity,
+        concern: "ours",
         title: r.label,
         detail:
           r.days < 0
@@ -206,6 +213,7 @@ export function accountAttention(a: AccountSignals, now: Date = new Date()): Att
   if (a.stage === "live" && (a.observed === "at_risk" || a.observed === "churned")) {
     flags.push({
       severity: a.observed === "churned" ? "act" : "soon",
+      concern: "ours",
       title: `Marked live, behaving ${a.observed === "churned" ? "churned" : "at risk"}`,
       detail: "Their usage stopped and the account record has not caught up. Find out which is true.",
     });
@@ -213,6 +221,7 @@ export function accountAttention(a: AccountSignals, now: Date = new Date()): Att
     // Revenue leaking in the most embarrassing way: a live hotel nobody is invoicing.
     flags.push({
       severity: "act",
+      concern: "ours",
       title: "Marked prospect but live",
       detail: "They are taking bookings on the platform and are billed nothing. Either close them or stop the service.",
     });
@@ -222,6 +231,7 @@ export function accountAttention(a: AccountSignals, now: Date = new Date()): Att
   ) {
     flags.push({
       severity: "note",
+      concern: "ours",
       title: `Marked ${a.stage === "churned" ? "churned" : "at risk"}, behaving live`,
       detail: "Usage recovered. Good news to open a call with, and the stage is out of date.",
     });
@@ -231,6 +241,7 @@ export function accountAttention(a: AccountSignals, now: Date = new Date()): Att
   if (!a.hasPrimaryContact && age > GRACE_DAYS) {
     flags.push({
       severity: "soon",
+      concern: "ours",
       title: "No one to call",
       detail: "No primary contact recorded. An account you cannot phone is an account you cannot save.",
     });
@@ -239,12 +250,14 @@ export function accountAttention(a: AccountSignals, now: Date = new Date()): Att
     if (since === null && age > STALE_CONTACT_DAYS) {
       flags.push({
         severity: "soon",
+        concern: "ours",
         title: "Never contacted",
         detail: `Paying for ${Math.floor(age / 30)} month(s) with no call, email or meeting ever logged.`,
       });
     } else if (since !== null && since >= STALE_CONTACT_DAYS) {
       flags.push({
         severity: "soon",
+        concern: "ours",
         title: `No contact in ${since} days`,
         detail: "A paying customer nobody has spoken to since then. Renewals are lost in these gaps.",
       });

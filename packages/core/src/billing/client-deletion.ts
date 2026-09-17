@@ -35,6 +35,13 @@ export interface ClientDeletionFacts {
   isPendingSignup: boolean;
   /** Currently switched off rather than trading. */
   isSuspended: boolean;
+  /**
+   * Channels still switched ON at the channel manager's own end.
+   *
+   * ⚠️ Not the same question as our `Channel.status`. Ours says what we are doing; this says what
+   * THEY still have — and Channex bills per property with an active channel.
+   */
+  liveRemoteChannels: number;
 }
 
 export type ClientDeletionVerdict =
@@ -42,6 +49,30 @@ export type ClientDeletionVerdict =
   | { ok: false; reason: string; instead: string };
 
 export function canDeleteClient(f: ClientDeletionFacts): ClientDeletionVerdict {
+  /*
+   * ⚠️ FIRST, and a refusal rather than a warning.
+   *
+   * Deleting a client removed every record that its property existed — while the channel stayed
+   * switched on at Channex, still connected to the OTA and still billed to us, every month, with
+   * nothing left in the product to attribute the charge to or even to name the hotel. That is not a
+   * risk to be accepted with a warning; it is a bill arriving forever for something nobody can find.
+   *
+   * It is also trivially avoidable: disconnecting the channel switches the far end off, and then
+   * this rule stops applying. So the refusal names the one step, and it comes before every other
+   * check because it is the only one that leaves something running after the row is gone.
+   */
+  if (f.liveRemoteChannels > 0) {
+    const n = f.liveRemoteChannels;
+    return {
+      ok: false,
+      reason:
+        `${n} of this client's channel${n === 1 ? " is" : "s are"} still switched on at the channel manager. ` +
+        `Deleting the client here would not switch ${n === 1 ? "it" : "them"} off: the connection would stay live with the OTA, ` +
+        "we would go on being billed for the property, and there would be nothing left in here to say whose it was.",
+      instead: `Disconnect ${n === 1 ? "that channel" : "those channels"} on this page first — that closes the rooms and switches the far end off — then delete.`,
+    };
+  }
+
   if (f.issuedInvoices > 0) {
     return {
       ok: false,

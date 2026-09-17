@@ -169,3 +169,26 @@ export async function createChannexChannel(
 export async function activateChannexChannel(cfg: ChannexApiConfig, channelId: string): Promise<void> {
   await call(cfg, "POST", `/channels/${encodeURIComponent(channelId)}/activate`);
 }
+
+/**
+ * Switch the channel off at Channex. The moment we stop being billed for that property.
+ *
+ * ## ⚠️ Nothing in this codebase called this until 2026-09-17, and the hole was expensive
+ *
+ * `activate` had existed since the connect flow was written and there was no counterpart. So:
+ * disconnecting a channel closed the rooms and left the Channex channel ON; suspending an account
+ * stopped our syncing and left it ON; and **deleting a client removed every record that the
+ * property existed while it stayed ON and billable forever**. Channex bills per property with an
+ * active channel, so each of those was a standing charge for a hotel we no longer had, which
+ * nothing in the product could have told us about.
+ *
+ * Deactivation is reversible — `activateChannexChannel` puts it back, and that is the billable
+ * moment again, which is why reconnecting has to say so.
+ *
+ * ⚠️ It is NOT `DELETE /channels/{id}`. That route exists and is not what we want: a deleted channel
+ * cannot be reactivated, so a hotel that comes back has to be set up from nothing, and
+ * `provisionChannexProperty` is one-shot.
+ */
+export async function deactivateChannexChannel(cfg: ChannexApiConfig, channelId: string): Promise<void> {
+  await call(cfg, "POST", `/channels/${encodeURIComponent(channelId)}/deactivate`);
+}

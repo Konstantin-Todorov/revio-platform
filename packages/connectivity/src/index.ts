@@ -73,7 +73,7 @@ export {
 } from "./channex-channels.js";
 export {
   channexApiConfig,
-  fetchChannelAdapter, testChannelConnection, createChannexChannel, activateChannexChannel,
+  fetchChannelAdapter, testChannelConnection, createChannexChannel, activateChannexChannel, deactivateChannexChannel,
   type ChannexApiConfig, type ConnectionTest,
 } from "./channex-channel-api.js";
 export {

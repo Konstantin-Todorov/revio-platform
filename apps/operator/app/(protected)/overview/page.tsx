@@ -7,6 +7,29 @@ import { StatCard } from "@revio/ui/stat-card";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * The feed's two halves, in the order they are read.
+ *
+ * Their hotels first, always — even on a day when every commercial flag is red and nothing of theirs
+ * is. A broken channel is somebody's morning; an unpaid invoice is a phone call we can make tomorrow.
+ * An empty half still renders, because "nothing is broken for anyone" is the sentence somebody most
+ * wants to see and a section that vanishes cannot say it.
+ */
+const FEED_SECTIONS = [
+  {
+    concern: "theirs" as const,
+    title: "Their hotels",
+    hint: "the software is not doing its job",
+    empty: "Nothing is broken for any client right now.",
+  },
+  {
+    concern: "ours" as const,
+    title: "Our accounts",
+    hint: "money, renewal, usage",
+    empty: "Nothing outstanding on our side.",
+  },
+];
+
 const PLAN_TONE = { starter: "neutral", growth: "info", scale: "success", enterprise: "success" } as const;
 
 const money = (minor: number) =>
@@ -167,27 +190,57 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
               Nothing outstanding across the portfolio — no stalled onboarding, no unpaid invoices, no sync failures.
             </p>
           ) : (
-            <ul className="divide-y divide-surface-border">
-              {d.feed.slice(0, 12).map((f, i) => (
-                <li key={`${f.clientId}-${f.title}-${i}`} className="flex items-start gap-3 px-4 py-2.5">
-                  <span
-                    aria-hidden
-                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                      f.severity === "act" ? "bg-danger-600" : f.severity === "soon" ? "bg-warning-500" : "bg-ink-300"
-                    }`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-baseline gap-x-2">
-                      <Link href={`/clients/${f.clientId}`} className="text-[13px] font-semibold text-ink-900 hover:text-brand-700 hover:underline">
-                        {f.clientName}
-                      </Link>
-                      <span className={`text-[13px] ${f.severity === "act" ? "font-semibold text-danger-600" : "text-ink-700"}`}>{f.title}</span>
-                    </span>
-                    <span className="mt-0.5 block text-[12px] text-ink-500">{f.detail}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
+            /*
+              ⚠️ TWO SECTIONS, and their hotels first regardless of which half is redder.
+              
+              One ranked list put "3 bookings never reached the calendar" and "renews in 12 days"
+              in competition, and on a quiet day the renewal note won. They are not the same kind of
+              thing: one is somebody's guest arriving at a desk with no reservation, the other is a
+              call that can happen tomorrow. A label on each row would not fix it — a label has to be
+              read, a heading is read before anything under it.
+              
+              Each half is capped separately, so a bad morning on one side cannot push the other off
+              the screen entirely.
+            */
+            <div>
+              {FEED_SECTIONS.map(({ concern, title, hint, empty }) => {
+                const rows = d.feed.filter((f) => f.concern === concern);
+                return (
+                  <div key={concern}>
+                    <div className="flex flex-wrap items-baseline gap-x-2 border-b border-surface-border bg-surface-muted/60 px-4 py-2">
+                      <h4 className="text-[11px] font-bold uppercase tracking-wide text-ink-600">{title}</h4>
+                      <span className="text-[11px] text-ink-400">{hint}</span>
+                      {rows.length > 0 && <span className="tnum ml-auto text-[11px] font-semibold text-ink-500">{rows.length}</span>}
+                    </div>
+                    {rows.length === 0 ? (
+                      <p className="px-4 py-3 text-[12.5px] text-ink-400">{empty}</p>
+                    ) : (
+                      <ul className="divide-y divide-surface-border/60">
+                        {rows.slice(0, 8).map((f, i) => (
+                          <li key={`${f.clientId}-${f.title}-${i}`} className="flex items-start gap-3 px-4 py-2.5">
+                            <span
+                              aria-hidden
+                              className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                f.severity === "act" ? "bg-danger-600" : f.severity === "soon" ? "bg-warning-500" : "bg-ink-300"
+                              }`}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex flex-wrap items-baseline gap-x-2">
+                                <Link href={`/clients/${f.clientId}`} className="text-[13px] font-semibold text-ink-900 hover:text-brand-700 hover:underline">
+                                  {f.clientName}
+                                </Link>
+                                <span className={`text-[13px] ${f.severity === "act" ? "font-semibold text-danger-600" : "text-ink-700"}`}>{f.title}</span>
+                              </span>
+                              <span className="mt-0.5 block text-[12px] text-ink-500">{f.detail}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </Card>
 

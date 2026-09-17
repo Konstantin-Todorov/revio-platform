@@ -5,6 +5,8 @@ import { alignSeries, billedSeries, bookingSeries, hasHistory, monthKeys, mrrMov
 import { TrendChart } from "@/components/overview/TrendChart";
 import { SetupProgressCard } from "@/components/clients/SetupProgressCard";
 import { ChannelsPanel } from "@/components/clients/ChannelsPanel";
+import { AttentionSections } from "@/components/clients/AttentionSections";
+import { splitByConcern } from "@/lib/attention";
 import { setDemo } from "@/lib/actions";
 import { endTrial, startTrial } from "@/lib/actions-trials";
 import {
@@ -155,26 +157,12 @@ export default async function ClientDetailPage({
         </div>
       )}
 
-      {/* 1. What is wrong. Nothing else on this page matters while something here is red. */}
+      {/* 1. What is wrong. Nothing else on this page matters while something here is red.
+          ⚠️ In two halves — see AttentionSections for why a label on each row is not the same thing. */}
       {c.attention.length > 0 && (
         <Card>
           <CardHeader title={`Needs attention (${c.attention.length})`} />
-          <ul className="divide-y divide-surface-border">
-            {c.attention.map((f) => (
-              <li key={f.title} className="flex items-start gap-3 px-4 py-3">
-                <span
-                  aria-hidden
-                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                    f.severity === "act" ? "bg-danger-600" : f.severity === "soon" ? "bg-warning-500" : "bg-ink-300"
-                  }`}
-                />
-                <span>
-                  <span className={`text-[13px] font-semibold ${f.severity === "act" ? "text-danger-600" : "text-ink-900"}`}>{f.title}</span>
-                  <span className="mt-0.5 block text-[12.5px] text-ink-500">{f.detail}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
+          <AttentionSections {...splitByConcern(c.attention)} />
         </Card>
       )}
 

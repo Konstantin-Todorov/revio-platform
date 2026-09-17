@@ -38,12 +38,20 @@ export async function clientDeletionFacts(tenantId: string) {
   });
   if (!tenant) return null;
 
-  const [issuedInvoices, reservations, properties, users] = await Promise.all([
+  const [issuedInvoices, reservations, properties, users, liveRemoteChannels] = await Promise.all([
     // Sent or paid only. A draft is a number nobody has seen.
     prisma.invoice.count({ where: { tenantId, status: { in: ["sent", "paid"] } } }),
     prisma.reservation.count({ where: { tenantId } }),
     prisma.property.count({ where: { tenantId } }),
     prisma.user.count({ where: { tenantId } }),
+    /*
+     * ⚠️ Channels still switched ON at Channex — what we are BILLED for, which is a different
+     * question from our own `status`. `externalChannelActive` is null for anything we never created
+     * there, and only an explicit `false` means somebody has switched it off.
+     */
+    prisma.channel.count({
+      where: { tenantId, externalChannelId: { not: null }, NOT: { externalChannelActive: false } },
+    }),
   ]);
 
   return {
@@ -54,6 +62,7 @@ export async function clientDeletionFacts(tenantId: string) {
       isDemo: tenant.isDemo,
       isPendingSignup: tenant.status === "pending_signup",
       isSuspended: tenant.status === "suspended",
+      liveRemoteChannels,
     },
     counts: { reservations, properties, users, issuedInvoices },
   };

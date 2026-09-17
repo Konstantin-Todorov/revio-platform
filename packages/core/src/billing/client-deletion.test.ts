@@ -3,6 +3,7 @@ import { canDeleteClient, type ClientDeletionFacts } from "./client-deletion.js"
 
 const base: ClientDeletionFacts = {
   issuedInvoices: 0, reservations: 0, isDemo: false, isPendingSignup: false, isSuspended: false,
+  liveRemoteChannels: 0,
 };
 
 describe("canDeleteClient", () => {
@@ -65,5 +66,32 @@ describe("canDeleteClient", () => {
     expect(one.ok && one.warning).toMatch(/1 reservation\b/);
     const two = canDeleteClient({ ...base, issuedInvoices: 1 });
     expect(!two.ok && two.reason).toMatch(/1 invoice that has been/);
+  });
+});
+
+describe("a channel still switched on at the channel manager", () => {
+  /*
+   * ⚠️ The refusal that matters most, because it is the only one where something keeps RUNNING
+   * after the row is gone. Deleting the client removed every record its property existed, while the
+   * channel stayed live with the OTA and billed to us every month, with nothing left to attribute
+   * the charge to or even name the hotel.
+   */
+  it("refuses outright, and names the one step that clears it", () => {
+    const v = canDeleteClient({ ...base, liveRemoteChannels: 1 });
+    expect(v.ok).toBe(false);
+    if (v.ok) return;
+    expect(v.reason).toMatch(/still switched on/i);
+    expect(v.reason).toMatch(/billed/i);
+    expect(v.instead).toMatch(/disconnect/i);
+  });
+
+  it("outranks every other check — including the ones that would have allowed it", () => {
+    // A pending signup is normally "harmless" tidying. Not while something of ours is still live.
+    const v = canDeleteClient({ ...base, isPendingSignup: true, liveRemoteChannels: 2 });
+    expect(v.ok).toBe(false);
+  });
+
+  it("stops applying the moment the far end is switched off", () => {
+    expect(canDeleteClient({ ...base, isSuspended: true, liveRemoteChannels: 0 }).ok).toBe(true);
   });
 });
