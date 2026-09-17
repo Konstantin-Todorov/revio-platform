@@ -68,6 +68,39 @@ bare table header on a fresh install reads as a screen that failed to load.
 
 An empty state says what to do next, in words, with the control nearby.
 
+## 4b · When something goes wrong, the screen tells the customer what it means for THEM
+
+Rule 4 asks for an error state to exist. This is what it has to say, and it was written after an
+incident rather than before one.
+
+On **2026-09-15** a hotel connected its property and made a test booking to watch it arrive. The
+booking was sold under a rate plan with no channel id, so RevioLink refused to guess which room it
+meant — correctly; guessing is how two guests arrive for one room — and parked it. The platform then
+told her, in order: nothing by email, a reservation page with a dash in every field, and a timeline
+reading *"No events recorded for this reservation yet"* while the Error Center held the cause to the
+second. She waited fifteen minutes, concluded bookings were being lost, and **disconnected her
+channel**.
+
+Nothing was broken. Every refusal was right. She left because of what the screens said.
+
+**Four rules, in this order:**
+
+1. **Lead with the consequence, not the cause.** "Your channel mapping is incomplete" describes our
+   problem. "This booking is not in your calendar and the room is still on sale" describes theirs,
+   and it is the sentence that makes somebody act today instead of tomorrow.
+2. **Name the exact control, and check it is the right one.** Both the error and the email first said
+   "Re-sync" — which only *pushes* and cannot bring a booking back. Telling a customer to press a
+   button that cannot work costs more than saying nothing.
+3. **Never let a screen imply data was lost when it was not.** A hotel that believes we drop bookings
+   disconnects its channel. Say where the thing is being held and what brings it back.
+4. **A status with a known cause must never render as silence.** Dashes in every field and "no events
+   recorded" is a screen asserting we do not know, when we do.
+
+⚠️ And the corollary that caused the lasting damage here: **a recovery control must not be gated on
+something the customer can dismiss.** Re-import was shown only while an error was unresolved, so
+pressing *Resolve* — which imports nothing — hid the one button that recovers the booking. Gate
+recovery on the FACT (a booking with no stay), never on whether anybody has tidied a notice.
+
 ## 5 · Write for the person, not the schema
 
 - Their vocabulary, never ours. A person manages **notifications**, not `webhook config`; they see
