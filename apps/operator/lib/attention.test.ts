@@ -311,3 +311,39 @@ describe("a booking that never reached the calendar", () => {
     expect(flags.some((f) => f.title.includes("calendar"))).toBe(true);
   });
 });
+
+describe("a rate plan publishing to the wrong room", () => {
+  const wired = (crossWiredMappings?: { count: number; checkedAt: Date }) =>
+    clientAttention(healthy(crossWiredMappings ? { crossWiredMappings } : {}), NOW);
+
+  it("is silent when there is none", () => {
+    expect(wired().some((f) => f.title.includes("wrong room"))).toBe(false);
+  });
+
+  it("is act, and says the mapping looks finished — because that is why nobody has noticed", () => {
+    const [f] = wired({ count: 1, checkedAt: NOW }).filter((x) => x.title.includes("wrong room"));
+    expect(f?.severity).toBe("act");
+    expect(f?.detail).toMatch(/everything looks finished/i);
+    expect(f?.detail).toMatch(/confirmed with the channel today/i);
+  });
+
+  it("says how old the confirmation is, because this is the one second-hand signal here", () => {
+    const [f] = wired({ count: 2, checkedAt: new Date(NOW.getTime() - 3 * 86_400_000) }).filter((x) =>
+      x.title.includes("wrong room"),
+    );
+    expect(f?.title).toBe("2 rate plans are publishing to the wrong room");
+    expect(f?.detail).toMatch(/last confirmed with the channel 3 days ago/i);
+  });
+
+  /*
+   * Suspension locks staff out of our products. It does not take prices down from Booking.com — the
+   * scheduled pull selects channels by `status: "connected"` and asks nothing about tenant status.
+   */
+  it("survives a suspension", () => {
+    const flags = clientAttention(
+      healthy({ status: "suspended", crossWiredMappings: { count: 1, checkedAt: NOW } }),
+      NOW,
+    );
+    expect(flags.some((f) => f.title.includes("wrong room"))).toBe(true);
+  });
+});

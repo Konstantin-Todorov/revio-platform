@@ -61,6 +61,9 @@ const JOBS = [
   { name: "pickup-snapshot", url: CRS && `${CRS}/api/jobs/pickup` },
   { name: "channex-pull", url: CM && `${CM}/api/jobs/pull` },
   { name: "arrivals-digest", url: CM && `${CM}/api/jobs/arrivals` },
+  // Nightly is plenty: a mapping only changes when a person changes it. What it catches does
+  // not announce itself — a row pointing at another room pushes successfully forever.
+  { name: "mapping-audit", url: CM && `${CM}/api/jobs/mapping-audit` },
   { name: "auto-assign", url: PMS && `${PMS}/api/jobs/assign` },
   { name: "auto-close-day", url: PMS && `${PMS}/api/jobs/closeday` },
   /*

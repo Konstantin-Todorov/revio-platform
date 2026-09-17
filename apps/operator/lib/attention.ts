@@ -82,6 +82,19 @@ export interface ClientSignals {
    * screen is not a signal.
    */
   failedImports?: { count: number; oldestAt: Date };
+  /**
+   * Rate-plan mappings the channel says belong to a different room than we have them under, and
+   * when we last confirmed that with the channel.
+   *
+   * ⚠️ Read from the MAPPING ROWS and the answer the nightly audit recorded on them — not from the
+   * Error Center, for the same reason `failedImports` is not. The hotel can mark a cross-wire
+   * resolved, which changes nothing about where its prices are going.
+   *
+   * `checkedAt` is carried because this is the one signal here that is second-hand. Everything else
+   * in `ClientSignals` is a fact about our own database; this is a fact about the channel's, as of a
+   * moment. A fault last confirmed a week ago is worth saying so.
+   */
+  crossWiredMappings?: { count: number; checkedAt: Date };
 }
 
 const DAY = 86_400_000;
@@ -176,7 +189,36 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
         `The channel confirmed ${failed.count === 1 ? "it" : "them"} to the guest and we could not import ` +
         `${failed.count === 1 ? "it" : "them"} — the room type or rate plan was not mapped. ` +
         `${days === 0 ? "Today" : `Oldest is ${days} day${days === 1 ? "" : "s"} old`}. ` +
-        "Nobody is holding the room, and the guest thinks they have one. Finish the mapping and re-sync.",
+        "Nobody is holding the room, and the guest thinks they have one. Finish the mapping, then " +
+        "press Re-import bookings on their Channels screen — Re-sync only sends prices out and " +
+        "cannot bring a booking back.",
+    });
+  }
+
+  /*
+   * ⚠️ One room's prices and availability are published against another room, right now.
+   *
+   * There is nothing to see anywhere else: the mapping row reads `mapped`, every push reports
+   * success, and the channel accepts each update — because all of that IS succeeding. Only the
+   * destination is wrong, and only the channel's own catalogue can say so.
+   *
+   * `act`, and above the suspension return on purpose. Suspending an account locks its staff out of
+   * our products; it does not take prices down from an OTA. The scheduled pull selects channels by
+   * `status: "connected"` and nothing else, so a suspended client's channels go on syncing — and a
+   * suspended client is one we are *more* likely to be in a difficult conversation with, not less.
+   */
+  const wired = s.crossWiredMappings;
+  if (wired && wired.count > 0) {
+    const days = daysSince(wired.checkedAt, now);
+    flags.push({
+      severity: "act",
+      title: wired.count === 1 ? "A rate plan is publishing to the wrong room" : `${wired.count} rate plans are publishing to the wrong room`,
+      detail:
+        `The channel says ${wired.count === 1 ? "this plan belongs" : "these plans belong"} to a ` +
+        `different room type than we have ${wired.count === 1 ? "it" : "them"} mapped under, so those ` +
+        `prices and that availability are going onto the wrong room. Everything looks finished — the ` +
+        `mapping is green and every push succeeds. ` +
+        `${days === 0 ? "Confirmed with the channel today." : `Last confirmed with the channel ${days} day${days === 1 ? "" : "s"} ago.`}`,
     });
   }
 
@@ -190,11 +232,12 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
      * Nothing else matters while they are locked out, and listing "no bookings in 30 days" under a
      * suspension is telling someone their car won't start while it is up on the ramp.
      *
-     * ⚠️ `return flags` keeps what was pushed ABOVE this block, and three checks sit there on
-     * purpose: the temporary email, the shared sign-in address, and — the one that matters — a
-     * booking that never reached the calendar. Suspending an account does not un-confirm a booking
-     * the OTA already promised a guest, and somebody is still going to arrive. Moving any of those
-     * below this line would silence them, which is a decision, not a tidy-up.
+     * ⚠️ `return flags` keeps what was pushed ABOVE this block, and four checks sit there on
+     * purpose: the temporary email, the shared sign-in address, a booking that never reached the
+     * calendar, and a rate plan publishing to the wrong room. Suspending an account does not
+     * un-confirm a booking the OTA already promised a guest, and it does not take wrong prices down
+     * from Booking.com. Moving any of those below this line would silence them, which is a
+     * decision, not a tidy-up.
      */
     return flags;
   }

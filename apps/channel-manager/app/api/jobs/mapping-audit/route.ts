@@ -1,0 +1,74 @@
+/**
+ * Nightly: ask every real channel what its rate plans belong to, and raise the ones we have wrong.
+ *
+ * ## Why this is scheduled rather than a button
+ *
+ * A cross-wired mapping produces no symptom anybody would go looking for. The row says `mapped`,
+ * the push says `success`, the channel accepts every update, and the only consequence is that one
+ * room's prices publish against another — which the hotel discovers from a guest, or from a bill.
+ * Nothing is going to prompt somebody to press a button about a screen that looks finished.
+ *
+ * It ran twice on real property before anything could see it: the €666 price on 13 September, and
+ * `Apartment, 2 Bedrooms → Standard Rate` still pointing at the 1-Bedroom's plan four days later,
+ * because the adapter fix of the 13th repaired the picker and never repaired the rows.
+ *
+ * Mock channels are excluded, as everywhere else — they would invent an answer.
+ *
+ * Cron-triggered, nightly is enough (a mapping changes when a person changes it):
+ *   POST /api/jobs/mapping-audit   with `Authorization: Bearer $CRON_SECRET`
+ */
+import { NextResponse, type NextRequest } from "next/server";
+import { JOB, acquireJobLease, forSystem, releaseJobLease } from "@revio/db";
+import { auditChannelMapping } from "@revio/connectivity";
+
+export const dynamic = "force-dynamic";
+
+export async function POST(req: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const lease = await acquireJobLease(JOB.mappingAudit, 15 * 60_000);
+  if (!lease.acquired) {
+    return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
+  }
+
+  try {
+    const db = forSystem();
+    const channels = await db.channel.findMany({
+      where: { status: "connected", connectivityMode: { not: "mock" } },
+      select: { id: true },
+    });
+
+    let checked = 0, crossWired = 0, raised = 0, inconclusive = 0;
+    const lines: string[] = [];
+    for (const c of channels) {
+      /*
+       * One channel's failure never stops the rest. A revoked key on one hotel must not leave every
+       * other hotel's mapping unexamined — that shape of coupling is how a single bad credential
+       * turns into a platform-wide blind spot.
+       */
+      try {
+        const r = await auditChannelMapping(db, c.id);
+        checked += r.checked;
+        crossWired += r.crossWired.length;
+        raised += r.raised;
+        if (r.skipped) {
+          inconclusive++;
+          lines.push(`${r.channelName}: ${r.skipped}`);
+        } else if (r.crossWired.length > 0) {
+          lines.push(`${r.channelName}: ${r.crossWired.length} cross-wired, ${r.raised} newly raised`);
+        }
+      } catch (e) {
+        inconclusive++;
+        lines.push(`${c.id}: threw — ${e instanceof Error ? e.message : "unknown"}`);
+      }
+    }
+
+    for (const l of lines) console.warn(`[mapping-audit] ${l}`);
+    return NextResponse.json({ ok: true, channels: channels.length, checked, crossWired, raised, inconclusive });
+  } finally {
+    await releaseJobLease(JOB.mappingAudit);
+  }
+}

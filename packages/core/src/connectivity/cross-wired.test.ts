@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { crossWiredRatePlans, describeCrossWire } from "./cross-wired";
+import { crossWiredFromRecord, crossWiredRatePlans, describeCrossWire, type RecordedMapping } from "./cross-wired";
 
 // The real shape, from Cabacum Beach Residence on 2026-09-17.
 const CATALOGUE = [
@@ -84,5 +84,49 @@ describe("a channel that does not scope plans by room", () => {
   it("still reports an id the channel does not have at all", () => {
     const rows = [{ roomTypeId: "rt1", roomTypeName: "Apartment, 1 Bedroom", ratePlanName: "Standard Rate", externalRateId: "gone" }];
     expect(crossWiredRatePlans(rows, UNSCOPED, OUR_ROOMS)[0]?.reason).toBe("not_in_catalogue");
+  });
+});
+
+describe("crossWiredFromRecord", () => {
+  const AT = new Date("2026-09-17T02:00:00Z");
+  const row = (over: Partial<RecordedMapping> = {}): RecordedMapping => ({
+    roomTypeId: "rt2",
+    roomTypeName: "Apartment, 2 Bedrooms",
+    ratePlanName: "Standard Rate",
+    externalRateId: "0ea321e7",
+    externalRoomIdSeen: "d383225c", // the 1-Bedroom's room, per the channel
+    checkedAt: AT,
+    ...over,
+  });
+
+  it("reports the live fault from Cabacum: mapped under 2 Bedrooms, belongs to 1 Bedroom", () => {
+    const [f] = crossWiredFromRecord([row()], OUR_ROOMS);
+    expect(f).toEqual({
+      roomTypeName: "Apartment, 2 Bedrooms",
+      ratePlanName: "Standard Rate",
+      externalRateId: "0ea321e7",
+      checkedAt: AT,
+    });
+  });
+
+  it("says nothing when the channel agrees", () => {
+    expect(crossWiredFromRecord([row({ externalRoomIdSeen: "5b6c86e1" })], OUR_ROOMS)).toEqual([]);
+  });
+
+  it("says nothing when we never asked", () => {
+    expect(crossWiredFromRecord([row({ checkedAt: null, externalRoomIdSeen: null })], OUR_ROOMS)).toEqual([]);
+  });
+
+  it("says nothing when we asked and the channel would not place the plan", () => {
+    // Checked, but no room named — an unknown, not a wrong answer.
+    expect(crossWiredFromRecord([row({ externalRoomIdSeen: null })], OUR_ROOMS)).toEqual([]);
+  });
+
+  it("says nothing when our own room type is unmapped — that fault is named elsewhere", () => {
+    expect(crossWiredFromRecord([row({ roomTypeId: "rt-unmapped" })], OUR_ROOMS)).toEqual([]);
+  });
+
+  it("says nothing for a row with no external id at all", () => {
+    expect(crossWiredFromRecord([row({ externalRateId: null })], OUR_ROOMS)).toEqual([]);
   });
 });

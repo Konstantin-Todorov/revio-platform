@@ -117,3 +117,60 @@ export function describeCrossWire(f: CrossWired): string {
     : `${f.roomTypeName} · ${f.ratePlanName} points at rate plan ${f.externalRateId}, which the channel no longer has. ` +
         `Nothing sent for it is arriving.`;
 }
+
+/**
+ * The same question, asked of what we wrote down instead of of the channel.
+ *
+ * `crossWiredRatePlans` needs the channel's live catalogue, which only a screen that already fetches
+ * it can afford. The Operator console shows every client at once and cannot make an API call per
+ * client per render — so the nightly audit records the channel's answer on each mapping row, and
+ * this reads it back.
+ *
+ * ⚠️ **Only CERTAIN faults.** A row is reported when the channel named a room for the plan, we know
+ * which channel room our room type is, and the two differ. Every other combination is silence:
+ *
+ *   * never checked → we have not asked, which is not evidence of anything
+ *   * checked, no room named → the channel would not place the plan (it may not scope plans by room
+ *     at all), and an unknown is not a wrong answer
+ *   * our room type unmapped → the fault is the missing room mapping, already named elsewhere
+ *
+ * This is deliberately more cautious than the live check. A false accusation on a console somebody
+ * reads before phoning a customer costs more than a missed one, because the missed one comes back
+ * tomorrow night and the false one gets acted on.
+ */
+export interface RecordedMapping {
+  roomTypeId: string;
+  roomTypeName: string;
+  ratePlanName: string;
+  externalRateId: string | null;
+  /** What the channel said this plan belongs to, as of `checkedAt`. */
+  externalRoomIdSeen: string | null;
+  /** When the channel was last asked. Null = never. */
+  checkedAt: Date | null;
+}
+
+export interface RecordedCrossWire {
+  roomTypeName: string;
+  ratePlanName: string;
+  externalRateId: string;
+  checkedAt: Date;
+}
+
+export function crossWiredFromRecord(
+  rows: readonly RecordedMapping[],
+  ourRoomExternalId: ReadonlyMap<string, string>,
+): RecordedCrossWire[] {
+  const out: RecordedCrossWire[] = [];
+  for (const r of rows) {
+    if (!r.checkedAt || !r.externalRateId || !r.externalRoomIdSeen) continue;
+    const expected = ourRoomExternalId.get(r.roomTypeId);
+    if (!expected || expected === r.externalRoomIdSeen) continue;
+    out.push({
+      roomTypeName: r.roomTypeName,
+      ratePlanName: r.ratePlanName,
+      externalRateId: r.externalRateId,
+      checkedAt: r.checkedAt,
+    });
+  }
+  return out;
+}

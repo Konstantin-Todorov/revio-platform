@@ -146,6 +146,15 @@ export const JOB = {
    * calendar rendered empty — nothing broken, nothing a test can see, and the demo is the sale.
    */
   demoRefresh: "demo-refresh",
+  /**
+   * Asks each real channel what its rate plans belong to, so a mapping pointing at the wrong room
+   * can be seen at all.
+   *
+   * Scheduled rather than offered as a button because the fault has no symptom: the row says
+   * mapped, the push says success, and one room's prices publish against another. Nobody presses a
+   * button about a screen that looks finished.
+   */
+  mappingAudit: "mapping-audit",
   holdExpiry: "hold-expiry",
   pickupSnapshot: "pickup-snapshot",
   /** Round-2 §3: closes a business day nobody closed, so unclosed days cannot accumulate. */

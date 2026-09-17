@@ -1282,6 +1282,18 @@ model ChannelRatePlanMapping {
   externalRateId String?
   status         String  @default("incomplete") // complete | incomplete
 
+  /// What the CHANNEL says `externalRateId` belongs to, the last time we asked it.
+  ///
+  /// ⚠️ Stored, not asked live, so that a cross-wire is a plain database question. The hotel's own
+  /// mapping screen can compare against the catalogue because it already lists it on every render;
+  /// the Operator console cannot make an API call per client per page load, and a fault only WE can
+  /// see is a fault nobody sees until the hotel phones. Written by the nightly `mapping-audit`.
+  ///
+  /// Null means never asked — which is not the same as correct, and the screens say so.
+  externalRoomIdSeen String?
+  /// When `externalRoomIdSeen` was last written. A stale answer is still an answer, and its age matters.
+  catalogueCheckedAt DateTime?
+
   channel  Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
   ratePlan RatePlan  @relation(fields: [ratePlanId], references: [id], onDelete: Cascade)
   roomType RoomType? @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)

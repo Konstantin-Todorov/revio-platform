@@ -10,7 +10,7 @@ import { provisioningState, soldButNotProvisioned } from "./provisioning";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { directUsageByTenant } from "./direct-usage";
-import { PRODUCT_BY_KEY, billableEntitlements, channelEconomics, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
+import { PRODUCT_BY_KEY, billableEntitlements, channelEconomics, crossWiredFromRecord, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
 import { partitionDemo } from "./demo";
 import {
@@ -20,6 +20,67 @@ import {
 
 // Operator perimeter sees all tenants → bypass RLS (app.bypass=on) for every query.
 const prisma = forSystem();
+
+/**
+ * Rate-plan mappings pointing at a plan the channel says belongs to a different room.
+ *
+ * ⚠️ Read back from what the nightly `mapping-audit` recorded on each row, never asked live. This
+ * runs for every client on a page that lists all of them; one Channex request per client per render
+ * is not a thing a console can do, and the alternative — leaving the check on the hotel's own screen
+ * only — means we find out when they telephone. That is how we found out last time.
+ *
+ * ⚠️ **Grouped by channel before comparing.** A room type's external id is per channel: the same
+ * room is one id on Booking.com and another on Expedia. Comparing across channels would invent a
+ * mismatch on every client with two channels connected.
+ */
+async function crossWiredFor(tenantId: string): Promise<{ count: number; checkedAt: Date } | undefined> {
+  const [rateMaps, roomMaps] = await Promise.all([
+    prisma.channelRatePlanMapping.findMany({
+      where: { tenantId, catalogueCheckedAt: { not: null }, externalRateId: { not: null }, roomTypeId: { not: null } },
+      select: {
+        channelId: true, roomTypeId: true, externalRateId: true,
+        externalRoomIdSeen: true, catalogueCheckedAt: true,
+        ratePlan: { select: { name: true } }, roomType: { select: { name: true } },
+      },
+    }),
+    prisma.channelRoomTypeMapping.findMany({
+      where: { tenantId, externalRoomId: { not: null } },
+      select: { channelId: true, roomTypeId: true, externalRoomId: true },
+    }),
+  ]);
+  if (rateMaps.length === 0) return undefined;
+
+  const byChannel = new Map<string, typeof rateMaps>();
+  for (const m of rateMaps) {
+    const rows = byChannel.get(m.channelId);
+    if (rows) rows.push(m);
+    else byChannel.set(m.channelId, [m]);
+  }
+
+  let count = 0;
+  let oldestCheck: Date | null = null;
+  for (const [channelId, rows] of byChannel) {
+    const ourRooms = new Map(
+      roomMaps.flatMap((r) => (r.channelId === channelId && r.externalRoomId ? [[r.roomTypeId, r.externalRoomId] as const] : [])),
+    );
+    const faults = crossWiredFromRecord(
+      rows.map((m) => ({
+        roomTypeId: m.roomTypeId!,
+        roomTypeName: m.roomType?.name ?? "",
+        ratePlanName: m.ratePlan.name,
+        externalRateId: m.externalRateId,
+        externalRoomIdSeen: m.externalRoomIdSeen,
+        checkedAt: m.catalogueCheckedAt,
+      })),
+      ourRooms,
+    );
+    count += faults.length;
+    for (const f of faults) if (!oldestCheck || f.checkedAt < oldestCheck) oldestCheck = f.checkedAt;
+  }
+  // The age shown is the OLDEST confirmation behind the count, so "confirmed today" can never be
+  // said on the strength of one fresh row while another has not been looked at in a week.
+  return count > 0 && oldestCheck ? { count, checkedAt: oldestCheck } : undefined;
+}
 
 /**
  * The trials a hotel has asked to keep, in the shape the attention feed wants.
@@ -178,6 +239,9 @@ export async function getClients() {
         failedImportRows.length > 0
           ? { count: failedImportRows.length, oldestAt: failedImportRows[0]!.importedAt }
           : undefined;
+      // Two cheap indexed reads off columns the nightly audit already wrote. Nothing is asked of
+      // Channex here — see `crossWiredFor`.
+      const crossWiredMappings = await crossWiredFor(t.id);
 
       const entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
       /*
@@ -218,6 +282,7 @@ export async function getClients() {
           unpaidInvoices,
           monthlyPriceMinor: monthly,
           ...(failedImports ? { failedImports } : {}),
+          ...(crossWiredMappings ? { crossWiredMappings } : {}),
           keepRequests: keepRequestsOf(t.productTrials),
         }),
         ...accountAttention({
@@ -678,6 +743,10 @@ export async function getClientDetail(id: string) {
       ? { count: failedImportRowsDetail.length, oldestAt: failedImportRowsDetail[0]!.importedAt }
       : undefined;
 
+  // The same read as the list. This page is what somebody looks at before picking up the phone, and
+  // "one of your rooms is on sale at another room's price" is the first thing they need to know.
+  const detailCrossWired = await crossWiredFor(id);
+
   const keepAsked = await prisma.productTrial.findMany({
     where: { tenantId: id, endedAt: null, keepRequestedAt: { not: null } },
     select: { product: true, endsAt: true, keepRequestedAt: true },
@@ -697,6 +766,7 @@ export async function getClientDetail(id: string) {
       keepRequests: keepRequestsOf(keepAsked),
       sharedSignInWith: sharedIps,
       ...(detailFailedImports ? { failedImports: detailFailedImports } : {}),
+      ...(detailCrossWired ? { crossWiredMappings: detailCrossWired } : {}),
     }),
     ...accountAttention({
       status: tenant.status, createdAt: tenant.createdAt,
