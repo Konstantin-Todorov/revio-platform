@@ -239,7 +239,16 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     if (since) params.set("filter[inserted_at][gte]", since);
     params.set("order[inserted_at]", "asc");
 
-    const res = await this.get(`/bookings?${params.toString()}`);
+    /*
+     * ⚠️ EVERY page, not the first ten.
+     *
+     * `/bookings` paginates like every other Channex collection and defaults to a page of ten. This
+     * is also the path `forceFullFetch` takes — the only way to recover a booking that was
+     * acknowledged before its mapping was finished — so a hotel with eleven bookings in the window
+     * would have pressed "Re-import bookings" and silently got ten of them, with nothing anywhere
+     * saying so.
+     */
+    const res = await this.getAll<ChannexBooking>(`/bookings?${params.toString()}`);
     /*
      * THROW, never return []. This line used to be `if (!res.ok) return []`.
      *
@@ -253,8 +262,7 @@ export class ChannexChannelAdapter implements ChannelAdapter {
      * message, so throwing is what surfaces the reason. Returning [] is what hides it.
      */
     if (!res.ok) throw new Error(`Channex GET /bookings → ${res.error ?? `HTTP ${res.status}`}`);
-    const data = (res.body as { data?: ChannexBooking[] } | null)?.data ?? [];
-    return data.map(toRawReservation);
+    return res.rows.map(toRawReservation);
   }
 
   /**
@@ -266,11 +274,16 @@ export class ChannexChannelAdapter implements ChannelAdapter {
     const params = new URLSearchParams();
     params.set("filter[property_id]", this.propertyId);
     params.set("order[inserted_at]", "asc");
-    const res = await this.get(`/booking_revisions/feed?${params.toString()}`);
+    /*
+     * Paged, for the same reason as `/bookings`. The feed only returns UNacked revisions, so ten at
+     * a time did eventually drain across ticks rather than losing anything — but a hotel that takes
+     * twenty bookings overnight had the last ten waiting on the next poll for no reason, and the
+     * cost of finding that out is a guest at a desk with no reservation.
+     */
+    const res = await this.getAll<ChannexBooking>(`/booking_revisions/feed?${params.toString()}`);
     // Same reason as `pullReservations` above: a failed feed read is not an empty feed.
     if (!res.ok) throw new Error(`Channex GET /booking_revisions/feed → ${res.error ?? `HTTP ${res.status}`}`);
-    const data = (res.body as { data?: ChannexBooking[] } | null)?.data ?? [];
-    return data.map(toRawRevision);
+    return res.rows.map(toRawRevision);
   }
 
   /**
@@ -366,14 +379,14 @@ export class ChannexChannelAdapter implements ChannelAdapter {
    * parameter name here does not fail; it truncates. `meta.total` is what proves we got everything,
    * so the loop is bounded by it rather than by "a short page means the end".
    */
-  private async getAll(path: string): Promise<{ ok: boolean; status: number; rows: ChannexRow[]; error?: string }> {
-    const rows: ChannexRow[] = [];
+  private async getAll<T = ChannexRow>(path: string): Promise<{ ok: boolean; status: number; rows: T[]; error?: string }> {
+    const rows: T[] = [];
     const LIMIT = 100;
     for (let page = 1; page <= 50; page++) {
       const sep = path.includes("?") ? "&" : "?";
       const res = await this.request("GET", `${path}${sep}pagination[page]=${page}&pagination[limit]=${LIMIT}`);
       if (!res.ok) return { ok: false, status: res.status, rows: [], ...(res.error ? { error: res.error } : {}) };
-      const body = res.body as { data?: ChannexRow[]; meta?: { total?: number } } | null;
+      const body = res.body as { data?: T[]; meta?: { total?: number } } | null;
       const batch = body?.data;
       if (!Array.isArray(batch)) return { ok: false, status: res.status, rows: [], error: "no data array" };
       rows.push(...batch);

@@ -92,3 +92,47 @@ describe("listProducts", () => {
     await expect(adapter().listProducts()).resolves.toEqual({ rooms: [], rates: [] });
   });
 });
+
+describe("pulling bookings", () => {
+  const booking = (id: string) => ({
+    id,
+    attributes: {
+      id, revision_id: `rev-${id}`, ota_reservation_code: id, status: "new",
+      arrival_date: "2026-10-01", departure_date: "2026-10-03",
+      customer: { name: "A", surname: "B" }, rooms: [], services: [],
+      inserted_at: "2026-09-17T00:00:00Z", currency: "EUR", amount: "100.00",
+    },
+  });
+
+  function pagedBookings(all: unknown[]) {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const u = new URL(url);
+      const limit = Number(u.searchParams.get("pagination[limit]") ?? 10);
+      const page = Number(u.searchParams.get("pagination[page]") ?? 1);
+      return new Response(
+        JSON.stringify({ data: all.slice((page - 1) * limit, page * limit), meta: { total: all.length, limit, page } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }));
+  }
+
+  /*
+   * This is also the `forceFullFetch` path — the only way to recover a booking acknowledged before
+   * its mapping was finished. Pressing "Re-import bookings" with eleven in the window used to bring
+   * back ten, with nothing saying so.
+   */
+  it("returns every booking past the first page", async () => {
+    pagedBookings(Array.from({ length: 11 }, (_, i) => booking(`b${i}`)));
+    expect(await adapter().pullReservations("")).toHaveLength(11);
+  });
+
+  it("throws rather than reporting an empty day when the read fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 401 })));
+    await expect(adapter().pullReservations("")).rejects.toThrow(/401/);
+  });
+
+  it("drains the whole revisions feed in one pull", async () => {
+    pagedBookings(Array.from({ length: 23 }, (_, i) => booking(`r${i}`)));
+    expect(await adapter().pullRevisions()).toHaveLength(23);
+  });
+});
