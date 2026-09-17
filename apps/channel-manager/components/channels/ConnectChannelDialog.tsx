@@ -191,10 +191,18 @@ export function ConnectChannelDialog({
             </button>
           </div>
 
-          {/* Connected is not live, and the button says "connect" — so the difference is stated here
-              rather than discovered when no bookings arrive. */}
+          {/*
+            Connected is not live, and the button says "connect" — so the difference is stated here
+            rather than discovered when no bookings arrive.
+
+            ⚠️ It used to end "until you activate it", and **they cannot**. We are the Channex
+            customer, not the hotel: one organisation, one key, every property. They have no Channex
+            account and are never asked for one. Pointing somebody at a door they have no key to is
+            worse than saying nothing, because they go looking.
+          */}
           <p className="text-[11.5px] text-ink-400">
-            The channel is created switched off. Nothing goes on sale until you activate it.
+            The channel is created switched off. Nothing goes on sale until we switch it on — tell us
+            when your mapping is finished and you are ready to take bookings.
           </p>
         </form>
       </Modal>

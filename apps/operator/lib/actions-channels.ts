@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { forSystem } from "@revio/db";
-import { pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "@revio/connectivity";
+import { pauseChannel, resumeChannel, disconnectChannel, reconnectChannel, activateChannexChannel, channexApiConfig } from "@revio/connectivity";
 import { flashError, setFlash } from "@revio/ui/flash";
 import { getOperatorSession } from "./session";
 
@@ -30,6 +30,72 @@ async function channelOf(channelId: string) {
     where: { id: channelId },
     select: { id: true, name: true, propertyId: true, tenantId: true, status: true, property: { select: { name: true } } },
   });
+}
+
+/**
+ * Switch a connected-but-not-live channel on at Channex, so the OTA starts selling.
+ *
+ * ## ⚠️ Why this is here and not on the hotel's own screen
+ *
+ * **We are the Channex customer, not the hotel** — one organisation, one key, every property. A
+ * hotel has no Channex account and is never asked for one, so it physically cannot switch its own
+ * channel on. RevioLink has been telling hotels since 26 August that "nothing goes on sale until you
+ * activate it", pointing at a door they have no key to, and there was no door on our side either:
+ * `activateChannexChannel` was written that day and never called from anywhere. Cabacum's channel is
+ * live because somebody logged into Channex and flipped it by hand.
+ *
+ * ## ⚠️ It is the billable moment
+ *
+ * Channex charges per property with an active channel. This is where that charge starts, which is
+ * why it says so and why it is one deliberate click rather than the tail end of a create.
+ *
+ * ## Refused with nothing mapped
+ *
+ * A channel switched on with no room type carrying an external id publishes nothing and looks live —
+ * the exact state this console spent today learning to recognise. Better to refuse and say why.
+ */
+export async function operatorActivateChannel(fd: FormData): Promise<void> {
+  const session = await getOperatorSession();
+  if (!session) return flashError("Sign in again.");
+  const id = String(fd.get("channelId") ?? "");
+  const ch = await prisma.channel.findUnique({
+    where: { id },
+    select: {
+      id: true, name: true, status: true, tenantId: true, connectivityMode: true,
+      externalChannelId: true, property: { select: { name: true } },
+    },
+  });
+  if (!ch) return flashError("That channel no longer exists.");
+  if (ch.status !== "pending") return flashError(`${ch.name} is already ${ch.status}.`);
+  if (!ch.externalChannelId) {
+    return flashError(`${ch.name} has no channel id at Channex — it was never created there, so there is nothing to switch on.`);
+  }
+
+  const mapped = await prisma.channelRoomTypeMapping.count({
+    where: { channelId: id, externalRoomId: { not: null } },
+  });
+  if (mapped === 0) {
+    return flashError(
+      `${ch.property.name} · ${ch.name} has no room type mapped to the channel yet. Switching it on now would ` +
+      "put it live with nothing to send — it would read as working and sell nothing. Finish the mapping first.",
+    );
+  }
+
+  try {
+    const cfg = await channexApiConfig(ch.tenantId, ch.connectivityMode);
+    await activateChannexChannel(cfg, ch.externalChannelId);
+  } catch (e) {
+    return flashError(`Channex refused to switch ${ch.name} on: ${e instanceof Error ? e.message : "unknown error"}`);
+  }
+  await prisma.channel.update({
+    where: { id },
+    data: { status: "connected", externalChannelActive: true },
+  });
+  await setFlash(
+    "success",
+    `${ch.property.name} · ${ch.name} is live — the OTA is selling through it, and Channex is now billing us for that property.`,
+  );
+  revalidatePath(`/clients/${ch.tenantId}`);
 }
 
 /** Pause: a stop-sell overlay on the OTA. Reversible, mappings untouched. */

@@ -11,6 +11,7 @@ vi.mock("@/lib/actions-channels", () => ({
   operatorDisconnectChannel: "/__action",
   operatorReconnectChannel: "/__action",
   operatorDeleteChannel: "/__action",
+  operatorActivateChannel: "/__action",
 }));
 
 import { ChannelsPanel, type ChannelRow } from "@/components/clients/ChannelsPanel";
@@ -149,5 +150,31 @@ describe("a demo connection", () => {
 
   it("but a real channel always says when it was last confirmed", () => {
     expect(html([row({ mode: "channex_prod", catalogueCheckedAt: null })])).toMatch(/Listings checked/);
+  });
+});
+
+describe("a channel that is set up but not switched on", () => {
+  const pending = () => row({ status: "pending", reservations: 0, catalogueStatus: null, catalogueCheckedAt: null });
+
+  /*
+   * ⚠️ `pending` is a database word. It also already means something else in this product — the spec
+   * uses it for the outbox queue depth — so printing it raw is both jargon and ambiguous jargon.
+   */
+  it("never shows the database word", () => {
+    const out = html([pending()]);
+    expect(out).toMatch(/not live yet/);
+    expect(out).not.toMatch(/>pending</);
+  });
+
+  /*
+   * The only control in this panel that STARTS something: the OTA begins selling and Channex begins
+   * billing us for the property. It exists here and not on the hotel's own screen because we are the
+   * Channex customer and they have no account there.
+   */
+  it("offers Go live, and only in this state", () => {
+    expect(html([pending()])).toMatch(/Go live/);
+    expect(html([row({ status: "connected" })])).not.toMatch(/Go live/);
+    expect(html([row({ status: "paused" })])).not.toMatch(/Go live/);
+    expect(html([row({ status: "disconnected" })])).not.toMatch(/Go live/);
   });
 });

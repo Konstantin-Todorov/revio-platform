@@ -40,7 +40,32 @@ const STATUS_PILL: Record<string, { tone: "success" | "warning" | "danger" | "ne
   paused: { tone: "warning", label: "Paused" },
   error: { tone: "danger", label: "Error" },
   disconnected: { tone: "neutral", label: "Disconnected" },
+  /*
+   * ⚠️ This row was missing, so the pill fell through to `?? ch.status` and printed the raw database
+   * word **"pending"** at a hotelier — with no explanation and nothing to press.
+   *
+   * It is worse than an unlabelled state, because "pending" already means something else here: the
+   * spec (CM-GUIDE-V2 §glossary) uses it for the OUTBOX QUEUE DEPTH — updates waiting to go out —
+   * and this card shows exactly that number two lines below, under "Pending". Same word, two
+   * meanings, on one card.
+   *
+   * What this status actually means: the connection has been created inside Channex and nobody has
+   * switched it on yet, so the OTA is not talking to us at all.
+   */
+  pending: { tone: "warning", label: "Not live yet" },
 };
+
+/**
+ * What a channel that is not live yet means, and who has to do something about it.
+ *
+ * ⚠️ **The hotel cannot switch this on.** We are the Channex customer, not them — one organisation,
+ * one key, every property (root CLAUDE.md). They have no Channex account and are never asked for
+ * one. So a message telling them to go and activate it is a message about a door they cannot reach,
+ * which is exactly what the connect dialog used to say.
+ */
+const NOT_LIVE_YET =
+  "Set up, but not switched on. The connection exists and the OTA is not selling through it yet — " +
+  "no prices out, no bookings in. Switching it on is ours to do; tell us when you are ready and we will.";
 
 export default async function ChannelsPage() {
   const { channels, mapStats } = await getChannels();
@@ -125,6 +150,16 @@ export default async function ChannelsPage() {
                   <div className="mt-1">
                     <StatusPill tone={ch.connectivityMode === "mock" ? "neutral" : "info"}>{MODE_LABEL[ch.connectivityMode] ?? ch.connectivityMode}</StatusPill>
                   </div>
+                  {/*
+                    Said on the card, not in a tooltip. A hotel that has just connected a channel and
+                    sees a badge is entitled to know whether it is working, and this is the one state
+                    where the honest answer is "not yet, and not by you".
+                  */}
+                  {ch.status === "pending" && (
+                    <p className="mt-1.5 rounded-md border border-warning-600/30 bg-warning-50 px-2.5 py-1.5 text-[11.5px] leading-snug text-warning-800">
+                      {NOT_LIVE_YET}
+                    </p>
+                  )}
                 </div>
                 {/* Quick actions (spec §3.5): Sync · Pull · Pause/Resume, with Disconnect separated
                     so it can't be hit by accident. All confirmed + audited per channel. */}

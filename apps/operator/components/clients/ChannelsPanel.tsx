@@ -3,7 +3,7 @@ import { StatusPill, type Tone } from "@/components/ui/primitives";
 import { SubmitButton } from "@revio/ui/submit-button";
 import {
   operatorPauseChannel, operatorResumeChannel, operatorDisconnectChannel,
-  operatorReconnectChannel, operatorDeleteChannel,
+  operatorReconnectChannel, operatorDeleteChannel, operatorActivateChannel,
 } from "@/lib/actions-channels";
 import { DeleteChannel } from "./DeleteChannel";
 
@@ -26,8 +26,11 @@ import { DeleteChannel } from "./DeleteChannel";
  */
 
 const STATUS_TONE: Record<string, Tone> = {
-  connected: "success", paused: "warning", disconnected: "neutral", error: "danger", pending: "info",
+  connected: "success", paused: "warning", disconnected: "neutral", error: "danger", pending: "warning",
 };
+
+/** The database word is `pending`; nobody outside the schema should read that. */
+const STATUS_LABEL: Record<string, string> = { pending: "not live yet" };
 
 /** The channel's own words for what the last audit found — never a column name. */
 const CATALOGUE: Record<string, { tone: Tone; label: string; detail: string }> = {
@@ -106,6 +109,27 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
 
         const controls = (
           <>
+            {/*
+              ⚠️ The only control here that STARTS something.
+              
+              The hotel cannot press it — we are the Channex customer, they have no account there —
+              and until now neither could we: `activateChannexChannel` was written on 26 August and
+              called from nowhere, so a connected channel stayed switched off until somebody opened
+              Channex by hand. It is also the billable moment, which is why the label says "go live"
+              rather than "activate": one of those describes what happens to the hotel.
+            */}
+            {ch.status === "pending" && (
+              <form action={operatorActivateChannel}>
+                <input type="hidden" name="channelId" value={ch.id} />
+                <SubmitButton
+                  title="Switches the channel on at Channex. The OTA starts selling, and Channex starts billing us for this property."
+                  className="rounded-md bg-brand-800 px-2.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700"
+                >
+                  Go live
+                </SubmitButton>
+              </form>
+            )}
+
             {ch.status === "paused" ? (
               /*
                 ⚠️ No Resume while the account is suspended, because resuming cannot work: it would
@@ -176,7 +200,7 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
                 <span className="text-[13px] font-bold text-ink-900">{ch.propertyName}</span>
                 <span className="text-ink-300">·</span>
                 <span className="text-[13px] font-semibold text-ink-700">{ch.name}</span>
-                <StatusPill tone={STATUS_TONE[ch.status] ?? "neutral"}>{ch.status}</StatusPill>
+                <StatusPill tone={STATUS_TONE[ch.status] ?? "neutral"}>{STATUS_LABEL[ch.status] ?? ch.status}</StatusPill>
                 {ch.mode === "mock"
                   ? <StatusPill tone="neutral">demo connection</StatusPill>
                   : <StatusPill tone="info">{ch.mode === "channex_prod" ? "Channex production" : "Channex sandbox"}</StatusPill>}
