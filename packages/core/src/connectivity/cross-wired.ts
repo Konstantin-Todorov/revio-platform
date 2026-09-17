@@ -37,8 +37,14 @@ export interface MappedRate {
 export interface ChannelRate {
   id: string;
   title: string;
-  /** The room type the CHANNEL says this plan belongs to. The authority. */
-  externalRoomId: string;
+  /**
+   * The room type the CHANNEL says this plan belongs to. The authority.
+   *
+   * ⚠️ `null` means the channel did NOT say — not that the plan belongs to no room. A channel that
+   * never scopes plans by room (our mock) answers null for every plan, and judging against that
+   * would report every mapping in the demo as cross-wired. Unknown is skipped, never accused.
+   */
+  externalRoomId: string | null;
 }
 
 export interface CrossWired {
@@ -88,6 +94,8 @@ export function crossWiredRatePlans(
       });
       continue;
     }
+    // The channel did not say which room this plan belongs to, so it cannot say we put it wrong.
+    if (plan.externalRoomId == null) continue;
     if (plan.externalRoomId !== expectedRoom) {
       out.push({
         roomTypeName: m.roomTypeName,

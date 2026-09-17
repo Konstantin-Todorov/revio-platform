@@ -67,3 +67,22 @@ describe("crossWiredRatePlans", () => {
     expect(describeCrossWire(fault!)).toMatch(/another room/);
   });
 });
+
+describe("a channel that does not scope plans by room", () => {
+  /*
+   * The mock adapter answers null for every plan's room. Judging against that would print a
+   * cross-wire banner on both demo hotels, every day, for mappings that are correct.
+   */
+  const UNSCOPED = CATALOGUE.map((c) => ({ ...c, externalRoomId: null }));
+
+  it("accuses nothing when the channel never said which room a plan belongs to", () => {
+    // rt1 is the 1-Bedroom and 749e0e4c is the 2-Bedroom's plan: cross-wired if the channel had said.
+    const rows = [{ roomTypeId: "rt1", roomTypeName: "Apartment, 1 Bedroom", ratePlanName: "Standard Rate", externalRateId: "749e0e4c" }];
+    expect(crossWiredRatePlans(rows, UNSCOPED, OUR_ROOMS)).toEqual([]);
+  });
+
+  it("still reports an id the channel does not have at all", () => {
+    const rows = [{ roomTypeId: "rt1", roomTypeName: "Apartment, 1 Bedroom", ratePlanName: "Standard Rate", externalRateId: "gone" }];
+    expect(crossWiredRatePlans(rows, UNSCOPED, OUR_ROOMS)[0]?.reason).toBe("not_in_catalogue");
+  });
+});

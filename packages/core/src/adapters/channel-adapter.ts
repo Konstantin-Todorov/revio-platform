@@ -113,6 +113,25 @@ export interface RawRevision {
 export interface ExternalProduct {
   id: string;
   name: string;
+  /**
+   * ⚠️ For a RATE plan: the room type the CHANNEL says it belongs to. Null when the API did not say.
+   *
+   * Optional because not every adapter can answer it, and **erasing it is a real defect, not a
+   * cosmetic one**. The Channex adapter has carried `room_type_id` since 13 September — it was added
+   * precisely so a room's dropdown could stop offering another room's plans — and the field was then
+   * dropped at the `listChannelProducts` seam, whose declared return type was `{id, name}`. The
+   * runtime value was there the whole time; nothing downstream could see it. That is how
+   * `Apartment, 2 Bedrooms → Standard Rate` came to point at the 1-Bedroom's plan on a live property.
+   */
+  roomTypeId?: string | null;
+  /** `channel_scoped` is the OTA end of the chain ("BB BAR - BookingCom …"), never a push target. */
+  kind?: "property" | "channel_scoped";
+  /** Which channel it is scoped to, when it is. For explaining an exclusion, not for acting on. */
+  channel?: string;
+  /** The channel computes this one from a parent; nothing is ever pushed to it. */
+  derived?: boolean;
+  /** What it derives from, when the channel said. */
+  parentId?: string | null;
 }
 
 export interface ChannelAdapter {

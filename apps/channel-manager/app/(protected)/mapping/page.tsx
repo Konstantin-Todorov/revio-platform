@@ -1,6 +1,8 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { AlertTriangle, Link2 } from "lucide-react";
+import { crossWiredRatePlans, describeCrossWire } from "@revio/core";
+import { mappableRatePlans, ratePlansForRoom, type ChannexRatePlan } from "@revio/connectivity";
 import { getMapping, getUnmappedBookingAlerts } from "@/lib/data";
 import { listChannelProducts } from "@/lib/connectivity";
 import { fixMappings } from "@/lib/actions-config";
@@ -53,6 +55,61 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
   // each deep-links to the exact row that needs attention.
   const alerts = await getUnmappedBookingAlerts(channel.id);
 
+  /*
+   * ⚠️ WHICH OF THE CHANNEL'S PLANS THIS ROOM MAY BE OFFERED.
+   *
+   * The dropdown listed every rate plan in the property, flat. A Channex property with three
+   * apartments has three plans called "BB BAR" differing only by a UUID, so picking the right one
+   * was a coin toss with no feedback: the row goes green, the push succeeds, and one room's prices
+   * publish against another. `ratePlansForRoom` and `mappableRatePlans` were written for this on
+   * 13 September and had **no callers** — the adapter carried `room_type_id` and the
+   * `listChannelProducts` seam declared `{id, name}`, which deleted it on the way through.
+   */
+  const catalogue: ChannexRatePlan[] = products.rates.map((r) => ({
+    id: r.id,
+    name: r.name,
+    roomTypeId: r.roomTypeId ?? null,
+    kind: r.kind ?? "property",
+    derived: r.derived ?? false,
+    ...(r.channel ? { channel: r.channel } : {}),
+  }));
+  const { mappable, derived, excluded } = mappableRatePlans(catalogue);
+
+  /** Our room type → the channel's room id it is mapped to. Nothing about a rate plan can be judged without it. */
+  const channexRoomOf = new Map(
+    roomTypeMappings.flatMap((m) => (m.externalRoomId ? [[m.productId, m.externalRoomId] as const] : [])),
+  );
+  const channelRoomName = new Map(products.rooms.map((r) => [r.id, r.name] as const));
+
+  /*
+   * A channel that never says which room a plan belongs to (our mock, and the demo hotels with it)
+   * is not scoping by room, so filtering to nothing would take a working dropdown away. Offer
+   * everything then, and say nothing about cross-wiring — unknown is not wrong.
+   */
+  const scopesByRoom = mappable.some((p) => p.roomTypeId != null);
+  const ratesForRoom = (roomTypeId: string): ChannexRatePlan[] => {
+    if (!scopesByRoom) return mappable;
+    const ext = channexRoomOf.get(roomTypeId);
+    return ext ? ratePlansForRoom(mappable, ext) : [];
+  };
+
+  /*
+   * §4.4's missing half. `collidingExternalIds` below asks whether two of our rooms point at one
+   * plan; this asks whether one row points at the plan it claims to — an id used exactly once and
+   * still wrong. Only the channel's own `room_type_id` can answer it. Found live on 2026-09-17:
+   * `Apartment, 2 Bedrooms · Standard Rate` publishing to the 1-Bedroom's plan.
+   */
+  const crossWires = crossWiredRatePlans(
+    ratePlanMappings.flatMap((m) =>
+      m.externalRateId
+        ? [{ roomTypeId: m.roomTypeId, roomTypeName: m.roomTypeName, ratePlanName: m.ratePlan.name, externalRateId: m.externalRateId }]
+        : [],
+    ),
+    catalogue.map((c) => ({ id: c.id, title: c.name, externalRoomId: c.roomTypeId })),
+    channexRoomOf,
+    channelRoomName,
+  );
+
   return (
     <div>
       <PageHeader title="Mapping" subtitle="Room types carry how many rooms are free. Rate plans carry prices and restrictions. Both need linking." />
@@ -77,6 +134,33 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
         both on 0ea321e7…. It is shown rather than blocked, because a hotel may be mid-way through
         re-mapping and a screen that refuses to render is a hotel with no way to fix itself.
       */}
+      {/*
+        ⚠️ The mapping is finished, green, and pointing at another room.
+        
+        Everything downstream of this reports success — the push, the status pill, Channex itself —
+        because every part of it IS succeeding. The only wrong thing is the destination, and the
+        channel's own catalogue is the only place that says so. Leading with the consequence, per
+        UI-STANDARD 4b: not "an id does not match" but "those prices are going onto the wrong room".
+      */}
+      {crossWires.length > 0 && (
+        <div className="mb-3 rounded-md border border-danger-600/30 bg-danger-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-danger-700">
+            <AlertTriangle className="h-4 w-4" />
+            {crossWires.length === 1 ? "One rate plan is" : `${crossWires.length} rate plans are`} mapped to the wrong room in {channel.name}
+          </div>
+          <ul className="mt-1.5 space-y-1 pl-6 text-[12.5px] text-danger-700">
+            {crossWires.map((f) => (
+              <li key={`${f.roomTypeName}-${f.externalRateId}`}>
+                {describeCrossWire(f)}{" "}
+                <a href={`#map-rate-${ratePlanMappings.find((m) => m.externalRateId === f.externalRateId && m.roomTypeName === f.roomTypeName)?.ratePlanId ?? ""}`} className="font-semibold underline">
+                  fix the row
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {mappingCollisions.length > 0 && (
         <div className="mb-3 rounded-md border border-danger-600/30 bg-danger-50 px-4 py-3">
           <div className="flex items-center gap-2 text-[13px] font-semibold text-danger-700">
@@ -268,7 +352,18 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                               externalId={m.externalRateId}
                               channelName={channel.name} channelId={channel.id}
                               roomTypeId={m.roomTypeId}
-                              options={products.rates}
+                              options={ratesForRoom(m.roomTypeId)}
+                              optionsNote={
+                                !scopesByRoom
+                                  ? undefined
+                                  : !channexRoomOf.has(m.roomTypeId)
+                                    ? `Map the room type "${m.roomTypeName}" first — until it has an id in ${channel.name} we cannot tell which of its rate plans belong to this room, and offering all of them is how one room's prices end up on another.`
+                                    : ratesForRoom(m.roomTypeId).length === 0
+                                      ? `${channel.name} lists no rate plan under ${m.roomTypeName}. Create one there, or enter its id below if you know it.`
+                                      : derived.length + excluded.length > 0
+                                        ? `Showing only ${channel.name}'s plans for ${m.roomTypeName}. ${derived.length + excluded.length} other plan${derived.length + excluded.length > 1 ? "s are" : " is"} left out: ${[derived.length ? `${derived.length} derived from another plan` : "", excluded.length ? `${excluded.length} scoped to one OTA` : ""].filter(Boolean).join(", ")} — nothing is pushed to those.`
+                                        : undefined
+                              }
                             />
                           </div>
                         </td>

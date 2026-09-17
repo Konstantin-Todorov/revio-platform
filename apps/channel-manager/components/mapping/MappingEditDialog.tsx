@@ -6,7 +6,7 @@ import { updateStreamMapping, type ActionResult } from "@/lib/actions-config";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
 export function MappingEditDialog({
-  kind, id, productId, label, externalId, channelName, channelId, roomTypeId, options = [],
+  kind, id, productId, label, externalId, channelName, channelId, roomTypeId, options = [], optionsNote,
 }: {
   kind: "room" | "rate";
   /** The existing mapping row, or null when this product has never been sent to the channel. */
@@ -28,6 +28,14 @@ export function MappingEditDialog({
   roomTypeId?: string;
   /** Products pulled from the OTA (spec §3.6) — offered as a dropdown; empty = manual id entry. */
   options?: { id: string; name: string }[];
+  /**
+   * Why this list is what it is — shown whether or not there are options.
+   *
+   * ⚠️ A shortened list with no explanation is worse than a long one. If the plan somebody expects
+   * is missing, the question is "is it broken?", and the answer has to be on the screen where the
+   * question is asked, not in a support thread.
+   */
+  optionsNote?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(updateStreamMapping, null);
@@ -75,6 +83,11 @@ export function MappingEditDialog({
             <Field label={idLabel} hint={`The channel's own id for this ${noun}`}>
               <input name="externalId" defaultValue={externalId ?? ""} className={inputCls} placeholder="e.g. 88291" />
             </Field>
+          )}
+          {optionsNote && (
+            <p className="rounded-md border border-surface-border bg-surface-muted px-3 py-2 text-[11.5px] leading-snug text-ink-500">
+              {optionsNote}
+            </p>
           )}
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
           <div className="flex justify-end gap-2 pt-1">

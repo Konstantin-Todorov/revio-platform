@@ -11,7 +11,7 @@ import { forSystem, decryptSecret, forTenant, markBillable, releaseRoomsForCance
 import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
-  type RestrictionType, type ChannelAdapter,
+  type RestrictionType, type ChannelAdapter, type ExternalProduct,
   resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan, pushedOf, importFailureEmail } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { sendEmail, publicBaseUrl } from "@revio/email";
@@ -1331,11 +1331,24 @@ export async function reconnectChannel(prisma: Db, channelId: string): Promise<C
 }
 
 
-/** Pull the channel's own products (rooms + rates with their OTA-side ids) for dropdown mapping.
- * Returns empty lists when the adapter can't list (network trouble must never break the screen). */
+/**
+ * Pull the channel's own products (rooms + rates with their OTA-side ids) for dropdown mapping.
+ * Returns empty lists when the adapter can't list (network trouble must never break the screen).
+ *
+ * ⚠️ **The return type is `ExternalProduct`, not `{id, name}`, and that is the whole point.**
+ *
+ * It WAS `{id, name}`, and the Channex adapter has returned each rate plan's `room_type_id`,
+ * `kind` and `derived` since 13 September — added so a room's dropdown would stop offering another
+ * room's plans. Structural widening at this one line threw all three away: the values arrived, the
+ * types said they did not exist, and `ratePlansForRoom` / `mappableRatePlans` were written, tested
+ * and never called by anything. The picker went on offering every plan in the property, flat, and
+ * `Apartment, 2 Bedrooms → Standard Rate` was mapped to the 1-Bedroom's plan on a live property.
+ *
+ * A seam that narrows a type is a silent deletion. Widen here before adding a field upstream.
+ */
 export async function listChannelProducts(
   prisma: Db, channelId: string,
-): Promise<{ rooms: { id: string; name: string }[]; rates: { id: string; name: string }[] }> {
+): Promise<{ rooms: ExternalProduct[]; rates: ExternalProduct[] }> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return { rooms: [], rates: [] };
   try {
