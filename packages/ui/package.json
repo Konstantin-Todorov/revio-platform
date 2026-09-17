@@ -35,6 +35,7 @@
     "./controls": "./src/controls.tsx",
     "./menu": "./src/menu.tsx",
     "./dialog": "./src/dialog.tsx",
+    "./turnstile": "./src/turnstile.tsx",
     "./column-visibility": "./src/column-visibility.tsx",
     "./tabs": "./src/tabs.tsx",
     "./stale-deployment-boundary": "./src/stale-deployment-boundary.tsx",

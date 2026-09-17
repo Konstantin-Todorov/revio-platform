@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { TurnstileField } from "@revio/ui/turnstile";
 import { ArrowRight, BedDouble, CalendarCheck, Radio } from "lucide-react";
 import { submitSignup, type SignupResult } from "@/lib/actions-signup";
 
@@ -43,7 +44,7 @@ const NEEDS = [
 const inputCls =
   "h-10 w-full rounded-md border border-surface-border bg-white px-3 text-[13.5px] text-ink-900 outline-none transition-colors placeholder:text-ink-300 focus:border-brand-600";
 
-export function SignupForm({ defaultEmail = "" }: { defaultEmail?: string }) {
+export function SignupForm({ defaultEmail = "", siteKey }: { defaultEmail?: string; siteKey?: string | undefined }) {
   const [state, formAction, pending] = useActionState<SignupResult | null, FormData>(submitSignup, null);
   const [intent, setIntent] = useState<string>("cm");
 
@@ -111,6 +112,9 @@ export function SignupForm({ defaultEmail = "" }: { defaultEmail?: string }) {
           and pay for those alone.
         </p>
       </fieldset>
+
+      {/* Renders nothing until a site key exists, so this ships safely before the keys do. */}
+      <TurnstileField siteKey={siteKey} />
 
       {state?.error && (
         <p role="alert" className="rounded-md border border-danger-600/30 bg-danger-50 px-3 py-2 text-[12.5px] text-danger-700">

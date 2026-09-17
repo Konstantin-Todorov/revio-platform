@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createPublicSignup } from "@revio/db";
-import { signupEmail, validateSignup } from "@revio/core";
+import { signupEmail, validateSignup, readTurnstileResult, turnstileNotConfigured, type TurnstileVerdict } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { productOrigin } from "@revio/ui/product-links";
 
@@ -37,6 +37,26 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
     intent: String(fd.get("intent") ?? ""),
   });
   if (!valid.ok) return { error: valid.message };
+
+  /*
+   * ⚠️ Turnstile runs AFTER validation and BEFORE the write.
+   *
+   * After validation so a real person who mistyped their email is told about the typo rather than
+   * being silently challenged twice. Before the write because the whole point is not creating the
+   * tenant, the property, the owner and the invitation email.
+   *
+   * It is a FILTER, not a gate on a real hotel — the same standing decision that reversed the
+   * disposable-email refusal. Every permissive verdict is marked `unverified` and logged, because
+   * failing open is only safe while it is impossible to do silently.
+   */
+  const challenge = await verifySignupChallenge(String(fd.get("cf-turnstile-response") ?? ""));
+  if (!challenge.ok) {
+    console.warn(`[signup] challenge refused for ${valid.fields.email}: ${challenge.reason}`);
+    return { error: "We could not confirm that was a person. Reload the page and try once more." };
+  }
+  if (challenge.unverified) {
+    console.warn(`[signup] challenge NOT verified (${challenge.reason}) — allowing ${valid.fields.email}`);
+  }
 
   const outcome = await createPublicSignup(valid.fields);
   if (!outcome.ok) return { error: outcome.message };
@@ -87,4 +107,35 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
   }
 
   redirect(outcome.kind === "resent" ? "/signup/sent?again=1" : "/signup/sent");
+}
+
+
+/**
+ * Ask Cloudflare whether the token in the form came from a person.
+ *
+ * ⚠️ Status code first, `success` second — a Cloudflare error is valid JSON whose `success` is
+ * simply `undefined`, which is indistinguishable from a failed challenge if you read the field
+ * alone. That confusion produced 411 consecutive "success" sync events on a revoked Channex key.
+ *
+ * A thrown fetch — DNS, TLS, a dead network — is an outage, not a bot, and resolves the same way
+ * every other unreachable-Cloudflare case does: allow, and mark it unverified.
+ */
+async function verifySignupChallenge(token: string): Promise<TurnstileVerdict> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return turnstileNotConfigured();
+  // No token with a secret configured means the widget never resolved — a blocked script, an old
+  // tab. Treat it as unverified rather than as a failure: the person is probably real.
+  if (!token) return { ok: true, reason: "no token returned by the widget", unverified: true };
+
+  try {
+    const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ secret, response: token }),
+    });
+    const body = res.status === 200 ? ((await res.json()) as { success?: boolean; "error-codes"?: string[] }) : null;
+    return readTurnstileResult(res.status, body);
+  } catch (err) {
+    return { ok: true, reason: `turnstile fetch threw: ${err instanceof Error ? err.message : "unknown"}`, unverified: true };
+  }
 }

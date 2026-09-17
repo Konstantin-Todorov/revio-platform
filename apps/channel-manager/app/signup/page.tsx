@@ -79,7 +79,13 @@ export default async function SignupPage({
           <h2 className="text-[20px] font-bold tracking-tight text-ink-900">Start your free trial</h2>
           <p className="mb-5 mt-1 text-[13px] text-ink-500">Thirty days of all three Revio products. No card, no call.</p>
 
-          <SignupForm defaultEmail={email ?? ""} />
+          <SignupForm
+            defaultEmail={email ?? ""}
+            /* Read on the SERVER and passed down. `NEXT_PUBLIC_` would work but puts the key in
+               every client bundle in the app; this one page needs it. Absent = no widget, and the
+               action is permissive to match, which is what lets the code ship before the keys. */
+            {...(process.env.TURNSTILE_SITE_KEY ? { siteKey: process.env.TURNSTILE_SITE_KEY } : {})}
+          />
 
           <p className="mt-5 text-center text-[12.5px] text-ink-500">
             Already have an account?{" "}
