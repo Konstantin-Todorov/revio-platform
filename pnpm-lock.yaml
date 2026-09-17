@@ -431,6 +431,9 @@ importers:
       '@revio/db':
         specifier: workspace:*
         version: link:../db
+      '@revio/email':
+        specifier: workspace:*
+        version: link:../email
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

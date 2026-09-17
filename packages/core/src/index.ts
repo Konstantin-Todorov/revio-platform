@@ -12,6 +12,7 @@ export * from "./trials/clock.js";
 export * from "./forms/parse.js";
 export * from "./email/auth-emails.js";
 export * from "./email/trial-emails.js";
+export * from "./email/import-failure.js";
 export * from "./inventory/availability.js";
 export * from "./inventory/waterfall.js";
 export * from "./stays/stay-state.js";

@@ -12,8 +12,9 @@ import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
   type RestrictionType, type ChannelAdapter,
-  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan, pushedOf } from "@revio/core";
+  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan, pushedOf, importFailureEmail } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
+import { sendEmail, publicBaseUrl } from "@revio/email";
 import { decidePull, type Stay } from "./pull-merge.js";
 import { indexRateMappings, resolveExternalRateId } from "./rate-mapping.js";
 import { comparePublished, summarisePublished, type ExpectedRate, type PublishedSummary } from "./published-check.js";
@@ -1057,6 +1058,51 @@ export async function pullChannel(
       await prisma.reservation.create({
         data: { tenantId, propertyId, channelId, externalId: raw.externalId, guestName: raw.guestName, status: "failed_import", totalMinor: raw.totalMinor, currency: raw.currency, ...fx },
       });
+      /*
+       * ⚠️ TELL THEM. Silence is what turned this into an incident.
+       *
+       * On 2026-09-15 a hotel made a test booking to watch it arrive, got nothing, waited fifteen
+       * minutes, decided bookings were being lost and disconnected the channel. Everything else
+       * about the refusal was right — the Sync Center line, the Error Center entry — and she saw
+       * neither, because she was watching her inbox.
+       *
+       * A booking the channel has already confirmed to a guest, that we are NOT holding a room for,
+       * is the event most worth interrupting somebody about, and it was the only one sending no mail.
+       *
+       * It cannot make the pull fail: `sendEmail` never throws by design, the address lookup is
+       * wrapped, and a mail outage must not stop the next booking importing.
+       */
+      try {
+        const prop = await prisma.property.findUnique({
+          where: { id: propertyId },
+          select: { name: true, reservationEmailPrimary: true, reservationEmailSecondary: true, baseCurrency: true },
+        });
+        const to = [prop?.reservationEmailPrimary, prop?.reservationEmailSecondary].filter(
+          (a): a is string => !!a,
+        );
+        if (prop && to.length > 0) {
+          const mail = importFailureEmail({
+            hotelName: prop.name,
+            channelName: channel.name,
+            guestName: raw.guestName,
+            reference: raw.externalId,
+            total: `${(raw.totalMinor / 100).toFixed(2)} ${raw.currency}`,
+            unmapped: missing.join("; "),
+            mappingUrl: `${publicBaseUrl()}/mapping`,
+          });
+          const sent = await sendEmail({ to, subject: mail.subject, text: mail.text, html: mail.html });
+          if (!sent.ok) {
+            console.error(`[pull] import-failure mail for ${prop.name} failed: ${sent.error ?? "unknown"}`);
+          }
+        } else {
+          // Worth a log line: a hotel with no reservation address cannot be told about ANY booking,
+          // which the welcome flow asks for precisely to avoid.
+          console.error(`[pull] booking ${raw.externalId} could not be imported and property ${propertyId} has no reservation email`);
+        }
+      } catch (err) {
+        console.error(`[pull] import-failure mail threw for ${raw.externalId}:`, err);
+      }
+
       await prisma.errorItem.create({
         data: {
           tenantId, propertyId, channelId, severity: "critical", code: "reservation_unmapped",
