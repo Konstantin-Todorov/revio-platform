@@ -5,6 +5,11 @@ document was asked out loud that day and none of it was written down anywhere.
 
 ---
 
+> 📍 **API-level behaviour lives in [`CHANNEX-API-NOTES.md`](CHANNEX-API-NOTES.md)** — pagination,
+> where `room_type_id` actually is, webhooks, what the endpoints return, how to probe one safely, and
+> the test that would have caught each fault. This file is how a *hotel* gets connected; that one is
+> how the *API* behaves.
+
 ## The two hops
 
 The single most common misunderstanding: **Channex is not an OTA.** It is the middleman. There are
