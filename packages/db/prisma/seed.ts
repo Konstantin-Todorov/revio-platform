@@ -62,6 +62,32 @@ async function main() {
     data: { name: "Revio Operator", email: "operator@revio.app", role: "super_admin", passwordHash: pw },
   });
 
+  /*
+   * ⚠️ US, the company — the singleton every invoice is issued BY.
+   *
+   * The seed never created this row, so a freshly seeded database had no `OperatorCompany` at all
+   * and `stripe-mode-verify` refused on every developer machine with "Seed the database first" —
+   * advice that could not work, because seeding was exactly what did not produce it. Production has
+   * the row only because it was written by hand once.
+   *
+   * `stripeMode: "test"` is the important value and it matches production. The platform charges
+   * nobody with live keys yet, and a seed that quietly set "live" would be a database where the
+   * next card is real.
+   */
+  await prisma.operatorCompany.upsert({
+    where: { id: "singleton" },
+    update: {},
+    create: {
+      id: "singleton",
+      legalName: "Уебър БГ ЕООД",
+      legalNameLatin: "Weber BG EOOD",
+      // чл. 97а: a real BG number valid for cross-border services only — NOT a charge-VAT
+      // registration. Which one we hold decides whether VAT goes on an invoice at all.
+      vatRegistration: "art97a",
+      stripeMode: "test",
+    },
+  });
+
   // --- Tenant + operator user ---------------------------------------------
   const tenant = await prisma.tenant.create({
     data: {

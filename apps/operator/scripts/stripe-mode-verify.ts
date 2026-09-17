@@ -30,14 +30,45 @@ async function setChoice(mode: "test" | "live") {
   await sys.operatorCompany.update({ where: { id: "singleton" }, data: { stripeMode: mode } });
 }
 
+/**
+ * What a Stripe account that has finished verification looks like.
+ *
+ * ⚠️ `lastCheckOk: true` only means the KEY authenticated. Live mode additionally requires Stripe to
+ * have confirmed the account can accept charges — a key can be valid on an account that is still
+ * mid-verification and cannot take a payment. The fixture predates that rule, so it produced an
+ * account that authenticates and cannot charge, and the product correctly said so.
+ */
+const CHARGES_ENABLED = { chargesEnabled: true } as const;
+
+/**
+ * Store a live credential the way a CONFIGURED integration actually looks.
+ *
+ * ⚠️ It must carry the webhook signing secret as well as the API key, and this script stored only
+ * the key — so step 3 asserted "with a working key it reports no problem" while the product
+ * correctly answered:
+ *
+ *   "Payments are set to LIVE, but no webhook signing secret is stored. A card could be charged
+ *    while the invoice remains unpaid in Revio."
+ *
+ * That is exactly the failure the check exists to prevent, and it was being reported as a FAIL of
+ * the code rather than a gap in the fixture. An API key alone is not a working payments setup: it
+ * can take money and cannot hear that it did.
+ */
 async function putLiveKey(lastCheckOk: boolean | null) {
   await sys.platformCredential.upsert({
     where: { provider_mode: { provider: "stripe", mode: "live" } },
-    update: { lastCheckOk, lastCheckedAt: lastCheckOk === null ? null : new Date() },
+    update: {
+      lastCheckOk,
+      lastCheckedAt: lastCheckOk === null ? null : new Date(),
+      webhookCipher: encryptSecret("whsec_scratch_never_real"),
+      lastCheckDetail: lastCheckOk ? CHARGES_ENABLED : undefined,
+    },
     create: {
       provider: "stripe", mode: "live",
       cipher: encryptSecret("sk_live_scratch_never_real"), hint: "sk_live_••••eal",
+      webhookCipher: encryptSecret("whsec_scratch_never_real"),
       lastCheckOk, lastCheckedAt: lastCheckOk === null ? null : new Date(),
+      lastCheckDetail: lastCheckOk ? CHARGES_ENABLED : undefined,
     },
   });
 }
@@ -82,7 +113,12 @@ async function main() {
     await setChoice("live");
     check((await activeStripeMode()) === "live", "choosing live makes it live");
     const liveOk = await stripeModeStatus();
-    check(liveOk.usable && liveOk.problem === null, "and with a working key it reports no problem");
+    // A failing assertion has to say what it GOT, or the next person re-derives it from scratch —
+    // which is the afternoon this one cost.
+    check(
+      liveOk.usable && liveOk.problem === null,
+      `and with a working key it reports no problem — usable=${liveOk.usable} problem=${JSON.stringify(liveOk.problem)}`,
+    );
 
     // 4 — the choice outliving the credential.
     await sys.platformCredential.deleteMany({ where: { provider: "stripe", mode: "live" } });
