@@ -219,10 +219,30 @@ export async function provisionChannexProperty(
    * Cheap to prevent, expensive to undo, and it costs one GET. Checked against the account this key
    * can actually see, which is also a free check that the key works before we start writing.
    */
-  const existing = await api("GET", "/properties");
-  const clash = (existing?.data ?? []).find(
-    (x: { id: string; attributes?: { title?: string } }) =>
-      (x.attributes?.title ?? "").trim().toLowerCase() === property.name.trim().toLowerCase(),
+  /*
+   * ⚠️ EVERY property, not the first ten.
+   *
+   * Channex paginates and defaults to a page of 10. A guard against duplicates that reads one page
+   * stops working the moment the account holds eleven properties — and it stops working silently,
+   * by finding no clash and letting the duplicate through. That is a check which degrades exactly as
+   * we grow, and whose failure looks identical to success.
+   *
+   * The account is at three today. This is the kind of thing that is free to fix now and is found
+   * later by discovering two identical properties and being unable to say which one the OTAs were
+   * mapped against — which has already happened once here, to "Ethno Villa Cherry".
+   */
+  const existing: { id: string; attributes?: { title?: string } }[] = [];
+  for (let page = 1; page <= 50; page++) {
+    const res = await api("GET", `/properties?pagination[page]=${page}&pagination[limit]=100`);
+    // Defensive: a POST to /properties answers with a single object under `data`, and a 5xx can
+    // answer with anything. A guard must not throw its way out of the check it exists to perform.
+    const batch: { id: string; attributes?: { title?: string } }[] = Array.isArray(res?.data) ? res.data : [];
+    existing.push(...batch);
+    const total = res?.meta?.total;
+    if (batch.length === 0 || (typeof total === "number" && existing.length >= total) || batch.length < 100) break;
+  }
+  const clash = existing.find(
+    (x) => (x.attributes?.title ?? "").trim().toLowerCase() === property.name.trim().toLowerCase(),
   );
   if (clash) {
     throw new ChannexProvisionError(

@@ -32,9 +32,15 @@ const writes = () => ({
 function stubFetch(handler: (method: string, path: string, body: any) => { status?: number; json: any }) {
   const calls: { method: string; path: string; body: any }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init: any) => {
-    const path = String(url).replace(/^https?:\/\/[^/]+\/api\/v1/, "");
+    /*
+     * The query string is dropped for MATCHING only — the reads are paginated
+     * (`?pagination[page]=…`) and a handler keyed on the bare path would silently stop matching,
+     * which is how a stub quietly starts testing the fallback branch instead of the real one.
+     */
+    const full = String(url).replace(/^https?:\/\/[^/]+\/api\/v1/, "");
+    const path = full.split("?")[0]!;
     const body = init?.body ? JSON.parse(init.body) : undefined;
-    calls.push({ method: init?.method ?? "GET", path, body });
+    calls.push({ method: init?.method ?? "GET", path: full, body });
     const r = handler(init?.method ?? "GET", path, body);
     return {
       ok: (r.status ?? 200) < 400,
@@ -161,7 +167,7 @@ describe("dry run — the runbook says always do this first", () => {
     const res = await provisionChannexProperty(input({ dryRun: true }), w);
 
     // The read that matters still happens; nothing is written anywhere.
-    expect(calls.filter((c) => c.method === "GET" && c.path === "/properties")).toHaveLength(1);
+    expect(calls.filter((c) => c.method === "GET" && c.path.startsWith("/properties"))).toHaveLength(1);
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
     expect(w.writeChannel).not.toHaveBeenCalled();
     expect(w.writeRoomMapping).not.toHaveBeenCalled();
@@ -176,5 +182,34 @@ describe("dry run — the runbook says always do this first", () => {
       ? { json: { data: [{ id: "cx-old", attributes: { title: "Hotel Sofia" } }] } }
       : null));
     await expect(provisionChannexProperty(input({ dryRun: true }), writes())).rejects.toThrow(/already has a property/i);
+  });
+});
+
+describe("the duplicate-property guard and pagination", () => {
+  /*
+   * ⚠️ A guard that reads one page stops working at eleven properties, silently, by finding no
+   * clash and letting the duplicate through. Its failure is indistinguishable from its success, and
+   * it fails precisely as the business grows. The account is at three today.
+   */
+  it("finds a clash that sits past the first page", async () => {
+    const filler = Array.from({ length: 100 }, (_, i) => ({ id: `x${i}`, attributes: { title: `Other ${i}` } }));
+    const second = [{ id: "cx-dupe", attributes: { title: "Hotel Sofia" } }];
+    // Page-aware stub: page 1 is full and clean, page 2 carries the duplicate.
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const full = String(url).replace(/^https?:\/\/[^/]+\/api\/v1/, "");
+      const page = Number(new URL(String(url)).searchParams.get("pagination[page]") ?? 1);
+      const json = full.startsWith("/properties")
+        ? { data: page === 1 ? filler : second, meta: { total: 101 } }
+        : { data: {} };
+      return { ok: true, status: 200, text: async () => JSON.stringify(json) } as never;
+    }));
+
+    await expect(provisionChannexProperty(input(), writes())).rejects.toThrow(/already has a property/);
+  });
+
+  it("does not throw when the channel answers with something that is not a list", async () => {
+    stubFetch((_m, _p) => ({ json: { data: { id: "not-a-list" } } }));
+    // The guard finds no clash and provisioning proceeds — it must not crash inside its own check.
+    await expect(provisionChannexProperty(input(), writes())).resolves.toBeDefined();
   });
 });
