@@ -11,7 +11,12 @@
 
 export interface EmailResult {
   ok: boolean;
-  mode: "resend" | "mock";
+  /**
+   * `skipped` = every recipient was on a reserved domain that cannot receive mail, so nothing was
+   * sent. `ok` is true because the caller did nothing wrong and a demo flow must still complete —
+   * it is a distinct mode rather than a silent success so a caller that cares can tell.
+   */
+  mode: "resend" | "mock" | "skipped";
   error?: string;
   /**
    * The provider never answered inside `EMAIL_TIMEOUT_MS`.
@@ -41,6 +46,39 @@ export interface EmailResult {
  * awaiting mail in the first place.
  */
 const EMAIL_TIMEOUT_MS = 10_000;
+
+/**
+ * Top-level domains that are reserved so they can NEVER resolve — RFC 2606 and RFC 6761.
+ *
+ * `.demo` is not on that list and behaves identically for our purposes: nobody owns
+ * `hotelsofia.demo`, so every message to it bounces. Included because our two permanent demo
+ * tenants use exactly that, deliberately.
+ */
+const UNDELIVERABLE_TLDS = ["test", "example", "invalid", "localhost", "demo"];
+
+/**
+ * An address that cannot possibly receive mail.
+ *
+ * ## ⚠️ Why this is a guard and not a nicety
+ *
+ * On 2026-09-17 the account's last 82 messages were **61 delivered and 21 bounced** — a 26% bounce
+ * rate, and 20 of those 21 were `admin@hotelsofia.demo` and `owner@blacksea.demo`. The demo tenants
+ * live in production on purpose, their addresses are fake on purpose, and every entitlement toggle
+ * or digest aimed at them was a guaranteed bounce.
+ *
+ * Providers throttle and then suspend a sender on bounce rate. **Every alert this platform sends —
+ * a booking that could not be imported, a password reset, an invoice — leaves by the same domain.**
+ * So a rehearsal against a demo hotel was quietly spending the deliverability that a real hotel's
+ * "your booking is not in the calendar" email depends on.
+ *
+ * Dropped rather than failed: the caller did nothing wrong and a demo flow must still complete.
+ */
+export function isUndeliverable(address: string): boolean {
+  const at = address.lastIndexOf("@");
+  if (at < 0) return true;
+  const tld = address.slice(at + 1).trim().toLowerCase().split(".").pop() ?? "";
+  return UNDELIVERABLE_TLDS.includes(tld);
+}
 
 /**
  * The From header. A hotel sends as ITS OWN name, from OUR verified address — we can DKIM-sign
@@ -92,6 +130,18 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo, at
    */
   attachments?: { filename: string; content: string }[] | null;
 }): Promise<EmailResult> {
+  /*
+   * ⚠️ Before anything else, including the mock branch: an address that cannot receive mail is not
+   * worth a log line either, and the mock branch is what a developer reads to check a flow.
+   */
+  const deliverable = to.filter((a) => !isUndeliverable(a));
+  if (deliverable.length !== to.length) {
+    const dropped = to.filter(isUndeliverable);
+    console.warn(`[email] not sent to ${dropped.join(",")} — reserved domain, cannot receive mail. subject="${subject}"`);
+  }
+  if (deliverable.length === 0) return { ok: true, mode: "skipped" };
+  to = deliverable;
+
   const key = process.env.RESEND_API_KEY;
   if (!key) {
     console.log(`[email:mock] from="${resolveFrom(fromName)}" replyTo=${replyTo ?? "-"} to=${to.join(",")} subject="${subject}" html=${html?.trim() ? "yes" : "no"} attachments=${attachments?.length ?? 0}\n${text}`);

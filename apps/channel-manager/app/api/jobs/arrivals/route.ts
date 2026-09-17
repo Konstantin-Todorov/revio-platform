@@ -53,8 +53,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
   }
   const db = forSystem();
+  /*
+   * ⚠️ `tenant: { status: "active" }` — a suspended account gets no mail either.
+   *
+   * Ventsi Group has been suspended and receiving "Tomorrow's arrivals (0) — Chervena Vila" every
+   * afternoon, for a property whose channel points at something Channex deleted. Every part of that
+   * is wrong: nobody there can sign in to act on it, the number is zero because nothing can reach
+   * them, and it is a daily reminder of a service we have switched off. A suspension that stops the
+   * software and keeps the mail is a suspension nobody thought through.
+   */
   const properties = await db.property.findMany({
-    where: { status: "active", OR: [{ notifyTodayArrivals: true }, { notifyTomorrowArrivals: true }] },
+    where: {
+      status: "active",
+      tenant: { status: "active" },
+      OR: [{ notifyTodayArrivals: true }, { notifyTomorrowArrivals: true }],
+    },
   });
 
   let sent = 0;
