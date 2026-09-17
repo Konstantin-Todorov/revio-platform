@@ -33,12 +33,15 @@
 import { forTenant } from "@revio/db";
 import { crossWiredRatePlans, describeCrossWire, type CrossWired } from "@revio/core";
 import { listChannelProducts, verifyChannelProperty } from "./sync.js";
+import { ensureChannexWebhook } from "./channex-webhook.js";
 
 type Db = ReturnType<typeof forTenant>;
 
 export interface MappingAuditResult {
   channelId: string;
   channelName: string;
+  /** What the webhook check did, when it ran. Absent when the property is unreachable anyway. */
+  webhook?: "registered" | "already" | "failed";
   /** Mapping rows whose catalogue answer we recorded. */
   checked: number;
   crossWired: CrossWired[];
@@ -59,7 +62,17 @@ export interface MappingAuditResult {
  * at all (our mock, so both demo hotels) is recorded as checked and accused of nothing: the pure
  * check skips a plan whose room the channel would not name.
  */
-export async function auditChannelMapping(prisma: Db, channelId: string): Promise<MappingAuditResult> {
+export async function auditChannelMapping(
+  prisma: Db,
+  channelId: string,
+  /**
+   * Where Channex should ring us, and the secret it sends back. Passed in rather than read from the
+   * environment here: only the app knows its own public origin, and `req.nextUrl.origin` behind
+   * Railway's proxy is `localhost` — a mistake this codebase has already shipped once.
+   */
+  webhookCallbackUrl?: string,
+  webhookSecret?: string,
+): Promise<MappingAuditResult> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) {
     return { channelId, channelName: "unknown", checked: 0, crossWired: [], raised: 0, skipped: "no such channel" };
@@ -97,11 +110,29 @@ export async function auditChannelMapping(prisma: Db, channelId: string): Promis
     return { ...base, checked: 0, crossWired: [], raised, skipped: "the channel 404s the property this channel points at" };
   }
 
+  /*
+   * ⚠️ The webhook is CHECKED nightly, not registered once and forgotten.
+   *
+   * Registering at connect time and never looking again is the shape of defect this codebase keeps
+   * producing: a thing that is correct on the day it is built and silently stops. A webhook deleted
+   * on Channex's side, or one that was never created because a connect half-failed, produces no
+   * error anywhere — bookings simply go back to arriving up to five minutes late, which nobody would
+   * ever notice. `ensureChannexWebhook` is idempotent, so on almost every night this is one GET.
+   *
+   * It is deliberately NOT allowed to fail the audit: the mapping check is the point of this job and
+   * a webhook is an optimisation on top of a poll that still runs.
+   */
+  let webhook: MappingAuditResult["webhook"];
+  if (webhookCallbackUrl && webhookSecret) {
+    const w = await ensureChannexWebhook(channel.propertyId, webhookCallbackUrl, webhookSecret);
+    webhook = w.ok ? (w.unchanged ? "already" : "registered") : "failed";
+  }
+
   const products = await listChannelProducts(prisma, channelId);
   if (products.rates.length === 0) {
     // See the header: zero is "no answer", never "no plans".
     await markChannel("unreadable");
-    return { ...base, checked: 0, crossWired: [], raised: 0, skipped: "the channel listed no rate plans — treated as unknown" };
+    return { ...base, checked: 0, crossWired: [], raised: 0, ...(webhook ? { webhook } : {}), skipped: "the channel listed no rate plans — treated as unknown" };
   }
   await markChannel("ok");
 
@@ -168,7 +199,7 @@ export async function auditChannelMapping(prisma: Db, channelId: string): Promis
     });
   }
 
-  return { ...base, checked, crossWired, raised };
+  return { ...base, checked, crossWired, raised, ...(webhook ? { webhook } : {}) };
 }
 
 /**

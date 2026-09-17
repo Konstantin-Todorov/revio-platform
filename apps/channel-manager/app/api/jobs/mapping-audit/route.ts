@@ -50,7 +50,18 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
 
+    /*
+     * Where Channex rings us. From the environment, never from the request: `req.nextUrl.origin`
+     * behind Railway's proxy is the internal `localhost:<port>`, which this codebase has already
+     * shipped once and spent a day chasing.
+     */
+    const origin = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, "")
+      || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "");
+    const callbackUrl = origin ? `${origin}/api/webhooks/channex` : "";
+    const webhookSecret = process.env.CHANNEX_WEBHOOK_SECRET ?? "";
+
     let checked = 0, crossWired = 0, raised = 0, inconclusive = 0;
+    const webhooks = { registered: 0, already: 0, failed: 0 };
     const lines: string[] = [];
     for (const c of channels) {
       /*
@@ -59,7 +70,8 @@ export async function POST(req: NextRequest) {
        * turns into a platform-wide blind spot.
        */
       try {
-        const r = await auditChannelMapping(db, c.id);
+        const r = await auditChannelMapping(db, c.id, callbackUrl, webhookSecret);
+        if (r.webhook) webhooks[r.webhook]++;
         checked += r.checked;
         crossWired += r.crossWired.length;
         raised += r.raised;
@@ -76,7 +88,7 @@ export async function POST(req: NextRequest) {
     }
 
     for (const l of lines) console.warn(`[mapping-audit] ${l}`);
-    return NextResponse.json({ ok: true, channels: channels.length, checked, crossWired, raised, inconclusive });
+    return NextResponse.json({ ok: true, channels: channels.length, checked, crossWired, raised, inconclusive, webhooks });
   } finally {
     await releaseJobLease(JOB.mappingAudit);
   }
