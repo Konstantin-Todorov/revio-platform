@@ -25,21 +25,21 @@ datasource db {
 // --- Tenancy ---------------------------------------------------------------
 
 model Tenant {
-  id                 String    @id @default(cuid())
-  name               String
-  slug               String    @unique
+  id                String  @id @default(cuid())
+  name              String
+  slug              String  @unique
   // Entitlements: which products this hotel account bought ("sold separately").
-  hasChannelManager  Boolean   @default(true)
-  hasReservation     Boolean   @default(false)
-  hasPms             Boolean   @default(false)
+  hasChannelManager Boolean @default(true)
+  hasReservation    Boolean @default(false)
+  hasPms            Boolean @default(false)
   // Commercial profile, set by the operator. plan ≈ room-count tier / package; status gates access.
-  plan               String    @default("starter") // starter | growth | scale
+  plan              String  @default("starter") // starter | growth | scale
   /// active | suspended | pending_signup
   ///
   /// `pending_signup` is a hotel that filled in the public form and has not yet opened the emailed
   /// link. Every app already refuses a session whose tenant is not `active`, so such an account is
   /// inert without one line of new gating — it fails closed by reusing a rule written long before.
-  status             String    @default("active")
+  status            String  @default("active")
 
   /// What a self-signed-up hotel said it needed most. Decides which product the welcome opens on;
   /// it never decides what they GET, which is all three. Null for operator-created clients.
@@ -89,10 +89,10 @@ model Tenant {
 }
 
 model User {
-  id                String    @id @default(cuid())
-  tenantId          String
-  name              String
-  email             String    @unique
+  id       String @id @default(cuid())
+  tenantId String
+  name     String
+  email    String @unique
 
   /// The mailbox this address actually reaches, for RECOGNITION only — `maria+trial2@gmail.com`
   /// and `m.a.r.i.a@gmail.com` both key to `maria@gmail.com`. Never used to sign in and never
@@ -146,7 +146,6 @@ model User {
   notificationsClearedAt DateTime?
   notificationsReadKeys  String[]  @default([])
 
-
   tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   recoveryCodes UserRecoveryCode[]
   activeDays    ActiveUserDay[]
@@ -174,7 +173,7 @@ model OperatorUser {
   /// The TOTP shared secret, ENCRYPTED at rest with the same AES-256-GCM helper the OTA
   /// credentials use. A plaintext secret in this column is a second factor that the database
   /// hands to anyone who can read it, which is no second factor at all.
-  totpSecret    String?
+  totpSecret        String?
   /// A setup in progress, kept APART from `totpSecret` so that starting one cannot disable the
   /// factor that already works.
   ///
@@ -188,17 +187,16 @@ model OperatorUser {
   /// Null until a code has actually been verified. Enrolment stores the secret first and only
   /// switches 2FA ON once the person proves their app generates matching codes — otherwise a
   /// mistyped setup locks them out of the console with no way back in.
-  totpEnabledAt DateTime?
+  totpEnabledAt     DateTime?
   /// The last 30-second step accepted for this account, so a code cannot be replayed inside its
   /// own window. TOTP is only single-use if something remembers; without this a code read over a
   /// shoulder stays valid for the rest of its period.
-  totpLastStep  Int?
+  totpLastStep      Int?
 
   createdAt DateTime @default(now())
 
   ownedAccounts ClientAccount[]
   recoveryCodes OperatorRecoveryCode[]
-
 
   /// ⚠️ Notification read state, per person — the whole reason a notification centre is not the
   /// same thing as the attention bell. The bell counts what is wrong at the hotel and reads the
@@ -268,28 +266,28 @@ model ConnectivityCredential {
 /// screen: a secret typed into psql has no encryption, no test, no record of who set it and no hint
 /// to recognise it by later.
 model PlatformCredential {
-  id       String @id @default(cuid())
+  id               String    @id @default(cuid())
   /// "stripe". One string rather than an enum so adding a provider is a migration nobody writes.
-  provider String
+  provider         String
   /// "test" | "live".
   ///
   /// NEVER inferred from the key. The mode is chosen by a person and the key is validated against
   /// it, because a live key pasted into a sandbox field is real money moving while somebody believes
   /// they are rehearsing. Same trap as Channex sandbox-vs-production, which has cost a day already.
-  mode     String
+  mode             String
   /// base64 iv.tag.ciphertext (AES-256-GCM) — the same envelope as ConnectivityCredential, so key
   /// rotation covers both without a second mechanism.
-  cipher   String
+  cipher           String
   /// What the screen shows in place of the key: "sk_test_••••4242". A key that can be read back out
   /// of the UI is a key that leaks in a screenshot, so there is deliberately no way to reveal it.
-  hint     String
+  hint             String
   /// The publishable key. NOT a secret — Stripe prints it in its own dashboard and the browser needs
   /// it for Elements — so it is stored in clear on purpose. Encrypting it would buy nothing and cost
   /// a decrypt on every page that renders a payment form.
-  publishableKey String?
+  publishableKey   String?
   /// Webhook signing secret, encrypted. Absent until webhooks are wired; a webhook whose signature
   /// is not verified is an unauthenticated write endpoint wearing a payment provider's name.
-  webhookCipher  String?
+  webhookCipher    String?
   /// When this credential was last exercised against the provider, and what came back.
   ///
   /// Stored rather than checked on render, for the reason ConnectivityCredential states: otherwise
@@ -306,9 +304,9 @@ model PlatformCredential {
   /// passed leaves evidence of what it passed against.
   lastCheckDetail  Json?
   /// Who set it, for the audit question "when did this change and who changed it".
-  updatedBy String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedBy        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@unique([provider, mode])
 }
@@ -430,15 +428,15 @@ model Invoice {
   // numbering and its own rules, and whether one is required is the accountant's call, not the
   // software's. See `docs/STRIPE-REVIEW-2026-09-09.md` §S2.
   /// How much has come back, in minor units. 0 is the normal case and is not the same as null.
-  refundedMinor         Int       @default(0)
+  refundedMinor Int       @default(0)
   /// When the most recent refund landed. Null while nothing has been returned.
-  refundedAt            DateTime?
+  refundedAt    DateTime?
   /// Stripe's own dispute state — "warning_needs_response", "needs_response", "won", "lost", …
   ///
   /// Never collapsed into a boolean: "a dispute exists" and "we lost it" are different amounts of
   /// trouble, and the operator needs to tell them apart without opening Stripe.
-  disputeStatus         String?
-  disputedAt            DateTime?
+  disputeStatus String?
+  disputedAt    DateTime?
 
   // --- The issued document -------------------------------------------------
   // Everything below is NULL while the invoice is a draft and frozen the moment it is issued.
@@ -620,8 +618,8 @@ model OperatorInvoiceSeries {
 /// `Tenant.name` is the trading name the hotel uses ("Hotel Sofia Group"); `legalName` is the entity
 /// that actually owes the money, and they are routinely different.
 model ClientBilling {
-  id           String   @id @default(cuid())
-  tenantId     String   @unique
+  id           String    @id @default(cuid())
+  tenantId     String    @unique
   legalName    String
   vatId        String?
   companyId    String?
@@ -640,8 +638,8 @@ model ClientBilling {
   /// when we edit the row — the difference is whether a legal name is the customer's own answer or
   /// our transcription of a phone call.
   selfServedAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
@@ -725,6 +723,16 @@ model ClientNote {
 
 model Property {
   id                        String    @id @default(cuid())
+  /// The Channex WEBHOOK id for this property, so bookings arrive in seconds instead of on the
+  /// five-minute poll.
+  ///
+  /// ⚠️ Per PROPERTY, not per channel. Channex keys a webhook on `property_id`, and one property can
+  /// carry Booking.com and Expedia at once — registering per channel would create a duplicate
+  /// webhook for every OTA and call us twice for one booking.
+  ///
+  /// Null = never registered. The five-minute poll runs regardless: a webhook that never arrives is
+  /// silent, which is the failure this platform has spent a day removing.
+  channexWebhookId          String?
   tenantId                  String
   name                      String
   timezone                  String    @default("Europe/Sofia")
@@ -1584,7 +1592,7 @@ model Hold {
   /// search). Recorded rather than inferred from `createdById IS NULL` — that inference is true
   /// today and silently wrong the first time anything else creates a hold without a user, which is
   /// exactly the kind of coupling that turns a metric into a lie nobody notices.
-  source        String   @default("staff")
+  source String @default("staff")
 
   /// The guest's browsing session, for booking-engine holds only (null for staff).
   ///
@@ -1592,7 +1600,7 @@ model Hold {
   /// goes back and books a different one leaves the first hold to expire — so one person, one
   /// booking, reads as one conversion AND one abandonment. Grouping by session counts that person
   /// once, as the single decision they actually made.
-  sessionId     String?
+  sessionId String?
 
   property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   roomType    RoomType     @relation(fields: [roomTypeId], references: [id], onDelete: Cascade)
@@ -2590,19 +2598,19 @@ model SupportMessage {
 /// Operator-perimeter: this is our mailbox, not a hotel's, and a hotel must never read what another
 /// customer sent us. No tenantId, and `operator_only` RLS.
 model InboundEmail {
-  id        String   @id @default(cuid())
+  id         String    @id @default(cuid())
   /// The mail's own Message-ID. Unique, and the whole reason a re-read is harmless.
-  messageId String   @unique
-  fromEmail String
-  subject   String
+  messageId  String    @unique
+  fromEmail  String
+  subject    String
   /// filed | opened | ignored-automated | ignored-empty | ignored-unknown-sender | error
-  outcome   String
+  outcome    String
   /// The request it was filed against or created, when there is one.
-  requestId String?
+  requestId  String?
   /// Why, in one line, for the outcomes that need explaining.
-  detail    String?
+  detail     String?
   receivedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([createdAt])
   @@index([outcome])
@@ -2669,11 +2677,11 @@ model ActiveUserDay {
 /// in March and did not keep it" is exactly what a renewal call needs, and a nullable date column
 /// would have been overwritten by the next trial.
 model ProductTrial {
-  id          String    @id @default(cuid())
-  tenantId    String
+  id                String    @id @default(cuid())
+  tenantId          String
   /// cm | crs | pms
-  product     String
-  startedAt   DateTime  @default(now())
+  product           String
+  startedAt         DateTime  @default(now())
   /// ⚠️ The first time this product was actually OPENED — and the only honest start for its trial.
   ///
   /// Signing up switched all three products on and started three clocks at once, so a hotel that
@@ -2684,23 +2692,23 @@ model ProductTrial {
   ///
   /// Null means never opened — an invitation, not a countdown. Existing rows were backfilled from
   /// `startedAt` so no running trial moved when this shipped.
-  openedAt    DateTime?
-  endsAt      DateTime
+  openedAt          DateTime?
+  endsAt            DateTime
   /// Set when it stopped, whichever way. Null means running — and only a running trial is swept.
-  endedAt     DateTime?
+  endedAt           DateTime?
   /// converted | cancelled | expired. Only `expired` is ever written by a machine.
-  outcome     String?
+  outcome           String?
   /// Which operator granted it. Nobody self-serves a trial.
-  grantedById String?
+  grantedById       String?
   /// Which warnings have gone out, so none is ever sent twice however often the sweep runs.
-  remindedAt7 DateTime?
-  remindedAt1 DateTime?
+  remindedAt7       DateTime?
+  remindedAt1       DateTime?
   /// The hotel pressed "Keep it" on the trial banner in their own product. The strongest buying
   /// signal we get. It does NOT convert anything — an operator still does that deliberately.
   keepRequestedAt   DateTime?
   /// Which person at the hotel asked, so the call-back knows who to ask for.
   keepRequestedById String?
-  createdAt   DateTime  @default(now())
+  createdAt         DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -2819,36 +2827,36 @@ model WaitlistEntry {
 /// send the same mail 24 times a day or send nothing at all, and the first of those is how an alert
 /// address becomes a folder nobody opens.
 model OperatorAlert {
-  id          String    @id @default(cuid())
+  id            String    @id @default(cuid())
   /// Stable across runs: what KIND of fault, for what THING. `cross_wired:<channelId>:<label>`.
-  key         String    @unique
+  key           String    @unique
   /// Which client it concerns — kept denormalised so a resolved alert still reads sensibly later.
-  clientName  String
-  summary     String
-  firstSeenAt DateTime  @default(now())
+  clientName    String
+  summary       String
+  firstSeenAt   DateTime  @default(now())
   lastAlertedAt DateTime
   /// Set when the fault stopped being reported. Kept rather than deleted: a fault that comes back
   /// is worth seeing as a recurrence, not as something new.
-  resolvedAt  DateTime?
+  resolvedAt    DateTime?
 
   @@index([resolvedAt])
 }
 
 model DeletedClient {
-  id           String   @id @default(cuid())
-  tenantName   String
-  tenantSlug   String
-  wasDemo      Boolean  @default(false)
+  id            String   @id @default(cuid())
+  tenantName    String
+  tenantSlug    String
+  wasDemo       Boolean  @default(false)
   /// The status it held at the moment it was deleted — active, suspended, pending_signup.
-  lastStatus   String
-  clientSince  DateTime
+  lastStatus    String
+  clientSince   DateTime
   /// What went with it, counted before the delete so the numbers are real rather than remembered.
-  reservations Int      @default(0)
-  properties   Int      @default(0)
-  users        Int      @default(0)
+  reservations  Int      @default(0)
+  properties    Int      @default(0)
+  users         Int      @default(0)
   deletedByName String
   deletedById   String
-  deletedAt    DateTime @default(now())
+  deletedAt     DateTime @default(now())
 
   @@index([deletedAt])
 }

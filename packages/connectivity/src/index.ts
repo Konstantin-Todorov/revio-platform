@@ -86,6 +86,7 @@ export {
   type OccupancyRate, type SellMode, type ChannexOccupancyOption,
 } from "./channex-occupancy.js";
 export { auditChannelMapping, type MappingAuditResult } from "./mapping-audit.js";
+export { ensureChannexWebhook, removeChannexWebhook, WEBHOOK_SECRET_HEADER, type WebhookResult } from "./channex-webhook.js";
 export { classifyChannexRatePlan, mappableRatePlans, ratePlansForRoom, type ChannexRatePlan, type ChannexRatePlanKind } from "./channex-products.js";
 export { ratePlanMappingRows, unconfirmedPairs, collidingExternalIds, type RoomScopedMappingRow, type ExistingRateMapping } from "./mapping-rows.js";
 export { comparePublished, summarisePublished, type PublishedComparison, type PublishedRate, type ExpectedRate, type PublishedSummary } from "./published-check.js";
