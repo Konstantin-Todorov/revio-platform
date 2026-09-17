@@ -148,5 +148,48 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
     });
   }
 
+  /*
+   * 5. A mapping that belongs to a rate plan the hotel has switched OFF.
+   *
+   * ⚠️ The push now skips these, so nothing is being published — but the row is still there, still
+   * says `complete`, and is still wrong. It is how the 2-Bedroom came to publish against the
+   * 1-Bedroom: a plan nobody maintains, mapped years ago, that kept going. Reported so it gets
+   * cleared rather than waiting to be re-enabled and start pushing nonsense again.
+   *
+   * `soon`, not `act`: it is no longer doing damage. It is a thing to tidy before it can.
+   */
+  const staleMaps = await prisma.channelRatePlanMapping.findMany({
+    where: { externalRateId: { not: null }, ratePlan: { active: false } },
+    select: {
+      channelId: true, ratePlan: { select: { name: true } }, roomType: { select: { name: true } },
+      channel: { select: { name: true, property: { select: { name: true, tenant: { select: { name: true } } } } } },
+    },
+  });
+  // One line per client+plan: five rooms carrying the same dead plan is one thing to tidy, not five.
+  const byPlan = new Map<string, { clientName: string; channel: string; plan: string; rooms: string[] }>();
+  for (const m of staleMaps) {
+    const k = `${m.channelId}:${m.ratePlan.name}`;
+    const e = byPlan.get(k) ?? {
+      clientName: m.channel.property.tenant.name,
+      channel: m.channel.name,
+      plan: m.ratePlan.name,
+      rooms: [],
+    };
+    if (m.roomType?.name) e.rooms.push(m.roomType.name);
+    byPlan.set(k, e);
+  }
+  for (const [k, e] of byPlan) {
+    out.push({
+      key: `stale_mapping:${k}`,
+      clientName: e.clientName,
+      summary: `"${e.plan}" is switched off but still mapped on ${e.channel}`,
+      action:
+        `Nothing is published for it — the push skips switched-off plans — but the mapping is stale and ` +
+        `would start sending again if the plan is ever re-enabled. Clear it on the Mapping screen` +
+        (e.rooms.length ? ` (${e.rooms.join(", ")}).` : "."),
+      severity: "soon",
+    });
+  }
+
   return out;
 }

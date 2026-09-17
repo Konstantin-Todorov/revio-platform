@@ -247,7 +247,26 @@ export async function syncChannel(
   const [allRoomMaps, allRateMaps] = await Promise.all([
     prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: "complete", externalRoomId: { not: null } }, include: { roomType: true } }),
     prisma.channelRatePlanMapping.findMany({
-      where: { channelId, status: "complete", externalRateId: { not: null } },
+      /*
+       * ⚠️ `ratePlan: { active: true }` — A SWITCHED-OFF PLAN MUST NOT PUSH.
+       *
+       * This filter was missing, and it is not a tidiness issue. A rate plan the hotel has turned
+       * off sells nothing in Revio, so pushing its prices to an OTA offers a guest a rate this
+       * system will not honour — and the mapping row behind it is usually stale, because nobody
+       * maintains the mapping of a plan they stopped using.
+       *
+       * Live proof on 2026-09-17: Cabacum Beach Residence switched `Standard Rate` off and built
+       * BB Flex and BB Non-Refundable instead. Its mapping row stayed `complete`, still pointed at
+       * a plan belonging to a DIFFERENT ROOM, and went on pushing on every sync — publishing the
+       * 2-Bedroom's availability against the 1-Bedroom. Deactivating the plan in the product did
+       * nothing to stop it.
+       *
+       * ⚠️ Deliberately NOT applied to `pushStopSellOverlay`. Pausing or disconnecting must close
+       * EVERYTHING currently live at the OTA, including whatever a stale mapping has been
+       * publishing. Skipping inactive plans there would leave exactly those rooms on sale — the
+       * opposite of what pause means.
+       */
+      where: { channelId, status: "complete", externalRateId: { not: null }, ratePlan: { active: true } },
       // occupancyOptions decides the shape of the push: their presence on a per-person plan is
       // what turns a scalar `rate` into a `rates[]` array.
       include: { ratePlan: { include: { occupancyOptions: true } } },
