@@ -49,11 +49,34 @@ export function middleware(req: NextRequest) {
   return NextResponse.next();
 }
 
+/**
+ * The paths the cookie gate must not touch, and why each one is on the list.
+ *
+ * ⚠️ Everything here is reached by something that HAS NO SESSION AND CANNOT GET ONE. A 307 to
+ * /login is not an error any of them can report — a cron sees a redirect it ignores, a mail client
+ * shows a broken image, a monitor follows the redirect and calls the service healthy. The failure is
+ * always silent, which is why the list is written out rather than kept in the regex alone.
+ */
+const UNGATED = [
+  // Cron. Does its own Bearer auth against CRON_SECRET.
+  "api/jobs",
+  // A hotel's email logo, fetched by mail clients that carry no cookie at all.
+  "api/brand",
+  // Polled by an EXTERNAL uptime monitor. A monitor following a 307 to /login would report the
+  // service healthy while its database was unreachable.
+  "api/health",
+  /*
+   * ⚠️ Channex ringing us when a booking arrives. Added 2026-09-17, and it was missing on the first
+   * deploy of that endpoint — caught by curl-ing production and getting a 307 instead of a 401.
+   *
+   * It would have failed in the worst available way: Channex gets a redirect, the route never runs,
+   * and it eventually disables an endpoint that keeps failing — while bookings carry on arriving on
+   * the five-minute poll, so nobody would ever have noticed the webhook did not work. The route does
+   * its own shared-secret check and fails closed.
+   */
+  "api/webhooks",
+];
+
 export const config = {
-  // api/jobs does its own Bearer auth (cron) and api/brand serves a hotel's email logo to mail
-  // clients that carry no session at all — the cookie gate must not redirect either.
-  // api/health is polled by an EXTERNAL uptime monitor that has no session, so the cookie gate
-  // must not redirect it — a monitor following a 307 to /login would report the service
-  // healthy while its database was unreachable.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/jobs|api/brand|api/health|.*\\.[a-zA-Z0-9]+$).*)"],
+  matcher: [`/((?!_next/static|_next/image|favicon.ico|${UNGATED.join("|")}|.*\\.[a-zA-Z0-9]+$).*)`],
 };
