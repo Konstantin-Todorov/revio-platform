@@ -28,22 +28,36 @@ export function DeleteChannel({
   name,
   propertyName,
   reservations,
+  explainRefusal,
   action,
 }: {
   channelId: string;
   name: string;
   propertyName: string;
   reservations: number;
+  /**
+   * Whether to spell out why there is no Remove.
+   *
+   * ⚠️ False on a healthy channel, and that is the point. The sentence under every working row was
+   * four repetitions of an apology for something nobody was trying to do — the clutter that teaches
+   * people to stop reading a screen. It appears where somebody would actually be reaching for
+   * delete: a disconnected channel, one pointed at a property that is gone, a suspended account.
+   */
+  explainRefusal?: boolean;
   action: (fd: FormData) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
 
   if (reservations > 0) {
+    if (!explainRefusal) return null;
     return (
-      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-400">
-        <AlertTriangle className="h-3.5 w-3.5" />
-        Cannot be removed — {reservations} booking{reservations === 1 ? "" : "s"} came through it and would go too. Disconnect instead.
+      <span className="inline-flex max-w-sm items-start gap-1.5 text-[11.5px] leading-snug text-ink-400">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          Cannot be removed — {reservations} booking{reservations === 1 ? "" : "s"} came through it and would go too.
+          Disconnect instead.
+        </span>
       </span>
     );
   }

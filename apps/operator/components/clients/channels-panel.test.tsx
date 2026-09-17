@@ -34,10 +34,23 @@ describe("what the panel refuses to offer", () => {
    * silently. There must be nothing to click.
    */
   it("offers no Remove at all when bookings came through the channel", () => {
-    const out = html([row({ reservations: 40 })]);
+    // Disconnected, so somebody plausibly IS reaching for delete and gets told why there is none.
+    const out = html([row({ reservations: 40, status: "disconnected" })]);
     expect(out).not.toMatch(/Remove/);
     expect(out).toMatch(/40 bookings came through it and would go too/);
     expect(out).toMatch(/Disconnect instead/);
+  });
+
+  /*
+   * ⚠️ On a healthy channel the refusal is not printed at all. Under every working row it was four
+   * repetitions of an apology for something nobody was trying to do.
+   */
+  it("says nothing about removal on a channel nobody would be removing", () => {
+    const out = html([row({ reservations: 40, status: "connected" })]);
+    expect(out).not.toMatch(/Remove/);
+    expect(out).not.toMatch(/Cannot be removed/);
+    // The fact that stops the question being asked is already there.
+    expect(out).toMatch(/Bookings taken/);
   });
 
   it("offers Remove when the channel never produced anything", () => {
@@ -120,5 +133,21 @@ describe("Resume on a suspended account", () => {
 
   it("is offered once the account is active again", () => {
     expect(html([row({ status: "paused" })], false)).toMatch(/Resume/);
+  });
+});
+
+describe("a demo connection", () => {
+  /*
+   * The audit only talks to real channels, so "Listings checked never" against a mock reads as
+   * neglect rather than as not-applicable. A screen that invents work is worse than a quiet one.
+   */
+  it("is not reported as never checked", () => {
+    const out = html([row({ mode: "mock", catalogueCheckedAt: null, catalogueStatus: null })]);
+    expect(out).toMatch(/demo connection/);
+    expect(out).not.toMatch(/Listings checked/);
+  });
+
+  it("but a real channel always says when it was last confirmed", () => {
+    expect(html([row({ mode: "channex_prod", catalogueCheckedAt: null })])).toMatch(/Listings checked/);
   });
 });

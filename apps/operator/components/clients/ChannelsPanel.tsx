@@ -95,17 +95,94 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
 
       {channels.map((ch) => {
         const cat = ch.catalogueStatus ? CATALOGUE[ch.catalogueStatus] : null;
+        /*
+          ⚠️ The "cannot be removed" sentence is shown only when somebody would be reaching for
+          delete — a channel that is disconnected, pointed at a property that is gone, or on a
+          suspended account. Printed under every healthy row it was four repetitions of an apology
+          for something nobody was trying to do, which is exactly the clutter that teaches people to
+          stop reading a screen. On a working channel the facts already say it: "Bookings taken 1".
+        */
+        const mightWantGone = ch.status === "disconnected" || ch.catalogueStatus === "property_missing" || suspended;
+
+        const controls = (
+          <>
+            {ch.status === "paused" ? (
+              /*
+                ⚠️ No Resume while the account is suspended, because resuming cannot work: it would
+                mark the channel connected and then be refused the re-push that lifts the stop-sell,
+                leaving a channel that reads live and sells nothing. The server refuses it too; this
+                is so nobody is invited to press a button that cannot succeed.
+              */
+              suspended ? (
+                <span className="max-w-xs text-[11.5px] leading-snug text-ink-400">
+                  Reinstate the account to resume — resuming now would reopen the channel without republishing anything.
+                </span>
+              ) : (
+                <form action={operatorResumeChannel}>
+                  <input type="hidden" name="channelId" value={ch.id} />
+                  <SubmitButton className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
+                    Resume
+                  </SubmitButton>
+                </form>
+              )
+            ) : ch.status === "connected" ? (
+              <form action={operatorPauseChannel}>
+                <input type="hidden" name="channelId" value={ch.id} />
+                <SubmitButton
+                  title="Stop-sells this channel at the OTA. Reversible; mappings are untouched."
+                  className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-warning-600 hover:text-warning-700"
+                >
+                  Pause
+                </SubmitButton>
+              </form>
+            ) : null}
+
+            {ch.status === "disconnected" ? (
+              <form action={operatorReconnectChannel}>
+                <input type="hidden" name="channelId" value={ch.id} />
+                <SubmitButton className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
+                  Reconnect
+                </SubmitButton>
+              </form>
+            ) : (
+              <form action={operatorDisconnectChannel}>
+                <input type="hidden" name="channelId" value={ch.id} />
+                <SubmitButton
+                  title="Stops all traffic both ways. Mappings are kept, so reconnecting restores them."
+                  className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-ink-400 hover:text-ink-800"
+                >
+                  Disconnect
+                </SubmitButton>
+              </form>
+            )}
+
+            <DeleteChannel
+              channelId={ch.id}
+              name={ch.name}
+              propertyName={ch.propertyName}
+              reservations={ch.reservations}
+              explainRefusal={mightWantGone}
+              action={operatorDeleteChannel}
+            />
+          </>
+        );
+
         return (
           <div key={ch.id} className="px-4 py-3.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[13px] font-bold text-ink-900">{ch.propertyName}</span>
-              <span className="text-ink-300">·</span>
-              <span className="text-[13px] font-semibold text-ink-700">{ch.name}</span>
-              <StatusPill tone={STATUS_TONE[ch.status] ?? "neutral"}>{ch.status}</StatusPill>
-              {ch.mode === "mock"
-                ? <StatusPill tone="neutral">demo connection</StatusPill>
-                : <StatusPill tone="info">{ch.mode === "channex_prod" ? "Channex production" : "Channex sandbox"}</StatusPill>}
-              {cat && <span title={cat.detail}><StatusPill tone={cat.tone}>{cat.label}</StatusPill></span>}
+            {/* Identity left, controls right, on one line — the shape of every row of settings
+                anybody has used. They stack at narrow widths rather than crushing. */}
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-[13px] font-bold text-ink-900">{ch.propertyName}</span>
+                <span className="text-ink-300">·</span>
+                <span className="text-[13px] font-semibold text-ink-700">{ch.name}</span>
+                <StatusPill tone={STATUS_TONE[ch.status] ?? "neutral"}>{ch.status}</StatusPill>
+                {ch.mode === "mock"
+                  ? <StatusPill tone="neutral">demo connection</StatusPill>
+                  : <StatusPill tone="info">{ch.mode === "channex_prod" ? "Channex production" : "Channex sandbox"}</StatusPill>}
+                {cat && <span title={cat.detail}><StatusPill tone={cat.tone}>{cat.label}</StatusPill></span>}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">{controls}</div>
             </div>
 
             {cat && cat.tone === "danger" && (
@@ -130,9 +207,17 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
               </p>
             )}
 
-            <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[11.5px] text-ink-500">
+            <dl className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11.5px] text-ink-500">
               <div><dt className="inline text-ink-400">Last sync </dt><dd className="inline font-semibold text-ink-700">{when(ch.lastSyncAt)}</dd></div>
-              <div><dt className="inline text-ink-400">Listings checked </dt><dd className="inline font-semibold text-ink-700">{when(ch.catalogueCheckedAt)}</dd></div>
+              {/*
+                ⚠️ Only for a channel we actually ask. A demo connection has no catalogue on the
+                other side, so the audit skips it — and printing "Listings checked never" against it
+                reads as a thing that has been neglected rather than a thing that does not apply.
+                A screen that invents work is worse than one that stays quiet.
+              */}
+              {ch.mode !== "mock" && (
+                <div><dt className="inline text-ink-400">Listings checked </dt><dd className="inline font-semibold text-ink-700">{when(ch.catalogueCheckedAt)}</dd></div>
+              )}
               <div><dt className="inline text-ink-400">Bookings taken </dt><dd className="tnum inline font-semibold text-ink-700">{ch.reservations}</dd></div>
               {ch.errorCount > 0 && (
                 <div><dt className="inline text-ink-400">Open errors </dt><dd className="tnum inline font-semibold text-danger-600">{ch.errorCount}</dd></div>
@@ -145,66 +230,6 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
                 </div>
               )}
             </dl>
-
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              {ch.status === "paused" ? (
-                /*
-                  ⚠️ No Resume while the account is suspended, because resuming cannot work: it would
-                  mark the channel connected and then be refused the re-push that lifts the stop-sell,
-                  leaving a channel that reads live and sells nothing. The server refuses it too; this
-                  is so nobody is invited to press a button that cannot succeed.
-                */
-                suspended ? (
-                  <span className="text-[11.5px] text-ink-400">
-                    Reinstate the account to resume — resuming now would reopen the channel without republishing anything.
-                  </span>
-                ) : (
-                  <form action={operatorResumeChannel}>
-                    <input type="hidden" name="channelId" value={ch.id} />
-                    <SubmitButton className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
-                      Resume
-                    </SubmitButton>
-                  </form>
-                )
-              ) : ch.status === "connected" ? (
-                <form action={operatorPauseChannel}>
-                  <input type="hidden" name="channelId" value={ch.id} />
-                  <SubmitButton
-                    title="Stop-sells this channel at the OTA. Reversible; mappings are untouched."
-                    className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-warning-600 hover:text-warning-700"
-                  >
-                    Pause
-                  </SubmitButton>
-                </form>
-              ) : null}
-
-              {ch.status === "disconnected" ? (
-                <form action={operatorReconnectChannel}>
-                  <input type="hidden" name="channelId" value={ch.id} />
-                  <SubmitButton className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
-                    Reconnect
-                  </SubmitButton>
-                </form>
-              ) : (
-                <form action={operatorDisconnectChannel}>
-                  <input type="hidden" name="channelId" value={ch.id} />
-                  <SubmitButton
-                    title="Stops all traffic both ways. Mappings are kept, so reconnecting restores them."
-                    className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-ink-400 hover:text-ink-800"
-                  >
-                    Disconnect
-                  </SubmitButton>
-                </form>
-              )}
-
-              <DeleteChannel
-                channelId={ch.id}
-                name={ch.name}
-                propertyName={ch.propertyName}
-                reservations={ch.reservations}
-                action={operatorDeleteChannel}
-              />
-            </div>
           </div>
         );
       })}

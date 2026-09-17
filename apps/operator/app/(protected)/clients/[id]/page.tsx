@@ -403,7 +403,16 @@ export default async function ClientDetailPage({
         </Card>
         )}
 
-        <Card>
+        {/*
+          ⚠️ FULL WIDTH, and that is not a cosmetic choice.
+          
+          It sat in a third of a row when it was four numbers, which was the right size for four
+          numbers. A channel row carries an identity, three states, four facts and three controls;
+          in a 380px column every one of those wraps onto its own line and the card becomes a stack
+          nobody scans. Same reasoning as "Twelve months" below — content that is read across
+          belongs across.
+        */}
+        <Card className="lg:col-span-3">
           <CardHeader
             title="Connectivity"
             action={
