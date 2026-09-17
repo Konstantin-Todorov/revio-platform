@@ -24,7 +24,12 @@
 import { createHmac } from "node:crypto";
 import { forSystem, encryptSecret } from "@revio/db";
 
-const BASE = process.env.OPERATOR_URL ?? "http://localhost:3010";
+/*
+ * The console's own dev port is 3001 (`next dev -p 3001`). This defaulted to 3010, which nothing
+ * starts, so the script refused on a normally-running stack and told you to start a SECOND console
+ * on a port no other tool uses.
+ */
+const BASE = process.env.OPERATOR_URL ?? "http://localhost:3001";
 const ENDPOINT = `${BASE}/api/webhooks/stripe`;
 const SECRET = "whsec_verify_scratch_secret_not_real";
 
@@ -70,7 +75,8 @@ async function main() {
   const reachable = await fetch(ENDPOINT).then((r) => r.ok).catch(() => false);
   if (!reachable) {
     console.error(`REFUSING TO RUN: nothing answering at ${ENDPOINT}.\n` +
-      `Start the console first:  pnpm --filter @revio/operator dev -- -p 3010`);
+      `Start the console first:  pnpm --filter @revio/operator dev` +
+      `\n(or point this at another one: OPERATOR_URL=http://localhost:PORT …)`);
     process.exit(2);
   }
 
@@ -92,6 +98,30 @@ async function main() {
     },
   });
   const hadCredentialBefore = credential.createdAt.getTime() < Date.now() - 5_000;
+
+  /*
+   * ⚠️ Preflight: can the ROUTE read what we just wrote?
+   *
+   * The secret is stored encrypted, and `encryptSecret` keys off CONNECTIVITY_SECRET (falling back
+   * to AUTH_SECRET). This script and the dev server are separate processes: run it without the
+   * console's own secret and it writes a cipher the route cannot open, so every genuine event is
+   * correctly refused — and the run printed SIX FAILs that read as "the payment webhook is broken"
+   * when nothing was wrong with it at all.
+   *
+   * A payments verifier reporting a false failure is worse than one that does not run, so this
+   * asks first and refuses with the actual remedy.
+   */
+  const probeBody = JSON.stringify({ id: "evt_preflight", type: "ping", data: { object: {} } });
+  const probe = await post(probeBody, sign(probeBody, SECRET));
+  if (probe.status === 400 && /no webhook signing secret/i.test(JSON.stringify(probe.json))) {
+    console.error(
+      "\nREFUSING TO RUN: the console cannot decrypt the signing secret this script just stored.\n" +
+      "Both processes must share one key. Re-run with the console's own:\n\n" +
+      `  AUTH_SECRET=$(grep '^AUTH_SECRET=' apps/operator/.env.local | cut -d= -f2-) \\\n` +
+      "  OPERATOR_URL=http://localhost:3001 pnpm --filter @revio/operator webhook-verify\n",
+    );
+    process.exit(2);
+  }
 
   const AMOUNT = 14160;
   const sessionId = `cs_verify_${Date.now()}`;
