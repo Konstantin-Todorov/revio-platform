@@ -125,7 +125,8 @@ export async function getClients() {
   return Promise.all(
     tenants.map(async (t) => {
       const [roomTypes, channels, channelsConnected, reservations, openErrors, lastSync, lastSuccess,
-             units, lastReservation, reservationsLast30d, bookingEngineProperties, directLast30d, unpaidInvoices] = await Promise.all([
+             units, lastReservation, reservationsLast30d, bookingEngineProperties, directLast30d, unpaidInvoices,
+             failedImportRows] = await Promise.all([
         prisma.roomType.count({ where: { tenantId: t.id } }),
         prisma.channel.count({ where: { tenantId: t.id } }),
         prisma.channel.count({ where: { tenantId: t.id, status: "connected" } }),
@@ -159,7 +160,24 @@ export async function getClients() {
           orderBy: { period: "asc" },
           select: { period: true, amountMinor: true, status: true },
         }),
+        /*
+         * Bookings a channel confirmed to a guest that we could not turn into a stay.
+         *
+         * ⚠️ Read from the RESERVATIONS, never from the Error Center. Pressing "Resolve" on the
+         * error dismisses the reminder and imports nothing, and that is precisely what buried a real
+         * client's lost booking for two days. A signal a customer can switch off by tidying their
+         * own screen is not a signal.
+         */
+        prisma.reservation.findMany({
+          where: { tenantId: t.id, status: "failed_import" },
+          orderBy: { importedAt: "asc" },
+          select: { importedAt: true },
+        }),
       ]);
+      const failedImports =
+        failedImportRows.length > 0
+          ? { count: failedImportRows.length, oldestAt: failedImportRows[0]!.importedAt }
+          : undefined;
 
       const entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
       /*
@@ -199,6 +217,7 @@ export async function getClients() {
           directReservationsLast30d: directLast30d,
           unpaidInvoices,
           monthlyPriceMinor: monthly,
+          ...(failedImports ? { failedImports } : {}),
           keepRequests: keepRequestsOf(t.productTrials),
         }),
         ...accountAttention({
@@ -648,6 +667,17 @@ export async function getClientDetail(id: string) {
    */
   const sharedIps = await sharedSignInWith(id);
 
+  // See the note on the list query: counted from reservations, not from the Error Center.
+  const failedImportRowsDetail = await prisma.reservation.findMany({
+    where: { tenantId: id, status: "failed_import" },
+    orderBy: { importedAt: "asc" },
+    select: { importedAt: true },
+  });
+  const detailFailedImports =
+    failedImportRowsDetail.length > 0
+      ? { count: failedImportRowsDetail.length, oldestAt: failedImportRowsDetail[0]!.importedAt }
+      : undefined;
+
   const keepAsked = await prisma.productTrial.findMany({
     where: { tenantId: id, endedAt: null, keepRequestedAt: { not: null } },
     select: { product: true, endsAt: true, keepRequestedAt: true },
@@ -666,6 +696,7 @@ export async function getClientDetail(id: string) {
       unpaidInvoices, monthlyPriceMinor: monthly,
       keepRequests: keepRequestsOf(keepAsked),
       sharedSignInWith: sharedIps,
+      ...(detailFailedImports ? { failedImports: detailFailedImports } : {}),
     }),
     ...accountAttention({
       status: tenant.status, createdAt: tenant.createdAt,

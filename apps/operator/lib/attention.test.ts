@@ -270,3 +270,44 @@ describe("shared sign-in addresses", () => {
     expect(withShared([{ ip: "203.0.113.9", clients: [] }])).toEqual([]);
   });
 });
+
+describe("a booking that never reached the calendar", () => {
+  const withFailed = (failedImports?: { count: number; oldestAt: Date }) =>
+    clientAttention(healthy(failedImports ? { failedImports } : {}), NOW);
+
+  it("says nothing when every booking imported", () => {
+    expect(withFailed().filter((f) => f.title.includes("calendar"))).toEqual([]);
+  });
+
+  it("is `act` from the very first one", () => {
+    // The OTA has confirmed it to a guest and we hold no stay. Somebody may arrive to a front desk
+    // with no reservation, and the room is still on sale. Nothing else in this file outranks that.
+    const [flag] = withFailed({ count: 1, oldestAt: NOW });
+    expect(flag?.severity).toBe("act");
+    expect(flag?.title).toBe("A booking never reached the calendar");
+  });
+
+  it("never softens with age — time makes the arrival closer, not safer", () => {
+    const old = withFailed({ count: 2, oldestAt: new Date(NOW.getTime() - 30 * 86_400_000) })[0];
+    expect(old?.severity).toBe("act");
+    expect(old?.title).toBe("2 bookings never reached the calendar");
+    expect(old?.detail).toMatch(/30 days old/);
+  });
+
+  it("names both consequences, because either one alone understates it", () => {
+    const [flag] = withFailed({ count: 1, oldestAt: NOW });
+    expect(flag?.detail).toMatch(/nobody is holding the room/i);
+    expect(flag?.detail).toMatch(/guest thinks they have one/i);
+    expect(flag?.detail).toMatch(/mapping/i);
+  });
+
+  it("still fires for a suspended client", () => {
+    // ⚠️ A suspended client normally reports only the suspension. A confirmed booking with no stay
+    // behind it is the exception: the guest is still arriving whatever the account is doing.
+    const flags = clientAttention(
+      healthy({ status: "suspended", failedImports: { count: 1, oldestAt: NOW } }),
+      NOW,
+    );
+    expect(flags.some((f) => f.title.includes("calendar"))).toBe(true);
+  });
+});

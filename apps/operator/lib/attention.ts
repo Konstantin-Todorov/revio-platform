@@ -72,6 +72,16 @@ export interface ClientSignals {
    * what somebody reads before picking up the phone, which is the only moment this changes anything.
    */
   sharedSignInWith?: { ip: string; clients: string[] }[];
+  /**
+   * Bookings a channel delivered that we could NOT turn into a reservation, and the oldest one.
+   *
+   * ⚠️ Deliberately counted from the RESERVATIONS, not from the Error Center. A hotel can press
+   * "Resolve" on the error — which dismisses the reminder and imports nothing — and that is exactly
+   * what happened on 2026-09-15: the error was marked resolved, the booking stayed unimported, and
+   * two days later nothing anywhere knew. A signal that a customer can switch off by tidying their
+   * screen is not a signal.
+   */
+  failedImports?: { count: number; oldestAt: Date };
 }
 
 const DAY = 86_400_000;
@@ -145,14 +155,47 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
     }
   }
 
+  /*
+   * ⚠️ The most urgent thing this file can say.
+   *
+   * A failed import is a booking the OTA has CONFIRMED to a guest and we hold no stay for. Two
+   * things follow, and both are worse than any billing question elsewhere in this list: somebody may
+   * arrive to a front desk with no reservation, and the room is still on sale, so it can be sold
+   * again — the double booking this platform exists to prevent, arriving through the front door.
+   *
+   * It is `act` from the first one and it never ages into a milder colour, because time does not
+   * make an unimported booking safer; it makes the arrival closer.
+   */
+  const failed = s.failedImports;
+  if (failed && failed.count > 0) {
+    const days = daysSince(failed.oldestAt, now);
+    flags.push({
+      severity: "act",
+      title: failed.count === 1 ? "A booking never reached the calendar" : `${failed.count} bookings never reached the calendar`,
+      detail:
+        `The channel confirmed ${failed.count === 1 ? "it" : "them"} to the guest and we could not import ` +
+        `${failed.count === 1 ? "it" : "them"} — the room type or rate plan was not mapped. ` +
+        `${days === 0 ? "Today" : `Oldest is ${days} day${days === 1 ? "" : "s"} old`}. ` +
+        "Nobody is holding the room, and the guest thinks they have one. Finish the mapping and re-sync.",
+    });
+  }
+
   if (s.status === "suspended") {
     flags.push({
       severity: "act",
       title: "Suspended",
       detail: "Every product is locked for this client. Their staff cannot sign in.",
     });
-    // Nothing else matters while they are locked out, and listing "no bookings in 30 days" under a
-    // suspension is telling someone their car won't start while it is up on the ramp.
+    /*
+     * Nothing else matters while they are locked out, and listing "no bookings in 30 days" under a
+     * suspension is telling someone their car won't start while it is up on the ramp.
+     *
+     * ⚠️ `return flags` keeps what was pushed ABOVE this block, and three checks sit there on
+     * purpose: the temporary email, the shared sign-in address, and — the one that matters — a
+     * booking that never reached the calendar. Suspending an account does not un-confirm a booking
+     * the OTA already promised a guest, and somebody is still going to arrive. Moving any of those
+     * below this line would silence them, which is a decision, not a tidy-up.
+     */
     return flags;
   }
 

@@ -931,11 +931,26 @@ export async function pullChannel(
 
     const lines: { roomTypeId: string; ratePlanId: string; quantity: number; checkIn: Date; checkOut: Date; priceMinor?: number }[] = [];
     let unmapped = false;
+    /*
+     * ⚠️ WHICH room and WHICH rate, kept rather than discarded.
+     *
+     * This said only "references an unmapped room or rate", and the booking row it wrote carried a
+     * name and a total and nothing else. A real hotel hit it on 2026-09-15: the owner made a test
+     * booking, it never arrived, the screen showed dashes, and she disconnected the channel because
+     * she believed bookings were being lost. Nobody could act on the error because nothing said what
+     * to map — and the ids were right here, in this loop, at the moment we threw them away.
+     */
+    const missing: string[] = [];
     for (const l of raw.lines) {
       const room = roomByExternal.get(l.externalRoomId);
       const ratePlanId = rateByExternal.get(l.externalRateId);
       if (!room || !ratePlanId) {
         unmapped = true;
+        const parts = [
+          room ? null : `room ${l.externalRoomId}`,
+          ratePlanId ? null : `rate ${l.externalRateId}`,
+        ].filter(Boolean);
+        missing.push(`${parts.join(" · ")} (${l.checkIn} → ${l.checkOut})`);
         continue;
       }
       lines.push({
@@ -1045,9 +1060,16 @@ export async function pullChannel(
       await prisma.errorItem.create({
         data: {
           tenantId, propertyId, channelId, severity: "critical", code: "reservation_unmapped",
-          message: `Booking #${raw.externalId} references an unmapped room or rate`,
+          // Name the thing to fix. "An unmapped room or rate" is a description of our confusion;
+          // the ids are what somebody can act on without opening a support ticket.
+          message:
+            `Booking #${raw.externalId} could not be imported — not mapped: ` +
+            `${missing.join("; ") || "room or rate unknown"}`,
           productLabel: `${channel.name} · ${raw.guestName}`,
-          recommendedAction: "Complete the room/rate mapping for this channel, then pull again.", resolved: false,
+          recommendedAction:
+            "Map that room type and rate plan on Channels → Mapping, then press Re-sync on this error to bring the booking in. " +
+            "Until then the stay is NOT in your calendar and the room is still on sale.",
+          resolved: false,
         },
       });
       /*
