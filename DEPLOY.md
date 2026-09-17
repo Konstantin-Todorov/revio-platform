@@ -325,6 +325,31 @@ On the ordinary schedule (annually is defensible), and immediately if a key may 
 a leaked `.env`, a departing contractor with production access, a compromised laptop. Both are
 Railway variables; neither has ever been committed.
 
+#### ✅ `AUTH_SECRET` rotated 2026-09-17 — one action still outstanding
+
+**⚠️ Remove `AUTH_SECRET_PREVIOUS` from all four services on or after 2026-10-01.**
+
+Fourteen days is the longest session TTL ("remember me"), so until then the old key must still
+verify or somebody gets logged out mid-shift. After it, the old key is dead and leaving the variable
+in place keeps a retired secret alive for no reason. That is the whole reason the date is written
+here rather than remembered.
+
+    railway variables --service <svc> delete AUTH_SECRET_PREVIOUS
+
+**Why it was rotated.** `channel-manager` and `operator` were running the *same* `AUTH_SECRET`
+(fingerprint `9af5e4899c`). Not exploitable: `verifySessionToken` keeps the `kind` claim, the
+operator's session gate refuses anything that is not `kind: "operator"`, and the subject must then
+resolve to an `OperatorUser`. Two independent barriers, both real.
+
+But a shared key means the two perimeters were separated by a **claim check** rather than by
+cryptography — one loosened condition away from a hotel session being a valid operator session. All
+four services now hold distinct 61–64 character keys.
+
+⚠️ **Checked first, and it is the thing that would have broken production:** `packages/db/src/crypto.ts`
+falls back to `AUTH_SECRET` when `CONNECTIVITY_SECRET` is unset, so rotating would have made every
+stored Channex and Stripe credential undecryptable. All four services carry their own
+`CONNECTIVITY_SECRET`, so nothing encrypted moved. Verify that again before the next rotation.
+
 ## The CI gate — `main` builds, `production` deploys
 
 Railway auto-deploys its watched branch. With no customers that is right; with a live hotel it means
