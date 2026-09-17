@@ -64,6 +64,9 @@ const JOBS = [
   // Nightly is plenty: a mapping only changes when a person changes it. What it catches does
   // not announce itself — a row pointing at another room pushes successfully forever.
   { name: "mapping-audit", url: CM && `${CM}/api/jobs/mapping-audit` },
+  // Hourly, and it sends nothing when there is nothing — see the route. It is what makes every
+  // other check on this list reach a person instead of a screen nobody has open.
+  { name: "operator-alerts", url: OPERATOR && `${OPERATOR}/api/jobs/alerts` },
   { name: "auto-assign", url: PMS && `${PMS}/api/jobs/assign` },
   { name: "auto-close-day", url: PMS && `${PMS}/api/jobs/closeday` },
   /*

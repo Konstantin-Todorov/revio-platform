@@ -2810,6 +2810,30 @@ model WaitlistEntry {
 /// it is its own table and carries copies rather than relations.
 ///
 /// Operator-only: a hotel must never be able to read that another one was removed.
+/// A fault we have told ourselves about, so we do not tell ourselves again every hour.
+///
+/// ⚠️ Operator-only, like every other table in this group: it holds our private assessment of a
+/// client's problems and a hotel must never be able to read it.
+///
+/// The row is the memory that makes silence possible. Without it the hourly alert job would either
+/// send the same mail 24 times a day or send nothing at all, and the first of those is how an alert
+/// address becomes a folder nobody opens.
+model OperatorAlert {
+  id          String    @id @default(cuid())
+  /// Stable across runs: what KIND of fault, for what THING. `cross_wired:<channelId>:<label>`.
+  key         String    @unique
+  /// Which client it concerns — kept denormalised so a resolved alert still reads sensibly later.
+  clientName  String
+  summary     String
+  firstSeenAt DateTime  @default(now())
+  lastAlertedAt DateTime
+  /// Set when the fault stopped being reported. Kept rather than deleted: a fault that comes back
+  /// is worth seeing as a recurrence, not as something new.
+  resolvedAt  DateTime?
+
+  @@index([resolvedAt])
+}
+
 model DeletedClient {
   id           String   @id @default(cuid())
   tenantName   String

@@ -155,6 +155,13 @@ export const JOB = {
    * button about a screen that looks finished.
    */
   mappingAudit: "mapping-audit",
+  /**
+   * Tells a human when something needs doing — and stays silent when it does not.
+   *
+   * Leased because it sends mail: two runners would each decide the same fault was new and send it
+   * twice, which is how an alert address becomes a folder nobody opens.
+   */
+  operatorAlerts: "operator-alerts",
   holdExpiry: "hold-expiry",
   pickupSnapshot: "pickup-snapshot",
   /** Round-2 §3: closes a business day nobody closed, so unclosed days cannot accumulate. */

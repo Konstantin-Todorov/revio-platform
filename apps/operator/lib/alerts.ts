@@ -1,0 +1,127 @@
+import "server-only";
+import { forSystem } from "@revio/db";
+import { crossWiredFromRecord, type AlertCandidate } from "@revio/core";
+
+/**
+ * Everything across the portfolio that a person should be told about, in one list.
+ *
+ * ## ⚠️ Read from facts, never from the Error Center
+ *
+ * Every candidate here is derived from something a customer cannot switch off. A hotel can mark an
+ * Error Center entry resolved — which dismisses the reminder and repairs nothing — and that is
+ * exactly what buried a real client's booking for two days. An alert sourced from a dismissible row
+ * is an alert that stops arriving precisely when somebody has decided not to deal with the problem.
+ *
+ * ## What is NOT in here
+ *
+ * Anything commercial. Renewals, unpaid invoices, quiet accounts and expansion candidates all
+ * belong to the console's "Our accounts" half — they are a morning's work, not an interruption. This
+ * mail is only for "somebody's hotel is not doing its job", which is the half with a guest at the
+ * other end of it.
+ */
+
+const prisma = forSystem();
+
+export async function alertCandidates(): Promise<AlertCandidate[]> {
+  const out: AlertCandidate[] = [];
+
+  /*
+   * 1. A booking a channel confirmed to a guest that we hold no stay for.
+   *
+   * Counted from the RESERVATIONS, for the reason in the header. The most consequential thing on
+   * this list: somebody may arrive at a desk with no record of them, and the room is still on sale.
+   */
+  const failed = await prisma.reservation.groupBy({
+    by: ["tenantId"],
+    where: { status: "failed_import" },
+    _count: true,
+    _min: { importedAt: true },
+  });
+  const tenantNames = new Map(
+    (await prisma.tenant.findMany({ select: { id: true, name: true } })).map((t) => [t.id, t.name]),
+  );
+  for (const f of failed) {
+    const n = f._count;
+    out.push({
+      // Keyed on the tenant, not on each booking: "2 bookings did not import" is one problem.
+      key: `failed_import:${f.tenantId}`,
+      clientName: tenantNames.get(f.tenantId) ?? "Unknown client",
+      summary: n === 1 ? "A booking never reached the calendar" : `${n} bookings never reached the calendar`,
+      action:
+        "Finish the mapping, then press Re-import bookings on their Channels screen. " +
+        "Re-sync only sends prices out and cannot bring a booking back.",
+      severity: "act",
+    });
+  }
+
+  /*
+   * 2. A channel pointed at a property the channel no longer has.
+   *
+   * Written by the nightly audit. It reports `success` on every poll, because a filter on an id that
+   * does not exist is not an error — which is why nothing noticed for weeks.
+   */
+  const missing = await prisma.channel.findMany({
+    where: { catalogueStatus: "property_missing" },
+    select: { id: true, name: true, property: { select: { name: true, tenant: { select: { name: true } } } } },
+  });
+  for (const ch of missing) {
+    out.push({
+      key: `property_missing:${ch.id}`,
+      clientName: ch.property.tenant.name,
+      summary: `${ch.property.name} · ${ch.name} is connected to a property the channel has deleted`,
+      action: "Nothing sent is arriving and nothing can arrive back. Reconnect the channel so it is set up again.",
+      severity: "act",
+    });
+  }
+
+  /*
+   * 3. A rate plan publishing to the wrong room.
+   *
+   * No other symptom exists: the mapping reads `mapped`, every push succeeds, and one room's prices
+   * go onto another. Compared against what the channel itself said, recorded nightly.
+   */
+  const rateMaps = await prisma.channelRatePlanMapping.findMany({
+    where: { catalogueCheckedAt: { not: null }, externalRateId: { not: null }, roomTypeId: { not: null } },
+    select: {
+      channelId: true, roomTypeId: true, externalRateId: true, externalRoomIdSeen: true, catalogueCheckedAt: true,
+      ratePlan: { select: { name: true } }, roomType: { select: { name: true } },
+      channel: { select: { name: true, property: { select: { name: true, tenant: { select: { name: true } } } } } },
+    },
+  });
+  const roomMaps = await prisma.channelRoomTypeMapping.findMany({
+    where: { externalRoomId: { not: null } },
+    select: { channelId: true, roomTypeId: true, externalRoomId: true },
+  });
+  // ⚠️ Grouped by channel before comparing: a room's external id is per channel, so comparing across
+  // them would invent a mismatch on every client with two channels connected.
+  const channels = new Set(rateMaps.map((m) => m.channelId));
+  for (const channelId of channels) {
+    const rows = rateMaps.filter((m) => m.channelId === channelId);
+    const ourRooms = new Map(
+      roomMaps.flatMap((r) => (r.channelId === channelId && r.externalRoomId ? [[r.roomTypeId, r.externalRoomId] as const] : [])),
+    );
+    const faults = crossWiredFromRecord(
+      rows.map((m) => ({
+        roomTypeId: m.roomTypeId!,
+        roomTypeName: m.roomType?.name ?? "",
+        ratePlanName: m.ratePlan.name,
+        externalRateId: m.externalRateId,
+        externalRoomIdSeen: m.externalRoomIdSeen,
+        checkedAt: m.catalogueCheckedAt,
+      })),
+      ourRooms,
+    );
+    const ctx = rows[0]!.channel;
+    for (const f of faults) {
+      out.push({
+        key: `cross_wired:${channelId}:${f.roomTypeName}|${f.ratePlanName}`,
+        clientName: ctx.property.tenant.name,
+        summary: `${f.roomTypeName} · ${f.ratePlanName} is publishing to the wrong room on ${ctx.name}`,
+        action: "Open Mapping and pick the rate plan the channel lists under that room. The prices are going onto another room until it changes.",
+        severity: "act",
+      });
+    }
+  }
+
+  return out;
+}
