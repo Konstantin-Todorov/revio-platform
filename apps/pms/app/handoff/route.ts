@@ -128,7 +128,14 @@ export async function GET(req: NextRequest) {
   const ttl = 12 * 60 * 60;
   const res = new NextResponse(null, { status: 307, headers: { Location: relativeLocation(roleHome(user.role)) } });
   await setSessionCookie(await signSession({ kind: "hotel", sub: user.id }, ttl), ttl);
-  // The spent token is in this URL. Keep it out of the next page's referrer.
-  res.headers.set("Referrer-Policy", "no-referrer");
+  /*
+   * ⚠️ The `Referrer-Policy: no-referrer` for this path is set in `config/security-headers.mjs`,
+   * NOT here.
+   *
+   * It used to be `res.headers.set(...)` on this line and it did nothing: a `headers()` entry in
+   * `next.config.mjs` is applied after the route and wins, so the catch-all's
+   * `strict-origin-when-cross-origin` silently replaced it. All three hand-off routes carried that
+   * line and none of them was keeping the token out of anything. Verified over HTTP after moving it.
+   */
   return res;
 }

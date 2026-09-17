@@ -38,5 +38,24 @@ export function securityHeaders(opts = {}) {
         { key: "Permissions-Policy", value: "geolocation=(), microphone=(), camera=(), payment=()" },
       ],
     },
+    {
+      /*
+       * ⚠️ `/handoff` carries a SESSION-GRANTING TOKEN in its query string, so it gets the stricter
+       * policy — the only path in the platform that does.
+       *
+       * The route already set this header on its own response and it did not survive: a `headers()`
+       * entry here is applied afterwards and wins, so the route's `no-referrer` was silently
+       * replaced by the catch-all's `strict-origin-when-cross-origin`. Three routes claimed in a
+       * comment to be keeping a credential out of the referrer and none of them were. It has to be
+       * set HERE to take effect, which is why a more specific source exists rather than a line in
+       * the route.
+       *
+       * Single use remains the primary control — `consumeHandoff` spends the token before the
+       * redirect, and `handoff-verify` proves a replay gets no cookie. This is the second layer, for
+       * the window before it is spent and for anywhere the URL is written down.
+       */
+      source: "/handoff",
+      headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+    },
   ];
 }
