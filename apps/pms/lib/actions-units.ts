@@ -39,10 +39,12 @@ export async function createUnit(fd: FormData): Promise<void> {
   const roomTypeId = str(fd, "roomTypeId");
   const label = str(fd, "label");
   const floor = str(fd, "floor") || null;
-  if (!roomTypeId || !label) return;
+  if (!roomTypeId || !label) return flashError("A room needs a room type and a number before it can be added.");
 
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId } });
-  if (!roomType || roomType.propertyId !== session.activePropertyId) return;
+  if (!roomType) return flashError("That room type no longer exists — somebody removed it while this page was open.");
+  if (roomType.propertyId !== session.activePropertyId) return; // crafted POST — see above
+
 
   const count = await prisma.unit.count({ where: { roomTypeId } });
   await prisma.unit.create({
@@ -72,7 +74,9 @@ export async function generateUnits(fd: FormData): Promise<void> {
   if (n <= 0) return flashError("Say how many rooms to create — a number above zero.");
 
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId } });
-  if (!roomType || roomType.propertyId !== session.activePropertyId) return;
+  if (!roomType) return flashError("That room type no longer exists — somebody removed it while this page was open.");
+  if (roomType.propertyId !== session.activePropertyId) return; // crafted POST — see above
+
 
   const existing = await prisma.unit.count({ where: { roomTypeId } });
   const data = Array.from({ length: n }, (_, i) => ({
@@ -98,7 +102,10 @@ export async function updateUnit(fd: FormData): Promise<void> {
   const session = await ctx("manage");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit || unit.propertyId !== session.activePropertyId) return;
+  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  // A different property's unit id is a crafted POST. There is no honest message for it, and naming
+  // the row would confirm it exists.
+  if (unit.propertyId !== session.activePropertyId) return;
 
   const features = fd.getAll("features").map(String).filter((f) => UNIT_FEATURES.includes(f));
   const requested = fd.getAll("connecting").map(String).filter(Boolean);
@@ -148,7 +155,10 @@ export async function deleteUnit(fd: FormData): Promise<void> {
   const session = await ctx("manage");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit || unit.propertyId !== session.activePropertyId) return;
+  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  // A different property's unit id is a crafted POST. There is no honest message for it, and naming
+  // the row would confirm it exists.
+  if (unit.propertyId !== session.activePropertyId) return;
 
   // Blocked if a guest is in it now OR it's assigned to any current/future stay (active, not yet
   // checked out) — deleting would cascade away a live stay record.
@@ -181,7 +191,10 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
   if (!HK_STATUSES.includes(status)) return flashError("That isn’t a housekeeping status. Reload the page and try again.");
 
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit || unit.propertyId !== session.activePropertyId) return;
+  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  // A different property's unit id is a crafted POST. There is no honest message for it, and naming
+  // the row would confirm it exists.
+  if (unit.propertyId !== session.activePropertyId) return;
   const prev = unit.hkStatus;
   // Not an error: two people pressing "clean" on the same room is ordinary, and the room IS clean.
   if (prev === status) return;
@@ -236,7 +249,10 @@ export async function startCleaning(fd: FormData): Promise<void> {
   const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit || unit.propertyId !== session.activePropertyId) return;
+  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  // A different property's unit id is a crafted POST. There is no honest message for it, and naming
+  // the row would confirm it exists.
+  if (unit.propertyId !== session.activePropertyId) return;
 
   const inProgress = await prisma.unit.findMany({
     where: { propertyId: session.activePropertyId, hkStatus: "in_progress", id: { not: unitId } },
@@ -266,7 +282,10 @@ export async function finishCleaning(fd: FormData): Promise<void> {
   const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit || unit.propertyId !== session.activePropertyId) return;
+  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  // A different property's unit id is a crafted POST. There is no honest message for it, and naming
+  // the row would confirm it exists.
+  if (unit.propertyId !== session.activePropertyId) return;
   await prisma.unit.update({ where: { id: unitId }, data: { hkStatus: "clean" } });
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: unit.hkStatus, newValue: "clean", userId: session.userId });
   // Finishing a clean lands in "awaiting inspection" when the property gates on inspection, else straight
@@ -286,9 +305,13 @@ export async function reportRoomIssue(fd: FormData): Promise<void> {
   const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const title = str(fd, "title");
-  if (!title) return;
+  // The description IS the report — a maintenance task with no words is one nobody can act on.
+  if (!title) return flashError("Say what is wrong with the room, so maintenance knows what to bring.");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit || unit.propertyId !== session.activePropertyId) return;
+  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  // A different property's unit id is a crafted POST. There is no honest message for it, and naming
+  // the row would confirm it exists.
+  if (unit.propertyId !== session.activePropertyId) return;
 
   await prisma.maintenanceTask.create({
     data: {

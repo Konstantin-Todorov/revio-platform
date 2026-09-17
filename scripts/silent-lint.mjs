@@ -27,7 +27,7 @@ import { readdirSync, readFileSync, existsSync } from "node:fs";
 const APPS = ["reservation", "channel-manager", "pms", "operator", "booking"];
 
 /** Ratchet. Lower this when you fix some; never raise it. */
-const BUDGET = 100;
+const BUDGET = 91;
 
 const found = [];
 
