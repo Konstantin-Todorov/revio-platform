@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Distribution — many channels, one calendar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../kit.css">
+<style>
+  /* The screen says "four channels". This artwork makes the other half of the sentence visible: the
+     four nameplates are lifted out of the capture and dropped into the layout, with one line each
+     running down into the product. What they all point at is a single calendar, which is the claim. */
+  /* Fixed left edge rather than centred flex: the four drop-lines below have to land on the four
+     plate centres exactly, and a centred row moves them the moment a name changes length. */
+  .plates { position: absolute; top: 92px; left: 243px; display: flex; gap: 14px; }
+  .plate {
+    display: flex; flex-direction: column; gap: 5px; width: 168px;
+    padding: 12px 14px; border-radius: 12px;
+    background: rgba(255, 255, 255, 0.03); border: 1px solid var(--hair);
+  }
+  .plate b { font-size: 12px; font-weight: 600; color: #eaf1f5; }
+  .plate span { font-size: 9.5px; color: #7f8f9b; }
+  .plate .pill { align-self: flex-start; margin-top: 2px; font-size: 9px; padding: 2px 7px; border-radius: 999px; color: #7fe6c0; background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.28); }
+  .plate .pill--warn { color: #f4b3b3; background: rgba(248, 113, 113, 0.12); border-color: rgba(248, 113, 113, 0.3); }
+  /* One hairline per channel, from its plate down to the top edge of the product window. */
+  .down { position: absolute; width: 1px; background: linear-gradient(to bottom, color-mix(in srgb, var(--accent) 45%, transparent), color-mix(in srgb, var(--accent) 12%, transparent)); }
+  .down::after { content: ''; position: absolute; left: -2px; bottom: 0; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+</style>
+</head>
+<body style="--accent:#00d2ff">
+<div class="stage stage--deep stage--grid">
+  <div class="glow glow--a" style="width:760px;height:400px;left:220px;top:-190px;opacity:.28"></div>
+  <div class="glow glow--a" style="width:560px;height:360px;left:340px;top:520px;opacity:.12"></div>
+
+  <div class="eyebrow" style="position:absolute;left:44px;top:48px">Every connected channel reads the same</div>
+
+  <!-- Nameplates. Each one is a real channel on the demo property with its real currency and
+       commission, taken from the capture below rather than written for the artwork. -->
+  <div class="plates">
+    <div class="plate"><b>Agoda</b><span>EUR · 17% commission</span><span class="pill">Connected</span></div>
+    <div class="plate"><b>Booking.com</b><span>EUR · 15% commission</span><span class="pill">Connected</span></div>
+    <div class="plate"><b>Expedia</b><span>EUR · 18% commission</span><span class="pill pill--warn">1 error</span></div>
+    <div class="plate"><b>Trip.com</b><span>EUR · 15% commission</span><span class="pill pill--warn">1 error</span></div>
+  </div>
+
+  <!-- One line from each channel into the same window. Plate centres: 327 · 509 · 691 · 873. -->
+  <div class="down" style="left:327px;top:176px;height:124px"></div>
+  <div class="down" style="left:509px;top:176px;height:124px"></div>
+  <div class="down" style="left:691px;top:176px;height:124px"></div>
+  <div class="down" style="left:873px;top:176px;height:124px"></div>
+
+  <figure class="frame" style="--accent:#00d2ff;position:absolute;left:240px;top:300px;width:720px;z-index:2">
+    <div class="frame__bar">
+      <span class="frame__mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 9v11"/></svg></span>
+      <span class="frame__label">RevioLink · Channels</span>
+      <span class="frame__host">cm.reviosoft.app/channels</span>
+    </div>
+    <!-- Ends between the connectivity row and the stat tiles, so no tile is sliced in half. -->
+    <div class="frame__media frame__media--window" style="height:322px"><img src="{{shot:link-channels}}" alt=""></div>
+    <figcaption class="frame__cap"><span>Mapping completeness · connectivity health · per-channel work</span><span>Demo property</span></figcaption>
+  </figure>
+
+  <div style="position:absolute;left:200px;right:200px;top:722px;font-size:10px;line-height:1.6;color:#6f7f90;text-align:center">
+    One availability calendar underneath. A channel that has drifted is shown as work to do, not reported as a success.
+  </div>
+</div>
+</body>
+</html>

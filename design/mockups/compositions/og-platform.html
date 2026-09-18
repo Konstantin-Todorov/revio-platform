@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Revio — social share card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../kit.css">
+<style>
+  /* The one artwork with copy baked in, because it IS the copy: a share card has no page around it to
+     supply a headline. Everything else in this folder deliberately carries none, so it can be dropped
+     into a section without saying the same sentence twice. */
+  /* Sized so the headline cannot run under the frame: a share card's text has nowhere to reflow to,
+     and a word clipped by a screenshot reads as a broken asset on every feed it lands in. */
+  h1 { position: absolute; left: 72px; top: 216px; margin: 0; width: 496px; font-size: 40px; line-height: 1.1; letter-spacing: -1.4px; font-weight: 600; color: #f4f8f9; }
+  .sub { position: absolute; left: 72px; top: 344px; width: 470px; font-size: 14px; line-height: 1.62; color: #9dadb8; }
+  .logo { position: absolute; left: 72px; top: 74px; height: 34px; }
+  .foot { position: absolute; left: 72px; bottom: 62px; display: flex; align-items: center; gap: 14px; font-size: 12px; color: #7f8f9b; }
+  .foot b { color: #dfe7ec; font-weight: 600; }
+  .dot-sep { width: 3px; height: 3px; border-radius: 50%; background: #4d5b66; }
+  /* Inset from the right edge. Bleeding a frame off the canvas is a fine device, but it sliced the
+     address bar mid-hostname — which reads as a broken image, on the one graphic that gets shared. */
+  .shot-front { position: absolute; left: 600px; top: 172px; width: 588px; z-index: 3; }
+  .shot-back { position: absolute; left: 694px; top: 96px; width: 560px; z-index: 1; opacity: .46; mask-image: linear-gradient(to bottom, #000 30%, transparent 100%); }
+</style>
+</head>
+<body style="--accent:#00d2ff">
+<div class="stage stage--deep stage--grid">
+  <div class="glow glow--a" style="width:700px;height:420px;left:-120px;top:-120px;opacity:.28"></div>
+  <div class="glow glow--a" style="width:620px;height:420px;left:700px;top:280px;opacity:.22"></div>
+
+  <img class="logo" src="{{asset:brand/revio-white.png}}" alt="Revio">
+
+  <h1>Hotel software that grows with you.</h1>
+  <p class="sub">
+    Channel manager, reservation system and property management on one shared inventory core. Start with
+    one product and add the rest — without rebuilding your records.
+  </p>
+
+  <div class="foot">
+    <b>reviosoft.app</b><span class="dot-sep"></span><span>RevioLink · RevioCRS · RevioPMS</span>
+  </div>
+
+  <div class="shot-back">
+    <figure class="frame" style="--accent:#34d399">
+      <div class="frame__bar" style="padding:8px 11px">
+        <span class="frame__mark"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 9v11"/></svg></span>
+        <span class="frame__label" style="font-size:11px">RevioPMS · Front Desk</span>
+      </div>
+      <div class="frame__media frame__media--window" style="height:170px"><img src="{{shot:pms-home}}" alt=""></div>
+    </figure>
+  </div>
+
+  <div class="shot-front">
+    <figure class="frame" style="--accent:#22d3ee">
+      <div class="frame__bar">
+        <span class="frame__mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 9v11"/></svg></span>
+        <span class="frame__label">RevioLink · Channels</span>
+        <span class="frame__host">cm.reviosoft.app/channels</span>
+      </div>
+      <div class="frame__media frame__media--window" style="height:336px"><img src="{{shot:link-channels}}" alt=""></div>
+    </figure>
+  </div>
+</div>
+</body>
+</html>

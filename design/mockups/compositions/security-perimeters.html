@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Security — two perimeters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../kit.css">
+<style>
+  /* ⚠️ This one is a diagram, and it says so on its face. Every other artwork in this folder is built
+     from real captures; a reader who has just looked at six screenshots will assume this is a seventh.
+     Saying "illustrative" is the difference between a diagram and an invented screenshot.
+
+     It draws one thing only: the hotel perimeter and the operator perimeter are different, and the
+     wall between them is enforced by the database rather than promised by the application. */
+  .hotel { position: absolute; top: 160px; width: 366px; height: 250px; padding: 20px; border-radius: 16px; }
+  .hotel--a { left: 52px; }
+  .hotel--b { left: 448px; }
+  .hotel h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #eef4f7; }
+  .hotel p { margin: 0; font-size: 10.5px; line-height: 1.55; color: #8b9aa5; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 9px; margin-top: 7px; background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(255, 255, 255, 0.07); font-size: 10.5px; color: #cbd6de; }
+  .row i { width: 5px; height: 5px; border-radius: 50%; background: #34d399; box-shadow: 0 0 8px #34d399; flex: none; }
+  .wall { position: absolute; top: 160px; width: 26px; height: 250px; }
+  .wall__line { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; background: repeating-linear-gradient(to bottom, rgba(255,255,255,.34) 0 5px, transparent 5px 11px); }
+  .wall__lock { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #0e1216; border: 1px solid rgba(255,255,255,.22); color: #b9c6d0; }
+  .op { position: absolute; left: 52px; right: 52px; top: 448px; padding: 18px 20px; border-radius: 16px; border-style: dashed; border-color: rgba(255, 255, 255, 0.22); background: rgba(255, 255, 255, 0.014); }
+  .chiprow { position: absolute; left: 0; right: 0; top: 556px; display: flex; justify-content: center; gap: 9px; }
+</style>
+</head>
+<body style="--accent:#00d2ff">
+<div class="stage stage--deep stage--grid">
+  <div class="glow glow--a" style="width:700px;height:340px;left:250px;top:-170px;opacity:.2"></div>
+
+  <div class="eyebrow" style="position:absolute;left:52px;top:44px">Two perimeters</div>
+  <div style="position:absolute;left:52px;top:68px;font-size:19px;font-weight:600;color:#f2f6f8">One database that will not hand over another hotel's rows.</div>
+
+  <div class="panel hotel hotel--a">
+    <h3>Hotel A</h3>
+    <p>A hotel account, and the products it is entitled to.</p>
+    <div class="row"><i></i>Its rooms, rates and reservations</div>
+    <div class="row"><i></i>Its guests and its folios</div>
+    <div class="row"><i></i>Its own staff logins and roles</div>
+    <div class="row" style="border-color:rgba(52,211,153,.3);background:rgba(52,211,153,.07);color:#8fe8c6">tenant_id on every row · Row-Level Security</div>
+  </div>
+
+  <div class="wall" style="left:424px">
+    <div class="wall__line"></div>
+    <div class="wall__lock"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+  </div>
+
+  <div class="panel hotel hotel--b">
+    <h3>Hotel B</h3>
+    <p>A different hotel, on the same database, seeing none of the above.</p>
+    <div class="row"><i></i>Its rooms, rates and reservations</div>
+    <div class="row"><i></i>Its guests and its folios</div>
+    <div class="row"><i></i>Its own staff logins and roles</div>
+    <div class="row" style="border-color:rgba(52,211,153,.3);background:rgba(52,211,153,.07);color:#8fe8c6">tenant_id on every row · Row-Level Security</div>
+  </div>
+
+  <div class="wall" style="left:820px">
+    <div class="wall__line"></div>
+    <div class="wall__lock"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+  </div>
+
+  <div class="panel op" style="border-width:1px">
+    <h3 style="margin:0 0 4px;font-size:13px;font-weight:600;color:#eef4f7">Revio Operator — our console</h3>
+    <p style="margin:0;font-size:10.5px;line-height:1.55;color:#8b9aa5">
+      Hotels, entitlements and billing. Its own schema, unreachable from a hotel connection: contracts,
+      contacts and integration keys are ours, and a hotel can never read our private notes about it.
+    </p>
+  </div>
+
+  <div class="chiprow">
+    <span class="chip">Rows carry a tenant id</span>
+    <span class="chip chip--accent">Enforced by Postgres, not by app code</span>
+    <span class="chip">Integration keys encrypted at rest</span>
+    <span class="chip">No card numbers stored anywhere</span>
+  </div>
+
+  <!-- The disclaimer is not optional and must not fall off the canvas: this is the one artwork here
+       that is not built from a capture, so it has to say so on its own face. -->
+  <div style="position:absolute;left:52px;right:52px;top:620px;text-align:center;font-size:10px;color:#6f7f90">
+    Illustrative diagram, not a product screenshot. The isolation it describes is enforced in production
+    by database-level Row-Level Security.
+  </div>
+</div>
+</body>
+</html>

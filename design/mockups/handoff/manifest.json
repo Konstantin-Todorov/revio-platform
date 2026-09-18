@@ -1,0 +1,208 @@
+{
+  "generatedBy": "design/mockups/build.mjs",
+  "note": "Every artwork is composed from the real captures in screenshots/. Copy in copy/ is the artwork's own; regenerate rather than hand-edit.",
+  "site": {
+    "repo": "../revio-websites (sibling checkout on this machine)",
+    "tokens": "src/styles/global.css — accent vars per product, near-black #0c0c0c ground, liquid-glass borders",
+    "frame": "src/components/BrowserFrame.astro — product chrome + caption strip that sections already wrap screenshots in",
+    "mediaAspect": "16/10 (aspect-[16/10] in BrowserFrame; captures are natively 2880×1800 = 1.6)"
+  },
+  "background": {
+    "decision": "Artworks use a near-black grid + glow backdrop. The site wants its OWN background instead.",
+    "instruction": "Strip .stage background/glow layers from the compositions (keep .stage--grid mask and layout); place frames and callouts on the page background directly."
+  },
+  "artwork": [
+    {
+      "name": "hero-one-core",
+      "title": "One core, three products",
+      "where": "Homepage hero",
+      "placement": "Full width, under the headline. Replaces the single platform screenshot currently in `BrowserFrame`.",
+      "file": "rendered/hero-one-core.png",
+      "pixels": [
+        2400,
+        1500
+      ],
+      "canvas": [
+        1200,
+        750
+      ],
+      "captures": [
+        "crs-dashboard",
+        "pms-housekeeping",
+        "platform-overview"
+      ]
+    },
+    {
+      "name": "product-link",
+      "title": "RevioLink — annotated",
+      "where": "RevioLink page",
+      "placement": "Full width. Three callouts name the regions a buyer asks about before they book a call.",
+      "file": "rendered/product-link.png",
+      "pixels": [
+        2400,
+        1500
+      ],
+      "canvas": [
+        1200,
+        750
+      ],
+      "captures": [
+        "link-channels"
+      ]
+    },
+    {
+      "name": "product-crs",
+      "title": "RevioCRS — annotated",
+      "where": "RevioCRS page",
+      "placement": "Full width. Leads with the reservation record, not the analytics dashboard.",
+      "file": "rendered/product-crs.png",
+      "pixels": [
+        2400,
+        1500
+      ],
+      "canvas": [
+        1200,
+        750
+      ],
+      "captures": [
+        "crs-reservations"
+      ]
+    },
+    {
+      "name": "product-pms",
+      "title": "RevioPMS — annotated",
+      "where": "RevioPMS page",
+      "placement": "Full width. The front desk, where the shared record arrives.",
+      "file": "rendered/product-pms.png",
+      "pixels": [
+        2400,
+        1500
+      ],
+      "canvas": [
+        1200,
+        750
+      ],
+      "captures": [
+        "pms-home"
+      ]
+    },
+    {
+      "name": "workflow-one-record",
+      "title": "One shared record, three seats",
+      "where": "Homepage — “How it works” band",
+      "placement": "Full width, or in the half column beside the copy. Makes the composable claim a diagram instead of an assertion.",
+      "file": "rendered/workflow-one-record.png",
+      "pixels": [
+        2400,
+        1500
+      ],
+      "canvas": [
+        1200,
+        750
+      ],
+      "captures": [
+        "crs-reservations",
+        "link-sync",
+        "pms-home"
+      ]
+    },
+    {
+      "name": "channels-one-calendar",
+      "title": "Many channels, one calendar",
+      "where": "RevioLink page — distribution",
+      "placement": "Full width. The four channel nameplates drop into the layout and point at one screen.",
+      "file": "rendered/channels-one-calendar.png",
+      "pixels": [
+        2400,
+        1500
+      ],
+      "canvas": [
+        1200,
+        750
+      ],
+      "captures": [
+        "link-channels"
+      ]
+    },
+    {
+      "name": "spotlight-housekeeping",
+      "title": "Housekeeping, at 2×",
+      "where": "RevioPMS page — housekeeping",
+      "placement": "Full width. The magnified inset is the same capture, so the detail cannot drift from the board.",
+      "file": "rendered/spotlight-housekeeping.png",
+      "pixels": [
+        2400,
+        1500
+      ],
+      "canvas": [
+        1200,
+        750
+      ],
+      "captures": [
+        "pms-housekeeping"
+      ]
+    },
+    {
+      "name": "record-guest-to-folio",
+      "title": "The guest’s side and your side",
+      "where": "RevioDirect page",
+      "placement": "Full width. The strongest structural claim on the site, shown rather than described.",
+      "file": "rendered/record-guest-to-folio.png",
+      "pixels": [
+        2400,
+        1500
+      ],
+      "canvas": [
+        1200,
+        750
+      ],
+      "captures": [
+        "direct-search",
+        "crs-reservations"
+      ]
+    },
+    {
+      "name": "security-perimeters",
+      "title": "Two perimeters",
+      "where": "Security & trust page",
+      "placement": "Full width or half column. ⚠️ A diagram, not a capture — it says so on the image.",
+      "file": "rendered/security-perimeters.png",
+      "pixels": [
+        2400,
+        1350
+      ],
+      "canvas": [
+        1200,
+        675
+      ],
+      "captures": []
+    },
+    {
+      "name": "og-platform",
+      "title": "Social share card (2×)",
+      "where": "og:image",
+      "placement": "The 2× master, for anywhere that wants the retina file.",
+      "file": "rendered/og-platform.png",
+      "pixels": [
+        2400,
+        1260
+      ],
+      "canvas": [
+        1200,
+        630
+      ],
+      "captures": [
+        "pms-home",
+        "link-channels"
+      ]
+    }
+  ],
+  "socialCard": {
+    "file": "rendered/og-platform-1200.png",
+    "pixels": [
+      1200,
+      630
+    ],
+    "replaces": "public/og/revio-og.png"
+  }
+}

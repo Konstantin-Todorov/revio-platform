@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hero — one core, three products</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../kit.css">
+<style>
+  /* The hero's whole argument in one picture: three product windows that are not three products.
+     The two outer frames are dimmer and dissolve at their edges — the same system seen from another
+     seat, not three systems side by side. Only the front frame is full colour, because it is the one
+     the caption underneath is describing. */
+  .rail { position: absolute; left: 0; right: 0; top: 672px; display: flex; justify-content: center; gap: 10px; }
+  .meta { position: absolute; top: 34px; display: flex; align-items: center; gap: 9px; }
+  .meta--l { left: 44px; }
+  .meta--r { right: 44px; }
+  .meta span { font-size: 10px; letter-spacing: 0.13em; text-transform: uppercase; color: #7f8d97; }
+  .meta i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+  /* The ghosts are the same footage, so they must not read as equal claimants to the eye. Fading
+     them toward their outer edge does the ranking without a hard cut anywhere. */
+  /* Faded at the INNER edge, not the outer one. The outer edge runs off the canvas and is cropped
+     there, which reads as a window that continues; the inner edge dissolves behind the front frame.
+     Fading the outer edge instead — as this first did — half-erases the product name in the title
+     bar and just looks like a rendering fault. */
+  .ghost-window { position: absolute; top: 190px; width: 520px; }
+  .ghost-window--l { left: -30px; mask-image: linear-gradient(to right, #000 58%, transparent 100%); }
+  .ghost-window--r { left: 720px; mask-image: linear-gradient(to left, #000 58%, transparent 100%); }
+
+  /* A soft light on the "floor" under the front frame. Cheap, and it is what stops the frame from
+     looking like it was pasted onto the background. */
+  .floor {
+    position: absolute; left: 120px; top: 540px; width: 960px; height: 190px;
+    background: radial-gradient(50% 50% at 50% 50%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 72%);
+    filter: blur(30px);
+  }
+</style>
+</head>
+<body style="--accent:#00d2ff">
+<div class="stage stage--deep stage--grid">
+  <div class="glow glow--a" style="width:820px;height:540px;left:190px;top:-210px;opacity:.32"></div>
+  <div class="glow glow--b" style="--accent-2:#818cf8;width:640px;height:460px;left:660px;top:400px;opacity:.2"></div>
+  <div class="glow glow--b" style="--accent-2:#34d399;width:560px;height:420px;left:-180px;top:420px;opacity:.15"></div>
+  <div class="floor"></div>
+
+  <div class="meta meta--l"><i></i><span>Hotel Sofia · demo property</span></div>
+  <div class="meta meta--r"><span>Captured from the live products</span></div>
+
+  <!-- Behind, left: what the booking record sees. -->
+  <div class="ghost-window ghost-window--l">
+    <figure class="frame frame--ghost" style="--accent:#818cf8;transform:perspective(2000px) rotateY(12deg) rotateX(1.5deg) rotate(-1deg)">
+      <div class="frame__bar">
+        <span class="frame__mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 9v11"/></svg></span>
+        <span class="frame__label">RevioCRS · Analytics</span>
+        <span class="frame__host">crs.reviosoft.app/analytics</span>
+      </div>
+      <div class="frame__media"><img src="{{shot:crs-dashboard}}" alt=""></div>
+    </figure>
+  </div>
+
+  <!-- Behind, right: what the building does with it. -->
+  <div class="ghost-window ghost-window--r">
+    <figure class="frame frame--ghost" style="--accent:#34d399;transform:perspective(2000px) rotateY(-12deg) rotateX(1.5deg) rotate(1deg)">
+      <div class="frame__bar">
+        <span class="frame__mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 9v11"/></svg></span>
+        <span class="frame__label">RevioPMS · Housekeeping</span>
+        <span class="frame__host">pms.reviosoft.app/housekeeping</span>
+      </div>
+      <div class="frame__media"><img src="{{shot:pms-housekeeping}}" alt=""></div>
+    </figure>
+  </div>
+
+  <!-- In front, full colour and undistorted: the platform's own dashboard. -->
+  <figure class="frame" style="--accent:#00d2ff;position:absolute;left:205px;top:66px;width:790px;z-index:4">
+    <div class="frame__bar">
+      <span class="frame__mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 9v11"/></svg></span>
+      <span class="frame__label">RevioLink · Distribution health</span>
+      <span class="frame__host">cm.reviosoft.app</span>
+    </div>
+    <div class="frame__media"><img src="{{shot:platform-overview}}" alt=""></div>
+    <figcaption class="frame__cap"><span>Connected channels · Active products · Pending updates</span><span>Demo property</span></figcaption>
+  </figure>
+
+  <!-- Which of the three windows is which. Without this the layer reads as decoration; with it, the
+       image makes the platform's actual claim — three workspaces, one system. -->
+  <div class="rail">
+    <span class="chip chip--accent" style="--accent:#22d3ee"><i class="chip__dot"></i>RevioLink · Channel manager</span>
+    <span class="chip chip--accent" style="--accent:#818cf8"><i class="chip__dot"></i>RevioCRS · Reservations</span>
+    <span class="chip chip--accent" style="--accent:#34d399"><i class="chip__dot"></i>RevioPMS · Operations</span>
+  </div>
+</div>
+</body>
+</html>

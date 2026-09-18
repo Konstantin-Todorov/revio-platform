@@ -1,0 +1,387 @@
+/* ---------------------------------------------------------------------------
+   Marketing artwork kit — the shared visual language for design/mockups
+
+   These artworks sit ON the marketing site, so they are built from the site's own
+   tokens rather than from a designer's palette. The values are lifted from
+   `revio-websites/src/styles/global.css` (accent per product, near-black ground,
+   the liquid-glass edge) and `src/components/BrowserFrame.astro` (the product
+   chrome bar and caption strip), so an image dropped into a page reads as part of
+   the page instead of pasted onto it. If the site's tokens change, change them
+   here too — that is the whole point of keeping them in one file.
+
+   Everything is laid out in px on a fixed canvas (see the JOBS table in
+   build.mjs) and rendered at 2×, so measurements below are exact and readable.
+--------------------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* ⚠️ `height: 100%` on html AND body is load-bearing. With both left at `auto`, `.stage`'s
+   `height: 100%` resolves against an indefinite height, the stage collapses to zero tall, and
+   `overflow: hidden` then clips every absolutely-positioned child away — producing a completely
+   blank, perfectly valid-looking PNG. */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #0a0b0d;
+  color: #fff;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root {
+  /* Platform default, matching global.css `:root`. Product artwork overrides --accent inline. */
+  --accent: #00d2ff;
+  --accent-soft: #a4f4fd;
+  --ink: #0c0c0c;
+  --hair: rgba(255, 255, 255, 0.09);
+  --hair-strong: rgba(255, 255, 255, 0.16);
+}
+
+/* ---------------------------------------------------------------------------
+   Stage — the fixed canvas every composition is drawn on
+--------------------------------------------------------------------------- */
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ink);
+}
+
+.stage--deep {
+  background:
+    radial-gradient(120% 90% at 50% -20%, #16181d 0%, #0b0c0e 55%, #08090a 100%);
+}
+
+/* Faint blueprint grid. Two nested gradients rather than an SVG, so it stays crisp at any scale. */
+.stage--grid::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.028) 1px, transparent 1px);
+  background-size: 60px 60px;
+  /* The grid belongs to the background, not to the page: fading it out keeps the artwork's edges
+     from becoming a hard rectangle wherever the site's own background differs by a shade. */
+  mask-image: radial-gradient(115% 105% at 50% 45%, #000 35%, transparent 80%);
+}
+
+/* Accent light. One per corner, low opacity — the site's `accent-glow` blobs, frozen. */
+.glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+}
+.glow--a {
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 55%, transparent), transparent 70%);
+}
+.glow--b {
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent-2, var(--accent)) 45%, transparent), transparent 70%);
+}
+
+/* ---------------------------------------------------------------------------
+   Product frame — the chrome the app itself wears
+--------------------------------------------------------------------------- */
+
+.frame {
+  position: relative;
+  margin: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0e1219;
+  border: 1px solid var(--hair-strong);
+  box-shadow:
+    0 2px 0 rgba(255, 255, 255, 0.04) inset,
+    0 40px 80px -30px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.frame__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: linear-gradient(110deg, color-mix(in srgb, var(--accent) 10%, #141820), #16191f);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.frame__mark {
+  display: flex;
+  color: var(--accent);
+}
+
+.frame__label {
+  font-size: 12px;
+  color: #e3e9ef;
+  white-space: nowrap;
+}
+
+.frame__host {
+  margin-left: auto;
+  font-size: 10px;
+  color: #8f9aa6;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.frame__media {
+  position: relative;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), transparent);
+}
+
+/* Every capture is 2880×1800 (1.6). The slot is 1.6 as well, so this is a fit, never a crop — which
+   is what allows a callout marker to sit on a known UI region and stay there. */
+.frame__media img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.frame__cap {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  background: rgba(14, 18, 25, 0.92);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 10px;
+  color: #9ba8b6;
+}
+.frame__cap > span:last-child {
+  color: #6f7f90;
+  white-space: nowrap;
+}
+
+/* A view window onto a capture: the same frame, but showing only the top portion of the screen.
+   Many captures have an empty lower half — real, but it reads as a hole in a marketing image. Set a
+   height on the media and the capture is clipped, never scaled, so annotations keep their position
+   and nothing goes soft. Choose a height that ends between rows, or the last row looks cut off. */
+.frame__media--window {
+  overflow: hidden;
+}
+
+/* A frame standing behind another one: dimmer, tilted, and faded out where it leaves the canvas, so
+   it reads as depth rather than as a second thing competing for attention. */
+.frame--ghost {
+  opacity: 0.5;
+  filter: saturate(0.75) brightness(0.85);
+  box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.9);
+}
+.frame--ghost .frame__cap {
+  display: none;
+}
+
+.tilt {
+  transform-style: preserve-3d;
+}
+
+/* ---------------------------------------------------------------------------
+   Callouts — the reason these images exist at all
+--------------------------------------------------------------------------- */
+
+/* A callout names a real region of the product UI. The dot is the region; the line leads out to the
+   label.
+
+   Positioned with plain `left`/`top` in px — deliberately, and NOT as a percentage of the frame.
+   The stage is a fixed canvas and the frame geometry is fixed with it, so px is exact; a percentage
+   would also have forced the callouts inside the frame, which clips (`overflow: hidden` is what
+   rounds the capture's corners) and would have cut every label off. Callouts therefore live on the
+   stage, on top of the frame, at coordinates read off the real capture.
+
+   ⚠️ The dot must sit on the control the label describes. A label pointing at roughly the right
+   region is worse than no label: it teaches the reader that the annotations cannot be trusted. */
+.callout {
+  position: absolute;
+  z-index: 3;
+}
+
+.callout__dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 0 16px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+
+.callout__line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--line, 90px);
+  height: 1px;
+  background: linear-gradient(to right, var(--accent), color-mix(in srgb, var(--accent) 25%, transparent));
+}
+
+/* A fixed width, and wrapping text. `nowrap` here was a real defect: the label box grew past the
+   right edge of the canvas and the sentence was silently cut mid-word — which, in a marketing image,
+   reads as a broken page rather than as a bug in the artwork. */
+.callout__label {
+  position: absolute;
+  top: 0;
+  left: calc(var(--line, 90px) + 12px);
+  transform: translateY(-50%);
+  width: var(--label-w, 336px);
+  font-size: 11px;
+  line-height: 1.35;
+  color: #dfe7ec;
+  background: rgba(10, 12, 15, 0.86);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 7px;
+  padding: 7px 11px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 26px -12px rgba(0, 0, 0, 0.9);
+}
+.callout__label b {
+  display: block;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+
+/* Mirrored variant: the line runs left from the dot and the label sits on the far side. */
+.callout--left .callout__line {
+  left: auto;
+  right: calc(var(--line, 90px) * -1);
+  background: linear-gradient(to left, var(--accent), color-mix(in srgb, var(--accent) 25%, transparent));
+}
+.callout--left .callout__label {
+  left: auto;
+  right: calc(var(--line, 90px) + 12px);
+}
+
+/* ---------------------------------------------------------------------------
+   Chips, labels and rules
+--------------------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #dfe7ec;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hair);
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+.chip--accent {
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.02));
+}
+.chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+/* The site's eyebrow: small, wide-tracked, quiet. */
+.eyebrow {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  color: #8b9aa4;
+}
+
+/* A labelled hairline — used for the "one core" line that runs behind the product frames. */
+.rule {
+  position: absolute;
+  height: 1px;
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--accent) 45%, transparent) 15%, color-mix(in srgb, var(--accent) 45%, transparent) 85%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   Annotated product shot
+   ---------------------------------------------------------------------------
+   Frame on the left, a tidy label column down the right. Used by all three product
+   artworks, so the three pages read as one family rather than three one-offs — the
+   callout copy is the only thing that changes.
+--------------------------------------------------------------------------- */
+
+/* The label column. Fixed x, so every callout's leader line lands on the same edge and the labels
+   line up as a column instead of floating at whatever x their target happened to be. */
+.labelcol {
+  position: absolute;
+  left: 822px;
+  width: 336px;
+}
+
+.shot-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.shot-note {
+  font-size: 10px;
+  line-height: 1.6;
+  color: #6f7f90;
+}
+
+/* Offset labels are nudged vertically when two targets sit at nearly the same height, so two opaque
+   label boxes can never land on top of each other. */
+.callout--nudge-up .callout__label { transform: translateY(-100%); }
+.callout--nudge-down .callout__label { transform: translateY(0); }
+
+/* A tinted panel used for the diagrammatic pieces. */
+.panel {
+  position: relative;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--hair);
+  backdrop-filter: blur(6px);
+}
+.panel--accent {
+  border-color: color-mix(in srgb, var(--accent) 34%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, rgba(255, 255, 255, 0.015));
+}
+
+/* ---------------------------------------------------------------------------
+   Magnified detail — a real region of a real capture, enlarged
+--------------------------------------------------------------------------- */
+
+/* Crops and scales the same capture the frame is showing. Honest by construction: there is no second
+   source, so the detail can never show something the product does not. `--s` is the scale, `--dx/--dy`
+   shift the capture inside the window. */
+.detail {
+  /* Above the frames it magnifies. Without a z-index it is painted behind the frame (which carries
+     z-index: 2) and only the slice that hangs off the frame's edge is visible — which reads as a
+     mis-cropped inset rather than as a stacking fault. */
+  z-index: 4;
+  position: absolute;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  background: #0e1219;
+  box-shadow:
+    0 30px 60px -24px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(0, 0, 0, 0.5);
+}
+.detail img {
+  position: absolute;
+  display: block;
+  transform-origin: top left;
+  transform: translate(var(--dx), var(--dy)) scale(var(--s, 1.6));
+}
