@@ -34,6 +34,18 @@ every time, because CI has no Next cache. The fonts are now in the repository �
 *The build depended on Google* — and `pnpm build` of all five makes no request to
 `fonts.googleapis.com` or `gstatic`.
 
+## Three files, three questions
+
+| | |
+| --- | --- |
+| **`STATUS.md`** (this one) | What is true right now, and how each claim was checked |
+| **`ACTION-REQUIRED.md`** | What is waiting on a person rather than on code |
+| **`HANDOFF-2026-09-22.md`** | **What is not settled** — where I am unsure, what I did not check, and what needs reasoning across more of the system than one change should carry |
+
+The third is new on 2026-09-22 and exists because this file has no honest place for *"I believe
+this and cannot prove it."* Everything here names how it was checked; anything that cannot be
+checked was quietly not written down at all. That is the gap it fills.
+
 ## Why this file exists
 
 Status was spread across eight append-only documents — `CLAUDE.md`, `BUILD-PLAN.md`, `GO-LIVE.md`,

@@ -201,9 +201,11 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
       clientName: e.clientName,
       summary: `"${e.plan}" is switched off but still mapped on ${e.channel}`,
       action:
-        `Nothing is published for it — the push skips switched-off plans — but the mapping is stale and ` +
-        `would start sending again if the plan is ever re-enabled. Clear it on the Mapping screen` +
-        (e.rooms.length ? ` (${e.rooms.join(", ")}).` : "."),
+        `No rates or availability go out for it — the push skips switched-off plans. Two things can ` +
+        `still reach it: re-enabling the plan, and PAUSING OR DISCONNECTING the channel, because a ` +
+        `stop-sell deliberately closes everything mapped whether the plan is on or off. If the ` +
+        `mapping points at the wrong room, that stop-sell closes the wrong room. Clear it on the ` +
+        `Mapping screen` + (e.rooms.length ? ` (${e.rooms.join(", ")}).` : "."),
       severity: "soon",
     });
   }
