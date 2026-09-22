@@ -123,6 +123,33 @@ Switching to live keys is a deliberate act with a standing constraint against it
 constraints* in `docs/PMS-ROUND2-STATUS.md`: payments stay Stripe **test-mode only** until somebody
 decides otherwise. This entry records that the decision is now available, not that it has been made.
 
+### 2c. Google Analytics + Search Console in the operator — ADDED 2026-09-22
+
+`operator.reviosoft.app/website` reads both without anybody signing into Google. It is **built and
+inert**: with the variables unset it says so on the screen rather than erroring.
+
+Three steps, and only the first cannot be done from the repo:
+
+1. **Google Cloud → a service account**, with a JSON key. Then grant it, in Google:
+   - GA4 → Admin → Property access management → add its email as **Viewer**
+   - Search Console → Settings → Users and permissions → add its email (Full or Restricted)
+2. **Four variables on the `operator` service:**
+   ```
+   GOOGLE_INSIGHTS_CLIENT_EMAIL   the service account's email
+   GOOGLE_INSIGHTS_PRIVATE_KEY    private_key from the JSON, \n escapes kept as-is
+   GA4_PROPERTY_ID                numeric — Analytics → Admin → Property details
+   GSC_SITE_URL                   exactly as Search Console spells it, e.g. https://reviosoft.app/
+   ```
+3. Nothing else. No table, no migration, no scheduled job.
+
+⚠️ **It stores nothing, deliberately.** The obvious design was a nightly job filling our own table;
+the founder's call is that anything needing more than Search Console's sixteen months is a question
+to ask in Analytics itself. This screen answers the normal periods — 7, 28, 90 days — live.
+
+⚠️ Two things the screen states rather than hides: Search Console lags two to three days, and GA4
+counts only visitors who accepted cookies. Every number there is a floor, not a total, and a floor
+presented as a total is how somebody concludes the site is failing.
+
 ### 3. Billing details for each real client
 A client cannot be invoiced without their **legal** entity name, country and address — the trading
 name is not who owes the money, and the country decides the VAT treatment.

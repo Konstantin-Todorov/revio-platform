@@ -128,6 +128,7 @@ export const OPERATOR_AREAS: OperatorArea[] = [
     href: "/analytics",
     sections: [
       { href: "/analytics", label: "Product analytics", blurb: "What people actually open, and who has gone quiet" },
+      { href: "/website", label: "Website", blurb: "Analytics and Search Console for reviosoft.app, without opening Google" },
       { href: "/platform-history", label: "Platform history", blurb: "What we built, and what is next" },
     ],
   },

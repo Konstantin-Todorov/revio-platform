@@ -11,7 +11,7 @@ import { OPERATOR_AREAS, areaForPath, sectionsForPath, activeSection } from "./n
 const EVERY_ROUTE = [
   "/overview", "/clients", "/leads", "/support", "/plans", "/billing",
   "/health", "/errors", "/auth-log", "/integrations", "/connectivity",
-  "/analytics", "/platform-history", "/settings/account",
+  "/analytics", "/website", "/platform-history", "/settings/account",
 ];
 
 describe("the shape of the menu", () => {
