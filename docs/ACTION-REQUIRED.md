@@ -239,27 +239,35 @@ and a declaration to НАП naming where our database lives.
 
 ## 🟠 Needed at the moment a client is onboarded
 
-### 4b. Two real clients have open connectivity alerts — RAISED 2026-09-22
+### 4b. ~~Two real clients have open connectivity alerts~~ — ✅ DONE 2026-09-22
 
-`/overview` has been carrying these since **20 September**. Both are on real, non-demo tenants, and
-both need somebody to open a screen — neither is a code fix.
+Both were repaired the same evening by `packages/db/scripts/repair-real-client-mappings.mts`
+(dry-run first, rows backed up, audit entries written). **Neither fix sent anything to an OTA**,
+and that is checkable rather than asserted — the script explains why in each case.
 
-**DesManagement 2015 (active) — a leftover mapping.** `Standard Rate` on *Apartment, 2 Bedrooms* is
-switched off in the product but still mapped at Channex, under the *1-Bedroom*'s room. Nothing is
-published for it: the push has skipped switched-off plans since 17 September. It matters because a
-mapping nobody maintains starts sending nonsense the day the plan is re-enabled. **Clear it on their
-Mapping screen.**
+**DesManagement 2015 · Cabacum Beach Residence — unmapped, not deleted.** Reading Channex directly
+showed the row was wrong twice over: `Apartment, 2 Bedrooms · Standard Rate` carried rate id
+`0ea321e7…`, which Channex says is `BB BAR - BookingCom Cabacum Beach Residence` attached to
+**Apartment, 1 Bedroom** — the wrong room, and a channel-*derived* plan where all six other rows on
+this property point at base plans. `externalRateId` is now null and the row is `incomplete`, which
+is exactly what the hotel's own dialog does on "— not mapped —". The six correct mappings were not
+touched. No push was sent: the plan is switched off and `syncChannel` has skipped switched-off plans
+since 17 September, so nothing about what we publish changed.
 
-> ⚠️ Until 2026-09-22 this same row ALSO raised an `act` alert reading *"publishing to the wrong
-> room"*, and the client page said so in red beside *"every push succeeds"*. Both were false. Fixed
-> in `crossWiredFromRecord` — a switched-off plan is not a cross-wire. If you looked at this client
-> before today, that is what you saw.
+**Ventsi Group · Chervena Vila — disconnected, not removed.** Its channel claimed `connected` while
+pointing at Channex property `d06f812c…`, which is not in the account — the three that are there
+are Cabacum Beach Residence and two called *Ethno Villa Cherry*. Nothing could be sent or received.
+Disconnect rather than delete because delete is permanent and `Reservation.channel` cascades, while
+this keeps both mappings dormant and the account's future is a decision nobody has made.
 
-**Ventsi Group (suspended) — a channel pointed at nothing.** Chervena Vila's Channex channel still
-names a property Channex has deleted. Nothing is being sent, because a suspended tenant does not
-sync at all, so this is not urgent — but the channel row reads `connected`, which it is not.
-**Reconnect it or remove it** when the account is next touched. The mapping audit deliberately keeps
-running on suspended clients, which is why this is visible at all.
+> ⚠️ **Reconnecting will not work until a Channex property exists again**, and that is the
+> situation rather than a limit of the repair: the property was deleted at Channex. Whoever picks
+> the account up needs to create one and re-provision.
+
+> ⚠️ **Two properties named *Ethno Villa Cherry* are in the Channex account and no Revio channel
+> points at either.** One is Ruse/EUR, the other Cherven/**CZK** — a Czech currency on a Bulgarian
+> villa. Neither has a channel, so neither is being billed, but they are the duplicate noted
+> earlier and they still need clearing up **in Channex**, which nothing here can do.
 
 ### 5. That hotel's Channex property
 Either create it in the portal and give me the UUID, or tell me to create it via the API. Then I map

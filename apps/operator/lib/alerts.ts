@@ -61,7 +61,23 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
    * does not exist is not an error — which is why nothing noticed for weeks.
    */
   const missing = await prisma.channel.findMany({
-    where: { catalogueStatus: "property_missing" },
+    /*
+     * ⚠️ A DISCONNECTED channel is excluded, and the summary below is why.
+     *
+     * It reads "is connected to a property the channel has deleted". Once the channel is
+     * disconnected that sentence is false in its first word, and there is nothing left to act on:
+     * nothing syncs, nothing is billed, and the dead property id is kept only so a later reconnect
+     * has something to replace. Ventsi Group's sat here after being disconnected on 2026-09-22 —
+     * an `act` alert whose only remaining action was the one already taken, which is exactly how a
+     * feed stops being read.
+     *
+     * The alert still returns by itself if somebody reconnects: the mapping audit selects on
+     * `status: "connected"`, so a reconnected channel is walked again on the next run and
+     * `catalogueStatus` is rewritten from what Channex actually answers. While it is disconnected
+     * that field is frozen at its last reading, which is correct — it is a record of what was true
+     * when we last asked, not a claim about now.
+     */
+    where: { catalogueStatus: "property_missing", status: { not: "disconnected" } },
     select: { id: true, name: true, property: { select: { name: true, tenant: { select: { name: true } } } } },
   });
   for (const ch of missing) {

@@ -636,8 +636,8 @@ last checked 13:01 on 2026-09-22, both with a webhook secret. The row asking for
 
 | | Who | Why it matters |
 | --- | --- | --- |
-| **Clear DesManagement 2015's stale mapping** | Founder / Operations | Their *Standard Rate* on Apartment, 2 Bedrooms is switched off but still mapped at Channex, under the 1-Bedroom's room. Nothing is published for it today. It matters because a mapping nobody maintains starts sending nonsense the day the plan is re-enabled. Their Mapping screen. Open since 20 Sept |
-| **Decide what to do about *Ventsi Group*** | Founder | A real account, suspended, and its Channex channel points at a property Channex has deleted. Nothing is being sent — a suspended tenant does not sync — but the channel row reads `connected`, which it is not. Reconnect it or remove it |
+| **Two duplicate properties in the Channex account** | Founder | Two are named *Ethno Villa Cherry* — one Ruse/EUR, one Cherven/**CZK**, a Czech currency on a Bulgarian villa — and **no Revio channel points at either**. Neither has a channel so neither is billed, but they need clearing up **in Channex**; nothing in our console can reach them |
+| **Decide what to do about *Ventsi Group*** | Founder | A real account, suspended. Its channel was disconnected on 22 Sept because it pointed at a property Channex had deleted. Reconnecting needs a new Channex property and a re-provision — the decision is whether the account continues at all |
 | **Four overstays and three open folios on the demo book** | Founder / Operations | The state audit against production reports exactly two faults, seven rows, and **both are records a hotelier reaches, not code**: four stays past their departure date never checked out, and three departed stays whose folio is still open (€733 across Ventsi's three). They are the audit working, not failing |
 | **Decide one retry policy for a failed job** | Founder | The codebase holds both positions in its own comments — see `ACTION-REQUIRED.md` §2d. Four routes say a failed run should wait out its TTL; two now retry on the next tick. Either is defensible; having both is not |
 | **Decide whether to switch payments to live** | Founder | A working live key is stored and the account is BG/EUR with charges enabled. `stripeMode` is `test` by deliberate choice, and the standing constraint says test-only until somebody decides otherwise. **I do not flip that switch.** Separately, `apps/booking` carries no Stripe variables at all, so a *guest* cannot pay by card whatever this is set to |
@@ -656,9 +656,11 @@ last checked 13:01 on 2026-09-22, both with a webhook secret. The row asking for
 | `pms` · `/api/jobs/closeday` | 22 Sept 06:51, once | `prisma.jobLease.updateMany()` could not reach `postgres.railway.internal`. A Postgres restart caught the job mid-lease. The same job ran normally at 18:10 the same day — which is the 09-22 `withJobLease` fix working, because under the old code the lease would have stayed held |
 | `operator` · `/api/jobs/support-inbox` | 18 Sept, once | `Unexpected close` from a TLS socket — the mailbox connection dropped mid-sweep. Has not recurred in four days. It now returns a diagnosable body instead of a bare 500 |
 
-**Two operator alerts open, both on real clients, both needing a person** — they are in the table
-above. A third, on the same DesManagement row, was **false and has been resolved**; see the 09-22
-entry about two alerts saying opposite things.
+**The operator alert feed is empty.** Three were open on real clients this morning. One was
+**false** — see the 09-22 entry about two alerts saying opposite things. The other two were
+repaired the same evening: DesManagement's stale mapping unmapped, Ventsi Group's dead channel
+disconnected. `ACTION-REQUIRED.md` §4b has what was found in each and why neither fix sent anything
+to an OTA.
 
 ⚠️ **Four of the five rows in this log were not faults at all until today** — one per app per
 deploy, from tabs open across a release. The list had become 80% weather, which is how a real fault
