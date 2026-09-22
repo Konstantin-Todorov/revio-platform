@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  delta, localeOf, parseGaDate, readConfig, shapePages, shapeQueries, shapeTraffic,
-  splitByLocale, windowFor,
+  delta, localeOf, parseGaDate, readConfig, shapeBreakdown, shapeLanding, shapePages,
+  shapeQueries, shapeTraffic, share, splitByLocale, windowFor,
 } from "./google-insights";
+import { colourFor } from "@/components/analytics/ShareBars";
 
 describe("readConfig", () => {
   const full: Record<string, string | undefined> = {
@@ -134,5 +135,40 @@ describe("splitByLocale", () => {
     ]);
     expect(totals.bg).toEqual({ clicks: 5, impressions: 140 });
     expect(totals.en).toEqual({ clicks: 6, impressions: 250 });
+  });
+});
+
+describe("the richer breakdowns", () => {
+  it("keeps GA4's unattributed rows instead of dropping them, or every percentage below inflates", () => {
+    const rows = [
+      { dimensionValues: [{ value: "Direct" }], metricValues: [{ value: "9" }, { value: "24" }] },
+      { dimensionValues: [{ value: "(not set)" }], metricValues: [{ value: "3" }, { value: "6" }] },
+    ];
+    const out = shapeBreakdown(rows);
+    expect(out.map((r) => r.label)).toEqual(["Direct", "Unattributed"]);
+    expect(out.reduce((s, r) => s + r.sessions, 0)).toBe(30);
+  });
+
+  it("sorts by sessions, because the question is which is biggest", () => {
+    const rows = [
+      { dimensionValues: [{ value: "Referral" }], metricValues: [{ value: "1" }, { value: "2" }] },
+      { dimensionValues: [{ value: "Direct" }], metricValues: [{ value: "9" }, { value: "24" }] },
+    ];
+    expect(shapeBreakdown(rows).map((r) => r.label)).toEqual(["Direct", "Referral"]);
+  });
+
+  it("turns GA4's engagement fraction into a percentage", () => {
+    const rows = [{ dimensionValues: [{ value: "/bg/" }], metricValues: [{ value: "12" }, { value: "0.6667" }] }];
+    expect(shapeLanding(rows)[0]).toEqual({ page: "/bg/", sessions: 12, engagementRate: 66.7 });
+  });
+
+  it("returns 0 from share() on a zero total — NaN renders a bar at FULL width", () => {
+    expect(share(3, 0)).toBe(0);
+    expect(share(3, 12)).toBe(25);
+  });
+
+  it("greys only the two labels that mean 'we do not know', never a real category", () => {
+    expect(colourFor("Unattributed", 0)).toBe(colourFor("Everything else", 5));
+    expect(colourFor("Direct", 0)).not.toBe(colourFor("Unattributed", 0));
   });
 });

@@ -264,6 +264,68 @@ export function splitByLocale(pages: PageRow[]) {
   return totals;
 }
 
+export interface Breakdown { label: string; people: number; sessions: number }
+export interface LandingRow { page: string; sessions: number; engagementRate: number }
+export interface SearchSlice { label: string; clicks: number; impressions: number }
+
+/**
+ * A row of `[dimension, metric, metric]` into something the screen can draw.
+ *
+ * ⚠️ GA4 answers `(not set)` and `(other)` for rows it cannot attribute, and those are REAL rows
+ * with real people in them — dropping them would quietly inflate every percentage below. They are
+ * relabelled, not removed.
+ */
+export function shapeBreakdown(rows: GaRow[]): Breakdown[] {
+  return rows
+    .map((r) => ({
+      label: humanLabel(r.dimensionValues?.[0]?.value ?? ""),
+      people: Number(r.metricValues?.[0]?.value ?? 0),
+      sessions: Number(r.metricValues?.[1]?.value ?? 0),
+    }))
+    .filter((d) => d.label)
+    .sort((a, b) => b.sessions - a.sessions);
+}
+
+export function humanLabel(value: string): string {
+  if (value === "(not set)" || value === "(none)" || value === "") return "Unattributed";
+  if (value === "(other)") return "Everything else";
+  if (value === "(direct)") return "Direct";
+  return value;
+}
+
+export function shapeLanding(rows: GaRow[]): LandingRow[] {
+  return rows
+    .map((r) => ({
+      page: r.dimensionValues?.[0]?.value ?? "",
+      sessions: Number(r.metricValues?.[0]?.value ?? 0),
+      /* GA4 sends a fraction; the screen shows a percentage. */
+      engagementRate: Math.round(Number(r.metricValues?.[1]?.value ?? 0) * 1000) / 10,
+    }))
+    .filter((d) => d.page && d.page !== "(not set)")
+    .sort((a, b) => b.sessions - a.sessions);
+}
+
+export function shapeSearchSlice(rows: GscRow[]): SearchSlice[] {
+  return rows
+    .map((r) => ({
+      label: humanLabel(r.keys?.[0] ?? ""),
+      clicks: r.clicks ?? 0,
+      impressions: r.impressions ?? 0,
+    }))
+    .sort((a, b) => b.impressions - a.impressions);
+}
+
+/**
+ * A share of a total, as a percentage, for a bar's width.
+ *
+ * ⚠️ Zero total returns zero rather than NaN. `NaN%` renders as literal "NaN%" in a width and the
+ * bar becomes full-width — the emptiest possible data drawn as the fullest possible chart.
+ */
+export function share(part: number, total: number): number {
+  if (!total) return 0;
+  return Math.round((part / total) * 1000) / 10;
+}
+
 /* ------------------------------------------------------------------ */
 /* The two calls, and the one function the screen uses.                 */
 /* ------------------------------------------------------------------ */
@@ -314,6 +376,15 @@ export interface SiteInsights {
   queries: QueryRow[];
   pages: PageRow[];
   byLocale: ReturnType<typeof splitByLocale>;
+  /** Engagement, not just volume — a visit that bounced is not a visit that read anything. */
+  engagementRate: number;
+  avgSeconds: number;
+  channels: Breakdown[];
+  devices: Breakdown[];
+  countries: Breakdown[];
+  landing: LandingRow[];
+  searchDevices: SearchSlice[];
+  searchCountries: SearchSlice[];
 }
 
 const EMPTY = (period: Period, window: { startDate: string; endDate: string }): SiteInsights => ({
@@ -327,6 +398,14 @@ const EMPTY = (period: Period, window: { startDate: string; endDate: string }): 
   queries: [],
   pages: [],
   byLocale: { bg: { clicks: 0, impressions: 0 }, en: { clicks: 0, impressions: 0 } },
+  engagementRate: 0,
+  avgSeconds: 0,
+  channels: [],
+  devices: [],
+  countries: [],
+  landing: [],
+  searchDevices: [],
+  searchCountries: [],
 });
 
 /**
@@ -347,13 +426,34 @@ export async function getSiteInsights(period: Period = 28): Promise<SiteInsights
     const token = await accessToken(config);
     const metrics = [{ name: "activeUsers" }, { name: "screenPageViews" }];
 
-    const [daily, prior, queries, pages, priorSearch] = await Promise.all([
-      ga(config, token, { dateRanges: [w.current], dimensions: [{ name: "date" }], metrics }),
-      ga(config, token, { dateRanges: [w.previous], metrics }),
-      gsc(config, token, { ...w.current, dimensions: ["query"], rowLimit: 25 }),
-      gsc(config, token, { ...w.current, dimensions: ["page"], rowLimit: 25 }),
-      gsc(config, token, { ...w.previous, rowLimit: 1 }),
-    ]);
+    /*
+      ⚠️ Issued together, not one after another. Eleven serial round trips to Google is a screen
+      that takes ten seconds to paint; in parallel it is one round trip's worth of waiting.
+    */
+    const pair = [{ name: "activeUsers" }, { name: "sessions" }];
+    const [daily, prior, quality, channels, devices, countries, landing, queries, pages, priorSearch, sDevices, sCountries] =
+      await Promise.all([
+        ga(config, token, { dateRanges: [w.current], dimensions: [{ name: "date" }], metrics }),
+        ga(config, token, { dateRanges: [w.previous], metrics }),
+        ga(config, token, {
+          dateRanges: [w.current],
+          metrics: [{ name: "engagementRate" }, { name: "averageSessionDuration" }],
+        }),
+        ga(config, token, { dateRanges: [w.current], dimensions: [{ name: "sessionDefaultChannelGroup" }], metrics: pair, limit: 8 }),
+        ga(config, token, { dateRanges: [w.current], dimensions: [{ name: "deviceCategory" }], metrics: pair, limit: 5 }),
+        ga(config, token, { dateRanges: [w.current], dimensions: [{ name: "country" }], metrics: pair, limit: 8 }),
+        ga(config, token, {
+          dateRanges: [w.current],
+          dimensions: [{ name: "landingPage" }],
+          metrics: [{ name: "sessions" }, { name: "engagementRate" }],
+          limit: 12,
+        }),
+        gsc(config, token, { ...w.current, dimensions: ["query"], rowLimit: 25 }),
+        gsc(config, token, { ...w.current, dimensions: ["page"], rowLimit: 25 }),
+        gsc(config, token, { ...w.previous, rowLimit: 1 }),
+        gsc(config, token, { ...w.current, dimensions: ["device"], rowLimit: 5 }),
+        gsc(config, token, { ...w.current, dimensions: ["country"], rowLimit: 8 }),
+      ]);
 
     const traffic = shapeTraffic(daily.rows ?? []);
     const people = traffic.reduce((s, d) => s + d.people, 0);
@@ -386,6 +486,14 @@ export async function getSiteInsights(period: Period = 28): Promise<SiteInsights
       queries: shapeQueries(queries.rows ?? []),
       pages: shapedPages,
       byLocale: splitByLocale(shapedPages),
+      engagementRate: Math.round(Number(quality.rows?.[0]?.metricValues?.[0]?.value ?? 0) * 1000) / 10,
+      avgSeconds: Math.round(Number(quality.rows?.[0]?.metricValues?.[1]?.value ?? 0)),
+      channels: shapeBreakdown(channels.rows ?? []),
+      devices: shapeBreakdown(devices.rows ?? []),
+      countries: shapeBreakdown(countries.rows ?? []),
+      landing: shapeLanding(landing.rows ?? []),
+      searchDevices: shapeSearchSlice(sDevices.rows ?? []),
+      searchCountries: shapeSearchSlice(sCountries.rows ?? []),
     };
   } catch (e) {
     return { ...EMPTY(period, w.current), configured: true, error: (e as Error).message };

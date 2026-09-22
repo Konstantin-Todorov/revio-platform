@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSiteInsights, PERIODS, type Period } from "@/lib/google-insights";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { DailyBars } from "@/components/ui/DailyBars";
+import { ShareBars } from "@/components/analytics/ShareBars";
 
 export const dynamic = "force-dynamic";
 
@@ -129,7 +130,7 @@ export default async function WebsitePage({
 
       {d.configured && !d.error && (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             <Card className="p-4">
               <div className="text-[11px] uppercase tracking-wide text-ink-400">People</div>
               <div className="tnum mt-1 text-[24px] font-bold leading-none text-ink-900">{d.people.current}</div>
@@ -139,6 +140,19 @@ export default async function WebsitePage({
               <div className="text-[11px] uppercase tracking-wide text-ink-400">Page views</div>
               <div className="tnum mt-1 text-[24px] font-bold leading-none text-ink-900">{d.views.current}</div>
               <div className="mt-1.5"><Delta pct={d.views.deltaPct} previous={d.views.previous} /></div>
+            </Card>
+            <Card className="p-4">
+              {/* The tooltip goes on the label, not the Card — `Card` forwards no title attribute. */}
+              <div
+                className="text-[11px] uppercase tracking-wide text-ink-400"
+                title="An engaged session lasted over ten seconds, fired a key event, or saw two or more pages. It is the closest thing GA4 has to 'they actually read it'."
+              >
+                Engaged
+              </div>
+              <div className="tnum mt-1 text-[24px] font-bold leading-none text-ink-900">{d.engagementRate}%</div>
+              <div className="mt-1.5 text-[11.5px] text-ink-500">
+                {Math.floor(d.avgSeconds / 60)}m {d.avgSeconds % 60}s average visit
+              </div>
             </Card>
             <Card className="p-4">
               <div className="text-[11px] uppercase tracking-wide text-ink-400">Clicks from search</div>
@@ -173,6 +187,99 @@ export default async function WebsitePage({
               </p>
             </div>
           </Card>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card>
+              <CardHeader
+                title="Where they came from"
+                subtitle="How the visit started — hover a bar for what the category means"
+              />
+              <div className="px-4 pb-4">
+                <ShareBars
+                  rows={d.channels}
+                  meanings={{
+                    Direct: "Typed the address, used a bookmark, or arrived from somewhere that sent no referrer — an email client or a messaging app, typically.",
+                    "Organic Search": "Clicked an unpaid result in Google or another search engine.",
+                    Referral: "Followed a link on another website.",
+                    "Organic Social": "Came from a social network without an ad.",
+                    Unattributed: "GA4 could not tell. Usually a blocked referrer — this is not a category, it is an absence.",
+                  }}
+                />
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader title="On what" subtitle="Phone, desktop or tablet" />
+              <div className="px-4 pb-4">
+                <ShareBars
+                  rows={d.devices}
+                  meanings={{
+                    mobile: "A phone. If this is the majority, the phone layout is the real site and the desktop one is the variant.",
+                    desktop: "A computer.",
+                    tablet: "A tablet — usually renders the desktop layout at a smaller size.",
+                  }}
+                />
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader title="From where" subtitle="Country, by sessions" />
+              <div className="px-4 pb-4">
+                <ShareBars rows={d.countries} />
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader
+                title="Where they landed"
+                subtitle="The first page of a visit, and whether that visit engaged"
+              />
+              <div className="px-4 pb-4">
+                {d.landing.length === 0 ? (
+                  <p className="py-3 text-[12.5px] text-ink-500">Nothing recorded in this period.</p>
+                ) : (
+                  <table className="w-full text-left text-[12.5px]">
+                    <thead className="text-[11px] uppercase tracking-wide text-ink-400">
+                      <tr>
+                        <th className="py-2">Landing page</th>
+                        <th className="py-2 text-right">Sessions</th>
+                        <th className="py-2 text-right" title="Share of those sessions that lasted over ten seconds, saw two pages, or fired a key event.">Engaged</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {d.landing.slice(0, 12).map((l) => (
+                        <tr key={l.page} className="border-t border-ink-100">
+                          <td className="py-2 pr-3 text-ink-800">{l.page}</td>
+                          <td className="tnum py-2 text-right text-ink-900">{l.sessions}</td>
+                          <td className="tnum py-2 text-right text-ink-500">{l.engagementRate}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <p className="mt-3 text-[11.5px] leading-relaxed text-ink-500">
+                  A landing page is where a visit STARTED, which is a different question from the most
+                  viewed page — and the one that says which page is doing the earning.
+                </p>
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader title="Search, split two ways" subtitle="By device and by country, from Search Console" />
+              <div className="grid grid-cols-1 gap-4 px-4 pb-4 sm:grid-cols-2">
+                <div>
+                  <div className="mb-2 text-[11px] uppercase tracking-wide text-ink-400">Device</div>
+                  <ShareBars rows={d.searchDevices.map((s) => ({ label: s.label, people: s.clicks, sessions: s.impressions }))} unit="impressions" />
+                </div>
+                <div>
+                  <div className="mb-2 text-[11px] uppercase tracking-wide text-ink-400">Country</div>
+                  <ShareBars rows={d.searchCountries.map((s) => ({ label: s.label, people: s.clicks, sessions: s.impressions }))} unit="impressions" />
+                </div>
+              </div>
+            </Card>
+          </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
