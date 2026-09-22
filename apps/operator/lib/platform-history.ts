@@ -284,9 +284,9 @@ export const PLATFORM_ROADMAP = [
     priority: "must",
     effort: "S",
     owner: "Founder + external",
-    title: "Take a real payment",
-    outcome: "A live Stripe key is deployed and the account's default currency is the one we invoice in, so the first customer can pay by card instead of by bank transfer.",
-    dependency: "Stripe verification is done; the account still defaults to USD while every price is in EUR, and no live key is deployed anywhere",
+    title: "A guest can pay by card",
+    outcome: "RevioDirect can take a real card, so a hotel's own booking page stops being the only channel that cannot collect.",
+    dependency: "Charging OUR clients is already possible — a live key is stored, tested, BG/EUR, charges enabled; the console is set to sandbox by deliberate choice. What is missing is apps/booking, which carries no Stripe variables at all",
   },
   {
     id: "job-failures-noticed",

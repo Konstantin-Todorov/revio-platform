@@ -32,6 +32,25 @@
  * false negative by design. What it makes impossible is the loud, repeated failure — a document
  * insisting something is unbuilt while the function sits in the tree.
  *
+ * ## Counts, added 2026-09-22
+ *
+ * The symbol check has a blind spot, and on 2026-09-22 every stale claim in `STATUS.md` was inside
+ * it: **a number**. It said 1,945 tests (2,911), twelve checks (seventeen), nine jobs and then ten
+ * (thirteen), eight Railway services (nine). None of those cites a symbol, so none was checked, and
+ * every one of them had been true when it was written.
+ *
+ * A figure that can be derived from the repository is therefore written as a claim too:
+ *
+ *     <!-- status: count jobs 13 -->
+ *     <!-- status: count checks 17 -->
+ *     <!-- status: count screens 90 -->
+ *
+ * Only three, and only these three, because each is **exactly** derivable from one file — the `JOB`
+ * registry, the `verify` script, and `route-walk`'s own route lists. A count that has to be
+ * measured at runtime (tests, Railway services, rows in production) is deliberately NOT here: a
+ * lint that guesses is worse than one that stays quiet, and this file already says in as many words
+ * that such a figure is only as fresh as the last time somebody ran the query.
+ *
  * Run: `node scripts/status-lint.mjs` (part of `pnpm verify` and CI).
  */
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
@@ -54,6 +73,28 @@ function docs(dir, out = []) {
 }
 
 const MARKER = /status:\s*(built|not-built)\s+([^\s#]+)#([A-Za-z0-9_]+)/g;
+const COUNT_MARKER = /status:\s*count\s+(jobs|checks|screens)\s+(\d+)/g;
+
+/** Each derives its number from exactly one file, so the answer cannot be a guess. */
+const COUNTERS = {
+  jobs() {
+    const block = readFileSync(join(ROOT, "packages/db/src/job-lease.ts"), "utf8")
+      .match(/export const JOB = \{([\s\S]*?)\n\} as const;/);
+    return block ? [...block[1].matchAll(/^\s*\w+:\s*"[^"]+"/gm)].length : null;
+  },
+  checks() {
+    // Every step of `pnpm verify` except the test run itself — those are the checks, and `test` is
+    // counted separately in the sentence beside this number.
+    const { scripts } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+    if (!scripts?.verify) return null;
+    return scripts.verify.split("&&").map((s) => s.trim()).filter((s) => s && s !== "pnpm test").length;
+  },
+  screens() {
+    const src = readFileSync(join(ROOT, "scripts/route-walk.mjs"), "utf8");
+    const apps = [...src.matchAll(/routes:\s*\[([\s\S]*?)\n\s*\]/g)];
+    return apps.length === 0 ? null : apps.reduce((n, [, body]) => n + (body.match(/"/g) ?? []).length / 2, 0);
+  },
+};
 
 const files = docs(ROOT);
 const failures = [];
@@ -106,6 +147,20 @@ for (const file of files) {
       failures.push(`${rel} says ${symbol} is NOT BUILT — but it is declared in ${path}`);
     }
   }
+
+  for (const m of src.matchAll(COUNT_MARKER)) {
+    const [, what, stated] = m;
+    const lineStart = src.lastIndexOf("\n", m.index) + 1;
+    if (/^(\s{4,}|>|\s*\*\s)/.test(src.slice(lineStart, m.index))) continue;
+    claims++;
+    const actual = COUNTERS[what]();
+    const rel = file.slice(ROOT.length + 1);
+    if (actual === null) {
+      failures.push(`${rel} counts ${what}, but the source it derives from could not be parsed — the check is blind`);
+    } else if (actual !== Number(stated)) {
+      failures.push(`${rel} says there are ${stated} ${what} — there are ${actual}`);
+    }
+  }
 }
 
 for (const f of failures) console.log(`  ${f}`);
@@ -115,7 +170,8 @@ if (failures.length > 0) {
     "\nstatus-lint FAILED.\n" +
       "A document is describing code that does not match it. Five claims in these files were wrong\n" +
       "in three days, every one of them work recorded as open that had already shipped — two of them\n" +
-      "nearly cost duplicate work. Fix the sentence, not the marker.",
+      "nearly cost duplicate work. A COUNT that disagrees is the same failure with a number.\n" +
+      "Fix the sentence, not the marker.",
   );
   process.exit(1);
 }

@@ -107,21 +107,37 @@ business name "Revio", country BG.
 returned describes test mode. The account-level evidence — details submitted, no outstanding
 requirements — is the same in both modes and is what says the business verification is finished.
 
-**The blocker moved rather than cleared, and that is the point of correcting this entry:**
+### ⚠️ BOTH BLOCKERS BELOW WERE WRONG — corrected again 2026-09-22, evening
 
-1. **No live key is deployed anywhere.** `STRIPE_SECRET_KEY` and
-   `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` exist on **`pms` only**, and both are `sk_test` / `pk_test`.
-   `booking`, `operator`, `reservation` and `channel-manager` carry no Stripe variables at all —
-   including `booking`, which is the app that takes a guest's card. So no real card can be charged
-   today, and the reason is deployment, not Stripe.
-2. **The account's default currency is `usd`, on a Bulgarian account that bills in EUR.** The price
-   list, the calculator, every invoice and `CURRENCY` in `config/pricing.ts` are euro. A payment
-   taken in the account's default currency would settle in dollars and convert. Worth checking in
-   the Stripe dashboard before the first live charge, not after.
+They were written this morning and are struck through because each was checked against the wrong
+thing. *Re-checked by query against `PlatformCredential` and `OperatorCompany` in production:*
 
-Switching to live keys is a deliberate act with a standing constraint against it — see *Standing
+**We can charge a real card. It is switched off on purpose.** A **live** Stripe restricted key is
+stored and was last tested **OK at 13:01 today**; Stripe answers `chargesEnabled: true`,
+`payoutsEnabled: true`, `detailsSubmitted: true`, `defaultCurrency: **EUR**`, country `BG`, account
+`acct_1UE4yvFdkWSHYoRn`. The console reads `stripeMode = test`, which is a **stored choice** —
+`activeStripeMode` reads it from `OperatorCompany` so that pasting a live key in order to test the
+connection cannot silently start charging real cards. It used to be inferred from whether a live key
+worked, which did exactly that.
+
+1. ~~**No live key is deployed anywhere.**~~ This described **Railway environment variables**, where
+   only `pms` carries Stripe keys and both are `sk_test` / `pk_test`. *That part is still true and
+   still matters* — see below. But the operator does not use environment variables for this at all:
+   it reads the encrypted `PlatformCredential` row, and that row holds a working live key. Two
+   stores, one of them checked.
+2. ~~**The account's default currency is `usd`.**~~ It queried the **test** account,
+   `acct_1TrN0uC9R6il3Bgk`. The live account is a **different account id** and its default currency
+   is EUR. A sandbox account's currency says nothing about the business.
+
+**What is genuinely still missing: a GUEST cannot pay by card.** `apps/booking` — the app that takes
+a guest's card — carries **no Stripe variables at all**, and `apps/pms` has test keys only. *Checked
+with `railway variables --service <each>` on 2026-09-22.* That is a different promise from Revio
+invoicing its own clients, and only the second one is ready.
+
+Switching payments to live is a deliberate act with a standing constraint against it — see *Standing
 constraints* in `docs/PMS-ROUND2-STATUS.md`: payments stay Stripe **test-mode only** until somebody
-decides otherwise. This entry records that the decision is now available, not that it has been made.
+decides otherwise. **I do not flip that switch.** This entry records that the decision is available
+and that nothing technical is in its way.
 
 ### 2c. Google Analytics + Search Console in the operator — ADDED 2026-09-22
 

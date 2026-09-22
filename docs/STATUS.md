@@ -1,27 +1,37 @@
 # Revio — where the project actually is
 
-**Updated 2026-09-14**, at commit `c641c3e` — which CI passed and `promote.yml` fast-forwarded onto
-`production`, *checked with `git fetch origin production && git log origin/production -1`*. Every line below names how it
-was checked. Nothing here is copied forward from another document.
+**Updated 2026-09-22**, at commit `9473a49` — which CI passed and `promote.yml` fast-forwarded onto
+`production`, *checked with `git fetch origin production && git log --oneline origin/production -1`;
+`main` and `production` are the same commit*.
+Every line below names how it was checked. Nothing here is copied forward from another document.
 
-⚠️ **What was re-checked on 2026-09-13 and what was not.** Re-checked: the deployed commit
-(`git ls-remote`); the **ten** scheduled jobs at `operator.reviosoft.app/api/health/jobs`, all `ok`
-at 16:56 local (`invoice-run` included — see the note below about reading that endpoint during a
-deploy); `/login` and `/api/health` returning 200 on all
-four staff origins; and the full gate — `pnpm verify` EXIT=0, 2546 tests, lint 0 errors, authz-lint
-268 of 288 actions gated, silent-lint at its budget of 100, jobs-lint 10 of 10 scheduled.
+⚠️ **What was re-checked on 2026-09-22 and what was not.** Re-checked today, by query or request:
+the deployed commit; **thirteen** scheduled jobs at `operator.reviosoft.app/api/health/jobs`, every
+one `ok` and under twelve minutes old; `/login` on all four staff origins and a real booking page on
+RevioDirect, all `200`; the full gate — `pnpm verify` EXIT=0, **2,911 tests** across twelve
+packages, lint 0 errors at its budget of 25 warnings, `jobs-lint` 13 of 13; `route-walk --app
+operator`, 19 of 19 screens healthy; the **state-integrity audit against production**; the error log
+and the operator alert feed; every tenant, reservation and invoice count in *The honest commercial
+position*; and the Stripe credential state, which turned out to contradict what two other documents
+said about it.
 
-**NOT re-checked today, and it matters:** the mapping data of any real hotel *on Channex*. That needs
-a live API key and is what the Mapping screen's **Verify** button exists for — a human has to press
-it. The commercial figures under *The honest commercial position* are still as at 2026-09-07 and are
-labelled there.
+**NOT re-checked today:** `route-walk` on the other three apps (it needs them running locally and
+only the operator was up); `click-walk`; the three database race harnesses; and any real hotel's
+mapping **on Channex**, which needs the Verify button and a human.
 
 ⚠️ **Pushing again cancels the previous commit's CI**, so only the newest commit runs to
 completion and only it is promoted. `git ls-remote --heads origin production` is the only way to
 know what is actually serving — a green "Promote" run for an older commit does not mean that commit
-is live, and the promote for the newest one may still be seconds away when you look.
+is live, and the promote for the newest one may still be seconds away when you look. Seen again
+today: three pushes in one hour left two "Promote to production" runs green while `production` still
+pointed at the first of them.
 
----
+⚠️ **CI failed once today on something that is not ours.** `next/font` could not reach Google while
+building `apps/pms` — `TypeError: Cannot read properties of null (reading '1')` inside the Google
+font loader — and a re-run went green. It is worth writing down because it means **the build of all
+five apps depends on reaching a third party at compile time.** The marketing site had the same
+dependency and it was removed on 2026-09-22 by self-hosting the fonts. Nothing here has been
+changed yet.
 
 ## Why this file exists
 
@@ -40,6 +50,10 @@ Three that show the shape of it:
 - **`trial-sweep`** was declared, scheduled, leased, tested, deployed — and had never run. The cron
   was POSTing into a login page, which answers `200`, so the runner logged `ok` every tick. Found on
   2026-09-07 by reading the job health endpoint *while checking this file*, not by an alarm.
+- **The roadmap listed two finished things as outstanding.** Hotel MFA and guest data rights sat in
+  "Now · must" on `/platform-history` until 2026-09-22, having shipped on 30 and 29 August. A
+  roadmap is the one artefact used to decide what to do next, so two wrong entries make every
+  entry a guess. Found by reading the board against the code while updating this file.
 
 ### The rule that keeps this file true
 
@@ -62,6 +76,17 @@ Three that show the shape of it:
 
    `built` fails when the symbol is missing; `not-built` fails when it is present, which is the
    direction that actually keeps going wrong. **Cite the code in any new claim here.**
+
+   ⚠️ **The lint has a blind spot, and on 2026-09-22 every stale claim in this file was inside it.**
+   It checks claims that cite a symbol. Nothing in it can check a **number or a name**, and those
+   are what rotted: *1,945 tests* (2,911), *twelve checks* (seventeen), *nine jobs* then *ten*
+   (thirteen), *eight Railway services* (nine), *"all three tenants are demo"* (five tenants, two
+   real), and a real client named **Ruse Rentals Tester** that does not exist in production — it is
+   *DesManagement 2015*. Every one of them was true when written.
+
+   Two of those now defend themselves: the job count is the number `jobs-lint` asserts, so CI fails
+   if they diverge. The rest do not. **A figure in this file is only as fresh as the last time
+   somebody ran the query, so write the query beside it.**
 4. **A green check is not evidence until you know what it looked at.** `trial-sweep` passed its lint,
    held its lease and returned `200` for its entire life without ever running.
 5. **Correct is not the same as usable.** The support thread passed every test and was unreadable.
@@ -79,20 +104,27 @@ Three that show the shape of it:
 | **RevioPMS** | Front desk, housekeeping, folios, invoicing | `pms.reviosoft.app` | Live |
 | **RevioDirect** | The hotel's own booking page | `booking.reviosoft.app/<hotel>` | Live |
 | **Operator console** | Our internal admin | `operator.reviosoft.app` | Live |
-| **Marketing site** | | `reviosoft.app` | Live |
+| **Marketing site** | Bilingual since 2026-09-22 | `reviosoft.app` · `/bg/` | Live |
+| **Documentation** | | `docs.reviosoft.app` | Live |
 
-*Checked with `railway status --json`:* eight Railway services, all online. The six platform services
-(`channel-manager` · `reservation` · `pms` · `booking` · `operator` · `jobs`) are all on the CI-gated
-`production` branch at the **same commit**; the marketing site is on `production` of its own repo;
-Postgres is an image.
+*Checked with `railway status`:* **nine** Railway services — the six platform ones
+(`channel-manager` · `reservation` · `pms` · `booking` · `operator` · `jobs`), plus
+`revio-websites`, `docs` and Postgres. *Checked with `curl`:* all four staff `/login` pages and a
+real RevioDirect booking page answer `200`.
 
-**1,945 automated tests pass** (`pnpm verify`, ten packages), plus **twelve separate checks** on every
-change — typecheck, lint, and ten ratchets that each exist because something specific went wrong
-once: copy · authz · silent · money · health · a11y · scroll-lock · jobs · zoom · tokens. CI additionally applies every migration into an empty database and runs the seed.
+⚠️ This table said **eight** services until today. `docs` was added and nothing here noticed.
 
-⚠️ **Three checks are deliberately NOT in that number, because they need a live database**, and each
-is the only real proof of something the platform promises. Run them by hand against a scratch or
-demo database before a release:
+**2,911 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **seventeen separate
+checks** on every change <!-- status: count checks 17 --> — typecheck, lint, and fifteen ratchets that each exist because something
+specific went wrong once: copy · authz · layout-guard · status · silent · money · health · a11y ·
+scroll-lock · jobs · zoom · tokens · perimeter · dates · drift. CI additionally applies every
+migration into an empty database and runs the seed.
+
+⚠️ That paragraph said **1,945 tests and twelve checks**. Both had been true; neither was. The count
+is `pnpm verify` output, summed.
+
+⚠️ **Five checks are deliberately NOT in that number, because they need a live database or a
+running app**, and each is the only real proof of something the platform promises:
 
 ```
 pnpm --filter @revio/db claim-verify         # the claim primitive is atomic
@@ -102,50 +134,230 @@ pnpm --filter @revio/operator webhook-verify # a forged Stripe event cannot mark
 pnpm --filter @revio/operator stripe-mode-verify  # sandbox never becomes live on its own
 ```
 
-The last of those is new on 2026-09-08 and found the worst defect of the week — see *Known issues*.
+**Channex is certified and connected** — certified 2026-08-24, key in place 08-26. *Checked by query
+2026-09-22:* two channels in `channex_prod` mode. ⚠️ **One of them is broken and has been since at
+least 20 September**: Ventsi Group's reads `catalogueStatus = property_missing` — it points at a
+property Channex has deleted. The other, DesManagement 2015's, reads `ok` and last synced today.
+Hotel Sofia Group's is `channex_sandbox`, a different account, and is not billed.
 
-**Channex is certified and connected** — certified 2026-08-24, key in place 08-26. *Checked by query:*
-two channels in `channex_prod` mode, both `connected`. That is the real OTA connection, not the mock.
+**All THIRTEEN scheduled jobs run.** <!-- status: count jobs 13 --> *Checked at `/api/health/jobs` on 2026-09-22, every one `ok`
+and between 201 and 717 seconds old:* `hold-expiry` · `pickup-snapshot` · `channex-pull` ·
+`arrivals-digest` · `auto-assign` · `auto-close-day` · `waitlist-sweep` · `trial-sweep` ·
+`support-inbox` · `mapping-audit` · `invoice-run` · `operator-alerts` · `demo-refresh`.
 
-**All NINE scheduled jobs run.** *Checked at `/api/health/jobs` on 2026-09-08, every one `ok` and
-under a minute old:* `hold-expiry` · `pickup-snapshot` · `channex-pull` · `arrivals-digest` ·
-`auto-assign` · `auto-close-day` · `waitlist-sweep` · `trial-sweep` · **`support-inbox`**. The last
-is new and is the proof the support mailbox credentials are in place — it was inert until they were.
+⚠️ This said **nine**, then **ten**. Four jobs were added and the number was never moved. It is now
+the same number `jobs-lint` asserts, so the two cannot drift apart again without CI failing.
 
 ---
 
 ## The honest commercial position
 
 This is the part most likely to be misread from the engineering documents, so it is stated plainly.
+*Every figure below was queried against production on 2026-09-22.*
 
-**There is no revenue and no hotel is operating on the platform yet.**
+**There is no revenue yet. But a real hotel is now on the platform, and bookings have arrived
+through it.** That is a change of state since this file last said "no hotel is operating on the
+platform yet", and it happened on 12 September without this page noticing.
 
 | | |
 | --- | --- |
-| Real (non-demo) accounts | **2** — *Ruse Rentals Tester* and *Ventsi Group* |
+| Real (non-demo) accounts | **2** — *DesManagement 2015* and *Ventsi Group* |
 | Of those, active | **1** (Ventsi Group is suspended) |
-| Reservations taken by a real client | **0** |
-| Rooms configured by a real client | **0** |
-| Invoices ever issued to a real client | **0** |
+| Reservations taken by a real client | **3** — all through their live Channex channel, all `acked` |
+| Rooms configured by a real client | **41 units across 3 room types** |
+| Invoices issued to a real client | **0** — one draft of €89.68 exists and has never been sent |
+| Collected | **€0** |
 | Monthly recurring revenue | **€0** |
 
-*Checked by query against production on 2026-09-07; not re-queried on 09-08, and nothing has
-happened since that would move them — there is still no real client using the platform.* There are
-**three** demo tenants — Hotel Sofia Group, Black Sea
-Resort and Belmar Boutique Hotel — and all five invoices in the system belong to them (three paid, two
-draft). They are real invoices against real pricing, which is how the billing flow stays tested, but
-they are not income.
+⚠️ **The previous version of this table named *Ruse Rentals Tester* as one of the two real
+accounts.** There is no such tenant in production. It is *DesManagement 2015*, joined 09-09,
+billing from 09-12, on `starter`, entitled to all three products and not on a trial.
 
-The demo hotels are where the volume is: **128 rooms, 51 reservations, 22 guests, 17 room types, 12
+The three real reservations came in on 12, 13 and 15 September — €6.00, €3.00 and €3.60, the first
+two named "Channel Manager Test" and the third a real guest name. They are small because they are
+connectivity proofs, not business. **What they demonstrate is the thing the platform is for:** a
+booking made at an OTA reached a hotel's system through Channex and was acknowledged, with no
+integration step performed by anyone.
+
+There are **three** demo tenants — Hotel Sofia Group, Black Sea Resort and Belmar Boutique Hotel.
+All seven other invoices in the system belong to them (four draft, three paid, €1,112.20 in total).
+They are real invoices against real pricing, which is how the billing flow stays tested, but they
+are not income.
+
+The demo hotels are where the volume is: **128 units, 75 reservations, 25 guests, 15 room types, 10
 connected channels**. That is what a prospect sees in a demonstration, and it is genuine data on the
 real system — not a mock-up.
 
-**What this means:** the software is finished and proven; the business has not started. The next
-constraint is a hotel that uses it, not a feature.
+**What this means:** the software is finished and proven, and the first real connection works. The
+next constraint is a hotel that *runs its business* on it, not a feature.
+
+### Can we take money? Yes — and it is switched off on purpose
+
+⚠️ **This is the entry most recently wrong, in both directions, and it took three queries to settle.
+`ACTION-REQUIRED.md` §2b said two things this morning that are not true, and this file repeated the
+consequence.** What is actually the case, *checked against `PlatformCredential` and
+`OperatorCompany` in production on 2026-09-22*:
+
+- A **live** Stripe restricted key is stored and was last tested **OK at 13:01 today**. Stripe
+  answers `chargesEnabled: true`, `payoutsEnabled: true`, `detailsSubmitted: true`,
+  `defaultCurrency: EUR`, country `BG`, account `acct_1UE4yvFdkWSHYoRn`.
+- The console is set to **`stripeMode = test`**. That is a **stored choice**, not a missing key —
+  `activeStripeMode` reads it from `OperatorCompany` precisely so that pasting a live key in order
+  to check the connection cannot silently start charging real cards. It used to be inferred from
+  whether a live key worked, which did exactly that.
+
+So **charging a real client's card is one switch away**, and the switch is deliberate: the standing
+constraint in `docs/PMS-ROUND2-STATUS.md` is test-mode only until somebody decides otherwise.
+
+§2b's two claimed blockers, and why each was wrong:
+
+1. *"No live key is deployed anywhere."* It was reading **Railway environment variables**, where
+   only `pms` carries Stripe keys and both are test. The operator does not use environment
+   variables for this at all — it reads the encrypted `PlatformCredential` row, and that row holds
+   a working live key. Two stores, one of them checked.
+2. *"The account's default currency is `usd`."* It queried the **test** account,
+   `acct_1TrN0uC9R6il3Bgk`. The live account is a different account id and its default currency is
+   **EUR**. A sandbox account's currency says nothing about the business.
+
+**What genuinely cannot happen today** is a *guest* paying by card. `apps/booking` — the app that
+takes a guest's card — carries **no Stripe variables at all**, and `apps/pms` has test keys only.
+*Checked with `railway variables --service <each>`.* That is a different promise from Revio
+invoicing its own clients, and only the second one is ready.
 
 ---
 
 ## What is being worked on
+
+### In progress
+
+**Nothing is half-built.** *Checked with `git status` — the tree is clean, and `main` and
+`production` are the same commit.* The two items this section named as Codex's uncommitted work
+both shipped: the city-tax VAT base in `f828cac` on 09-09, and the operator sidebar in `7e70a38`
+the same day.
+
+### Shipped 2026-09-22 — the error log stopped being mostly weather
+
+Four of the five unresolved rows in the production error log were not faults. They were Next's
+`Failed to find Server Action`, filed once per app every time a deploy replaced the build under
+somebody's open tab. The page had claimed since it was built that this was not recorded; no code
+ever made that true. `isDeployMismatch` now drops the class **at the recorder**, so all ten call
+sites are covered by one gate rather than each remembering.
+
+⚠️ **Dropped from the table, not from the record.** It still goes to the container log, because
+there is one reading under which it is a real fault — if it keeps arriving long after a deploy has
+settled, two instances are serving different builds — and only a log line carries the deploy stamp
+that separates the two readings. *Checked: 17 tests, deliberately weighted toward proving the
+filter does NOT match; a bare "Failed to fetch", a plain chunk 404 and "Server Action failed: folio
+is already closed" all still file.*
+
+**And six job routes that could not say they had failed.** Five were given a `catch` on 09-22
+morning; the remaining six answered a bare 500 with an empty body, so `run-jobs` logged
+`HTTP 500 in 10166ms · ` and nothing after the separator. All thirteen now report. `jobs-lint`
+fails a job route with no `catch`, which is how the seventh — `demo-refresh` — was found: a grep
+for "catch" had matched the word in a comment.
+<!-- status: built packages/db/src/app-errors.ts#isDeployMismatch -->
+
+*Production error log, checked 2026-09-22: **2 unresolved**, both transient infrastructure — a
+Postgres restart that hit `auto-close-day` at 06:51 and a mailbox disconnect on 09-18. Neither has
+recurred; the close-day job ran normally at 18:10 the same day.*
+
+### Shipped 2026-09-22 — two alerts on one mapping, saying opposite things
+
+DesManagement 2015 carried both of these from 20 September:
+
+```
+act   Apartment, 2 Bedrooms · Standard Rate is publishing to the wrong room on Channex
+soon  "Standard Rate" is switched off but still mapped on Channex
+```
+
+They are the same row, and the second is right — it says in as many words *"nothing is published
+for it"*. The first says prices are going to the wrong room right now, and the client page repeated
+it in red beside a claim that every push succeeds. Both halves are false: `syncChannel` has filtered
+on `ratePlan.active` since 09-17.
+
+The filter belongs in `crossWiredFromRecord`, which carries the rule in its own doc comment — *"a
+false accusation on a console somebody reads before phoning a customer costs more than a missed
+one"* — rather than in a query one caller remembers. `active` is a **required** field on
+`RecordedMapping`, and that is what made the compiler name all three call sites; a grep had found
+two. *Checked: the alert resolved itself in production within ten minutes of the deploy, by the
+alerts job running the fixed code.*
+<!-- status: built packages/core/src/connectivity/cross-wired.ts#crossWiredFromRecord -->
+
+### Shipped 2026-09-22 — Google's numbers, and whether products get opened
+
+`operator.reviosoft.app/website` answers eleven Google Analytics and Search Console queries without
+anybody signing into Google — traffic split by source, landing pages, search queries and pages split
+two ways, and the calls to action the marketing site was already collecting and nobody was reading.
+Service-account JWT signed with `node:crypto`; no `googleapis` dependency.
+
+⚠️ **The private key is the one value that does not pass through a transcript.** It is pasted by the
+founder into a Railway variable. The screen names the two ways it is usually pasted wrong — a key
+ID instead of a key, and a JSON blob instead of a PEM — because both happened.
+
+**Product analytics gained the question it was missing.** It could say whether anybody was there and
+which screens were worth building; it could not say whether a product a hotel is *entitled to* ever
+gets opened. `apps/operator/lib/adoption.ts` answers that per product: entitled → opened in 30 days
+→ opened in 7 → screens reached → entitled and never opened. The denominator is **entitlement, not
+the invoice**, because a trial nobody opens is the most useful thing to know before it ends.
+<!-- status: built apps/operator/lib/adoption.ts#getAdoption -->
+
+**Sitemap `lastmod`.** Search Console reported 31 indexed and **27 "Discovered – currently not
+indexed"**, almost all of them the new Bulgarian pages. The sitemap carried no `lastmod` — the one
+field Google says it uses. `changefreq` and `priority` are still deliberately absent.
+
+### Shipped 2026-09-22 — a failed job stopped reporting success
+
+A job whose work threw kept its lease. A held lease answers `{ ok: true, skipped: … }`, so every
+tick for the rest of the TTL reported success and did nothing. One failure silently suppressed the
+job and told the runner it was fine — which is how a 500 at 09:51 became silence. `withJobLease`
+releases on both paths.
+
+⚠️ **The lease policy itself was NOT changed, deliberately.** Four of the five other job routes
+state in their own comments that a failed run should wait out its TTL rather than retry on the next
+tick. That is a decision, and it is not one to reverse while fixing something else. The
+contradiction is recorded in `ACTION-REQUIRED.md` §2d and is on the roadmap as *A failed job reaches
+a person*.
+
+### Shipped 2026-09-22 — the marketing site is bilingual
+
+`reviosoft.app` serves 21 paths in Bulgarian under `/bg/`, plus `/search`, `/login` and a localised
+404. hreflang reciprocity and canonical self-reference verified page by page; the sitemap carries
+both locales. Fonts are self-hosted, which removed the last third-party call before consent —
+Inter for Latin, Source Sans 3 for Cyrillic, because Inter has no Bulgarian `locl` forms.
+
+⚠️ **The products are still English-only**, which is the wrong way round: a site is read once and a
+front desk is used every shift. On the roadmap as *The staff products in the hotel's own language*.
+
+### Shipped 2026-09-17 — the first real hotel's connectivity, and what hid behind it
+
+The largest single day in the project by commit count (about thirty), and nearly all of it was
+things that were failing silently on a real client.
+
+- **Channex calls us instead of being polled** 288 times a day — and the ring is not trusted: the
+  webhook triggers a pull rather than carrying the payload.
+- **What Channex did with a push is read back**, from its own task log, instead of us recording what
+  we sent and calling that success.
+- **A cancellation releases the room on every path there is** — CRS, channel manager and OTA pull
+  each had their own cancel and none of them released the assignment.
+- **A booking we cannot import now sends mail.** It had been silent, and a real client's booking had
+  been lost for two days with nothing saying so.
+- **"Pulled 0 revisions · success", every five minutes, against a property Channex had deleted.**
+  A filter on an id that does not exist is not an error, which is why nothing noticed for weeks.
+- **A rate plan switched off went on pushing for ever**, publishing one room against another.
+
+### Shipped 2026-09-16 — one sign-in opens every product the hotel bought
+
+Central login replaced four separate doors; the login page was rebuilt as the first impression it
+is; one Dialog primitive replaced the hand-rolled copies. Building it exposed that **the second
+product's onboarding had been written, tested and was unreachable**, and that switching products
+sent hotels to `localhost`.
+
+### Shipped 2026-09-15 — something that opens every screen, and something that presses things
+
+`route-walk` opens **90 screens** <!-- status: count screens 90 --> with a real session — 21 RevioLink, 24 RevioCRS, 26 RevioPMS, 19
+Operator — and asserts not merely a 200 but that the page is not one of our own failure screens.
+`click-walk` is the other half: a real browser pressing things. See the section at the foot of this
+file for why a 200 is not success, and for the three times each has been proven to fail.
 
 ### ⌘K and the notification centre — shipped 2026-09-14, all four products
 
@@ -220,7 +432,8 @@ indistinguishable from the real fault at a single point in time. **Read it twice
 before calling it.** The same rule already applies to `production` on this page — a promote race
 gave two different answers two minutes apart earlier the same afternoon.
 
-All ten jobs are `ok`, checked at 16:56 local.
+*(All jobs were `ok` at 16:56 local on 2026-09-13. The current count and state are at the top of
+this file — there were ten then and there are thirteen now.)*
 
 ### Shipped 2026-09-13 — the self-serve path, end to end
 
@@ -249,20 +462,13 @@ whether clients can be told to set themselves up.
 - **One trial, one email.** The sweep sent per `ProductTrial` row, so a hotel got nine emails where
   it should get three. Batched per hotel; the per-product state machine is untouched.
 - **The invoice run is scheduled**, not a button — a month nobody pressed it in was never invoiced.
-  *Checked: `jobs-lint` 10 of 10, and authz-lint caught the first attempt exposing it as a public
-  server action.*
+  *Checked at the time: `jobs-lint` 10 of 10 — it is 13 of 13 today — and authz-lint caught the
+  first attempt exposing it as a public server action.*
 - **An enquiry can be sent a free trial** from the `/leads` queue — a link to the ordinary public
   signup, never an account.
 - **A room added after Connect can reach Channex** (`channex-catchup`). Provisioning is one-shot, so
   nothing in the product could send it; the Mapping screen described the problem and offered nothing
   to press. Read-before-create, and the 401 trap handled where it would have cost a duplicate.
-
-### In progress
-Nothing of ours is half-built. **Codex has two items uncommitted in the shared tree** (claimed in
-`docs/WORK-LOG.md`, both currently green under `pnpm verify`): the city-tax VAT base in
-`apps/pms/lib/invoice.ts`, and the operator sidebar's seven-group navigation in
-`apps/operator/components/shell/Sidebar.tsx`. They are local only; nothing is deployed. Stage by path
-if you commit anything nearby.
 
 ### Shipped 2026-09-09 · part 3 — a hotel can pay an invoice by card
 
@@ -352,9 +558,16 @@ that are assessments rather than code: `docs/COMPETITIVE-GAPS-2026-09.md` and
 
 ### Ready to build, in the order I would do them
 
+⚠️ **This table is no longer the roadmap.** The roadmap lives on `operator.reviosoft.app/platform-history`
+(`apps/operator/lib/platform-history.ts`) with a Now / Next / Later shape and a rule that adding a
+Now item means moving one out. **It had been a month stale and two of its seven "Now · must" items
+had already shipped** — hotel MFA on 08-30 and guest data rights on 08-29 — which was corrected on
+2026-09-22. What stays here is the reasoning behind rows this file already argued about.
+<!-- status: built apps/operator/lib/platform-history.ts#PLATFORM_ROADMAP -->
+
 | | Why | Effort |
 | --- | --- | --- |
-| **Onboard one real hotel end to end** | The only thing that turns finished software into a business. Everything below is guesswork until a hotel has used it for a week | — |
+| **Onboard one real hotel end to end** | ⏳ **Half true now.** DesManagement 2015 is connected, has 41 units configured and has taken three bookings through Channex. What has NOT happened is a hotel running its business on it for a week. Everything below is still guesswork until that does | — |
 | ~~**Send the payment link**~~ ✅ | Built and shipped in `b1437da`. The invoice emails itself: `emailInvoiceToCustomer` looks up the client's billing address, attaches the document, includes the card link when one is live and the IBAN when it is not, and **refuses a draft outright** — an email about a number that can still change is worse than no email. This row said "not built yet" for days, and so did a comment 130 lines above the Send button. <!-- status: built apps/operator/lib/actions-integrations.ts#emailInvoiceToCustomer --> | — |
 | ~~**Refunds**~~ ✅ · **recurring** ⏳ | Refunds and disputes ARE handled — the Stripe webhook records `refundedMinor`, `refundedAt` and `disputeStatus` beside a status that deliberately never moves off "paid", because the supply and the payment both still happened. What remains is **recurring**: every month is still an invoice somebody generates and sends. Stripe Subscriptions would automate it, but that is a pricing-model decision before it is a build. <!-- status: built apps/operator/app/api/webhooks/stripe/route.ts#POST --> | Medium |
 | **Use the new menu for a week** | ✅ Built on the fourth attempt — icon rail → vertical section panel → horizontal tabs only inside a page, from the founder's own reference. Nothing left to build; what is left is finding out whether the grouping survives daily use. The four rejected shapes and why are in `apps/operator/CLAUDE.md` so a fifth does not repeat them | — |
@@ -369,7 +582,15 @@ actually ship, plus the platform read as a hotel owner rather than as a feature 
 the code, not the documents. The four that matter most: **no analytics on the booking page at all**
 (so an owner cannot see or advertise their own funnel), **no abandoned-booking recovery** (the data is
 already captured and thrown away), **one language and one currency**, and **we still cannot take
-money**. Nothing on that list should start before a hotel is using the product — it exists so the
+money**.
+
+⚠️ Two of those four moved on 2026-09-22 and the file has not been re-measured since. *Language*:
+the marketing site is bilingual, but the guest-facing booking page and all three staff products
+are still English-only, so the gap stands where it matters. *Money*: Revio can now charge its own
+clients — see *Can we take money?* above — but a **guest** still cannot pay by card, which is what
+that row was about. Re-read `COMPETITIVE-GAPS` against the code before quoting it.
+
+Nothing on that list should start before a hotel is using the product — it exists so the
 answer is ready when they say which gap they hit.
 
 ### Deliberately not being built
@@ -385,21 +606,43 @@ answer is ready when they say which gap they hit.
 ## Things that need a person, not code
 
 **Done since this table was last written**, so they are off it: the resolved faults and 39 stale
-warnings are cleared, the 3 stuck stays are repaired, and the support mailbox password is set — the
-inbound-email job now reads `support@reviosoft.app`.
+warnings are cleared, the 3 stuck stays are repaired, the support mailbox password is set, and
+**both Stripe keys are now stored and testing OK** — the sandbox row and a live restricted key,
+last checked 13:01 on 2026-09-22, both with a webhook secret. The row asking for them is gone.
+
+*Everything below was re-checked against production on 2026-09-22.*
 
 | | Who | Why it matters |
 | --- | --- | --- |
-| **Paste the Stripe sandbox keys and add the webhook** | Founder | `/integrations/stripe` → Sandbox → *Set up*: `sk_test_…`, `pk_test_…`, and the `whsec_…` from Stripe → Developers → Webhooks (endpoint `https://operator.reviosoft.app/api/webhooks/stripe`, event `checkout.session.completed`). Without the signing secret the endpoint refuses everything, which is correct and means nothing settles. **I do not enter keys or change settings in a live Stripe account** |
-| **Confirm the article on the VAT certificate** | Founder | Set to **чл. 97а** on 2026-09-09 from your description — a BG number valid only outside Bulgaria. That is what the certificate should say; if it says чл. 96 instead, it is one click on Settings → Company details. It decides the tax on every invoice |
-| **Decide what to do about *Ventsi Group*** | Founder | A real account, currently suspended |
+| **Clear DesManagement 2015's stale mapping** | Founder / Operations | Their *Standard Rate* on Apartment, 2 Bedrooms is switched off but still mapped at Channex, under the 1-Bedroom's room. Nothing is published for it today. It matters because a mapping nobody maintains starts sending nonsense the day the plan is re-enabled. Their Mapping screen. Open since 20 Sept |
+| **Decide what to do about *Ventsi Group*** | Founder | A real account, suspended, and its Channex channel points at a property Channex has deleted. Nothing is being sent — a suspended tenant does not sync — but the channel row reads `connected`, which it is not. Reconnect it or remove it |
+| **Four overstays and three open folios on the demo book** | Founder / Operations | The state audit against production reports exactly two faults, seven rows, and **both are records a hotelier reaches, not code**: four stays past their departure date never checked out, and three departed stays whose folio is still open (€733 across Ventsi's three). They are the audit working, not failing |
+| **Decide one retry policy for a failed job** | Founder | The codebase holds both positions in its own comments — see `ACTION-REQUIRED.md` §2d. Four routes say a failed run should wait out its TTL; two now retry on the next tick. Either is defensible; having both is not |
+| **Decide whether to switch payments to live** | Founder | A working live key is stored and the account is BG/EUR with charges enabled. `stripeMode` is `test` by deliberate choice, and the standing constraint says test-only until somebody decides otherwise. **I do not flip that switch.** Separately, `apps/booking` carries no Stripe variables at all, so a *guest* cannot pay by card whatever this is set to |
+| **Confirm the article on the VAT certificate** | Founder | Set to **`art97a`** in `OperatorCompany` — *checked by query* — from your description on 2026-09-09. A BG number valid only outside Bulgaria. If the certificate says чл. 96 instead, it is one click on Settings → Company details. It decides the tax on every invoice |
 | **Euro changeover and fiscalization** | Founder | Both are dated obligations rather than features. `TaxInvoice.fiscalRef` is the seam; `docs/specs/BG-FISCALIZATION-RESEARCH.md` |
 
 ---
 
 ## Known issues
 
-**None open.** But four were open for a day, and how they were found is the point of this section.
+**Two faults open in the production error log, both transient infrastructure, neither recurring.**
+*Checked by query 2026-09-22:*
+
+| Service | When | What |
+| --- | --- | --- |
+| `pms` · `/api/jobs/closeday` | 22 Sept 06:51, once | `prisma.jobLease.updateMany()` could not reach `postgres.railway.internal`. A Postgres restart caught the job mid-lease. The same job ran normally at 18:10 the same day — which is the 09-22 `withJobLease` fix working, because under the old code the lease would have stayed held |
+| `operator` · `/api/jobs/support-inbox` | 18 Sept, once | `Unexpected close` from a TLS socket — the mailbox connection dropped mid-sweep. Has not recurred in four days. It now returns a diagnosable body instead of a bare 500 |
+
+**Two operator alerts open, both on real clients, both needing a person** — they are in the table
+above. A third, on the same DesManagement row, was **false and has been resolved**; see the 09-22
+entry about two alerts saying opposite things.
+
+⚠️ **Four of the five rows in this log were not faults at all until today** — one per app per
+deploy, from tabs open across a release. The list had become 80% weather, which is how a real fault
+goes unread. See the 2026-09-22 entry.
+
+Below is the older record of how issues here have been found, which is the point of this section.
 
 ⚠️ **The worst defect of the project so far was live for weeks and no test saw it.** R1 above: on
 RevioDirect, two guests confirming the same hold both got the room. It was found by an outside review
@@ -419,13 +662,18 @@ The founder-reported issue from 2026-09-07 — a hotel could not reply to our re
 `docs/SUPPORT-ROUND2.md`. Item 5 of that review, more help content, is deliberately still open and
 waiting on the queue to say what is missing.
 
-The three faults recorded this week were all the same thing — a
-browser tab left open across a deploy — and the cause was fixed on 2026-09-07: the app now detects it
-and reloads itself instead of showing an error that could not be dismissed.
+The three faults recorded that week were all the same thing — a browser tab left open across a
+deploy — and the cause was fixed on 2026-09-07: the app detects it and reloads itself instead of
+showing an error that could not be dismissed.
 
-The one real defect found this week that *would* have affected a user — `trial-sweep` never running —
-was fixed on 2026-09-07 before any trial existed. There are **0** trials in production, so nothing was
-missed. Had one been running, it would never have warned, never expired, and the hotel would have kept
+⚠️ **That fix handled the browser and not the log.** The server went on filing one row per app per
+deploy for another two weeks, which is what made the log unreadable by 09-22. A fix that addresses
+the symptom a user sees is not the same as one that addresses the record — this file is the record,
+and it said "none open" throughout.
+
+The one real defect found that week that *would* have affected a user — `trial-sweep` never running
+— was fixed on 2026-09-07 before any trial existed. *Checked 2026-09-22: there is now **1**
+`ProductTrial` row in production, on a demo tenant, started 09-11 and running.* Had one been running, it would never have warned, never expired, and the hotel would have kept
 the product free while the console showed a countdown that meant nothing.
 
 ---
@@ -434,7 +682,11 @@ the product free while the console showed a countdown that meant nothing.
 
 ```
 curl -s https://operator.reviosoft.app/api/health/jobs     # are the scheduled jobs running?
+open https://operator.reviosoft.app/errors                  # has anything thrown, and was it ours?
+open https://operator.reviosoft.app/overview                # what needs a call today
 open https://operator.reviosoft.app/analytics               # what anybody actually opens
+open https://operator.reviosoft.app/website                 # Google's numbers, without signing in
+open https://operator.reviosoft.app/platform-history        # what was built, and what is next
 git ls-remote --heads origin production                    # what is actually deployed
 railway logs --service jobs                                # what the cron actually got back
 pnpm verify                                                # every test and check, locally
@@ -442,10 +694,27 @@ pnpm route-walk                                            # every SCREEN, signe
 pnpm click-walk                                            # what a person PRESSES, in a real browser
 ```
 
+**Against production directly**, read-only, for the things no screen aggregates:
+
+```
+PROD="$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)"
+
+# the audit the Platform Health page runs, from a terminal
+cd packages/db && DATABASE_URL="$PROD" npx tsx scripts/state-audit.ts
+
+# what is actually unresolved, rather than what a page chose to show
+psql "$PROD" -c 'SELECT service, route, count, "lastSeenAt" FROM "AppError" WHERE "resolvedAt" IS NULL'
+psql "$PROD" -c 'SELECT "clientName", key, summary FROM "OperatorAlert" WHERE "resolvedAt" IS NULL'
+```
+
+⚠️ **`route-walk` mints its own session** from the local database and needs no password. If you
+find yourself about to type one into a form to check a screen, use `route-walk --app <name>`
+instead — it signs the same JWT the app's own login would.
+
 ### ⚠️ `pnpm verify` does not open a single page — `pnpm route-walk` does
 
 On 2026-09-14 this repository had **2,591 passing tests and eleven ratchet lints, and not one of them
-loaded a screen.** Every test proved a function returned the right value; none proved a person could
+loaded a screen.** (2,911 and fifteen today; the point stands — none of them opens a page.) Every test proved a function returned the right value; none proved a person could
 open a page. The founder found the consequence in production: a search result that led to "We
 couldn't find that", and then a white page reading *"Application error: a client-side exception has
 occurred."*
