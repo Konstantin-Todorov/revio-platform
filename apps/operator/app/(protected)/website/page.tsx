@@ -56,7 +56,7 @@ export default async function WebsitePage({
             key={p}
             href={`/website?days=${p}`}
             className={`rounded-lg px-3 py-1.5 text-[12.5px] font-semibold ${
-              p === period ? "bg-ink-900 text-white" : "border border-ink-200 text-ink-600 hover:bg-ink-50"
+              p === period ? "bg-ink-900 text-white" : "border border-ink-200 text-ink-600 hover:bg-ink-100"
             }`}
           >
             {p} days
