@@ -25,12 +25,46 @@ import { createHmac } from "node:crypto";
 import { forSystem, encryptSecret } from "@revio/db";
 
 /*
+ * Writes, so it runs against a LOCAL database only — the same guard `folio-atomic-verify` carries.
+ *
+ * ⚠️ Nothing stopped this pointing at production until 2026-09-22. `packages/booking` has no `.env`
+ * of its own, so a harness there uses whatever DATABASE_URL the shell happens to export — and the
+ * public production URL is one `railway variables` away in every runbook in this repo. `localhost`
+ * matches both a developer's `revio_dev` and CI's throwaway `revio_ci`, which is why the guard is on
+ * the host rather than on a database name.
+ */
+{
+  const target = process.env.DATABASE_URL ?? "";
+  // Anchored to the HOST: `scheme://[user[:pass]@]host[:port]/`. A bare substring test would pass
+  // `postgresql://u@db.example.com/localhost_copy`; requiring an `@` would refuse the perfectly
+  // local `postgresql://localhost:5432/revio_dev` that this repo's own runbooks use.
+  if (!/^postgres(ql)?:\/\/([^@/]*@)?(localhost|127\.0\.0\.1)(:\d+)?\//.test(target)) {
+    console.error(`webhook-verify writes, so it only runs against a local database. DATABASE_URL="${target.replace(/:\/\/[^@]*@/, "://***@")}"`);
+    process.exit(2);
+  }
+}
+
+/*
  * The console's own dev port is 3001 (`next dev -p 3001`). This defaulted to 3010, which nothing
  * starts, so the script refused on a normally-running stack and told you to start a SECOND console
  * on a port no other tool uses.
  */
 const BASE = process.env.OPERATOR_URL ?? "http://localhost:3001";
 const ENDPOINT = `${BASE}/api/webhooks/stripe`;
+
+/*
+ * ⚠️ The endpoint is guarded as well as the database, because this script sends FORGED Stripe events.
+ *
+ * `OPERATOR_URL` is not a name this script invented: it is a real Railway variable on the `jobs`
+ * service, pointing at the production console. Anyone who has run `railway run` or exported a
+ * service's variables has it in their shell. Production would refuse every forgery — refusing them
+ * is exactly what this proves — but firing test traffic at the live payment webhook is not
+ * something to do by accident, and the database guard above cannot see where HTTP goes.
+ */
+if (!/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(BASE)) {
+  console.error(`webhook-verify sends forged Stripe events, so it only targets a local console. OPERATOR_URL="${BASE}"`);
+  process.exit(2);
+}
 const SECRET = "whsec_verify_scratch_secret_not_real";
 
 const sys = forSystem();

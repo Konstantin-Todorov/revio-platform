@@ -18,6 +18,26 @@
 import { forSystem, forTenant, prisma } from "@revio/db";
 import { publicCreateHold } from "../src/public-engine.js";
 
+/*
+ * Writes, so it runs against a LOCAL database only — the same guard `folio-atomic-verify` carries.
+ *
+ * ⚠️ Nothing stopped this pointing at production until 2026-09-22. `packages/booking` has no `.env`
+ * of its own, so a harness there uses whatever DATABASE_URL the shell happens to export — and the
+ * public production URL is one `railway variables` away in every runbook in this repo. `localhost`
+ * matches both a developer's `revio_dev` and CI's throwaway `revio_ci`, which is why the guard is on
+ * the host rather than on a database name.
+ */
+{
+  const target = process.env.DATABASE_URL ?? "";
+  // Anchored to the HOST: `scheme://[user[:pass]@]host[:port]/`. A bare substring test would pass
+  // `postgresql://u@db.example.com/localhost_copy`; requiring an `@` would refuse the perfectly
+  // local `postgresql://localhost:5432/revio_dev` that this repo's own runbooks use.
+  if (!/^postgres(ql)?:\/\/([^@/]*@)?(localhost|127\.0\.0\.1)(:\d+)?\//.test(target)) {
+    console.error(`engine-race writes, so it only runs against a local database. DATABASE_URL="${target.replace(/:\/\/[^@]*@/, "://***@")}"`);
+    process.exit(2);
+  }
+}
+
 const RACERS = 12;
 const ROOMS = 3;
 

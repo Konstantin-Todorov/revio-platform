@@ -39,12 +39,19 @@ const OPERATOR_ONLY = new Set(["ConnectivityCredential", "Invoice", "OperatorUse
 const OPERATOR_GLOBAL = ["OperatorCompany", "OperatorInvoiceSeries"] as const;
 
 async function main() {
-  const [{ current_user: role, is_super: isSuper, bypass }] = await prisma.$queryRaw<
+  const [who] = await prisma.$queryRaw<
     { current_user: string; is_super: boolean; bypass: boolean }[]
   >(Prisma.sql`
     SELECT current_user, rolsuper AS is_super, rolbypassrls AS bypass
     FROM pg_roles WHERE rolname = current_user
   `);
+  // A connection that cannot see its own role row cannot be reasoned about, so it is refused
+  // rather than destructured into `undefined` and allowed to run a check it cannot interpret.
+  if (!who) {
+    console.error("REFUSING TO RUN: this connection cannot read its own role from pg_roles.");
+    process.exit(2);
+  }
+  const { current_user: role, is_super: isSuper, bypass } = who;
   console.log(`\nConnected as "${role}" (superuser=${isSuper}, bypassrls=${bypass})\n`);
   if (isSuper || bypass) {
     console.error(
@@ -65,7 +72,10 @@ async function main() {
     console.error(`REFUSING TO RUN: need at least two tenants to prove isolation, found ${tenants.length}.`);
     process.exit(2);
   }
-  const [A, B] = tenants;
+  // Non-null by the length check directly above, which the compiler cannot carry through a
+  // destructure. Stated here once rather than scattered as `?.` over every use below.
+  const A = tenants[0]!;
+  const B = tenants[1]!;
   console.log(`Tenant A = ${A.name}\nTenant B = ${B.name}\n`);
 
   // 1. Fail-closed: the unscoped client sets no GUC at all, so it is entitled to nothing.

@@ -70,7 +70,10 @@ async function main() {
   const twnBb = await mk("Breakfast", "TWN-BB", twin, 3);
 
   // Daily prices (needed so pushes have content). Weekday/weekend variation.
-  const priceRows: { tenantId: string; propertyId: string; roomTypeId: string; ratePlanId: string; date: Date; priceMinor: number }[] = [];
+  // `occupancy` was missing from this type since OBP made it part of the RatePrice key. The rows
+  // below always carried it and it was always written — JavaScript does not drop a field the type
+  // forgot — but nothing typechecked `scripts/`, so the declaration went on describing the old key.
+  const priceRows: { tenantId: string; propertyId: string; roomTypeId: string; ratePlanId: string; date: Date; occupancy: number; priceMinor: number }[] = [];
   const plans = [
     { plan: dblBar, room: double, base: 12000 }, { plan: dblBb, room: double, base: 14000 },
     { plan: twnBar, room: twin, base: 11000 }, { plan: twnBb, room: twin, base: 13000 },

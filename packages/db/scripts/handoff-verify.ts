@@ -29,12 +29,42 @@
 import { issueHandoff, forSystem } from "../src/index.js";
 
 const url = process.env.DATABASE_URL ?? "";
-if (!/localhost|127\.0\.0\.1/.test(url)) {
+if (!/^postgres(ql)?:\/\/([^@/]*@)?(localhost|127\.0\.0\.1)(:\d+)?\//.test(url)) {
   console.error(`handoff-verify issues real credentials, so it only runs against a local database. DATABASE_URL="${url}"`);
   process.exit(1);
 }
 
 const PORT = { cm: 3000, crs: 3002, pms: 3003 } as const;
+
+/*
+ * ⚠️ Every app is probed BEFORE a single token is issued.
+ *
+ * This used to issue a hand-off and then call the app, so a product that was not running ended the
+ * run in an unhandled `TypeError: fetch failed … ECONNREFUSED 127.0.0.1:3002` — forty lines of Node
+ * internals that read like the hand-off itself had broken, with an orphaned token left behind in
+ * the database. Found on 2026-09-22 by running it: the first attempt died on :3003, the second on
+ * :3002, one missing app at a time.
+ *
+ * The other harnesses already refuse cleanly with exit 2 and the remedy — `webhook-verify` says
+ * "nothing answering at … Start the console first". This now does the same, and names EVERY app
+ * that is down in one go rather than making the person discover them serially.
+ */
+{
+  const down: string[] = [];
+  for (const [product, port] of Object.entries(PORT)) {
+    const up = await fetch(`http://localhost:${port}/login`, { redirect: "manual", signal: AbortSignal.timeout(5000) })
+      .then((r) => r.status < 500)
+      .catch(() => false);
+    if (!up) down.push(`${product} (:${port})`);
+  }
+  if (down.length > 0) {
+    console.error(
+      `REFUSING TO RUN: a hand-off crosses products, so all three must be running. Not answering: ${down.join(", ")}.\n` +
+        "Start them first, e.g.  pnpm --filter @revio/reservation dev",
+    );
+    process.exit(2);
+  }
+}
 
 const user = await forSystem().user.findFirst({
   where: { role: "owner", active: true },

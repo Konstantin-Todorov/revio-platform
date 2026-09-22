@@ -5,9 +5,12 @@ name: CI
 # and was found by whoever opened the page.
 #
 # Runs on every push and every PR. Nothing here needs a secret, which is deliberate: a pipeline that
-# cannot run on a fork, or that fails for want of a credential, gets ignored within a month. The
-# checks that need a REAL database (`rls-verify`, `claim-verify`, `engine-race`) are release gates
-# run by hand against one — see DEPLOY.md.
+# cannot run on a fork, or that fails for want of a credential, gets ignored within a month.
+#
+# ⚠️ This paragraph used to say the checks that need a real database "are release gates run by hand".
+# They were — and by 2026-09-22 nobody had run them for weeks, while CI was already building a
+# migrated, seeded Postgres and throwing it away unused. See "Races and isolation" below. The two
+# that need the apps RUNNING (`webhook-verify`, `handoff-verify`) are still by hand.
 #
 # The one exception is `Schema drift`, which uses a throwaway postgres SERVICE CONTAINER. That keeps
 # both properties the rule is protecting — no secret, and it still runs on a fork — while catching a
@@ -176,6 +179,41 @@ jobs:
           ADMIN_URL_BASE: postgresql://postgres:postgres@localhost:5432
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
           DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
+
+      # The guarantees the platform's central claims rest on, proved on every push instead of by hand.
+      #
+      # Every one of these existed, passed when written, and then went unrun — the worst defect in the
+      # project's history (two guests confirming one hold, and BOTH getting the room) was invisible to
+      # every unit test and every lint, and `engine-race` was green throughout because it raced hold
+      # CREATION rather than confirmation. When they were finally raced properly, 12 of 12 won. A
+      # guard that is not run is a guard that is not there, and "run it before a release" is not a
+      # schedule anybody keeps.
+      #
+      # Against the SEEDED `revio_ci`, after the seed and before `Test`, which uses a separate
+      # database. Each harness cleans up after itself, and each refuses a non-local DATABASE_URL.
+      #
+      # `rls-verify` runs as the restricted `revio_app` role, created here from the same
+      # `rls-role.sql` production uses, because as the superuser every check passes without proving
+      # anything — the harness says so and refuses. The password is a throwaway on a container that
+      # lives for one job.
+      - name: Races and isolation
+        run: |
+          psql "$ADMIN_URL_BASE/revio_ci" -v app_password=ci_throwaway -f packages/db/prisma/rls-role.sql
+          DATABASE_URL="postgresql://revio_app:ci_throwaway@localhost:5432/revio_ci" \
+            pnpm --filter @revio/db rls-verify
+          pnpm --filter @revio/db claim-verify
+          pnpm --filter @revio/db lease-verify
+          pnpm --filter @revio/db folio-atomic-verify
+          pnpm --filter @revio/booking engine-race
+          pnpm --filter @revio/booking confirm-race
+          pnpm --filter @revio/operator stripe-mode-verify
+        env:
+          ADMIN_URL_BASE: postgresql://postgres:postgres@localhost:5432
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/revio_ci
+          # Stated rather than left to the dev fallback in `crypto.ts`. Not a secret: the container
+          # and everything encrypted in it are gone when the job ends.
+          CONNECTIVITY_SECRET: ci-throwaway-not-a-secret
 
       # Pointed at the EMPTY `revio_signup_ci`, not the seeded `revio_ci`. Without a database here
       # the database-backed tests skip silently, and a test that skips in CI is a test that does
