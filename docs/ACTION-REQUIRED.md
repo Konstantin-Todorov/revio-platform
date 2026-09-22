@@ -3,7 +3,7 @@
 Everything the platform cannot decide for itself. Nothing here is a code task — each item needs a
 person: a credential, a legal confirmation, a dashboard setting, or a judgement about the business.
 
-Ordered by what goes wrong if it is missed. Last reviewed **2026-09-12**.
+Ordered by what goes wrong if it is missed. Last reviewed **2026-09-22**.
 
 ⚠️ **This file is only useful if it is true.** Reviewed on 2026-09-12 against the code and against
 production, after three weeks in which the first real hotel was onboarded, payments were built and
@@ -80,27 +80,48 @@ seed carries `VAT 9%` on accommodation. **Checked on 2026-09-08, nothing to chan
    behind it.
 2. **Breakfast included in a room rate.** 9% or 20%? A bundled supply is a classic split-rate trap
    and the answer decides how `computeStayCharges` should tag the line.
-3. ⚠️ **City tax IS inside the VAT base, and we charge 0% on it — a defect.** Researched
-   2026-09-09: НАП's position is that туристическият данък се включва в данъчната основа, so a
-   night's base is the room charge **plus** the tourist tax, taxed at 9%. It is shown as its own
-   line on the document, which is presumably why it was modelled as a separate zero-rated fee.
-   `rateFor` returns 0 for `city_tax`, understating VAT by about €0.25 on a €195 stay — small per
-   booking, wrong on every tax document. **Zero real invoices exist, so fixing it now costs
-   nothing; after the first one it is a correction.** See `docs/PLAN-2026-09-09.md` §3.
+3. ~~City tax IS inside the VAT base, and we charge 0% on it~~ — ✅ **FIXED, and this entry was
+   stale.** Shipped the same day it was researched, in `f828cac` (2026-09-09): `rateFor` in
+   `apps/pms/lib/invoice.ts` returns the property's **reduced** rate for `city_tax`, the amount is
+   aggregated with accommodation before inclusive rounding, and the separately labelled city-tax
+   line is preserved in the issued snapshot. Missing and exempt categories stay explicitly zero.
+   The commit carries the citation (ЗДДС 26(3)(1)) and added 69 lines of tests; re-run 2026-09-22,
+   `lib/invoice.test.ts` 7/7 green inside 158 passing PMS tests.
+
+   ⚠️ Left visible rather than deleted, because this is the exact failure this file warns about at
+   the top: *work marked "still open" had shipped weeks earlier*. It was carried as an open
+   accountant question for thirteen days after it was closed in code.
 4. **The euro changeover.** The threshold above is already quoted in euro. Invoices spanning the
    transition, and whether dual display is required, is a compliance question we have not answered.
 5. **Fiscalization** is adjacent and separate — a Bulgarian hotel taking cash has НАП device
    obligations. See `docs/specs/BG-FISCALIZATION-RESEARCH.md`; `TaxInvoice.fiscalRef` is the seam.
 
-### 2b. Revio's own Stripe account is not verified — ⚠️ ADDED 2026-09-12
+### 2b. ~~Revio's own Stripe account is not verified~~ — ⚠️ CORRECTED 2026-09-22
 
-`charges_enabled: false`. Every part of taking a card payment is built and proven in test mode —
-Checkout, the signed webhook, refunds, disputes, the paid receipt — and **not one real card can be
-charged until Stripe finishes verifying the business**. Bank transfer still works, so this does not
-block invoicing; it blocks being paid by card.
+**The verification is DONE.** Queried directly against Stripe: `details_submitted: true`,
+`payouts_enabled: true`, and **`requirements.currently_due`, `past_due` and `eventually_due` are all
+empty** — there is nothing outstanding for a person to complete. Account `acct_1TrN0uC9R6il3Bgk`,
+business name "Revio", country BG.
 
-This was missing from this file entirely while being the nearest thing to a live blocker. Stripe
-dashboard → complete the business verification.
+⚠️ Read with the **test** key, which is the only one deployed, so the `charges_enabled` flag it
+returned describes test mode. The account-level evidence — details submitted, no outstanding
+requirements — is the same in both modes and is what says the business verification is finished.
+
+**The blocker moved rather than cleared, and that is the point of correcting this entry:**
+
+1. **No live key is deployed anywhere.** `STRIPE_SECRET_KEY` and
+   `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` exist on **`pms` only**, and both are `sk_test` / `pk_test`.
+   `booking`, `operator`, `reservation` and `channel-manager` carry no Stripe variables at all —
+   including `booking`, which is the app that takes a guest's card. So no real card can be charged
+   today, and the reason is deployment, not Stripe.
+2. **The account's default currency is `usd`, on a Bulgarian account that bills in EUR.** The price
+   list, the calculator, every invoice and `CURRENCY` in `config/pricing.ts` are euro. A payment
+   taken in the account's default currency would settle in dollars and convert. Worth checking in
+   the Stripe dashboard before the first live charge, not after.
+
+Switching to live keys is a deliberate act with a standing constraint against it — see *Standing
+constraints* in `docs/PMS-ROUND2-STATUS.md`: payments stay Stripe **test-mode only** until somebody
+decides otherwise. This entry records that the decision is now available, not that it has been made.
 
 ### 3. Billing details for each real client
 A client cannot be invoiced without their **legal** entity name, country and address — the trading

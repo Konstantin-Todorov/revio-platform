@@ -38,3 +38,6 @@ backups/
 
 # Playwright MCP scratch output (page snapshots, screenshots)
 .playwright-mcp/
+
+# Scratch directory from an editor plugin — never part of the repo.
+.freebuff/
