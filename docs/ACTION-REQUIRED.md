@@ -164,6 +164,30 @@ to ask in Analytics itself. This screen answers the normal periods — 7, 28, 90
 counts only visitors who accepted cookies. Every number there is a floor, not a total, and a floor
 presented as a total is how somebody concludes the site is failing.
 
+### 2d. Decide one retry policy for a failed job — RAISED 2026-09-22
+
+The codebase currently holds **both** positions, in writing, and they contradict each other:
+
+| Where | What it says |
+| --- | --- |
+| `packages/db/src/job-lease.ts`, `withJobLease` | *"Release on failure too: the next tick should retry promptly rather than sit out the TTL because one run threw."* |
+| `holds`, `pickup`, `arrivals`, `pull` route comments | *"If the body throws, the lease is deliberately NOT released — a run that failed should wait out the short TTL rather than be retried instantly by the next tick."* |
+
+Both are defensible. Retrying promptly recovers from a transient fault; backing off stops a
+persistent fault being hammered every tick. What is not defensible is having both, decided per
+route by whoever wrote it.
+
+**Neither was overridden.** The four routes that state the backoff keep it; `assign` and `closeday`,
+which stated nothing, were moved to `withJobLease` when they failed on 2026-09-22.
+
+⚠️ **The part that is a defect under EITHER policy:** a skipped run answers `ok: true`, so
+`run-jobs` counts it as a success. With a single `jobs` replica, "another instance holds this job"
+should essentially never happen — when it does, it means the previous run failed and the job is
+being suppressed. Today that is indistinguishable from the normal multi-replica case, which is how
+a 500 at 09:51 became silence rather than an alert.
+
+Decide the policy, then the skip can say which of the two it is.
+
 ### 3. Billing details for each real client
 A client cannot be invoiced without their **legal** entity name, country and address — the trading
 name is not who owes the money, and the country decides the VAT treatment.

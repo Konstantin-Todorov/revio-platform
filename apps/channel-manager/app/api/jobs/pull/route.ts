@@ -43,105 +43,128 @@ export async function POST(req: NextRequest) {
   if (!lease.acquired) {
     return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
   }
-
-  const db = forSystem();
   /*
-   * Connected, real connectivity, and an account that is not suspended.
-   *
-   * ⚠️ The tenant filter is an optimisation, NOT the rule. `pullChannel` refuses a suspended account
-   * on its own and that is the authority — one decision, in one place, that a second caller cannot
-   * route around. This filter exists so the job does not call it 288 times a day only to be refused
-   * and write an audit row saying so: a trail full of "this account is suspended" is how a hotel's
-   * record of what actually happened becomes unreadable, which has already happened here once with
-   * 20,249 rows of "0 new · 0 updated".
-   */
-  const channels = await db.channel.findMany({
-    where: { status: "connected", connectivityMode: { not: "mock" }, property: { tenant: { status: "active" } } },
-    include: { property: { include: { tenant: true } } },
-  });
+    ⚠️ The work runs inside a try whose RETURN is also inside it.
 
-  let imported = 0, updated = 0, failed = 0, rejected = 0;
-  for (const channel of channels) {
-    let outcome;
-    try {
-      outcome = await pullChannel(db, channel.id);
-    } catch (e) {
-      failed++;
-      outcome = { ok: false as const, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: "unknown", error: e instanceof Error ? e.message : "pull threw" };
-    }
-    if (outcome.ok) {
-      imported += outcome.imported;
-      updated += outcome.updated;
-      // A booking that arrived and bounced off a missing mapping. The pull worked; the booking did
-      // not land. Counted separately so a run that rejected one never reports as a clean run.
-      rejected += outcome.failedImport;
-    } else { failed++; }
+    That detail is the whole fix: wrapping only the statements and leaving the return outside puts
+    every variable the return reads out of scope, which is exactly how the first attempt at this
+    broke. Typecheck caught it; it is recorded here so the next person does not repeat it.
 
+    What this does NOT change is the lease. The comment above states that a failed run deliberately
+    waits out its TTL instead of being retried on the next tick, and that is a decision, not an
+    oversight — it is not overridden here. See `docs/ACTION-REQUIRED.md` for the contradiction it
+    sits in.
+
+    What it changes is that a failure can be READ. Without a catch, Next answers a bare 500 with an
+    EMPTY body, and the runner logged exactly that on 2026-09-22: `HTTP 500 in 10166ms · ` and
+    nothing after the separator. An error nobody can see is an error nobody fixes.
+  */
+  try {
+    const db = forSystem();
     /*
-     * Only write to the audit trail when something actually happened.
+     * Connected, real connectivity, and an account that is not suspended.
      *
-     * This used to record every tick of every channel. The cron runs every few minutes against three
-     * connected channels, so it wrote roughly 860 rows a day saying "0 new · 0 updated" — and by
-     * 2026-09-07 the audit log was **20,249 of ~20,700 rows** of exactly that. 98% noise.
-     *
-     * The audit trail is the HOTEL's record of who changed what. A pull that changed nothing changed
-     * nothing, and burying a price edit or a check-in under nine hundred daily non-events makes the
-     * screen useless precisely when somebody is trying to answer "what happened to this booking?".
-     *
-     * ⚠️ This does NOT weaken the proof that the poller is alive — that was never this row's job.
-     * `SyncEvent` still records every attempt (including the successful no-ops), the Sync Center
-     * reads those, and `operator /api/health/jobs` reports a job that has stopped running. Health
-     * lives there; the audit trail is for changes.
-     *
-     * A FAILURE is always recorded, because a channel that could not be pulled is a change in the
-     * hotel's world even though no data moved.
+     * ⚠️ The tenant filter is an optimisation, NOT the rule. `pullChannel` refuses a suspended account
+     * on its own and that is the authority — one decision, in one place, that a second caller cannot
+     * route around. This filter exists so the job does not call it 288 times a day only to be refused
+     * and write an audit row saying so: a trail full of "this account is suspended" is how a hotel's
+     * record of what actually happened becomes unreadable, which has already happened here once with
+     * 20,249 rows of "0 new · 0 updated".
      */
-    const changedSomething = outcome.ok && (outcome.imported > 0 || outcome.updated > 0);
-    if (changedSomething || !outcome.ok) {
-      await db.auditEntry.create({
-        data: {
-          tenantId: channel.tenantId, propertyId: channel.propertyId,
-          entity: "Channel sync", field: "scheduled pull",
-          newValue: outcome.ok ? `${outcome.imported} new · ${outcome.updated} updated (${outcome.mode})` : `failed: ${outcome.error ?? "unknown"}`,
-          source: "api", channelCode: channel.code,
-          syncResult: outcome.ok ? "success" : "failed",
-        },
-      });
-    }
+    const channels = await db.channel.findMany({
+      where: { status: "connected", connectivityMode: { not: "mock" }, property: { tenant: { status: "active" } } },
+      include: { property: { include: { tenant: true } } },
+    });
 
-    // Reservation delivery: when the hotel runs neither CRS nor PMS, nothing else would surface the
-    // booking — email it to the configured address(es), same rule as the manual pull.
-    if (outcome.ok && outcome.imported > 0) {
-      const tenant = channel.property.tenant;
-      const takesDeliveryElsewhere = tenant.hasReservation || tenant.hasPms;
-      const to = deliveryRecipients(channel.property, "both");
-      if (!takesDeliveryElsewhere && to.length > 0) {
-        const fresh = await db.reservation.findMany({
-          where: { propertyId: channel.propertyId, channelId: channel.id },
-          include: { channel: true, lines: { include: { roomType: true } } },
-          orderBy: { importedAt: "desc" },
-          take: outcome.imported,
-        });
-        const rows = fresh.map((r) => {
-          const l = r.lines[0];
-          return `• ${r.guestName} — ${l?.roomType.name ?? ""} · ${l ? `${l.checkIn.toISOString().slice(0, 10)} → ${l.checkOut.toISOString().slice(0, 10)}` : ""} · ${r.channel?.name ?? "Direct"}`;
-        });
-        const mail = {
-          preview: `${outcome.imported} new from ${channel.name}.`,
-          heading: `${outcome.imported} new booking${outcome.imported > 1 ? "s" : ""}`,
-          product: "RevioLink",
-          blocks: [{ p: `Pulled from ${channel.name} for ${channel.property.name}.` }, { list: rows }],
-        };
-        await sendEmail({
-          to,
-          subject: `${outcome.imported} new booking${outcome.imported > 1 ? "s" : ""} — ${channel.property.name}`,
-          text: renderSystemEmailText(mail),
-          html: renderSystemEmail(mail),
+    let imported = 0, updated = 0, failed = 0, rejected = 0;
+    for (const channel of channels) {
+      let outcome;
+      try {
+        outcome = await pullChannel(db, channel.id);
+      } catch (e) {
+        failed++;
+        outcome = { ok: false as const, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: "unknown", error: e instanceof Error ? e.message : "pull threw" };
+      }
+      if (outcome.ok) {
+        imported += outcome.imported;
+        updated += outcome.updated;
+        // A booking that arrived and bounced off a missing mapping. The pull worked; the booking did
+        // not land. Counted separately so a run that rejected one never reports as a clean run.
+        rejected += outcome.failedImport;
+      } else { failed++; }
+
+      /*
+       * Only write to the audit trail when something actually happened.
+       *
+       * This used to record every tick of every channel. The cron runs every few minutes against three
+       * connected channels, so it wrote roughly 860 rows a day saying "0 new · 0 updated" — and by
+       * 2026-09-07 the audit log was **20,249 of ~20,700 rows** of exactly that. 98% noise.
+       *
+       * The audit trail is the HOTEL's record of who changed what. A pull that changed nothing changed
+       * nothing, and burying a price edit or a check-in under nine hundred daily non-events makes the
+       * screen useless precisely when somebody is trying to answer "what happened to this booking?".
+       *
+       * ⚠️ This does NOT weaken the proof that the poller is alive — that was never this row's job.
+       * `SyncEvent` still records every attempt (including the successful no-ops), the Sync Center
+       * reads those, and `operator /api/health/jobs` reports a job that has stopped running. Health
+       * lives there; the audit trail is for changes.
+       *
+       * A FAILURE is always recorded, because a channel that could not be pulled is a change in the
+       * hotel's world even though no data moved.
+       */
+      const changedSomething = outcome.ok && (outcome.imported > 0 || outcome.updated > 0);
+      if (changedSomething || !outcome.ok) {
+        await db.auditEntry.create({
+          data: {
+            tenantId: channel.tenantId, propertyId: channel.propertyId,
+            entity: "Channel sync", field: "scheduled pull",
+            newValue: outcome.ok ? `${outcome.imported} new · ${outcome.updated} updated (${outcome.mode})` : `failed: ${outcome.error ?? "unknown"}`,
+            source: "api", channelCode: channel.code,
+            syncResult: outcome.ok ? "success" : "failed",
+          },
         });
       }
-    }
-  }
 
-  await releaseJobLease(JOB.channexPull);
-  return NextResponse.json({ ok: true, channels: channels.length, imported, updated, failed, rejected });
+      // Reservation delivery: when the hotel runs neither CRS nor PMS, nothing else would surface the
+      // booking — email it to the configured address(es), same rule as the manual pull.
+      if (outcome.ok && outcome.imported > 0) {
+        const tenant = channel.property.tenant;
+        const takesDeliveryElsewhere = tenant.hasReservation || tenant.hasPms;
+        const to = deliveryRecipients(channel.property, "both");
+        if (!takesDeliveryElsewhere && to.length > 0) {
+          const fresh = await db.reservation.findMany({
+            where: { propertyId: channel.propertyId, channelId: channel.id },
+            include: { channel: true, lines: { include: { roomType: true } } },
+            orderBy: { importedAt: "desc" },
+            take: outcome.imported,
+          });
+          const rows = fresh.map((r) => {
+            const l = r.lines[0];
+            return `• ${r.guestName} — ${l?.roomType.name ?? ""} · ${l ? `${l.checkIn.toISOString().slice(0, 10)} → ${l.checkOut.toISOString().slice(0, 10)}` : ""} · ${r.channel?.name ?? "Direct"}`;
+          });
+          const mail = {
+            preview: `${outcome.imported} new from ${channel.name}.`,
+            heading: `${outcome.imported} new booking${outcome.imported > 1 ? "s" : ""}`,
+            product: "RevioLink",
+            blocks: [{ p: `Pulled from ${channel.name} for ${channel.property.name}.` }, { list: rows }],
+          };
+          await sendEmail({
+            to,
+            subject: `${outcome.imported} new booking${outcome.imported > 1 ? "s" : ""} — ${channel.property.name}`,
+            text: renderSystemEmailText(mail),
+            html: renderSystemEmail(mail),
+          });
+        }
+      }
+    }
+
+    await releaseJobLease(JOB.channexPull);
+    return NextResponse.json({ ok: true, channels: channels.length, imported, updated, failed, rejected });
+  } catch (err) {
+    console.error("channex-pull: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
+  }
 }

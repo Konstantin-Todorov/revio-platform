@@ -32,7 +32,30 @@ export async function POST(req: NextRequest) {
   if (!lease.acquired) {
     return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
   }
-  await ensurePickupSnapshot(forSystem());
-  await releaseJobLease(JOB.pickupSnapshot);
-  return NextResponse.json({ ok: true });
+  /*
+    ⚠️ The work runs inside a try whose RETURN is also inside it.
+
+    That detail is the whole fix: wrapping only the statements and leaving the return outside puts
+    every variable the return reads out of scope, which is exactly how the first attempt at this
+    broke. Typecheck caught it; it is recorded here so the next person does not repeat it.
+
+    What this does NOT change is the lease. The comment above states that a failed run deliberately
+    waits out its TTL instead of being retried on the next tick, and that is a decision, not an
+    oversight — it is not overridden here. See `docs/ACTION-REQUIRED.md` for the contradiction it
+    sits in.
+
+    What it changes is that a failure can be READ. Without a catch, Next answers a bare 500 with an
+    EMPTY body, and the runner logged exactly that on 2026-09-22: `HTTP 500 in 10166ms · ` and
+    nothing after the separator. An error nobody can see is an error nobody fixes.
+  */
+  try {    await ensurePickupSnapshot(forSystem());
+    await releaseJobLease(JOB.pickupSnapshot);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("pickup-snapshot: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
+  }
 }

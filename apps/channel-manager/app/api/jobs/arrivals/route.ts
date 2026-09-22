@@ -52,87 +52,110 @@ export async function POST(req: NextRequest) {
   if (!lease.acquired) {
     return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
   }
-  const db = forSystem();
   /*
-   * ⚠️ `tenant: { status: "active" }` — a suspended account gets no mail either.
-   *
-   * Ventsi Group has been suspended and receiving "Tomorrow's arrivals (0) — Chervena Vila" every
-   * afternoon, for a property whose channel points at something Channex deleted. Every part of that
-   * is wrong: nobody there can sign in to act on it, the number is zero because nothing can reach
-   * them, and it is a daily reminder of a service we have switched off. A suspension that stops the
-   * software and keeps the mail is a suspension nobody thought through.
-   */
-  const properties = await db.property.findMany({
-    where: {
-      status: "active",
-      tenant: { status: "active" },
-      OR: [{ notifyTodayArrivals: true }, { notifyTomorrowArrivals: true }],
-    },
-  });
+    ⚠️ The work runs inside a try whose RETURN is also inside it.
 
-  let sent = 0;
-  for (const property of properties) {
-    const { minutes, ymd } = nowInTz(property.timezone);
-    const jobs: { day: string; label: string; to: string[] }[] = [];
-    const due = (time: string) => {
-      const t = toMinutes(time);
-      return minutes >= t && minutes < t + 15; // one 15-minute window per day
-    };
-    if (property.notifyTodayArrivals && due(property.notifyTodayTime)) {
-      jobs.push({ day: ymd, label: "Today's arrivals", to: deliveryRecipients(property, property.notifyTodayTo as "primary" | "secondary" | "both") });
-    }
-    if (property.notifyTomorrowArrivals && due(property.notifyTomorrowTime)) {
-      jobs.push({ day: addDays(ymd, 1), label: "Tomorrow's arrivals", to: deliveryRecipients(property, property.notifyTomorrowTo as "primary" | "secondary" | "both") });
-    }
+    That detail is the whole fix: wrapping only the statements and leaving the return outside puts
+    every variable the return reads out of scope, which is exactly how the first attempt at this
+    broke. Typecheck caught it; it is recorded here so the next person does not repeat it.
 
-    for (const job of jobs) {
-      if (job.to.length === 0) continue;
-      // Idempotence guard: the "due" window is 15 minutes wide, but a scheduler may fire more often
-      // than that (and GitHub-style crons drift). One digest per property/label/day — if we already
-      // logged this digest today, skip it rather than emailing the hotel two or three times.
-      const alreadySent = await db.auditEntry.findFirst({
-        where: {
-          propertyId: property.id, entity: "Arrival notification", field: job.label,
-          createdAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) },
-        },
-      });
-      if (alreadySent) continue;
-      const day = new Date(`${job.day}T00:00:00Z`);
-      const arrivals = await db.reservation.findMany({
-        where: { propertyId: property.id, status: { in: [...SOLD_STATUSES] }, lines: { some: { checkIn: day } } },
-        include: { channel: true, lines: { include: { roomType: true } } },
-        orderBy: { guestName: "asc" },
-      });
-      const rows = arrivals.map((r) => {
-        const l = r.lines[0];
-        return `${r.guestName} — ${l?.roomType.name ?? ""} · ${l ? `${(l.checkOut.getTime() - l.checkIn.getTime()) / 86_400_000}n` : ""} · ${r.channel?.name ?? "Direct"}`;
-      });
-      const none = job.label === "Today's arrivals" ? "No arrivals today." : "No arrivals tomorrow.";
-      const mail = {
-        preview: arrivals.length > 0 ? `${arrivals.length} arriving at ${property.name}.` : none,
-        heading: `${job.label} — ${property.name}`,
-        product: "RevioLink",
-        blocks: arrivals.length > 0
-          ? [{ p: `${arrivals.length} arriving on ${job.day}.` }, { list: rows }]
-          : [{ p: `${none} (${job.day})` }],
+    What this does NOT change is the lease. The comment above states that a failed run deliberately
+    waits out its TTL instead of being retried on the next tick, and that is a decision, not an
+    oversight — it is not overridden here. See `docs/ACTION-REQUIRED.md` for the contradiction it
+    sits in.
+
+    What it changes is that a failure can be READ. Without a catch, Next answers a bare 500 with an
+    EMPTY body, and the runner logged exactly that on 2026-09-22: `HTTP 500 in 10166ms · ` and
+    nothing after the separator. An error nobody can see is an error nobody fixes.
+  */
+  try {    const db = forSystem();
+    /*
+     * ⚠️ `tenant: { status: "active" }` — a suspended account gets no mail either.
+     *
+     * Ventsi Group has been suspended and receiving "Tomorrow's arrivals (0) — Chervena Vila" every
+     * afternoon, for a property whose channel points at something Channex deleted. Every part of that
+     * is wrong: nobody there can sign in to act on it, the number is zero because nothing can reach
+     * them, and it is a daily reminder of a service we have switched off. A suspension that stops the
+     * software and keeps the mail is a suspension nobody thought through.
+     */
+    const properties = await db.property.findMany({
+      where: {
+        status: "active",
+        tenant: { status: "active" },
+        OR: [{ notifyTodayArrivals: true }, { notifyTomorrowArrivals: true }],
+      },
+    });
+
+    let sent = 0;
+    for (const property of properties) {
+      const { minutes, ymd } = nowInTz(property.timezone);
+      const jobs: { day: string; label: string; to: string[] }[] = [];
+      const due = (time: string) => {
+        const t = toMinutes(time);
+        return minutes >= t && minutes < t + 15; // one 15-minute window per day
       };
-      const res = await sendEmail({
-        to: job.to,
-        subject: `${job.label} (${arrivals.length}) — ${property.name} · ${job.day}`,
-        text: renderSystemEmailText(mail),
-        html: renderSystemEmail(mail),
-      });
-      if (res.ok) sent++;
-      await db.auditEntry.create({
-        data: {
-          tenantId: property.tenantId, propertyId: property.id,
-          entity: "Arrival notification", field: job.label,
-          newValue: res.ok ? `${arrivals.length} arrival(s) emailed to ${job.to.join(", ")} (${res.mode})` : `failed: ${res.error}`,
-          source: "api", channelCode: "all", syncResult: res.ok ? "success" : "failed",
-        },
-      });
+      if (property.notifyTodayArrivals && due(property.notifyTodayTime)) {
+        jobs.push({ day: ymd, label: "Today's arrivals", to: deliveryRecipients(property, property.notifyTodayTo as "primary" | "secondary" | "both") });
+      }
+      if (property.notifyTomorrowArrivals && due(property.notifyTomorrowTime)) {
+        jobs.push({ day: addDays(ymd, 1), label: "Tomorrow's arrivals", to: deliveryRecipients(property, property.notifyTomorrowTo as "primary" | "secondary" | "both") });
+      }
+
+      for (const job of jobs) {
+        if (job.to.length === 0) continue;
+        // Idempotence guard: the "due" window is 15 minutes wide, but a scheduler may fire more often
+        // than that (and GitHub-style crons drift). One digest per property/label/day — if we already
+        // logged this digest today, skip it rather than emailing the hotel two or three times.
+        const alreadySent = await db.auditEntry.findFirst({
+          where: {
+            propertyId: property.id, entity: "Arrival notification", field: job.label,
+            createdAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) },
+          },
+        });
+        if (alreadySent) continue;
+        const day = new Date(`${job.day}T00:00:00Z`);
+        const arrivals = await db.reservation.findMany({
+          where: { propertyId: property.id, status: { in: [...SOLD_STATUSES] }, lines: { some: { checkIn: day } } },
+          include: { channel: true, lines: { include: { roomType: true } } },
+          orderBy: { guestName: "asc" },
+        });
+        const rows = arrivals.map((r) => {
+          const l = r.lines[0];
+          return `${r.guestName} — ${l?.roomType.name ?? ""} · ${l ? `${(l.checkOut.getTime() - l.checkIn.getTime()) / 86_400_000}n` : ""} · ${r.channel?.name ?? "Direct"}`;
+        });
+        const none = job.label === "Today's arrivals" ? "No arrivals today." : "No arrivals tomorrow.";
+        const mail = {
+          preview: arrivals.length > 0 ? `${arrivals.length} arriving at ${property.name}.` : none,
+          heading: `${job.label} — ${property.name}`,
+          product: "RevioLink",
+          blocks: arrivals.length > 0
+            ? [{ p: `${arrivals.length} arriving on ${job.day}.` }, { list: rows }]
+            : [{ p: `${none} (${job.day})` }],
+        };
+        const res = await sendEmail({
+          to: job.to,
+          subject: `${job.label} (${arrivals.length}) — ${property.name} · ${job.day}`,
+          text: renderSystemEmailText(mail),
+          html: renderSystemEmail(mail),
+        });
+        if (res.ok) sent++;
+        await db.auditEntry.create({
+          data: {
+            tenantId: property.tenantId, propertyId: property.id,
+            entity: "Arrival notification", field: job.label,
+            newValue: res.ok ? `${arrivals.length} arrival(s) emailed to ${job.to.join(", ")} (${res.mode})` : `failed: ${res.error}`,
+            source: "api", channelCode: "all", syncResult: res.ok ? "success" : "failed",
+          },
+        });
+      }
     }
+    await releaseJobLease(JOB.arrivalsDigest);
+    return NextResponse.json({ ok: true, propertiesChecked: properties.length, digestsSent: sent });
+  } catch (err) {
+    console.error("arrivals-digest: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
   }
-  await releaseJobLease(JOB.arrivalsDigest);
-  return NextResponse.json({ ok: true, propertiesChecked: properties.length, digestsSent: sent });
 }
