@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   readStripeKey, stripeHint, switchWarning,
   validateSecretKey, validatePublishableKey, validateWebhookSecret,
+  planKeyEdit, type KeyEditInput,
 } from "./stripe-key";
 
 /*
@@ -152,5 +153,66 @@ describe("switchWarning", () => {
     expect(switchWarning("test", "live")).toMatch(/real cards/i);
     expect(switchWarning("test", "live")).toMatch(/stored payment method|do not exist/i);
     expect(switchWarning("live", "test")).toMatch(/do not exist/i);
+  });
+});
+
+/**
+ * The rule that made the form editable. Weighted toward what an EMPTY box must not do.
+ *
+ * The failure it replaces was not a crash: every path saved something, and what it saved was
+ * quietly wrong. A wiped publishable key looks identical to one that was never set.
+ */
+describe("planKeyEdit", () => {
+  const edit = (over: Partial<KeyEditInput> = {}): KeyEditInput => ({
+    exists: true, secret: "", publishable: "", webhook: "", ...over,
+  });
+
+  it("keeps everything when every box is empty and a credential exists", () => {
+    // Pressing Save with nothing typed is a re-test, not a reset.
+    expect(planKeyEdit(edit())).toEqual({
+      replaceSecret: false, writePublishable: false, writeWebhook: false, refusal: null,
+    });
+  });
+
+  it("adds ONLY the publishable key — the case the founder could not perform", () => {
+    // Two fields already right, the third missing. Before this, adding it meant re-entering a
+    // webhook secret Stripe shows exactly once.
+    expect(planKeyEdit(edit({ publishable: "pk_live_abc" }))).toEqual({
+      replaceSecret: false, writePublishable: true, writeWebhook: false, refusal: null,
+    });
+  });
+
+  it("adds ONLY the webhook secret", () => {
+    expect(planKeyEdit(edit({ webhook: "whsec_abc" }))).toEqual({
+      replaceSecret: false, writePublishable: false, writeWebhook: true, refusal: null,
+    });
+  });
+
+  it("replaces ONLY the secret key", () => {
+    expect(planKeyEdit(edit({ secret: "rk_live_abc" }))).toEqual({
+      replaceSecret: true, writePublishable: false, writeWebhook: false, refusal: null,
+    });
+  });
+
+  it("an empty publishable key never clears a stored one", () => {
+    // The exact regression. `publishableKey: value || null` in the upsert wiped it on every save
+    // that did not retype it.
+    expect(planKeyEdit(edit({ secret: "rk_live_abc" })).writePublishable).toBe(false);
+  });
+
+  it("still demands a secret key when there is nothing stored to keep", () => {
+    const first = planKeyEdit(edit({ exists: false }));
+    expect(first.refusal).toBe("Paste the secret key from your Stripe dashboard.");
+    expect(first.replaceSecret).toBe(true);
+  });
+
+  it("does not refuse a first credential that HAS a secret key", () => {
+    expect(planKeyEdit(edit({ exists: false, secret: "sk_test_abc" })).refusal).toBeNull();
+  });
+
+  it("treats whitespace as empty, so a stray space cannot mean 'replace with nothing'", () => {
+    expect(planKeyEdit(edit({ secret: "   ", publishable: "  ", webhook: "\t" }))).toEqual({
+      replaceSecret: false, writePublishable: false, writeWebhook: false, refusal: null,
+    });
   });
 });

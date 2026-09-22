@@ -175,3 +175,52 @@ export function switchWarning(from: StripeMode, to: StripeMode): string | null {
     ? "Going live: from now on real cards are charged and real money moves. Customer and card ids saved in sandbox do not exist in the live account, so any stored payment method will stop working and has to be collected again."
     : "Going back to sandbox: nothing will be charged. Customer and card ids saved in live mode do not exist in the sandbox account, so anything stored against them will not resolve.";
 }
+
+/**
+ * What a save should actually change — the decision that made a three-field form editable.
+ *
+ * ## The bug this replaces
+ *
+ * The form's three fields each treated an empty box differently, and nothing on screen said so:
+ * the secret key was `required`, so changing anything meant re-pasting it; an empty publishable
+ * key silently **wiped** the stored one; an empty webhook secret kept it. The founder hit all
+ * three at once on the live credential — two fields correct, the third needing a publishable key,
+ * and no way to add it without re-entering a webhook secret that Stripe shows exactly once.
+ *
+ * ## The rule
+ *
+ * **Empty means keep, for every field, once a credential exists.** A credential that does not
+ * exist yet still needs a secret key, because there is nothing to keep. Clearing a stored value is
+ * deliberately NOT expressible here: nothing in the product needs it, and a blank box that can
+ * either keep or destroy depending on context is the ambiguity this function exists to remove.
+ *
+ * Pure so the rule can be proved rather than described. The action does the encryption and the
+ * network check; this only decides which fields are in play.
+ */
+export interface KeyEditInput {
+  /** Whether a credential already exists for this mode. */
+  exists: boolean;
+  secret: string;
+  publishable: string;
+  webhook: string;
+}
+
+export interface KeyEdit {
+  /** False when the stored secret is kept — the caller must decrypt it to re-test, not rewrite it. */
+  replaceSecret: boolean;
+  writePublishable: boolean;
+  writeWebhook: boolean;
+  /** Set only when there is nothing stored and nothing was pasted. */
+  refusal: string | null;
+}
+
+export function planKeyEdit(input: KeyEditInput): KeyEdit {
+  const secret = input.secret.trim();
+  const keep = secret === "" && input.exists;
+  return {
+    replaceSecret: !keep,
+    writePublishable: input.publishable.trim() !== "",
+    writeWebhook: input.webhook.trim() !== "",
+    refusal: secret === "" && !input.exists ? "Paste the secret key from your Stripe dashboard." : null,
+  };
+}

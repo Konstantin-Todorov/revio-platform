@@ -12,7 +12,7 @@ import { sendEmail } from "@revio/email";
 import { invoicePaymentRequestEmail } from "./invoice-emails";
 import { invoiceDocData } from "./invoice-data";
 import { invoiceFileHtml, invoiceFileName } from "./invoice-html";
-import { isStripeMode, validateSecretKey, validatePublishableKey, validateWebhookSecret } from "./stripe-key";
+import { isStripeMode, planKeyEdit, validateSecretKey, validatePublishableKey, validateWebhookSecret } from "./stripe-key";
 import { isVatRegistration } from "./vat";
 
 // Platform credentials are operator-perimeter data (bypass-only RLS) — always via forSystem.
@@ -43,9 +43,38 @@ export async function saveStripeKey(_prev: ActionResult | null, fd: FormData): P
   const mode = String(fd.get("mode") ?? "").trim();
   if (!isStripeMode(mode)) return { ok: false, error: "Choose sandbox or live." };
 
+  /*
+   * ⚠️ BLANK MEANS "KEEP WHAT IS STORED", for all three fields, once a credential exists.
+   *
+   * It used to mean three different things in the same form, and nothing said so:
+   *
+   *   secret key       required — so changing ANYTHING meant re-pasting it
+   *   publishable key  blank silently WIPED the stored one
+   *   webhook secret   blank kept the stored one
+   *
+   * The founder hit the consequence on the live credential: two fields were right, the third
+   * needed adding, and there was no way to add it without re-entering the other two — one of
+   * which Stripe shows exactly once. A form where you cannot change one thing is a form people
+   * put off using, and this is the form that decides whether we can take money.
+   *
+   * A credential that does not exist yet still requires a secret key: there is nothing to keep.
+   */
+  const existing = await prisma.platformCredential.findUnique({
+    where: { provider_mode: { provider: "stripe", mode } },
+    select: { id: true },
+  });
+
   const secret = String(fd.get("secretKey") ?? "");
-  const checked = validateSecretKey(secret, mode);
-  if (!checked.ok) return { ok: false, error: checked.error };
+  const plan = planKeyEdit({
+    exists: existing !== null,
+    secret,
+    publishable: String(fd.get("publishableKey") ?? ""),
+    webhook: String(fd.get("webhookSecret") ?? ""),
+  });
+  if (plan.refusal) return { ok: false, error: plan.refusal };
+
+  const checked = plan.replaceSecret ? validateSecretKey(secret, mode) : null;
+  if (checked && !checked.ok) return { ok: false, error: checked.error };
 
   const publishable = validatePublishableKey(String(fd.get("publishableKey") ?? ""), mode);
   if (!publishable.ok) return { ok: false, error: publishable.error };
@@ -53,7 +82,27 @@ export async function saveStripeKey(_prev: ActionResult | null, fd: FormData): P
   const webhook = validateWebhookSecret(String(fd.get("webhookSecret") ?? ""));
   if (!webhook.ok) return { ok: false, error: webhook.error };
 
-  const key = secret.trim();
+  /*
+   * The stored key is decrypted only to re-test it. Saving without touching the secret still asks
+   * Stripe about it, because the answer is what the screen shows — and a credential left unchecked
+   * because somebody only edited a neighbouring field is exactly the stale green this console
+   * exists to avoid.
+   */
+  let key = secret.trim();
+  if (!plan.replaceSecret) {
+    const stored = await readStripeSecret(mode);
+    if (stored.state === "decryption_error") {
+      return {
+        ok: false,
+        error:
+          "The stored key cannot be decrypted, so it cannot be kept. CONNECTIVITY_SECRET has probably changed — " +
+          "paste the secret key again to replace it.",
+      };
+    }
+    if (stored.state === "missing") return { ok: false, error: "Paste the secret key from your Stripe dashboard." };
+    key = stored.secret;
+  }
+
   const check = await checkStripeKey(key, mode);
 
   // Stripe answered and said no. That is a bad key, and a bad key is not stored.
@@ -64,10 +113,10 @@ export async function saveStripeKey(_prev: ActionResult | null, fd: FormData): P
   await prisma.platformCredential.upsert({
     where: { provider_mode: { provider: "stripe", mode } },
     update: {
-      cipher: encryptSecret(key),
-      hint: checked.hint,
-      publishableKey: publishable.value || null,
-      ...(webhook.value ? { webhookCipher: encryptSecret(webhook.value) } : {}),
+      // Untouched fields are omitted rather than written back, so a blank box cannot clear one.
+      ...(plan.replaceSecret ? { cipher: encryptSecret(key), hint: checked!.hint } : {}),
+      ...(plan.writePublishable ? { publishableKey: publishable.value } : {}),
+      ...(plan.writeWebhook ? { webhookCipher: encryptSecret(webhook.value) } : {}),
       lastCheckedAt: check.reachable ? new Date() : null,
       lastCheckOk: check.reachable ? check.ok : null,
       lastCheckMessage: check.message.slice(0, 400),
@@ -78,9 +127,9 @@ export async function saveStripeKey(_prev: ActionResult | null, fd: FormData): P
       provider: "stripe",
       mode,
       cipher: encryptSecret(key),
-      hint: checked.hint,
+      hint: checked!.hint,
       publishableKey: publishable.value || null,
-      ...(webhook.value ? { webhookCipher: encryptSecret(webhook.value) } : {}),
+      ...(plan.writeWebhook ? { webhookCipher: encryptSecret(webhook.value) } : {}),
       lastCheckedAt: check.reachable ? new Date() : null,
       lastCheckOk: check.reachable ? check.ok : null,
       lastCheckMessage: check.message.slice(0, 400),

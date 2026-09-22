@@ -23,7 +23,22 @@ import type { StripeMode } from "@/lib/stripe-key";
  * here because a connection is genuinely useful before they are filled in, and the readiness list on
  * the page behind this says plainly which parts are still missing.
  */
-export function StripeKeyDialog({ mode, hasKey }: { mode: StripeMode; hasKey: boolean }) {
+/**
+ * ⚠️ What is already installed, so a blank box is a choice rather than a gamble.
+ *
+ * Each field can be left empty to keep what is stored — see `saveStripeKey`, which is where the
+ * three fields stopped meaning three different things. The dialog has to SAY that, per field, or
+ * the behaviour is a secret and people re-paste everything anyway.
+ */
+export interface InstalledStripeKeys {
+  /** Masked tail of the stored server key, e.g. `sk_test_••••yNtV`. Null when nothing is stored. */
+  secretHint: string | null;
+  /** Public by design, so it is shown in full — recognising it is the point. */
+  publishableKey: string | null;
+  hasWebhook: boolean;
+}
+
+export function StripeKeyDialog({ mode, hasKey, installed }: { mode: StripeMode; hasKey: boolean; installed: InstalledStripeKeys }) {
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(saveStripeKey, null);
   useEffect(() => {
@@ -38,7 +53,7 @@ export function StripeKeyDialog({ mode, hasKey }: { mode: StripeMode; hasKey: bo
         onClick={() => setOpen(true)}
         className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700"
       >
-        {hasKey ? "Replace" : "Set up"}
+        {hasKey ? "Edit keys" : "Set up"}
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title={`Stripe · ${live ? "live" : "sandbox"} keys`}>
@@ -63,38 +78,63 @@ export function StripeKeyDialog({ mode, hasKey }: { mode: StripeMode; hasKey: bo
           which key is installed. It is tested against Stripe before saving.
         </p>
 
+        {hasKey && (
+          <p className="mb-3 rounded-md border border-surface-border bg-surface-muted px-3 py-2 text-[12px] leading-relaxed text-ink-600">
+            <span className="font-semibold text-ink-800">Leave a box empty to keep what is there.</span>{" "}
+            You can fill in one field without re-entering the others — which matters most for the
+            webhook secret, because Stripe shows that one exactly once.
+          </p>
+        )}
+
         <form action={formAction} className="space-y-3.5">
           <input type="hidden" name="mode" value={mode} />
 
           <Field
             label="Server API key"
-            hint={`Prefer a restricted key with Account read, Balance read and Checkout Sessions write. Starts ${live ? "rk_live_" : "rk_test_"}; a full sk_ key also works.`}
+            hint={
+              installed.secretHint
+                ? `Installed: ${installed.secretHint}. Leave empty to keep it — it is still re-tested against Stripe when you save.`
+                : `Prefer a restricted key with Account read, Balance read and Checkout Sessions write. Starts ${live ? "rk_live_" : "rk_test_"}; a full sk_ key also works.`
+            }
           >
             <input
               name="secretKey"
               type="password"
-              required
+              // Required only when there is nothing to keep. This attribute is what forced the whole
+              // credential to be re-entered to change any part of it.
+              required={!hasKey}
               autoComplete="off"
               className={inputCls}
-              placeholder={live ? "rk_live_… or sk_live_…" : "rk_test_… or sk_test_…"}
+              placeholder={hasKey ? "unchanged" : live ? "rk_live_… or sk_live_…" : "rk_test_… or sk_test_…"}
             />
           </Field>
 
-          <Field label="Publishable key" hint="Optional and not used by hosted Checkout. Keep it only for a future embedded card form; safe to be public.">
+          <Field
+            label="Publishable key"
+            hint={
+              installed.publishableKey
+                ? `Installed: ${installed.publishableKey}. Not used by hosted Checkout — keep it for a future embedded card form.`
+                : "Optional and not used by hosted Checkout. Keep it only for a future embedded card form; safe to be public."
+            }
+          >
             <input
               name="publishableKey"
               type="text"
               autoComplete="off"
               className={inputCls}
-              placeholder={live ? "pk_live_…" : "pk_test_…"}
+              placeholder={installed.publishableKey ? "unchanged" : live ? "pk_live_…" : "pk_test_…"}
             />
           </Field>
 
           <Field
             label="Webhook signing secret"
-            hint="Optional. Stripe shows it once, when the endpoint is added. Without it we cannot verify that an event is genuinely from Stripe."
+            hint={
+              installed.hasWebhook
+                ? "One is installed. Leave empty to keep it — Stripe will not show it to you a second time."
+                : "Optional. Stripe shows it once, when the endpoint is added. Without it we cannot verify that an event is genuinely from Stripe."
+            }
           >
-            <input name="webhookSecret" type="password" autoComplete="off" className={inputCls} placeholder="whsec_…" />
+            <input name="webhookSecret" type="password" autoComplete="off" className={inputCls} placeholder={installed.hasWebhook ? "unchanged" : "whsec_…"} />
           </Field>
 
           {state?.error && (

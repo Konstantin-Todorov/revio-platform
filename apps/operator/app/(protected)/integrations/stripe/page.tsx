@@ -118,7 +118,15 @@ function ModePanel({ conn, inUse }: { conn: StripeConnection; inUse: boolean }) 
               </button>
             </form>
           )}
-          <StripeKeyDialog mode={conn.mode as StripeMode} hasKey={conn.configured} />
+          <StripeKeyDialog
+            mode={conn.mode as StripeMode}
+            hasKey={conn.configured}
+            installed={{
+              secretHint: conn.configured ? conn.hint : null,
+              publishableKey: conn.publishableKey,
+              hasWebhook: conn.webhookSecretState === "ready",
+            }}
+          />
         </div>
       </div>
 
