@@ -67,7 +67,41 @@ export default async function WebsitePage({
         </span>
       </div>
 
-      {!d.configured && (
+      {d.problem && (
+        <Card className="p-4">
+          <p className="text-[13px] font-semibold text-amber-700">
+            {d.problem.kind === "key-looks-like-an-id"
+              ? "That is the key ID, not the key."
+              : d.problem.kind === "key-not-a-pem"
+                ? "That does not look like a private key."
+                : "Some settings are missing."}
+          </p>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">
+            {d.problem.kind === "key-looks-like-an-id" ? (
+              <>
+                <code className="text-[11.5px]">GOOGLE_INSIGHTS_PRIVATE_KEY</code> holds 40 hex
+                characters, which is a service-account <strong>key ID</strong>. The console shows it in
+                large type right after a key is created, so it is easy to copy instead of the key. Open
+                the downloaded JSON and use the <code className="text-[11.5px]">private_key</code> value
+                — or simply paste the <strong>whole file</strong> into{" "}
+                <code className="text-[11.5px]">GOOGLE_INSIGHTS_CREDENTIALS</code> and the email and key
+                are read out of it.
+              </>
+            ) : d.problem.kind === "key-not-a-pem" ? (
+              <>
+                It should begin <code className="text-[11.5px]">-----BEGIN PRIVATE KEY-----</code>.
+                Easiest: paste the whole downloaded JSON into{" "}
+                <code className="text-[11.5px]">GOOGLE_INSIGHTS_CREDENTIALS</code> — one variable, and
+                no <code className="text-[11.5px]">\n</code> escaping to get wrong.
+              </>
+            ) : (
+              <>Still needed: {d.problem.fields.join(", ")}.</>
+            )}
+          </p>
+        </Card>
+      )}
+
+      {!d.configured && !d.problem && (
         <Card className="p-4">
           <p className="text-[13px] font-semibold text-ink-900">Not connected to Google yet.</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-ink-500">

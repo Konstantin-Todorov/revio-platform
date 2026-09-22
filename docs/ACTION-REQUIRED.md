@@ -133,14 +133,28 @@ Three steps, and only the first cannot be done from the repo:
 1. **Google Cloud → a service account**, with a JSON key. Then grant it, in Google:
    - GA4 → Admin → Property access management → add its email as **Viewer**
    - Search Console → Settings → Users and permissions → add its email (Full or Restricted)
-2. **Four variables on the `operator` service:**
+2. **Three variables on the `operator` service:**
    ```
-   GOOGLE_INSIGHTS_CLIENT_EMAIL   the service account's email
-   GOOGLE_INSIGHTS_PRIVATE_KEY    private_key from the JSON, \n escapes kept as-is
+   GOOGLE_INSIGHTS_CREDENTIALS    the downloaded JSON, pasted whole
    GA4_PROPERTY_ID                numeric — Analytics → Admin → Property details
    GSC_SITE_URL                   exactly as Search Console spells it, e.g. https://reviosoft.app/
    ```
+   ⚠️ Paste the **whole file**. The email and the key are read out of it, which removes the two
+   mistakes this step actually produces: extracting the wrong field, and losing the `\n` escaping.
+   The older split variables — `GOOGLE_INSIGHTS_CLIENT_EMAIL` + `GOOGLE_INSIGHTS_PRIVATE_KEY` —
+   still work.
+
+   ⚠️ **The key is not the key ID.** A service-account key ID is 40 hex characters and the console
+   shows it in large type the moment a key is created, so it is the easy thing to copy. It happened
+   here on the first attempt. The screen now names that specific mistake instead of saying "not
+   configured".
 3. Nothing else. No table, no migration, no scheduled job.
+
+**Status 2026-09-22:** step 1 is DONE — project `revio-insights`, both APIs enabled, service account
+`revio-operator-insights@revio-insights.iam.gserviceaccount.com` granted **Viewer** in GA4 (property
+550727982) and **Restricted** in Search Console (`https://reviosoft.app/`). `GA4_PROPERTY_ID` and
+`GSC_SITE_URL` are set. **Only the credential is outstanding.**
+
 
 ⚠️ **It stores nothing, deliberately.** The obvious design was a nightly job filling our own table;
 the founder's call is that anything needing more than Search Console's sixteen months is a question

@@ -12,18 +12,47 @@ describe("readConfig", () => {
     GSC_SITE_URL: "https://reviosoft.app/",
   };
 
-  it("is null unless every variable is present — the screen must say 'not configured', not half-work", () => {
+  const ok = (env: Record<string, string | undefined>) => {
+    const r = readConfig(env);
+    if (!r || "problem" in r) throw new Error(`expected a config, got ${JSON.stringify(r)}`);
+    return r.config;
+  };
+  const problem = (env: Record<string, string | undefined>) => {
+    const r = readConfig(env);
+    if (!r || !("problem" in r)) throw new Error(`expected a problem, got ${JSON.stringify(r)}`);
+    return r.problem;
+  };
+
+  it("NAMES the missing variable rather than saying 'not configured' to someone who set three of four", () => {
     for (const key of Object.keys(full)) {
       const partial = { ...full };
       delete partial[key];
-      expect(readConfig(partial), `missing ${key}`).toBeNull();
+      expect(problem(partial), `missing ${key}`).toEqual({ kind: "missing", fields: [key] });
     }
-    expect(readConfig(full)).not.toBeNull();
+  });
+
+  it("is null — not a problem — when nothing at all is set, because that is an unconnected screen", () => {
+    expect(readConfig({})).toBeNull();
   });
 
   it("turns the literal \\n of an env var back into real newlines, or signing fails obscurely", () => {
-    expect(readConfig(full)!.privateKey).toContain("\n");
-    expect(readConfig(full)!.privateKey).not.toContain("\\n");
+    expect(ok(full).privateKey).toContain("\n");
+    expect(ok(full).privateKey).not.toContain("\\n");
+  });
+
+  it("catches the 40-hex KEY ID, which the console shows most prominently and is easy to copy instead", () => {
+    expect(problem({ ...full, GOOGLE_INSIGHTS_PRIVATE_KEY: "d4f2a1b39c8e7f60a1b2c3d4e5f60718293a4b5c" }))
+      .toEqual({ kind: "key-looks-like-an-id" });
+  });
+
+  it("reads the WHOLE downloaded JSON, so there is nothing to extract and no escaping to get wrong", () => {
+    const blob = JSON.stringify({
+      client_email: "bot@x.iam.gserviceaccount.com",
+      private_key: "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----",
+    });
+    const cfg = ok({ GOOGLE_INSIGHTS_CREDENTIALS: blob, GA4_PROPERTY_ID: "1", GSC_SITE_URL: "https://x/" });
+    expect(cfg.clientEmail).toBe("bot@x.iam.gserviceaccount.com");
+    expect(cfg.privateKey).toContain("\n");
   });
 });
 

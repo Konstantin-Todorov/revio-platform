@@ -50,26 +50,79 @@ export interface InsightsConfig {
 }
 
 /**
- * Reads the four variables, or returns null.
+ * What is wrong with the configuration, in words the screen can print.
  *
- * ⚠️ `PRIVATE_KEY` arrives from an environment variable, where a real newline cannot survive, so the
- * literal two-character `\n` sequences are turned back into newlines. Without this the key parses as
- * a single line and signing fails with an error that names neither the variable nor the cause.
+ * ⚠️ `null` used to be the only answer, and it was not enough. A key was pasted that turned out to
+ * be the 40-character **key ID** rather than the key — an easy mistake, because the Keys page shows
+ * the id in large type right after you create one — and the screen could only say "not configured",
+ * which sends somebody back to re-do a step they already did correctly.
  */
-/*
-  ⚠️ Takes a plain record, not `NodeJS.ProcessEnv`. It reads four string keys and nothing else, and
-  this project's `ProcessEnv` requires `NODE_ENV` — so the narrower type is both the honest
-  signature and the one a test can construct without inventing unrelated variables.
-*/
+export type ConfigProblem =
+  | { kind: "missing"; fields: string[] }
+  | { kind: "key-looks-like-an-id" }
+  | { kind: "key-not-a-pem" };
+
+/**
+ * Reads the configuration.
+ *
+ * ## ⚠️ Paste the WHOLE JSON file if you like
+ *
+ * `GOOGLE_INSIGHTS_CREDENTIALS` takes the service-account JSON exactly as Google downloads it, and
+ * the email and the key are read out of it. That is one variable instead of three, nothing to
+ * extract by hand, and — the part that actually bites — no `\n` escaping to get wrong.
+ *
+ * The three separate variables still work, for a deployment that already has them.
+ */
 export function readConfig(
   env: Record<string, string | undefined> = process.env,
-): InsightsConfig | null {
-  const clientEmail = env.GOOGLE_INSIGHTS_CLIENT_EMAIL?.trim();
-  const rawKey = env.GOOGLE_INSIGHTS_PRIVATE_KEY;
+): { config: InsightsConfig } | { problem: ConfigProblem } | null {
+  const blob = env.GOOGLE_INSIGHTS_CREDENTIALS?.trim();
+  let clientEmail = env.GOOGLE_INSIGHTS_CLIENT_EMAIL?.trim();
+  let rawKey = env.GOOGLE_INSIGHTS_PRIVATE_KEY?.trim();
+
+  if (blob?.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(blob) as { client_email?: string; private_key?: string };
+      clientEmail = parsed.client_email?.trim() || clientEmail;
+      rawKey = parsed.private_key?.trim() || rawKey;
+    } catch {
+      return { problem: { kind: "key-not-a-pem" } };
+    }
+  }
+  /* Somebody may reasonably paste the whole file into the key variable instead. Accept that too. */
+  if (rawKey?.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(rawKey) as { client_email?: string; private_key?: string };
+      clientEmail = parsed.client_email?.trim() || clientEmail;
+      rawKey = parsed.private_key?.trim();
+    } catch {
+      return { problem: { kind: "key-not-a-pem" } };
+    }
+  }
+
   const propertyId = env.GA4_PROPERTY_ID?.trim();
   const siteUrl = env.GSC_SITE_URL?.trim();
-  if (!clientEmail || !rawKey || !propertyId || !siteUrl) return null;
-  return { clientEmail, privateKey: rawKey.replace(/\\n/g, "\n"), propertyId, siteUrl };
+
+  const missing = [
+    !clientEmail && "GOOGLE_INSIGHTS_CLIENT_EMAIL",
+    !rawKey && "GOOGLE_INSIGHTS_PRIVATE_KEY",
+    !propertyId && "GA4_PROPERTY_ID",
+    !siteUrl && "GSC_SITE_URL",
+  ].filter(Boolean) as string[];
+  /* Nothing at all set is not a problem to report — it is a screen that has not been connected yet. */
+  if (missing.length === 4) return null;
+  if (missing.length) return { problem: { kind: "missing", fields: missing } };
+
+  const key = rawKey!.replace(/\\n/g, "\n");
+  /*
+    ⚠️ A service-account KEY ID is 40 hex characters, and it is the thing the console shows most
+    prominently once a key exists. Named specifically, because "invalid key" would send somebody
+    back to Google to redo a step they did correctly.
+  */
+  if (/^[a-f0-9]{40}$/i.test(key)) return { problem: { kind: "key-looks-like-an-id" } };
+  if (!key.includes("-----BEGIN")) return { problem: { kind: "key-not-a-pem" } };
+
+  return { config: { clientEmail: clientEmail!, privateKey: key, propertyId: propertyId!, siteUrl: siteUrl! } };
 }
 
 const b64url = (input: Buffer | string) =>
@@ -243,6 +296,8 @@ async function gsc(config: InsightsConfig, token: string, body: unknown) {
 
 export interface SiteInsights {
   configured: boolean;
+  /** What is wrong with the SETUP, as opposed to a Google failure. */
+  problem?: ConfigProblem;
   error?: string;
   period: Period;
   window: { startDate: string; endDate: string };
@@ -283,8 +338,10 @@ const EMPTY = (period: Period, window: { startDate: string; endDate: string }): 
  */
 export async function getSiteInsights(period: Period = 28): Promise<SiteInsights> {
   const w = windowFor(period);
-  const config = readConfig();
-  if (!config) return EMPTY(period, w.current);
+  const read = readConfig();
+  if (!read) return EMPTY(period, w.current);
+  if ("problem" in read) return { ...EMPTY(period, w.current), problem: read.problem };
+  const config = read.config;
 
   try {
     const token = await accessToken(config);
