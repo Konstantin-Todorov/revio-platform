@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   delta, localeOf, parseGaDate, readConfig, shapeBreakdown, shapeLanding, shapePages,
-  shapeQueries, shapeTraffic, share, splitByLocale, windowFor,
+  shapeCtas, shapeQueries, shapeTraffic, share, splitByLocale, windowFor,
 } from "./google-insights";
 import { colourFor } from "@/components/analytics/ShareBars";
 
@@ -170,5 +170,20 @@ describe("the richer breakdowns", () => {
   it("greys only the two labels that mean 'we do not know', never a real category", () => {
     expect(colourFor("Unattributed", 0)).toBe(colourFor("Everything else", 5));
     expect(colourFor("Direct", 0)).not.toBe(colourFor("Unattributed", 0));
+  });
+});
+
+describe("call-to-action clicks", () => {
+  it("drops (not set), which is GA4 saying the parameter never arrived on that event", () => {
+    const rows = [
+      { dimensionValues: [{ value: "home-hero-trial" }], metricValues: [{ value: "7" }, { value: "5" }] },
+      { dimensionValues: [{ value: "(not set)" }], metricValues: [{ value: "2" }, { value: "2" }] },
+    ];
+    expect(shapeCtas(rows).map((c) => c.cta)).toEqual(["home-hero-trial"]);
+  });
+
+  it("keeps clicks and people apart — one person pressing three times is not three people", () => {
+    const rows = [{ dimensionValues: [{ value: "nav-trial" }], metricValues: [{ value: "3" }, { value: "1" }] }];
+    expect(shapeCtas(rows)[0]).toEqual({ cta: "nav-trial", clicks: 3, people: 1 });
   });
 });

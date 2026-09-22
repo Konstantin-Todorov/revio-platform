@@ -267,6 +267,33 @@ export function splitByLocale(pages: PageRow[]) {
 export interface Breakdown { label: string; people: number; sessions: number }
 export interface LandingRow { page: string; sessions: number; engagementRate: number }
 export interface SearchSlice { label: string; clicks: number; impressions: number }
+export interface CtaRow { cta: string; clicks: number; people: number }
+
+/**
+ * Which calls to action were pressed.
+ *
+ * ⚠️ `customEvent:cta` only answers once **CTA** is registered as a custom dimension in GA4 (Admin →
+ * Data display → Custom definitions, event parameter `cta`). Registered 2026-09-22. Without it the
+ * API returns an error rather than an empty list, which is why this is fetched on its own and its
+ * failure does not take the rest of the screen with it.
+ *
+ * ⚠️ It is NOT backfilled. A custom dimension starts collecting the day it is registered, so the
+ * first days of any window that predates it are genuinely empty rather than quiet — the screen says
+ * so rather than letting it read as nobody clicking.
+ */
+export const CTA_DIMENSION_REGISTERED = "2026-09-22";
+
+export function shapeCtas(rows: GaRow[]): CtaRow[] {
+  return rows
+    .map((r) => ({
+      cta: r.dimensionValues?.[0]?.value ?? "",
+      clicks: Number(r.metricValues?.[0]?.value ?? 0),
+      people: Number(r.metricValues?.[1]?.value ?? 0),
+    }))
+    .filter((c) => c.cta && c.cta !== "(not set)")
+    .sort((a, b) => b.clicks - a.clicks);
+}
+
 
 /**
  * A row of `[dimension, metric, metric]` into something the screen can draw.
@@ -385,6 +412,8 @@ export interface SiteInsights {
   landing: LandingRow[];
   searchDevices: SearchSlice[];
   searchCountries: SearchSlice[];
+  ctas: CtaRow[];
+  ctaSince: string;
 }
 
 const EMPTY = (period: Period, window: { startDate: string; endDate: string }): SiteInsights => ({
@@ -406,6 +435,8 @@ const EMPTY = (period: Period, window: { startDate: string; endDate: string }): 
   landing: [],
   searchDevices: [],
   searchCountries: [],
+  ctas: [],
+  ctaSince: CTA_DIMENSION_REGISTERED,
 });
 
 /**
@@ -431,7 +462,7 @@ export async function getSiteInsights(period: Period = 28): Promise<SiteInsights
       that takes ten seconds to paint; in parallel it is one round trip's worth of waiting.
     */
     const pair = [{ name: "activeUsers" }, { name: "sessions" }];
-    const [daily, prior, quality, channels, devices, countries, landing, queries, pages, priorSearch, sDevices, sCountries] =
+    const [daily, prior, quality, channels, devices, countries, landing, queries, pages, priorSearch, sDevices, sCountries, ctas] =
       await Promise.all([
         ga(config, token, { dateRanges: [w.current], dimensions: [{ name: "date" }], metrics }),
         ga(config, token, { dateRanges: [w.previous], metrics }),
@@ -453,6 +484,20 @@ export async function getSiteInsights(period: Period = 28): Promise<SiteInsights
         gsc(config, token, { ...w.previous, rowLimit: 1 }),
         gsc(config, token, { ...w.current, dimensions: ["device"], rowLimit: 5 }),
         gsc(config, token, { ...w.current, dimensions: ["country"], rowLimit: 8 }),
+        /*
+          ⚠️ Its own try/catch. `customEvent:cta` errors outright if the dimension has been
+          unregistered, and one missing panel must not blank a screen that also carries the traffic,
+          the channels and the search data.
+        */
+        ga(config, token, {
+          dateRanges: [w.current],
+          dimensions: [{ name: "customEvent:cta" }],
+          metrics: [{ name: "eventCount" }, { name: "activeUsers" }],
+          dimensionFilter: {
+            filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "cta_click" } },
+          },
+          limit: 15,
+        }).catch(() => ({ rows: [] as GaRow[] })),
       ]);
 
     const traffic = shapeTraffic(daily.rows ?? []);
@@ -494,6 +539,8 @@ export async function getSiteInsights(period: Period = 28): Promise<SiteInsights
       landing: shapeLanding(landing.rows ?? []),
       searchDevices: shapeSearchSlice(sDevices.rows ?? []),
       searchCountries: shapeSearchSlice(sCountries.rows ?? []),
+      ctas: shapeCtas(ctas.rows ?? []),
+      ctaSince: CTA_DIMENSION_REGISTERED,
     };
   } catch (e) {
     return { ...EMPTY(period, w.current), configured: true, error: (e as Error).message };

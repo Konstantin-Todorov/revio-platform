@@ -281,6 +281,48 @@ export default async function WebsitePage({
             </Card>
           </div>
 
+          <Card>
+            <CardHeader
+              title="What they pressed"
+              subtitle="Calls to action, by clicks — the step between reading the site and contacting us"
+            />
+            <div className="px-4 pb-4">
+              {d.ctas.length === 0 ? (
+                <p className="py-3 text-[12.5px] leading-relaxed text-ink-500">
+                  Nothing yet in this window. The site has been sending these clicks for a while, but
+                  the <strong>CTA</strong> dimension was only registered in Analytics on {d.ctaSince} —
+                  and a custom dimension is never backfilled, so anything before that date is genuinely
+                  absent rather than zero.
+                </p>
+              ) : (
+                <table className="w-full text-left text-[12.5px]">
+                  <thead className="text-[11px] uppercase tracking-wide text-ink-400">
+                    <tr>
+                      <th className="py-2">Call to action</th>
+                      <th className="py-2 text-right">Clicks</th>
+                      <th className="py-2 text-right">People</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.ctas.map((c) => (
+                      <tr key={c.cta} className="border-t border-ink-100">
+                        <td className="py-2 pr-3 text-ink-800">{c.cta}</td>
+                        <td className="tnum py-2 text-right text-ink-900">{c.clicks}</td>
+                        <td className="tnum py-2 text-right text-ink-500">{c.people}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {/* The distinction that makes the table worth reading rather than just counting. */}
+              <p className="mt-3 text-[11.5px] leading-relaxed text-ink-500">
+                Clicks and people differ on purpose: one person pressing the same button three times is
+                three clicks and one person, and which of those two numbers moved tells you whether
+                interest widened or deepened.
+              </p>
+            </div>
+          </Card>
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader
