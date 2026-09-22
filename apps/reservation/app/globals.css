@@ -3,9 +3,20 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --font-hanken: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-  }
+  /*
+    ⚠️ `--font-hanken` is deliberately NOT defined here.
+
+    It is set by `next/font` on <html>, and it holds the family name Next GENERATED for the files
+    it is serving — plus a metric-matched fallback it computes. A literal "Hanken Grotesk" used to
+    sit in this block and, being un-layered against a layered rule, won; it worked only because
+    `next/font/google` happens to register the family under the real name. The moment the same
+    font came from `next/font/local`, which names the family after the variable, every screen in
+    this app silently fell back to the system sans. It compiled, every test passed, and the only
+    way to see it was to read the computed style on a rendered page.
+
+    Anything that needs the family reads `var(--font-hanken)` — which is what `font-sans` in
+    tailwind.config.ts already does. Nothing else should name the font.
+  */
   html {
     /*
      * Chrome on Android "boosts" text in some layouts — it silently inflates font sizes to make a

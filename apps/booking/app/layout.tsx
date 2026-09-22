@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Instrument_Serif } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
 /**
@@ -14,17 +14,41 @@ import "./globals.css";
  * high-contrast display face, not a book serif: it looks current at 48px and is never used for body
  * copy, which is precisely the job a hotel's wordmark needs.
  */
-const ui = Plus_Jakarta_Sans({
-  subsets: ["latin"],
+/*
+  ⚠️ `next/font/local`, not `next/font/google` — the bytes are in the repository.
+
+  `next/font/google` self-hosts what it ships, so runtime was never the issue. It fetches from
+  Google at BUILD time, on every build, and CI has no Next cache. On 2026-09-22 that fetch failed
+  and took the whole deploy with it, on a commit with nothing wrong in it. Both families here are
+  chosen for specific reasons stated above, and neither choice changes: one variable file now
+  covers the weight range that five static weights used to.
+
+  Refresh with `node scripts/fetch-fonts.mjs`; the subsets taken and not taken are explained there.
+*/
+const jakartaSans = localFont({
+  src: [
+    { path: "./fonts/plus-jakarta-sans-latin.woff2", style: "normal", weight: "400 800" },
+    { path: "./fonts/plus-jakarta-sans-latin-ext.woff2", style: "normal", weight: "400 800" },
+  ],
   variable: "--font-ui",
-  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 
-const serif = Instrument_Serif({
-  subsets: ["latin"],
+/*
+  ⚠️ Named `instrumentSerif`, not `serif`.
+
+  `next/font/local` derives the CSS family name from this binding, so `const serif` would register
+  a face called `serif` — which is a CSS GENERIC FAMILY KEYWORD. Next quotes what it emits, so it
+  happens to resolve; anything that ever re-emits the value unquoted would silently get the
+  browser's default serif instead of Instrument Serif, and it would look almost right. Under
+  `next/font/google` the name came from the font and this could not arise.
+*/
+const instrumentSerif = localFont({
+  src: [
+    { path: "./fonts/instrument-serif-latin.woff2", style: "normal", weight: "400" },
+    { path: "./fonts/instrument-serif-latin-ext.woff2", style: "normal", weight: "400" },
+  ],
   variable: "--font-serif",
-  weight: "400",
   display: "swap",
 });
 
@@ -45,7 +69,7 @@ export const viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${ui.variable} ${serif.variable}`}>
+    <html lang="en" className={`${jakartaSans.variable} ${instrumentSerif.variable}`}>
       <body className="min-h-screen">{children}</body>
     </html>
   );

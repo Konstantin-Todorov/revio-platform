@@ -1,12 +1,25 @@
 import type { Metadata } from "next";
-import { Hanken_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { DatePickerAffordance } from "@revio/ui/date-picker-affordance";
 
-const hanken = Hanken_Grotesk({
-  subsets: ["latin"],
+/*
+  ⚠️ `next/font/local`, not `next/font/google` — the bytes are in the repository.
+
+  `next/font/google` self-hosts what it ships, so runtime was never the issue. It fetches from
+  Google at BUILD time, on every build, and CI has no Next cache. On 2026-09-22 that fetch failed
+  and took the whole deploy with it: `TypeError: Cannot read properties of null (reading '1')`
+  inside Next's font loader, on a commit with nothing wrong in it.
+
+  One variable file covers 400–800, which is why five static weights became two files. Refresh them
+  with `node scripts/fetch-fonts.mjs`; the subsets taken and not taken are explained there.
+*/
+const hanken = localFont({
+  src: [
+    { path: "./fonts/hanken-grotesk-latin.woff2", style: "normal", weight: "400 800" },
+    { path: "./fonts/hanken-grotesk-latin-ext.woff2", style: "normal", weight: "400 800" },
+  ],
   variable: "--font-hanken",
-  weight: ["400", "500", "600", "700", "800"],
   display: "swap",
 });
 

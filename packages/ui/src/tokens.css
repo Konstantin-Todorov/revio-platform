@@ -44,7 +44,14 @@
   --revio-accent-050: #efe9fb;
 
   /* Typography — Atlas direction */
-  --revio-font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /*
+    The family comes from `next/font`, never from a literal here. Naming it twice is how the staff
+    apps came within one commit of rendering in the system font: a hardcoded copy in each app's
+    globals.css beat the variable, and matched only because one loader happens to register the real
+    name. Nothing consumes this token today; it is kept correct so that the first thing which does
+    is not wrong.
+  */
+  --revio-font-sans: var(--font-hanken), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 
   /* Radius & spacing scale */
   --revio-radius-sm: 6px;
