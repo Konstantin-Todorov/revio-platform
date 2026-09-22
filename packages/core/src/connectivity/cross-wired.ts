@@ -147,6 +147,17 @@ export interface RecordedMapping {
   externalRoomIdSeen: string | null;
   /** When the channel was last asked. Null = never. */
   checkedAt: Date | null;
+  /**
+   * Whether the hotel still has this rate plan switched on.
+   *
+   * ⚠️ REQUIRED rather than optional, and that is the whole point of adding it: both callers had to
+   * be changed, which is what the compiler is for. A plan that is switched off is not pushed —
+   * `syncChannel` has filtered on this since 2026-09-17 — so it cannot be publishing anywhere, and
+   * a mapping it left behind is a thing to tidy rather than a fault doing damage. Reporting it as a
+   * cross-wire says prices are going to the wrong room right now, which is false, and says it in
+   * red on the page somebody reads before telephoning the customer.
+   */
+  active: boolean;
 }
 
 export interface RecordedCrossWire {
@@ -163,6 +174,9 @@ export function crossWiredFromRecord(
   const out: RecordedCrossWire[] = [];
   for (const r of rows) {
     if (!r.checkedAt || !r.externalRateId || !r.externalRoomIdSeen) continue;
+    // A plan nobody publishes cannot publish to the wrong room. The leftover mapping is still worth
+    // clearing, and is reported as a stale mapping — one line per plan, at the severity it deserves.
+    if (!r.active) continue;
     const expected = ourRoomExternalId.get(r.roomTypeId);
     if (!expected || expected === r.externalRoomIdSeen) continue;
     out.push({

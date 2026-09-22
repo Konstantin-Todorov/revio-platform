@@ -96,6 +96,7 @@ describe("crossWiredFromRecord", () => {
     externalRateId: "0ea321e7",
     externalRoomIdSeen: "d383225c", // the 1-Bedroom's room, per the channel
     checkedAt: AT,
+    active: true,
     ...over,
   });
 
@@ -128,5 +129,25 @@ describe("crossWiredFromRecord", () => {
 
   it("says nothing for a row with no external id at all", () => {
     expect(crossWiredFromRecord([row({ externalRateId: null })], OUR_ROOMS)).toEqual([]);
+  });
+
+  it("says nothing about a plan the hotel switched off", () => {
+    /*
+     * The live case, from DesManagement 2015 on 2026-09-22. Exactly the row above — mapped under
+     * 2 Bedrooms, placed by the channel under 1 Bedroom — but `Standard Rate` is switched off.
+     *
+     * `syncChannel` has skipped switched-off plans since 2026-09-17, so nothing is published for
+     * it and nothing can be going to the wrong room. It still raised `act` on the alert feed and
+     * a red line on the client page reading "publishing to the wrong room … every push succeeds",
+     * beside a second alert on the same object correctly saying "nothing is published for it".
+     * Two alerts, one object, contradicting each other on the screen used to decide who to phone.
+     */
+    expect(crossWiredFromRecord([row({ active: false })], OUR_ROOMS)).toEqual([]);
+  });
+
+  it("still reports the switched-ON plans when a switched-off one sits beside them", () => {
+    // The filter must not take the row's neighbours with it.
+    const out = crossWiredFromRecord([row({ active: false }), row({ ratePlanName: "BB Flex" })], OUR_ROOMS);
+    expect(out.map((f) => f.ratePlanName)).toEqual(["BB Flex"]);
   });
 });

@@ -84,7 +84,7 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
     where: { catalogueCheckedAt: { not: null }, externalRateId: { not: null }, roomTypeId: { not: null } },
     select: {
       channelId: true, roomTypeId: true, externalRateId: true, externalRoomIdSeen: true, catalogueCheckedAt: true,
-      ratePlan: { select: { name: true } }, roomType: { select: { name: true } },
+      ratePlan: { select: { name: true, active: true } }, roomType: { select: { name: true } },
       channel: { select: { name: true, property: { select: { name: true, tenant: { select: { name: true } } } } } },
     },
   });
@@ -108,6 +108,7 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
         externalRateId: m.externalRateId,
         externalRoomIdSeen: m.externalRoomIdSeen,
         checkedAt: m.catalogueCheckedAt,
+        active: m.ratePlan.active,
       })),
       ourRooms,
     );
@@ -161,7 +162,7 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
   const staleMaps = await prisma.channelRatePlanMapping.findMany({
     where: { externalRateId: { not: null }, ratePlan: { active: false } },
     select: {
-      channelId: true, ratePlan: { select: { name: true } }, roomType: { select: { name: true } },
+      channelId: true, ratePlan: { select: { name: true, active: true } }, roomType: { select: { name: true } },
       channel: { select: { name: true, property: { select: { name: true, tenant: { select: { name: true } } } } } },
     },
   });

@@ -48,7 +48,7 @@ async function channelsFor(tenantId: string) {
       where: { tenantId, catalogueCheckedAt: { not: null }, externalRateId: { not: null }, roomTypeId: { not: null } },
       select: {
         channelId: true, roomTypeId: true, externalRateId: true, externalRoomIdSeen: true,
-        catalogueCheckedAt: true, ratePlan: { select: { name: true } }, roomType: { select: { name: true } },
+        catalogueCheckedAt: true, ratePlan: { select: { name: true, active: true } }, roomType: { select: { name: true } },
       },
     }),
     prisma.channelRoomTypeMapping.findMany({
@@ -71,6 +71,7 @@ async function channelsFor(tenantId: string) {
           externalRateId: m.externalRateId,
           externalRoomIdSeen: m.externalRoomIdSeen,
           checkedAt: m.catalogueCheckedAt,
+          active: m.ratePlan.active,
         })),
       ourRooms,
     );
@@ -111,7 +112,7 @@ async function crossWiredFor(tenantId: string): Promise<{ count: number; checked
       select: {
         channelId: true, roomTypeId: true, externalRateId: true,
         externalRoomIdSeen: true, catalogueCheckedAt: true,
-        ratePlan: { select: { name: true } }, roomType: { select: { name: true } },
+        ratePlan: { select: { name: true, active: true } }, roomType: { select: { name: true } },
       },
     }),
     prisma.channelRoomTypeMapping.findMany({
@@ -142,6 +143,7 @@ async function crossWiredFor(tenantId: string): Promise<{ count: number; checked
         externalRateId: m.externalRateId,
         externalRoomIdSeen: m.externalRoomIdSeen,
         checkedAt: m.catalogueCheckedAt,
+        active: m.ratePlan.active,
       })),
       ourRooms,
     );

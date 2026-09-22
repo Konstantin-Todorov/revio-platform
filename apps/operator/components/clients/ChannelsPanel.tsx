@@ -219,6 +219,11 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
             {/*
               A cross-wire has no other symptom: the mapping reads `mapped`, the push succeeds, and
               one room's prices publish against another. Only the channel's own catalogue says so.
+
+              ⚠️ Switched-off plans are excluded upstream, in `crossWiredFromRecord`. Nothing is
+              pushed for them, so this sentence — which says prices are going to the wrong room and
+              that every push succeeds — would be false in both halves, in red, on the page read
+              before telephoning the customer. A leftover mapping is reported as a stale mapping.
             */}
             {ch.crossWired.length > 0 && (
               <p className="mt-1.5 flex gap-1.5 text-[12.5px] leading-snug text-danger-700">
