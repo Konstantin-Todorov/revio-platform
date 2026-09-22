@@ -56,8 +56,12 @@ export default async function ErrorsPage() {
 
       <p className="text-[11.5px] leading-relaxed text-ink-400">
         A page reloading itself after a release is not recorded here. That is the product working —
-        the tab was running an older build — and filing it would make every deploy look like an
-        incident.
+        the tab was holding a Server Action id or a script chunk from the build that was just
+        replaced, and Next reloads it against the new one. Filing that would make every deploy look
+        like an incident, and for a while it did: it was four of the five rows in this list. It goes
+        to the service log instead, where each line carries the deploy it came from — which is what
+        tells &ldquo;a tab was open during a release&rdquo; apart from &ldquo;two instances are
+        serving different builds&rdquo;.
       </p>
     </div>
   );

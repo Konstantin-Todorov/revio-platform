@@ -63,6 +63,7 @@ if (scheduled.length === 0) {
  * pattern the working apps already use.
  */
 const unreachable = [];
+const mute = [];
 for (const app of readdirSync("apps")) {
   const routes = `apps/${app}/app/api/jobs`;
   const middleware = `apps/${app}/middleware.ts`;
@@ -73,13 +74,32 @@ for (const app of readdirSync("apps")) {
     continue;
   }
   if (!matcher[1].includes("api/jobs")) unreachable.push(`${app} — serves apps/${app}/app/api/jobs but its middleware matcher does not exempt it`);
+
+  /*
+   * Every job route must be able to SAY that it failed.
+   *
+   * Without a catch, an exception leaves Next to answer a bare 500 with an empty body. The runner
+   * then logs `HTTP 500 in 10166ms · ` and nothing after the separator — which is exactly what it
+   * logged on 2026-09-22, and why identifying that morning's failure needed a query against the
+   * error table rather than a glance at the run.
+   *
+   * Six of the eleven routes were still like that a day after the other five were fixed, which is
+   * the argument for checking it here instead of trusting the next person to copy the pattern.
+   */
+  for (const job of readdirSync(routes, { withFileTypes: true }).filter((d) => d.isDirectory())) {
+    const file = `${routes}/${job.name}/route.ts`;
+    if (!existsSync(file)) continue;
+    if (!/\}\s*catch\s*\(/.test(readFileSync(file, "utf8"))) {
+      mute.push(`${app}/${job.name} — apps/${app}/app/api/jobs/${job.name}/route.ts has no catch`);
+    }
+  }
 }
 
 const unscheduled = declared.filter((n) => !scheduled.includes(n) && !NOT_SCHEDULED.has(n));
 const unknown = scheduled.filter((n) => !declared.includes(n));
 
-if (unscheduled.length === 0 && unknown.length === 0 && unreachable.length === 0) {
-  console.log(`jobs-lint: ${declared.length} declared job(s), all scheduled and reachable by the runner.`);
+if (unscheduled.length === 0 && unknown.length === 0 && unreachable.length === 0 && mute.length === 0) {
+  console.log(`jobs-lint: ${declared.length} declared job(s), all scheduled, reachable by the runner, and able to report a failure.`);
   process.exit(0);
 }
 
@@ -109,6 +129,17 @@ if (unknown.length > 0) {
   console.error(
     "\nUsually a typo or a half-finished rename. The runner would call an endpoint whose lease" +
       "\nname nobody holds, so two replicas could run it at once.",
+  );
+}
+
+if (mute.length > 0) {
+  console.error("\njobs-lint FAILED: a job route that cannot report its own failure.\n");
+  for (const n of mute) console.error(`  ${n}`);
+  console.error(
+    "\nAn uncaught throw becomes a 500 with an EMPTY body, so the run log says the job failed and" +
+      "\nnothing about why. Catch it and answer `{ ok: false, error }` with status 500 — the work" +
+      "\nstill failed, but now it can be read. Keep the return INSIDE the try; moving it out puts" +
+      "\nthe variables it reads out of scope, which is how the first attempt at this broke.",
   );
 }
 

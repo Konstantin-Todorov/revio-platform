@@ -93,6 +93,12 @@ export async function POST(req: NextRequest) {
       ok: true, sent: true, to: ALERT_TO,
       fresh: decision.fresh.length, stale: decision.stale.length, resolved: gone.length,
     });
+  } catch (err) {
+    console.error("operator-alerts: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
   } finally {
     await releaseJobLease(JOB.operatorAlerts);
   }

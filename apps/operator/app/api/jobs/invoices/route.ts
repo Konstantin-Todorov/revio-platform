@@ -33,6 +33,12 @@ export async function POST(req: NextRequest) {
 
   try {
     return NextResponse.json({ ok: true, ...(await runInvoiceGeneration()) });
+  } catch (err) {
+    console.error("invoice-run: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
   } finally {
     await releaseJobLease(JOB.invoiceRun);
   }

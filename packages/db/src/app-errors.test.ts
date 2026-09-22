@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { errorSignature } from "./app-errors.js";
+import { errorSignature, isDeployMismatch } from "./app-errors.js";
 
 /**
  * The signature decides what counts as "the same bug", and it has to be wrong in neither direction.
@@ -65,5 +65,69 @@ describe("errorSignature", () => {
   it("gives 500 distinct faults 500 distinct signatures", () => {
     const seen = new Set(Array.from({ length: 500 }, (_, i) => errorSignature(`fault ${i}`, frame("a.ts"))));
     expect(seen.size).toBe(500);
+  });
+});
+
+/**
+ * The filter has to be wrong in neither direction, and the two directions cost different things.
+ *
+ * Too narrow and the log fills with deploy weather until nobody opens it. Too broad and it eats a
+ * real fault — silently, in the one place built to make faults findable. So the false-negative
+ * tests below matter more than the false-positive ones, and there are deliberately more of them.
+ */
+describe("isDeployMismatch", () => {
+  it("catches Next's own server-side wording, verbatim from production", () => {
+    // This exact string, from four apps, was 80% of the unresolved log when the filter was written.
+    expect(
+      isDeployMismatch(
+        "Failed to find Server Action. This request might be from an older or newer deployment.\n" +
+          "Read more: https://nextjs.org/docs/messages/failed-to-find-server-action",
+      ),
+    ).toBe(true);
+  });
+
+  it("catches the browser-side twin, which has the same cause and arrives by another road", () => {
+    // A tab open across a deploy asking for a chunk the new build no longer ships. It reaches us
+    // through /api/client-error rather than the server hook, and it is the same non-event.
+    expect(isDeployMismatch("ChunkLoadError: Loading chunk 4821 failed.")).toBe(true);
+    expect(isDeployMismatch("Loading chunk app/layout failed.")).toBe(true);
+    expect(isDeployMismatch("Failed to fetch dynamically imported module: https://pms.reviosoft.app/_next/x.js")).toBe(true);
+    expect(isDeployMismatch("error loading dynamically imported module")).toBe(true);
+  });
+
+  it("does not eat a bare network failure", () => {
+    // "Failed to fetch" on its own is a real fault with many causes — an API we call being down,
+    // a CORS mistake, a broken URL. Matching the prefix would have hidden every one of them.
+    expect(isDeployMismatch("Failed to fetch")).toBe(false);
+    expect(isDeployMismatch("TypeError: Failed to fetch")).toBe(false);
+  });
+
+  it("does not eat a fault that merely mentions a chunk or a module", () => {
+    expect(isDeployMismatch("Cannot read properties of undefined (reading 'chunk')")).toBe(false);
+    expect(isDeployMismatch("Module not found: Can't resolve './folio'")).toBe(false);
+  });
+
+  it("does not eat anything from our own domain code", () => {
+    // The faults the log exists for. Every one of these must still be filed.
+    for (const real of [
+      "Invalid `prisma.ratePrice.upsert()` invocation",
+      "Can't reach database server at `postgres.railway.internal:5432`",
+      "Unexpected close",
+      "Folio is closed",
+      "No availability for the requested stay",
+      "Not found",
+    ]) {
+      expect(isDeployMismatch(real), real).toBe(false);
+    }
+  });
+
+  it("does not eat an action fault that is about our code rather than the build", () => {
+    // Close wording, different condition: this one is a real server action throwing.
+    expect(isDeployMismatch("Server Action failed: folio is already closed")).toBe(false);
+  });
+
+  it("holds on an empty or junk message", () => {
+    expect(isDeployMismatch("")).toBe(false);
+    expect(isDeployMismatch("Unknown error")).toBe(false);
   });
 });

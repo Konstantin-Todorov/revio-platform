@@ -47,6 +47,54 @@ export function errorSignature(message: string, stack: string | undefined): stri
   return `${message.slice(0, PART)}@${stable.slice(0, PART)}`;
 }
 
+/**
+ * Faults whose only cause is that the tab and the server are running different builds.
+ *
+ * This is not a judgement call about severity — it is a different *kind* of event. A deploy
+ * replaces the running build while people have pages open; every open tab then holds references
+ * (a Server Action id, a JS chunk path) that the new build does not answer to. Next's designed
+ * response is to reload the tab against the new build, and the person sees a page that works.
+ * Nothing is broken, nothing is lost, and nobody has anything to fix.
+ *
+ * ## Why this has to be dropped rather than merely tolerated
+ *
+ * The error log's purpose is stated in one sentence: somebody says "the screen went white" and you
+ * open the log. That only works if what is in it is worth reading. When this was written, four of
+ * the five unresolved rows in production were this class — every deploy filing one per app — so the
+ * list was 80% weather. A log that is mostly weather is not consulted, and a log that is not
+ * consulted does not do the one job it exists for. The page has claimed since it was built that
+ * "a page reloading itself after a release is not recorded here"; no code ever made that true.
+ *
+ * ## Dropped from the table, not from the record
+ *
+ * It still goes to the container log, because there is one reading under which it *is* a fault:
+ * if it keeps arriving long after a deploy settled, the builds are genuinely inconsistent — two
+ * instances serving different versions, or a stale CDN copy. Railway's log is the right home for
+ * that, precisely because every line there carries the deploy it came from, which is the context
+ * that tells the two readings apart. The table has no such column and would flatten them into one
+ * row that means neither.
+ *
+ * ## Matched narrowly, on purpose
+ *
+ * Each pattern is Next's own wording for exactly this condition. Nothing here matches a bare
+ * "Failed to fetch" or a plain chunk 404, both of which are real faults with other causes. A
+ * filter that is too eager hides the bug it was supposed to make findable, which is a worse
+ * failure than the noise it was added to remove.
+ */
+const DEPLOY_MISMATCH = [
+  // Server side: the tab posted an action id this build was not compiled with.
+  /Failed to find Server Action/i,
+  // Browser side, via /api/client-error: the tab asked for a chunk the new build no longer ships.
+  /ChunkLoadError/i,
+  /Loading chunk \S+ failed/i,
+  /Failed to fetch dynamically imported module/i,
+  /error loading dynamically imported module/i,
+] as const;
+
+export function isDeployMismatch(message: string): boolean {
+  return DEPLOY_MISMATCH.some((re) => re.test(message));
+}
+
 export type ServiceName = "cm" | "crs" | "pms" | "operator" | "booking";
 
 export interface RecordErrorInput {
@@ -61,6 +109,14 @@ export async function recordAppError(input: RecordErrorInput): Promise<void> {
     const err = input.error;
     const message = (err instanceof Error ? err.message : String(err)).slice(0, MESSAGE_LIMIT) || "Unknown error";
     const stack = err instanceof Error ? err.stack?.slice(0, STACK_LIMIT) : undefined;
+
+    if (isDeployMismatch(message)) {
+      // Not swallowed: the container log keeps it, stamped with the deploy it came from. See
+      // DEPLOY_MISMATCH above for why that is the only place the two readings can be told apart.
+      console.warn(`[${input.service}] build mismatch, not filed as a fault: ${message.split("\n")[0]}`);
+      return;
+    }
+
     const signature = errorSignature(message, stack);
     const now = new Date();
 

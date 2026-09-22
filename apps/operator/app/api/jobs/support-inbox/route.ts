@@ -27,6 +27,12 @@ export async function POST(req: NextRequest) {
   try {
     const result = await sweepSupportInbox();
     return NextResponse.json(result);
+  } catch (err) {
+    console.error("support-inbox: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
   } finally {
     await releaseJobLease(JOB.supportInbox);
   }

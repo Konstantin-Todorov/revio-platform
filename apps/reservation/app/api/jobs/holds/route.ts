@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
     EMPTY body, and the runner logged exactly that on 2026-09-22: `HTTP 500 in 10166ms · ` and
     nothing after the separator. An error nobody can see is an error nobody fixes.
   */
-  try {    const released = await releaseExpiredHolds(forSystem());
+  try {
+    const released = await releaseExpiredHolds(forSystem());
     await releaseJobLease(JOB.holdExpiry);
     return NextResponse.json({ ok: true, released });
   } catch (err) {

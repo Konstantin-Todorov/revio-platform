@@ -39,6 +39,12 @@ export async function POST(req: NextRequest) {
     // The same trace the CLI prints, so a log line and a terminal say the same thing.
     for (const l of lines) console.log(`[demo-refresh] ${l}`);
     return NextResponse.json({ ok: true, tenantsTouched, staysWritten });
+  } catch (err) {
+    console.error("demo-refresh: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
   } finally {
     await releaseJobLease(JOB.demoRefresh);
   }

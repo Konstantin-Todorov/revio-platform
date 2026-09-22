@@ -29,9 +29,24 @@ export async function POST(req: NextRequest) {
     That is what happened on 2026-09-22: a 500 here, then quiet. `withJobLease` releases on both
     paths, so the next tick retries instead of sitting out the TTL.
   */
-  const lease = await withJobLease(JOB.autoAssign, 10 * 60_000, () => autoAssignAllProperties(forSystem()));
-  if (!lease.ran) {
-    return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
+  /*
+    A failure has to come back with a body. `withJobLease` re-throws whatever the work threw — which
+    is right, because the lease must be released and the caller must know the run failed — but with
+    nothing catching it Next answers a bare 500 and an EMPTY response. The runner then logs
+    `HTTP 500 in 10166ms · ` and nothing after the separator, which is what it logged on 2026-09-22
+    and is why that morning's failure took a database query to identify rather than a glance.
+  */
+  try {
+    const lease = await withJobLease(JOB.autoAssign, 10 * 60_000, () => autoAssignAllProperties(forSystem()));
+    if (!lease.ran) {
+      return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
+    }
+    return NextResponse.json({ ok: true, ...lease.result });
+  } catch (err) {
+    console.error("auto-assign: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
   }
-  return NextResponse.json({ ok: true, ...lease.result });
 }

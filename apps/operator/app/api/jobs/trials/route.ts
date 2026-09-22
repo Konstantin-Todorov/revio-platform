@@ -27,6 +27,12 @@ export async function POST(req: NextRequest) {
   try {
     const result = await sweepTrials();
     return NextResponse.json({ ok: true, ...result });
+  } catch (err) {
+    console.error("trial-sweep: failed", err);
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
   } finally {
     await releaseJobLease(JOB.trialSweep);
   }
