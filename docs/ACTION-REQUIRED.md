@@ -223,13 +223,39 @@ and a declaration to НАП naming where our database lives.
 
 ## 🟠 Needed at the moment a client is onboarded
 
+### 4b. Two real clients have open connectivity alerts — RAISED 2026-09-22
+
+`/overview` has been carrying these since **20 September**. Both are on real, non-demo tenants, and
+both need somebody to open a screen — neither is a code fix.
+
+**DesManagement 2015 (active) — a leftover mapping.** `Standard Rate` on *Apartment, 2 Bedrooms* is
+switched off in the product but still mapped at Channex, under the *1-Bedroom*'s room. Nothing is
+published for it: the push has skipped switched-off plans since 17 September. It matters because a
+mapping nobody maintains starts sending nonsense the day the plan is re-enabled. **Clear it on their
+Mapping screen.**
+
+> ⚠️ Until 2026-09-22 this same row ALSO raised an `act` alert reading *"publishing to the wrong
+> room"*, and the client page said so in red beside *"every push succeeds"*. Both were false. Fixed
+> in `crossWiredFromRecord` — a switched-off plan is not a cross-wire. If you looked at this client
+> before today, that is what you saw.
+
+**Ventsi Group (suspended) — a channel pointed at nothing.** Chervena Vila's Channex channel still
+names a property Channex has deleted. Nothing is being sent, because a suspended tenant does not
+sync at all, so this is not urgent — but the channel row reads `connected`, which it is not.
+**Reconnect it or remove it** when the account is next touched. The mapping audit deliberately keeps
+running on suspended clients, which is why this is visible at all.
+
 ### 5. That hotel's Channex property
 Either create it in the portal and give me the UUID, or tell me to create it via the API. Then I map
 room types and rate plans both ways and switch the channel `channex_sandbox` → `channex_prod`.
 
-**Nothing should be created before there is a real hotel.** All three tenants are demo, and the rule
-in `factory.ts` is that a real adapter is never pointed at demo data. Channex bills per property with
-an active channel — currently 0.
+⚠️ **This paragraph used to say "all three tenants are demo". That has not been true since
+DesManagement 2015 and Ventsi Group arrived** — five tenants now, three demo and two real, and
+DesManagement has a live `channex_prod` channel with a checked catalogue. The rule in `factory.ts`
+still stands: a real adapter is never pointed at demo data. Channex bills per property with an
+active channel — **two channels are in `channex_prod` mode, and one of them points at a property
+Channex has deleted, so one billable property**, not 0. (Hotel Sofia Group's is `channex_sandbox`,
+which is a different account and is not billed.)
 
 ### 6. That hotel's own OTA credentials
 Booking.com, Expedia, and so on. They belong to the hotel, not to us. Channex needs them to connect
