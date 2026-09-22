@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getUsageReport } from "@/lib/usage";
+import { getAdoption } from "@/lib/adoption";
 import { getTrialReadings } from "@/lib/trial-reading-data";
 import { TrialsPanel } from "@/components/analytics/TrialsPanel";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -51,6 +52,7 @@ const VERDICT_TONE: Record<string, "danger" | "warning" | "info" | "success" | "
  */
 export default async function AnalyticsPage() {
   const u = await getUsageReport();
+  const adoption = await getAdoption();
   const trials = await getTrialReadings();
   const delta = u.activeUsers7d - u.activeUsersPrev7d;
 
@@ -84,6 +86,62 @@ export default async function AnalyticsPage() {
           </p>
         </Card>
       )}
+
+      {/*
+        Depth, not presence. The cards below say whether anyone came in; this says whether the
+        products they are ENTITLED to are the products they open — which is the number a renewal
+        turns on, and the one a page-view total cannot reach.
+      */}
+      <Card>
+        <CardHeader
+          title="Is each product actually being used?"
+          subtitle="Of the hotels entitled to it — ever opened, and opened this week"
+        />
+        <div className="px-4 pb-4">
+          {!adoption.recording ? (
+            <p className="py-3 text-[12.5px] text-ink-500">
+              Nothing recorded in the last 30 days, so there is no adoption to read yet.
+            </p>
+          ) : (
+            <table className="w-full text-left text-[12.5px]">
+              <thead className="text-[11px] uppercase tracking-wide text-ink-400">
+                <tr>
+                  <th className="py-2">Product</th>
+                  <th className="py-2 text-right">Entitled</th>
+                  <th className="py-2 text-right" title="Opened at least one screen in the last 30 days.">Opened · 30d</th>
+                  <th className="py-2 text-right" title="Opened at least one screen in the last 7 days. The gap against 30d is a hotel that used to come in and stopped.">Opened · 7d</th>
+                  <th className="py-2 text-right" title="The widest any single hotel has gone, against how many distinct screens of this product anyone has reached at all.">Screens reached</th>
+                  <th className="py-2">Entitled, never opened</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adoption.rows.map((r) => (
+                  <tr key={r.product} className="border-t border-ink-100 align-top">
+                    <td className="py-2 pr-3 font-medium text-ink-900">{r.productName}</td>
+                    <td className="tnum py-2 text-right text-ink-900">{r.entitled}</td>
+                    <td className="tnum py-2 text-right text-ink-700">{r.opened30}</td>
+                    <td className="tnum py-2 text-right text-ink-700">{r.opened7}</td>
+                    <td className="tnum py-2 text-right text-ink-500">
+                      {r.screensSeen} / {r.screensTotal}
+                    </td>
+                    <td className="py-2 pl-3 text-ink-500">
+                      {r.neverOpened.length === 0
+                        ? "—"
+                        : r.neverOpened.map((t) => t.name + (t.isDemo ? " (demo)" : "")).join(", ")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="mt-3 text-[11.5px] leading-relaxed text-ink-500">
+            The denominator is the ENTITLEMENT, not the invoice — a trial tenant is entitled and not
+            yet billed, and a trial nobody opens is the most useful thing to know before it ends.
+            Demo tenants are included and marked, per the standing rule that operations count them
+            and money does not.
+          </p>
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card className="p-4">
