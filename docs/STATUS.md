@@ -26,12 +26,13 @@ is live, and the promote for the newest one may still be seconds away when you l
 today: three pushes in one hour left two "Promote to production" runs green while `production` still
 pointed at the first of them.
 
-⚠️ **CI failed once today on something that is not ours.** `next/font` could not reach Google while
-building `apps/pms` — `TypeError: Cannot read properties of null (reading '1')` inside the Google
-font loader — and a re-run went green. It is worth writing down because it means **the build of all
-five apps depends on reaching a third party at compile time.** The marketing site had the same
-dependency and it was removed on 2026-09-22 by self-hosting the fonts. Nothing here has been
-changed yet.
+⚠️ **CI failed once today on something that was not ours — and then it was fixed.** `next/font`
+could not reach Google while building `apps/pms` (`TypeError: Cannot read properties of null
+(reading '1')` inside the Google font loader), CI went red on a commit with nothing wrong in it,
+and a re-run went green. The build of all five apps depended on a third party at compile time,
+every time, because CI has no Next cache. The fonts are now in the repository — see the 09-22 entry
+*The build depended on Google* — and `pnpm build` of all five makes no request to
+`fonts.googleapis.com` or `gstatic`.
 
 ## Why this file exists
 
@@ -234,6 +235,27 @@ invoicing its own clients, and only the second one is ready.
 `production` are the same commit.* The two items this section named as Codex's uncommitted work
 both shipped: the city-tax VAT base in `f828cac` on 09-09, and the operator sidebar in `7e70a38`
 the same day.
+
+### Shipped 2026-09-22 — the build depended on Google, and fixing it broke the font
+
+`next/font/google` self-hosts the bytes it ships, so **runtime** was never the issue. It fetches
+them at **build** time, on every build, and CI has no Next cache. That is why a Google hiccup this
+morning turned a clean commit into a red CI and stopped `production` where it was. The variable
+woff2 for each family is now committed; `node scripts/fetch-fonts.mjs` refreshes them.
+
+⚠️ **The switch to `next/font/local` broke the font on four apps and compiled perfectly.** The
+Google loader registers the family under its real name; the local loader names it after the JS
+binding. Each staff app's `globals.css` carried a hardcoded `--font-hanken: "Hanken Grotesk", …`
+that beat the class `next/font` puts on `<html>` — and matched only because of that coincidence.
+The moment the bytes came from a local file, four apps fell back to the system sans. **Typecheck,
+2,911 tests and seventeen lints all passed on it.** The only thing that saw it was reading the
+computed style on a rendered page, which is the last step in `docs/UI-STANDARD.md` and the reason
+it is written down.
+
+*Checked by measurement, not by looking:* the same string at 40px is **500.41px wide on production
+and 500.41px locally** for Hanken; 538.64 on both for Plus Jakarta at weight 400; 385.2 on both for
+Instrument Serif, against 474.41 for the browser's generic serif. The variable file gives five
+distinct widths across 400–800, which is what had to be true when one file replaced five.
 
 ### Shipped 2026-09-22 — the error log stopped being mostly weather
 
