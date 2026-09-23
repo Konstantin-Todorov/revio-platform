@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { JOB, acquireJobLease, releaseJobLease } from "@revio/db";
+import { JOB, withJobLease } from "@revio/db";
 import { sweepTrials } from "@/lib/trial-sweep";
 
 /**
@@ -19,21 +19,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const lease = await acquireJobLease(JOB.trialSweep, 5 * 60_000);
-  if (!lease.acquired) {
-    return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
-  }
 
   try {
-    const result = await sweepTrials();
-    return NextResponse.json({ ok: true, ...result });
+    const lease = await withJobLease(JOB.trialSweep, 5 * 60_000, async () => {
+      const result = await sweepTrials();
+      return { ok: true, ...result };
+    });
+    if (!lease.ran) {
+      return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
+    }
+    return NextResponse.json(lease.result);
   } catch (err) {
     console.error("trial-sweep: failed", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
       { status: 500 },
     );
-  } finally {
-    await releaseJobLease(JOB.trialSweep);
   }
 }

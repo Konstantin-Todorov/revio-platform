@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { JOB, acquireJobLease, forSystem, forTenant, releaseJobLease } from "@revio/db";
+import { JOB, withJobLease, forSystem, forTenant } from "@revio/db";
 import { waitlistSweep } from "@revio/booking";
 import { sendSweepEmails } from "@/lib/waitlist-emails";
 
@@ -21,10 +21,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const lease = await acquireJobLease(JOB.waitlistSweep, 5 * 60_000);
-  if (!lease.acquired) {
-    return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
-  }
   /*
     ⚠️ The work runs inside a try whose RETURN is also inside it.
 
@@ -32,45 +28,52 @@ export async function POST(req: NextRequest) {
     every variable the return reads out of scope, which is exactly how the first attempt at this
     broke. Typecheck caught it; it is recorded here so the next person does not repeat it.
 
-    What this does NOT change is the lease. The comment above states that a failed run deliberately
-    waits out its TTL instead of being retried on the next tick, and that is a decision, not an
-    oversight — it is not overridden here. See `docs/ACTION-REQUIRED.md` for the contradiction it
-    sits in.
+    ⚠️ ONE lease policy since 2026-09-23: `withJobLease`, releasing on both paths and stamping
+    `lastRunAt` only on success. This route used to keep its lease after a failure so a failed
+    run would "wait out its TTL". Measured against the real 10-minute cron that backoff mostly
+    did not exist — a 5-minute TTL has expired before the next tick — and where it did (10-minute
+    TTLs) it skipped a tick at random and reported the skip as `ok: true`. Decided by the founder;
+    the table is in `docs/ACTION-REQUIRED.md` §2d, and `jobs-lint` now refuses a hand-held lease.
 
-    What it changes is that a failure can be READ. Without a catch, Next answers a bare 500 with an
+    What the catch changes is that a failure can be READ. Without a catch, Next answers a bare 500 with an
     EMPTY body, and the runner logged exactly that on 2026-09-22: `HTTP 500 in 10166ms · ` and
     nothing after the separator. An error nobody can see is an error nobody fixes.
   */
   try {
-    const system = forSystem();
-    // Only properties that actually have somebody waiting — most sweeps should do nothing at all.
-    const pending = await system.waitlistEntry.findMany({
-      where: { status: { in: ["waiting", "offered"] } },
-      select: { propertyId: true },
-      distinct: ["propertyId"],
-    });
-
-    let offered = 0, lapsed = 0, staled = 0;
-    for (const { propertyId } of pending) {
-      const property = await system.property.findUnique({
-        where: { id: propertyId },
-        select: { id: true, tenantId: true, name: true, baseCurrency: true, timezone: true, publicSlug: true },
+    const lease = await withJobLease(JOB.waitlistSweep, 5 * 60_000, async () => {
+      const system = forSystem();
+      // Only properties that actually have somebody waiting — most sweeps should do nothing at all.
+      const pending = await system.waitlistEntry.findMany({
+        where: { status: { in: ["waiting", "offered"] } },
+        select: { propertyId: true },
+        distinct: ["propertyId"],
       });
-      if (!property) continue;
-      // Scoped per tenant even inside a system job: the sweep reads and writes hotel-owned rows, and
-      // the RLS perimeter is the thing that makes "one property at a time" true rather than hoped for.
-      const db = forTenant(property.tenantId);
-      const result = await waitlistSweep(db, property);
-      // A scheduled sweep that holds rooms and sends nothing takes inventory off sale silently —
-      // the one way this feature could harm the hotel that switched it on.
-      await sendSweepEmails(db, property.id, property.publicSlug, result);
-      offered += result.offered;
-      lapsed += result.lapsed;
-      staled += result.staled;
-    }
 
-    await releaseJobLease(JOB.waitlistSweep);
-    return NextResponse.json({ ok: true, properties: pending.length, offered, lapsed, staled });
+      let offered = 0, lapsed = 0, staled = 0;
+      for (const { propertyId } of pending) {
+        const property = await system.property.findUnique({
+          where: { id: propertyId },
+          select: { id: true, tenantId: true, name: true, baseCurrency: true, timezone: true, publicSlug: true },
+        });
+        if (!property) continue;
+        // Scoped per tenant even inside a system job: the sweep reads and writes hotel-owned rows, and
+        // the RLS perimeter is the thing that makes "one property at a time" true rather than hoped for.
+        const db = forTenant(property.tenantId);
+        const result = await waitlistSweep(db, property);
+        // A scheduled sweep that holds rooms and sends nothing takes inventory off sale silently —
+        // the one way this feature could harm the hotel that switched it on.
+        await sendSweepEmails(db, property.id, property.publicSlug, result);
+        offered += result.offered;
+        lapsed += result.lapsed;
+        staled += result.staled;
+      }
+
+      return { ok: true, properties: pending.length, offered, lapsed, staled };
+    });
+    if (!lease.ran) {
+      return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
+    }
+    return NextResponse.json(lease.result);
   } catch (err) {
     console.error("waitlist-sweep: failed", err);
     return NextResponse.json(

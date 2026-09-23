@@ -180,7 +180,23 @@ to ask in Analytics itself. This screen answers the normal periods — 7, 28, 90
 counts only visitors who accepted cookies. Every number there is a floor, not a total, and a floor
 presented as a total is how somebody concludes the site is failing.
 
-### 2d. Decide one retry policy for a failed job — RAISED 2026-09-22
+### 2d. ~~Decide one retry policy for a failed job~~ — ✅ DECIDED AND DONE 2026-09-23
+
+**Decided by the founder: release on failure, everywhere.** All thirteen job routes now go through
+`withJobLease`, which releases the lease on both paths and stamps `lastRunAt` only when the run
+succeeded. `jobs-lint` refuses a route that takes the lease by hand, and `lease-verify` (in CI)
+proves the failure path: the job's own error surfaces, the lease is freed, `lastRunAt` is untouched.
+
+⚠️ **Doing it found a worse defect than the one being decided.** Six routes released the lease in a
+`finally` with the default `ranSuccessfully = true` — so a run that THREW still stamped `lastRunAt`,
+and the dead-man's switch reads `lastRunAt`. A job failing on every tick would have read "ok" at
+`/api/health/jobs` for ever. Those six were the five operator jobs (alerts, invoices, trials,
+support inbox, demo refresh) and `mapping-audit` — which also had no outer catch at all, and passed
+`jobs-lint` only because the lint matched an inner per-channel `catch`.
+
+The history below is kept for the reasoning.
+
+#### Original entry
 
 The codebase currently holds **both** positions, in writing, and they contradict each other:
 

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { JOB, acquireJobLease, releaseJobLease, refreshDemoStays } from "@revio/db";
+import { JOB, withJobLease, refreshDemoStays } from "@revio/db";
 
 /**
  * Scheduled entry point for the demo refresh.
@@ -29,23 +29,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const lease = await acquireJobLease(JOB.demoRefresh, 5 * 60_000);
-  if (!lease.acquired) {
-    return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
-  }
 
   try {
-    const { tenantsTouched, staysWritten, lines } = await refreshDemoStays({ apply: true });
-    // The same trace the CLI prints, so a log line and a terminal say the same thing.
-    for (const l of lines) console.log(`[demo-refresh] ${l}`);
-    return NextResponse.json({ ok: true, tenantsTouched, staysWritten });
+    const lease = await withJobLease(JOB.demoRefresh, 5 * 60_000, async () => {
+      const { tenantsTouched, staysWritten, lines } = await refreshDemoStays({ apply: true });
+      // The same trace the CLI prints, so a log line and a terminal say the same thing.
+      for (const l of lines) console.log(`[demo-refresh] ${l}`);
+      return { ok: true, tenantsTouched, staysWritten };
+    });
+    if (!lease.ran) {
+      return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
+    }
+    return NextResponse.json(lease.result);
   } catch (err) {
     console.error("demo-refresh: failed", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
       { status: 500 },
     );
-  } finally {
-    await releaseJobLease(JOB.demoRefresh);
   }
 }

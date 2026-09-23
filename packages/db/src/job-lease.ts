@@ -128,8 +128,15 @@ export async function withJobLease<T>(
     return { ran: true, result };
   } catch (err) {
     // Release on failure too: the next tick should retry promptly rather than sit out the TTL
-    // because one run threw.
-    await releaseJobLease(name, false);
+    // because one run threw. `false` leaves `lastRunAt` alone, so the dead-man's switch at
+    // /api/health/jobs goes on counting from the last run that actually SUCCEEDED.
+    //
+    // ⚠️ The release is not allowed to replace the error. The commonest reason a job throws is that
+    // the database went away — 06:51 on 2026-09-22 was exactly that — and then the release fails
+    // for the same reason. Letting it throw would report "cannot reach database while releasing a
+    // lease" instead of whatever the job was doing when it broke. The lease still expires on its
+    // own TTL, so a release that fails costs at most one tick.
+    await releaseJobLease(name, false).catch(() => undefined);
     throw err;
   }
 }

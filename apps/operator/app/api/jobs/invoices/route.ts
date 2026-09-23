@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { JOB, acquireJobLease, releaseJobLease } from "@revio/db";
+import { JOB, withJobLease } from "@revio/db";
 import { runInvoiceGeneration } from "@/lib/invoice-run";
 
 export const dynamic = "force-dynamic";
@@ -26,20 +26,20 @@ export async function POST(req: NextRequest) {
   }
 
   // Leased so two runners cannot race to create the same `tenantId + period` row.
-  const lease = await acquireJobLease(JOB.invoiceRun, 5 * 60_000);
-  if (!lease.acquired) {
-    return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
-  }
 
   try {
-    return NextResponse.json({ ok: true, ...(await runInvoiceGeneration()) });
+    const lease = await withJobLease(JOB.invoiceRun, 5 * 60_000, async () => {
+      return { ok: true, ...(await runInvoiceGeneration()) };
+    });
+    if (!lease.ran) {
+      return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
+    }
+    return NextResponse.json(lease.result);
   } catch (err) {
     console.error("invoice-run: failed", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
       { status: 500 },
     );
-  } finally {
-    await releaseJobLease(JOB.invoiceRun);
   }
 }

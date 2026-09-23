@@ -106,6 +106,43 @@ async function main() {
     const blocked = await acquireJobLease(JOB_NAME, 60_000);
     record("a live lease blocks a second acquirer", held.acquired && !blocked.acquired, `first=${held.acquired}, second=${blocked.acquired}`);
     await releaseJobLease(JOB_NAME);
+
+    // ---------------------------------------------------------------------
+    // 5. A run that FAILS — the policy all thirteen jobs follow since 2026-09-23.
+    //
+    //    Before, five routes kept their lease on failure and six stamped `lastRunAt` on failure
+    //    through a `finally`. The first meant a failed run could suppress the next tick while
+    //    answering `ok: true`; the second meant a job failing on every tick read "ok" at the
+    //    dead-man's switch forever. Three things now have to be true, and each is checked.
+    // ---------------------------------------------------------------------
+    await reset();
+    await withJobLease(JOB_NAME, 60_000, async () => "a good run first");
+    const lastGood = (await forSystem().jobLease.findFirst({ where: { name: JOB_NAME } }))?.lastRunAt ?? null;
+    await new Promise((r) => setTimeout(r, 25));
+
+    let caught: unknown = null;
+    try {
+      await withJobLease(JOB_NAME, 60_000, async () => {
+        throw new Error("the job body broke");
+      });
+    } catch (e) {
+      caught = e;
+    }
+    record(
+      "a failed run surfaces the JOB's own error, not a lease error",
+      caught instanceof Error && caught.message === "the job body broke",
+      caught instanceof Error ? `"${caught.message}"` : "nothing was thrown",
+    );
+
+    const afterFail = (await forSystem().jobLease.findFirst({ where: { name: JOB_NAME } }))?.lastRunAt ?? null;
+    record(
+      "a failed run does NOT stamp lastRunAt, so the dead-man's switch keeps counting from the last success",
+      lastGood !== null && afterFail?.getTime() === lastGood.getTime(),
+      `last success ${lastGood?.toISOString() ?? "none"} · after the failure ${afterFail?.toISOString() ?? "none"}`,
+    );
+
+    const retried = await withJobLease(JOB_NAME, 60_000, async () => "retried");
+    record("a failed run releases the lease, so the very next tick retries", retried.ran, retried.ran ? "ran" : "still blocked");
   } finally {
     await reset();
     console.log("\nCleaned up.");

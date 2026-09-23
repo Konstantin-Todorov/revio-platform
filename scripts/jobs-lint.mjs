@@ -64,6 +64,7 @@ if (scheduled.length === 0) {
  */
 const unreachable = [];
 const mute = [];
+const handLeased = [];
 for (const app of readdirSync("apps")) {
   const routes = `apps/${app}/app/api/jobs`;
   const middleware = `apps/${app}/middleware.ts`;
@@ -89,8 +90,30 @@ for (const app of readdirSync("apps")) {
   for (const job of readdirSync(routes, { withFileTypes: true }).filter((d) => d.isDirectory())) {
     const file = `${routes}/${job.name}/route.ts`;
     if (!existsSync(file)) continue;
-    if (!/\}\s*catch\s*\(/.test(readFileSync(file, "utf8"))) {
-      mute.push(`${app}/${job.name} — apps/${app}/app/api/jobs/${job.name}/route.ts has no catch`);
+    const src = readFileSync(file, "utf8");
+    /*
+     * ⚠️ A catch that ANSWERS 500 — not merely the word "catch".
+     *
+     * The first version of this check matched `} catch (` anywhere, and `mapping-audit` passed it on
+     * the strength of an inner per-channel `catch (e)` while having no outer catch at all: an
+     * exception there still produced a bare 500 with an empty body. Found 2026-09-23. Requiring the
+     * 500 inside the catch is what makes it the right catch.
+     */
+    if (!/catch\s*\(\w+\)\s*\{[\s\S]{0,400}?status:\s*500/.test(src)) {
+      mute.push(`${app}/${job.name} — apps/${app}/app/api/jobs/${job.name}/route.ts has no catch that answers 500`);
+    }
+    /*
+     * ⚠️ ONE lease policy: `withJobLease`, which releases on both paths and stamps `lastRunAt` only
+     * on success.
+     *
+     * Until 2026-09-23 there were three: five routes kept the lease on a failure (sometimes
+     * suppressing the next tick, which then answered `ok: true`), six released in a `finally` that
+     * stamped `lastRunAt` even when the run threw — so a job failing on every tick read "ok" at the
+     * dead-man's switch for ever — and two used `withJobLease`. A route that takes the lease by hand
+     * is how the next variant would start.
+     */
+    if (!src.includes("withJobLease(") || /\b(acquireJobLease|releaseJobLease)\s*\(/.test(src)) {
+      handLeased.push(`${app}/${job.name} — apps/${app}/app/api/jobs/${job.name}/route.ts does not go through withJobLease`);
     }
   }
 }
@@ -98,8 +121,8 @@ for (const app of readdirSync("apps")) {
 const unscheduled = declared.filter((n) => !scheduled.includes(n) && !NOT_SCHEDULED.has(n));
 const unknown = scheduled.filter((n) => !declared.includes(n));
 
-if (unscheduled.length === 0 && unknown.length === 0 && unreachable.length === 0 && mute.length === 0) {
-  console.log(`jobs-lint: ${declared.length} declared job(s), all scheduled, reachable by the runner, and able to report a failure.`);
+if (unscheduled.length === 0 && unknown.length === 0 && unreachable.length === 0 && mute.length === 0 && handLeased.length === 0) {
+  console.log(`jobs-lint: ${declared.length} declared job(s), all scheduled, reachable by the runner, able to report a failure, and on one lease policy.`);
   process.exit(0);
 }
 
@@ -140,6 +163,17 @@ if (mute.length > 0) {
       "\nnothing about why. Catch it and answer `{ ok: false, error }` with status 500 — the work" +
       "\nstill failed, but now it can be read. Keep the return INSIDE the try; moving it out puts" +
       "\nthe variables it reads out of scope, which is how the first attempt at this broke.",
+  );
+}
+
+if (handLeased.length > 0) {
+  console.error("\njobs-lint FAILED: a job route that manages its lease by hand.\n");
+  for (const n of handLeased) console.error(`  ${n}`);
+  console.error(
+    "\nWrap the work in `withJobLease(JOB.x, ttl, async () => …)`. It releases the lease on success" +
+      "\nAND on failure, so the next tick retries, and stamps `lastRunAt` only when the run succeeded," +
+      "\nwhich is what the dead-man's switch at /api/health/jobs reads. A value the job wants to report" +
+      "\nas a failure must be THROWN inside the callback, not returned, or it is recorded as a success.",
   );
 }
 

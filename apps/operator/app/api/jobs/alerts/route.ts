@@ -18,7 +18,7 @@
  *   POST /api/jobs/alerts   with `Authorization: Bearer $CRON_SECRET`
  */
 import { NextResponse, type NextRequest } from "next/server";
-import { JOB, acquireJobLease, forSystem, releaseJobLease } from "@revio/db";
+import { JOB, withJobLease, forSystem } from "@revio/db";
 import { decideAlerts, operatorAlertEmail } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { alertCandidates } from "@/lib/alerts";
@@ -38,68 +38,72 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const lease = await acquireJobLease(JOB.operatorAlerts, 10 * 60_000);
-  if (!lease.acquired) {
-    return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
-  }
 
   try {
-    const db = forSystem();
-    const candidates = await alertCandidates();
-    const known = await db.operatorAlert.findMany({ where: { resolvedAt: null } });
-    const now = new Date();
-    const decision = decideAlerts(candidates, known, now);
+    const lease = await withJobLease(JOB.operatorAlerts, 10 * 60_000, async () => {
+      const db = forSystem();
+      const candidates = await alertCandidates();
+      const known = await db.operatorAlert.findMany({ where: { resolvedAt: null } });
+      const now = new Date();
+      const decision = decideAlerts(candidates, known, now);
 
-    /*
-     * ⚠️ Resolution is recorded even when nothing is sent.
-     *
-     * A fault that stopped being reported is a fault somebody fixed, and leaving the row open would
-     * mean a recurrence three weeks later reads as "still open since September" rather than as the
-     * new event it is.
-     */
-    const live = new Set(candidates.map((c) => c.key));
-    const gone = known.filter((k) => !live.has(k.key));
-    if (gone.length > 0) {
-      await db.operatorAlert.updateMany({ where: { key: { in: gone.map((g) => g.key) } }, data: { resolvedAt: now } });
-    }
+      /*
+       * ⚠️ Resolution is recorded even when nothing is sent.
+       *
+       * A fault that stopped being reported is a fault somebody fixed, and leaving the row open would
+       * mean a recurrence three weeks later reads as "still open since September" rather than as the
+       * new event it is.
+       */
+      const live = new Set(candidates.map((c) => c.key));
+      const gone = known.filter((k) => !live.has(k.key));
+      if (gone.length > 0) {
+        await db.operatorAlert.updateMany({ where: { key: { in: gone.map((g) => g.key) } }, data: { resolvedAt: now } });
+      }
 
-    if (decision.silent) {
-      return NextResponse.json({ ok: true, sent: false, candidates: candidates.length, resolved: gone.length });
-    }
+      if (decision.silent) {
+        return { ok: true, sent: false, candidates: candidates.length, resolved: gone.length };
+      }
 
-    const origin = process.env.OPERATOR_URL || "https://operator.reviosoft.app";
-    const mail = operatorAlertEmail(decision, `${origin}/overview`);
-    const res = await sendEmail({ to: [ALERT_TO], subject: mail.subject, text: mail.text, html: mail.html });
+      const origin = process.env.OPERATOR_URL || "https://operator.reviosoft.app";
+      const mail = operatorAlertEmail(decision, `${origin}/overview`);
+      const res = await sendEmail({ to: [ALERT_TO], subject: mail.subject, text: mail.text, html: mail.html });
 
-    /*
-     * ⚠️ Only write `lastAlertedAt` when the mail actually left.
-     *
-     * Recording it on a failed send would mark the fault as reported and then stay silent about it
-     * for three days — an alerting system that goes quiet exactly when its own transport is broken.
-     */
-    if (!res.ok) {
-      return NextResponse.json({ ok: false, sent: false, error: res.error ?? "send failed" }, { status: 500 });
-    }
+      /*
+       * ⚠️ Only write `lastAlertedAt` when the mail actually left.
+       *
+       * Recording it on a failed send would mark the fault as reported and then stay silent about it
+       * for three days — an alerting system that goes quiet exactly when its own transport is broken.
+       */
+      if (!res.ok) {
+        // Thrown, not returned: inside `withJobLease` a returned value counts as a successful run and
+        // stamps `lastRunAt`, which is what the dead-man's switch reads. An alerting job whose mail
+        // does not leave must read as FAILED there, or the one alarm that watches the others goes quiet.
+        throw new Error(`the alert email did not send: ${res.error ?? "send failed"}`);
+      }
 
-    for (const c of [...decision.fresh, ...decision.stale]) {
-      await db.operatorAlert.upsert({
-        where: { key: c.key },
-        create: { key: c.key, clientName: c.clientName, summary: c.summary, lastAlertedAt: now },
-        update: { lastAlertedAt: now, summary: c.summary, resolvedAt: null },
-      });
-    }
+      for (const c of [...decision.fresh, ...decision.stale]) {
+        await db.operatorAlert.upsert({
+          where: { key: c.key },
+          create: { key: c.key, clientName: c.clientName, summary: c.summary, lastAlertedAt: now },
+          update: { lastAlertedAt: now, summary: c.summary, resolvedAt: null },
+        });
+      }
 
-    return NextResponse.json({
-      ok: true, sent: true, to: ALERT_TO,
-      fresh: decision.fresh.length, stale: decision.stale.length, resolved: gone.length,
+      return {
+        ok: true, sent: true, to: ALERT_TO,
+        fresh: decision.fresh.length, stale: decision.stale.length, resolved: gone.length,
+      }
+  ;
     });
+    if (!lease.ran) {
+      return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
+    }
+    return NextResponse.json(lease.result);
   } catch (err) {
     console.error("operator-alerts: failed", err);
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : String(err) },
       { status: 500 },
     );
-  } finally {
-    await releaseJobLease(JOB.operatorAlerts);
   }
 }
