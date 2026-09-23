@@ -5,6 +5,7 @@ import { NotebookPen, Pencil, Trash2, X } from "lucide-react";
 import { addGuestNote, editGuestNote, deleteGuestNote } from "@/lib/actions-reservations";
 import { relativeTime } from "@/lib/format";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export type GuestNoteRow = {
   id: string;
   authorName: string;
@@ -36,9 +37,9 @@ export function GuestNotes({ guestId, notes }: { guestId: string; notes: GuestNo
           className="w-full resize-y rounded-md border border-surface-border bg-white px-3 py-2 text-[13px] text-ink-900 outline-none transition-colors placeholder:text-ink-400 focus:border-brand-600"
         />
         <div className="flex justify-end">
-          <button className="flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+          <SubmitButton className="flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Adding…">
             <NotebookPen className="h-3.5 w-3.5" /> Add note
-          </button>
+          </SubmitButton>
         </div>
       </form>
 

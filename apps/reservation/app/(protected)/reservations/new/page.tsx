@@ -11,6 +11,7 @@ import { StayRangeField } from "@revio/ui/stay-range-field";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 const inputCls =
@@ -153,9 +154,9 @@ async function SearchStep({ sp }: { sp: { from?: string; to?: string; guests?: s
                       <input type="hidden" name="quantity" value={qty} />
                       <input type="hidden" name="guests" value={guests} />
                       <input type="hidden" name="sourceId" value={selectedSource?.id ?? ""} />
-                      <button className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+                      <SubmitButton className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Holding…">
                         Hold &amp; continue
-                      </button>
+                      </SubmitButton>
                     </form>
                   ) : r.blocked ? (
                     <span title={r.blocked}><StatusPill tone="warning">restricted</StatusPill></span>
@@ -315,9 +316,9 @@ async function HoldForm({ holdId, guests, sourceId, error, guestId }: { holdId: 
             <button formAction={releaseHold} name="id" value={hold.id} formNoValidate className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">
               Release hold
             </button>
-            <button className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">
+            <SubmitButton className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Confirming…">
               Confirm reservation
-            </button>
+            </SubmitButton>
           </div>
         </form>
       </Card>

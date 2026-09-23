@@ -5,6 +5,7 @@ import { Play, Check, TriangleAlert, X } from "lucide-react";
 import { startCleaning, finishCleaning, reportRoomIssue } from "@/lib/actions-units";
 import type { HkStatus } from "@/lib/hk-meta";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 /**
  * Housekeeper quick actions on a room tile (spec §3.4): Start cleaning (dirty → in-progress, subject
  * to the one-room-in-progress rule enforced server-side), Finish (in-progress → clean), and
@@ -19,9 +20,9 @@ export function RoomActions({ unitId, status }: { unitId: string; status: HkStat
         {status === "dirty" && (
           <form action={startCleaning} className="flex-1">
             <input type="hidden" name="unitId" value={unitId} />
-            <button className="flex w-full items-center justify-center gap-1 rounded-md bg-brand-700 px-2 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-brand-600">
+            <SubmitButton className="flex w-full items-center justify-center gap-1 rounded-md bg-brand-700 px-2 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-brand-600" pendingLabel="Starting…">
               <Play className="h-3 w-3" /> Start
-            </button>
+            </SubmitButton>
           </form>
         )}
         {status === "in_progress" && (

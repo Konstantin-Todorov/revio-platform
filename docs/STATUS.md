@@ -283,6 +283,52 @@ invoice* among them. Proved on the rendered folio: two presses 150 ms apart, **o
 has hydrated. Measured: pressed in the first moment of a cold load, two walk-ins still went through.
 That needs an idempotency key on the server — `HANDOFF` item 2.
 
+### Checked 2026-09-23 — one room sold from every source, read three ways at every step
+
+The question the founder asked: when a reservation arrives from the booking engine, from the front
+desk or from a channel, does availability hold, and does everything that should move, move? Walked
+on the local demo hotel through the **real screens and functions**, on Suite (3 rooms), 10–12 March
+2027. After every step, three independent readings: what the **guest** sees (booking-engine search),
+what the **hotel** sees (RevioLink calendar), and the **database** directly. Also what reception sees
+in RevioCRS, which matched throughout.
+
+| Step | Guest | Hotel (bookable · sold) | Database |
+| --- | --- | --- | --- |
+| Start | 3 | 3 · 0 | 3 |
+| Booking engine | 2 | 2 · 1 | 2 |
+| Front desk: hold only, not yet confirmed | last room | 1 · 1 | 1 (1 held) |
+| Front desk: confirmed | last room | 1 · 2 | 1 |
+| Channel (Booking.com) | not offered | 0 · 3 | 0 |
+| 4th try: engine / front desk | refused / "sold out" | — | — |
+| 4th try: channel | not offered | 0 · 4 | −1, `overbooked`, **critical alert** |
+| Cancel all four, one by one | 3 | 3 · 0 | 3, no room held by a cancelled stay |
+
+All three agreed at every one of the eleven steps. A hold takes the room off sale **before**
+confirmation; a sold-out room is refused by the engine and the front desk; a channel booking that
+arrives anyway is **accepted, marked `overbooked`, and raises a critical alert** — correct, because
+the guest has already paid the OTA; "bookable" stops at 0 rather than pushing −1.
+
+**Prices agree too.** Suite has no explicit price after 4 January 2027, yet the engine sold March at
+€120 a night. Both the engine and the channel push resolve price through one function,
+`resolveRate` in `@revio/core`: explicit price → derived from the parent plan → the plan's own
+default (Standard Rate: €120 for two). So the direct site and the OTAs get the same number. The
+RevioLink calendar shows "—" on those dates because it shows explicit prices only — a UI question
+(it reads as "not priced" while the room sells at €120), not a data one.
+
+**What the walk found, and what was fixed the same day:**
+
+- The booking engine and RevioPMS each carried a copy of the push recorder that still wrote
+  "success" **before** the push and discarded its outcome — BUG-014, fixed in RevioLink on
+  12 September and never carried to those two. One recorder now, `recordAvailabilityPush`.
+- RevioCRS's "Confirm reservation" and "Hold & continue" were bare `<button>`s, invisible to
+  `submit-lint` because it only matched `type="submit"`. Converted, lint widened, double-press
+  on Confirm proved to create exactly one reservation.
+
+⚠️ **Not covered by this walk:** the real Channex import path. The channel booking used RevioLink's
+demo simulator, which writes the reservation directly; a real OTA booking arrives through
+`pullChannel` and the revisions feed. That path is covered by the Channex certification runbook and
+by `pull-merge` tests, not by today's walk.
+
 ### Shipped 2026-09-23 — twelve different guests could be put in one room
 
 Every path that puts a stay into a physical room — auto-assignment, check-in, walk-in, room move —

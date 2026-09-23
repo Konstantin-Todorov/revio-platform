@@ -32,7 +32,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative } from "node:path";
 
-const CREATES = /^(create|add|new|walkIn|issue|send|start|record|post|confirm|book|invite|generate|import|charge|convert|checkIn|checkOut|split|duplicate|request|submit|grant|open|capture|refund|use[A-Z])/;
+const CREATES = /^(create|add|new|walkIn|issue|send|start|record|post|confirm|book|invite|generate|import|charge|convert|checkIn|checkOut|split|duplicate|request|submit|grant|open|capture|refund|use[A-Z]|place|hold|reserve|claim)/;
 const APPS = ["reservation", "channel-manager", "pms", "operator", "booking"];
 
 const found = [];
@@ -49,10 +49,22 @@ function scan(p) {
   const src = readFileSync(p, "utf8");
   for (const m of src.matchAll(/<form\s+action=\{(\w+)\}[\s\S]*?<\/form>/g)) {
     forms++;
-    if (!CREATES.test(m[1])) continue;
-    for (const b of m[0].matchAll(/<button\b[^>]*?type="submit"[^>]*>/g)) {
-      if (/onClick/.test(b[0])) continue;
-      found.push(`${relative(".", p)} → ${m[1]}`);
+    /*
+     * ⚠️ Every <button> in a form submits it unless it says `type="button"` or `type="reset"`.
+     *
+     * The first version matched only `type="submit"`, and RevioCRS's "Confirm reservation" — a
+     * bare `<button>` — passed straight through it, as did "Hold & continue". Found 2026-09-23 by
+     * booking through the real screens. A button's own `formAction` overrides the form's action,
+     * so the action judged is the one that button actually calls.
+     */
+    for (const b of m[0].matchAll(/<button\b[^>]*>/g)) {
+      const tag = b[0];
+      if (/type="(button|reset)"/.test(tag)) continue;
+      if (/onClick/.test(tag)) continue;
+      const own = tag.match(/formAction=\{(\w+)\}/);
+      const action = own ? own[1] : m[1];
+      if (!CREATES.test(action)) continue;
+      found.push(`${relative(".", p)} → ${action}`);
     }
   }
 }
