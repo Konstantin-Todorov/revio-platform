@@ -259,6 +259,29 @@ invoicing its own clients, and only the second one is ready.
 both shipped: the city-tax VAT base in `f828cac` on 09-09, and the operator sidebar in `7e70a38`
 the same day.
 
+### Shipped 2026-09-23 — a real Channex sandbox booking, followed through; three defects behind it
+
+*Checked by creating, modifying and cancelling booking `REVIO-E2E-222837` through Channex's own
+Booking CRS API and reading both sides at every step:* imported by webhook in 2s and acked;
+Channex and Revio both went 6→5 → (modify to 3 nights) 5/5/5 → (cancel) 6/6/6, 0 unacked revisions.
+The loop is right. What it exposed:
+
+- **An OTA cancellation was counted on no day at all** (`6e9df58`). The pull wrote `status` and never
+  `cancelledAt`, which is what "cancelled today", the notification centre, RevioLink's summary and
+  the CSV export count by. Production: 4 channel cancellations, 0 dated — plus one declined booking
+  request, same gap. All 5 dated from their own sync/audit trail; `state-audit` gained
+  *cancelled reservation with no cancellation date* (0 in production).
+- **Two webhook rings could import one new booking twice** (`afaf897`). Channex rings several times
+  per booking; the cron held a lease, the webhook and Pull button did not (the webhook's comment
+  cited a lease that did not exist). Seen: one revision processed by two pulls 165ms apart. Now
+  `withChannelPullLock` serialises every caller (a second ring waits, then pulls), and
+  `Reservation @@unique([channelId, externalId])` refuses a second copy. `lease-verify` proves both —
+  the duplicate check FAILED with 8 rows before the migration. Production had 0 duplicates.
+- **First-run setup was written three times** (`42d4b3c`). RevioPMS's copy had stopped linking a new
+  room type to the rate plans (production: 0 affected rooms); both others priced the season from the
+  server's UTC date. Now one module, `@revio/db` `welcome-writes.ts`, proven by
+  `welcome-writes-verify` in CI.
+
 ### Shipped 2026-09-23 — the front desk could turn one hold into twelve reservations
 
 **Measured, not argued.** `apps/reservation/scripts/crs-confirm-race.ts` raced the front desk's
