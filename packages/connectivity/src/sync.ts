@@ -1171,6 +1171,22 @@ export async function pullChannel(
         data: {
           guestName: raw.guestName,
           status: overbooked ? "overbooked" : status,
+          /*
+           * ⚠️ WHEN it was cancelled, not only that it was.
+           *
+           * Every cancellation made by staff records `cancelledAt`; this path — an OTA cancellation,
+           * the kind a channel-heavy hotel gets most — recorded only the status. And `cancelledAt` is
+           * what RevioLink's own dashboard counts cancellations by, what "cancelled today" and the
+           * cancellation-date filter in RevioCRS select on, and what the notification centre orders
+           * "what happened" by. So a guest cancelling on Booking.com vanished from all four: the
+           * one event a channel manager exists to tell a hotel about. Found 2026-09-23 by cancelling
+           * a real booking in the Channex sandbox and reading the row; production held 4 channel
+           * cancellations, 0 with a date, against 8 of 9 for staff ones.
+           *
+           * The moment we LEARNED of it, which is what a hotel's day is counted in. Channex does not
+           * give a separate cancellation timestamp in the revision this reads.
+           */
+          ...(status === "cancelled" ? { cancelledAt: new Date() } : {}),
           totalMinor: raw.totalMinor,
           currency: raw.currency,
           ...fx,
@@ -1285,6 +1301,9 @@ export async function pullChannel(
       data: {
         tenantId, propertyId, channelId, externalId: raw.externalId, guestName: raw.guestName,
         status: overbooked ? "overbooked" : status, totalMinor: raw.totalMinor, currency: raw.currency, ...fx,
+        // A booking made and cancelled before we first pulled it arrives already cancelled — the
+        // same date as the update path above, for the same four readers.
+        ...(status === "cancelled" ? { cancelledAt: new Date() } : {}),
         lines: { create: lines },
       },
     });

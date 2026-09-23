@@ -500,7 +500,9 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
   });
   const updated = await prisma.reservation.updateMany({
     where: { id: reservationId, propertyId: property.id, status: "requested" },
-    data: { status: "cancelled" },
+    // With the date, like every other cancellation — "cancelled today", the notification centre and
+    // RevioLink's summary all count by `cancelledAt`, and a declined request is one of them.
+    data: { status: "cancelled", cancelledAt: new Date() },
   });
   if (updated.count === 0) return { ok: false, error: "That request has already been answered." };
 

@@ -65,6 +65,19 @@ export const STATE_CHECKS: readonly StateCheck[] = [
           WHERE r.status = 'cancelled' AND ${LIVE_ASSIGNMENT}`,
   },
   {
+    /*
+     * "Cancelled today", the notification centre, RevioLink's reservation summary and the CSV
+     * export all bucket a cancellation by `cancelledAt`. A cancelled row without one is counted on
+     * no day at all — the channel-pull and booking-engine decline paths wrote `status` alone until
+     * 2026-09-23, and four production rows had to be dated by hand from their sync and audit trail.
+     */
+    id: "cancelled_undated",
+    fault: "cancelled reservation with no cancellation date",
+    remedy: "date it from its last pull or audit entry; it is missing from every cancellations count",
+    sql: `SELECT count(*)::int AS rows FROM "Reservation" r
+          WHERE r.status = 'cancelled' AND r."cancelledAt" IS NULL`,
+  },
+  {
     id: "cancelled_empty_folio_open",
     fault: "cancelled reservation with an empty open folio",
     remedy: "closes itself on cancel now; existing rows need closing",
