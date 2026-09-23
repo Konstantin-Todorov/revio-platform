@@ -2,10 +2,10 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { todayInTimeZone } from "@revio/core";
-import { computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
+import { computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
   matchDuplicates, normalisePhone, type DuplicateCandidate,
-  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
-  ratePlanRows, type RoundingRule,
+  resolveRate, resolveStay, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
+  ratePlanRows, displayedRate, rateSourceNote, toResolvablePlan,
 } from "@revio/core";
 import { getSession } from "./session";
 
@@ -144,6 +144,9 @@ export interface InventorySection {
     rate: string;
     /** Price per rate-plan id, one for every row in `ratePlanRows`. */
     ratesByPlan: Record<string, string>;
+    /** Per plan: why the price shows what it does when nobody set it for that night (a plan default
+     *  or a parent plan's price). Absent for a price somebody set. See `displayedRate`. */
+    rateNotesByPlan: Record<string, string>;
     /**
      * Every occupancy priced, present ONLY under per-person (OBP §6.5).
      *
@@ -273,31 +276,15 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
     rpId === standard?.id ? (priceByKey.get(`${rtId}:${k}:${occ}`) ?? null) : null;
 
   const propertyModel = defaults?.pricingModel ?? "per_room";
-  const standardResolvable: ResolvablePlan | null = standard
-    ? {
-        id: standard.id,
-        pricingModel: standard.pricingModel,
-        primaryOccupancy: standard.primaryOccupancy,
-        parentRatePlanId: standard.parentRatePlanId,
-        priceLogic: standard.priceLogic,
-        derivedType: standard.derivedType,
-        derivedDirection: standard.derivedDirection,
-        derivedValue: standard.derivedValue,
-        derivedRounding: standard.derivedRounding,
-        derivedFloorMinor: standard.derivedFloorMinor,
-        derivedCeilingMinor: standard.derivedCeilingMinor,
-        options: (standard.occupancyOptions ?? []).map((o) => ({
-          occupancy: o.occupancy,
-          isPrimary: o.isPrimary,
-          mode: o.mode === "derived" ? ("derived" as const) : ("manual" as const),
-          rateMinor: o.rateMinor,
-          adjustmentType: o.adjustmentType as "percent" | "fixed" | null,
-          direction: o.direction as "increase" | "decrease" | null,
-          value: o.value,
-          rounding: o.rounding as never,
-        })),
-      }
-    : null;
+  const standardResolvable: ResolvablePlan | null = standard ? toResolvablePlan(standard) : null;
+  /*
+   * Every plan, for the per-plan rows. ⚠️ Priced through `displayedRate` — `resolveRate`, the call
+   * the Channex push makes. These rows read stored prices directly and printed "—" for a night
+   * nobody had priced, while the channel sold it at the plan's default rate.
+   */
+  const allResolvable = new Map(planRecords.map((p) => [p.id, toResolvablePlan(p)]));
+  const lookupAll: PriceLookup = (rtId, rpId, k, occ) =>
+    planPriceByKey.get(`${rpId}:${rtId}:${k}:${occ}`) ?? null;
   const planIndex = new Map(standardResolvable ? [[standardResolvable.id, standardResolvable]] : []);
 
   /** Every occupancy this room sells at on this date — null entries stay null, never zero. */
@@ -391,36 +378,24 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
          * nothing that already reads it changes; this is what makes the SECOND plan visible at all —
          * the gap that let a hotel save a BB Non-Refundable price and never see it again.
          */
-        ratesByPlan: Object.fromEntries(
-          planRowList.map((pl): readonly [string, string] => {
-            const occ = effectivePrimary(
-              planRecordById.get(pl.id)?.primaryOccupancy ?? null,
-              rt.defaultOccupancy,
-              Math.max(1, rt.maxGuests),
-            );
-            const own = planPriceByKey.get(`${pl.id}:${rt.id}:${d}:${occ}`)
-              ?? planPriceByKey.get(`${pl.id}:${rt.id}:${d}:`);
-            if (own != null) return [pl.id, String(Math.round(own / 100))] as const;
-            // A derived row shows its parent's price through its own adjustment.
-            if (pl.parentRatePlanId) {
-              const rec = planRecordById.get(pl.id);
-              const base = planPriceByKey.get(`${pl.parentRatePlanId}:${rt.id}:${d}:${occ}`)
-                ?? planPriceByKey.get(`${pl.parentRatePlanId}:${rt.id}:${d}:`);
-              if (base != null && rec) {
-                return [pl.id, String(Math.round(deriveRate(base, {
-                  parentRatePlanId: pl.parentRatePlanId,
-                  adjustmentType: (rec.derivedType as "percent" | "fixed") ?? "percent",
-                  direction: (rec.derivedDirection as "increase" | "decrease") ?? "decrease",
-                  value: rec.derivedValue ?? 0,
-                  rounding: (rec.derivedRounding as RoundingRule | null) ?? "none",
-                  ...(rec.derivedFloorMinor != null ? { floorMinor: rec.derivedFloorMinor } : {}),
-                  ...(rec.derivedCeilingMinor != null ? { ceilingMinor: rec.derivedCeilingMinor } : {}),
-                }) / 100))] as const;
-              }
-            }
-            return [pl.id, "—"] as const;
-          }),
-        ) as Record<string, string>,
+        ...(() => {
+          const ratesByPlan: Record<string, string> = {};
+          const rateNotesByPlan: Record<string, string> = {};
+          for (const pl of planRowList) {
+            const plan = allResolvable.get(pl.id);
+            if (!plan) { ratesByPlan[pl.id] = "—"; continue; }
+            const shown = displayedRate({
+              lookup: lookupAll, plans: allResolvable, plan, roomTypeId: rt.id, maxOccupancy: rt.maxGuests,
+              roomDefaultOccupancy: rt.defaultOccupancy, propertyModel, dateKey: d,
+            });
+            ratesByPlan[pl.id] = shown.minor != null ? String(Math.round(shown.minor / 100)) : "—";
+            const rec = planRecordById.get(pl.id);
+            const note = rateSourceNote(shown.source, rec?.name ?? "This plan",
+              rec?.parentRatePlanId ? planRecordById.get(rec.parentRatePlanId)?.name : undefined);
+            if (note) rateNotesByPlan[pl.id] = note;
+          }
+          return { ratesByPlan, rateNotesByPlan };
+        })(),
         // Present only under per-person. Absent means "render exactly as before", which is what a
         // per-room property must keep doing byte for byte.
         ...(occupancyRates ? { occupancyRates } : {}),
@@ -573,48 +548,50 @@ export async function remainingByNight(
   });
 }
 
-/** Total accommodation price for a stay on one (room type, rate plan) — derived plans computed from
- *  the parent's stored nightly prices via @revio/core. Null when any night lacks a price. */
-export async function stayQuote(roomTypeId: string, ratePlanId: string, checkIn: string, checkOut: string, quantity = 1) {
+/**
+ * Total accommodation price for a stay on one (room type, rate plan) — through `resolveStay`, the
+ * resolver the Channex push, the booking engine and the folio use.
+ *
+ * ⚠️ This read stored `RatePrice` rows itself and returned null if any night had none. The push
+ * resolves the same night to the plan's DEFAULT rate, so a night Booking.com was selling at €120
+ * could not be sold at the front desk at all — the search dropped the plan as "not on sale for
+ * these dates". It also read prices at `defaultOccupancy ?? maxGuests`, which misses a per-room
+ * price (stored at the ceiling) for any room whose default occupancy is lower, and it ignored the
+ * party size, so a per-person plan quoted two guests' price to one. Null now means what the push
+ * means by it: this plan genuinely cannot price one of these nights.
+ */
+export async function stayQuote(
+  roomTypeId: string, ratePlanId: string, checkIn: string, checkOut: string, quantity = 1, guests?: number,
+) {
   const nights = nightsOf(checkIn, checkOut);
-  const rp = await prisma.ratePlan.findUniqueOrThrow({ where: { id: ratePlanId } });
-  const priceSourceId = rp.priceLogic === "derived" && rp.parentRatePlanId ? rp.parentRatePlanId : rp.id;
-  /*
-   * ⚠️ Occupancy-filtered — `byDate` holds one price per date and OBP made that untrue by default.
-   * Without the filter a per-person room returns a row per guest count and the map keeps whichever
-   * came last, so the same search could quote a different price on two consecutive runs.
-   */
-  const quoteRoom = await prisma.roomType.findUnique({
-    where: { id: roomTypeId }, select: { maxGuests: true, defaultOccupancy: true },
+  const room = await prisma.roomType.findUnique({
+    where: { id: roomTypeId }, select: { propertyId: true, maxGuests: true, defaultOccupancy: true },
   });
-  const quoteOccupancy = quoteRoom?.defaultOccupancy ?? quoteRoom?.maxGuests ?? 1;
-  const rows = await prisma.ratePrice.findMany({
-    where: {
-      roomTypeId, ratePlanId: priceSourceId, occupancy: quoteOccupancy,
-      date: { gte: new Date(`${checkIn}T00:00:00Z`), lt: new Date(`${checkOut}T00:00:00Z`) },
-    },
-  });
-  const byDate = new Map(rows.map((r) => [ymd(r.date), r.priceMinor]));
-
-  let total = 0;
-  for (const d of nights) {
-    const base = byDate.get(d);
-    if (base == null) return null;
-    if (rp.priceLogic === "derived" && rp.parentRatePlanId) {
-      total += deriveRate(base, {
-        parentRatePlanId: rp.parentRatePlanId,
-        adjustmentType: (rp.derivedType as "percent" | "fixed") ?? "percent",
-        direction: (rp.derivedDirection as "increase" | "decrease") ?? "decrease",
-        value: rp.derivedValue ?? 0,
-        rounding: (rp.derivedRounding as Parameters<typeof deriveRate>[1]["rounding"]) ?? "none",
-        ...(rp.derivedFloorMinor != null ? { floorMinor: rp.derivedFloorMinor } : {}),
-        ...(rp.derivedCeilingMinor != null ? { ceilingMinor: rp.derivedCeilingMinor } : {}),
-      });
-    } else {
-      total += base;
-    }
-  }
-  return total * quantity;
+  if (!room || nights.length === 0) return null;
+  // Every plan of the property: a derived plan resolves through its parent chain.
+  const [planRows, defaults, rows] = await Promise.all([
+    prisma.ratePlan.findMany({ where: { propertyId: room.propertyId }, include: { occupancyOptions: true } }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId: room.propertyId }, select: { pricingModel: true } }),
+    prisma.ratePrice.findMany({
+      where: { roomTypeId, date: { gte: new Date(`${checkIn}T00:00:00Z`), lt: new Date(`${checkOut}T00:00:00Z`) } },
+      select: { ratePlanId: true, date: true, occupancy: true, priceMinor: true },
+    }),
+  ]);
+  const plans = new Map(planRows.map((p) => [p.id, toResolvablePlan(p)]));
+  const plan = plans.get(ratePlanId);
+  if (!plan) return null;
+  const stored = new Map(rows.map((r) => [`${r.ratePlanId}:${ymd(r.date)}:${r.occupancy ?? ""}`, r.priceMinor]));
+  const lookup: PriceLookup = (_rt, rp, k, occ) => stored.get(`${rp}:${k}:${occ}`) ?? null;
+  const ceiling = Math.max(1, room.maxGuests);
+  // Guests per room, when the party is known; otherwise the plan's headline occupancy.
+  const occupancy = guests && guests > 0
+    ? Math.min(ceiling, Math.max(1, Math.ceil(guests / Math.max(1, quantity))))
+    : effectivePrimary(plan.primaryOccupancy, room.defaultOccupancy, ceiling);
+  const stay = resolveStay({
+    lookup, plans, roomTypeId, maxOccupancy: ceiling, roomDefaultOccupancy: room.defaultOccupancy,
+    propertyModel: defaults?.pricingModel ?? "per_room", plan, occupancy,
+  }, nights);
+  return stay ? stay.totalMinor * quantity : null;
 }
 
 export interface StaySearch {
@@ -655,13 +632,13 @@ export async function searchAvailability(q: StaySearch) {
     roomTypes.map(async (rt) => {
       const nights = await remainingByNight(rt.id, q.checkIn, q.checkOut);
       const remainingMin = nights.length ? Math.min(...nights.map((n) => n.remaining)) : 0;
-      const totalMinor = standard ? await stayQuote(rt.id, standard.id, q.checkIn, q.checkOut, q.quantity) : null;
+      const totalMinor = standard ? await stayQuote(rt.id, standard.id, q.checkIn, q.checkOut, q.quantity, q.guests) : null;
       const planQuotes = (
         await Promise.all(
           sellablePlans.map(async (rp) => ({
             id: rp.id,
             name: rp.name,
-            totalMinor: await stayQuote(rt.id, rp.id, q.checkIn, q.checkOut, q.quantity),
+            totalMinor: await stayQuote(rt.id, rp.id, q.checkIn, q.checkOut, q.quantity, q.guests),
           })),
         )
       )

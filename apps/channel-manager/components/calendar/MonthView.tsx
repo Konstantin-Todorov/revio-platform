@@ -110,6 +110,7 @@ export function MonthView({
                     value={price.value}
                     prefix="€"
                     past={d < todayKey}
+                    {...(price.note ? { note: price.note } : {})}
                     {...(priceRow?.ratePlanId ? { ratePlanId: priceRow.ratePlanId } : {})}
                   />
                 )}

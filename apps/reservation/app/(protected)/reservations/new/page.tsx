@@ -223,7 +223,7 @@ async function HoldForm({ holdId, guests, sourceId, error, guestId }: { holdId: 
     : null;
 
   const quotes = new Map<string, number | null>();
-  for (const rp of ratePlans) quotes.set(rp.id, await stayQuote(hold.roomTypeId, rp.id, checkIn, checkOut, hold.quantity));
+  for (const rp of ratePlans) quotes.set(rp.id, await stayQuote(hold.roomTypeId, rp.id, checkIn, checkOut, hold.quantity, guests));
   const defaultPlan = ratePlans.find((rp) => quotes.get(rp.id) != null) ?? ratePlans[0];
   const defaultQuote = defaultPlan ? quotes.get(defaultPlan.id) : null;
 

@@ -17,7 +17,7 @@ import {
   hasChanges, hydrateGuestContact, isAdvancePurchaseClosed, isOtaAliasEmail, recogniseGuest,
   resolveChosenExtras, resolveRestriction, type SellableExtra,
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type RestrictionType,
-  resolveRate, type PriceLookup, type ResolvablePlan,
+  resolveRate, toResolvablePlan, type PriceLookup,
 } from "@revio/core";
 import { recordAvailabilityPush, syncRealChannels, stayScope } from "@revio/connectivity";
 
@@ -186,7 +186,7 @@ async function loadStayContext(
     prices.map((p) => [`${p.roomTypeId}:${p.ratePlanId}:${ymd(p.date)}:${p.occupancy ?? ""}`, p.priceMinor]),
   );
   const lookup: PriceLookup = (rtId, rpId, k, occ) => priceMap.get(`${rtId}:${rpId}:${k}:${occ}`) ?? null;
-  const planIndex = new Map(plans.map((rp) => [rp.id, toResolvable(rp)]));
+  const planIndex = new Map(plans.map((rp) => [rp.id, toResolvablePlan(rp)]));
   const propertyModel = defaults?.pricingModel ?? "per_room";
 
   const priceFor = (rt: (typeof roomTypes)[number], rp: (typeof plans)[number], k: string, occupancy: number): number | null =>
@@ -979,42 +979,3 @@ export function bookingReference(reservationId: string): string {
   return `RV-${reservationId.slice(-6).toUpperCase()}`;
 }
 
-/**
- * A Prisma rate plan as the shared resolver wants it.
- *
- * Here rather than inline at each call site so the two axes are mapped once: `priceLogic` +
- * `derived*` is the plan-to-plan axis, `pricingModel` + `options` is the occupancy axis, and they
- * are read from different columns for a reason.
- */
-function toResolvable(rp: {
-  id: string; pricingModel: string | null; primaryOccupancy: number | null;
-  parentRatePlanId: string | null; priceLogic: string;
-  derivedType: string | null; derivedDirection: string | null; derivedValue: number | null;
-  derivedRounding: string | null; derivedFloorMinor: number | null; derivedCeilingMinor: number | null;
-  occupancyOptions?: { occupancy: number; isPrimary: boolean; mode: string; rateMinor: number | null;
-    adjustmentType: string | null; direction: string | null; value: number | null; rounding: string }[];
-}): ResolvablePlan {
-  return {
-    id: rp.id,
-    pricingModel: rp.pricingModel,
-    primaryOccupancy: rp.primaryOccupancy,
-    parentRatePlanId: rp.parentRatePlanId,
-    priceLogic: rp.priceLogic,
-    derivedType: rp.derivedType,
-    derivedDirection: rp.derivedDirection,
-    derivedValue: rp.derivedValue,
-    derivedRounding: rp.derivedRounding,
-    derivedFloorMinor: rp.derivedFloorMinor,
-    derivedCeilingMinor: rp.derivedCeilingMinor,
-    options: (rp.occupancyOptions ?? []).map((o) => ({
-      occupancy: o.occupancy,
-      isPrimary: o.isPrimary,
-      mode: o.mode === "derived" ? "derived" : "manual",
-      rateMinor: o.rateMinor,
-      adjustmentType: o.adjustmentType as "percent" | "fixed" | null,
-      direction: o.direction as "increase" | "decrease" | null,
-      value: o.value,
-      rounding: o.rounding as never,
-    })),
-  };
-}

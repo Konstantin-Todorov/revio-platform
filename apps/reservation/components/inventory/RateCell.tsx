@@ -5,13 +5,16 @@ import { saveCalendarRate } from "@/lib/actions-rates";
 
 /** Inline-editable standard-plan rate in the Inventory Calendar — writes the SAME RatePrice rows
  *  the CM's grid edits (derived plans recalc from it automatically). */
-export function RateCell({ roomTypeId, date, value, ratePlanId }: {
+export function RateCell({ roomTypeId, date, value, ratePlanId, note }: {
   roomTypeId: string;
   date: string;
   value: string;
   /** Which plan's row this cell sits in. The grid draws one row per plan, so an edit without it is
    *  ambiguous — and an ambiguous price edit is how a rate lands on a plan nobody was looking at. */
   ratePlanId?: string;
+  /** Nobody set this night's price — it is the plan's default, or its parent's. Rendered lighter with
+   *  this as the hover, so a default and a decision do not look the same. */
+  note?: string;
 }) {
   const [pending, start] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -51,8 +54,8 @@ export function RateCell({ roomTypeId, date, value, ratePlanId }: {
       type="button"
       onClick={() => setEditing(true)}
       disabled={pending}
-      className={`tnum w-full rounded px-1 py-0.5 text-center text-[12px] font-semibold text-ink-700 transition-colors hover:bg-brand-50 ${pending ? "opacity-50" : ""}`}
-      title="Click to edit the standard rate"
+      className={`tnum w-full rounded px-1 py-0.5 text-center text-[12px] transition-colors hover:bg-brand-50 ${note ? "font-normal text-ink-400" : "font-semibold text-ink-700"} ${pending ? "opacity-50" : ""}`}
+      title={note ?? "Click to change this night's price"}
     >
       {value === "—" ? "—" : `€${value}`}
     </button>

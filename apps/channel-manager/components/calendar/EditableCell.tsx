@@ -6,7 +6,7 @@ import { saveCell } from "@/lib/actions-calendar";
 type Kind = "availability" | "price" | "restriction" | "flag";
 
 export function EditableCell({
-  roomTypeId, date, field, kind, value, flag, prefix = "", warn, ratePlanId, past = false,
+  roomTypeId, date, field, kind, value, flag, prefix = "", warn, note, ratePlanId, past = false,
 }: {
   roomTypeId: string;
   date: string;
@@ -19,6 +19,12 @@ export function EditableCell({
   prefix?: string;
   /** Non-blocking attention note (e.g. allotment above the physical room count). */
   warn?: string;
+  /**
+   * The price shown is not one somebody set for this night — a plan default, or a parent plan's
+   * price. Rendered lighter, with this as the hover, so "sells at €120 by default" and "priced at
+   * €120" do not look identical. Typing a price replaces it like any other.
+   */
+  note?: string;
   /**
    * This night has already gone.
    *
@@ -62,7 +68,7 @@ export function EditableCell({
     }
     return (
       <span
-        title="This date has passed — rates and availability can only be changed from today onwards"
+        title={note ? `${note} This date has passed.` : "This date has passed — rates and availability can only be changed from today onwards"}
         className="flex h-7 w-full items-center justify-center text-ink-400"
       >
         {value === "—" ? "—" : `${prefix}${value}`}
@@ -111,7 +117,7 @@ export function EditableCell({
           return n <= 0 ? "text-danger-500" : n <= 5 ? "text-warning-600" : "text-success-600";
         })()
       : kind === "price"
-        ? "text-ink-900 font-semibold"
+        ? note ? "text-ink-400 font-normal" : "text-ink-900 font-semibold"
         : value === "—"
           ? "text-ink-300"
           : "text-ink-700 font-semibold";
@@ -120,7 +126,7 @@ export function EditableCell({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      title={warn}
+      title={warn ?? note}
       className={`flex h-7 w-full items-center justify-center gap-0.5 rounded transition-colors hover:bg-brand-50 ${kind === "availability" ? "font-bold" : ""} ${warn ? "bg-warning-50 text-warning-700 ring-1 ring-inset ring-warning-600/40" : tone} ${pending ? "opacity-50" : ""}`}
     >
       {value === "—" ? "—" : `${prefix}${value}`}

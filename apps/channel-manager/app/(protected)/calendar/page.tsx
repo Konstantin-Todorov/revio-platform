@@ -396,6 +396,7 @@ export default async function CalendarPage({
                                 {...(row.ratePlanId ? { ratePlanId: row.ratePlanId } : {})}
                                 {...(cell.flag ? { flag: cell.flag } : {})}
                                 {...(cell.warn ? { warn: cell.warn } : {})}
+                                {...(cell.note ? { note: cell.note } : {})}
                                 // A gone night reads but does not edit — the server refuses the
                                 // write, so the cell must not offer it. See EditableCell.
                                 past={cell.date < todayKey}
@@ -405,7 +406,7 @@ export default async function CalendarPage({
                           );
                         }
                         return (
-                          <td key={cell.date} className={`${base} px-1.5 py-1.5 ${row.muted ? "text-ink-400" : "font-semibold text-ink-900"}`}>
+                          <td key={cell.date} title={cell.note} className={`${base} px-1.5 py-1.5 ${row.muted ? "text-ink-400" : "font-semibold text-ink-900"}`}>
                             {row.kind === "price" && cell.value !== "—" ? `€${cell.value}` : cell.value}
                           </td>
                         );

@@ -274,7 +274,7 @@ function SectionRows({
               <td key={i} className={`px-1 py-1 text-center ${pl.editable ? "" : "text-ink-400"} ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
                 {pl.editable ? (
                   <span className="inline-flex items-center">
-                    <RateCell roomTypeId={section.roomType.id} date={dates[i]!} value={value} ratePlanId={pl.id} />
+                    <RateCell roomTypeId={section.roomType.id} date={dates[i]!} value={value} ratePlanId={pl.id} {...(cell.rateNotesByPlan[pl.id] ? { note: cell.rateNotesByPlan[pl.id] } : {})} />
                     {/* Present only under per-person, and only on the headline row — a popover per
                         plan per cell is the grid growing in the direction the spec forbids. */}
                     {cell.occupancyRates && pl.id === rateRows[0]?.id && (
@@ -285,7 +285,7 @@ function SectionRows({
                     )}
                   </span>
                 ) : (
-                  <span className="tnum text-[12px]">{value}</span>
+                  <span className="tnum text-[12px]" title={cell.rateNotesByPlan[pl.id]}>{value}</span>
                 )}
               </td>
             );

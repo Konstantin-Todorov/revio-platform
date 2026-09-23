@@ -1,14 +1,11 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, deriveRate, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type DerivedRateConfig, type SetupFacts, type ProductName } from "@revio/core";
+import { dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, displayedRate, rateSourceNote, toResolvablePlan, type PriceLookup, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type SetupFacts, type ProductName } from "@revio/core";
 import { collidingExternalIds, describeStructureGap, mappingRows, ratePlanMappingRows, structureGap } from "@revio/connectivity";
 import { getSession } from "./session";
 
 const DAY = 86_400_000;
-function utcDate(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-}
 function addDays(d: Date, n: number): Date {
   return new Date(d.getTime() + n * DAY);
 }
@@ -300,7 +297,12 @@ export type CalendarRow = {
    * is how a price lands on a plan the person was not looking at.
    */
   ratePlanId?: string;
-  cells: { date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean; warn?: string }[];
+  cells: {
+    date: string; value: string; flag?: "stop" | "ctd" | "cta"; muted?: boolean; warn?: string;
+    /** Why a price cell shows the number it does, when nobody set it for that night — a plan default
+     *  or a parent plan's price. Rendered muted with this as the hover. See `displayedRate`. */
+    note?: string;
+  }[];
 };
 
 /** Board query: window start (YYYY-MM-DD), window size, room-type filter, visible row groups. */
@@ -336,7 +338,9 @@ export async function getCalendarBoard(q: CalendarQuery) {
   const days = q.days && q.days >= 1 && q.days <= 31 ? q.days : 14;
 
   // Window start: requested date clamped to [today-7d, today+2y-days]; default = Monday of this week.
-  const today = utcDate(new Date());
+  // The PROPERTY's today (root CLAUDE.md): the server's UTC date opened a Bulgarian hotel's grid on
+  // yesterday, as a read-only column, every night until 03:00.
+  const today = new Date(`${todayInTimeZone(property.timezone)}T00:00:00Z`);
   /*
    * ⚠️ The grid begins at TODAY, not at the Monday of this week.
    *
@@ -381,7 +385,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
    * on the grid was read from it. At a hotel that had switched BAR off and sold on two BB plans, the
    * calendar therefore showed exactly one row, and it was the dead one. See `ratePlanRows`.
    */
-  const planRecords = await prisma.ratePlan.findMany({ where: { propertyId }, orderBy: { sortOrder: "asc" } });
+  const planRecords = await prisma.ratePlan.findMany({ where: { propertyId }, include: { occupancyOptions: true }, orderBy: { sortOrder: "asc" } });
   const planInputs = planRecords.map((p) => ({
     id: p.id, code: p.code, name: p.name, active: p.active,
     priceLogic: p.priceLogic, sortOrder: p.sortOrder, parentRatePlanId: p.parentRatePlanId,
@@ -419,10 +423,10 @@ export async function getCalendarBoard(q: CalendarQuery) {
        * keep whichever arrived last. The headline is the room's primary occupancy.
        */
       ? prisma.ratePrice.findMany({
-          where: {
-            roomTypeId: { in: rtIds }, ratePlanId: { in: pricePlanIds }, date: { gte: start, lte: end },
-            occupancy: { in: allRoomTypes.map((rt) => rt.defaultOccupancy ?? rt.maxGuests) },
-          },
+          // Every occupancy: `displayedRate` picks the one the push sends. This read filtered to
+          // `defaultOccupancy ?? maxGuests`, which missed a per-room price — stored at the ceiling —
+          // for any room whose default occupancy is lower.
+          where: { roomTypeId: { in: rtIds }, ratePlanId: { in: pricePlanIds }, date: { gte: start, lte: end } },
         })
       : Promise.resolve([]),
     // ROOM-LEVEL read — the calendar has one row per room, so `cellMap` is keyed on room + date.
@@ -495,11 +499,27 @@ export async function getCalendarBoard(q: CalendarQuery) {
   }
 
   const priceKey = (rt: string, k: string) => `${rt}:${k}`;
-  // Narrowed above to each room's primary, so at most one row per (plan, room, date) reaches this map.
-  const planPriceKey = (rp: string, rt: string, k: string) => `${rp}:${rt}:${k}`;
+  /*
+   * ⚠️ Priced by `displayedRate` — `resolveRate`, the call the Channex push makes — not by reading
+   * rows. A night nobody priced showed "—" here while the channel was selling it at the plan's
+   * default rate (found 2026-09-23 in the sandbox: "—" on the grid, €120 on Channex).
+   */
   const priceMap = new Map(
-    prices.map((p) => [planPriceKey(p.ratePlanId, p.roomTypeId, p.date.toISOString().slice(0, 10)), p.priceMinor]),
+    prices.map((p) => [`${p.ratePlanId}:${p.roomTypeId}:${p.date.toISOString().slice(0, 10)}:${p.occupancy ?? ""}`, p.priceMinor]),
   );
+  const lookup: PriceLookup = (rt, rp, k, occ) => priceMap.get(`${rp}:${rt}:${k}:${occ}`) ?? null;
+  const resolvable = new Map(planRecords.map((p) => [p.id, toResolvablePlan(p)]));
+  const propertyModel = (await prisma.propertyDefaults.findUnique({ where: { propertyId }, select: { pricingModel: true } }))?.pricingModel ?? "per_room";
+  const priceCell = (planId: string, rt: { id: string; maxGuests: number; defaultOccupancy: number | null }, k: string) => {
+    const plan = resolvable.get(planId)!;
+    const shown = displayedRate({
+      lookup, plans: resolvable, plan, roomTypeId: rt.id, maxOccupancy: rt.maxGuests,
+      roomDefaultOccupancy: rt.defaultOccupancy, propertyModel, dateKey: k,
+    });
+    const rec = planById.get(planId);
+    const note = rateSourceNote(shown.source, rec?.name ?? "This plan", rec?.parentRatePlanId ? planById.get(rec.parentRatePlanId)?.name : undefined);
+    return { date: k, value: fmt(shown.minor ?? undefined), ...(note ? { note } : {}) };
+  };
   const cellMap = new Map(cells.map((c) => [priceKey(c.roomTypeId, c.date.toISOString().slice(0, 10)), c]));
   /*
    * Which (room, date) cells carry a restriction set for SOME rate plans rather than for the room.
@@ -618,27 +638,16 @@ export async function getCalendarBoard(q: CalendarQuery) {
      */
     for (const plan of planRows) {
       const rec = planById.get(plan.id);
-      const own = (k: string) => priceMap.get(planPriceKey(plan.id, roomType.id, k));
-
       if (plan.priceLogic !== "derived" || !plan.parentRatePlanId) {
         rows.push({
           key: plan.code, label: plan.label, kind: "price", field: "price", editable: true,
           ratePlanId: plan.id,
-          cells: dateKeys.map((k) => ({ date: k, value: fmt(own(k)) })),
+          cells: dateKeys.map((k) => priceCell(plan.id, roomType, k)),
         });
         continue;
       }
 
       const parent = planById.get(plan.parentRatePlanId);
-      const cfg: DerivedRateConfig = {
-        parentRatePlanId: plan.parentRatePlanId,
-        adjustmentType: (rec?.derivedType as "percent" | "fixed") ?? "percent",
-        direction: (rec?.derivedDirection as "increase" | "decrease") ?? "decrease",
-        value: rec?.derivedValue ?? 0,
-        rounding: (rec?.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
-        ...(rec?.derivedFloorMinor != null ? { floorMinor: rec.derivedFloorMinor } : {}),
-        ...(rec?.derivedCeilingMinor != null ? { ceilingMinor: rec.derivedCeilingMinor } : {}),
-      };
       const off = rec?.derivedType === "percent"
         ? `${rec?.derivedDirection === "increase" ? "+" : "−"}${rec?.derivedValue}%`
         : `${rec?.derivedDirection === "increase" ? "+" : "−"}€${((rec?.derivedValue ?? 0) / 100).toLocaleString("en-US")}`;
@@ -646,10 +655,9 @@ export async function getCalendarBoard(q: CalendarQuery) {
         key: plan.code, label: plan.label, kind: "price", muted: true,
         ratePlanId: plan.id,
         derived: { parent: parent?.name ?? "its parent plan", offset: off }, // paperclip + hover (spec §2.3)
-        cells: dateKeys.map((k) => {
-          const base = priceMap.get(planPriceKey(plan.parentRatePlanId!, roomType.id, k));
-          return { date: k, value: base === undefined ? "—" : fmt(deriveRate(base, cfg)), muted: true };
-        }),
+        // The same resolver as an own-price row, so a derived plan follows its parent's DEFAULT too
+        // — it showed "—" whenever the parent had no stored row for the night.
+        cells: dateKeys.map((k) => ({ ...priceCell(plan.id, roomType, k), muted: true })),
       });
     }
     if (visible.has("minlos")) {

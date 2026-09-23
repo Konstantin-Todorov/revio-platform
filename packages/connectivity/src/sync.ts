@@ -12,7 +12,7 @@ import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
   type RestrictionType, type ChannelAdapter, type ExternalProduct,
-  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan, pushedOf, importFailureEmail } from "@revio/core";
+  resolveRate, toResolvablePlan, effectiveModel, effectivePrimary, type PriceLookup, pushedOf, importFailureEmail } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } from "./channex-channel-api.js";
 import { sendEmail, publicBaseUrl } from "@revio/email";
@@ -1761,45 +1761,6 @@ export async function verifyChannelProperty(
   }
 }
 
-/**
- * A Prisma rate plan as `resolveRate` wants it.
- *
- * Deliberately the same shape the booking engine builds. Two adapters would be two chances for the
- * push and the quote to read the same row differently — which is the parity failure this whole
- * feature is trying to prevent, reintroduced at the last step.
- */
-function toResolvablePlan(rp: {
-  id: string; pricingModel: string | null; primaryOccupancy: number | null;
-  parentRatePlanId: string | null; priceLogic: string;
-  derivedType: string | null; derivedDirection: string | null; derivedValue: number | null;
-  derivedRounding: string | null; derivedFloorMinor: number | null; derivedCeilingMinor: number | null;
-  occupancyOptions?: { occupancy: number; isPrimary: boolean; mode: string; rateMinor: number | null;
-    adjustmentType: string | null; direction: string | null; value: number | null; rounding: string }[];
-}): ResolvablePlan {
-  return {
-    id: rp.id,
-    pricingModel: rp.pricingModel,
-    primaryOccupancy: rp.primaryOccupancy,
-    parentRatePlanId: rp.parentRatePlanId,
-    priceLogic: rp.priceLogic,
-    derivedType: rp.derivedType,
-    derivedDirection: rp.derivedDirection,
-    derivedValue: rp.derivedValue,
-    derivedRounding: rp.derivedRounding,
-    derivedFloorMinor: rp.derivedFloorMinor,
-    derivedCeilingMinor: rp.derivedCeilingMinor,
-    options: (rp.occupancyOptions ?? []).map((o) => ({
-      occupancy: o.occupancy,
-      isPrimary: o.isPrimary,
-      mode: o.mode === "derived" ? "derived" : "manual",
-      rateMinor: o.rateMinor,
-      adjustmentType: o.adjustmentType as "percent" | "fixed" | null,
-      direction: o.direction as "increase" | "decrease" | null,
-      value: o.value,
-      rounding: o.rounding as never,
-    })),
-  };
-}
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * §4.4 — verify against the destination
