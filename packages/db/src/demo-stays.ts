@@ -33,7 +33,7 @@
 
 import { todayInTimeZone } from "@revio/core";
 
-import { forSystem } from "./rls.js";
+import { forSystem, withSystemTransaction } from "./rls.js";
 
 
 /** Everything this script creates is named with it, and a re-run deletes by it. */
@@ -245,3 +245,105 @@ export async function refreshDemoStays({ apply = false }: { apply?: boolean } = 
   return { lines, tenantsTouched, staysWritten };
 }
 
+
+export interface DemoCloseResult {
+  lines: string[];
+  staysClosed: number;
+  foliosClosed: number;
+}
+
+/** How many days past its booked departure a hand-made demo stay may sit before it is closed. */
+const STALE_AFTER_DAYS = 2;
+
+/**
+ * Check out the demo hotels' stays that should have ended days ago — the part `refreshDemoStays`
+ * deliberately does not touch.
+ *
+ * ## Why
+ *
+ * The refresh owns only its own `DEMO-STAY-` rows. Everything else on a demo hotel was made by hand:
+ * rehearsals, sandbox tests, a walk-in typed in during a demo. Those stays never check out on their
+ * own, so the demo front desk carried a guest "overstaying" since July and a cancelled booking with
+ * an open €393 bill — which to somebody being shown the product reads as a broken product, not as a
+ * hotel. (Found 2026-09-23 by the state-integrity audit: 3 overstays, 1 open folio, all demo.)
+ *
+ * ## What it does — the front desk's check-out, nothing more
+ *
+ * Mirrors `checkOut` in RevioPMS: the assignments get `checkedOutAt`, the reservation gets
+ * `departedAt` (the stay's real ending, never a status), and each open folio closes with the outcome
+ * its lines say — `settled` at zero, `outstanding` when money is owed, so it lands in receivables
+ * rather than vanishing. It never edits a money line.
+ *
+ * Two deliberate differences from the button: the departure is stamped at the BOOKED check-out day,
+ * because that is when the guest left in any story the demo tells; and room housekeeping status is
+ * left alone, because a room vacated in July has been cleaned and re-let since.
+ *
+ * ⚠️ `isDemo` tenants only, one transaction per stay, dry run unless `apply`.
+ */
+export async function closeStaleDemoStays({ apply = false }: { apply?: boolean } = {}): Promise<DemoCloseResult> {
+  const prisma = forSystem();
+  const lines: string[] = [];
+  let staysClosed = 0;
+  let foliosClosed = 0;
+
+  const tenants = await prisma.tenant.findMany({
+    where: { isDemo: true },
+    select: { id: true, name: true, properties: { select: { id: true, timezone: true } } },
+  });
+  if (tenants.length === 0) throw new Error("No demo tenants. Refusing to touch anything.");
+
+  for (const tenant of tenants) {
+    for (const property of tenant.properties) {
+      const cutoff = dayFrom(todayInTimeZone(property.timezone), -STALE_AFTER_DAYS);
+      const stale = await prisma.reservation.findMany({
+        where: {
+          tenantId: tenant.id, propertyId: property.id,
+          OR: [
+            // Still in the house days after the booked departure.
+            { departedAt: null, assignments: { some: { status: "active", checkedOutAt: null, checkOut: { lt: cutoff } } } },
+            // Left, but the bill was never closed.
+            { departedAt: { lt: cutoff }, folios: { some: { status: "open" } } },
+          ],
+        },
+        select: {
+          id: true, guestName: true, departedAt: true,
+          assignments: { where: { status: "active" }, select: { id: true, checkOut: true, checkedOutAt: true } },
+          folios: { where: { status: "open" }, select: { id: true, lines: { where: { voided: false }, select: { kind: true, amountMinor: true } } } },
+        },
+      });
+
+      for (const r of stale) {
+        const lastNight = r.assignments.reduce<Date | null>((m, a) => (!m || a.checkOut > m ? a.checkOut : m), null);
+        // Noon on the booked departure day — a check-out time, not midnight.
+        const departure = r.departedAt ?? (lastNight ? new Date(lastNight.getTime() + 10 * 3_600_000) : new Date());
+        const folioOutcomes = r.folios.map((f) => {
+          const balance = f.lines.reduce((s, l) => s + (l.kind === "payment" ? -l.amountMinor : l.amountMinor), 0);
+          return { id: f.id, balance, outcome: balance === 0 ? "settled" : "outstanding" };
+        });
+        lines.push(
+          `${tenant.name} · ${r.guestName}: departed ${iso(departure)}` +
+          (folioOutcomes.length ? ` · folio ${folioOutcomes.map((f) => `${f.outcome} (${(f.balance / 100).toFixed(2)})`).join(", ")}` : ""),
+        );
+        if (!apply) continue;
+
+        await withSystemTransaction(async (tx) => {
+          await tx.roomAssignment.updateMany({
+            where: { reservationId: r.id, status: "active", checkedOutAt: null },
+            data: { checkedOutAt: departure },
+          });
+          if (!r.departedAt) await tx.reservation.update({ where: { id: r.id }, data: { departedAt: departure } });
+          // `closedAt` is now, not the departure: a nightly accrual posted while the stay sat open
+          // must not read as "charged after the folio closed".
+          for (const f of folioOutcomes) {
+            await tx.folio.update({ where: { id: f.id }, data: { status: "closed", closedAt: new Date(), outcome: f.outcome } });
+          }
+        });
+        staysClosed++;
+        foliosClosed += folioOutcomes.length;
+      }
+    }
+  }
+  if (lines.length === 0) lines.push("No stale demo stays.");
+  if (!apply && staysClosed === 0 && lines[0] !== "No stale demo stays.") lines.push("Nothing was written. Re-run with --apply.");
+  return { lines, staysClosed, foliosClosed };
+}

@@ -7,11 +7,15 @@
  *   DATABASE_URL=… pnpm --filter @revio/db exec tsx scripts/refresh-demo-stays.ts           # dry run
  *   DATABASE_URL=… pnpm --filter @revio/db exec tsx scripts/refresh-demo-stays.ts --apply
  */
-import { refreshDemoStays } from "../src/demo-stays.js";
+import { closeStaleDemoStays, refreshDemoStays } from "../src/demo-stays.js";
 
-refreshDemoStays({ apply: process.argv.includes("--apply") })
-  .then(({ lines }) => {
+const apply = process.argv.includes("--apply");
+refreshDemoStays({ apply })
+  .then(async ({ lines }) => {
     for (const l of lines) console.log(l);
+    // The hand-made stays the refresh does not own — checked out once they are days past departure.
+    console.log("\nStale hand-made demo stays:");
+    for (const l of (await closeStaleDemoStays({ apply })).lines) console.log(`  ${l}`);
   })
   .catch((e) => {
     console.error(e instanceof Error ? e.message : e);

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { JOB, withJobLease, refreshDemoStays } from "@revio/db";
+import { JOB, withJobLease, refreshDemoStays, closeStaleDemoStays } from "@revio/db";
 
 /**
  * Scheduled entry point for the demo refresh.
@@ -35,7 +35,11 @@ export async function POST(req: NextRequest) {
       const { tenantsTouched, staysWritten, lines } = await refreshDemoStays({ apply: true });
       // The same trace the CLI prints, so a log line and a terminal say the same thing.
       for (const l of lines) console.log(`[demo-refresh] ${l}`);
-      return { ok: true, tenantsTouched, staysWritten };
+      // And the hand-made stays it does not own: checked out once they are days past departure, so
+      // the demo front desk never shows a guest "overstaying" since a rehearsal in July.
+      const closed = await closeStaleDemoStays({ apply: true });
+      for (const l of closed.lines) console.log(`[demo-refresh] stale: ${l}`);
+      return { ok: true, tenantsTouched, staysWritten, staleClosed: closed.staysClosed };
     });
     if (!lease.ran) {
       return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
