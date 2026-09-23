@@ -1522,6 +1522,12 @@ model Reservation {
 
   @@index([propertyId])
   @@index([channelId])
+  /// One row per booking a channel sent. Two concurrent pulls of one new revision each found no
+  /// existing row and could each create one — the same guest twice, a room off sale nobody sold.
+  /// The pull is serialised per channel now (`withChannelPullLock`); this makes it impossible
+  /// rather than unlikely. NULLs are distinct in Postgres, so direct and CRS bookings (no channel,
+  /// no external id) are unaffected.
+  @@unique([channelId, externalId])
   /// Front Desk asks "is this stay still in the house?" on every load. `departedAt` is the stay's
   /// ending — deliberately NOT a status value — so it is the column that question filters on.
   @@index([propertyId, departedAt])

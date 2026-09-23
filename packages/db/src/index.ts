@@ -81,6 +81,9 @@ export {
   acquireJobLease,
   releaseJobLease,
   withJobLease,
+  withChannelPullLock,
+  isChannelPullLock,
+  CHANNEL_PULL_LOCK_PREFIX,
   JOB,
   type LeaseResult,
 } from "./job-lease.js";

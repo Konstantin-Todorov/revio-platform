@@ -147,3 +147,15 @@ describe("jobHealth — output stability", () => {
     expect(jobHealth(leases, NOW, 600).state).toBe("ok");
   });
 });
+
+describe("jobHealth — per-channel pull locks share the table and are not jobs", () => {
+  it("does not report a disconnected channel's old lock as a stale job", () => {
+    const now = new Date("2026-09-23T12:00:00Z");
+    const report = jobHealth(
+      [{ name: "channel-pull:cm_disconnected", lastRunAt: new Date("2026-08-01T00:00:00Z") }],
+      now,
+    );
+    expect(report.jobs.some((j) => j.name.startsWith("channel-pull:"))).toBe(false);
+    expect(report.state).not.toBe("degraded");
+  });
+});

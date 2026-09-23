@@ -215,3 +215,61 @@ export const JOB = {
    */
   invoiceRun: "invoice-run",
 } as const;
+
+/**
+ * One pull per channel at a time — a lock, not a job.
+ *
+ * ## Why
+ *
+ * `JOB.channexPull` serialises the CRON, and only the cron. The Channex webhook and the manual Pull
+ * button called `pullChannel` directly, and Channex rings several times for one booking. On
+ * 2026-09-23, in the sandbox, two pulls fetched the same revision inside 165ms — one applied it,
+ * one found it unchanged. For a NEW booking both would have found no existing row and both would
+ * have created one: the same guest twice, a room taken off sale that nobody sold. Nothing in the
+ * database refused it (it does now — `Reservation @@unique([channelId, externalId])`).
+ *
+ * ## Why it waits instead of skipping
+ *
+ * A ring that arrives while another pull runs may be for a revision the running pull fetched too
+ * early to see. Skipping would leave that booking for the next cron tick, up to ten minutes — which
+ * is exactly the latency the webhook exists to remove. So a second caller waits its turn and then
+ * pulls; the extra pull is cheap and its empty result is the channel's heartbeat anyway (the
+ * dashboard's "Last successful sync" is read from those events).
+ *
+ * ## Why it is not in `JOB`
+ *
+ * `JOB` is what the dead-man's switch watches, and a channel that is disconnected stops being
+ * pulled on purpose. Its lock row going old is correct, not an outage — so these rows are named
+ * with a prefix `jobHealth` leaves out, and they never stamp `lastRunAt`.
+ */
+export const CHANNEL_PULL_LOCK_PREFIX = "channel-pull:";
+
+export function isChannelPullLock(name: string): boolean {
+  return name.startsWith(CHANNEL_PULL_LOCK_PREFIX);
+}
+
+export async function withChannelPullLock<T>(
+  channelId: string,
+  fn: () => Promise<T>,
+  opts: { ttlMs?: number; waitMs?: number; pollMs?: number } = {},
+): Promise<{ ran: true; result: T } | { ran: false; heldBy?: string }> {
+  const name = `${CHANNEL_PULL_LOCK_PREFIX}${channelId}`;
+  // A pull is a feed fetch, a few writes per revision and a push: seconds. Two minutes bounds a
+  // crashed holder without ever expiring under a live one.
+  const ttlMs = opts.ttlMs ?? 2 * 60_000;
+  const deadline = Date.now() + (opts.waitMs ?? 45_000);
+  const pollMs = opts.pollMs ?? 500;
+  for (;;) {
+    const lease = await acquireJobLease(name, ttlMs);
+    if (lease.acquired) {
+      try {
+        return { ran: true, result: await fn() };
+      } finally {
+        // `false`: a lock has no "last successful run" — see the note above.
+        await releaseJobLease(name, false).catch(() => undefined);
+      }
+    }
+    if (Date.now() >= deadline) return { ran: false, ...(lease.heldBy ? { heldBy: lease.heldBy } : {}) };
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}

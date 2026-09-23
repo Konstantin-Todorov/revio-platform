@@ -9,7 +9,9 @@
  *     rang — and even that is checked against our own database before anything happens. Everything
  *     about the booking comes from our own authenticated pull.
  *   * **The worst a forged request can do is cause one extra pull**, which is idempotent and
- *     rate-limited by the lease below. It cannot create, cancel or alter anything.
+ *     serialised per channel inside `pullChannel` (`withChannelPullLock`). It cannot create,
+ *     cancel or alter anything. (This line used to cite "the lease below"; there was none, and
+ *     two rings for one booking ran their imports side by side until 2026-09-23.)
  *   * **A wrong or missing secret is a 401 and nothing else** — no hint about whether the property
  *     exists, because an endpoint that answers differently for a real id is an enumeration oracle.
  *

@@ -7,7 +7,7 @@
  * inventory (a CRS booking, a PMS OOO / walk-in / check-in) can now call `syncRealChannels(db, propertyId)`
  * and the change reaches Channex immediately — no manual Re-sync in the CM.
  */
-import { forSystem, decryptSecret, forTenant, markBillable, releaseRoomsForCancellation } from "@revio/db";
+import { forSystem, decryptSecret, forTenant, markBillable, releaseRoomsForCancellation, withChannelPullLock } from "@revio/db";
 import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
@@ -911,10 +911,44 @@ export function pullSummary(args: {
   };
 }
 
+/**
+ * Run a create that the database may refuse as a duplicate channel booking.
+ *
+ * `Reservation @@unique([channelId, externalId])` is the guarantee; this turns its refusal into
+ * "someone else already imported it" (`null`) instead of a failed pull. Every other error throws.
+ */
+async function createOnce<T>(create: () => Promise<T>): Promise<T | null> {
+  try {
+    return await create();
+  } catch (e) {
+    if ((e as { code?: string })?.code === "P2002") return null;
+    throw e;
+  }
+}
+
+/**
+ * Pull one channel — one at a time per channel, whoever asks.
+ *
+ * Three callers reach this: the cron, the Channex webhook (which rings several times per booking)
+ * and the manual Pull button. Only the cron was serialised, so two webhook rings ran the import
+ * loop side by side and could each create the same new booking. See `withChannelPullLock`.
+ */
 export async function pullChannel(
   prisma: Db,
   channelId: string,
-  opts?: {
+  opts?: PullOptions,
+): Promise<PullOutcome> {
+  const locked = await withChannelPullLock(channelId, () => pullChannelNow(prisma, channelId, opts));
+  if (locked.ran) return locked.result;
+  // Waited the whole window and the other pull is still going — an honest "not now", never a
+  // success with zero counts, which would read exactly like a quiet channel.
+  return {
+    ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: "unknown",
+    error: "Another pull for this channel is still running. It will pick this booking up; try again in a minute.",
+  };
+}
+
+type PullOptions = {
     /**
      * Fetch from the bookings endpoint instead of the revisions feed.
      *
@@ -929,7 +963,12 @@ export async function pullChannel(
      * `failed_import` row in place once its room and rate resolve.
      */
     forceFullFetch?: boolean;
-  },
+};
+
+async function pullChannelNow(
+  prisma: Db,
+  channelId: string,
+  opts?: PullOptions,
 ): Promise<PullOutcome> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return { ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: "mock", error: "Unknown channel." };
@@ -1216,9 +1255,10 @@ export async function pullChannel(
     }
 
     if (unmapped || lines.length === 0) {
-      await prisma.reservation.create({
+      const placed = await createOnce(() => prisma.reservation.create({
         data: { tenantId, propertyId, channelId, externalId: raw.externalId, guestName: raw.guestName, status: "failed_import", totalMinor: raw.totalMinor, currency: raw.currency, ...fx },
-      });
+      }));
+      if (!placed) { unchanged++; continue; }
       /*
        * ⚠️ TELL THEM. Silence is what turned this into an incident.
        *
@@ -1297,7 +1337,7 @@ export async function pullChannel(
 
     const overbooked = await isOverbooked(lines);
 
-    await prisma.reservation.create({
+    const created = await createOnce(() => prisma.reservation.create({
       data: {
         tenantId, propertyId, channelId, externalId: raw.externalId, guestName: raw.guestName,
         status: overbooked ? "overbooked" : status, totalMinor: raw.totalMinor, currency: raw.currency, ...fx,
@@ -1306,7 +1346,9 @@ export async function pullChannel(
         ...(status === "cancelled" ? { cancelledAt: new Date() } : {}),
         lines: { create: lines },
       },
-    });
+    }));
+    // Another pull created this booking between our read and our write. It is imported — by them.
+    if (!created) { unchanged++; continue; }
     if (overbooked) {
       await prisma.errorItem.create({
         data: {

@@ -1,4 +1,4 @@
-import { JOB } from "@revio/db";
+import { JOB, isChannelPullLock } from "@revio/db";
 
 /**
  * What the scheduled jobs are doing — derived from what the code DECLARES, not from what has
@@ -58,7 +58,9 @@ export function jobHealth(
   staleAfterSeconds: number = STALE_AFTER_SECONDS,
 ): JobHealthReport {
   const declared = new Set<string>(Object.values(JOB));
-  const byName = new Map(leases.map((l) => [l.name, l] as const));
+  // Per-channel pull LOCKS share the lease table and are not jobs: a disconnected channel's lock
+  // going old is correct. See `withChannelPullLock`.
+  const byName = new Map(leases.filter((l) => !isChannelPullLock(l.name)).map((l) => [l.name, l] as const));
 
   // Every declared job, plus any orphan row. Sorted so the monitor's output is stable between polls
   // and a diff between two readings means something changed rather than that the rows came back in

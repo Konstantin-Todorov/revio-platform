@@ -14,7 +14,7 @@
  */
 import { prisma } from "../src/client.js";
 import { forSystem } from "../src/rls.js";
-import { acquireJobLease, releaseJobLease, withJobLease } from "../src/job-lease.js";
+import { acquireJobLease, releaseJobLease, withJobLease, withChannelPullLock, CHANNEL_PULL_LOCK_PREFIX } from "../src/job-lease.js";
 
 /*
  * Writes, so it runs against a LOCAL database only — the same guard `folio-atomic-verify` carries.
@@ -143,6 +143,59 @@ async function main() {
 
     const retried = await withJobLease(JOB_NAME, 60_000, async () => "retried");
     record("a failed run releases the lease, so the very next tick retries", retried.ran, retried.ran ? "ran" : "still blocked");
+
+    // ---------------------------------------------------------------------
+    // 6. One pull per channel — the webhook, the button and the cron together.
+    //    Channex rings several times per booking. Every ring must pull (a later ring may carry a
+    //    revision the earlier pull fetched too soon to see), and no two may run side by side.
+    // ---------------------------------------------------------------------
+    const PROBE_CHANNEL = "lease-verify-channel";
+    let inFlight = 0;
+    let peak = 0;
+    const rings = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        withChannelPullLock(PROBE_CHANNEL, async () => {
+          inFlight += 1;
+          peak = Math.max(peak, inFlight);
+          await new Promise((r) => setTimeout(r, 60));
+          inFlight -= 1;
+          return true;
+        }, { pollMs: 20, waitMs: 10_000 }),
+      ),
+    );
+    record("every one of 6 concurrent rings pulled — none was dropped", rings.every((r) => r.ran), `${rings.filter((r) => r.ran).length}/6 ran`);
+    record("no two pulls of one channel ever ran at the same moment", peak === 1, `peak concurrency ${peak}`);
+    const lockRow = await forSystem().jobLease.findUnique({ where: { name: `${CHANNEL_PULL_LOCK_PREFIX}${PROBE_CHANNEL}` } });
+    record(
+      "a channel lock never stamps lastRunAt, so the dead-man's switch cannot mistake it for a job",
+      lockRow !== null && lockRow.lastRunAt === null,
+      lockRow ? `lastRunAt ${lockRow.lastRunAt?.toISOString() ?? "null"}` : "no row",
+    );
+    await forSystem().jobLease.deleteMany({ where: { name: `${CHANNEL_PULL_LOCK_PREFIX}${PROBE_CHANNEL}` } });
+
+    // ---------------------------------------------------------------------
+    // 7. And if two imports race anyway, the DATABASE refuses the second copy of a booking.
+    // ---------------------------------------------------------------------
+    const channel = await forSystem().channel.findFirst({ select: { id: true, tenantId: true, propertyId: true } });
+    if (!channel) {
+      record("a seeded channel exists to race a booking import on", false, "seed the database first");
+    } else {
+      const externalId = `lease-verify-${Date.now()}`;
+      const attempt = () => forSystem().reservation.create({
+        data: {
+          tenantId: channel.tenantId, propertyId: channel.propertyId, channelId: channel.id, externalId,
+          guestName: "Race Probe", status: "confirmed", totalMinor: 0, currency: "EUR",
+        },
+      }).then(() => "created" as const, (e: { code?: string }) => (e?.code === "P2002" ? "refused" as const : Promise.reject(e)));
+      const outcomes = await Promise.all(Array.from({ length: 8 }, attempt));
+      const rows = await forSystem().reservation.count({ where: { channelId: channel.id, externalId } });
+      await forSystem().reservation.deleteMany({ where: { channelId: channel.id, externalId } });
+      record(
+        "8 concurrent imports of one channel booking leave exactly one reservation",
+        rows === 1 && outcomes.filter((o) => o === "created").length === 1,
+        `${rows} row(s) · ${outcomes.filter((o) => o === "refused").length} refused as duplicates`,
+      );
+    }
   } finally {
     await reset();
     console.log("\nCleaned up.");
