@@ -1,12 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { occupancyKeyFor, occupancyKeysFor, releaseRoomsForCancellation, isStayInHouse } from "@revio/db";
+import { occupancyKeyFor, occupancyKeysFor, releaseRoomsForCancellation, isStayInHouse, quoteStay } from "@revio/db";
 import { prisma } from "./db";
-import { computeWaterfall, deriveRate, isOverbooking, pastDateRefusal, pastRangeRefusal, plansPerRoom, ROOM_OCCUPYING_STATUSES, todayInTimeZone, type Capability, type DerivedRateConfig } from "@revio/core";
+import { pastDateRefusal, pastRangeRefusal, plansPerRoom, todayInTimeZone, type Capability } from "@revio/core";
 import { getProperty } from "./data";
-import { logAudit, recordPush, recordPull, str, int, eachDate, utcDay } from "./mutation-helpers";
-import type { PushField } from "./connectivity";
+import { logAudit, recordPush, str, int, eachDate, utcDay } from "./mutation-helpers";
+import { pullChannel, type PushField } from "./connectivity";
 import { guard, requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
 
@@ -639,110 +639,62 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
   const _g = await guard("manageReservations");
   if (!_g.ok) return { ok: false, error: _g.error };
   const property = await getProperty();
-  const { id: propertyId, tenantId } = property;
   const channelId = str(fd, "channelId");
   const roomTypeId = str(fd, "roomTypeId");
   const ratePlanId = str(fd, "ratePlanId");
   const checkIn = str(fd, "checkIn");
   const nights = Math.max(1, int(fd, "nights", 1));
   const quantity = Math.max(1, int(fd, "quantity", 1));
-  const guestName = str(fd, "guestName") || "Walk-in Guest";
+  const guestName = str(fd, "guestName").trim() || "Walk-in Guest";
   if (!channelId || !roomTypeId || !ratePlanId || !checkIn) return { ok: false, error: "Fill channel, room, rate and date." };
+  const pastRefusal = pastDateRefusal({ iso: checkIn, earliest: todayInTimeZone(property.timezone) });
+  if (pastRefusal) return { ok: false, error: pastRefusal };
 
-  const [channel, ratePlan, stdId] = await Promise.all([
+  /*
+   * ⚠️ Through the REAL import, not beside it.
+   *
+   * This action used to write the reservation itself: priced from stored rows only (a night nobody
+   * had priced became a €0 booking), no mapping involved, and "imported" / "re-pushed" events
+   * written by hand. The demo therefore showed a loop the product does not run. Now it builds the
+   * booking the way an OTA sends one — the channel's own room and rate ids, the channel's price —
+   * and hands it to `pullChannel`, so it meets the same mapping, overbooking check, sync events and
+   * re-push as a real Booking.com reservation.
+   */
+  const [channel, roomMap, rateMaps] = await Promise.all([
     prisma.channel.findUnique({ where: { id: channelId } }),
-    prisma.ratePlan.findUnique({ where: { id: ratePlanId } }),
-    editablePlanId(propertyId),
+    prisma.channelRoomTypeMapping.findFirst({ where: { channelId, roomTypeId, externalRoomId: { not: null } } }),
+    prisma.channelRatePlanMapping.findMany({ where: { channelId, ratePlanId, externalRateId: { not: null } } }),
   ]);
-  if (!channel || !ratePlan) return { ok: false, error: "Unknown channel or rate plan." };
-
-  const dates = Array.from({ length: nights }, (_, i) => utcDay(checkIn).getTime() + i * 86_400_000).map((t) => new Date(t));
-
-  // Price the stay from the standard rate (+ derive if this rate plan is derived).
-  let totalMinor = 0;
-  let overbooked = false;
-  const derivedCfg: DerivedRateConfig | null = ratePlan.priceLogic === "derived" && ratePlan.derivedType ? {
-    parentRatePlanId: stdId ?? "",
-    adjustmentType: ratePlan.derivedType as "percent" | "fixed",
-    direction: (ratePlan.derivedDirection as "increase" | "decrease") ?? "decrease",
-    value: ratePlan.derivedValue ?? 0,
-    rounding: (ratePlan.derivedRounding as DerivedRateConfig["rounding"]) ?? "none",
-  } : null;
-
-  const rt = await prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId } });
-  const checkInDate = utcDay(checkIn);
-  const checkOutDate = new Date(checkInDate.getTime() + nights * 86_400_000);
-
-  // Rooms already sold per night (derived from active reservations) + the date allotment, for the
-  // overbooking check. We do NOT mutate inventory — availability = inventory − sold updates itself once
-  // this reservation lands (sold is always derived).
-  const [priorLines, cells, periods, activeHolds] = await Promise.all([
-    prisma.reservationLine.findMany({
-      where: {
-        roomTypeId,
-        reservation: { propertyId, status: { in: [...ROOM_OCCUPYING_STATUSES] } },
-        checkIn: { lt: checkOutDate },
-        checkOut: { gt: checkInDate },
-      },
-    }),
-    // ROOM-LEVEL: the manual sell limit lives on the room-wide cell. A plan cell carries
-    // `inventory: null`, so letting one win this map would drop the limit and hide an overbooking.
-    prisma.dailyCell.findMany({ where: { roomTypeId, date: { gte: checkInDate, lt: checkOutDate }, ratePlanId: null } }),
-    prisma.roomInventoryPeriod.findMany({ where: { roomTypeId, dateFrom: { lt: checkOutDate }, dateTo: { gte: checkInDate } } }),
-    prisma.hold.findMany({
-      where: { roomTypeId, status: "active", expiresAt: { gt: new Date() }, checkIn: { lt: checkOutDate }, checkOut: { gt: checkInDate } },
-    }),
-  ]);
-  const invByDate = new Map(cells.map((c) => [c.date.toISOString().slice(0, 10), c.inventory]));
-  // One room type, so one lookup — before the loop, not inside it.
-  const quoteOccupancy = await occupancyKeyFor(prisma, roomTypeId);
-
-  for (const date of dates) {
-    const sp = stdId ? await prisma.ratePrice.findUnique({ where: { roomTypeId_ratePlanId_date_occupancy: { roomTypeId, ratePlanId: stdId, date, occupancy: quoteOccupancy } } }) : null;
-    const stdMinor = sp?.priceMinor ?? 0;
-    totalMinor += (derivedCfg ? deriveRate(stdMinor, derivedCfg) : stdMinor) * quantity;
-
-    const k = date.toISOString().slice(0, 10);
-    const sold = priorLines.filter((l) => l.checkIn <= date && date < l.checkOut).reduce((s, l) => s + l.quantity, 0);
-    const held = activeHolds.filter((h) => h.checkIn <= date && date < h.checkOut).reduce((s, h) => s + h.quantity, 0);
-    const remaining = computeWaterfall({
-      physical: rt.totalRooms,
-      outOfOrder: periods.filter((p) => p.kind === "out_of_order" && p.dateFrom <= date && date <= p.dateTo).reduce((s, p) => s + p.rooms, 0),
-      closed: periods.filter((p) => p.kind === "closure" && p.dateFrom <= date && date <= p.dateTo).reduce((s, p) => s + p.rooms, 0),
-      manualSellLimit: invByDate.get(k) ?? null,
-      holds: held, confirmed: sold,
-    }).remaining;
-    if (isOverbooking(remaining)) overbooked = true;
+  if (!channel || channel.propertyId !== property.id) return { ok: false, error: "That channel is not connected to this property." };
+  if (channel.connectivityMode !== "mock") return { ok: false, error: "Simulated bookings only run on demo channels." };
+  const rateMap = rateMaps.find((m) => m.roomTypeId === roomTypeId) ?? rateMaps.find((m) => m.roomTypeId == null);
+  // An unmapped room or rate cannot be sold on the channel — say so, the way the real import would.
+  if (!roomMap?.externalRoomId || !rateMap?.externalRateId) {
+    return { ok: false, error: `That room and rate are not mapped to ${channel.name}, so the channel could not have sold them. Map them in Mapping first.` };
   }
 
-  // The channel inherits the property currency, so this booking is already in property currency
-  // (FX rate 1). Real foreign-currency imports will set a real rate + converted amount here.
-  const reservation = await prisma.reservation.create({
-    data: {
-      tenantId, propertyId, channelId, externalId: String(Math.floor(100000000 + Math.random() * 899999999)),
-      guestName, status: overbooked ? "overbooked" : "confirmed",
-      totalMinor, currency: property.baseCurrency,
-      propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
-      lines: { create: [{ roomTypeId, ratePlanId, quantity, checkIn: checkInDate, checkOut: checkOutDate, priceMinor: totalMinor }] },
-    },
+  const checkOut = new Date(Date.parse(`${checkIn}T00:00:00Z`) + nights * 86_400_000).toISOString().slice(0, 10);
+  const room = await prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId }, select: { name: true, maxGuests: true } });
+  const totalMinor = await quoteStay(prisma, { roomTypeId, ratePlanId, checkIn, checkOut, quantity });
+  if (totalMinor == null) {
+    return { ok: false, error: "This rate plan has no price for those nights and no default rate, so no channel is selling it." };
+  }
+
+  const outcome = await pullChannel(channelId, {
+    inject: [{
+      externalId: String(Math.floor(100000000 + Math.random() * 899999999)),
+      guestName, status: "confirmed", totalMinor, currency: property.baseCurrency,
+      lines: [{
+        externalRoomId: roomMap.externalRoomId, externalRateId: rateMap.externalRateId,
+        quantity, checkIn, checkOut, priceMinor: totalMinor, adults: Math.max(1, room.maxGuests),
+      }],
+    }],
   });
+  if (!outcome.ok) return { ok: false, error: outcome.error ?? "The booking could not be imported." };
+  if (outcome.failedImport > 0) return { ok: false, error: "The channel sent the booking but it could not be imported — see the Error Center." };
 
-  await recordPull(propertyId, tenantId, `New reservation imported (${channel.name}) — ${guestName}`, channelId);
-  await recordPush(propertyId, tenantId, `Availability re-pushed after booking on ${channel.name}`);
-  await logAudit(propertyId, tenantId, { entity: `Reservation · ${guestName}`, field: "import", newValue: `${rt.name} ×${quantity} · ${nights}n`, source: "api" });
-
-  if (overbooked) {
-    await prisma.errorItem.create({
-      data: {
-        tenantId, propertyId, channelId, severity: "critical", code: "overbooking_detected",
-        message: `Overbooking on ${rt.name}`, productLabel: `${channel.name} · ${rt.name}`,
-        recommendedAction: "Resolve manually with the guest or move the booking", resolved: false,
-      },
-    });
-    revalidatePath("/errors");
-  }
-
-  void reservation;
+  await logAudit(property.id, property.tenantId, { entity: `Reservation · ${guestName}`, field: "import", newValue: `${room.name} ×${quantity} · ${nights}n`, source: "api" });
+  revalidatePath("/errors");
   revalidateCalendar();
   return { ok: true, affected: nights };
 }

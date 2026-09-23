@@ -44,6 +44,7 @@ export {
   type HandoffResult,
 } from "./auth-tokens.js";
 export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
+export { quoteStay } from "./stay-quote.js";
 export {
   writeWelcomeProperty,
   writeWelcomeRoomType,

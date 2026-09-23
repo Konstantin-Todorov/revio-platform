@@ -11,7 +11,7 @@ import { forSystem, decryptSecret, forTenant, markBillable, releaseRoomsForCance
 import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
-  type RestrictionType, type ChannelAdapter, type ExternalProduct,
+  type RestrictionType, type ChannelAdapter, type ExternalProduct, type RawReservation,
   resolveRate, toResolvablePlan, effectiveModel, effectivePrimary, type PriceLookup, pushedOf, importFailureEmail } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } from "./channex-channel-api.js";
@@ -752,6 +752,23 @@ export function pushVerdict(real: RealPushOutcome): { status: string; detail: st
  * record their own attributed events inside `syncChannel`; when anything was delivered, nothing
  * more is written. When nothing was delivered, ONE row says why, with the verdict's status.
  */
+/** One "pushed" row per connected mock channel — a demo property's Sync Center. Returns how many. */
+async function recordMockPushRows(db: Db, tenantId: string, propertyId: string, summary: string, detail?: string | null) {
+  const mocks = await db.channel.findMany({
+    where: { propertyId, status: "connected", connectivityMode: "mock" },
+    select: { id: true, name: true },
+  });
+  if (mocks.length > 0) {
+    await db.syncEvent.createMany({
+      data: mocks.map((c: { id: string; name: string }) => ({
+        tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary,
+        detail: detail ?? `Pushed to ${c.name} (mock)`,
+      })),
+    });
+  }
+  return mocks;
+}
+
 export async function recordAvailabilityPush(
   db: Db,
   args: {
@@ -764,18 +781,7 @@ export async function recordAvailabilityPush(
   },
 ): Promise<{ status: string; delivered: boolean }> {
   const { tenantId, propertyId, summary, scope } = args;
-  const mocks = await db.channel.findMany({
-    where: { propertyId, status: "connected", connectivityMode: "mock" },
-    select: { id: true, name: true },
-  });
-  if (mocks.length > 0) {
-    await db.syncEvent.createMany({
-      data: mocks.map((c: { id: string; name: string }) => ({
-        tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary,
-        detail: args.detail ?? `Pushed to ${c.name} (mock)`,
-      })),
-    });
-  }
+  const mocks = await recordMockPushRows(db, tenantId, propertyId, summary, args.detail);
 
   let real: RealPushOutcome;
   try {
@@ -963,6 +969,16 @@ type PullOptions = {
      * `failed_import` row in place once its room and rate resolve.
      */
     forceFullFetch?: boolean;
+    /**
+     * Demo only: import these bookings as though the channel's feed had just returned them.
+     *
+     * ⚠️ Refused for any channel that is not `mock`. It exists so the demo's "Simulate booking"
+     * runs the SAME import a real OTA booking runs — mapping, overbooking check, sync events,
+     * re-push — instead of a second, hand-written copy of it. That copy priced from stored rows
+     * only (a night nobody priced became a €0 booking), skipped the mapping, and wrote "imported"
+     * and "re-pushed" events itself, so the demo showed a loop the product does not run.
+     */
+    inject?: RawReservation[];
 };
 
 async function pullChannelNow(
@@ -998,14 +1014,19 @@ async function pullChannelNow(
     return { ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: channel.connectivityMode, error: "Channel is not fully set up." };
   }
 
-  const useFeed = !opts?.forceFullFetch
+  if (opts?.inject && channel.connectivityMode !== "mock") {
+    return { ok: false, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: channel.connectivityMode, error: "Only a demo channel can be sent a simulated booking." };
+  }
+  const useFeed = !opts?.inject && !opts?.forceFullFetch
     && typeof adapter.pullRevisions === "function"
     && typeof adapter.acknowledgeBooking === "function";
   const since = new Date(Date.now() - PULL_LOOKBACK_DAYS * DAY_MS).toISOString();
   let raws;
   const ackIds: string[] = [];
   try {
-    if (useFeed) {
+    if (opts?.inject) {
+      raws = opts.inject;
+    } else if (useFeed) {
       const revisions = await adapter.pullRevisions!();
       raws = revisions.map((r) => r.reservation);
       for (const r of revisions) ackIds.push(r.revisionId);
@@ -1410,7 +1431,12 @@ async function pullChannelNow(
 
   // Re-push the nights this pull actually moved. Unscoped, this covered fourteen days from today and
   // so said nothing at all about a booking further out than that.
-  if (touched.length > 0) await syncRealChannels(prisma, propertyId, stayScope(touched));
+  if (touched.length > 0) {
+    await syncRealChannels(prisma, propertyId, stayScope(touched));
+    // A demo property's mock channels "receive" the re-push as rows in the Sync Center — the same
+    // rows every other write records for them. Real channels were just pushed for real, above.
+    await recordMockPushRows(prisma, tenantId, propertyId, `Availability re-pushed after booking on ${channel.name}`);
+  }
 
   /*
    * "Free until your first booking syncs" — the moment that makes it true for a client with channel

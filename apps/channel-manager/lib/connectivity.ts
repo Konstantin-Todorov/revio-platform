@@ -30,8 +30,8 @@ export function syncRealChannels(propertyId: string, scope?: PushScope): Promise
   return sharedSyncRealChannels(prisma, propertyId, scope);
 }
 
-export function pullChannel(channelId: string): Promise<PullOutcome> {
-  return sharedPullChannel(prisma, channelId);
+export function pullChannel(channelId: string, opts?: Parameters<typeof sharedPullChannel>[2]): Promise<PullOutcome> {
+  return sharedPullChannel(prisma, channelId, opts);
 }
 
 /**

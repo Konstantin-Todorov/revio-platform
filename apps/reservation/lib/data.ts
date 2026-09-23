@@ -2,9 +2,10 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { todayInTimeZone } from "@revio/core";
+import { quoteStay } from "@revio/db";
 import { computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
   matchDuplicates, normalisePhone, type DuplicateCandidate,
-  resolveRate, resolveStay, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
+  resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
   ratePlanRows, displayedRate, rateSourceNote, toResolvablePlan,
 } from "@revio/core";
 import { getSession } from "./session";
@@ -549,49 +550,15 @@ export async function remainingByNight(
 }
 
 /**
- * Total accommodation price for a stay on one (room type, rate plan) — through `resolveStay`, the
- * resolver the Channex push, the booking engine and the folio use.
- *
- * ⚠️ This read stored `RatePrice` rows itself and returned null if any night had none. The push
- * resolves the same night to the plan's DEFAULT rate, so a night Booking.com was selling at €120
- * could not be sold at the front desk at all — the search dropped the plan as "not on sale for
- * these dates". It also read prices at `defaultOccupancy ?? maxGuests`, which misses a per-room
- * price (stored at the ceiling) for any room whose default occupancy is lower, and it ignored the
- * party size, so a per-person plan quoted two guests' price to one. Null now means what the push
- * means by it: this plan genuinely cannot price one of these nights.
+ * Total accommodation price for a stay — `quoteStay` in `@revio/db`, the resolver the push, the
+ * engine and the folio use. This read stored rows itself and returned null for any night nobody had
+ * priced, while the channel sold that night at the plan default: reception could not sell a room
+ * Booking.com was selling.
  */
-export async function stayQuote(
+export function stayQuote(
   roomTypeId: string, ratePlanId: string, checkIn: string, checkOut: string, quantity = 1, guests?: number,
 ) {
-  const nights = nightsOf(checkIn, checkOut);
-  const room = await prisma.roomType.findUnique({
-    where: { id: roomTypeId }, select: { propertyId: true, maxGuests: true, defaultOccupancy: true },
-  });
-  if (!room || nights.length === 0) return null;
-  // Every plan of the property: a derived plan resolves through its parent chain.
-  const [planRows, defaults, rows] = await Promise.all([
-    prisma.ratePlan.findMany({ where: { propertyId: room.propertyId }, include: { occupancyOptions: true } }),
-    prisma.propertyDefaults.findUnique({ where: { propertyId: room.propertyId }, select: { pricingModel: true } }),
-    prisma.ratePrice.findMany({
-      where: { roomTypeId, date: { gte: new Date(`${checkIn}T00:00:00Z`), lt: new Date(`${checkOut}T00:00:00Z`) } },
-      select: { ratePlanId: true, date: true, occupancy: true, priceMinor: true },
-    }),
-  ]);
-  const plans = new Map(planRows.map((p) => [p.id, toResolvablePlan(p)]));
-  const plan = plans.get(ratePlanId);
-  if (!plan) return null;
-  const stored = new Map(rows.map((r) => [`${r.ratePlanId}:${ymd(r.date)}:${r.occupancy ?? ""}`, r.priceMinor]));
-  const lookup: PriceLookup = (_rt, rp, k, occ) => stored.get(`${rp}:${k}:${occ}`) ?? null;
-  const ceiling = Math.max(1, room.maxGuests);
-  // Guests per room, when the party is known; otherwise the plan's headline occupancy.
-  const occupancy = guests && guests > 0
-    ? Math.min(ceiling, Math.max(1, Math.ceil(guests / Math.max(1, quantity))))
-    : effectivePrimary(plan.primaryOccupancy, room.defaultOccupancy, ceiling);
-  const stay = resolveStay({
-    lookup, plans, roomTypeId, maxOccupancy: ceiling, roomDefaultOccupancy: room.defaultOccupancy,
-    propertyModel: defaults?.pricingModel ?? "per_room", plan, occupancy,
-  }, nights);
-  return stay ? stay.totalMinor * quantity : null;
+  return quoteStay(prisma, { roomTypeId, ratePlanId, checkIn, checkOut, quantity, ...(guests ? { guests } : {}) });
 }
 
 export interface StaySearch {
