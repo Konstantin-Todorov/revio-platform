@@ -436,6 +436,10 @@ export async function pauseChannelAction(fd: FormData): Promise<void> {
     channelCode: ch?.code,
   });
   revalidateChannels();
+  // Said on the screen, not only in the audit log. The channel reads "paused" either way — that is
+  // deliberate — so without this a hotel that pressed it during an incident sees the button work
+  // while the OTA goes on selling.
+  if (!out.ok) return flashError(out.error ?? "The channel did not confirm the change.");
 }
 
 export async function resumeChannelAction(fd: FormData): Promise<void> {
@@ -467,6 +471,10 @@ export async function disconnectChannelAction(fd: FormData): Promise<void> {
     channelCode: ch?.code,
   });
   revalidateChannels();
+  // Said on the screen, not only in the audit log. The channel reads "disconnectd" either way — that is
+  // deliberate — so without this a hotel that pressed it during an incident sees the button work
+  // while the OTA goes on selling.
+  if (!out.ok) return flashError(out.error ?? "The channel did not confirm the change.");
 }
 
 export async function reconnectChannelAction(fd: FormData): Promise<void> {

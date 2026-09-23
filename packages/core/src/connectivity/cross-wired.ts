@@ -157,13 +157,12 @@ export interface RecordedMapping {
    * cross-wire says prices are going to the wrong room right now, which is false, and says it in
    * red on the page somebody reads before telephoning the customer.
    *
-   * ⚠️ **"Not pushed" means ARI, and there is exactly one exception.** `pushStopSellOverlay` — what
-   * pause and disconnect send — deliberately does NOT filter on `active`, because closing a channel
-   * has to close everything currently live at the OTA including whatever a stale mapping has been
-   * selling. So a cross-wired mapping on a switched-off plan is harmless until somebody pauses or
-   * disconnects, and at that moment it stop-sells the WRONG room. That is why the stale-mapping
-   * alert says so in as many words and is not merely housekeeping. Making this exception visible in
-   * the data rather than only in prose is written up as a task in `docs/HANDOFF-2026-09-22.md`.
+   * ⚠️ **Corrected 2026-09-23.** A day earlier this comment said a pause would stop-sell "the WRONG
+   * room" through such a mapping. It does not: `pushStopSellOverlay` closes every mapped room, so
+   * there is no wrong one, and `resumeChannel` re-opens through `syncChannel`, which skips
+   * switched-off plans — so the stale rate correctly stays closed. What IS true is narrower: whatever
+   * the channel last received for the rate is frozen there, and re-enabling the plan would publish
+   * through a mapping nobody has checked. That is what the stale-mapping alert now says.
    */
   active: boolean;
 }

@@ -100,3 +100,48 @@ export function unmappedPairs(
   }
   return gaps;
 }
+
+/**
+ * Which (channel room, channel rate) pairs a STOP-SELL has to close.
+ *
+ * ## Why this is not the ARI pairing
+ *
+ * `pushStopSellOverlay` used to send every mapped room × every mapped rate — including pairs that do
+ * not exist at the channel, a rate belonging to the 1-Bedroom addressed to the 2-Bedroom. On a
+ * three-room property that is roughly two pairs in three the channel cannot place. They closed
+ * nothing, but they made the push's result permanently "rejected", which is why nobody could read
+ * the result — and so nobody did: a pause answered "all dates closed" whatever the channel said.
+ *
+ * ## …and why it is not quite the ARI pairing either
+ *
+ * The ARI push refuses a property-wide ("catch-all") rate mapping on a real channel, because
+ * publishing a PRICE through one can land it on the wrong room — the €666 of 13 September. A
+ * stop-sell points the other way. Closing too much is the safe error; closing too little leaves a
+ * rate on sale that somebody pressed Pause to stop. So here a room-specific mapping pairs only with
+ * its own room, and a catch-all pairs with every room: the extra pairs may be refused, and that is a
+ * price worth paying to be sure the one that exists is closed.
+ *
+ * Switched-off plans are NOT excluded, deliberately. The ARI push skips them, so whatever the channel
+ * last received for them is frozen there; a pause has to close that too.
+ */
+export function stopSellPairs(
+  roomMaps: readonly { roomTypeId: string; externalRoomId: string | null }[],
+  rateMaps: readonly RatePlanMappingRow[],
+): { externalRoomId: string; externalRateId: string }[] {
+  const index = indexRateMappings(rateMaps, { allowCatchAll: true });
+  const planIds = [...new Set(rateMaps.map((m) => m.ratePlanId))];
+  const seen = new Set<string>();
+  const out: { externalRoomId: string; externalRateId: string }[] = [];
+  for (const room of roomMaps) {
+    if (!room.externalRoomId) continue;
+    for (const planId of planIds) {
+      const externalRateId = resolveExternalRateId(index, room.roomTypeId, planId);
+      if (!externalRateId) continue;
+      const key = `${room.externalRoomId}|${externalRateId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ externalRoomId: room.externalRoomId, externalRateId });
+    }
+  }
+  return out;
+}

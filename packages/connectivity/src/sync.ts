@@ -17,7 +17,7 @@ import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } from "./channex-channel-api.js";
 import { sendEmail, publicBaseUrl } from "@revio/email";
 import { decidePull, type Stay } from "./pull-merge.js";
-import { indexRateMappings, resolveExternalRateId } from "./rate-mapping.js";
+import { indexRateMappings, resolveExternalRateId, stopSellPairs } from "./rate-mapping.js";
 import { comparePublished, summarisePublished, type ExpectedRate, type PublishedSummary } from "./published-check.js";
 
 /** The tenant-scoped Prisma proxy each app already builds (`@revio/db` `forTenant`). */
@@ -1306,36 +1306,70 @@ export interface ChannelActionOutcome {
 /** Build a full-horizon STOP-SELL overlay for one channel (used by pause + disconnect close-out).
  * Never touches the core's ARI — availability and rates stay intact, so Resume can restore the
  * exact prior state just by re-pushing the truth. */
-async function pushStopSellOverlay(prisma: Db, channelId: string): Promise<void> {
+/**
+ * What a stop-sell actually did — read, not assumed.
+ *
+ * ⚠️ This returned `void` until 2026-09-23 and threw away the adapter's answer. The adapter was built
+ * carefully to report failure honestly — a 401, a value refused inside a 200, a pair the channel
+ * cannot place all come back as `ok: false` with the reasons — and one layer up that answer was
+ * discarded, so `pauseChannel` recorded "all dates closed · success" whatever happened. A pause is
+ * pressed to stop selling NOW, usually during an incident; a dead key (the 401 trap in the root
+ * CLAUDE.md, three incidents so far) closed nothing and said everything was closed.
+ */
+export interface StopSellOutcome {
+  /** False only when something the channel was asked to close was not confirmed closed. */
+  ok: boolean;
+  /** Distinct (room, rate) pairs addressed — zero means nothing was mapped, which is not a failure. */
+  pairs: number;
+  /** Plain-language reason when not ok: what the channel said, not a stack trace. */
+  error: string | null;
+}
+
+async function pushStopSellOverlay(prisma: Db, channelId: string): Promise<StopSellOutcome> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
-  if (!channel || channel.connectivityMode === "mock") return; // mock channels: the flag alone suffices
+  // Mock channels: the status flag alone is the whole truth; there is no far end to close.
+  if (!channel || channel.connectivityMode === "mock") return { ok: true, pairs: 0, error: null };
   const [roomMaps, rateMaps] = await Promise.all([
     prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: "complete", externalRoomId: { not: null } } }),
     prisma.channelRatePlanMapping.findMany({ where: { channelId, status: "complete", externalRateId: { not: null } } }),
   ]);
+  // Each rate with its own room, not every rate with every room — see `stopSellPairs`.
+  const pairs = stopSellPairs(roomMaps, rateMaps);
+  if (pairs.length === 0) return { ok: true, pairs: 0, error: null };
+
   const start = new Date(`${ymd(new Date())}T00:00:00Z`);
   const updates: AriUpdate[] = [];
   for (let i = 0; i < 365; i++) {
     const k = ymd(new Date(start.getTime() + i * DAY_MS));
-    for (const rm of roomMaps) {
-      for (const pm of rateMaps) {
-        updates.push({
-          externalRoomId: rm.externalRoomId!, externalRateId: pm.externalRateId!, date: k,
-          bookable: 0, priceMinor: 0, currency: "EUR", restrictions: { stopSell: true },
-        });
-      }
+    for (const pair of pairs) {
+      updates.push({
+        externalRoomId: pair.externalRoomId, externalRateId: pair.externalRateId, date: k,
+        bookable: 0, priceMinor: 0, currency: "EUR", restrictions: { stopSell: true },
+      });
     }
   }
-  if (updates.length === 0) return;
-  const mode = adapterMode(channel.connectivityMode);
-  const adapter = createChannelAdapter({
-    mode,
-    channelCode: channel.code,
-    ...(mode !== "mock"
-      ? { channex: { apiKey: await channexKey(channel.tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
-      : {}),
-  });
-  await adapter.pushAri(updates);
+
+  try {
+    const mode = adapterMode(channel.connectivityMode);
+    const adapter = createChannelAdapter({
+      mode,
+      channelCode: channel.code,
+      ...(mode !== "mock"
+        ? { channex: { apiKey: await channexKey(channel.tenantId, channel.connectivityMode), propertyId: channel.externalPropertyId ?? "" } }
+        : {}),
+    });
+    const result = await adapter.pushAri(updates);
+    if (result.ok) return { ok: true, pairs: pairs.length, error: null };
+    // One reason is enough to act on; 365 copies of it are not more informative.
+    const reasons = [...new Set(result.rejected.map((r) => r.reason))];
+    return {
+      ok: false,
+      pairs: pairs.length,
+      error: `${result.rejected.length} of ${updates.length} closures were not confirmed — ${reasons.slice(0, 2).join("; ")}${reasons.length > 2 ? ` (+${reasons.length - 2} more)` : ""}`,
+    };
+  } catch (e) {
+    return { ok: false, pairs: pairs.length, error: e instanceof Error ? e.message : "the channel did not answer" };
+  }
 }
 
 /** Pause: reversible stop-sell overlay on THIS channel only — other channels keep selling from the
@@ -1344,14 +1378,37 @@ export async function pauseChannel(prisma: Db, channelId: string): Promise<Chann
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return { ok: false, error: "Unknown channel." };
   if (channel.status !== "connected") return { ok: false, error: "Only a connected channel can be paused." };
-  await pushStopSellOverlay(prisma, channelId);
+  const closed = await pushStopSellOverlay(prisma, channelId);
+  /*
+   * ⚠️ Paused EITHER WAY — the same decision `disconnectChannel` already makes, for the same reason.
+   *
+   * Somebody pressed Pause to stop this channel selling. Leaving it `connected` because the close
+   * was refused would go on pushing availability to a channel a person has decided to stop, which
+   * is the opposite of what they asked. What changes is that the event and the answer say what the
+   * channel actually confirmed. It used to write "all dates closed · success" unconditionally.
+   */
   await prisma.channel.update({ where: { id: channelId }, data: { status: "paused" } });
   await prisma.syncEvent.create({
     data: {
-      tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push", status: "success",
-      summary: `Channel paused — all dates closed on ${channel.name} (stop-sell overlay, reversible)`,
+      tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push",
+      status: closed.ok ? "success" : "failed",
+      summary: closed.ok
+        ? closed.pairs === 0
+          ? `Channel paused — ${channel.name} had nothing mapped, so nothing needed closing`
+          : `Channel paused — all dates closed on ${channel.name} (stop-sell overlay, reversible)`
+        : `Channel paused here, but ${channel.name} did NOT confirm the close — it may still be selling`,
+      ...(closed.error ? { detail: closed.error } : {}),
     },
   });
+  if (!closed.ok) {
+    return {
+      ok: false,
+      error:
+        `${channel.name} is paused here and no longer receives updates, but the channel did not confirm ` +
+        `that it closed the dates, so it may still be selling. Close it in the channel's own extranet ` +
+        `or Channex now. (${closed.error})`,
+    };
+  }
   return { ok: true };
 }
 
@@ -1436,7 +1493,7 @@ export async function disconnectChannel(prisma: Db, channelId: string): Promise<
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   if (!channel) return { ok: false, error: "Unknown channel." };
   if (channel.status === "disconnected") return { ok: false, error: "Already disconnected." };
-  await pushStopSellOverlay(prisma, channelId);
+  const closed = await pushStopSellOverlay(prisma, channelId);
   const off = await switchOffAtChannel(prisma, channel);
   /*
    * ⚠️ Our row is marked disconnected EITHER WAY.
@@ -1450,12 +1507,24 @@ export async function disconnectChannel(prisma: Db, channelId: string): Promise<
   await prisma.syncEvent.create({
     data: {
       tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push",
-      status: off.off ? "success" : "warning",
-      summary: off.off
-        ? `Channel disconnected — ${channel.name} closed out and switched off at the channel; mapping kept dormant for a later reconnect`
-        : `Channel disconnected here — ${channel.name} closed out, but it could NOT be switched off at the channel and is still active there`,
+      status: off.off && closed.ok ? "success" : "warning",
+      summary: !closed.ok
+        ? `Channel disconnected here — but ${channel.name} did NOT confirm the stop-sell, so it may still be selling`
+        : off.off
+          ? `Channel disconnected — ${channel.name} closed out and switched off at the channel; mapping kept dormant for a later reconnect`
+          : `Channel disconnected here — ${channel.name} closed out, but it could NOT be switched off at the channel and is still active there`,
+      ...(closed.error ? { detail: closed.error } : {}),
     },
   });
+  // The close is checked first: a channel still SELLING is more urgent than one still BILLING.
+  if (!closed.ok) {
+    return {
+      ok: false,
+      error:
+        `${channel.name} no longer syncs, but the channel did not confirm that it closed the dates, so it ` +
+        `may still be selling. Close it in the channel's own extranet or Channex now. (${closed.error})`,
+    };
+  }
   if (!off.off) {
     return {
       ok: false,

@@ -200,11 +200,20 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
       key: `stale_mapping:${k}`,
       clientName: e.clientName,
       summary: `"${e.plan}" is switched off but still mapped on ${e.channel}`,
+      /*
+       * ⚠️ This sentence was wrong for a day, and the correction matters because it was emailed.
+       *
+       * On 2026-09-22 it said a pause "closes the wrong room" through a stale mapping. It does not:
+       * a pause closes EVERY mapped room, so there is no wrong one, and a resume re-opens only
+       * switched-on plans, so a switched-off plan correctly stays closed. A warning that makes an
+       * operator hesitate to press Pause during an incident is worse than no warning. What is true
+       * is below — two consequences, both about the plan being switched on again or left as is.
+       */
       action:
-        `No rates or availability go out for it — the push skips switched-off plans. Two things can ` +
-        `still reach it: re-enabling the plan, and PAUSING OR DISCONNECTING the channel, because a ` +
-        `stop-sell deliberately closes everything mapped whether the plan is on or off. If the ` +
-        `mapping points at the wrong room, that stop-sell closes the wrong room. Clear it on the ` +
+        `Nothing goes out for it — the push skips switched-off plans — so whatever the channel last ` +
+        `received for it is frozen there. If the channel still offers that rate, it offers it at that ` +
+        `last price. And if the plan is ever switched back on, it starts publishing to whatever this ` +
+        `mapping points at, which nobody has checked since it was switched off. Clear it on the ` +
         `Mapping screen` + (e.rooms.length ? ` (${e.rooms.join(", ")}).` : "."),
       severity: "soon",
     });

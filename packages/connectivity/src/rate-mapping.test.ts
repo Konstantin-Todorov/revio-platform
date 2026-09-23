@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { indexRateMappings, resolveExternalRateId, unmappedPairs } from "./rate-mapping.js";
+import { indexRateMappings, resolveExternalRateId, stopSellPairs, unmappedPairs } from "./rate-mapping.js";
 
 /**
  * The bug this replaces: a hotel with three room types and ONE "Standard Rate" mapped that plan to a
@@ -92,3 +92,66 @@ describe("unmappedPairs", () => {
     expect(unmappedPairs(ix, [DOUBLE, TWIN, SUITE], [STANDARD])).toHaveLength(0);
   });
 });
+
+/**
+ * What a Pause closes. The live shape is DesManagement 2015 / Cabacum Beach Residence on 2026-09-22:
+ * three rooms, each carrying its own BB Flex and BB Non-Refundable, and the old code sent all six
+ * rates to all three rooms — eighteen pairs, of which the channel could place six.
+ */
+describe("stopSellPairs", () => {
+  const ONE = "rt-1bed", TWO = "rt-2bed", THREE = "rt-3bed";
+  const rooms = [
+    { roomTypeId: ONE, externalRoomId: "ch-room-1" },
+    { roomTypeId: TWO, externalRoomId: "ch-room-2" },
+    { roomTypeId: THREE, externalRoomId: "ch-room-3" },
+  ];
+  const own = (roomTypeId: string, ratePlanId: string, externalRateId: string) => ({ roomTypeId, ratePlanId, externalRateId });
+  const cabacum = [
+    own(ONE, "flex", "r1-flex"), own(ONE, "nr", "r1-nr"),
+    own(TWO, "flex", "r2-flex"), own(TWO, "nr", "r2-nr"),
+    own(THREE, "flex", "r3-flex"), own(THREE, "nr", "r3-nr"),
+  ];
+
+  it("closes each rate on its OWN room — six pairs, not eighteen", () => {
+    const pairs = stopSellPairs(rooms, cabacum);
+    expect(pairs).toHaveLength(6);
+    expect(pairs).toContainEqual({ externalRoomId: "ch-room-1", externalRateId: "r1-flex" });
+    expect(pairs).toContainEqual({ externalRoomId: "ch-room-3", externalRateId: "r3-nr" });
+  });
+
+  it("never addresses a rate to a room it does not belong to", () => {
+    // The pairs the channel cannot place. They closed nothing, and they made the push's result
+    // permanently "rejected", which is why nobody could read it.
+    const pairs = stopSellPairs(rooms, cabacum);
+    expect(pairs).not.toContainEqual({ externalRoomId: "ch-room-2", externalRateId: "r1-flex" });
+    expect(pairs.every((p) => p.externalRateId.startsWith(p.externalRoomId.replace("ch-room-", "r")))).toBe(true);
+  });
+
+  it("closes a property-wide mapping on EVERY room — closing too much is the safe error here", () => {
+    // Opposite of the ARI push, which refuses a catch-all on a real channel: a PRICE through one can
+    // land on the wrong room, a CLOSE through one at worst closes a pair that did not exist.
+    const pairs = stopSellPairs(rooms, [{ roomTypeId: null, ratePlanId: "legacy", externalRateId: "r-legacy" }]);
+    expect(pairs.map((p) => p.externalRoomId).sort()).toEqual(["ch-room-1", "ch-room-2", "ch-room-3"]);
+  });
+
+  it("still closes a plan that is switched off — whatever the channel last got for it is frozen there", () => {
+    // Nothing here knows about `active`, on purpose: the caller does not filter, and neither does this.
+    const withStale = [...cabacum, own(TWO, "standard-switched-off", "r-stale")];
+    expect(stopSellPairs(rooms, withStale)).toContainEqual({ externalRoomId: "ch-room-2", externalRateId: "r-stale" });
+  });
+
+  it("sends each pair once, however it was reached", () => {
+    const dup = [own(ONE, "flex", "r1-flex"), { roomTypeId: null, ratePlanId: "flex", externalRateId: "r1-flex" }];
+    const pairs = stopSellPairs([rooms[0]!], dup);
+    expect(pairs).toEqual([{ externalRoomId: "ch-room-1", externalRateId: "r1-flex" }]);
+  });
+
+  it("skips a room the channel has no id for, rather than sending an empty one", () => {
+    expect(stopSellPairs([{ roomTypeId: ONE, externalRoomId: null }], cabacum)).toEqual([]);
+  });
+
+  it("returns nothing when nothing is mapped — a pause with nothing to close is not a failure", () => {
+    expect(stopSellPairs(rooms, [])).toEqual([]);
+  });
+});
+
