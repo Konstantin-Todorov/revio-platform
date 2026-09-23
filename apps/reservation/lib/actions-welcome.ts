@@ -9,7 +9,7 @@ import { getProperty } from "./data";
 import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
-import { markBillable } from "@revio/db";
+import { markBillable, writeWelcomeProperty, writeWelcomeRoomType, writeWelcomePrice, writeWelcomeTaxes } from "@revio/db";
 
 /**
  * RevioCRS's first-run writes.
@@ -36,28 +36,12 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
 
-  const name = str(fd, "name").trim();
-  if (!name) return { error: "Your property needs a name." };
-
-  const contactEmail = str(fd, "contactEmail").trim();
-  if (contactEmail && !contactEmail.includes("@")) {
-    return { error: "That contact email doesn't look right." };
-  }
-
-  await prisma.property.update({
-    where: { id: session.activePropertyId },
-    data: {
-      name,
-      address: str(fd, "address").trim() || null,
-      contactEmail: contactEmail || null,
-      phone: str(fd, "phone").trim() || null,
-      timezone: str(fd, "timezone") || "Europe/Sofia",
-      baseCurrency: str(fd, "baseCurrency") || "EUR",
-      checkInTime: str(fd, "checkInTime") || "14:00",
-      checkOutTime: str(fd, "checkOutTime") || "12:00",
-    },
+  const res = await writeWelcomeProperty({ tenantId: session.tenantId, propertyId: session.activePropertyId }, {
+    name: str(fd, "name"), address: str(fd, "address"), contactEmail: str(fd, "contactEmail"),
+    phone: str(fd, "phone"), timezone: str(fd, "timezone"), baseCurrency: str(fd, "baseCurrency"),
+    checkInTime: str(fd, "checkInTime"), checkOutTime: str(fd, "checkOutTime"),
   });
-
+  if (res.error) return res;
   return advance("property");
 }
 
@@ -69,41 +53,11 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
 
-  const name = str(fd, "name").trim();
-  const rooms = Number.parseInt(str(fd, "totalRooms"), 10);
-  const guests = Number.parseInt(str(fd, "maxGuests"), 10);
-
-  if (!name) return { error: "Give the room type a name — “Double Room” is fine." };
-  if (!Number.isFinite(rooms) || rooms < 1) return { error: "How many of these rooms do you have?" };
-  if (!Number.isFinite(guests) || guests < 1) return { error: "How many guests fit in one?" };
-
-  // Derived rather than asked — a code is an OTA concern, and it stays editable in Rooms & Rates.
-  const base = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 3) || "RM";
-  const taken = await prisma.roomType.findMany({ where: { propertyId: property.id }, select: { code: true } });
-  const codes = new Set(taken.map((t) => t.code));
-  let code = base;
-  for (let n = 2; codes.has(code); n++) code = `${base}${n}`;
-
-  const count = await prisma.roomType.count({ where: { propertyId: property.id } });
-  const created = await prisma.roomType.create({
-    data: {
-      tenantId: session.tenantId,
-      propertyId: property.id,
-      name,
-      code,
-      totalRooms: rooms,
-      maxGuests: guests,
-      sortOrder: count,
-    },
-  });
-
-  const plans = await prisma.ratePlan.findMany({ where: { propertyId: property.id }, select: { id: true } });
-  if (plans.length) {
-    await prisma.ratePlanRoomType.createMany({
-      data: plans.map((p) => ({ ratePlanId: p.id, roomTypeId: created.id })),
-    });
-  }
-
+  const res = await writeWelcomeRoomType(
+    { tenantId: session.tenantId, propertyId: property.id },
+    { name: str(fd, "name"), totalRooms: str(fd, "totalRooms"), maxGuests: str(fd, "maxGuests") },
+  );
+  if (res.error) return res;
   revalidatePath("/welcome/rooms");
   return {};
 }
@@ -136,101 +90,11 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
 
-  const major = Number.parseFloat(str(fd, "price").replace(",", "."));
-  if (!Number.isFinite(major) || major <= 0) return { error: "Enter a nightly price." };
-  const priceMinor = Math.round(major * 100);
-
-  /*
-   * EVERY sellable plan, not just the first — the same fix as RevioLink's, for the same reason.
-   *
-   * The first real hotel came out of onboarding with three active manual plans and at most one of
-   * them priced. The other two were live, linked to every room, and unsellable, with nothing on any
-   * screen saying so. A plan that is active and manual must have a price or it cannot sell.
-   *
-   * Derived plans are excluded: they follow their parent by definition, and pricing one directly is
-   * overwritten the moment the parent moves.
-   */
-  const plans = await prisma.ratePlan.findMany({
-    where: { propertyId: property.id, active: true, priceLogic: "manual" },
-    orderBy: { sortOrder: "asc" },
-    select: { id: true },
-  });
-  /*
-   * ⚠️ Occupancy is REQUIRED on every write, and this is where that was missed.
-   *
-   * `RatePrice` is keyed by (room, plan, date, occupancy) since OBP. These rows were written with no
-   * occupancy at all, which meant a brand-new hotel finished onboarding, set a price, and saw "—"
-   * on every calendar cell: `resolveRate` looks up a specific occupancy and a NULL row matches
-   * nothing. Worse, NULL is not equal to itself in a unique index, so `skipDuplicates` would not
-   * even dedupe a second run.
-   *
-   * Written at the room's ceiling — the one-row per-room shape, and where the migration backfilled
-   * every existing row.
-   */
-  const roomTypes = await prisma.roomType.findMany({
-    where: { propertyId: property.id },
-    select: { id: true, maxGuests: true, defaultOccupancy: true },
-  });
-  // Two causes, two messages. "Add a room type first" in front of somebody who has three room types
-  // and no active rate plan sends them to the wrong screen.
-  if (roomTypes.length === 0) return { error: "Add a room type first — a price belongs to a room." };
-  if (plans.length === 0) {
-    return { error: "There is no active rate plan to price. Add one in Rates & Restrictions, then come back — a price has to live on a plan." };
-  }
-
-  const DAYS = 180;
-  const today = new Date();
-  const rows: {
-    tenantId: string; propertyId: string; ratePlanId: string; roomTypeId: string;
-    date: Date; occupancy: number; priceMinor: number;
-  }[] = [];
-  for (const plan of plans) {
-    for (const rt of roomTypes) {
-      const occupancy = Math.max(1, rt.maxGuests);
-      for (let d = 0; d < DAYS; d++) {
-        const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + d));
-        rows.push({
-          tenantId: session.tenantId,
-          propertyId: property.id,
-          ratePlanId: plan.id,
-          roomTypeId: rt.id,
-          date,
-          occupancy,
-          priceMinor,
-        });
-      }
-    }
-  }
-  // Safe to re-run — it never overwrites a price somebody has since edited. Which means it can write
-  // nothing, and reporting "saved" for that would be the silence this project keeps being bitten by.
-  const written = await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
-
-  /*
-   * And the plan needs its occupancy option, or it has no default price to fall back on.
-   *
-   * A plan created by provisioning has none — the H13 backfill only covered plans that existed when
-   * it ran. Without this a date outside the 180-night window prices as null rather than falling back
-   * to the plan's own rate.
-   */
-  for (const plan of plans) {
-    for (const rt of roomTypes) {
-      const occupancy = Math.max(1, rt.maxGuests);
-      await prisma.ratePlanOccupancy.upsert({
-        where: { ratePlanId_occupancy: { ratePlanId: plan.id, occupancy } },
-        create: {
-          tenantId: session.tenantId, ratePlanId: plan.id, occupancy,
-          isPrimary: true, mode: "manual", rateMinor: priceMinor, rounding: "none",
-        },
-        update: { rateMinor: priceMinor },
-      });
-    }
-  }
-
-  if (written.count === 0 && rows.length > 0) {
-    // Every date already had a price. Nothing is wrong, but "saved" would be a lie.
-    return { error: "Those dates already have prices, so nothing was changed. Edit them on the calendar or in Bulk update." };
-  }
-
+  const res = await writeWelcomePrice(
+    { tenantId: session.tenantId, propertyId: property.id, timezone: property.timezone },
+    { price: str(fd, "price"), rateScreen: "Rates & Restrictions" },
+  );
+  if (res.error) return res;
   revalidatePath("/calendar");
   return advance("prices");
 }
@@ -250,66 +114,11 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
 
-  const standard = Number.parseInt(str(fd, "vatStandardPct"), 10);
-  const reduced = Number.parseInt(str(fd, "vatReducedPct"), 10);
-  if (!Number.isFinite(standard) || standard < 0 || standard > 100) return { error: "VAT must be between 0 and 100." };
-  if (!Number.isFinite(reduced) || reduced < 0 || reduced > 100) return { error: "VAT must be between 0 and 100." };
-
-  const cityTaxRaw = str(fd, "cityTax").trim().replace(",", ".");
-  let cityTaxMinor: number | null = null;
-  if (cityTaxRaw) {
-    const major = Number.parseFloat(cityTaxRaw);
-    if (!Number.isFinite(major) || major < 0) return { error: "City tax must be a number, or left empty." };
-    cityTaxMinor = Math.round(major * 100);
-  }
-
-  await prisma.propertyDefaults.upsert({
-    where: { propertyId: property.id },
-    create: {
-      tenantId: session.tenantId,
-      propertyId: property.id,
-      vatStandardPct: standard,
-      vatReducedPct: reduced,
-      invoiceIssuerName: str(fd, "invoiceIssuerName").trim() || null,
-      invoiceVatId: str(fd, "invoiceVatId").trim() || null,
-      invoiceAddress: str(fd, "invoiceAddress").trim() || null,
-    },
-    update: {
-      vatStandardPct: standard,
-      vatReducedPct: reduced,
-      invoiceIssuerName: str(fd, "invoiceIssuerName").trim() || null,
-      invoiceVatId: str(fd, "invoiceVatId").trim() || null,
-      invoiceAddress: str(fd, "invoiceAddress").trim() || null,
-    },
+  const res = await writeWelcomeTaxes({ tenantId: session.tenantId, propertyId: property.id }, {
+    vatStandardPct: str(fd, "vatStandardPct"), vatReducedPct: str(fd, "vatReducedPct"), cityTax: str(fd, "cityTax"),
+    invoiceIssuerName: str(fd, "invoiceIssuerName"), invoiceVatId: str(fd, "invoiceVatId"), invoiceAddress: str(fd, "invoiceAddress"),
   });
-
-  // City tax is a TaxFee row, not a column: a property may charge several, and the folio already
-  // knows how to apply them. Updated in place rather than added again on a second pass.
-  const existing = await prisma.taxFee.findFirst({
-    where: { propertyId: property.id, basis: "per_person", type: "fixed", active: true },
-  });
-  if (cityTaxMinor != null && cityTaxMinor > 0) {
-    if (existing) {
-      await prisma.taxFee.update({ where: { id: existing.id }, data: { amountMinor: cityTaxMinor } });
-    } else {
-      await prisma.taxFee.create({
-        data: {
-          tenantId: session.tenantId,
-          propertyId: property.id,
-          name: "City tax",
-          type: "fixed",
-          amountMinor: cityTaxMinor,
-          basis: "per_person",
-          inclusion: "excluded",
-        },
-      });
-    }
-  } else if (existing) {
-    // They cleared it. Deactivate rather than delete: a fee that has already been charged on a folio
-    // must keep existing for that folio to still explain itself.
-    await prisma.taxFee.update({ where: { id: existing.id }, data: { active: false } });
-  }
-
+  if (res.error) return res;
   revalidatePath("/settings", "layout");
   return advance("taxes");
 }

@@ -44,6 +44,13 @@ export {
   type HandoffResult,
 } from "./auth-tokens.js";
 export { getWelcomeFacts, otherProducts } from "./welcome-facts.js";
+export {
+  writeWelcomeProperty,
+  writeWelcomeRoomType,
+  writeWelcomePrice,
+  writeWelcomeTaxes,
+  type WelcomeWrite,
+} from "./welcome-writes.js";
 export { recordUsage } from "./usage.js";
 export {
   recordAuthEvent,

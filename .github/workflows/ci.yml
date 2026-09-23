@@ -208,6 +208,9 @@ jobs:
             pnpm --filter @revio/db rls-verify
           pnpm --filter @revio/db claim-verify
           pnpm --filter @revio/db lease-verify
+          # First-run writes, shared by three products since 2026-09-23 — each check is a divergence
+          # one of the old per-app copies had.
+          pnpm --filter @revio/db welcome-writes-verify
           pnpm --filter @revio/db folio-atomic-verify
           pnpm --filter @revio/booking engine-race
           pnpm --filter @revio/booking confirm-race

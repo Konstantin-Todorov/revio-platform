@@ -9,7 +9,7 @@ import { MANAGER_ROLES } from "./roles";
 import { activeProperty } from "./data";
 import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
-import { markBillable } from "@revio/db";
+import { markBillable, writeWelcomeProperty, writeWelcomeRoomType, writeWelcomeTaxes } from "@revio/db";
 import { flashError } from "@revio/ui/flash";
 
 /**
@@ -51,28 +51,14 @@ async function advance(from: string): Promise<never> {
 /** Step 1 — who and where they are. Address and contact details print on every document. */
 export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
   if (!(await requireManager())) return NOT_A_MANAGER;
-  const { property } = await activeProperty();
+  const { session, property } = await activeProperty();
 
-  const name = str(fd, "name").trim();
-  if (!name) return { error: "Your property needs a name." };
-
-  const contactEmail = str(fd, "contactEmail").trim();
-  if (contactEmail && !contactEmail.includes("@")) return { error: "That contact email doesn't look right." };
-
-  await prisma.property.update({
-    where: { id: property.id },
-    data: {
-      name,
-      address: str(fd, "address").trim() || null,
-      contactEmail: contactEmail || null,
-      phone: str(fd, "phone").trim() || null,
-      timezone: str(fd, "timezone") || "Europe/Sofia",
-      baseCurrency: str(fd, "baseCurrency") || "EUR",
-      checkInTime: str(fd, "checkInTime") || "14:00",
-      checkOutTime: str(fd, "checkOutTime") || "12:00",
-    },
+  const res = await writeWelcomeProperty({ tenantId: session.tenantId, propertyId: property.id }, {
+    name: str(fd, "name"), address: str(fd, "address"), contactEmail: str(fd, "contactEmail"),
+    phone: str(fd, "phone"), timezone: str(fd, "timezone"), baseCurrency: str(fd, "baseCurrency"),
+    checkInTime: str(fd, "checkInTime"), checkOutTime: str(fd, "checkOutTime"),
   });
-
+  if (res.error) return res;
   return advance("property");
 }
 
@@ -81,33 +67,13 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
   if (!(await requireManager())) return NOT_A_MANAGER;
   const { session, property } = await activeProperty();
 
-  const name = str(fd, "name").trim();
-  const rooms = Number.parseInt(str(fd, "totalRooms"), 10);
-  const guests = Number.parseInt(str(fd, "maxGuests"), 10);
-
-  if (!name) return { error: "Give the room type a name — “Double Room” is fine." };
-  if (!Number.isFinite(rooms) || rooms < 1) return { error: "How many of these rooms do you have?" };
-  if (!Number.isFinite(guests) || guests < 1) return { error: "How many guests fit in one?" };
-
-  const base = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 3) || "RM";
-  const taken = await prisma.roomType.findMany({ where: { propertyId: property.id }, select: { code: true } });
-  const codes = new Set(taken.map((t) => t.code));
-  let code = base;
-  for (let n = 2; codes.has(code); n++) code = `${base}${n}`;
-
-  const count = await prisma.roomType.count({ where: { propertyId: property.id } });
-  await prisma.roomType.create({
-    data: {
-      tenantId: session.tenantId,
-      propertyId: property.id,
-      name,
-      code,
-      totalRooms: rooms,
-      maxGuests: guests,
-      sortOrder: count,
-    },
-  });
-
+  // Shared with RevioLink and RevioCRS — and so, since 2026-09-23, linked to every rate plan like
+  // theirs. This copy used not to be, which left a PMS-first hotel with rooms no plan could sell.
+  const res = await writeWelcomeRoomType(
+    { tenantId: session.tenantId, propertyId: property.id },
+    { name: str(fd, "name"), totalRooms: str(fd, "totalRooms"), maxGuests: str(fd, "maxGuests") },
+  );
+  if (res.error) return res;
   revalidatePath("/welcome/rooms");
   return {};
 }
@@ -203,62 +169,11 @@ export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData
   if (!(await requireManager())) return NOT_A_MANAGER;
   const { session, property } = await activeProperty();
 
-  const standard = Number.parseInt(str(fd, "vatStandardPct"), 10);
-  const reduced = Number.parseInt(str(fd, "vatReducedPct"), 10);
-  if (!Number.isFinite(standard) || standard < 0 || standard > 100) return { error: "VAT must be between 0 and 100." };
-  if (!Number.isFinite(reduced) || reduced < 0 || reduced > 100) return { error: "VAT must be between 0 and 100." };
-
-  const cityTaxRaw = str(fd, "cityTax").trim().replace(",", ".");
-  let cityTaxMinor: number | null = null;
-  if (cityTaxRaw) {
-    const major = Number.parseFloat(cityTaxRaw);
-    if (!Number.isFinite(major) || major < 0) return { error: "City tax must be a number, or left empty." };
-    cityTaxMinor = Math.round(major * 100);
-  }
-
-  const invoiceFields = {
-    invoiceIssuerName: str(fd, "invoiceIssuerName").trim() || null,
-    invoiceVatId: str(fd, "invoiceVatId").trim() || null,
-    invoiceAddress: str(fd, "invoiceAddress").trim() || null,
-  };
-
-  await prisma.propertyDefaults.upsert({
-    where: { propertyId: property.id },
-    create: {
-      tenantId: session.tenantId,
-      propertyId: property.id,
-      vatStandardPct: standard,
-      vatReducedPct: reduced,
-      ...invoiceFields,
-    },
-    update: { vatStandardPct: standard, vatReducedPct: reduced, ...invoiceFields },
+  const res = await writeWelcomeTaxes({ tenantId: session.tenantId, propertyId: property.id }, {
+    vatStandardPct: str(fd, "vatStandardPct"), vatReducedPct: str(fd, "vatReducedPct"), cityTax: str(fd, "cityTax"),
+    invoiceIssuerName: str(fd, "invoiceIssuerName"), invoiceVatId: str(fd, "invoiceVatId"), invoiceAddress: str(fd, "invoiceAddress"),
   });
-
-  const existing = await prisma.taxFee.findFirst({
-    where: { propertyId: property.id, basis: "per_person", type: "fixed", active: true },
-  });
-  if (cityTaxMinor != null && cityTaxMinor > 0) {
-    if (existing) {
-      await prisma.taxFee.update({ where: { id: existing.id }, data: { amountMinor: cityTaxMinor } });
-    } else {
-      await prisma.taxFee.create({
-        data: {
-          tenantId: session.tenantId,
-          propertyId: property.id,
-          name: "City tax",
-          type: "fixed",
-          amountMinor: cityTaxMinor,
-          basis: "per_person",
-          inclusion: "excluded",
-        },
-      });
-    }
-  } else if (existing) {
-    // Deactivate rather than delete: a fee already charged on a folio must survive so that folio can
-    // still explain itself.
-    await prisma.taxFee.update({ where: { id: existing.id }, data: { active: false } });
-  }
-
+  if (res.error) return res;
   revalidatePath("/configuration");
   return advance("taxes");
 }

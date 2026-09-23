@@ -9,7 +9,7 @@ import { getProperty } from "./data";
 import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
-import { markBillable } from "@revio/db";
+import { markBillable, writeWelcomeProperty, writeWelcomeRoomType, writeWelcomePrice } from "@revio/db";
 
 /**
  * The first-run flow's writes.
@@ -52,28 +52,12 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
   const session = await getSession();
   if (!session) return { error: "Your session expired — sign in again." };
 
-  const name = str(fd, "name").trim();
-  if (!name) return { error: "Your property needs a name." };
-
-  const contactEmail = str(fd, "contactEmail").trim();
-  if (contactEmail && !contactEmail.includes("@")) {
-    return { error: "That contact email doesn't look right." };
-  }
-
-  await prisma.property.update({
-    where: { id: session.activePropertyId },
-    data: {
-      name,
-      address: str(fd, "address").trim() || null,
-      contactEmail: contactEmail || null,
-      phone: str(fd, "phone").trim() || null,
-      timezone: str(fd, "timezone") || "Europe/Sofia",
-      baseCurrency: str(fd, "baseCurrency") || "EUR",
-      checkInTime: str(fd, "checkInTime") || "14:00",
-      checkOutTime: str(fd, "checkOutTime") || "12:00",
-    },
+  const res = await writeWelcomeProperty({ tenantId: session.tenantId, propertyId: session.activePropertyId }, {
+    name: str(fd, "name"), address: str(fd, "address"), contactEmail: str(fd, "contactEmail"),
+    phone: str(fd, "phone"), timezone: str(fd, "timezone"), baseCurrency: str(fd, "baseCurrency"),
+    checkInTime: str(fd, "checkInTime"), checkOutTime: str(fd, "checkOutTime"),
   });
-
+  if (res.error) return res;
   return advance("property");
 }
 
@@ -90,43 +74,11 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
 
-  const name = str(fd, "name").trim();
-  const rooms = Number.parseInt(str(fd, "totalRooms"), 10);
-  const guests = Number.parseInt(str(fd, "maxGuests"), 10);
-
-  if (!name) return { error: "Give the room type a name — “Double Room” is fine." };
-  if (!Number.isFinite(rooms) || rooms < 1) return { error: "How many of these rooms do you have?" };
-  if (!Number.isFinite(guests) || guests < 1) return { error: "How many guests fit in one?" };
-
-  // A code is what OTAs key on. Derived rather than asked: nobody buying a channel manager wants to
-  // invent one, and it is editable later in Rooms & Rates.
-  const base = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 3) || "RM";
-  const taken = await prisma.roomType.findMany({ where: { propertyId: property.id }, select: { code: true } });
-  const codes = new Set(taken.map((t) => t.code));
-  let code = base;
-  for (let n = 2; codes.has(code); n++) code = `${base}${n}`;
-
-  const count = await prisma.roomType.count({ where: { propertyId: property.id } });
-  const created = await prisma.roomType.create({
-    data: {
-      tenantId: session.tenantId,
-      propertyId: property.id,
-      name,
-      code,
-      totalRooms: rooms,
-      maxGuests: guests,
-      sortOrder: count,
-    },
-  });
-
-  // Same rule as the Rooms & Rates screen: a new room type becomes sellable under every rate plan.
-  const plans = await prisma.ratePlan.findMany({ where: { propertyId: property.id }, select: { id: true } });
-  if (plans.length) {
-    await prisma.ratePlanRoomType.createMany({
-      data: plans.map((p) => ({ ratePlanId: p.id, roomTypeId: created.id })),
-    });
-  }
-
+  const res = await writeWelcomeRoomType(
+    { tenantId: session.tenantId, propertyId: property.id },
+    { name: str(fd, "name"), totalRooms: str(fd, "totalRooms"), maxGuests: str(fd, "maxGuests") },
+  );
+  if (res.error) return res;
   revalidatePath("/welcome/rooms");
   return {};
 }
@@ -166,103 +118,11 @@ export async function setWelcomePrice(_prev: WelcomeResult | null, fd: FormData)
   if (!session) return { error: "Your session expired — sign in again." };
   const property = await getProperty();
 
-  const major = Number.parseFloat(str(fd, "price").replace(",", "."));
-  if (!Number.isFinite(major) || major <= 0) return { error: "Enter a nightly price." };
-  const priceMinor = Math.round(major * 100);
-
-  /*
-   * EVERY sellable plan, not just the first.
-   *
-   * This took `findFirst` and priced one plan. The first real hotel (2026-09-09) came out of
-   * onboarding with three active plans — Standard Rate, BB Flex, BB Non-Refundable — and at most one
-   * of them could hold a price. The other two were live, linked to every room, and unsellable, with
-   * nothing on any screen saying so.
-   *
-   * A plan that is active and manual has to have a price or it cannot sell. The hotel varies them
-   * afterwards; what it must not do is discover on an OTA that two thirds of its rate plans were
-   * never priced.
-   *
-   * Derived plans are excluded because they follow their parent by definition — pricing one directly
-   * would be overwritten the moment the parent moved.
-   */
-  const plans = await prisma.ratePlan.findMany({
-    where: { propertyId: property.id, active: true, priceLogic: "manual" },
-    orderBy: { sortOrder: "asc" },
-    select: { id: true },
-  });
-  /*
-   * ⚠️ Occupancy is required on every RatePrice write since OBP — see the same note in RevioCRS's
-   * `actions-welcome.ts`. Written without it, a brand-new hotel finished onboarding and saw "—" on
-   * every calendar cell, because `resolveRate` asks for a specific occupancy and a NULL row matches
-   * none. Written at the room's ceiling: the per-room one-row shape.
-   */
-  const roomTypes = await prisma.roomType.findMany({
-    where: { propertyId: property.id },
-    select: { id: true, maxGuests: true },
-  });
-  /*
-   * Two different causes, and the message used to name only one of them.
-   *
-   * "Add a room type first" in front of somebody who has three room types and no active rate plan is
-   * a message that sends them to the wrong screen. Each cause now says what is actually missing.
-   */
-  if (roomTypes.length === 0) return { error: "Add a room type first — a price belongs to a room." };
-  if (plans.length === 0) {
-    return { error: "There is no active rate plan to price. Add one in Rooms & Rates, then come back — a price has to live on a plan." };
-  }
-
-  // 180 days is a season, not the full 500-day horizon: enough to be sellable today, small enough
-  // that a number typed in thirty seconds is not committed two years out.
-  const DAYS = 180;
-  const today = new Date();
-  const rows: {
-    tenantId: string; propertyId: string; ratePlanId: string; roomTypeId: string;
-    date: Date; occupancy: number; priceMinor: number;
-  }[] = [];
-  for (const plan of plans) {
-    for (const rt of roomTypes) {
-      const occupancy = Math.max(1, rt.maxGuests);
-      for (let d = 0; d < DAYS; d++) {
-        const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + d));
-        rows.push({
-          tenantId: session.tenantId,
-          propertyId: property.id,
-          ratePlanId: plan.id,
-          roomTypeId: rt.id,
-          date,
-          occupancy,
-          priceMinor,
-        });
-      }
-    }
-  }
-  /*
-   * `skipDuplicates` keeps this safe to re-run — it will never overwrite a price somebody has since
-   * edited on the calendar. But it can therefore write NOTHING, and reporting "done" for that is the
-   * silence this project keeps being bitten by. The count is checked below.
-   */
-  const written = await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true });
-
-  // Each plan's own default, so a date beyond the 180-night window still resolves to a number.
-  for (const plan of plans) {
-    for (const rt of roomTypes) {
-      const occupancy = Math.max(1, rt.maxGuests);
-      await prisma.ratePlanOccupancy.upsert({
-        where: { ratePlanId_occupancy: { ratePlanId: plan.id, occupancy } },
-        create: {
-          tenantId: session.tenantId, ratePlanId: plan.id, occupancy,
-          isPrimary: true, mode: "manual", rateMinor: priceMinor, rounding: "none",
-        },
-        update: { rateMinor: priceMinor },
-      });
-    }
-  }
-
-  if (written.count === 0 && rows.length > 0) {
-    // Every date already had a price. Nothing is wrong, but "saved" would be a lie.
-    return { error: "Those dates already have prices, so nothing was changed. Edit them on the calendar or in Bulk update." };
-  }
-
+  const res = await writeWelcomePrice(
+    { tenantId: session.tenantId, propertyId: property.id, timezone: property.timezone },
+    { price: str(fd, "price"), rateScreen: "Rooms & Rates" },
+  );
+  if (res.error) return res;
   revalidatePath("/calendar");
   return advance("prices");
 }
