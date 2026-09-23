@@ -19,7 +19,7 @@ import {
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type RestrictionType,
   resolveRate, type PriceLookup, type ResolvablePlan,
 } from "@revio/core";
-import { syncRealChannels, stayScope } from "@revio/connectivity";
+import { recordAvailabilityPush, syncRealChannels, stayScope } from "@revio/connectivity";
 
 type Db = ReturnType<typeof forTenant>;
 type PropertyRow = { id: string; tenantId: string; name: string; baseCurrency: string; timezone: string };
@@ -734,21 +734,26 @@ export async function publicCreateReservation(
       source: "api",
     },
   });
-  // Boundary rule: the sync trail shows the availability effect, not the guest/booking details
-  // (those live on the reservation + audit entry above).
-  await db.syncEvent.create({
-    data: {
-      tenantId: property.tenantId, propertyId: property.id,
-      kind: "push", status: "success",
-      summary: p.requestOnly
-        ? "Availability reduced — booking request received (Booking Engine)"
-        : "Availability reduced — new reservation confirmed (Booking Engine)",
-    },
+  /*
+   * The one availability truth changed — push it, then record what the push DID.
+   *
+   * ⚠️ This wrote "Availability reduced · success" first and then called the push, discarding its
+   * outcome. So a direct booking whose push to Booking.com failed read green in the Sync Center
+   * while the OTA went on selling the room the guest had just bought. Found 2026-09-23 by booking
+   * the same room from every source and reading the sync trail after each. The recorder never
+   * throws, so a failed push still never fails the booking.
+   *
+   * Boundary rule: the sync trail shows the availability effect, not the guest or booking details
+   * (those live on the reservation and the audit entry above).
+   */
+  await recordAvailabilityPush(db, {
+    tenantId: property.tenantId,
+    propertyId: property.id,
+    summary: p.requestOnly
+      ? "Availability reduced — booking request received (Booking Engine)"
+      : "Availability reduced — new reservation confirmed (Booking Engine)",
+    scope: stayScope([{ roomTypeId: rt.id, checkIn: p.checkIn, checkOut: p.checkOut }]),
   });
-  // The one availability truth changed — push the effect to any real channels immediately.
-  try {
-    await syncRealChannels(db, property.id, stayScope([{ roomTypeId: rt.id, checkIn: p.checkIn, checkOut: p.checkOut }]));
-  } catch { /* channel push must never fail the booking */ }
 
   return {
     reservationId: written.id,

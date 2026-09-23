@@ -26,7 +26,7 @@ export {
 } from "./mapping-rows.js";
 export {
   syncChannel,
-  syncRealChannels,
+  syncRealChannels, recordAvailabilityPush,
   pullSummary,
   pushVerdict,
   type RealPushOutcome,

@@ -1,6 +1,6 @@
 import "server-only";
 import { decimalOr, intOr, minorUnitsOr } from "@revio/core";
-import { pushVerdict, syncRealChannels, type PushScope, type RealPushOutcome } from "@revio/connectivity";
+import { recordAvailabilityPush, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
 import { getSession } from "./session";
 
@@ -60,49 +60,8 @@ export async function logAudit(
  * channex-mode channels get an actual ARI push — no manual Re-sync needed after an edit.
  */
 export async function recordPush(propertyId: string, tenantId: string, summary: string, scope?: PushScope) {
-  // Channel attribution (spec §5.1): one event per connected mock channel; real channels report
-  // their own attributed pushes from syncRealChannels below.
-  const mocks = await prisma.channel.findMany({
-    where: { propertyId, status: "connected", connectivityMode: "mock" },
-    select: { id: true, name: true },
-  });
-  if (mocks.length > 0) {
-    await prisma.syncEvent.createMany({
-      data: mocks.map((c) => ({ tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary, detail: `Pushed to ${c.name} via the connected CM (mock)` })),
-    });
-  }
-
-  /*
-   * ⚠️ THE EVENT IS WRITTEN AFTER THE PUSH, AND SAYS WHAT THE PUSH DID.
-   *
-   * This block used to write `status: "success"` with NO channel, **before** `syncRealChannels` ran
-   * and regardless of what it did. That is the row a tester found on 2026-09-12 with `CHANNEL = —`
-   * and status success, on a property where no price had ever reached a channel, under a Sync Center
-   * reading "everything is syncing cleanly" (BUG-014).
-   *
-   * It was the worst kind of false green: it masked thirteen other defects, because no fix to any of
-   * them could be told apart from the failure. `success` now means a channel accepted something.
-   */
-  let real: RealPushOutcome;
-  try {
-    real = await syncRealChannels(prisma, propertyId, scope);
-  } catch {
-    // Never break the caller's write on a push failure — but never call it a success either.
-    real = { attempted: 0, delivered: 0, failed: 1, paused: false, unmapped: [] };
-  }
-
-  /*
-   * One shared decision — `pushVerdict` in `@revio/connectivity` — so the two products cannot come
-   * to different conclusions about what "syncing cleanly" means.
-   */
-  const verdict = pushVerdict(real);
-  if (verdict.delivered) return;
-  // Demo property: the mock rows above are the whole truth.
-  if (mocks.length > 0) return;
-
-  await prisma.syncEvent.create({
-    data: { tenantId, propertyId, kind: "push", status: verdict.status, summary, detail: verdict.detail },
-  });
+  // One implementation for every product — see `recordAvailabilityPush` for why there is only one.
+  await recordAvailabilityPush(prisma, { tenantId, propertyId, summary, ...(scope ? { scope } : {}) });
 }
 
 /** Record a pull (a booking arriving from a channel). */

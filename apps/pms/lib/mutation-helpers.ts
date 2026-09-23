@@ -1,7 +1,7 @@
 import "server-only";
 import type { TenantTx } from "@revio/db";
 import { decimalOr, intOr, minorUnitsOr } from "@revio/core";
-import { syncRealChannels, type PushScope } from "@revio/connectivity";
+import { recordAvailabilityPush, type PushScope } from "@revio/connectivity";
 import { prisma } from "./db";
 import { getSession } from "./session";
 
@@ -61,32 +61,13 @@ export async function logAudit(
  * on its next push). This is the visible trace of the one cross-product write.
  */
 export async function recordSync(propertyId: string, tenantId: string, summary: string, detail?: string, scope?: PushScope, db: Db = prisma) {
-  // BOUNDARY RULE (spec CM-GUIDE-V2 §1): callers pass the AVAILABILITY EFFECT only — never the
-  // operational cause (no unit labels, guest names, maintenance notes). Channel attribution
-  // (spec §5.1): one event per connected mock channel; real channels report their own pushes.
-  const mocks = await db.channel.findMany({
-    where: { propertyId, status: "connected", connectivityMode: "mock" },
-    select: { id: true, name: true },
-  });
-  if (mocks.length === 0) {
-    await db.syncEvent.create({
-      data: { tenantId, propertyId, kind: "push", status: "success", summary, detail: detail ?? null },
-    });
-  } else {
-    await db.syncEvent.createMany({
-      data: mocks.map((c) => ({ tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary, detail: detail ?? null })),
-    });
-  }
-  // Immediate cross-product propagation: a PMS inventory change (unit OOO, walk-in) pushes the new
-  // availability to any real (channex) channel now. No-op when every channel is mock; never break the write.
-  try {
-  // A booking / OOO / walk-in changes AVAILABILITY, on the stay's own dates and room types — not
-  // rates, and not the whole horizon. Callers that know the affected dates and rooms pass them;
-  // an omitted scope still means a full push, which is the safe default for anything unclassified.
-    await syncRealChannels(db, propertyId, scope);
-  } catch {
-    /* per-channel failures are already isolated inside syncRealChannels. */
-  }
+  /*
+   * ⚠️ This used to write `status: "success"` BEFORE the push whenever the property had no mock
+   * channels — every real hotel — and then discard what the push did. DesManagement 2015 runs
+   * RevioPMS against a live Channex channel, so an out-of-order room or a walk-in there read
+   * green whatever Channex answered. See `recordAvailabilityPush`.
+   */
+  await recordAvailabilityPush(db, { tenantId, propertyId, summary, detail: detail ?? null, ...(scope ? { scope } : {}) });
 }
 
 export function str(fd: FormData, key: string): string {

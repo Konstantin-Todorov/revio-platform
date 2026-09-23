@@ -729,6 +729,76 @@ export function pushVerdict(real: RealPushOutcome): { status: string; detail: st
   };
 }
 
+/**
+ * Push an availability change to every channel, and record what actually happened.
+ *
+ * ## ⚠️ One function, because four copies had become two right and two wrong
+ *
+ * RevioLink's `recordPush` was fixed on 2026-09-12 (BUG-014): it used to write `status: "success"`
+ * BEFORE the push and regardless of it, which is how a Sync Center read "everything is syncing
+ * cleanly" on a property where no price had ever reached a channel. The fix — write the event
+ * AFTER the push, from `pushVerdict` — lived in RevioLink and in a copy in RevioCRS.
+ *
+ * Two other copies never got it, and were found on 2026-09-23 by booking one room through every
+ * source and reading the sync trail after each:
+ *
+ *   - the booking engine wrote "Availability reduced — new reservation confirmed · success" and
+ *     then called the push and discarded its outcome. A direct booking whose push failed read green
+ *     while the OTA went on selling the room the guest had just bought;
+ *   - RevioPMS's `recordSync` did the same whenever a property had no mock channels — which is
+ *     every real hotel. DesManagement 2015 runs RevioPMS against a live Channex channel.
+ *
+ * Mock channels get one row each, as before — the demo shows per-channel activity. Real channels
+ * record their own attributed events inside `syncChannel`; when anything was delivered, nothing
+ * more is written. When nothing was delivered, ONE row says why, with the verdict's status.
+ */
+export async function recordAvailabilityPush(
+  db: Db,
+  args: {
+    tenantId: string;
+    propertyId: string;
+    summary: string;
+    /** Operational context kept on the row, e.g. "1 room off sale until back in service". */
+    detail?: string | null;
+    scope?: PushScope;
+  },
+): Promise<{ status: string; delivered: boolean }> {
+  const { tenantId, propertyId, summary, scope } = args;
+  const mocks = await db.channel.findMany({
+    where: { propertyId, status: "connected", connectivityMode: "mock" },
+    select: { id: true, name: true },
+  });
+  if (mocks.length > 0) {
+    await db.syncEvent.createMany({
+      data: mocks.map((c: { id: string; name: string }) => ({
+        tenantId, propertyId, channelId: c.id, kind: "push", status: "success", summary,
+        detail: args.detail ?? `Pushed to ${c.name} (mock)`,
+      })),
+    });
+  }
+
+  let real: RealPushOutcome;
+  try {
+    real = await syncRealChannels(db, propertyId, scope);
+  } catch {
+    // Never break the caller's write on a push failure — but never call it a success either.
+    real = { attempted: 0, delivered: 0, failed: 1, paused: false, unmapped: [] };
+  }
+
+  const verdict = pushVerdict(real);
+  if (verdict.delivered) return { status: verdict.status, delivered: true };
+  // Demo property: the mock rows above are the whole truth.
+  if (mocks.length > 0) return { status: "success", delivered: false };
+
+  await db.syncEvent.create({
+    data: {
+      tenantId, propertyId, kind: "push", status: verdict.status, summary,
+      detail: args.detail ? `${args.detail} · ${verdict.detail}` : verdict.detail,
+    },
+  });
+  return { status: verdict.status, delivered: false };
+}
+
 export async function syncRealChannels(
   prisma: Db,
   propertyId: string,
