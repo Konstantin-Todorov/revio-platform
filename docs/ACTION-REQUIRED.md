@@ -193,6 +193,33 @@ Both are defensible. Retrying promptly recovers from a transient fault; backing 
 persistent fault being hammered every tick. What is not defensible is having both, decided per
 route by whoever wrote it.
 
+**Measured 2026-09-23 — and it makes the decision much smaller than it looked.** The cron runs every
+**~10 minutes** (container starts 03:10:05, 03:20:36, 03:31:01, 03:40:34, 03:50:57, 04:00:48 — about
+±30 s of jitter); a job is flagged late after **30 minutes**.
+
+| Job | Lease TTL | On failure | What actually happens at the next tick |
+| --- | --- | --- | --- |
+| `hold-expiry` | 5 min | keeps lease | lease already expired → **retries** |
+| `waitlist-sweep` | 5 min | keeps lease | lease already expired → **retries** |
+| `arrivals-digest` | 5 min | keeps lease | lease already expired → **retries** |
+| `channex-pull` | 10 min | keeps lease | **coin flip** on jitter — sometimes skips one tick, answering `ok: true` |
+| `pickup-snapshot` | 10 min | keeps lease | **coin flip**, same |
+| `auto-assign` · `auto-close-day` | 10 · 15 min | releases (`withJobLease`) | retries |
+| `mapping-audit` · the five operator jobs | 5–15 min | releases (`finally`) | retries |
+
+So **eleven of thirteen already retry at the next tick**, three of them despite comments saying they
+wait — those comments describe behaviour the system does not have, because a 5-minute backoff cannot
+outlast a 10-minute cron. The whole "policy" difference is two jobs that *randomly* skip one tick
+after a failure, and report that skip as success.
+
+**Recommendation: release on failure everywhere (`withJobLease`).** It is what already happens for
+eleven of thirteen, it makes the other two deterministic, and it removes the `ok: true` on a
+suppressed run. The protective idea behind the backoff — do not hammer a failing downstream — is
+already met by a 10-minute cadence. The lease still does its real job: one runner at a time.
+
+**It is a one-word decision now: yes or no.** Nothing has been changed; the four routes that state
+the backoff still carry it.
+
 **Neither was overridden.** The four routes that state the backoff keep it; `assign` and `closeday`,
 which stated nothing, were moved to `withJobLease` when they failed on 2026-09-22.
 
