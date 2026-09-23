@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       // And the hand-made stays it does not own: checked out once they are days past departure, so
       // the demo front desk never shows a guest "overstaying" since a rehearsal in July.
       const closed = await closeStaleDemoStays({ apply: true });
-      for (const l of closed.lines) console.log(`[demo-refresh] stale: ${l}`);
+      for (const l of closed.lines) console.info(`[demo-refresh] stale: ${l}`);
       return { ok: true, tenantsTouched, staysWritten, staleClosed: closed.staysClosed };
     });
     if (!lease.ran) {
