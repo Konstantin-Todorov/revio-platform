@@ -90,4 +90,4 @@ export { ensureChannexWebhook, removeChannexWebhook, WEBHOOK_SECRET_HEADER, type
 export { classifyChannexRatePlan, mappableRatePlans, ratePlansForRoom, type ChannexRatePlan, type ChannexRatePlanKind } from "./channex-products.js";
 export { ratePlanMappingRows, unconfirmedPairs, collidingExternalIds, type RoomScopedMappingRow, type ExistingRateMapping } from "./mapping-rows.js";
 export { comparePublished, summarisePublished, type PublishedComparison, type PublishedRate, type ExpectedRate, type PublishedSummary } from "./published-check.js";
-export { verifyPublished, type VerifyResult } from "./sync.js";
+export { verifyPublished, verifyPublishedAvailability, type VerifyResult, type AvailabilityCheck } from "./sync.js";

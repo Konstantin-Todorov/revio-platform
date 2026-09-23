@@ -11,7 +11,7 @@ import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-help
 import { flashError, setFlash } from "@revio/ui/flash";
 import { guard, requireCapability } from "./authz";
 import { earliestSelectable, pastRangeRefusal, renderSystemEmail, renderSystemEmailText, todayInTimeZone } from "@revio/core";
-import { verifyPublished } from "@revio/connectivity";
+import { verifyPublished, verifyPublishedAvailability } from "@revio/connectivity";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -747,8 +747,17 @@ export interface VerifyActionResult {
     roomTypeName?: string; ratePlanName?: string;
     /** The channel's own id — the only handle an `unexpected` finding has, since we never sent it. */
     externalRateId: string;
+    /** The channel's name for that plan, when its catalogue could be read. */
+    channelPlanName?: string;
+    /** Set when the channel computes this plan from another — then it ignores the price we send. */
+    derivedFrom?: string;
   }[];
   window?: string;
+  /** The room-count half: how many rooms the channel offers against what we send. */
+  rooms?: {
+    ok: boolean; headline?: string; error?: string;
+    examples?: { roomTypeName: string; date: string; ours: number; theirs: number | null; closedByStopSell: boolean }[];
+  };
 }
 
 /**
@@ -769,7 +778,10 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
   const channel = await prisma.channel.findFirst({ where: { id: channelId, propertyId } });
   if (!channel) return { error: "That channel is not on this property." };
 
-  const result = await verifyPublished(prisma, channel.id);
+  const [result, rooms] = await Promise.all([
+    verifyPublished(prisma, channel.id),
+    verifyPublishedAvailability(prisma, channel.id),
+  ]);
   if (!result.ok || !result.summary) {
     // A failure to LOOK is reported as one, never as "nothing wrong".
     return { error: result.error ?? "Could not read the channel." };
@@ -778,11 +790,19 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
   return {
     ok: true,
     headline: result.summary.headline,
-    examples: result.summary.examples.map((e) => ({
-      kind: e.kind, date: e.date, ours: e.ours, theirs: e.theirs, externalRateId: e.externalRateId,
-      ...(e.roomTypeName ? { roomTypeName: e.roomTypeName } : {}),
-      ...(e.ratePlanName ? { ratePlanName: e.ratePlanName } : {}),
-    })),
+    examples: result.summary.examples.map((e) => {
+      const plan = result.channelPlans?.[e.externalRateId];
+      return {
+        kind: e.kind, date: e.date, ours: e.ours, theirs: e.theirs, externalRateId: e.externalRateId,
+        ...(e.roomTypeName ? { roomTypeName: e.roomTypeName } : {}),
+        ...(e.ratePlanName ? { ratePlanName: e.ratePlanName } : {}),
+        ...(plan ? { channelPlanName: plan.name } : {}),
+        ...(plan?.derivedFrom ? { derivedFrom: plan.derivedFrom } : {}),
+      };
+    }),
     window: `${result.from} → ${result.to}`,
+    rooms: rooms.ok
+      ? { ok: true, headline: rooms.headline, examples: rooms.examples }
+      : { ok: false, error: rooms.error ?? "Could not read room counts." },
   };
 }

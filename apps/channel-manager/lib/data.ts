@@ -447,7 +447,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
      */
     prisma.dailyCell.findMany({
       where: { roomTypeId: { in: rtIds }, date: { gte: start, lte: end }, ratePlanId: { not: null } },
-      select: { roomTypeId: true, date: true, minLos: true, cta: true, ctd: true, stopSell: true },
+      select: { roomTypeId: true, ratePlanId: true, date: true, minLos: true, cta: true, ctd: true, stopSell: true },
     }),
     prisma.reservationLine.findMany({
       where: {
@@ -532,6 +532,23 @@ export async function getCalendarBoard(q: CalendarQuery) {
       planScoped.add(priceKey(c.roomTypeId, c.date.toISOString().slice(0, 10)));
     }
   }
+  /*
+   * Is EVERY active plan closed on this night? Then the room is off every OTA — the push sends 0 —
+   * whatever the room row says. Mirrors the push's per-plan resolution: a plan's own cell wins over
+   * the room's, then the plan default, then the property default. (Date-ranged restriction rules
+   * are a RevioCRS concept and are not read here.)
+   *
+   * Without this the grid said "Bookable 1" on nights a Bulk Update had stop-sold on both plans:
+   * found on a real hotel on 2026-09-23 — Channex showing 0 for thirty days, RevioLink showing 1,
+   * and nothing on the screen joining the two.
+   */
+  const planStop = new Map(planCells.filter((c) => c.ratePlanId).map((c) => [`${c.ratePlanId}:${c.roomTypeId}:${c.date.toISOString().slice(0, 10)}`, c.stopSell]));
+  const propStopDefault = (await prisma.propertyDefaults.findUnique({ where: { propertyId }, select: { defStopSell: true } }))?.defStopSell ?? false;
+  const everyPlanClosed = (rt: string, k: string) => {
+    if (allPlans.length === 0) return false;
+    const roomStop = cellMap.get(priceKey(rt, k))?.stopSell ?? false;
+    return allPlans.every((p) => (planStop.get(`${p.id}:${rt}:${k}`) ?? roomStop) || p.defStopSell || propStopDefault);
+  };
   const perPlanNote = (rt: string, k: string) =>
     planScoped.has(priceKey(rt, k))
       ? "Some rate plans have their own restriction on this date — set in Bulk Update. This row shows the room's."
@@ -620,7 +637,14 @@ export async function getCalendarBoard(q: CalendarQuery) {
           manualSellLimit: cellFor(k)?.inventory ?? null,
           holds: held, confirmed: sold,
         }).remaining;
-        const bookable = Math.max(0, remaining);
+        const closedEverywhere = everyPlanClosed(roomType.id, k);
+        const bookable = closedEverywhere ? 0 : Math.max(0, remaining);
+        if (closedEverywhere && remaining > 0) {
+          return {
+            date: k, value: "0",
+            warn: `Stop-sell on every rate plan — the channels are sent 0, although ${remaining} ${remaining === 1 ? "room is" : "rooms are"} free. Lift it in Bulk Update → Stop sell.`,
+          };
+        }
         return {
           date: k, value: String(bookable),
           // Nothing left is the fact a hotelier scans for. It gets the emphasis, not a muted grey.

@@ -406,8 +406,15 @@ export default async function CalendarPage({
                           );
                         }
                         return (
-                          <td key={cell.date} title={cell.note} className={`${base} px-1.5 py-1.5 ${row.muted ? "text-ink-400" : "font-semibold text-ink-900"}`}>
+                          <td
+                            key={cell.date}
+                            title={cell.warn ?? cell.note}
+                            // ⚠️ `warn` was set on read-only rows (Bookable's "nothing left to sell") and
+                            // never rendered — the one row a hotelier scans for "is anything on sale".
+                            className={`${base} px-1.5 py-1.5 ${cell.warn ? "bg-warning-50 font-semibold text-warning-700" : row.muted ? "text-ink-400" : "font-semibold text-ink-900"}`}
+                          >
                             {row.kind === "price" && cell.value !== "—" ? `€${cell.value}` : cell.value}
+                            {cell.warn && <span aria-hidden className="ml-0.5 text-[10px]">⚠</span>}
                           </td>
                         );
                       })}

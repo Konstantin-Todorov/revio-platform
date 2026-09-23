@@ -92,14 +92,60 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
                   <span className="font-semibold text-ink-800">
                     {e.roomTypeName
                       ? `${e.roomTypeName} · ${e.ratePlanName}`
-                      : `Channel rate plan ${e.externalRateId.slice(0, 8)}…`}
+                      : e.channelPlanName
+                        ? `${channelName} plan “${e.channelPlanName}”`
+                        : `Channel rate plan ${e.externalRateId.slice(0, 8)}…`}
                   </span>{" "}
                   {e.date} —{" "}
                   {e.kind === "missing"
                     ? `we have ${money(e.ours)}, they have nothing`
                     : e.kind === "unexpected"
-                      ? `they publish ${money(e.theirs)}, we sent nothing`
+                      ? `they publish ${money(e.theirs)}, and Revio does not manage this plan`
                       : `we have ${money(e.ours)}, they publish ${money(e.theirs)}`}
+                  {/* The cause, when it is knowable — a derived plan ignores what we send. */}
+                  {e.kind === "mismatch" && e.derivedFrom && (
+                    <span className="block pl-3 text-ink-500">
+                      {channelName} calculates this plan from {e.derivedFrom} and ignores the price we send. Make it derived in
+                      Rooms &amp; Rates with the same discount, or switch derivation off in {channelName}.
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {/* A plan the channel sells that nobody in Revio controls — the price guests see there is not ours to change. */}
+          {state.examples?.some((e) => e.kind === "unexpected") && (
+            <p className="mt-1.5 pl-6 text-[12px] text-ink-500">
+              Plans Revio does not manage keep whatever price was last set in {channelName}. If one of them is connected to an
+              OTA, it sells at that price — map it here, or close it in {channelName}.
+            </p>
+          )}
+
+          {/* The room counts — what a guest on an OTA sees first: is there a room at all? */}
+          {state.rooms && (
+            <p
+              className={`mt-2 flex items-start gap-1.5 rounded-md px-2.5 py-2 text-[12.5px] ${
+                !state.rooms.ok
+                  ? "bg-danger-50 text-danger-700"
+                  : state.rooms.examples && state.rooms.examples.length > 0
+                    ? "bg-warning-50 text-warning-800"
+                    : "bg-success-50 text-success-700"
+              }`}
+            >
+              {state.rooms.ok && !(state.rooms.examples && state.rooms.examples.length > 0) ? (
+                <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+              )}
+              <span>Rooms: {state.rooms.ok ? state.rooms.headline : state.rooms.error}</span>
+            </p>
+          )}
+          {state.rooms?.examples && state.rooms.examples.length > 0 && (
+            <ul className="mt-1.5 space-y-1 pl-6 text-[12px] text-ink-600">
+              {state.rooms.examples.map((e, i) => (
+                <li key={`${e.roomTypeName}-${e.date}-${i}`} className="tnum">
+                  <span className="font-semibold text-ink-800">{e.roomTypeName}</span> {e.date} — we send {e.ours}
+                  {e.closedByStopSell ? " (stop-sell on every plan)" : ""}, they offer {e.theirs ?? "nothing"}
                 </li>
               ))}
             </ul>

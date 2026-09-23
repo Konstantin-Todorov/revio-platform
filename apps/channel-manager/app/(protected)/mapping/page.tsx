@@ -114,6 +114,24 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
    * still wrong. Only the channel's own `room_type_id` can answer it. Found live on 2026-09-17:
    * `Apartment, 2 Bedrooms · Standard Rate` publishing to the 1-Bedroom's plan.
    */
+  /*
+   * ⚠️ A plan whose price Revio sets, mapped to a plan the CHANNEL computes.
+   *
+   * Channex derives such a plan from its parent and ignores the rate we push to it. Everything
+   * reports success — the push, the row, the status pill — and the guest on the OTA pays Channex's
+   * number, not ours. Found on a real hotel on 2026-09-23 by reading production back: BB
+   * Non-Refundable €333 in Revio, €299.70 on Booking.com for 93 nights, because Channex takes it
+   * as "BB BAR −10%". RevioDirect quotes €333 for the same night. The screen marked the plan
+   * "derived" in the dropdown and never said what that costs.
+   */
+  const rateById = new Map(products.rates.map((r) => [r.id, r] as const));
+  const derivedTargets = ratePlanMappings.flatMap((m) => {
+    const target = m.externalRateId ? rateById.get(m.externalRateId) : undefined;
+    if (!target?.derived) return [];
+    const parent = target.parentId ? rateById.get(target.parentId)?.name : undefined;
+    return [{ key: `${m.ratePlanId}-${m.roomTypeName}`, ratePlanId: m.ratePlanId, room: m.roomTypeName, plan: m.ratePlan.name, channelPlan: target.name, parent }];
+  });
+
   const crossWires = crossWiredRatePlans(
     ratePlanMappings.flatMap((m) =>
       m.externalRateId
@@ -170,6 +188,29 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                 <a href={`#map-rate-${ratePlanMappings.find((m) => m.externalRateId === f.externalRateId && m.roomTypeName === f.roomTypeName)?.ratePlanId ?? ""}`} className="font-semibold underline">
                   fix the row
                 </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {derivedTargets.length > 0 && (
+        <div className="mb-3 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-warning-700">
+            <AlertTriangle className="h-4 w-4" />
+            {derivedTargets.length === 1 ? "One price you set is" : `${derivedTargets.length} prices you set are`} ignored by {channel.name}
+          </div>
+          <p className="mt-1 pl-6 text-[12.5px] text-warning-700">
+            {channel.name} calculates these plans itself from another plan, so guests on the OTAs pay its number, not the one in
+            your calendar — and your own booking page still quotes yours. Either make the plan derived in Rooms &amp; Rates with the
+            same discount, so both sides agree, or switch derivation off for it in {channel.name}.
+          </p>
+          <ul className="mt-1.5 space-y-1 pl-6 text-[12.5px] text-warning-700">
+            {derivedTargets.map((d) => (
+              <li key={d.key}>
+                <span className="font-semibold">{d.room} · {d.plan}</span> → {d.channelPlan}
+                {d.parent ? `, which ${channel.name} derives from ${d.parent}` : ""}{" "}
+                <a href={`#map-rate-${d.ratePlanId}`} className="font-semibold underline">see the row</a>
               </li>
             ))}
           </ul>

@@ -217,10 +217,23 @@ export class ChannexChannelAdapter implements ChannelAdapter {
   async pushAvailability(
     updates: AriUpdate[],
   ): Promise<{ ok: boolean; taskId?: string; error?: string; warnings?: ChannexWarning[] }> {
+    /*
+     * ⚠️ The HIGHEST count across the room's plans, not the last one seen.
+     *
+     * A plan that is stop-sold (a Bulk Update on some plans, a plan default, an advance-purchase
+     * window) carries `bookable: 0` on its own update. Keyed last-write-wins, whether the ROOM went
+     * to 0 on Channex depended on which plan the loop happened to reach last — so closing
+     * Non-Refundable could take the whole room off every OTA, every rate, with the Sync Center green.
+     * A plan's own closure travels as that plan's `stop_sell`; the room closes only when every plan
+     * it sells is closed, which is exactly when the highest count is 0.
+     */
     const byRoomDate = new Map<string, ChannexAvailabilityValue>();
     for (const u of updates) {
       const v = toAvailabilityValue(this.propertyId, u);
-      if (v) byRoomDate.set(`${v.room_type_id}|${v.date}`, v);
+      if (!v) continue;
+      const key = `${v.room_type_id}|${v.date}`;
+      const seen = byRoomDate.get(key);
+      if (!seen || v.availability > seen.availability) byRoomDate.set(key, v);
     }
     const values = mergeDateRanges([...byRoomDate.values()]);
     if (values.length === 0) return { ok: true };
@@ -326,7 +339,15 @@ export class ChannexChannelAdapter implements ChannelAdapter {
   ): Promise<{ ok: true; rates: { externalRateId: string; date: string; priceMinor: number | null }[] } | { ok: false; error: string }> {
     const res = await this.get(
       `/restrictions?filter[property_id]=${this.propertyId}` +
-        `&filter[date][gte]=${dateFrom}&filter[date][lte]=${dateTo}`,
+        `&filter[date][gte]=${dateFrom}&filter[date][lte]=${dateTo}` +
+        /*
+         * ⚠️ REQUIRED. Without it Channex answers 400 "restrictions is required" — which is what
+         * this read did against sandbox and production alike from the day it shipped, so the Verify
+         * button (the only check that reads the destination) never once completed against a real
+         * Channex. Found 2026-09-23 by running it against production read-only. The unit tests
+         * passed throughout: they faked the response, and a fake does not require parameters.
+         */
+        `&filter[restrictions]=rate`,
     );
     // The status code, never the array length. See the note above.
     if (!res.ok) return { ok: false, error: `Channex ${res.status ?? "?"} reading published rates` };
@@ -354,6 +375,35 @@ export class ChannexChannelAdapter implements ChannelAdapter {
       }
     }
     return { ok: true, rates };
+  }
+
+  /**
+   * How many rooms Channex is offering, per room type and date — the availability half of what a
+   * guest on an OTA sees. The counterpart of `readPublishedRates`, and held to the same rule: a
+   * failed read is an ERROR, never an empty list.
+   *
+   * Channex answers keyed by room type then date: `{ data: { "<room_type_id>": { "2026-09-20": 5 } } }`.
+   */
+  async readPublishedAvailability(
+    dateFrom: string,
+    dateTo: string,
+  ): Promise<{ ok: true; rows: { externalRoomId: string; date: string; count: number }[] } | { ok: false; error: string }> {
+    const res = await this.get(
+      `/availability?filter[property_id]=${this.propertyId}` +
+        `&filter[date][gte]=${dateFrom}&filter[date][lte]=${dateTo}`,
+    );
+    if (!res.ok) return { ok: false, error: `Channex ${res.status ?? "?"} reading published availability` };
+    const data = (res.body as { data?: Record<string, Record<string, number | { availability?: number }>> } | null)?.data;
+    if (!data || typeof data !== "object") return { ok: true, rows: [] };
+    const rows: { externalRoomId: string; date: string; count: number }[] = [];
+    for (const [externalRoomId, byDate] of Object.entries(data)) {
+      if (!byDate || typeof byDate !== "object") continue;
+      for (const [date, cell] of Object.entries(byDate)) {
+        const n = typeof cell === "number" ? cell : Number(cell?.availability);
+        if (Number.isFinite(n)) rows.push({ externalRoomId, date, count: n });
+      }
+    }
+    return { ok: true, rows };
   }
 
   private async post(path: string, body: unknown): Promise<ApiResult> {

@@ -12,7 +12,7 @@ import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
   type RestrictionType, type ChannelAdapter, type ExternalProduct, type RawReservation,
-  resolveRate, toResolvablePlan, effectiveModel, effectivePrimary, type PriceLookup, pushedOf, importFailureEmail } from "@revio/core";
+  resolveRate, toResolvablePlan, displayedRate, todayInTimeZone, effectiveModel, effectivePrimary, type PriceLookup, pushedOf, importFailureEmail } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } from "./channex-channel-api.js";
 import { sendEmail, publicBaseUrl } from "@revio/email";
@@ -1799,6 +1799,13 @@ export interface VerifyResult {
   summary?: PublishedSummary;
   from?: string;
   to?: string;
+  /**
+   * The channel's own rate plans by id: its name, and the plan it derives from if it does. A finding
+   * about a plan we never sent to has only an id without this — and a mismatch on a plan the channel
+   * DERIVES is not a push fault at all: Channex computes that plan from its parent and ignores the
+   * price we send. Absent when the catalogue could not be read.
+   */
+  channelPlans?: Record<string, { name: string; derivedFrom?: string }>;
 }
 
 /**
@@ -1835,7 +1842,9 @@ export async function verifyPublished(
     return { ok: false, error: `${channel.name} cannot be read back — only Channex supports it today.` };
   }
 
-  const todayIso = ymd(new Date());
+  // The PROPERTY's today — the server's UTC date is a day behind a Bulgarian hotel until 03:00.
+  const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId }, select: { timezone: true } });
+  const todayIso = todayInTimeZone(property.timezone);
   const to = ymd(new Date(Date.parse(`${todayIso}T00:00:00Z`) + days * 86_400_000));
 
   const read = await (adapter as unknown as {
@@ -1847,14 +1856,24 @@ export async function verifyPublished(
   if (!read.ok) return { ok: false, error: read.error, from: todayIso, to };
 
   /*
-   * What we believe we sent, built from the SAME room-scoped mappings the push resolves through —
-   * so a pair with no mapping produces no expectation rather than a false "missing".
+   * What we SEND, computed the way the push computes it.
+   *
+   * ⚠️ This used to be built from stored `RatePrice` rows at `defaultOccupancy ?? maxGuests`. The
+   * push resolves through `resolveRate`: a night nobody priced goes out at the plan's default, a
+   * derived plan goes out at its parent's price through the adjustment, and a per-room price lives at
+   * the ceiling. So the one check that reads the destination could not see most of what it was
+   * checking — it expected nothing for a default-priced night and nothing for any derived plan.
+   * Now: the same mappings the push uses (complete, active plans, room-scoped), and `displayedRate`
+   * — `resolveRate` at the push's occupancy — for the number.
    */
-  const [rateMaps, roomTypes, prices] = await Promise.all([
+  const [rateMaps, roomTypes, planRows, defaults, prices] = await Promise.all([
     prisma.channelRatePlanMapping.findMany({
-      where: { channelId }, include: { ratePlan: { select: { id: true, name: true } } },
+      where: { channelId, status: "complete", externalRateId: { not: null }, roomTypeId: { not: null }, ratePlan: { active: true } },
+      include: { ratePlan: { select: { name: true } } },
     }),
     prisma.roomType.findMany({ where: { propertyId: channel.propertyId }, select: { id: true, name: true, defaultOccupancy: true, maxGuests: true } }),
+    prisma.ratePlan.findMany({ where: { propertyId: channel.propertyId }, include: { occupancyOptions: true } }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId: channel.propertyId }, select: { pricingModel: true } }),
     prisma.ratePrice.findMany({
       where: {
         propertyId: channel.propertyId,
@@ -1863,29 +1882,136 @@ export async function verifyPublished(
       select: { roomTypeId: true, ratePlanId: true, date: true, priceMinor: true, occupancy: true },
     }),
   ]);
-
-  const index = indexRateMappings(
-    rateMaps.map((m) => ({ ratePlanId: m.ratePlanId, roomTypeId: m.roomTypeId, externalRateId: m.externalRateId })),
-    { allowCatchAll: false },
-  );
-  const roomName = new Map(roomTypes.map((r) => [r.id, r.name]));
-  const planName = new Map(rateMaps.map((m) => [m.ratePlanId, m.ratePlan.name]));
-  // The headline price only — one row per (plan, room, date), the same figure the push sends.
-  const primaryOf = new Map(roomTypes.map((r) => [r.id, r.defaultOccupancy ?? r.maxGuests]));
+  const stored = new Map(prices.map((p) => [`${p.roomTypeId}:${p.ratePlanId}:${ymd(p.date)}:${p.occupancy ?? ""}`, p.priceMinor]));
+  const lookup: PriceLookup = (rt, rp, k, occ) => stored.get(`${rt}:${rp}:${k}:${occ}`) ?? null;
+  const plans = new Map(planRows.map((p) => [p.id, toResolvablePlan(p)]));
+  const roomById = new Map(roomTypes.map((r) => [r.id, r]));
+  const dateKeys: string[] = [];
+  for (let t = Date.parse(`${todayIso}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000) dateKeys.push(ymd(new Date(t)));
 
   const expected: ExpectedRate[] = [];
-  for (const p of prices) {
-    if (p.occupancy !== primaryOf.get(p.roomTypeId)) continue;
-    const externalRateId = resolveExternalRateId(index, p.roomTypeId, p.ratePlanId);
-    if (!externalRateId) continue;
-    expected.push({
-      externalRateId,
-      date: ymd(p.date),
-      priceMinor: p.priceMinor,
-      roomTypeName: roomName.get(p.roomTypeId) ?? p.roomTypeId,
-      ratePlanName: planName.get(p.ratePlanId) ?? p.ratePlanId,
-    });
+  for (const m of rateMaps) {
+    const room = roomById.get(m.roomTypeId!);
+    const plan = plans.get(m.ratePlanId);
+    if (!room || !plan) continue;
+    for (const k of dateKeys) {
+      const shown = displayedRate({
+        lookup, plans, plan, roomTypeId: room.id, maxOccupancy: room.maxGuests,
+        roomDefaultOccupancy: room.defaultOccupancy, propertyModel: defaults?.pricingModel ?? "per_room", dateKey: k,
+      });
+      if (shown.minor == null) continue;
+      expected.push({
+        externalRateId: m.externalRateId!, date: k, priceMinor: shown.minor,
+        roomTypeName: room.name, ratePlanName: m.ratePlan.name,
+      });
+    }
   }
 
-  return { ok: true, summary: summarisePublished(comparePublished(expected, read.rates)), from: todayIso, to };
+  let channelPlans: VerifyResult["channelPlans"];
+  try {
+    const catalogue = await adapter.listProducts?.();
+    if (catalogue && "rates" in catalogue) {
+      const rates = catalogue.rates as { id: string; name: string; parentId?: string | null }[];
+      const nameOf = new Map(rates.map((r) => [r.id, r.name]));
+      channelPlans = Object.fromEntries(rates.map((r) => [r.id, {
+        name: r.name, ...(r.parentId ? { derivedFrom: nameOf.get(r.parentId) ?? "another plan" } : {}),
+      }]));
+    }
+  } catch { /* names are an explanation, not the check — the comparison above stands without them */ }
+
+  return {
+    ok: true, summary: summarisePublished(comparePublished(expected, read.rates)), from: todayIso, to,
+    ...(channelPlans ? { channelPlans } : {}),
+  };
+}
+
+export interface AvailabilityCheck {
+  ok: boolean;
+  error?: string;
+  checked: number;
+  mismatched: number;
+  examples: { roomTypeName: string; date: string; ours: number; theirs: number | null; closedByStopSell: boolean }[];
+  headline: string;
+}
+
+/**
+ * The room-count half of Verify: how many rooms the channel offers, against what we send.
+ *
+ * Prices alone could not see the fault a hotel feels first — a room gone from every OTA. What we
+ * send per room and night is the waterfall (the calendar's Bookable row, the same function), or 0
+ * when EVERY plan the room is pushed under is stop-sold: the channel adapter sends the room's
+ * highest count across its plans, so one closed plan never closes the room.
+ *
+ * Same rule as the price read: a failed read is an error, never "nothing offered".
+ */
+export async function verifyPublishedAvailability(prisma: Db, channelId: string, days = 14): Promise<AvailabilityCheck> {
+  const empty = { checked: 0, mismatched: 0, examples: [], headline: "" };
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, error: "That channel no longer exists.", ...empty };
+  if (channel.connectivityMode === "mock") return { ok: false, error: "Demo channels cannot be read back.", ...empty };
+  const adapter = await adapterFor(prisma, channel, "push");
+  const reader = adapter as unknown as { readPublishedAvailability?: (a: string, b: string) => Promise<
+    { ok: true; rows: { externalRoomId: string; date: string; count: number }[] } | { ok: false; error: string }> };
+  if (!reader?.readPublishedAvailability) return { ok: false, error: `${channel.name} cannot be read back.`, ...empty };
+
+  const property = await prisma.property.findUniqueOrThrow({ where: { id: channel.propertyId }, select: { timezone: true } });
+  const todayIso = todayInTimeZone(property.timezone);
+  const start = new Date(`${todayIso}T00:00:00Z`);
+  const end = new Date(start.getTime() + days * DAY_MS);
+  const dateKeys = Array.from({ length: days + 1 }, (_, i) => ymd(new Date(start.getTime() + i * DAY_MS)));
+
+  const published = await reader.readPublishedAvailability(todayIso, ymd(end));
+  if (!published.ok) return { ok: false, error: published.error, ...empty };
+  const theirs = new Map(published.rows.map((r) => [`${r.externalRoomId}|${r.date}`, r.count]));
+
+  const [roomMaps, rateMaps, propDefaults] = await Promise.all([
+    prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: "complete", externalRoomId: { not: null } }, include: { roomType: true } }),
+    prisma.channelRatePlanMapping.findMany({
+      where: { channelId, status: "complete", externalRateId: { not: null }, ratePlan: { active: true } },
+      include: { ratePlan: { select: { id: true, defStopSell: true } } },
+    }),
+    prisma.propertyDefaults.findUnique({ where: { propertyId: channel.propertyId }, select: { defStopSell: true } }),
+  ]);
+
+  const examples: AvailabilityCheck["examples"] = [];
+  let checked = 0;
+  let mismatched = 0;
+  for (const rm of roomMaps) {
+    const rt = rm.roomType;
+    const [lines, holds, periods, cells] = await Promise.all([
+      prisma.reservationLine.findMany({ where: { roomTypeId: rt.id, reservation: { status: { in: [...ROOM_OCCUPYING_STATUSES] } }, checkIn: { lte: end }, checkOut: { gt: start } } }),
+      prisma.hold.findMany({ where: { roomTypeId: rt.id, status: "active", expiresAt: { gt: new Date() }, checkIn: { lte: end }, checkOut: { gt: start } } }),
+      prisma.roomInventoryPeriod.findMany({ where: { roomTypeId: rt.id, dateFrom: { lte: end }, dateTo: { gte: start } } }),
+      prisma.dailyCell.findMany({ where: { roomTypeId: rt.id, date: { gte: start, lte: end } } }),
+    ]);
+    const byDate = expandInventoryPeriods(periods.map((p) => ({ kind: p.kind, rooms: p.rooms, dateFrom: ymd(p.dateFrom), dateTo: ymd(p.dateTo) })), dateKeys);
+    const roomCell = new Map(cells.filter((c) => !c.ratePlanId).map((c) => [ymd(c.date), c]));
+    const planCell = new Map(cells.filter((c) => c.ratePlanId).map((c) => [`${c.ratePlanId}:${ymd(c.date)}`, c]));
+    const plans = rateMaps.filter((m) => m.roomTypeId === rt.id).map((m) => m.ratePlan);
+    for (const k of dateKeys) {
+      const d = new Date(`${k}T00:00:00Z`);
+      const cell = roomCell.get(k);
+      const { outOfOrder, closed } = byDate.get(k) ?? { outOfOrder: 0, closed: 0 };
+      const planClosed = (p: { id: string; defStopSell: boolean }) =>
+        (planCell.get(`${p.id}:${k}`)?.stopSell ?? cell?.stopSell ?? false) || p.defStopSell || (propDefaults?.defStopSell ?? false);
+      const closedByStopSell = plans.length > 0 && plans.every(planClosed);
+      const ours = closedByStopSell ? 0 : Math.max(0, computeWaterfall({
+        physical: rt.totalRooms, outOfOrder, closed, manualSellLimit: cell?.inventory ?? null,
+        holds: holds.filter((h) => h.checkIn <= d && d < h.checkOut).reduce((s, h) => s + h.quantity, 0),
+        confirmed: lines.filter((l) => l.checkIn <= d && d < l.checkOut).reduce((s, l) => s + l.quantity, 0),
+      }).remaining);
+      const got = theirs.get(`${rm.externalRoomId}|${k}`) ?? null;
+      checked++;
+      if (got !== ours) {
+        mismatched++;
+        if (examples.length < 8) examples.push({ roomTypeName: rt.name, date: k, ours, theirs: got, closedByStopSell });
+      }
+    }
+  }
+  const headline = checked === 0
+    ? "No mapped rooms to check."
+    : mismatched === 0
+      ? `Every room count matches, on all ${checked} room-nights checked.`
+      : `${mismatched} of ${checked} room-nights offered at a different count than we send.`;
+  return { ok: true, checked, mismatched, examples, headline };
 }
