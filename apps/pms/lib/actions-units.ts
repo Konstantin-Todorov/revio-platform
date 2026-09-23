@@ -3,11 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
+import { takeUnitOoo, clearUnitOoo } from "./units";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
-import { logAudit, recordSync, str, int, utcDay } from "./mutation-helpers";
+import { logAudit, str, int } from "./mutation-helpers";
 import { recordOpsEvent } from "./events";
-import { todayInTz, addDaysYmd } from "./format";
 import { flashError } from "@revio/ui/flash";
 
 const HK_STATUSES = ["clean", "dirty", "in_progress", "inspected", "out_of_order"];
@@ -199,31 +199,22 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
   // Not an error: two people pressing "clean" on the same room is ordinary, and the room IS clean.
   if (prev === status) return;
 
-  await prisma.unit.update({ where: { id: unitId }, data: { hkStatus: status } });
-
+  /*
+   * ⚠️ Through the shared pair, not an inline copy of it.
+   *
+   * This action used to write the status, then the out-of-order period, as separate statements,
+   * with no check for a period that already existed. A double tap on a phone could take two rooms
+   * off sale for one broken room, and a failure between the two writes could leave a room reading
+   * "out of order" while every channel went on selling it — or, coming back, reading "clean" and
+   * off sale for ever. `takeUnitOoo` / `clearUnitOoo` do both halves in one transaction with the
+   * unit row as the lock, and push only the dates that changed. Maintenance already used them.
+   */
   if (status === "out_of_order" && prev !== "out_of_order") {
-    const property = await prisma.property.findUnique({ where: { id: unit.propertyId } });
-    const today = todayInTz(property!.timezone);
-    const to = addDaysYmd(today, property!.syncHorizonDays);
-    await prisma.roomInventoryPeriod.create({
-      data: {
-        tenantId: session.tenantId,
-        propertyId: unit.propertyId,
-        roomTypeId: unit.roomTypeId,
-        kind: "out_of_order",
-        dateFrom: utcDay(today),
-        dateTo: utcDay(to),
-        rooms: 1,
-        unitId: unit.id,
-        note: `Unit ${unit.label} out of order (PMS)`,
-      },
-    });
-    const rt = await prisma.roomType.findUnique({ where: { id: unit.roomTypeId } });
-    await recordSync(unit.propertyId, session.tenantId, `Availability reduced — ${rt?.name ?? "1 room"}`, "1 room off sale until back in service");
+    await takeUnitOoo(session.tenantId, unit.propertyId, unit, `Unit ${unit.label} out of order (PMS)`);
   } else if (prev === "out_of_order" && status !== "out_of_order") {
-    await prisma.roomInventoryPeriod.deleteMany({ where: { unitId: unit.id } });
-    const rt = await prisma.roomType.findUnique({ where: { id: unit.roomTypeId } });
-    await recordSync(unit.propertyId, session.tenantId, `Availability restored — ${rt?.name ?? "1 room"}`, "1 room returned to sale");
+    await clearUnitOoo(session.tenantId, unit.propertyId, unit, status);
+  } else {
+    await prisma.unit.update({ where: { id: unitId }, data: { hkStatus: status } });
   }
 
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit_status", field: unit.label, oldValue: prev, newValue: status, userId: session.userId });

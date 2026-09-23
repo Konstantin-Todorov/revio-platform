@@ -9,7 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:seed": "pnpm --filter @revio/db db:seed",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ooo-race": "tsx scripts/ooo-race.ts"
   },
   "dependencies": {
     "@revio/connectivity": "workspace:*",
@@ -35,6 +36,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }

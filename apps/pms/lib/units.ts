@@ -1,41 +1,29 @@
 import "server-only";
-import { prisma } from "./db";
 import { stayScope } from "@revio/connectivity";
 import { recordSync } from "./mutation-helpers";
-import { todayInTz, addDaysYmd, utcDay } from "./format";
+import { addDaysYmd } from "./format";
+import { takeUnitOutOfOrder, returnUnitToService } from "./unit-ooo";
 
 /**
- * Take a unit out of order: set its housekeeping status and write the OOO `RoomInventoryPeriod` so the
- * shared availability waterfall drops the room on every channel. Idempotent (won't duplicate the period).
- * Shared by the housekeeping board and maintenance tasks — the ONE cross-product write.
+ * Take a unit out of order and tell the channels. The database half is `takeUnitOutOfOrder` in
+ * `./unit-ooo` — transactional and race-safe, see there.
+ *
+ * ⚠️ "Shared by the housekeeping board and maintenance tasks" was written above this function long
+ * before it was true. Until 2026-09-23 only maintenance called it; the housekeeping board carried an
+ * inline copy that had lost the duplicate check and the date-scoped push. It calls this now.
  */
 export async function takeUnitOoo(tenantId: string, propertyId: string, unit: { id: string; label: string; roomTypeId: string }, note: string) {
-  const property = await prisma.property.findUnique({ where: { id: propertyId } });
-  if (!property) return;
-  await prisma.unit.update({ where: { id: unit.id }, data: { hkStatus: "out_of_order" } });
-  const existing = await prisma.roomInventoryPeriod.count({ where: { unitId: unit.id } });
-  if (existing === 0) {
-    const today = todayInTz(property.timezone);
-    const to = addDaysYmd(today, property.syncHorizonDays);
-    await prisma.roomInventoryPeriod.create({
-      data: { tenantId, propertyId, roomTypeId: unit.roomTypeId, kind: "out_of_order", dateFrom: utcDay(today), dateTo: utcDay(to), rooms: 1, unitId: unit.id, note },
-    });
-    // Boundary rule: channels see the availability effect, never the operational cause.
-    const rt = await prisma.roomType.findUnique({ where: { id: unit.roomTypeId } });
-    await recordSync(propertyId, tenantId, `Availability reduced — ${rt?.name ?? "1 room"}`, "1 room off sale until back in service",
-      stayScope([{ roomTypeId: unit.roomTypeId, checkIn: today, checkOut: addDaysYmd(to, 1) }]));
-  }
+  const taken = await takeUnitOutOfOrder(tenantId, propertyId, unit, note);
+  if (!taken?.created) return;
+  // Boundary rule: channels see the availability effect, never the operational cause.
+  await recordSync(propertyId, tenantId, `Availability reduced — ${taken.roomTypeName}`, "1 room off sale until back in service",
+    stayScope([{ roomTypeId: taken.roomTypeId, checkIn: taken.from, checkOut: addDaysYmd(taken.to, 1) }]));
 }
 
-/** Return a unit to service: delete its OOO periods (restores the waterfall) and set the new hk status. */
+/** Return a unit to service: delete its OOO periods (restores the waterfall), set the new status, push the freed dates. */
 export async function clearUnitOoo(tenantId: string, propertyId: string, unit: { id: string; label: string }, newStatus: string) {
-  // Read the dates BEFORE deleting: they are what goes back on sale, and the push has to name them.
-  const periods = await prisma.roomInventoryPeriod.findMany({ where: { unitId: unit.id } });
-  const removed = await prisma.roomInventoryPeriod.deleteMany({ where: { unitId: unit.id } });
-  await prisma.unit.update({ where: { id: unit.id }, data: { hkStatus: newStatus } });
-  if (removed.count > 0) {
-    const u = await prisma.unit.findUnique({ where: { id: unit.id }, include: { roomType: true } });
-    await recordSync(propertyId, tenantId, `Availability restored — ${u?.roomType.name ?? "1 room"}`, "1 room returned to sale",
-      stayScope(periods.map((p) => ({ roomTypeId: p.roomTypeId, checkIn: p.dateFrom, checkOut: addDaysYmd(p.dateTo.toISOString().slice(0, 10), 1) }))));
-  }
+  const back = await returnUnitToService(tenantId, unit, newStatus);
+  if (back.removed.length === 0) return;
+  await recordSync(propertyId, tenantId, `Availability restored — ${back.roomTypeName}`, "1 room returned to sale",
+    stayScope(back.removed.map((p) => ({ roomTypeId: p.roomTypeId, checkIn: p.dateFrom, checkOut: addDaysYmd(p.dateTo.toISOString().slice(0, 10), 1) }))));
 }

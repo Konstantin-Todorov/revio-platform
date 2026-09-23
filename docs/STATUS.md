@@ -283,6 +283,22 @@ invoice* among them. Proved on the rendered folio: two presses 150 ms apart, **o
 has hydrated. Measured: pressed in the first moment of a cold load, two walk-ins still went through.
 That needs an idempotency key on the server — `HANDOFF` item 2.
 
+### Shipped 2026-09-23 — one broken room took six rooms off sale
+
+`apps/pms/scripts/ooo-race.ts` marked one room out of order twelve times at once: **six periods —
+six rooms off sale on every channel for one broken room.** Two copies of this write existed: the
+maintenance one counted existing periods before creating (count-then-create, so racers all count
+zero), and the housekeeping board carried its own inline copy with no count at all, under a comment
+in the shared file claiming it was "shared by the housekeeping board". Neither was a transaction,
+so a failure between the status and the period could leave a room reading "out of order" while
+channels sold it — or, coming back, "clean" and off sale for ever.
+
+Now one core, `apps/pms/lib/unit-ooo.ts`, in a transaction that updates the **unit row first** so a
+second caller waits on it and then sees the first one's period. Both paths call it. After: **1 of
+12**, and twelve concurrent "back in service" leave no period and report the freed dates once.
+Production checked first: no unit carried a duplicate period, and none disagreed with its status.
+<!-- status: built apps/pms/lib/unit-ooo.ts#takeUnitOutOfOrder -->
+
 ### Shipped 2026-09-23 — one lease policy, and six jobs that told the health check they had succeeded
 
 Founder's decision, applied to all thirteen: `withJobLease`, releasing on failure. Doing it found

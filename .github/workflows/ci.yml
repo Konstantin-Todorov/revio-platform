@@ -214,6 +214,8 @@ jobs:
           # The FRONT DESK's confirm, which is different code from the guest's. It produced twelve
           # reservations from one hold until 2026-09-23 and nothing raced it.
           pnpm --filter @revio/reservation crs-confirm-race
+          # A room out of order takes one room off sale, not six. See apps/pms/lib/unit-ooo.ts.
+          pnpm --filter @revio/pms ooo-race
           pnpm --filter @revio/operator stripe-mode-verify
         env:
           ADMIN_URL_BASE: postgresql://postgres:postgres@localhost:5432
