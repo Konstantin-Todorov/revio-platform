@@ -28,6 +28,7 @@ export * from "./guests/recognition.js";
 export * from "./rates/derive.js";
 export * from "./rates/calendar-rows.js";
 export * from "./connectivity/cadence.js";
+export * from "./connectivity/channel-journey.js";
 export * from "./rates/occupancy.js";
 export * from "./restrictions/resolve.js";
 export * from "./restrictions/capabilities.js";

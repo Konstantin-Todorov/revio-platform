@@ -29,7 +29,7 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
   const money = (m: number | null) => (m == null ? "—" : `€${(m / 100).toLocaleString("en-US")}`);
 
   return (
-    <div className="mb-3 rounded-md border border-surface-border bg-white px-4 py-3">
+    <div id="verify" className="mb-3 scroll-mt-4 rounded-md border border-surface-border bg-white px-4 py-3">
       <form action={formAction} className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <input type="hidden" name="channelId" value={channelId} />
         <SearchCheck className="h-4 w-4 shrink-0 text-ink-400" />

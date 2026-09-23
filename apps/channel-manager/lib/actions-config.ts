@@ -787,6 +787,22 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
     return { error: result.error ?? "Could not read the channel." };
   }
 
+  /*
+   * Remembered, so the channel card can say "checked, and it matched" rather than asking again.
+   * `success` only when BOTH halves match exactly; otherwise `warning` — a read that found
+   * differences is not a verified channel. A failed read is not recorded: it proved nothing.
+   */
+  const clean = result.summary.mismatched + result.summary.missing + result.summary.unexpected === 0
+    && rooms.ok && rooms.mismatched === 0;
+  await prisma.syncEvent.create({
+    data: {
+      tenantId: channel.tenantId, propertyId, channelId: channel.id, kind: "verify",
+      status: clean ? "success" : "warning",
+      summary: `Verified ${channel.name}: ${result.summary.headline}${rooms.ok ? ` · Rooms: ${rooms.headline}` : ""}`,
+    },
+  });
+  revalidatePath("/channels");
+
   return {
     ok: true,
     headline: result.summary.headline,

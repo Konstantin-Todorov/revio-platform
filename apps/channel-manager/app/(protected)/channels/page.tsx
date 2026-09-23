@@ -1,4 +1,6 @@
-import { Download, Radio, RotateCcw } from "lucide-react";
+import { CheckCircle2, Circle, Download, Radio, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { channelJourney } from "@revio/core";
 import { getChannels, getProperty } from "@/lib/data";
 import { pullChannelBookings, reimportChannelBookings } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
@@ -134,7 +136,15 @@ export default async function ChannelsPage() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {active.map((ch) => {
           const m = statById[ch.id];
-          const pct = m ? Math.round((m.complete / m.total) * 100) : 0;
+          const pct = m && m.total > 0 ? Math.min(100, Math.round((m.complete / m.total) * 100)) : 0;
+          // The way to the first booking — real channels only; a demo channel has no OTA behind it.
+          const journey = ch.connectivityMode === "mock" || !m ? null : channelJourney({
+            channelName: ch.name, onChannex: Boolean(ch.externalPropertyId),
+            mappingRows: m.total, mappingComplete: m.complete, status: ch.status,
+            verifiedAt: m.verifiedAt, bookingsReceived: m.bookingsReceived,
+            mappingHref: `/mapping?ch=${ch.code}`,
+          });
+          const nextStep = journey?.find((s) => s.next);
           return (
             <Card key={ch.id} className="p-4">
               <div className="flex items-start gap-3">
@@ -218,6 +228,34 @@ export default async function ChannelsPage() {
                   <DisconnectChannelButton channelId={ch.id} channelName={ch.name} />
                 </div>
               </div>
+
+              {/*
+                Where this channel stands, as steps — the one place the card says what happens next.
+                Collapsed to a single line once the first booking has arrived: then it is history.
+              */}
+              {journey && nextStep && (
+                <div className="mt-3 rounded-md border border-surface-border bg-surface-muted/60 px-3 py-2.5">
+                  <div className="mb-1.5 text-[11.5px] font-semibold text-ink-500">The way to your first {ch.name} booking</div>
+                  <ol className="space-y-1">
+                    {journey.map((s) => (
+                      <li key={s.key} className="flex items-start gap-2 text-[12.5px]">
+                        {s.done
+                          ? <CheckCircle2 className="mt-px h-4 w-4 shrink-0 text-success-600" aria-label="done" />
+                          : <Circle className={`mt-px h-4 w-4 shrink-0 ${s.next ? "text-brand-600" : "text-ink-300"}`} aria-label={s.next ? "next" : "not yet"} />}
+                        <div className="min-w-0">
+                          <span className={s.done ? "text-ink-500" : s.next ? "font-semibold text-ink-900" : "text-ink-400"}>{s.label}</span>
+                          {s.next && <p className="mt-0.5 text-[12px] leading-snug text-ink-600">{s.next}</p>}
+                          {s.action && (
+                            <Link href={s.action.href} className="mt-1 inline-flex h-7 items-center rounded-md bg-brand-800 px-2.5 text-[12px] font-semibold text-white hover:bg-brand-700">
+                              {s.action.label}
+                            </Link>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
 
               <div className="mt-4">
                 <div className="mb-1 flex items-center justify-between text-[11.5px] font-semibold text-ink-500">

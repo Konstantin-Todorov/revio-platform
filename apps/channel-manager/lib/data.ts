@@ -889,20 +889,23 @@ export async function getReservationSummary() {
 export async function getChannels() {
   const property = await getProperty();
   const channels = await prisma.channel.findMany({ where: { propertyId: property.id }, orderBy: { name: "asc" } });
-  // Two-stream completeness: every room type AND every rate plan must be mapped to the channel.
-  const [totalRoomTypes, totalRatePlans] = await Promise.all([
-    prisma.roomType.count({ where: { propertyId: property.id } }),
-    prisma.ratePlan.count({ where: { propertyId: property.id } }),
-  ]);
-  const total = totalRoomTypes + totalRatePlans;
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const mapStats = await Promise.all(
     channels.map(async (c) => {
-      const [rt, rp, syncs, syncsOk, stuckBookings] = await Promise.all([
-        prisma.channelRoomTypeMapping.count({ where: { channelId: c.id, status: "complete" } }),
-        prisma.channelRatePlanMapping.count({ where: { channelId: c.id, status: "complete" } }),
-        prisma.syncEvent.count({ where: { channelId: c.id, createdAt: { gte: since24h } } }),
-        prisma.syncEvent.count({ where: { channelId: c.id, createdAt: { gte: since24h }, status: "success" } }),
+      /*
+       * ⚠️ Completeness from the MAPPING SCREEN's own rows, not from counting mapping rows.
+       *
+       * This divided complete mapping rows by (room types + rate plans). Rate plans map once PER
+       * ROOM since the 13 September fix, and the count also took switched-off and derived plans —
+       * so a real hotel read "167%" with the bar drawn past the card, and could never reach 100%
+       * honestly. The Mapping screen decides what needs linking; this asks it.
+       */
+      const mapping = await getMapping(c.code);
+      const rows = [...mapping.roomTypeMappings, ...mapping.ratePlanMappings];
+      const [syncs, syncsOk, stuckBookings, lastVerified, bookingsReceived] = await Promise.all([
+        // Delivery health counts deliveries — a Verify read is not one.
+        prisma.syncEvent.count({ where: { channelId: c.id, createdAt: { gte: since24h }, kind: { in: ["push", "pull"] } } }),
+        prisma.syncEvent.count({ where: { channelId: c.id, createdAt: { gte: since24h }, kind: { in: ["push", "pull"] }, status: "success" } }),
         /*
          * ⚠️ Bookings this channel confirmed that never became a stay.
          *
@@ -916,12 +919,18 @@ export async function getChannels() {
          * notice, so this is what the button keys on now.
          */
         prisma.reservation.count({ where: { channelId: c.id, status: "failed_import" } }),
+        prisma.syncEvent.findFirst({ where: { channelId: c.id, kind: "verify", status: "success" }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+        prisma.reservation.count({ where: { channelId: c.id, status: { not: "failed_import" } } }),
       ]);
       return {
         channelId: c.id,
         stuckBookings,
-        complete: rt + rp,
-        total,
+        // A property-wide row ("to confirm") is pushed through on a demo channel and skipped on a real
+        // one (`indexRateMappings`), so it counts as linked only where it actually carries prices.
+        complete: rows.filter((r) => r.status === "complete" || (c.connectivityMode === "mock" && r.status === "unconfirmed")).length,
+        total: rows.length,
+        verifiedAt: lastVerified?.createdAt ?? null,
+        bookingsReceived,
         // Last-24h connectivity health: % of this channel's sync events that succeeded (null = no activity).
         health24h: syncs > 0 ? Math.round((syncsOk / syncs) * 100) : null,
         syncs24h: syncs,
