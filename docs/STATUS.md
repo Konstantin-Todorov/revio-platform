@@ -259,6 +259,27 @@ invoicing its own clients, and only the second one is ready.
 both shipped: the city-tax VAT base in `f828cac` on 09-09, and the operator sidebar in `7e70a38`
 the same day.
 
+### Shipped 2026-09-23 — production Channex read back for the first time, and what the hotel sees
+
+*Checked read-only against production Channex (`channex:readback`: no push, no ack), then a live sandbox
+create → cancel against the deployed code:* imported in under 1 s, **one** row despite repeated webhook
+rings, Channex 6 → 5 → 6, `cancelledAt` set. Demo sandbox: 124/124 prices, 62/62 room-nights match.
+
+- **Verify had never once completed against a real Channex** (`f43f3a3`) — HTTP 400, a missing
+  `filter[restrictions]`; its tests faked a 200. Now fixed, checks room counts as well as prices, names the
+  channel's own plans, and says *why* a price differs when the channel derives the plan.
+- **One stop-sold plan could close a whole room on every OTA** — the adapter kept the last plan's count per
+  room/night. Now the highest; the room closes only when every plan does.
+- **"—" in the calendar about a room selling at €120; reception could not sell it** (`2463c18`). Both
+  calendars and the CRS quote now use the push's resolver; a default price shows lighter, with a hover.
+- **Simulate booking ran a copy of the import** and booked unpriced nights at €0 (`9d6a528`); now it goes
+  through `pullChannel`.
+- **Demo front desk overstays since July** (`4131ed2`) — hand-made demo stays now check out nightly.
+- **Each real channel card shows the way to the first booking** (`2c51d6d`) — five steps, one "next", with a
+  button where there is something to press and a plain "the OTA approves this in its extranet" where not.
+  Mapping completeness read 167% on a real hotel; now the Mapping screen's own rows.
+- Real-client findings for the founder: `docs/ACTION-REQUIRED.md` §4c.
+
 ### Shipped 2026-09-23 — a real Channex sandbox booking, followed through; three defects behind it
 
 *Checked by creating, modifying and cancelling booking `REVIO-E2E-222837` through Channex's own

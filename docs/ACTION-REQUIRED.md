@@ -312,6 +312,26 @@ this keeps both mappings dormant and the account's future is a decision nobody h
 > villa. Neither has a channel, so neither is being billed, but they are the duplicate noted
 > earlier and they still need clearing up **in Channex**, which nothing here can do.
 
+### 4c. Cabacum Beach Residence (DesManagement) — three things only the hotel can decide — ADDED 2026-09-23
+
+Found by reading their live Channex property back, read-only (`pnpm --filter @revio/connectivity
+channex:readback`). Nothing here is a Revio fault; each is a setting the hotel owns.
+
+1. **Nothing is on sale on any OTA until 31 March 2027.** On 13 September a Bulk Update set stop-sell
+   on BOTH active plans (BB Flex, BB Non-Refundable) for all three apartments, 2026-09-13 → 2027-03-31.
+   A room closes on Channex when every plan it sells is closed, so Channex correctly shows 0 rooms.
+   Probably set during setup and never lifted. **Ask them.** RevioLink's calendar now shows it: Bookable 0
+   with "Stop-sell on every rate plan", and Bulk Update → Stop sell lifts it.
+2. **BB Non-Refundable sells at a different price than Revio thinks.** Channex derives it from "BB BAR"
+   (their BB Flex) at −10%, so it ignores the €333 Revio sends and OTAs show €299.70 — while RevioDirect
+   would quote €333. Either make BB Non-Refundable a derived plan in Revio (BB Flex −10%), or switch
+   derivation off for it in Channex. The Mapping screen now warns about exactly this.
+3. **Two open folios after departure** — "Channel Manager Test" (€8.94) and "Channel Manager Test 2"
+   (€5.67), departed 14–15 September. Their test stays; close or settle them on the folio screen.
+
+Also on that property: 6 Channex rate plans publish prices Revio does not manage (Verify lists them by
+name). If any is connected to an OTA, it sells at whatever was last typed in Channex.
+
 ### 5. That hotel's Channex property
 Either create it in the portal and give me the UUID, or tell me to create it via the API. Then I map
 room types and rate plans both ways and switch the channel `channex_sandbox` → `channex_prod`.
