@@ -204,6 +204,73 @@ async function main() {
     after === before ? "nothing committed" : `${after - before} row(s) survived the rollback`,
   );
 
+
+  /*
+   * ⚠️ Every policy is one of a KNOWN, REVIEWED set — added 2026-09-23.
+   *
+   * "Every table has RLS enabled" is asserted above, and it is not the same as "every policy is
+   * right". A table with RLS on and a wrong policy passes that check, and if the seed leaves it
+   * empty for one of the two test tenants its policy is never exercised either — 30 of the tenant
+   * tables hold rows on a fresh CI seed. A copy-pasted policy that compares the wrong column, or a
+   * second PERMISSIVE policy (which Postgres ORs with the first, silently widening access), would
+   * sail through.
+   *
+   * So the policy TEXT is pinned. Ten shapes existed when this was written and each was read:
+   * three are generic (tenant isolation in either operand order, and operator-only) and seven are
+   * specific to one table — `Tenant` is keyed on its own id, `AuthEvent` shows rows with no tenant
+   * only to the operator (it keeps sign-in attempts that matched no account), and five inherit
+   * through a parent, which is sound because RLS applies inside the subquery for this role.
+   *
+   * A new table using a generic shape passes without anyone touching this. A NEW shape fails until
+   * somebody reads it and adds it here — which is the review that would otherwise not happen.
+   */
+  const GENERIC_POLICIES = new Set<string>([
+  "((\"tenantId\" = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.bypass'::text, true) = 'on'::text))",
+  "((current_setting('app.bypass'::text, true) = 'on'::text) OR (\"tenantId\" = current_setting('app.tenant_id'::text, true)))",
+  "(current_setting('app.bypass'::text, true) = 'on'::text)",
+  ]);
+  const TABLE_POLICIES: Record<string, string> = {
+  AuthEvent: "((current_setting('app.bypass'::text, true) = 'on'::text) OR ((\"tenantId\" IS NOT NULL) AND (\"tenantId\" = current_setting('app.tenant_id'::text, true))))",
+  RatePlanRoomType: "(EXISTS ( SELECT 1 FROM \"RatePlan\" rp WHERE (rp.id = \"RatePlanRoomType\".\"ratePlanId\")))",
+  ReservationLine: "(EXISTS ( SELECT 1 FROM \"Reservation\" r WHERE (r.id = \"ReservationLine\".\"reservationId\")))",
+  ReservationNightRate: "((current_setting('app.bypass'::text, true) = 'on'::text) OR (EXISTS ( SELECT 1 FROM (\"ReservationLine\" rl JOIN \"Reservation\" r ON ((r.id = rl.\"reservationId\"))) WHERE ((rl.id = \"ReservationNightRate\".\"reservationLineId\") AND (r.\"tenantId\" = current_setting('app.tenant_id'::text, true))))))",
+  SupportMessage: "((current_setting('app.bypass'::text, true) = 'on'::text) OR (EXISTS ( SELECT 1 FROM \"SupportRequest\" r WHERE ((r.id = \"SupportMessage\".\"requestId\") AND (r.\"tenantId\" = current_setting('app.tenant_id'::text, true))))))",
+  Tenant: "((id = current_setting('app.tenant_id'::text, true)) OR (current_setting('app.bypass'::text, true) = 'on'::text))",
+  UserRecoveryCode: "((current_setting('app.bypass'::text, true) = 'on'::text) OR (EXISTS ( SELECT 1 FROM \"User\" u WHERE ((u.id = \"UserRecoveryCode\".\"userId\") AND (u.\"tenantId\" = current_setting('app.tenant_id'::text, true))))))",
+  };
+  const norm = (s: string | null) => (s ?? "").replace(/\s+/g, " ").trim();
+  const policies = await prisma.$queryRaw<
+    { tablename: string; permissive: string; cmd: string; qual: string | null; with_check: string | null }[]
+  >(Prisma.sql`SELECT tablename, permissive, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'public'`);
+  const perTable = new Map<string, number>();
+  const unknown: string[] = [];
+  const malformed: string[] = [];
+  for (const p of policies) {
+    perTable.set(p.tablename, (perTable.get(p.tablename) ?? 0) + 1);
+    const q = norm(p.qual);
+    if (!(GENERIC_POLICIES.has(q) || TABLE_POLICIES[p.tablename] === q)) unknown.push(`${p.tablename}: ${q}`);
+    if (p.permissive !== "PERMISSIVE" || p.cmd !== "ALL") malformed.push(`${p.tablename}: ${p.permissive} ${p.cmd}`);
+    // A NULL WITH CHECK makes Postgres apply USING to new rows, which is equivalent. A DIFFERENT
+    // one means rows can be written that the writer cannot then read, or the reverse.
+    if (p.with_check !== null && norm(p.with_check) !== q) malformed.push(`${p.tablename}: WITH CHECK differs from USING`);
+  }
+  record(
+    "every policy is one of the reviewed shapes",
+    unknown.length === 0,
+    unknown.length === 0 ? `${policies.length} policies, all known` : `unreviewed: ${unknown.join(" | ")}`,
+  );
+  const multi = [...perTable].filter(([, n]) => n > 1).map(([t, n]) => `${t} (${n})`);
+  record(
+    "no table has a second policy — PERMISSIVE policies OR together and would widen access",
+    multi.length === 0,
+    multi.length === 0 ? "one each" : multi.join(", "),
+  );
+  record(
+    "every policy is PERMISSIVE, covers ALL commands, and checks writes the way it filters reads",
+    malformed.length === 0,
+    malformed.length === 0 ? "all consistent" : malformed.join(" | "),
+  );
+
   const failed = checks.filter((c) => !c.ok);
   console.log(
     `\n${checks.length - failed.length}/${checks.length} checks passed ` +

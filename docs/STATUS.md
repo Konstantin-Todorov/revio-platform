@@ -136,16 +136,27 @@ migration into an empty database and runs the seed.
 ⚠️ That paragraph said **1,945 tests and twelve checks**. Both had been true; neither was. The count
 is `pnpm verify` output, summed.
 
-⚠️ **Five checks are deliberately NOT in that number, because they need a live database or a
-running app**, and each is the only real proof of something the platform promises:
+**Nine harnesses prove what unit tests cannot — and since 2026-09-23 seven of them run in CI on
+every push.** *Checked in GitHub Actions run `35782941281`, step "Races and isolation":* connected
+as `revio_app` (superuser=false, bypassrls=false), `rls-verify` 126/126, `claim-verify` 5/5,
+`lease-verify` 6/6, `folio-atomic-verify` ✓, `engine-race` 3 of 12 get a room and never oversold,
+`confirm-race` **exactly 1 of 12 confirms wins**, `stripe-mode-verify` 8/8.
+
+⚠️ This paragraph used to list five and say "run them by hand before a release". There were nine,
+three of them in no document at all, and "by hand" had come to mean not at all — while CI built a
+migrated, seeded Postgres on every push and threw it away unused.
+
+The two that need the apps **running** are still by hand, and both passed on 2026-09-23:
 
 ```
-pnpm --filter @revio/db claim-verify         # the claim primitive is atomic
-pnpm --filter @revio/booking engine-race     # the booking path never oversells a hold
-pnpm --filter @revio/booking confirm-race    # one hold becomes exactly one reservation
-pnpm --filter @revio/operator webhook-verify # a forged Stripe event cannot mark an invoice paid
-pnpm --filter @revio/operator stripe-mode-verify  # sandbox never becomes live on its own
+pnpm --filter @revio/operator webhook-verify   # forged, mismatched, replayed and refunded Stripe events
+pnpm --filter @revio/db handoff-verify         # a hand-off token opens one product once, and only that one
 ```
+
+Every harness that writes refuses a non-local database, and `webhook-verify` refuses a non-local
+console, because it sends forged Stripe events and `OPERATOR_URL` is a real Railway variable.
+`rls-verify` is the deliberate exception: DEPLOY.md runs it against production as the restricted
+role.
 
 **Channex is certified and connected** — certified 2026-08-24, key in place 08-26. *Checked by query
 2026-09-22:* two channels in `channex_prod` mode. ⚠️ **One of them is broken and has been since at
