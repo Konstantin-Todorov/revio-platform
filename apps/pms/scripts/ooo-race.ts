@@ -7,7 +7,7 @@
  * channel. Two of them for one broken room takes TWO rooms off sale. Housekeeping marks rooms from a
  * phone, where a double tap is ordinary, and maintenance can mark the same room from a task.
  */
-import { forSystem } from "@revio/db";
+import { forSystem, withTenantTransaction } from "@revio/db";
 import { takeUnitOutOfOrder, returnUnitToService } from "../lib/unit-ooo";
 
 {
@@ -41,6 +41,12 @@ async function main() {
   };
 
   try {
+    // Warm the pool, or a cold one serialises the racers by accident — see unit-claim-race.ts, where
+    // twelve cold transactions reported 1 of 12 against code with no lock at all.
+    await Promise.all(Array.from({ length: RACERS }, () => withTenantTransaction(unit.tenantId, async (tx) => {
+      await tx.$executeRaw`SELECT pg_sleep(0.05)`;
+    })));
+
     const results = await Promise.allSettled(
       Array.from({ length: RACERS }, () =>
         takeUnitOutOfOrder(unit.tenantId, unit.propertyId, { id: unit.id, roomTypeId: unit.roomTypeId }, "ooo-race"),

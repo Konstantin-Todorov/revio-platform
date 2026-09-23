@@ -11,6 +11,7 @@ const ERRORS: Record<string, string> = {
   fields: "Enter the guest’s name and pick a room type.",
   full: "No free, clean room of that type right now — clean or free a room first.",
   norate: "This property has no standard rate plan yet — set one up in RevioLink / RevioCRS first.",
+  taken: "Somebody put another guest in that room a moment ago. Nothing was saved — press Create again and a free room will be picked.",
 };
 
 const inputCls = "h-10 w-full rounded-md border border-surface-border bg-white px-3 text-[13.5px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-600";

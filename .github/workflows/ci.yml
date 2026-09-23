@@ -216,6 +216,9 @@ jobs:
           pnpm --filter @revio/reservation crs-confirm-race
           # A room out of order takes one room off sale, not six. See apps/pms/lib/unit-ooo.ts.
           pnpm --filter @revio/pms ooo-race
+          # Twelve different guests into one room at once — one may get it. Every path that assigns a
+          # room goes through claimUnitForStay; before it, twelve of twelve did.
+          pnpm --filter @revio/pms unit-claim-race
           pnpm --filter @revio/operator stripe-mode-verify
         env:
           ADMIN_URL_BASE: postgresql://postgres:postgres@localhost:5432

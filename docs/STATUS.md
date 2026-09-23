@@ -283,6 +283,28 @@ invoice* among them. Proved on the rendered folio: two presses 150 ms apart, **o
 has hydrated. Measured: pressed in the first moment of a cold load, two walk-ins still went through.
 That needs an idempotency key on the server — `HANDOFF` item 2.
 
+### Shipped 2026-09-23 — twelve different guests could be put in one room
+
+Every path that puts a stay into a physical room — auto-assignment, check-in, walk-in, room move —
+checked "is anybody in this room?" and then wrote. Auto-assignment did it inside a transaction and
+said so in a comment: *"the difference between a fast placement and two guests behind one door."* A
+transaction does not make check-then-write safe; under READ COMMITTED two of them both count zero.
+`apps/pms/scripts/unit-claim-race.ts`, twelve distinct reservations claiming one room with a warm
+connection pool: **twelve active assignments for one room**, three runs of three.
+
+⚠️ **The first run of that harness said the opposite — 1 of 12 — against code with no lock at all.**
+Twelve cold transactions each opened a new connection, which takes long enough that the first had
+committed before the others counted. The harness was slow, not the code safe. It now warms the pool
+first, and so do `crs-confirm-race` and `ooo-race`, which were re-run warm: both fixes hold.
+
+`claimUnitForStay` (`apps/pms/lib/claim-unit.ts`) locks the unit row with `SELECT … FOR UPDATE`, then
+counts, then writes — the same row the out-of-order write locks, so a room cannot be assigned and
+taken out of service at the same instant. All four paths use it; only tests write assignments
+directly now. Walk-in's guest, reservation and room are one transaction, and a multi-room check-in is
+all or nothing. Walked on the rendered pages: a walk-in lands complete, a move retires the old room
+only after the new one is claimed. After: **1 of 12**, three runs, warm. In CI.
+<!-- status: built apps/pms/lib/claim-unit.ts#claimUnitForStay -->
+
 ### Shipped 2026-09-23 — one broken room took six rooms off sale
 
 `apps/pms/scripts/ooo-race.ts` marked one room out of order twelve times at once: **six periods —

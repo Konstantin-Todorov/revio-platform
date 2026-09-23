@@ -1,4 +1,5 @@
 import "server-only";
+import { claimUnitForStay } from "./claim-unit";
 import { forTenant, withTenantTransaction } from "@revio/db";
 import {
   rankUnitsForStay,
@@ -153,31 +154,24 @@ export async function autoAssignForProperty(
     // this write another sweep, a check-in or a room move may have taken the room. Checking here is
     // the difference between a fast placement and two guests behind one door.
     const placed = await withTenantTransaction(tenantId, async (tx) => {
-      const taken = await tx.roomAssignment.count({
-        where: {
-          unitId: choice.unitId, status: "active", checkedOutAt: null,
-          checkIn: { lt: line.checkOut }, checkOut: { gt: line.checkIn },
-        },
-      });
-      if (taken > 0) return false;
       const stillUnassigned = await tx.roomAssignment.count({
         where: { reservationId: r.id, status: "active", checkedOutAt: null },
       });
       if (stillUnassigned > 0) return false; // somebody placed it while we were deciding
 
-      await tx.roomAssignment.create({
-        data: {
-          tenantId, propertyId, reservationId: r.id, reservationLineId: line.id,
-          unitId: choice.unitId, checkIn: line.checkIn, checkOut: line.checkOut,
-          status: "active",
-          // NOT checked in. A room is allocated; the guest has not arrived. Conflating the two is
-          // what would put a future booking into tonight's occupancy and the night audit's revenue.
-          checkedInAt: null,
-          pinned: false,
-          note: `auto-assigned · ${choice.reasons[0]}`,
-        },
+      // The room is locked, re-checked and written in one step — see `claimUnitForStay`. The count
+      // that used to stand here was inside this transaction and still let twelve guests into one
+      // room, because a transaction does not stop two of them both counting zero.
+      const created = await claimUnitForStay(tx, {
+        tenantId, propertyId, reservationId: r.id, reservationLineId: line.id,
+        unitId: choice.unitId, checkIn: line.checkIn, checkOut: line.checkOut,
+        // NOT checked in. A room is allocated; the guest has not arrived. Conflating the two is
+        // what would put a future booking into tonight's occupancy and the night audit's revenue.
+        checkedInAt: null,
+        pinned: false,
+        note: `auto-assigned · ${choice.reasons[0]}`,
       });
-      return true;
+      return created !== null;
     });
 
     if (placed) {
@@ -339,13 +333,6 @@ export async function reoptimiseImminentArrivals(
     // Same claim-inside-a-transaction discipline as the first placement: the scan is a snapshot, and
     // a check-in or another sweep may have taken the room since.
     const done = await withTenantTransaction(tenantId, async (tx) => {
-      const taken = await tx.roomAssignment.count({
-        where: {
-          unitId: best.unitId, status: "active", checkedOutAt: null,
-          checkIn: { lt: line.checkOut }, checkOut: { gt: line.checkIn },
-        },
-      });
-      if (taken > 0) return false;
       // Re-read the row: if somebody pinned it or checked the guest in while we were scoring, the
       // two rules above now forbid what we were about to do.
       const fresh = await tx.roomAssignment.findUnique({
@@ -355,15 +342,16 @@ export async function reoptimiseImminentArrivals(
       if (!fresh || fresh.status !== "active" || fresh.checkedOutAt) return false;
       if (!canReassign({ pinned: fresh.pinned, checkedInAt: fresh.checkedInAt })) return false;
 
-      await tx.roomAssignment.update({ where: { id: a.id }, data: { status: "moved" } });
-      await tx.roomAssignment.create({
-        data: {
-          tenantId, propertyId, reservationId: a.reservation.id, reservationLineId: line.id,
-          unitId: best.unitId, checkIn: line.checkIn, checkOut: line.checkOut,
-          status: "active", checkedInAt: null, pinned: false,
-          note: `re-optimised before arrival · ${best.reasons[0]}`,
-        },
+      // Claimed BEFORE the old row is marked moved: a `return false` does not roll a transaction
+      // back, so the order is what guarantees a refused claim leaves the guest where they were.
+      const created = await claimUnitForStay(tx, {
+        tenantId, propertyId, reservationId: a.reservation.id, reservationLineId: line.id,
+        unitId: best.unitId, checkIn: line.checkIn, checkOut: line.checkOut,
+        checkedInAt: null, pinned: false,
+        note: `re-optimised before arrival · ${best.reasons[0]}`,
       });
+      if (!created) return false;
+      await tx.roomAssignment.update({ where: { id: a.id }, data: { status: "moved" } });
       return true;
     });
 

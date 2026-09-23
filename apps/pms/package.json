@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:seed": "pnpm --filter @revio/db db:seed",
     "test": "vitest run",
-    "ooo-race": "tsx scripts/ooo-race.ts"
+    "ooo-race": "tsx scripts/ooo-race.ts",
+    "unit-claim-race": "tsx scripts/unit-claim-race.ts"
   },
   "dependencies": {
     "@revio/connectivity": "workspace:*",

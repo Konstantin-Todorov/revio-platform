@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { claimUnitForStay, RoomJustTaken } from "./claim-unit";
 import { revalidatePath } from "next/cache";
 import { withTenantTransaction } from "@revio/db";
 import { describeAccommodation, resolveRate } from "@revio/core";
@@ -93,15 +94,33 @@ export async function checkIn(fd: FormData): Promise<void> {
     });
   }
 
-  for (const spec of specs) {
-    await prisma.roomAssignment.create({
-      data: {
+  /*
+   * Every room of the stay claimed in ONE transaction, through `claimUnitForStay`.
+   *
+   * The clash check above is read outside any transaction and is only the fast, friendly refusal.
+   * Between it and this write another check-in, a walk-in or the auto-assignment sweep can take the
+   * room — the check-then-write that let twelve concurrent claims into one room. One transaction
+   * also makes a multi-room check-in all or nothing: a guest is never half checked in because their
+   * second room went to somebody else in the same second.
+   */
+  const lost = await withTenantTransaction(session.tenantId, async (tx) => {
+    for (const spec of specs) {
+      const created = await claimUnitForStay(tx, {
         tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId,
         reservationLineId: spec.lineId, unitId: spec.unitId,
-        checkIn: spec.checkIn, checkOut: spec.checkOut, status: "active", checkedInAt: now,
+        checkIn: spec.checkIn, checkOut: spec.checkOut, checkedInAt: now,
         ...(override ? { note: "assigned with override" } : {}),
-      },
-    });
+      });
+      if (!created) throw new RoomJustTaken(spec.unitLabel);
+    }
+    return null;
+  }).catch((err: unknown) => {
+    if (err instanceof RoomJustTaken) return err.unitLabel;
+    throw err;
+  });
+  if (lost) redirect(`/checkin/${reservationId}?error=busy`);
+
+  for (const spec of specs) {
     await logAudit(session.activePropertyId, session.tenantId, {
       entity: "check_in", field: spec.unitLabel,
       newValue: `#${reservationId.slice(-6)} ${res!.guestName}${override ? " (override)" : ""}`,
@@ -343,26 +362,27 @@ export async function roomMove(fd: FormData): Promise<MoveOutcome> {
     ? todayInTz((await prisma.property.findUniqueOrThrow({ where: { id: session.activePropertyId }, select: { timezone: true } })).timezone)
     : "";
 
-  await withTenantTransaction(session.tenantId, async (tx) => {
+  const moveLost = await withTenantTransaction(session.tenantId, async (tx) => {
+    // The new room is claimed FIRST — locked, re-checked, written — and only then is the old row
+    // retired. The clash check above ran outside this transaction and a sweep or a check-in may
+    // have taken the room since; if so, this throws and the guest stays exactly where they were.
+    const created = await claimUnitForStay(tx, {
+      tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId: a!.reservationId,
+      reservationLineId: a!.reservationLineId, unitId: newUnitId, checkIn: a!.checkIn, checkOut: a!.checkOut,
+      // Carried across UNCHANGED. It used to be `?? new Date()`, which was harmless while rooms
+      // were only ever allocated at check-in — every assignment being moved had already arrived,
+      // so the fallback never fired. Auto-assignment (§2.3) broke that: moving a booking for next
+      // Tuesday silently marked the guest as arrived, put them in tonight's occupancy and the
+      // night audit's revenue, and listed them on the minibar screen as a stay you could charge.
+      // A move changes WHERE somebody is, never WHETHER they have arrived.
+      checkedInAt: a!.checkedInAt,
+      pinned: true,
+      note: `moved from ${a!.unit.label} (${reason})`,
+    });
+    if (!created) throw new RoomJustTaken(newUnit!.label);
     // "moved", not "checked out" — the guest has not departed, and counting this as a departure
     // would put them in the day's checkout figures and the night audit's movements.
     await tx.roomAssignment.update({ where: { id: assignmentId }, data: { status: "moved" } });
-    await tx.roomAssignment.create({
-      data: {
-        tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId: a!.reservationId,
-        reservationLineId: a!.reservationLineId, unitId: newUnitId, checkIn: a!.checkIn, checkOut: a!.checkOut,
-        status: "active",
-        // Carried across UNCHANGED. It used to be `?? new Date()`, which was harmless while rooms
-        // were only ever allocated at check-in — every assignment being moved had already arrived,
-        // so the fallback never fired. Auto-assignment (§2.3) broke that: moving a booking for next
-        // Tuesday silently marked the guest as arrived, put them in tonight's occupancy and the
-        // night audit's revenue, and listed them on the minibar screen as a stay you could charge.
-        // A move changes WHERE somebody is, never WHETHER they have arrived.
-        checkedInAt: a!.checkedInAt,
-        pinned: true,
-        note: `moved from ${a!.unit.label} (${reason})`,
-      },
-    });
     await tx.unit.update({ where: { id: a!.unitId }, data: { hkStatus: "dirty" } });
 
     /*
@@ -397,7 +417,11 @@ export async function roomMove(fd: FormData): Promise<MoveOutcome> {
         reason: "room_move",
       });
     }
+  }).then(() => null, (err: unknown) => {
+    if (err instanceof RoomJustTaken) return err.unitLabel;
+    throw err;
   });
+  if (moveLost) redirect(`/move/${assignmentId}?error=busy`);
 
   await logAudit(session.activePropertyId, session.tenantId, {
     entity: "room_move", field: reason, oldValue: a!.unit.label, newValue: newUnit!.label, userId: session.userId,
@@ -500,47 +524,62 @@ export async function walkIn(fd: FormData): Promise<void> {
     priceMinor = Math.round((priceMinor / quotedNights.length) * nights);
   }
 
-  const guest = await prisma.guest.create({ data: { tenantId: session.tenantId, propertyId: session.activePropertyId, firstName, lastName } });
-  const reservation = await prisma.reservation.create({
-    data: {
-      tenantId: session.tenantId, propertyId: session.activePropertyId, channelId: null,
-      guestName: `${firstName} ${lastName}`, status: "confirmed",
-      totalMinor: priceMinor, currency: property!.baseCurrency,
-      propertyCurrency: property!.baseCurrency, propertyTotalMinor: priceMinor, fxRate: 1, fxAt: new Date(),
-      guestId: guest.id, paymentGuarantee: "none", notes: "Walk-in (PMS)", createdById: session.userId,
-      lines: {
-        create: [{
-          roomTypeId, ratePlanId: standard!.id, quantity: 1,
-          checkIn: utcDay(today), checkOut: utcDay(checkOut),
-          priceMinor, guestsCount: walkInOccupancy,
-          // The same per-night snapshot a channel or direct booking gets (§P4), so a walk-in's
-          // folio explains itself and survives a mid-stay occupancy change like any other stay.
-          ...(quotedNights.length === nights
-            ? {
-                nightRates: {
-                  create: quotedNights.map((n) => ({
-                    tenantId: session.tenantId,
-                    date: utcDay(n.date),
-                    occupancy: n.occupancy,
-                    rateMinor: n.rateMinor,
-                    source: "booking",
-                  })),
-                },
-              }
-            : {}),
-        }],
+  /*
+   * Guest, reservation and room in ONE transaction, the room through `claimUnitForStay`.
+   *
+   * These were three separate writes after a room was picked from a list read earlier. Two
+   * receptionists taking walk-ins into the same free room in the same second each got it; and a
+   * failure between the writes left a guest and a reservation with no room. If the room went to
+   * somebody else in between, this now throws, and the guest and reservation roll back with it.
+   */
+  const placed = await withTenantTransaction(session.tenantId, async (tx) => {
+    const guest = await tx.guest.create({ data: { tenantId: session.tenantId, propertyId: session.activePropertyId, firstName, lastName } });
+    const reservation = await tx.reservation.create({
+      data: {
+        tenantId: session.tenantId, propertyId: session.activePropertyId, channelId: null,
+        guestName: `${firstName} ${lastName}`, status: "confirmed",
+        totalMinor: priceMinor, currency: property!.baseCurrency,
+        propertyCurrency: property!.baseCurrency, propertyTotalMinor: priceMinor, fxRate: 1, fxAt: new Date(),
+        guestId: guest.id, paymentGuarantee: "none", notes: "Walk-in (PMS)", createdById: session.userId,
+        lines: {
+          create: [{
+            roomTypeId, ratePlanId: standard!.id, quantity: 1,
+            checkIn: utcDay(today), checkOut: utcDay(checkOut),
+            priceMinor, guestsCount: walkInOccupancy,
+            // The same per-night snapshot a channel or direct booking gets (§P4), so a walk-in's
+            // folio explains itself and survives a mid-stay occupancy change like any other stay.
+            ...(quotedNights.length === nights
+              ? {
+                  nightRates: {
+                    create: quotedNights.map((n) => ({
+                      tenantId: session.tenantId,
+                      date: utcDay(n.date),
+                      occupancy: n.occupancy,
+                      rateMinor: n.rateMinor,
+                      source: "booking",
+                    })),
+                  },
+                }
+              : {}),
+          }],
+        },
       },
-    },
-    include: { lines: true },
-  });
-  const line = reservation.lines[0]!;
-  await prisma.roomAssignment.create({
-    data: {
+      include: { lines: true },
+    });
+    const line = reservation.lines[0]!;
+    const created = await claimUnitForStay(tx, {
       tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId: reservation.id,
-      reservationLineId: line.id, unitId: unit.id, checkIn: line.checkIn, checkOut: line.checkOut,
-      status: "active", checkedInAt: new Date(),
-    },
+      reservationLineId: line.id, unitId: unit!.id, checkIn: line.checkIn, checkOut: line.checkOut,
+      checkedInAt: new Date(),
+    });
+    if (!created) throw new RoomJustTaken(unit!.label);
+    return { reservation, line };
+  }).catch((err: unknown) => {
+    if (err instanceof RoomJustTaken) return null;
+    throw err;
   });
+  if (!placed) redirect("/walkin?error=taken");
+  const { reservation, line } = placed!;
   await ensureFolio(session.tenantId, session.activePropertyId, reservation.id);
 
   /*

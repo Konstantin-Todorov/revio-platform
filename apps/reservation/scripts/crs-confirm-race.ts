@@ -16,7 +16,7 @@
  * It calls the same function the server action calls — not a copy of its sequence — which is why
  * that function takes the database client as a parameter and imports nothing from Next.
  */
-import { forSystem } from "@revio/db";
+import { forSystem, withTenantTransaction } from "@revio/db";
 import { convertHoldToReservation } from "../lib/convert-hold";
 
 {
@@ -69,6 +69,12 @@ async function main() {
   };
 
   try {
+    // Warm the pool, or a cold one serialises the racers by accident — see unit-claim-race.ts, where
+    // twelve cold transactions reported 1 of 12 against code with no lock at all.
+    await Promise.all(Array.from({ length: RACERS }, () => withTenantTransaction(property.tenantId, async (tx) => {
+      await tx.$executeRaw`SELECT pg_sleep(0.05)`;
+    })));
+
     const results = await Promise.allSettled(
       Array.from({ length: RACERS }, (_, i) =>
         convertHoldToReservation(
