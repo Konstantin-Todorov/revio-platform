@@ -126,6 +126,11 @@ jobs:
       - name: Every job is scheduled
         run: pnpm jobs:lint
 
+      # A form that creates something must refuse a second press while it runs — a double press on
+      # the folio was a guest charged twice. See scripts/submit-lint.mjs.
+      - name: No double submits
+        run: pnpm submit:lint
+
       # Pinch-zoom must stay unlocked (WCAG 1.4.4) AND form controls must stay 16px on touch — the
       # two halves of one fix. Lock the viewport and you break magnification for everyone; delete the
       # 16px rule and iOS zooms the page on every focus, which is what makes people lock the viewport.
@@ -206,6 +211,9 @@ jobs:
           pnpm --filter @revio/db folio-atomic-verify
           pnpm --filter @revio/booking engine-race
           pnpm --filter @revio/booking confirm-race
+          # The FRONT DESK's confirm, which is different code from the guest's. It produced twelve
+          # reservations from one hold until 2026-09-23 and nothing raced it.
+          pnpm --filter @revio/reservation crs-confirm-race
           pnpm --filter @revio/operator stripe-mode-verify
         env:
           ADMIN_URL_BASE: postgresql://postgres:postgres@localhost:5432

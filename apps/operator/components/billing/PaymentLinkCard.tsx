@@ -4,6 +4,7 @@ import { createInvoicePaymentLink, clearInvoicePaymentLink, emailInvoiceToCustom
 import { isLinkLive } from "@/lib/stripe-checkout";
 import { CopyLinkButton } from "./CopyLinkButton";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 /**
  * How this invoice gets paid by card.
  *
@@ -141,12 +142,10 @@ export function PaymentLinkCard({
           {!live && invoice.number && (
             <form action={createInvoicePaymentLink}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
-              >
+              <SubmitButton
+                className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted" pendingLabel="Creating link…">
                 <Link2 className="h-4 w-4" /> Create payment link
-              </button>
+              </SubmitButton>
             </form>
           )}
           {/*
@@ -160,12 +159,10 @@ export function PaymentLinkCard({
           {invoice.number && (
             <form action={emailInvoiceToCustomer}>
               <input type="hidden" name="invoiceId" value={invoice.id} />
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700"
-              >
+              <SubmitButton
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Sending…">
                 <Mail className="h-4 w-4" /> {live ? "Email invoice and link" : "Email the invoice"}
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>
@@ -192,12 +189,11 @@ export function PaymentLinkCard({
           </p>
           <form action={clearInvoicePaymentLink} className="mt-1">
             <input type="hidden" name="invoiceId" value={invoice.id} />
-            <button
-              type="submit"
+            <SubmitButton
               className="rounded-md px-1.5 py-1 text-[11px] font-semibold text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
             >
               Withdraw this link
-            </button>
+            </SubmitButton>
           </form>
         </div>
       )}

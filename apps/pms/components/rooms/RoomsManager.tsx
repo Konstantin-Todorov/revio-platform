@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/ui/primitives";
 import { HK_LABEL, HK_TONE, type HkStatus } from "@/lib/hk-meta";
 import { createUnit, generateUnits, deleteUnit, updateUnit } from "@/lib/actions-units";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 type Unit = { id: string; label: string; floor: string | null; hkStatus: HkStatus; features: string[]; connectingUnitIds: string[] };
 type RoomType = { id: string; name: string; code: string; totalRooms: number; unitKind: string; units: Unit[] };
 
@@ -182,9 +183,9 @@ export function RoomsManager({ roomTypes, allUnits, blocked }: { roomTypes: Room
                     <span className="text-[11px] font-semibold text-ink-600">Floor / zone</span>
                     <input name="floor" placeholder="Floor 1" className={`${inputCls} w-32`} />
                   </label>
-                  <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500">
+                  <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel="Adding…">
                     <Plus className="h-3.5 w-3.5" /> Add one
-                  </button>
+                  </SubmitButton>
                 </form>
 
                 {/* Bulk */}
@@ -206,9 +207,9 @@ export function RoomsManager({ roomTypes, allUnits, blocked }: { roomTypes: Room
                     <span className="text-[11px] font-semibold text-ink-600">Floor / zone</span>
                     <input name="floor" placeholder="Floor 1" className={`${inputCls} w-28`} />
                   </label>
-                  <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50">
+                  <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50" pendingLabel="Generating…">
                     <Wand2 className="h-3.5 w-3.5" /> Generate
-                  </button>
+                  </SubmitButton>
                 </form>
                 <p className="text-[11px] text-ink-400">Generate makes numbered rooms (e.g. prefix “A”, start 101, 10 rooms → A101…A110).</p>
               </div>

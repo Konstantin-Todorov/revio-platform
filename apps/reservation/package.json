@@ -9,7 +9,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:seed": "pnpm --filter @revio/db db:seed"
+    "db:seed": "pnpm --filter @revio/db db:seed",
+    "crs-confirm-race": "tsx scripts/crs-confirm-race.ts"
   },
   "dependencies": {
     "@revio/booking": "workspace:*",

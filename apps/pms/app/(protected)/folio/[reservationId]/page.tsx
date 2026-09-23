@@ -15,6 +15,7 @@ import { issueInvoice } from "@/lib/actions-invoice";
 import { checkOut } from "@/lib/actions-frontdesk";
 import { money } from "@/lib/format";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 /** How a closed folio ended, said plainly. `outstanding` is the only one that is still a task. */
@@ -259,9 +260,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <form action={removeFolio}>
                     <input type="hidden" name="reservationId" value={reservationId} />
                     <input type="hidden" name="folioId" value={folio.id} />
-                    <button type="submit" title="Remove this empty split folio" className="inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-[11px] font-semibold text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                    <SubmitButton title="Remove this empty split folio" className="inline-flex items-center gap-1 rounded-md border border-surface-border px-2 py-1 text-[11px] font-semibold text-ink-500 transition-colors hover:bg-danger-50 hover:text-danger-600">
                       <Trash2 className="h-3.5 w-3.5" /> Remove
-                    </button>
+                    </SubmitButton>
                   </form>
                 )}
               </div>
@@ -299,16 +300,16 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                             <option value="" disabled>move…</option>
                             {moveTargets.filter((t) => t.id !== folio.id).map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                           </select>
-                          <button type="submit" className="ml-0.5 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-600 hover:bg-ink-100">go</button>
+                          <SubmitButton className="ml-0.5 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-600 hover:bg-ink-100">go</SubmitButton>
                         </form>
                       )}
                       {open && !l.voided && l.kind !== "accommodation" && (
                         <form action={voidFolioLine}>
                           <input type="hidden" name="reservationId" value={reservationId} />
                           <input type="hidden" name="lineId" value={l.id} />
-                          <button type="submit" aria-label="Void line" title="Void" className="flex h-7 w-7 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                          <SubmitButton aria-label="Void line" title="Void" className="flex h-7 w-7 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
                             <Ban className="h-3.5 w-3.5" />
-                          </button>
+                          </SubmitButton>
                         </form>
                       )}
                     </div>
@@ -349,9 +350,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
             <form action={createFolio} className="flex items-center gap-1.5">
               <input type="hidden" name="reservationId" value={reservationId} />
               <input name="label" placeholder="Company" className={`${inputCls} w-28`} />
-              <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-2 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
+              <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-2 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted" pendingLabel="Opening…">
                 <SplitSquareHorizontal className="h-3.5 w-3.5" /> Split
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>
@@ -386,9 +387,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
               </div>
               <div className="flex gap-2">
                 <input name="ref" type="text" placeholder="Reference (optional)" className={`${inputCls} flex-1`} />
-                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50">
+                <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50" pendingLabel="Recording…">
                   <CreditCard className="h-3.5 w-3.5" /> Take
-                </button>
+                </SubmitButton>
               </div>
               <p className="text-[10.5px] text-ink-400">
                 Cash / company / bank are drawer entries. Card runs through the payment gateway
@@ -410,9 +411,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
               <form action={checkOut} className="flex items-center gap-3">
                 <input type="hidden" name="reservationId" value={reservationId} />
                 <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success-600"><CheckCircle2 className="h-4 w-4" /> Balance settled</span>
-                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">
+                <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Checking out…">
                   <LogOut className="h-4 w-4" /> Check out
-                </button>
+                </SubmitButton>
               </form>
             ) : (
               <form action={checkOut} className="space-y-2.5">
@@ -423,9 +424,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 </p>
                 <div className="flex gap-2">
                   <input name="reason" type="text" placeholder="Override reason (e.g. bill to company)" className={`${inputCls} flex-1`} />
-                  <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-danger-500 px-3 py-2 text-[12.5px] font-semibold text-danger-600 transition-colors hover:bg-danger-50">
+                  <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-danger-500 px-3 py-2 text-[12.5px] font-semibold text-danger-600 transition-colors hover:bg-danger-50" pendingLabel="Checking out…">
                     <LogOut className="h-3.5 w-3.5" /> Check out with balance
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             )}
@@ -451,9 +452,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
               </div>
               <div className="flex gap-2">
                 <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${currency})`} className={`${inputCls} flex-1`} />
-                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500">
+                <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel="Posting…">
                   <Plus className="h-3.5 w-3.5" /> Add
-                </button>
+                </SubmitButton>
               </div>
             </form>
           </div>
@@ -479,9 +480,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                       <form action={removeStayExtra}>
                         <input type="hidden" name="reservationId" value={reservationId} />
                         <input type="hidden" name="id" value={e.id} />
-                        <button type="submit" title="Stop this extra (nights already accrued stay on the bill)" className="flex h-6 w-6 items-center justify-center rounded text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                        <SubmitButton title="Stop this extra (nights already accrued stay on the bill)" className="flex h-6 w-6 items-center justify-center rounded text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
                           <Ban className="h-3 w-3" />
-                        </button>
+                        </SubmitButton>
                       </form>
                     </span>
                   </li>
@@ -492,9 +493,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
               <input type="hidden" name="reservationId" value={reservationId} />
               <input name="name" required placeholder="e.g. Breakfast" className={`${inputCls} w-40`} />
               <input name="price" type="text" inputMode="decimal" required placeholder={`Per night (${currency})`} className={`${inputCls} w-32`} />
-              <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50">
+              <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50" pendingLabel="Adding…">
                 <Repeat className="h-3.5 w-3.5" /> Add for the stay
-              </button>
+              </SubmitButton>
             </form>
           </div>
 
@@ -548,9 +549,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 <span className="text-[11px] font-semibold text-ink-600">Buyer VAT ID</span>
                 <input name="buyerVatId" placeholder="(company)" className={`${inputCls} w-32`} />
               </label>
-              <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+              <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Issuing…">
                 <FileText className="h-3.5 w-3.5" /> Issue
-              </button>
+              </SubmitButton>
             </form>
           </div>
 
@@ -619,9 +620,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   </select>
                 </label>
                 <input name="amount" type="text" inputMode="decimal" required placeholder={`Amount (${currency})`} className={`${inputCls} w-32`} />
-                <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+                <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Capturing…">
                   <ShieldCheck className="h-3.5 w-3.5" /> Take deposit
-                </button>
+                </SubmitButton>
               </form>
 
               {combined.depositsHeld > 0 && (
@@ -629,16 +630,16 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <form action={useDeposit} className="flex items-end gap-1.5">
                     <input type="hidden" name="reservationId" value={reservationId} />
                     <input name="amount" type="text" inputMode="decimal" placeholder="all" className={`${inputCls} w-20`} />
-                    <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-success-500 px-3 text-[12.5px] font-semibold text-success-600 transition-colors hover:bg-success-50">
+                    <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md border border-success-500 px-3 text-[12.5px] font-semibold text-success-600 transition-colors hover:bg-success-50" pendingLabel="Applying…">
                       Use deposit
-                    </button>
+                    </SubmitButton>
                   </form>
                   <form action={refundDeposit} className="flex items-end gap-1.5">
                     <input type="hidden" name="reservationId" value={reservationId} />
                     <input name="amount" type="text" inputMode="decimal" placeholder="all" className={`${inputCls} w-20`} />
-                    <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md border border-surface-border px-3 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
+                    <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md border border-surface-border px-3 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted" pendingLabel="Refunding…">
                       Refund
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
               )}

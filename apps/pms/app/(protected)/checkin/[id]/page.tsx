@@ -7,6 +7,7 @@ import { checkIn } from "@/lib/actions-frontdesk";
 import { HK_LABEL } from "@/lib/hk-meta";
 import { ymd } from "@/lib/format";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 const ERRORS: Record<string, string> = {
@@ -135,9 +136,9 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
               </p>
             )}
 
-            <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+            <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Checking in…">
               <LogIn className="h-4 w-4" /> Check in
-            </button>
+            </SubmitButton>
           </form>
         </Card>
       )}

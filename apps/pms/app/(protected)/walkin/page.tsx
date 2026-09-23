@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SubmitButton } from "@revio/ui/submit-button";
 import { ArrowLeft, UserPlus, AlertTriangle } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getWalkInOptions } from "@/lib/data";
@@ -73,9 +74,23 @@ export default async function WalkInPage({ searchParams }: { searchParams: Promi
               (Phase 3) — no card is handled here.
             </p>
 
-            <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-4 py-2 text-[13.5px] font-semibold text-white transition-colors hover:bg-accent-500">
+            {/*
+              ⚠️ Pending-aware, because a second press here is a second GUEST.
+
+              This was a plain submit button. A walk-in writes a guest, a reservation, a room
+              assignment, a folio and a register entry, then pushes availability — slow enough that
+              the screen sits unchanged and the natural move is to press again. On 2026-09-09 the
+              demo hotel got exactly that: "Maria Ivanova" checked in twice, 1.2 seconds apart, into
+              rooms 101 AND 102, with two folios. The first request had finished, so the second saw
+              101 taken and correctly picked 102 — nothing raced; the button simply accepted two
+              presses. The shared SubmitButton disables itself while the action runs.
+            */}
+            <SubmitButton
+              pendingLabel={<><UserPlus className="h-4 w-4" /> Checking in…</>}
+              className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-4 py-2 text-[13.5px] font-semibold text-white transition-colors hover:bg-accent-500"
+            >
               <UserPlus className="h-4 w-4" /> Create &amp; check in
-            </button>
+            </SubmitButton>
           </form>
         )}
       </Card>

@@ -38,6 +38,8 @@ export function SubmitButton({
   value,
   title,
   formAction,
+  disabled = false,
+  "aria-label": ariaLabel,
 }: {
   children: ReactNode;
   /** What it says while it works. Keep it a verb in progress: "Starting…", not "Please wait". */
@@ -47,6 +49,14 @@ export function SubmitButton({
   value?: string;
   title?: string;
   formAction?: (formData: FormData) => void | Promise<void>;
+  /**
+   * Disabled for a reason of the caller's own — not permitted, not yet valid. OR'd with pending,
+   * never replaced by it: a button that is off because the stay cannot be reopened must stay off
+   * whether or not something else in the form is submitting.
+   */
+  disabled?: boolean;
+  /** For an icon-only button, what a screen reader announces. Carried through, never dropped. */
+  "aria-label"?: string;
 }) {
   const { pending, data } = useFormStatus();
   // Only the button that was pressed. A form with no named buttons has one, so it is that one.
@@ -55,8 +65,9 @@ export function SubmitButton({
   return (
     <button
       type="submit"
-      disabled={pending}
+      disabled={pending || disabled}
       aria-busy={isThis || undefined}
+      {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
       {...(name !== undefined ? { name } : {})}
       {...(value !== undefined ? { value } : {})}
       {...(title ? { title } : {})}

@@ -127,10 +127,10 @@ real RevioDirect booking page answer `200`.
 
 ⚠️ This table said **eight** services until today. `docs` was added and nothing here noticed.
 
-**2,911 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **seventeen separate
-checks** on every change <!-- status: count checks 17 --> — typecheck, lint, and fifteen ratchets that each exist because something
+**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **eighteen separate
+checks** on every change <!-- status: count checks 18 --> — typecheck, lint, and sixteen ratchets that each exist because something
 specific went wrong once: copy · authz · layout-guard · status · silent · money · health · a11y ·
-scroll-lock · jobs · zoom · tokens · perimeter · dates · drift. CI additionally applies every
+scroll-lock · jobs · submit · zoom · tokens · perimeter · dates · drift. CI additionally applies every
 migration into an empty database and runs the seed.
 
 ⚠️ That paragraph said **1,945 tests and twelve checks**. Both had been true; neither was. The count
@@ -258,6 +258,38 @@ invoicing its own clients, and only the second one is ready.
 `production` are the same commit.* The two items this section named as Codex's uncommitted work
 both shipped: the city-tax VAT base in `f828cac` on 09-09, and the operator sidebar in `7e70a38`
 the same day.
+
+### Shipped 2026-09-23 — the front desk could turn one hold into twelve reservations
+
+**Measured, not argued.** `apps/reservation/scripts/crs-confirm-race.ts` raced the front desk's
+"confirm this hold" twelve times at once, against the real function, before any fix: **12 of 12
+won — twelve reservations, one hold, one room.** The guest's booking page had exactly this defect,
+found it, fixed it and wrote the fix down in `packages/booking/src/public-engine.ts`; the staff path
+in RevioCRS is different code and still converted the hold unconditionally, after the reservation,
+outside any transaction. Same fix applied: the conversion is the claim (`UPDATE … WHERE status =
+'active'`), in the same transaction as the reservation, and a loser rolls back whole. After: **1 of
+12, eleven refused, one guest row** — three runs. The race now runs in CI.
+<!-- status: built apps/reservation/lib/convert-hold.ts#convertHoldToReservation -->
+
+**And a second press was a second guest.** Production held one instance: the demo hotel checked
+"Maria Ivanova" in twice on 9 September, 1.2 s apart, rooms 101 and 102, two folios. Nothing raced —
+the walk-in button was a plain submit, the action is slow, and people press again. The shared
+`SubmitButton` that disables itself while working existed and was on **8 of 211 forms**. It is now on
+the 43 that create, post, issue or charge — the folio's *record payment*, *post charge* and *issue
+invoice* among them. Proved on the rendered folio: two presses 150 ms apart, **one** €12.34 payment.
+`submit-lint` keeps it that way.
+
+⚠️ **What that does not cover, stated plainly:** two tabs, a network retry, or a press before React
+has hydrated. Measured: pressed in the first moment of a cold load, two walk-ins still went through.
+That needs an idempotency key on the server — `HANDOFF` item 2.
+
+### Shipped 2026-09-23 — one lease policy, and six jobs that told the health check they had succeeded
+
+Founder's decision, applied to all thirteen: `withJobLease`, releasing on failure. Doing it found
+that six routes released in a `finally` that stamped `lastRunAt` even when the run threw — and the
+dead-man's switch reads `lastRunAt`, so a job failing on every tick would have read "ok" for ever.
+One of them was the operator alerts job, the one that watches the others. *Checked in production:
+the 05:00 tick after the deploy ran 13/13.*
 
 ### Shipped 2026-09-22 — the build depended on Google, and fixing it broke the font
 

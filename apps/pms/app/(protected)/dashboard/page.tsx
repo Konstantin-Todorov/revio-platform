@@ -12,6 +12,7 @@ import { checkOut } from "@/lib/actions-frontdesk";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
 import { money } from "@/lib/format";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 const READY: Record<"ready" | "partial" | "none", { tone: "success" | "warning" | "danger"; label: string }> = {
@@ -214,9 +215,9 @@ export default async function DashboardPage() {
                     </Link>
                     <form action={checkOut}>
                       <input type="hidden" name="reservationId" value={r.reservationId} />
-                      <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted hover:text-danger-600">
+                      <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted hover:text-danger-600" pendingLabel="Checking out…">
                         <LogOut className="h-3.5 w-3.5" /> Check out
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </li>

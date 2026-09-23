@@ -3,6 +3,7 @@ import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primit
 import { listLeads } from "@/lib/data";
 import { setLeadHandled, sendLeadTrialInvite } from "@/lib/actions-leads";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 /**
@@ -123,21 +124,18 @@ export default async function LeadsPage() {
                     {!l.trialSentAt && (
                       <form action={sendLeadTrialInvite} className="shrink-0">
                         <input type="hidden" name="id" value={l.id} />
-                        <button
-                          type="submit"
+                        <SubmitButton
                           title={`Email ${l.email} a link to start the 30-day trial`}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-2.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700"
-                        >
+                          className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-2.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Sending…">
                           <Send className="h-3.5 w-3.5" /> Send trial
-                        </button>
+                        </SubmitButton>
                       </form>
                     )}
 
                     <form action={setLeadHandled} className="shrink-0">
                       <input type="hidden" name="id" value={l.id} />
                       <input type="hidden" name="handled" value={l.handledAt ? "0" : "1"} />
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted"
                       >
                         {l.handledAt ? (
@@ -149,7 +147,7 @@ export default async function LeadsPage() {
                             <Check className="h-3.5 w-3.5" /> Mark replied
                           </>
                         )}
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </li>

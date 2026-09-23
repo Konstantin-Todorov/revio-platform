@@ -5,6 +5,7 @@ import { getOperatorUsers } from "@/lib/data";
 import { getOperatorSession } from "@/lib/session";
 import { inviteOperator, updateOperatorRole, removeOperator } from "@/lib/actions-settings";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 const inputCls =
@@ -51,11 +52,11 @@ export default async function StaffSettingsPage() {
                       <option value="super_admin">Super admin</option>
                       <option value="support">Support</option>
                     </select>
-                    <button type="submit" className="rounded-md border border-surface-border px-2 py-1 text-[11.5px] font-semibold text-ink-600 hover:bg-surface-muted">Save</button>
+                    <SubmitButton className="rounded-md border border-surface-border px-2 py-1 text-[11.5px] font-semibold text-ink-600 hover:bg-surface-muted">Save</SubmitButton>
                   </form>
                   <form action={removeOperator}>
                     <input type="hidden" name="id" value={u.id} />
-                    <button type="submit" aria-label="Remove" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600"><Trash2 className="h-3.5 w-3.5" /></button>
+                    <SubmitButton aria-label="Remove" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600"><Trash2 className="h-3.5 w-3.5" /></SubmitButton>
                   </form>
                 </>
               ) : (
@@ -83,9 +84,9 @@ export default async function StaffSettingsPage() {
                 <option value="super_admin">Super admin</option>
               </select>
             </label>
-            <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+            <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Inviting…">
               <UserPlus className="h-3.5 w-3.5" /> Invite
-            </button>
+            </SubmitButton>
           </form>
         </div>
       )}

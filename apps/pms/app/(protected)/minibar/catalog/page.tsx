@@ -5,6 +5,7 @@ import { getCatalog } from "@/lib/pos";
 import { createPosItem, updatePosItem, deletePosItem } from "@/lib/actions-pos";
 import { POS_OUTLETS, POS_OUTLET_LABEL } from "@/lib/roles";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 const inputCls = "h-9 rounded-md border border-surface-border bg-white px-2.5 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-600";
@@ -56,9 +57,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
             <span className="text-[11px] font-semibold text-ink-600">Price ({property.baseCurrency})</span>
             <input name="price" type="text" inputMode="decimal" required placeholder="0.00" className={`${inputCls} w-24`} />
           </label>
-          <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500">
+          <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel="Adding…">
             <Plus className="h-3.5 w-3.5" /> Add
-          </button>
+          </SubmitButton>
         </form>
       </Card>
 
@@ -85,15 +86,15 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
                     <input type="checkbox" name="active" defaultChecked={it.active} className="h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
                     Active
                   </label>
-                  <button type="submit" aria-label="Save" title="Save" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border text-ink-500 transition-colors hover:bg-surface-muted hover:text-accent-600">
+                  <SubmitButton aria-label="Save" title="Save" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border text-ink-500 transition-colors hover:bg-surface-muted hover:text-accent-600">
                     <Save className="h-3.5 w-3.5" />
-                  </button>
+                  </SubmitButton>
                 </form>
                 <form action={deletePosItem}>
                   <input type="hidden" name="id" value={it.id} />
-                  <button type="submit" aria-label="Delete" title="Delete" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                  <SubmitButton aria-label="Delete" title="Delete" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
                     <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  </SubmitButton>
                 </form>
               </li>
             ))}

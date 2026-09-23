@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { getProperty, remainingByNight, stayViolation, todayInTz, PAYMENT_GUARANTEES } from "./data";
 import { releaseExpiredHolds } from "./holds";
+import { convertHoldToReservation, HoldAlreadyTaken } from "./convert-hold";
 import { getSession } from "./session";
 import { stayScope } from "@revio/connectivity";
 import { claimHold, releaseRoomsForCancellation, isStayInHouse } from "@revio/db";
@@ -190,62 +191,33 @@ export async function confirmReservation(fd: FormData): Promise<void> {
   const source = bookingSourceId ? await prisma.bookingSource.findFirst({ where: { id: bookingSourceId, propertyId: property.id } }) : null;
   if (!ratePlan) redirect(`/reservations/new?hold=${holdId}&error=${encodeURIComponent("Pick a rate plan.")}`);
 
-  // Guest record: reuse by e-mail when one exists (booking history accumulates), else create.
-  const email = str(fd, "email") || null;
-  const phone = str(fd, "phone") || null;
-  const existing = email ? await prisma.guest.findFirst({ where: { propertyId: property.id, email } }) : null;
-  const guest =
-    existing ??
-    (await prisma.guest.create({
-      data: {
-        tenantId: property.tenantId,
-        propertyId: property.id,
-        firstName,
-        lastName,
-        email,
-        phone,
-        company: str(fd, "company") || null,
-        specialRequests: str(fd, "specialRequests") || null,
-      },
-    }));
-  if (existing && str(fd, "specialRequests")) {
-    await prisma.guest.update({ where: { id: existing.id }, data: { specialRequests: str(fd, "specialRequests") } });
-  }
-
-  const guestName = `${firstName} ${lastName}`;
-  const reservation = await prisma.reservation.create({
-    data: {
-      tenantId: property.tenantId,
-      propertyId: property.id,
-      channelId: null,
-      externalId: null,
-      guestName,
-      status: "confirmed",
-      totalMinor: priceMinor,
-      currency: property.baseCurrency,
-      propertyCurrency: property.baseCurrency,
-      propertyTotalMinor: priceMinor,
-      fxRate: 1,
-      fxAt: new Date(),
-      guestId: guest.id,
-      bookingSourceId: source?.id ?? null,
-      paymentGuarantee: guarantee,
-      notes: str(fd, "notes") || null,
-      createdById: session?.userId ?? null,
-      lines: {
-        create: [{
-          roomTypeId: hold!.roomTypeId,
-          ratePlanId,
-          quantity: hold!.quantity,
-          checkIn: hold!.checkIn,
-          checkOut: hold!.checkOut,
-          priceMinor,
-          guestsCount,
-        }],
-      },
-    },
+  let converted: { reservationId: string; guestName: string };
+  try {
+    converted = await convertHoldToReservation(property, hold!, {
+    firstName,
+    lastName,
+    email: str(fd, "email") || null,
+    phone: str(fd, "phone") || null,
+    company: str(fd, "company") || null,
+    specialRequests: str(fd, "specialRequests") || null,
+    notes: str(fd, "notes") || null,
+    ratePlanId,
+    bookingSourceId: source?.id ?? null,
+    paymentGuarantee: guarantee,
+    priceMinor,
+    guestsCount,
+    createdById: session?.userId ?? null,
   });
-  await prisma.hold.update({ where: { id: hold!.id }, data: { status: "converted", reservationId: reservation.id } });
+  } catch (err) {
+    // Lost the race for this hold: somebody else's confirm won and ours was rolled back whole.
+    // Said in words, because the screen they came from still shows the hold as available.
+    if (err instanceof HoldAlreadyTaken) {
+      redirect(`/reservations/new?error=${encodeURIComponent("Somebody else confirmed this hold a moment ago, so it is already a reservation. Search again to book another room.")}`);
+    }
+    throw err;
+  }
+  const { reservationId, guestName } = converted;
+  const reservation = { id: reservationId };
 
   await logAudit(property.id, property.tenantId, {
     entity: tag(reservation.id, guestName),

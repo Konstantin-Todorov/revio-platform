@@ -9,6 +9,7 @@ import { IssueInvoiceButton } from "@/components/billing/IssueInvoiceButton";
 import { getCompany } from "@/lib/invoice-doc";
 import { allowedTransitions, amountBasis } from "@revio/core";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 function money(minor: number, currency = "EUR"): string {
@@ -40,9 +41,9 @@ export default async function BillingPage() {
         subtitle={`Plans, monthly price and invoices per client · period ${period}`}
         action={
           <form action={generateInvoices}>
-            <button type="submit" className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">
+            <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Generating…">
               <FilePlus2 className="h-4 w-4" /> Generate {period} invoices
-            </button>
+            </SubmitButton>
           </form>
         }
       />
@@ -143,7 +144,7 @@ export default async function BillingPage() {
                           rooms say {c.effective.derivedPlan} · {c.effective.override!.reason}
                           <form action={clearPlanOverride} className="inline">
                             <input type="hidden" name="tenantId" value={c.id} />
-                            <button type="submit" className="ml-1.5 underline hover:text-ink-700">use rooms</button>
+                            <SubmitButton className="ml-1.5 underline hover:text-ink-700">use rooms</SubmitButton>
                           </form>
                         </span>
                       )}
@@ -157,7 +158,7 @@ export default async function BillingPage() {
                             <option value="scale">Scale</option>
                           </select>
                           <input name="reason" placeholder="why?" required className={inputCls} />
-                          <button type="submit" className="rounded border border-surface-border px-1.5 py-0.5 text-[11px] font-semibold text-ink-500 hover:bg-surface-muted">Save</button>
+                          <SubmitButton className="rounded border border-surface-border px-1.5 py-0.5 text-[11px] font-semibold text-ink-500 hover:bg-surface-muted">Save</SubmitButton>
                         </form>
                       </details>
                     </div>
@@ -196,7 +197,7 @@ export default async function BillingPage() {
                         )}
                         {allowedTransitions(c.currentInvoice).includes("paid") && (
                           <form action={setInvoiceStatus}><input type="hidden" name="id" value={c.currentInvoice.id} /><input type="hidden" name="status" value="paid" />
-                            <button type="submit" className="inline-flex items-center gap-1 rounded border border-success-500 px-1.5 py-0.5 text-[11px] font-semibold text-success-600 hover:bg-success-50"><CheckCircle2 className="h-3 w-3" />Mark paid</button></form>
+                            <SubmitButton className="inline-flex items-center gap-1 rounded border border-success-500 px-1.5 py-0.5 text-[11px] font-semibold text-success-600 hover:bg-success-50"><CheckCircle2 className="h-3 w-3" />Mark paid</SubmitButton></form>
                         )}
                       </div>
                     )}

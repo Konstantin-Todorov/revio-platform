@@ -12,6 +12,7 @@ import { todayInTz, money } from "@/lib/format";
 import { HK_LABEL, HK_TONE } from "@/lib/hk-meta";
 import { GuestRegisterCard } from "@/components/register/GuestRegisterCard";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 const STATE_META: Record<StayState, { tone: Tone; label: string }> = {
@@ -221,9 +222,9 @@ export default async function ReservationViewPage({
             {o.stayState === "in_house" && (
               <form action={checkOut}>
                 <input type="hidden" name="reservationId" value={reservationId} />
-                <button type="submit" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted hover:text-danger-600">
+                <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted hover:text-danger-600" pendingLabel="Checking out…">
                   <LogOut className="h-3.5 w-3.5" /> Check out
-                </button>
+                </SubmitButton>
               </form>
             )}
             {/* The way back from a mistaken check-out. Check-in refuses a departed stay — which is
@@ -240,14 +241,13 @@ export default async function ReservationViewPage({
                   disabled={!isManager}
                   className="h-9 w-52 rounded-md border border-surface-border bg-white px-2.5 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-600 disabled:cursor-not-allowed disabled:bg-surface-muted"
                 />
-                <button
-                  type="submit"
+                <SubmitButton
                   disabled={!isManager}
                   title={isManager ? "Reopen this stay — the rooms are not held, so it will need checking in again" : "Manager approval required"}
                   className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:text-ink-300 disabled:hover:bg-transparent"
                 >
                   <RotateCcw className="h-3.5 w-3.5" /> Reopen stay
-                </button>
+                </SubmitButton>
               </form>
             )}
           </div>

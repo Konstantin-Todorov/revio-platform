@@ -9,6 +9,7 @@ import { getSession } from "@/lib/session";
 import { getOpenShift } from "@/lib/workforce";
 import { clockInSelf, clockOutSelf } from "@/lib/actions-workforce";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
 const inputCls = "h-9 rounded-md border border-surface-border bg-white px-2.5 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-600";
@@ -80,9 +81,9 @@ export default async function MaintenancePage({ searchParams }: { searchParams: 
             <input type="checkbox" name="ooo" className="h-4 w-4 rounded border-surface-border text-danger-600 focus:ring-danger-600" />
             <PowerOff className="h-3.5 w-3.5" /> Out of order
           </label>
-          <button type="submit" className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500">
+          <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel="Creating…">
             <Plus className="h-3.5 w-3.5" /> Add
-          </button>
+          </SubmitButton>
         </form>
         <p className="mt-2 text-[11px] text-ink-400">Ticking “Out of order” (with a room) takes that room off sale on every channel until the task is done.</p>
       </Card>
@@ -127,9 +128,9 @@ function TaskList({ title, rows }: { title: string; rows: Awaited<ReturnType<typ
               <MaintStatusControl id={t.id} status={t.status} />
               <form action={deleteMaintenanceTask}>
                 <input type="hidden" name="id" value={t.id} />
-                <button type="submit" aria-label="Delete" title="Delete" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                <SubmitButton aria-label="Delete" title="Delete" className="flex h-8 w-8 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
                   <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                </SubmitButton>
               </form>
             </div>
           </li>

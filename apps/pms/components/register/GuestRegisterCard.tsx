@@ -6,6 +6,7 @@ import {
 import { saveStayGuest, addStayGuest, removeStayGuest, cancelStayGuest } from "@/lib/actions-register";
 import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
 
+import { SubmitButton } from "@revio/ui/submit-button";
 export type RegisterRow = TouristRegisterEntry & { id: string };
 
 const input =
@@ -174,27 +175,25 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
 
                 <div className="mt-3 flex items-center justify-end gap-2">
                   {blank && (
-                    <button
-                      type="submit" formAction={removeStayGuest}
+                    <SubmitButton formAction={removeStayGuest}
                       className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-ink-400 transition-colors hover:text-danger-600"
                     >
                       <Trash2 className="h-3.5 w-3.5" /> Remove
-                    </button>
+                    </SubmitButton>
                   )}
                   {!blank && (
-                    <button
-                      type="submit" formAction={cancelStayGuest}
+                    <SubmitButton formAction={cancelStayGuest}
                       title={r.cancelled ? "Put this registration back" : "Mark this registration cancelled — it keeps its number"}
                       className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-ink-400 transition-colors hover:text-warning-700"
                     >
                       {r.cancelled
                         ? <><RotateCcw className="h-3.5 w-3.5" /> Reinstate</>
                         : <><Ban className="h-3.5 w-3.5" /> Cancel</>}
-                    </button>
+                    </SubmitButton>
                   )}
-                  <button type="submit" className="rounded-md bg-brand-700 px-3.5 py-1.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-800">
+                  <SubmitButton className="rounded-md bg-brand-700 px-3.5 py-1.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-800">
                     Save
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             </details>
@@ -210,9 +209,9 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
           </p>
           <form action={addStayGuest}>
             <input type="hidden" name="reservationId" value={reservationId} />
-            <button type="submit" className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
+            <SubmitButton className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700" pendingLabel="Adding…">
               <Plus className="h-3.5 w-3.5" /> Add a guest
-            </button>
+            </SubmitButton>
           </form>
         </div>
       )}
