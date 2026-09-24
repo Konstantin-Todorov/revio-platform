@@ -3,6 +3,8 @@ import localFont from "next/font/local";
 import "./globals.css";
 // Bulgarian letters — a Cyrillic-only face. Generated; see scripts/fetch-fonts.mjs.
 import "./cyrillic-font.css";
+import { LOCALE_LABELS } from "@revio/ui/i18n";
+import { getLocale } from "@/lib/locale";
 import { DatePickerAffordance } from "@revio/ui/date-picker-affordance";
 
 /*
@@ -48,9 +50,12 @@ export const viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // `lang` is the reader's language: Bulgarian letterforms (Source Sans 3's `locl`) and the screen
+  // reader's voice both follow it. See `@revio/ui/i18n`.
+  const locale = await getLocale();
   return (
-    <html lang="en" className={hanken.variable}>
+    <html lang={LOCALE_LABELS[locale].htmlLang} className={hanken.variable}>
       <body>
         {children}
         {/* One listener: every native date field opens its picker from anywhere on it. */}

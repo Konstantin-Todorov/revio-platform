@@ -146,6 +146,11 @@ model User {
   notificationsClearedAt DateTime?
   notificationsReadKeys  String[]  @default([])
 
+  /// The language this PERSON reads the staff products in ("en" | "bg"). Null = not chosen yet, which
+  /// means English. On the person, not the hotel: a Bulgarian housekeeper and an English-speaking
+  /// owner share one hotel. See `@revio/ui/i18n`.
+  locale String?
+
   tenant        Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   recoveryCodes UserRecoveryCode[]
   activeDays    ActiveUserDay[]

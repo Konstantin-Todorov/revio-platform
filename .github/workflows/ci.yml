@@ -79,6 +79,10 @@ jobs:
       # Copy conventions across all five apps. Has its own zero-file guard, for the same reason.
       - name: Copy lint
         run: pnpm copy:lint
+      # Rejected Bulgarian terms — "канален мениджър", "ценови план", "обект"… — fail the build, in the
+      # products as on the website. Written before the first screen was translated, on purpose.
+      - name: Terminology
+        run: pnpm terminology:lint
 
       # Every server action in RevioLink and RevioCRS is gated, or is exempt WITH A REASON. This is
       # the check that stops X2 quietly coming back the next time somebody adds an action.

@@ -5,6 +5,8 @@ import { TopbarSearch } from "./TopbarSearch";
 import { NotificationBell } from "./NotificationBell";
 import { UserMenu } from "./UserMenu";
 import type { ProductLink, ProductUpsell } from "@revio/ui/product-links";
+import type { Locale } from "@revio/ui/i18n";
+import type { UserMenuStrings } from "./UserMenu";
 
 type Property = { id: string; name: string; tenantName: string };
 
@@ -14,7 +16,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export function Topbar({
-  properties, activeId, activeName, role, userName, feed, timeZone, products, upsells,
+  properties, activeId, activeName, role, userName, feed, timeZone, products, upsells, locale = "en", t,
 }: {
   properties: Property[];
   activeId: string;
@@ -25,6 +27,9 @@ export function Topbar({
   upsells: ProductUpsell[];
   feed: NotificationFeed;
   timeZone: string;
+  locale?: Locale;
+  /** Translated menu strings and role names — `lib/i18n/shell.ts`. */
+  t?: { menu: UserMenuStrings; roles: Record<string, string> };
 }) {
   return (
     <header className="sticky top-0 z-20 flex h-[60px] items-center gap-3 border-b border-surface-border bg-white/95 px-4 backdrop-blur lg:gap-4 lg:px-6">
@@ -36,7 +41,7 @@ export function Topbar({
       </div>
 
       <NotificationBell initial={feed} timeZone={timeZone} />
-      <UserMenu products={products} upsells={upsells} userName={userName} roleLabel={ROLE_LABEL[role] ?? role} />
+      <UserMenu products={products} upsells={upsells} userName={userName} roleLabel={t?.roles[role] ?? ROLE_LABEL[role] ?? role} locale={locale} {...(t ? { t: t.menu } : {})} />
     </header>
   );
 }

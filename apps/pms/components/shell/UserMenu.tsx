@@ -2,20 +2,25 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Settings, LogOut, ChevronDown } from "lucide-react";
+import { Settings, LogOut, ChevronDown, Languages } from "lucide-react";
 import { AccountMenuBody } from "@revio/ui/account-menu-body";
 import { openProduct } from "@/lib/actions-switch";
 import { GetHelp, GetHelpTrigger } from "@revio/ui/get-help";
 import { submitSupportRequest } from "@/lib/actions-support";
 import type { ProductLink, ProductUpsell } from "@revio/ui/product-links";
 import { logout } from "@/lib/actions-auth";
+import { setLocale } from "@/lib/actions-locale";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@revio/ui/i18n";
+
+export type UserMenuStrings = { account: string; settings: string; logOut: string; language: string };
+const EN: UserMenuStrings = { account: "Account menu", settings: "Settings", logOut: "Log out", language: "Language" };
 
 function initials(name: string): string {
   return name.split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase() || "U";
 }
 
 /** Top-right account menu: the avatar opens a dropdown → Settings + Log out. */
-export function UserMenu({ userName, roleLabel, products, upsells }: { userName: string; roleLabel: string; products: ProductLink[]; upsells: ProductUpsell[] }) {
+export function UserMenu({ userName, roleLabel, products, upsells, locale = "en", t = EN }: { userName: string; roleLabel: string; products: ProductLink[]; upsells: ProductUpsell[]; locale?: Locale; t?: UserMenuStrings }) {
   const [open, setOpen] = useState(false);
   // Beside the menu's own state, never inside the dropdown: closing the menu unmounts what is
   // in it, and a dialog whose state lives there disappears the moment it is asked to appear.
@@ -29,7 +34,7 @@ export function UserMenu({ userName, roleLabel, products, upsells }: { userName:
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-label="Account menu" className="flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-surface-muted">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-label={t.account} className="flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-surface-muted">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-product-ink text-[12px] font-bold text-white">{initials(userName)}</div>
         <div className="hidden text-left leading-tight sm:block">
           <div className="text-[12.5px] font-semibold text-ink-900">{userName}</div>
@@ -51,12 +56,32 @@ export function UserMenu({ userName, roleLabel, products, upsells }: { userName:
             trialHref={(key) => `/start-trial/${key}`}
           />
           <Link href="/settings" onClick={() => setOpen(false)} className="flex items-center gap-2 px-3 py-2 text-[13px] text-ink-700 transition-colors hover:bg-surface-muted">
-            <Settings className="h-4 w-4 text-ink-400" /> Settings
+            <Settings className="h-4 w-4 text-ink-400" /> {t.settings}
           </Link>
+          {/*
+            Language — each named in its own words, so the one you can read is findable whatever is
+            showing now. Two buttons, not a dropdown: the choice is visible before it is made.
+          */}
+          <form action={setLocale} className="flex items-center gap-1.5 border-t border-surface-border px-3 py-2" aria-label={t.language}>
+            <Languages className="h-4 w-4 shrink-0 text-ink-400" aria-hidden />
+            {LOCALES.map((l) => (
+              <button
+                key={l}
+                type="submit"
+                name="locale"
+                value={l}
+                lang={LOCALE_LABELS[l].htmlLang}
+                aria-pressed={l === locale}
+                className={`rounded px-2 py-0.5 text-[12.5px] font-semibold transition-colors ${l === locale ? "bg-brand-50 text-brand-800" : "text-ink-600 hover:bg-surface-muted"}`}
+              >
+                {LOCALE_LABELS[l].native}
+              </button>
+            ))}
+          </form>
           <GetHelpTrigger onClick={() => { setHelpOpen(true); setOpen(false); }} />
           <form action={logout} className="border-t border-surface-border">
             <button type="submit" className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-700 transition-colors hover:bg-danger-50 hover:text-danger-600">
-              <LogOut className="h-4 w-4 text-ink-400" /> Log out
+              <LogOut className="h-4 w-4 text-ink-400" /> {t.logOut}
             </button>
           </form>
         </div>

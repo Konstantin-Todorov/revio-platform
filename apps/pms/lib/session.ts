@@ -19,6 +19,8 @@ export interface Session {
   entitlements: { channelManager: boolean; reservation: boolean; pms: boolean };
   activePropertyId: string;
   tenantName: string;
+  /** The language this person chose ("en" | "bg"); null = never chosen = English. */
+  locale: string | null;
 }
 
 export const ACTIVE_PROPERTY_COOKIE = "revio_property";
@@ -61,6 +63,7 @@ export async function getSession(): Promise<Session | null> {
     },
     activePropertyId: active.id,
     tenantName: tenant.name,
+    locale: user.locale ?? null,
   };
 }
 

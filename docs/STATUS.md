@@ -127,9 +127,9 @@ real RevioDirect booking page answer `200`.
 
 ⚠️ This table said **eight** services until today. `docs` was added and nothing here noticed.
 
-**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **eighteen separate
-checks** on every change <!-- status: count checks 18 --> — typecheck, lint, and sixteen ratchets that each exist because something
-specific went wrong once: copy · authz · layout-guard · status · silent · money · health · a11y ·
+**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **nineteen separate
+checks** on every change <!-- status: count checks 19 --> — typecheck, lint, and seventeen ratchets that each exist because something
+specific went wrong once: copy · terminology · authz · layout-guard · status · silent · money · health · a11y ·
 scroll-lock · jobs · submit · zoom · tokens · perimeter · dates · drift. CI additionally applies every
 migration into an empty database and runs the seed.
 

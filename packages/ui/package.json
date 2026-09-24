@@ -59,7 +59,9 @@
     "./plan-tree": "./src/plan-tree.tsx",
     "./command-palette": "./src/command-palette.tsx",
     "./role-locked": "./src/role-locked.tsx",
-    "./notification-center": "./src/notification-center.tsx"
+    "./notification-center": "./src/notification-center.tsx",
+    "./i18n": "./src/i18n.ts",
+    "./i18n-context": "./src/i18n-context.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

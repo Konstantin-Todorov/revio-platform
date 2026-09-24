@@ -56,6 +56,10 @@ const EXEMPT = {
   // housekeeper who cannot open Settings is exactly the person most likely to be standing in front
   // of a broken screen, and a support form that refuses them loses the report we most need.
   "actions-support.ts:submitSupportRequest": "anybody signed in may ask for help, whatever their role",
+  // Your own language is a preference, not a permission — a housekeeper who can change nothing else
+  // is exactly who most needs to read the screen. It writes only the caller's own User row, and
+  // works signed out too (the sign-in screen has a language before it has a person).
+  "actions-locale.ts:setLocale": "choosing your own language is a preference, not a permission",
   // ⚠️ The ⌘K palette's search. A READ that writes nothing, so a write capability is the wrong
   // question — but it is emphatically not ungated, and the gate it has is the one that matters for a
   // read: `roleCanOpenProduct` (default-deny, `@revio/core/auth/read-scope`) as the first statement,

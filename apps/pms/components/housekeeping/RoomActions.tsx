@@ -11,7 +11,10 @@ import { SubmitButton } from "@revio/ui/submit-button";
  * to the one-room-in-progress rule enforced server-side), Finish (in-progress → clean), and
  * Report-an-issue (→ a Maintenance task). The desktop status <select> above stays for supervisors.
  */
-export function RoomActions({ unitId, status }: { unitId: string; status: HkStatus }) {
+export type RoomActionStrings = { start: string; starting: string; finish: string; report: string; describe: string; log: string };
+const EN: RoomActionStrings = { start: "Start", starting: "Starting…", finish: "Finish", report: "Report an issue", describe: "Describe the fault…", log: "Log" };
+
+export function RoomActions({ unitId, status, t = EN }: { unitId: string; status: HkStatus; t?: RoomActionStrings }) {
   const [reporting, setReporting] = useState(false);
 
   return (
@@ -20,8 +23,8 @@ export function RoomActions({ unitId, status }: { unitId: string; status: HkStat
         {status === "dirty" && (
           <form action={startCleaning} className="flex-1">
             <input type="hidden" name="unitId" value={unitId} />
-            <SubmitButton className="flex w-full items-center justify-center gap-1 rounded-md bg-brand-700 px-2 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-brand-600" pendingLabel="Starting…">
-              <Play className="h-3 w-3" /> Start
+            <SubmitButton className="flex w-full items-center justify-center gap-1 rounded-md bg-brand-700 px-2 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-brand-600" pendingLabel={t.starting}>
+              <Play className="h-3 w-3" /> {t.start}
             </SubmitButton>
           </form>
         )}
@@ -29,14 +32,15 @@ export function RoomActions({ unitId, status }: { unitId: string; status: HkStat
           <form action={finishCleaning} className="flex-1">
             <input type="hidden" name="unitId" value={unitId} />
             <button className="flex w-full items-center justify-center gap-1 rounded-md bg-success-600 px-2 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-success-500">
-              <Check className="h-3 w-3" /> Finish
+              <Check className="h-3 w-3" /> {t.finish}
             </button>
           </form>
         )}
         <button
           type="button"
           onClick={() => setReporting((v) => !v)}
-          title="Report an issue"
+          title={t.report}
+          aria-label={t.report}
           className={`flex items-center justify-center rounded-md border px-2 py-1 text-[11.5px] font-semibold transition-colors ${reporting ? "border-danger-500/60 bg-danger-50 text-danger-600" : "border-surface-border text-ink-500 hover:bg-surface-muted"} ${status === "dirty" || status === "in_progress" ? "" : "flex-1"}`}
         >
           {reporting ? <X className="h-3 w-3" /> : <TriangleAlert className="h-3 w-3" />}
@@ -49,10 +53,10 @@ export function RoomActions({ unitId, status }: { unitId: string; status: HkStat
             name="title"
             required
             autoFocus
-            placeholder="Describe the fault…"
+            placeholder={t.describe}
             className="min-w-0 flex-1 rounded-md border border-surface-border bg-white px-2 py-1 text-[11.5px] outline-none focus:border-danger-500"
           />
-          <button className="shrink-0 rounded-md bg-danger-600 px-2 py-1 text-[11.5px] font-semibold text-white hover:bg-danger-500">Log</button>
+          <button className="shrink-0 rounded-md bg-danger-600 px-2 py-1 text-[11.5px] font-semibold text-white hover:bg-danger-500">{t.log}</button>
         </form>
       )}
     </div>

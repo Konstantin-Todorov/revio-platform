@@ -16,7 +16,7 @@ const SELECT_TINT: Record<HkStatus, string> = {
  * Compact housekeeping-status changer: a native select that submits the setUnitStatus server action
  * on change (the OOO option triggers the waterfall write server-side). Works on touch/mobile (PWA).
  */
-export function StatusControl({ unitId, status }: { unitId: string; status: HkStatus }) {
+export function StatusControl({ unitId, status, labels = HK_LABEL, aria = "Housekeeping status" }: { unitId: string; status: HkStatus; labels?: Record<HkStatus, string>; aria?: string }) {
   const ref = useRef<HTMLFormElement>(null);
   return (
     <form ref={ref} action={setUnitStatus}>
@@ -29,11 +29,11 @@ export function StatusControl({ unitId, status }: { unitId: string; status: HkSt
         name="status"
         defaultValue={status}
         onChange={() => ref.current?.requestSubmit()}
-        aria-label="Housekeeping status"
+        aria-label={aria}
         className={`w-full cursor-pointer rounded-md border bg-white px-2 py-1.5 text-[12.5px] font-semibold outline-none focus:border-accent-600 ${SELECT_TINT[status]}`}
       >
         {HK_STATUSES.map((s) => (
-          <option key={s} value={s}>{HK_LABEL[s]}</option>
+          <option key={s} value={s}>{labels[s]}</option>
         ))}
       </select>
     </form>

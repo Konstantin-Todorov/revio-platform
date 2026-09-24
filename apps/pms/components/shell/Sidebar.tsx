@@ -11,12 +11,20 @@ import { NAV_HEADING_CLASS, NAV_ROW_CLASS, NAV_SCROLL_CLASS, navTail } from "@re
 import { roleAllowsPath } from "@/lib/roles";
 
 type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
+type SectionKey = "frontOffice" | "roomsHousekeeping" | "setup" | "endOfDay";
+/** The translated frame — built on the server (`lib/i18n/shell.ts`) and passed in, so this client
+ *  bundle never carries the other language. Absent keys keep the English label below. */
+export type SidebarStrings = {
+  sections: Record<SectionKey, string>;
+  nav: Partial<Record<string, string>>;
+  menu: { closeMenu: string };
+};
 
 // Nav regrouped to the roles that use each area (spec §2): Front Office (reception) · Rooms &
 // Housekeeping · Setup (manager/admin) · End of Day. New tabs (Guests / User Management /
 // Configuration) land as placeholders until their phase builds them (D4 / D8 / E7).
-const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
-  { title: "Front office", items: [
+const SECTIONS: { title?: string; titleKey?: SectionKey; tail?: boolean; items: Item[] }[] = [
+  { title: "Front office", titleKey: "frontOffice", items: [
     { href: "/dashboard", label: "Front Desk", icon: LayoutDashboard },
     // Between Front Desk and Guests on purpose: Front Desk is today as a list, the calendar is the
     // coming weeks as a grid. Same question, two time horizons.
@@ -28,16 +36,16 @@ const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
     { href: "/register", label: "Guest Register", icon: BookUser },
     { href: "/minibar", label: "Extras & Charges", icon: Wine },
   ] },
-  { title: "Rooms & housekeeping", items: [
+  { title: "Rooms & housekeeping", titleKey: "roomsHousekeeping", items: [
     { href: "/housekeeping", label: "Housekeeping", icon: Sparkles },
     { href: "/rooms", label: "Rooms", icon: BedDouble },
     { href: "/maintenance", label: "Maintenance", icon: Wrench },
   ] },
-  { title: "Setup", items: [
+  { title: "Setup", titleKey: "setup", items: [
     { href: "/users", label: "Staff & Access", icon: UserCog },
     { href: "/configuration", label: "Configuration", icon: SlidersHorizontal },
   ] },
-  { title: "End of day", items: [
+  { title: "End of day", titleKey: "endOfDay", items: [
     { href: "/closeday", label: "Close Day", icon: Moon },
   ] },
   /*
@@ -63,12 +71,17 @@ const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
   },
 ];
 
-export function Sidebar({ role, footer }: { role: string; footer: string }) {
+export function Sidebar({ role, footer, t }: { role: string; footer: string; t?: SidebarStrings }) {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
   // Scoped roles (housekeeper, outlet/POS…) see only their allowed sections (spec §3.4 / §3.7).
+  // Labels by route from the translated frame; the English literal stays as the fallback.
   const sections = SECTIONS
-    .map((s) => ({ ...s, items: s.items.filter((i) => roleAllowsPath(role, i.href)) }))
+    .map((s) => ({
+      ...s,
+      title: (s.titleKey && t?.sections[s.titleKey]) || s.title,
+      items: s.items.filter((i) => roleAllowsPath(role, i.href)).map((i) => ({ ...i, label: t?.nav[i.href] ?? i.label })),
+    }))
     .filter((s) => s.items.length > 0);
   /*
    * One section, rendered from a named function so the TAIL can live outside the scrolling
@@ -159,7 +172,7 @@ export function Sidebar({ role, footer }: { role: string; footer: string }) {
         <button
           type="button"
           onClick={() => setOpen(false)}
-          aria-label="Close menu"
+          aria-label={t?.menu.closeMenu ?? "Close menu"}
           className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
         >
           <X className="h-5 w-5" />
