@@ -45,6 +45,18 @@ describe("ratePlanMappingRows", () => {
     expect(std[0]!.roomTypeId).toBe("r1");
   });
 
+  it("on a DEMO channel a catch-all row counts as mapped — its push really does use it", () => {
+    // The mock push accepts a property-wide row, so "6 unmapped · Auto-fix" about a demo channel
+    // whose prices were going out was a false alarm the bell and the channel card then repeated.
+    const r = ratePlanMappingRows({
+      roomTypes: ROOMS, ratePlans: PLANS, sellsOn, catchAllCounts: true,
+      existing: [{ id: "m1", ratePlanId: "flex", roomTypeId: null, externalId: "cb75de7d", status: "complete" }],
+    });
+    const flex = r.filter((x) => x.ratePlanId === "flex");
+    expect(flex.every((x) => x.status === "complete" && !x.unmapped)).toBe(true);
+    expect(unconfirmedPairs(flex)).toBe(0);
+  });
+
   it("⚠️ a CATCH-ALL row reads as unconfirmed, never as complete", () => {
     /*
      * The €666 fault. `BB Flex` with roomTypeId NULL still pushes — resolveExternalRateId falls

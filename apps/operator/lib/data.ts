@@ -10,7 +10,7 @@ import { provisioningState, soldButNotProvisioned } from "./provisioning";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { directUsageByTenant } from "./direct-usage";
-import { PRODUCT_BY_KEY, billableEntitlements, channelEconomics, crossWiredFromRecord, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
+import { CAPABILITY_ERROR_CODE, PRODUCT_BY_KEY, billableEntitlements, channelEconomics, crossWiredFromRecord, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
 import { partitionDemo } from "./demo";
 import {
@@ -180,8 +180,8 @@ export interface NotifItem { text: string; href: string; tone: "danger" | "warni
 export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
   const since = new Date(Date.now() - 24 * 3600 * 1000);
   const [failed, openErrors, suspended] = await Promise.all([
-    prisma.syncEvent.count({ where: { status: "failed", createdAt: { gte: since } } }),
-    prisma.errorItem.count({ where: { resolved: false } }),
+    prisma.syncEvent.count({ where: { status: "failed", createdAt: { gte: since }, kind: { in: ["push", "pull"] } } }),
+    prisma.errorItem.count({ where: { resolved: false, code: { not: CAPABILITY_ERROR_CODE } } }),
     prisma.tenant.count({ where: { status: "suspended" } }),
   ]);
   const items: NotifItem[] = [];
@@ -219,7 +219,7 @@ export async function getOverviewStats() {
       prisma.ratePlanRoomType.count(),
       prisma.channel.count({ where: { status: "connected" } }),
       prisma.reservation.count(),
-      prisma.errorItem.count({ where: { resolved: false } }),
+      prisma.errorItem.count({ where: { resolved: false, code: { not: CAPABILITY_ERROR_CODE } } }),
       prisma.tenant.count({ where: { status: "suspended" } }),
     ]);
   return { clients, properties, products, connectedChannels, reservations, openErrors, suspended };
@@ -265,7 +265,7 @@ export async function getClients() {
         prisma.channel.count({ where: { tenantId: t.id } }),
         prisma.channel.count({ where: { tenantId: t.id, status: "connected" } }),
         prisma.reservation.count({ where: { tenantId: t.id } }),
-        prisma.errorItem.count({ where: { tenantId: t.id, resolved: false } }),
+        prisma.errorItem.count({ where: { tenantId: t.id, resolved: false, code: { not: CAPABILITY_ERROR_CODE } } }),
         prisma.channel.findFirst({ where: { tenantId: t.id, lastSyncAt: { not: null } }, orderBy: { lastSyncAt: "desc" }, select: { lastSyncAt: true } }),
         /*
          * The last SUCCESS, which is a different question from `Channel.lastSyncAt`.
@@ -668,7 +668,7 @@ export async function getClientDetail(id: string) {
     prisma.channel.findMany({ where: { tenantId: id }, select: { id: true, name: true, code: true, status: true, commissionPct: true, lastSyncAt: true, errorCount: true } }),
     prisma.channel.count({ where: { tenantId: id, status: "connected" } }),
     prisma.reservation.count({ where: { tenantId: id } }),
-    prisma.errorItem.count({ where: { tenantId: id, resolved: false } }),
+    prisma.errorItem.count({ where: { tenantId: id, resolved: false, code: { not: CAPABILITY_ERROR_CODE } } }),
     prisma.channel.findFirst({ where: { tenantId: id, lastSyncAt: { not: null } }, orderBy: { lastSyncAt: "desc" }, select: { lastSyncAt: true } }),
     prisma.reservation.findFirst({ where: { tenantId: id }, orderBy: { importedAt: "desc" }, select: { importedAt: true } }),
     prisma.reservation.count({ where: { tenantId: id, importedAt: { gte: thirtyDaysAgo } } }),
@@ -1158,8 +1158,9 @@ export async function getPlans() {
 export async function getPlatformHealth() {
   const since = new Date(Date.now() - 24 * 3600 * 1000);
   const [events, openErrors, failedRecent, tenants] = await Promise.all([
-    prisma.syncEvent.findMany({ where: { createdAt: { gte: since } }, select: { tenantId: true, status: true, kind: true } }),
-    prisma.errorItem.findMany({ where: { resolved: false }, select: { tenantId: true, severity: true } }),
+    // Deliveries only — a Verify read (`kind: "verify"`) is not a push that succeeded or failed.
+    prisma.syncEvent.findMany({ where: { createdAt: { gte: since }, kind: { in: ["push", "pull"] } }, select: { tenantId: true, status: true, kind: true } }),
+    prisma.errorItem.findMany({ where: { resolved: false, code: { not: CAPABILITY_ERROR_CODE } }, select: { tenantId: true, severity: true } }),
     /*
      * BOUNDED TO THE LAST 7 DAYS. This read had no time filter at all, so a panel headed "Recent
      * sync failures" cheerfully listed failures from June and read as a live incident every time

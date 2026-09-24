@@ -5,6 +5,7 @@ import {
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { getNotifications } from "./data";
+import { productOrigin } from "@revio/ui/product-links";
 
 const WINDOW_DAYS = 14;
 const PER_SOURCE = 25;
@@ -99,7 +100,8 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
     ...errors.map((e): NotificationEvent => ({
       key: `error:${e.id}`,
       title: e.resolved ? `Resolved — ${e.message}` : e.message,
-      href: "/distribution",
+      // RevioLink's Errors tab — /distribution holds no errors and only says where they are.
+      href: `${productOrigin("cm")}/sync?tab=errors`,
       severity: e.resolved ? "info" : e.severity === "critical" ? "critical" : "warning",
       at: e.createdAt,
       ...ctx(e.property.name),

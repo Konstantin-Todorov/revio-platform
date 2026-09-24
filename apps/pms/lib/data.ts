@@ -1,6 +1,6 @@
 import "server-only";
 import type { ProductName, SetupFacts } from "@revio/core";
-import { deriveStayState } from "@revio/core";
+import { deriveStayState, todayInTimeZone } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { todayInTz, ymd, utcDay, minutesOfDayInTz } from "./format";
@@ -75,19 +75,23 @@ export interface NotifItem { text: string; href: string; tone: "danger" | "warni
 export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
   const { property } = await activeProperty();
   const today = todayInTz(property.timezone);
-  const [reservations, dirty, ooo, openFolios] = await Promise.all([
-    prisma.reservation.findMany({ where: { propertyId: property.id, status: { in: [...OCCUPYING] } }, include: { lines: true, assignments: true } }),
+  const [overview, dirty, oooUnits, openFolios] = await Promise.all([
+    /*
+     * ⚠️ The front desk's own list. This counted reservations with NO assignment row at all — and
+     * since auto-assignment places every booking on receipt, almost none qualified: the bell said
+     * nothing while "To check in" listed six. Counted once, by the screen it opens.
+     */
+    getFrontDeskOverview(),
     prisma.unit.count({ where: { propertyId: property.id, active: true, hkStatus: "dirty" } }),
-    prisma.unit.count({ where: { propertyId: property.id, active: true, hkStatus: "out_of_order" } }),
+    prisma.unit.findMany({
+      where: { propertyId: property.id, active: true, hkStatus: "out_of_order" },
+      select: { id: true, maintenanceTasks: { where: { setsOoo: true, status: { not: "done" } }, select: { id: true } } },
+    }),
     prisma.folio.findMany({ where: { propertyId: property.id, status: "open" }, include: { lines: { select: { kind: true, amountMinor: true, voided: true } } } }),
   ]);
 
-  let arrivalsDue = 0;
-  for (const r of reservations) {
-    if (r.lines.length === 0 || r.assignments.length > 0) continue;
-    const ci = ymd(r.lines.map((l) => l.checkIn).sort((a, b) => a.getTime() - b.getTime())[0]!);
-    if (ci <= today) arrivalsDue++;
-  }
+  const arrivalsDue = overview.arrivals.length;
+  const ooo = oooUnits.length;
   const unsettled = openFolios.filter((f) => {
     let c = 0, p = 0;
     for (const l of f.lines) {
@@ -117,7 +121,15 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
 
   if (arrivalsDue > 0) items.push({ text: `${arrivalsDue} arrival${arrivalsDue === 1 ? "" : "s"} to check in`, href: "/dashboard", tone: "info" });
   if (dirty > 0) items.push({ text: `${dirty} room${dirty === 1 ? "" : "s"} to clean`, href: "/housekeeping", tone: "warning" });
-  if (ooo > 0) items.push({ text: `${ooo} room${ooo === 1 ? "" : "s"} out of order`, href: "/maintenance", tone: "danger" });
+  /*
+   * A room can be taken out of order from the housekeeping board with no maintenance task behind it,
+   * and /maintenance lists tasks — so it opened on nothing. Maintenance when every such room has a
+   * task there; otherwise the board, where every room shows, out-of-order ones in red.
+   */
+  if (ooo > 0) {
+    const allTracked = oooUnits.every((u) => u.maintenanceTasks.length > 0);
+    items.push({ text: `${ooo} room${ooo === 1 ? "" : "s"} out of order`, href: allTracked ? "/maintenance" : "/housekeeping", tone: "danger" });
+  }
   if (unsettled > 0) items.push({ text: `${unsettled} open balance${unsettled === 1 ? "" : "s"}`, href: "/folios", tone: "danger" });
   return { items, count: items.length };
 }
@@ -304,6 +316,21 @@ export async function getFrontDeskOverview() {
       guestId: r.guestId, returning: false, overdueState: null, overdueByMinutes: 0,
       balanceMinor: null, currency: r.currency,
     };
+
+    /*
+     * ⚠️ A departed stay is NEVER an arrival.
+     *
+     * `departedAt` emptied `active` above, and the branch below then asked only "no checked-in room,
+     * check-in date in the past?" — which a guest who left two days ago answers yes. So every
+     * departure older than today reappeared under "To check in" as OVERDUE, with a Check in button
+     * the check-in itself refuses. Found 2026-09-24 reproducing a notification mismatch; production
+     * held 20 such stays, 2 of them a real client's. Status stays `confirmed` on purpose (the stay
+     * is still sold and earned — root CLAUDE.md), so `departedAt` is the only thing that can say it.
+     */
+    if (r.departedAt) {
+      if (todayInTimeZone(property.timezone, r.departedAt) === today) departedToday.push(row);
+      continue;
+    }
 
     if (active.length > 0) {
       inHouse.push(row);

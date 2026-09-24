@@ -99,7 +99,7 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
          somebody needs to see when it happens for the third time this week. */
       title: e.resolved ? `Resolved — ${e.message}` : e.message,
       body: e.code ?? undefined,
-      href: "/sync",
+      href: "/sync?tab=errors",
       severity: e.resolved ? "info" : e.severity === "critical" ? "critical" : "warning",
       at: e.createdAt,
       ...ctx(e.property.name),

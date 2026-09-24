@@ -22,7 +22,9 @@ export function NotificationBell({ initial, timeZone }: { initial: NotificationF
       load={loadNotifications}
       markRead={markNotificationRead}
       markAllRead={markAllNotificationsRead}
-      onNavigate={(href) => router.push(href)}
+      // An error lives in RevioLink, another product on another origin — a full navigation, not a
+      // client-side push into a route this app does not have.
+      onNavigate={(href) => (/^https?:\/\//.test(href) ? window.location.assign(href) : router.push(href))}
     />
   );
 }

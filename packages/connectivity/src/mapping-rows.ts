@@ -151,6 +151,14 @@ export function ratePlanMappingRows(args: {
   /** Which room types each plan is sold on — `RatePlanRoomType`. */
   sellsOn: (roomTypeId: string, ratePlanId: string) => boolean;
   existing: readonly ExistingRateMapping[];
+  /**
+   * Does a property-wide row actually carry prices on this channel? True for a demo (mock) channel,
+   * whose push accepts it (`indexRateMappings({ allowCatchAll })`); false for every real one, whose
+   * push skips it. Without this the Mapping screen said "6 unmapped · Auto-fix" about a demo channel
+   * whose prices were going out fine — and the channel card and the bell, once they learned to read
+   * this screen's rows, repeated it.
+   */
+  catchAllCounts?: boolean;
 }): RoomScopedMappingRow[] {
   const specific = new Map<string, ExistingRateMapping>();
   const catchAll = new Map<string, ExistingRateMapping>();
@@ -201,8 +209,8 @@ export function ratePlanMappingRows(args: {
         rows.push({
           id: null, roomTypeId: rt.id, roomTypeName: rt.name, ratePlanId: rp.id, ratePlanName: rp.name,
           externalId: null,
-          status: "unconfirmed",
-          unmapped: true,
+          status: args.catchAllCounts ? "complete" : "unconfirmed",
+          unmapped: !args.catchAllCounts,
           fromCatchAll: true,
           inheritedExternalId: inherited.externalId,
         });

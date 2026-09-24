@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, displayedRate, rateSourceNote, toResolvablePlan, type PriceLookup, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type SetupFacts, type ProductName } from "@revio/core";
+import { CAPABILITY_ERROR_CODE, dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, displayedRate, rateSourceNote, toResolvablePlan, type PriceLookup, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type SetupFacts, type ProductName } from "@revio/core";
 import { collidingExternalIds, describeStructureGap, mappingRows, ratePlanMappingRows, structureGap } from "@revio/connectivity";
 import { getSession } from "./session";
 
@@ -26,45 +26,51 @@ export interface NotifItem { text: string; href: string; tone: "danger" | "warni
 export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
   const property = await getProperty();
   const since = new Date(Date.now() - DAY);
-  const [openErrors, unmappedRates, unmappedRooms, failed] = await Promise.all([
-    prisma.errorItem.count({ where: { propertyId: property.id, resolved: false } }),
-    prisma.channelRatePlanMapping.count({ where: { tenantId: property.tenantId, status: { not: "complete" } } }),
-    prisma.channelRoomTypeMapping.count({ where: { tenantId: property.tenantId, status: { not: "complete" } } }),
+  const [openErrors, failed, channels] = await Promise.all([
+    /*
+     * ⚠️ Channel LIMITATIONS are not errors — the Sync Center says so in as many words and counts
+     * them in their own box. The bell counted them as "open errors" in red, so a hotel whose only
+     * items were "Expedia does not support CTD" was told something was broken.
+     */
+    prisma.errorItem.count({ where: { propertyId: property.id, resolved: false, code: { not: CAPABILITY_ERROR_CODE } } }),
     prisma.syncEvent.count({ where: { propertyId: property.id, status: "failed", createdAt: { gte: since } } }),
+    prisma.channel.findMany({ where: { propertyId: property.id, status: { not: "disconnected" } }, select: { code: true, name: true } }),
   ]);
-  const unmapped = unmappedRates + unmappedRooms;
   const items: NotifItem[] = [];
-  if (openErrors > 0) items.push({ text: `${openErrors} open error${openErrors === 1 ? "" : "s"}`, href: "/sync", tone: "danger" });
+  // The Errors tab, not the Activity feed: the item promises errors, so it opens on them.
+  if (openErrors > 0) items.push({ text: `${openErrors} open error${openErrors === 1 ? "" : "s"}`, href: "/sync?tab=errors", tone: "danger" });
   if (failed > 0) items.push({ text: `${failed} sync failure${failed === 1 ? "" : "s"} (24h)`, href: "/sync", tone: "danger" });
-  if (unmapped > 0) items.push({ text: `${unmapped} unmapped product${unmapped === 1 ? "" : "s"}`, href: "/mapping", tone: "warning" });
 
   /*
-   * Products that never reached the channel manager AT ALL — a different question from the two
-   * counts above, and the reason they cannot answer it.
+   * ⚠️ Mapping gaps are the MAPPING SCREEN's rows, per channel — not a count of mapping rows.
    *
-   * Provisioning is one-shot, so a room type or rate plan added afterwards is created locally, made
-   * sellable, and never sent. It therefore has no mapping row, and `status != complete` counts rows:
-   * no row, no count, and the hotel is shown green while it sells a room no OTA can see.
-   *
-   * Only asked when a channel actually exists. A hotel that has not connected one yet is not
-   * failing to sync anything, and warning it would be the same false signal in the other direction.
+   * This counted every `status != complete` row across the whole ACCOUNT: every property, every
+   * channel including disconnected ones, switched-off plans and leftover property-wide rows. A real
+   * hotel was told "3 unmapped products", clicked, and read "everything mapped" — because the screen
+   * shows active products on one channel of this property, and none of the three were among them.
+   * The bell now asks the screen it links to, and links to the channel that has the gap.
    */
-  const channelCount = await prisma.channel.count({ where: { propertyId: property.id } });
-  if (channelCount > 0) {
-    const [roomTypes, ratePlans, roomRows, rateRows] = await Promise.all([
-      prisma.roomType.findMany({ where: { propertyId: property.id }, select: { id: true, name: true, active: true } }),
-      prisma.ratePlan.findMany({ where: { propertyId: property.id }, select: { id: true, name: true, active: true, priceLogic: true } }),
-      prisma.channelRoomTypeMapping.findMany({ where: { channel: { propertyId: property.id } }, select: { roomTypeId: true } }),
-      prisma.channelRatePlanMapping.findMany({ where: { channel: { propertyId: property.id } }, select: { ratePlanId: true } }),
-    ]);
-    const gap = structureGap({
-      roomTypes,
-      ratePlans,
-      mappedRoomTypeIds: roomRows.map((r) => r.roomTypeId),
-      mappedRatePlanIds: rateRows.map((r) => r.ratePlanId),
-    });
-    const sentence = describeStructureGap(gap);
-    if (sentence) items.push({ text: sentence, href: "/mapping", tone: "danger" });
+  // One sentence per distinct gap, not per channel: a room never sent is never sent to all of them,
+  // and four identical lines for one room is noise. The channel is named only when they differ.
+  const neverSentBy = new Map<string, { sentence: string; href: string; channels: string[] }>();
+  for (const ch of channels) {
+    const mapping = await getMapping(ch.code);
+    const href = `/mapping?ch=${encodeURIComponent(ch.code)}`;
+    if (mapping.neverSent.length > 0) {
+      const sentence = describeStructureGap({ neverSent: mapping.neverSent, hasGap: true });
+      if (sentence) {
+        const seen = neverSentBy.get(sentence);
+        if (seen) seen.channels.push(ch.name);
+        else neverSentBy.set(sentence, { sentence, href, channels: [ch.name] });
+      }
+    }
+    const open = [...mapping.roomTypeMappings, ...mapping.ratePlanMappings]
+      .filter((r) => r.status !== "complete" && r.status !== "never_sent").length;
+    if (open > 0) items.push({ text: `${open} product${open === 1 ? "" : "s"} not linked to ${ch.name}`, href, tone: "warning" });
+  }
+  for (const g of neverSentBy.values()) {
+    const prefix = neverSentBy.size > 1 ? `${g.channels.join(", ")}: ` : "";
+    items.push({ text: `${prefix}${g.sentence}`, href: g.href, tone: "danger" });
   }
 
   return { items, count: items.length };
@@ -925,9 +931,7 @@ export async function getChannels() {
       return {
         channelId: c.id,
         stuckBookings,
-        // A property-wide row ("to confirm") is pushed through on a demo channel and skipped on a real
-        // one (`indexRateMappings`), so it counts as linked only where it actually carries prices.
-        complete: rows.filter((r) => r.status === "complete" || (c.connectivityMode === "mock" && r.status === "unconfirmed")).length,
+        complete: rows.filter((r) => r.status === "complete").length,
         total: rows.length,
         verifiedAt: lastVerified?.createdAt ?? null,
         bookingsReceived,
@@ -1091,6 +1095,7 @@ export async function getMapping(channelCode?: string) {
       id: m.id, ratePlanId: m.ratePlanId, roomTypeId: m.roomTypeId,
       externalId: m.externalRateId, status: m.status,
     })),
+    catchAllCounts: channel.connectivityMode === "mock",
   });
 
   const ratePlanMappings: MappedRateRow[] = scopedRows.map((r) => ({

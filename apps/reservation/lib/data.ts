@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { todayInTimeZone } from "@revio/core";
 import { quoteStay } from "@revio/db";
-import { computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
+import { productOrigin } from "@revio/ui/product-links";
+import { reservationSegments, segmentHref } from "./segments";
+import { CAPABILITY_ERROR_CODE, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
   matchDuplicates, normalisePhone, type DuplicateCandidate,
   resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
   ratePlanRows, displayedRate, rateSourceNote, toResolvablePlan,
@@ -84,17 +86,31 @@ export interface NotifItem { text: string; href: string; tone: "danger" | "warni
 export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
   const property = await getProperty();
   const today = todayInTz(property.timezone);
-  const start = new Date(`${today}T00:00:00Z`);
-  const next = new Date(start.getTime() + 86_400_000);
-  const [openErrors, arrivals, departures] = await Promise.all([
-    prisma.errorItem.count({ where: { propertyId: property.id, resolved: false } }),
-    prisma.reservationLine.count({ where: { checkIn: { gte: start, lt: next }, reservation: { propertyId: property.id, status: { in: ["confirmed", "modified"] } } } }),
-    prisma.reservationLine.count({ where: { checkOut: { gte: start, lt: next }, reservation: { propertyId: property.id, status: { in: ["confirmed", "modified"] } } } }),
+  const [openErrors, counts] = await Promise.all([
+    // Channel limitations are not errors — RevioLink's Sync Center counts them apart. See the CM bell.
+    prisma.errorItem.count({ where: { propertyId: property.id, resolved: false, code: { not: CAPABILITY_ERROR_CODE } } }),
+    /*
+     * ⚠️ The tabs' own counts. This counted reservation LINES (a two-room booking was two
+     * arrivals) with a different status set, and linked to the unfiltered list — so "3 arrivals
+     * today" opened on every reservation in the hotel, beside a tab reading "Arriving today 2".
+     */
+    getReservationSegmentCounts(today),
   ]);
+  const seg = Object.fromEntries(reservationSegments(today).map((x) => [x.key, x]));
   const items: NotifItem[] = [];
-  if (openErrors > 0) items.push({ text: `${openErrors} open error${openErrors === 1 ? "" : "s"}`, href: "/distribution", tone: "danger" });
-  if (arrivals > 0) items.push({ text: `${arrivals} arrival${arrivals === 1 ? "" : "s"} today`, href: "/reservations", tone: "info" });
-  if (departures > 0) items.push({ text: `${departures} departure${departures === 1 ? "" : "s"} today`, href: "/reservations", tone: "info" });
+  /*
+   * ⚠️ Errors live in RevioLink's Sync Center, and this pointed at /distribution — a page that
+   * holds no errors and says so ("lives in RevioLink → Sync Center"), with a link to this app's
+   * own home. Now it opens the Errors tab itself. A hotel without RevioLink has no channels and so
+   * no distribution errors to be told about.
+   */
+  if (openErrors > 0 && property.tenant.hasChannelManager) {
+    items.push({ text: `${openErrors} open channel error${openErrors === 1 ? "" : "s"} — in RevioLink`, href: `${productOrigin("cm")}/sync?tab=errors`, tone: "danger" });
+  }
+  const arriving = counts.arriving ?? 0;
+  const departing = counts.departing ?? 0;
+  if (arriving > 0 && seg.arriving) items.push({ text: `${arriving} arrival${arriving === 1 ? "" : "s"} today`, href: segmentHref(seg.arriving), tone: "info" });
+  if (departing > 0 && seg.departing) items.push({ text: `${departing} departure${departing === 1 ? "" : "s"} today`, href: segmentHref(seg.departing), tone: "info" });
   return { items, count: items.length };
 }
 

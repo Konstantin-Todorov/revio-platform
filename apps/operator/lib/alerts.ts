@@ -97,7 +97,8 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
    * go onto another. Compared against what the channel itself said, recorded nightly.
    */
   const rateMaps = await prisma.channelRatePlanMapping.findMany({
-    where: { catalogueCheckedAt: { not: null }, externalRateId: { not: null }, roomTypeId: { not: null } },
+    // A disconnected channel publishes nothing — same rule as the property_missing alert above.
+    where: { catalogueCheckedAt: { not: null }, externalRateId: { not: null }, roomTypeId: { not: null }, channel: { status: { not: "disconnected" } } },
     select: {
       channelId: true, roomTypeId: true, externalRateId: true, externalRoomIdSeen: true, catalogueCheckedAt: true,
       ratePlan: { select: { name: true, active: true } }, roomType: { select: { name: true } },
@@ -176,7 +177,7 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
    * `soon`, not `act`: it is no longer doing damage. It is a thing to tidy before it can.
    */
   const staleMaps = await prisma.channelRatePlanMapping.findMany({
-    where: { externalRateId: { not: null }, ratePlan: { active: false } },
+    where: { externalRateId: { not: null }, ratePlan: { active: false }, channel: { status: { not: "disconnected" } } },
     select: {
       channelId: true, ratePlan: { select: { name: true, active: true } }, roomType: { select: { name: true } },
       channel: { select: { name: true, property: { select: { name: true, tenant: { select: { name: true } } } } } },
