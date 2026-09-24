@@ -164,10 +164,12 @@ least 20 September**: Ventsi Group's reads `catalogueStatus = property_missing` 
 property Channex has deleted. The other, DesManagement 2015's, reads `ok` and last synced today.
 Hotel Sofia Group's is `channex_sandbox`, a different account, and is not billed.
 
-**All THIRTEEN scheduled jobs run.** <!-- status: count jobs 13 --> *Checked at `/api/health/jobs` on 2026-09-22, every one `ok`
+**FOURTEEN scheduled jobs.** <!-- status: count jobs 14 --> *Thirteen checked at `/api/health/jobs` on 2026-09-22, every one `ok`
 and between 201 and 717 seconds old:* `hold-expiry` · `pickup-snapshot` · `channex-pull` ·
 `arrivals-digest` · `auto-assign` · `auto-close-day` · `waitlist-sweep` · `trial-sweep` ·
-`support-inbox` · `mapping-audit` · `invoice-run` · `operator-alerts` · `demo-refresh`.
+`support-inbox` · `mapping-audit` · `invoice-run` · `operator-alerts` · `demo-refresh`. The fourteenth,
+`guest-mail` (2026-09-25 — "Before arrival" / "After departure", for hotels that switch them on), is
+**not yet seen running in production**; check it at the same endpoint after the deploy.
 
 ⚠️ This said **nine**, then **ten**. Four jobs were added and the number was never moved. It is now
 the same number `jobs-lint` asserts, so the two cannot drift apart again without CI failing.

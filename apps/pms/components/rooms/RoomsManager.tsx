@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Plus, Trash2, Wand2, ChevronDown, ChevronUp, SlidersHorizontal, Link2, TriangleAlert, History, Layers, Pencil, X } from "lucide-react";
+import { Plus, Trash2, Wand2, ChevronDown, SlidersHorizontal, Link2, TriangleAlert, History, Layers, Pencil, X } from "lucide-react";
 import { StatusPill } from "@/components/ui/primitives";
 import { HK_TONE, type HkStatus } from "@/lib/hk-meta";
 import { fill } from "@revio/ui/i18n";
@@ -18,7 +18,8 @@ export type RoomsManagerStrings = {
   start: string; howMany: string; generating: string; generate: string; generateNote: string;
   floors: RoomsStrings["floors"];
 };
-import { createUnit, generateUnits, deleteUnit, updateUnit, setUnitsFloor, removeFloor, renameFloor, moveFloor } from "@/lib/actions-units";
+import { createUnit, generateUnits, deleteUnit, updateUnit, setUnitsFloor, removeFloor, renameFloor, reorderFloors } from "@/lib/actions-units";
+import { SortableList } from "@revio/ui/sortable";
 
 import { SubmitButton } from "@revio/ui/submit-button";
 type Unit = { id: string; label: string; floor: string | null; hkStatus: HkStatus; features: string[]; connectingUnitIds: string[] };
@@ -116,14 +117,16 @@ function FloorSelect({
 }
 
 /** One floor's row: its rooms, and the two things you can do to a floor — rename it, or remove it. */
-function FloorRow({ floor, rooms, t, count, first, last }: {
+function FloorRow({ floor, rooms, t, count, handle }: {
   floor: string; rooms: { id: string; label: string }[]; t: RoomsStrings["floors"]; count: (n: number) => string;
-  first: boolean; last: boolean;
+  /** The drag handle — the order floors appear in everywhere: here, the calendar, the housekeeping board. */
+  handle: React.ReactNode;
 }) {
   const [renaming, setRenaming] = useState(false);
   const name = floorName(floor, t);
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 pl-2 pr-4">
+      {handle}
       {renaming ? (
         <form action={async (fd) => { await renameFloor(fd); setRenaming(false); }} className="flex w-full items-center gap-2 sm:w-auto">
           <input type="hidden" name="floor" value={floor} />
@@ -145,26 +148,6 @@ function FloorRow({ floor, rooms, t, count, first, last }: {
       </span>
       {!renaming && (
         <span className="ml-auto flex shrink-0 items-center gap-0.5">
-          {/* The order floors appear in everywhere — here, the calendar, the housekeeping board. */}
-          {(["up", "down"] as const).map((step) => {
-            const off = step === "up" ? first : last;
-            const label = fill(step === "up" ? t.moveUp : t.moveDown, { floor: name });
-            return (
-              <form key={step} action={moveFloor}>
-                <input type="hidden" name="floor" value={floor} />
-                <input type="hidden" name="step" value={step} />
-                <button
-                  type="submit"
-                  disabled={off}
-                  aria-label={label}
-                  title={label}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-700 disabled:opacity-30 disabled:hover:bg-transparent"
-                >
-                  {step === "up" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </button>
-              </form>
-            );
-          })}
           <button
             type="button"
             onClick={() => setRenaming(true)}
@@ -190,7 +173,7 @@ function FloorRow({ floor, rooms, t, count, first, last }: {
           </form>
         </span>
       )}
-    </li>
+    </div>
   );
 }
 
@@ -243,11 +226,19 @@ function FloorsPanel({ units, floors, t }: { units: (Unit & { typeName: string }
         {floors.length === 0 && (
           <li className="px-4 py-3 text-[12.5px] text-ink-500">{t.empty}</li>
         )}
-        {floors.map((f, i) => (
-          <FloorRow key={f} floor={f} rooms={byFloor.get(f) ?? []} t={t} count={count} first={i === 0} last={i === floors.length - 1} />
-        ))}
+        {floors.length > 0 && (
+          <li>
+            <SortableList
+              items={floors.map((f) => ({ id: f }))}
+              className="divide-y divide-surface-border/70"
+              handleLabel={(f) => fill(t.dragAria, { floor: floorName(f.id, t) })}
+              onReorder={(order) => reorderFloors(order)}
+              render={(f, handle) => <FloorRow floor={f.id} rooms={byFloor.get(f.id) ?? []} t={t} count={count} handle={handle} />}
+            />
+          </li>
+        )}
         {unassigned.length > 0 && (
-          <li className="flex flex-wrap items-baseline gap-x-3 gap-y-1 bg-warning-50/50 px-4 py-2.5">
+          <li className="flex flex-wrap items-baseline gap-x-3 gap-y-1 bg-warning-50/50 py-2.5 pl-11 pr-4">
             <span className="w-28 shrink-0 text-[13px] font-semibold text-warning-700">{t.noFloor}</span>
             <span className="w-16 shrink-0 text-[11.5px] text-ink-400">{count(unassigned.length)}</span>
             <span className="flex min-w-0 basis-full flex-wrap gap-1 sm:flex-1 sm:basis-0">

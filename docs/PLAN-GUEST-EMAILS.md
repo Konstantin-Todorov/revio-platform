@@ -90,3 +90,45 @@ pre-arrival and thank-you on the jobs runner.
    ask them, or switch? — recommended: default for new, ask the existing ones.
 4. Build order: **3 → C (CRS confirmations) → A+B → D** — recommended, because fault 3 is a visible
    bug on the live booking page and C is the biggest gap for a CRS-only hotel.
+
+---
+
+## 6. Who sends what — checked for duplicates and gaps (2026-09-25)
+
+The founder asked: *do the emails RevioLink sends overlap with RevioCRS's or RevioPMS's; with one
+product, does every needed email still arrive; with all three, is nobody mailed the same thing twice?*
+Read from the code, event by event:
+
+| Event | Guest receives | Team receives | With all three products |
+| --- | --- | --- | --- |
+| Booking on Booking.com / Expedia | nothing from us — **the OTA confirms**; a second confirmation reads as a second booking | "N new bookings" — **only if the hotel runs RevioLink alone** (`deliverNewBookings`); with RevioCRS or RevioPMS it is on their screens instead | one import, no mail to the guest, no mail to the team |
+| Booking on the hotel's booking page | confirmation (RevioDirect) | nothing — it is in RevioCRS | once |
+| Booking typed into RevioCRS | confirmation (tick, on by default) | — | once |
+| Change / cancellation in RevioCRS | "changed" / "cancelled" (tick) — never for an OTA booking | — | once |
+| Walk-in, room move, extension in RevioPMS | nothing (the guest is at the desk) | — | — |
+| Check-out in RevioPMS | the bill (tick; one-click check-out sends it when there is an address) | — | once |
+| 3 days before arrival / morning after departure | "Before arrival" / "After departure" — **off until the hotel switches them on**; the job stamps each stay once | — | once, whichever product the booking came from |
+| A booking that could not be imported | — | "A booking is not in your calendar" (once per failed booking) | once |
+| Daily arrivals list | — | at the hotel's chosen time, once a day | once |
+
+**One gap found and fixed:** bookings that arrived by the **Channex webhook** (seconds) never
+produced the "new bookings" email — the webhook imported them, so the five-minute pull found nothing
+new and sent nothing. A RevioLink-only hotel with the webhook on was never told about a booking. All
+three import paths now call one function, `apps/channel-manager/lib/booking-delivery.ts`. The manual
+"pull now" and the scheduled pull also used to word the same email two different ways.
+
+**By design, not a gap:** a hotel running RevioCRS or RevioPMS gets no "new booking" email — it sees
+the booking in the product it works in, and the email would be the duplicate. If a hotel ever asks
+for both, it is a setting to add, not a default to change.
+
+## 7. Languages — the rule (see `packages/ui/CLAUDE.md` § "Bulgarian is the first translation")
+
+- **Guests** get the hotel's guest language (Settings → Guest emails). Base is English; a new hotel
+  starts in English. *Proposed, not built:* start a new property in the language of the person who
+  creates it — a hotel set up by someone working in Bulgarian begins with Bulgarian guest mail, and
+  one set up in English keeps English.
+- **The team** gets its own language: `teamLocale` — the reader's panel language where the address is
+  a user's, else the owner's. New bookings, the arrivals list and import failures follow it.
+- **The panel** is each person's own (`User.locale`), and the Guest emails screen says so where the
+  product offers the switch — the list shows each email's real subject in the guests' language, so
+  the two are never confused.

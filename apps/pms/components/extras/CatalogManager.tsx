@@ -1,17 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronUp, GlassWater, Pencil, Plus, Sparkles, Utensils, Wine, X } from "lucide-react";
+import { GlassWater, Pencil, Plus, Sparkles, Utensils, Wine, X } from "lucide-react";
 import { fill } from "@revio/ui/i18n";
 import { SubmitButton } from "@revio/ui/submit-button";
-import { createPosItem, deletePosItem, movePosItem, updatePosItem } from "@/lib/actions-pos";
+import { SortableList } from "@revio/ui/sortable";
+import { createPosItem, deletePosItem, reorderPosItems, updatePosItem } from "@/lib/actions-pos";
 
 /** Strings only — a client component takes no functions. Worded on the server. */
 export type CatalogStrings = {
   name: string; namePlaceholder: string; outlet: string; type: string; item: string; extra: string;
   price: string; adding: string; add: string; active: string; activeHint: string; save: string; cancel: string;
   itemsOne: string; itemsMany: string; addTo: string; emptyOutlet: string; edit: string; hidden: string;
-  moveUp: string; moveDown: string; deleteConfirm: string; delete: string; kindHint: string;
+  dragAria: string; deleteConfirm: string; delete: string; kindHint: string;
   outlets: Record<string, string>;
 };
 
@@ -62,13 +63,13 @@ function ItemFields({ t, outlets, item, outlet }: { t: CatalogStrings; outlets: 
   );
 }
 
-function ItemRow({ item, t, outlets, first, last }: { item: CatalogItem; t: CatalogStrings; outlets: readonly string[]; first: boolean; last: boolean }) {
+function ItemRow({ item, t, outlets, handle }: { item: CatalogItem; t: CatalogStrings; outlets: readonly string[]; handle: React.ReactNode }) {
   const [editing, setEditing] = useState(false);
   const iconBtn = "flex h-8 w-8 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-700 disabled:opacity-30 disabled:hover:bg-transparent";
 
   if (editing) {
     return (
-      <li className="bg-surface-muted px-4 py-3">
+      <div className="bg-surface-muted px-4 py-3">
         <form action={async (fd) => { await updatePosItem(fd); setEditing(false); }} className="space-y-3">
           <input type="hidden" name="id" value={item.id} />
           <ItemFields t={t} outlets={outlets} item={item} outlet={item.outlet} />
@@ -85,12 +86,13 @@ function ItemRow({ item, t, outlets, first, last }: { item: CatalogItem; t: Cata
             </span>
           </div>
         </form>
-      </li>
+      </div>
     );
   }
 
   return (
-    <li className={`flex items-center gap-2 px-4 py-2.5 ${item.active ? "" : "bg-surface-muted/50"}`}>
+    <div className={`flex items-center gap-2 py-2.5 pl-2 pr-4 ${item.active ? "" : "bg-surface-muted/50"}`}>
+      {handle}
       <span className="min-w-0 flex-1">
         <span className={`block truncate text-[13.5px] font-semibold ${item.active ? "text-ink-900" : "text-ink-400"}`}>{item.name}</span>
         <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-ink-400">
@@ -100,18 +102,6 @@ function ItemRow({ item, t, outlets, first, last }: { item: CatalogItem; t: Cata
       </span>
       <span className={`tnum shrink-0 text-[13.5px] font-bold ${item.active ? "text-ink-900" : "text-ink-400"}`}>{item.price}</span>
       <span className="flex shrink-0 items-center">
-        {(["up", "down"] as const).map((step) => {
-          const label = fill(step === "up" ? t.moveUp : t.moveDown, { item: item.name });
-          return (
-            <form key={step} action={movePosItem} className="hidden sm:block">
-              <input type="hidden" name="id" value={item.id} />
-              <input type="hidden" name="step" value={step} />
-              <button type="submit" disabled={step === "up" ? first : last} aria-label={label} title={label} className={iconBtn}>
-                {step === "up" ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
-            </form>
-          );
-        })}
         <button type="button" onClick={() => setEditing(true)} aria-label={fill(t.edit, { item: item.name })} title={fill(t.edit, { item: item.name })} className={iconBtn}>
           <Pencil className="h-3.5 w-3.5" />
         </button>
@@ -128,7 +118,7 @@ function ItemRow({ item, t, outlets, first, last }: { item: CatalogItem; t: Cata
           </button>
         </form>
       </span>
-    </li>
+    </div>
   );
 }
 
@@ -184,11 +174,13 @@ export function CatalogManager({ items, outlets, t }: { items: CatalogItem[]; ou
             {list.length === 0 ? (
               <p className="px-4 py-3 text-[12.5px] text-ink-400">{t.emptyOutlet}</p>
             ) : (
-              <ul className="divide-y divide-surface-border/70">
-                {list.map((it, i) => (
-                  <ItemRow key={it.id} item={it} t={t} outlets={outlets} first={i === 0} last={i === list.length - 1} />
-                ))}
-              </ul>
+              <SortableList
+                items={list}
+                className="divide-y divide-surface-border/70"
+                handleLabel={(it) => fill(t.dragAria, { item: it.name })}
+                onReorder={(ids) => reorderPosItems(outlet, ids)}
+                render={(it, handle) => <ItemRow item={it} t={t} outlets={outlets} handle={handle} />}
+              />
             )}
           </section>
         );

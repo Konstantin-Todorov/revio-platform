@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { pullChannel, reimportChannelBookings as sharedReimport, fullSyncChannel, pauseChannel, resumeChannel, disconnectChannel, reconnectChannel } from "./connectivity";
-import { sendEmail, deliveryRecipients } from "@revio/email";
-import { getSession } from "./session";
+import { sendEmail } from "@revio/email";
+import { deliverNewBookings } from "./booking-delivery";
 import type { PushField, PushScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 import { flashError, setFlash } from "@revio/ui/flash";
@@ -552,40 +552,13 @@ export async function pullChannelBookings(fd: FormData): Promise<void> {
   });
   // Reservation delivery (CM-UPDATES-V1): when the property has no PMS/CRS taking delivery,
   // new channel bookings are emailed to the configured reservation address(es).
+  // "N new bookings" to a hotel that runs RevioLink alone — the same function as the scheduled pull
+  // and the Channex webhook (`deliverNewBookings`), so the three can never disagree again.
   if (outcome.ok && outcome.imported > 0) {
-    const session = await getSession();
-    const takesDeliveryElsewhere = session?.entitlements.reservation || session?.entitlements.pms;
-    const property = await prisma.property.findUnique({ where: { id: propertyId } });
-    const to = property ? deliveryRecipients(property, "both") : [];
-    if (!takesDeliveryElsewhere && property && to.length > 0) {
-      const fresh = await prisma.reservation.findMany({
-        where: { propertyId, channelId },
-        include: { channel: true, lines: { include: { roomType: true } } },
-        orderBy: { importedAt: "desc" },
-        take: outcome.imported,
-      });
-      const lines = fresh.map((r) => {
-        const l = r.lines[0];
-        return `#${r.externalId ?? r.id.slice(-6)} · ${r.guestName} · ${l ? `${l.roomType.name} ${l.checkIn.toISOString().slice(0, 10)} → ${l.checkOut.toISOString().slice(0, 10)}` : ""} · ${(r.totalMinor / 100).toFixed(2)} ${r.currency}`;
-      });
-      const mail = {
-        preview: `${fresh.length} just imported for ${property.name}.`,
-        heading: `${fresh.length} new reservation${fresh.length > 1 ? "s" : ""}`,
-        product: "RevioLink",
-        blocks: [
-          { p: `Just imported from ${fresh[0]?.channel?.name ?? "a channel"} for ${property.name}.` },
-          { list: lines },
-        ],
-      };
-      const res = await sendEmail({
-        to,
-        subject: `${fresh.length} new reservation${fresh.length > 1 ? "s" : ""} — ${property.name}`,
-        text: renderSystemEmailText(mail),
-        html: renderSystemEmail(mail),
-      });
+    const delivered = await deliverNewBookings(channelId, outcome.imported);
+    if (delivered.to.length > 0) {
       await logAudit(propertyId, tenantId, {
-        entity: "Reservation delivery", field: "email",
-        newValue: res.ok ? `${fresh.length} booking(s) emailed to ${to.join(", ")} (${res.mode})` : `failed: ${res.error}`,
+        entity: "Reservation delivery", field: "email", newValue: `${delivered.note} → ${delivered.to.join(", ")}`,
       });
     }
   }

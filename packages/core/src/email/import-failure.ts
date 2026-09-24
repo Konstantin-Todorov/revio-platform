@@ -26,7 +26,7 @@
  * channel, which is exactly what happened.
  */
 
-import { renderSystemEmail, renderSystemEmailText } from "./system-shell.js";
+import { renderSystemEmail, renderSystemEmailText, type SystemEmailLocale } from "./system-shell.js";
 import type { AuthEmail } from "./auth-emails.js";
 
 export interface ImportFailureArgs {
@@ -46,57 +46,77 @@ export interface ImportFailureArgs {
   unmapped: string;
   /** Straight to the mapping screen. Built by the caller — only it knows its own origin. */
   mappingUrl: string;
+  /** The hotel team's language (`teamLocale` in @revio/db). English otherwise. */
+  locale?: string;
 }
 
-export function importFailureEmail({
-  hotelName,
-  channelName,
-  guestName,
-  reference,
-  total,
-  unmapped,
-  mappingUrl,
-}: ImportFailureArgs): AuthEmail {
-  const args = {
-    preview: `${channelName} confirmed a booking we could not add to your calendar — the room is still on sale.`,
+/** The copy, one entry per language — a new language is a new entry, never a branch. */
+const COPY: Record<SystemEmailLocale, (a: ImportFailureArgs) => { subject: string; preview: string; heading: string; lead: string; labels: [string, string, string, string]; why: string; action: string; calm: string; note: string }> = {
+  en: (a) => ({
+    subject: `Action needed — a ${a.channelName} booking is not in your calendar`,
+    preview: `${a.channelName} confirmed a booking we could not add to your calendar — the room is still on sale.`,
     heading: "A booking is not in your calendar",
+    lead:
+      `${a.channelName} has confirmed a booking to a guest, and ${a.hotelName} does not yet have a ` +
+      `stay for it. Two things follow: nobody is holding that room, so it can still be sold ` +
+      `again — and the guest believes they have it.`,
+    labels: ["Guest", "Reference", "Total", "Sold as"],
+    why:
+      `The room type or rate plan it was sold under is not mapped for ${a.channelName} yet, so we ` +
+      `could not tell which of your rooms it meant. We did not guess — guessing is how two ` +
+      `guests arrive for one room.`,
+    action: "Finish the mapping",
+    calm:
+      `Nothing has been lost. Once the mapping is finished, press "Re-import bookings" on the ` +
+      `Channels screen and it comes in with its dates and guest details. ` +
+      `(Re-sync only sends prices out — it will not bring a booking back.)`,
+    note: "You are getting this because a booking arrived that we could not write down. It is not a routine notification.",
+  }),
+  bg: (a) => ({
+    subject: `Нужно е действие — резервация от ${a.channelName} не е в календара Ви`,
+    preview: `${a.channelName} потвърди резервация, която не успяхме да добавим в календара Ви — стаята все още се продава.`,
+    heading: "Резервация не е в календара Ви",
+    lead:
+      `${a.channelName} потвърди резервация на гост, а ${a.hotelName} все още няма престой за нея. ` +
+      `От това следват две неща: никой не пази тази стая, така че тя може да бъде продадена отново — ` +
+      `а гостът смята, че я има.`,
+    labels: ["Гост", "Номер", "Сума", "Продадена като"],
+    why:
+      `Типът стая или ценовият план, по който е продадена, още не е свързан за ${a.channelName}, така че ` +
+      `не можахме да разберем коя от стаите Ви е. Не гадаехме — от гадаене двама гости пристигат за една стая.`,
+    action: "Довършете свързването",
+    calm:
+      `Нищо не е загубено. Щом свързването е готово, натиснете „Повторно изтегляне на резервациите“ в ` +
+      `екрана „Канали“ и резервацията влиза с датите и данните на госта. ` +
+      `(Повторната синхронизация само изпраща цени — тя няма да върне резервация.)`,
+    note: "Получавате това, защото пристигна резервация, която не успяхме да запишем. Това не е рутинно известие.",
+  }),
+};
+
+export function importFailureEmail(a: ImportFailureArgs): AuthEmail {
+  const locale: SystemEmailLocale = a.locale === "bg" ? "bg" : "en";
+  const c = COPY[locale](a);
+  const args = {
+    locale,
+    preview: c.preview,
+    heading: c.heading,
     blocks: [
-      {
-        p:
-          `${channelName} has confirmed a booking to a guest, and ${hotelName} does not yet have a ` +
-          `stay for it. Two things follow: nobody is holding that room, so it can still be sold ` +
-          `again — and the guest believes they have it.`,
-      },
+      { p: c.lead },
       {
         list: [
-          `Guest · ${guestName}`,
-          `Reference · ${reference}`,
-          `Total · ${total}`,
-          ...(unmapped ? [`Sold as · ${unmapped}`] : []),
+          `${c.labels[0]} · ${a.guestName}`,
+          `${c.labels[1]} · ${a.reference}`,
+          `${c.labels[2]} · ${a.total}`,
+          ...(a.unmapped ? [`${c.labels[3]} · ${a.unmapped}`] : []),
         ],
       },
-      {
-        p:
-          `The room type or rate plan it was sold under is not mapped for ${channelName} yet, so we ` +
-          `could not tell which of your rooms it meant. We did not guess — guessing is how two ` +
-          `guests arrive for one room.`,
-      },
-      { action: { label: "Finish the mapping", url: mappingUrl } },
-      {
-        // The reassurance is load-bearing: the hotel that hit this disconnected its channel because
-        // it believed bookings were being dropped.
-        p:
-          `Nothing has been lost. Once the mapping is finished, press "Re-import bookings" on the ` +
-          `Channels screen and it comes in with its dates and guest details. ` +
-          `(Re-sync only sends prices out — it will not bring a booking back.)`,
-      },
-      { note: "You are getting this because a booking arrived that we could not write down. It is not a routine notification." },
+      { p: c.why },
+      { action: { label: c.action, url: a.mappingUrl } },
+      // The reassurance is load-bearing: the hotel that hit this disconnected its channel because
+      // it believed bookings were being dropped.
+      { p: c.calm },
+      { note: c.note },
     ],
   };
-
-  return {
-    subject: `Action needed — a ${channelName} booking is not in your calendar`,
-    text: renderSystemEmailText(args),
-    html: renderSystemEmail(args),
-  };
+  return { subject: c.subject, text: renderSystemEmailText(args), html: renderSystemEmail(args) };
 }

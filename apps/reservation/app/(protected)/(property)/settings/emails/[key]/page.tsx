@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
-import { EMAIL_LOCALES, EMAIL_SENT_BY, EMAIL_TEMPLATE_BY_KEY, defaultsFor, sampleDetails } from "@revio/core";
+import { EMAIL_LOCALES, EMAIL_OPT_IN, EMAIL_TEMPLATE_BY_KEY, defaultsFor, emailStatus, sampleDetails } from "@revio/core";
 import { brandOf } from "@revio/email";
 import { EmailEditor } from "@revio/ui/email-editor";
 import { guestEmailsStrings } from "@revio/ui/guest-emails-strings";
 import { translate } from "@revio/ui/i18n";
 import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/session";
 import { saveEmailTemplate, resetEmailTemplate } from "@/lib/actions-email";
 import { getProperty } from "@/lib/data";
 
@@ -30,7 +31,15 @@ export default async function EmailEditorPage({
   const rows = await prisma.emailTemplate.findMany({ where: { propertyId: property.id, key } });
   const row = rows.find((r) => r.locale === lang) ?? null;
   const fallback = defaultsFor(def!, lang);
-  const words = translate(guestEmailsStrings, "en").templates[key];
+  const ui = translate(guestEmailsStrings, "en");
+  const words = ui.templates[key];
+  const session = await getSession();
+  const status = emailStatus({
+    key,
+    runs: { crs: Boolean(session?.entitlements.reservation), pms: Boolean(session?.entitlements.pms), bookingPage: Boolean(property.bookingEngineEnabled) },
+    switchedOff: row ? !row.enabled : false,
+    switchedOn: Boolean(row?.enabled),
+  });
 
   return (
     /* `key`: switching language is a navigation to the same route, and without a remount the editor
@@ -41,7 +50,7 @@ export default async function EmailEditorPage({
       label={words?.label ?? def!.label}
       description={words?.when ?? def!.description}
       canDisable={def!.canDisable}
-      wired={(EMAIL_SENT_BY[key] ?? []).length > 0}
+      notice={status.kind === "needs" ? ui.status.needsHint[status.needs] : null}
       variables={def!.variables}
       locale={lang}
       locales={EMAIL_LOCALES.map((l) => ({
@@ -50,7 +59,7 @@ export default async function EmailEditorPage({
         edited: rows.some((r) => r.locale === l.key),
         primary: guestLang === l.key,
       }))}
-      enabled={row?.enabled ?? true}
+      enabled={row?.enabled ?? !EMAIL_OPT_IN.has(key)}
       subject={row?.subject ?? fallback.subject}
       body={row?.body ?? fallback.body}
       customised={Boolean(row)}

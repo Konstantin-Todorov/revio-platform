@@ -30,6 +30,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { forSystem } from "@revio/db";
 import { pullChannel, WEBHOOK_SECRET_HEADER } from "@revio/connectivity";
+import { deliverNewBookings } from "@/lib/booking-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +73,10 @@ export async function POST(req: NextRequest) {
   void (async () => {
     for (const c of channels) {
       try {
-        await pullChannel(db, c.id);
+        const outcome = await pullChannel(db, c.id);
+        // The webhook imports first, so the scheduled pull finds nothing new afterwards — this is the
+        // only chance to tell a RevioLink-only hotel about the booking. See `deliverNewBookings`.
+        if (outcome.ok && outcome.imported > 0) await deliverNewBookings(c.id, outcome.imported);
       } catch (e) {
         // A failed pull writes its own SyncEvent. Logged here so a webhook-shaped failure is
         // distinguishable from a cron-shaped one in the service log.

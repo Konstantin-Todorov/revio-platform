@@ -7,7 +7,7 @@
  * inventory (a CRS booking, a PMS OOO / walk-in / check-in) can now call `syncRealChannels(db, propertyId)`
  * and the change reaches Channex immediately — no manual Re-sync in the CM.
  */
-import { forSystem, decryptSecret, forTenant, markBillable, releaseRoomsForCancellation, withChannelPullLock } from "@revio/db";
+import { forSystem, decryptSecret, forTenant, markBillable, releaseRoomsForCancellation, teamLocale, withChannelPullLock } from "@revio/db";
 import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
@@ -1311,6 +1311,8 @@ async function pullChannelNow(
             total: `${(raw.totalMinor / 100).toFixed(2)} ${raw.currency}`,
             unmapped: missing.join("; "),
             mappingUrl: `${publicBaseUrl()}/mapping`,
+            // The team's language: the addresses are the hotel's mailboxes (`teamLocale`).
+            locale: await teamLocale(tenantId, to),
           });
           const sent = await sendEmail({ to, subject: mail.subject, text: mail.text, html: mail.html });
           if (!sent.ok) {

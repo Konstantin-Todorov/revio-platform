@@ -91,3 +91,25 @@ with `fill()`, because most of these are client components and a function cannot
 
 A finished strings module goes in `apps/pms/lib/i18n/coverage.test.ts`, which fails the build if any
 key has no Bulgarian.
+
+## Bulgarian is the first translation, not the last (founder, 2026-09-25)
+
+*"Всичко, което правим (понеже това е първи превод), да го имаме предвид, защото ще имаме и други
+преводи и езици."* The base language is and stays **English**; every other language is laid over it.
+So nothing may be written in a way that only works for two languages:
+
+- **A language is an entry in a table, never a branch.** `Translations<T>` for screens
+  (`{ en, bg, … }`), `Record<locale, …>` for mail copy (`staff-emails.ts`, `import-failure.ts`). No
+  new `if (locale === "bg")`. The older `auth-emails.ts` / `trial-emails.ts` / `stayDetails` still
+  branch — convert them to tables when a third language arrives, or sooner if touched.
+- **The list of languages is one list** — `LOCALES` in `./i18n` for the panel, `EMAIL_LOCALES` in
+  core for guest mail. A screen that offers a language reads the list; it never hard-codes two
+  buttons.
+- **Formatting goes through `Intl` with the locale's tag** (`LOCALE_LABELS[l].intl`), never a
+  hand-written date or number format — a third language then formats itself.
+- **Plurals are worded by the dictionary**, never `n === 1 ? "x" : "xs"` in a component: other
+  languages have more than two forms.
+- **Three languages exist per person, and they are different settings:** the *panel* (`User.locale`,
+  account menu), the *guests'* mail (`Property.defaultLanguage`, Settings → Guest emails), and the
+  *team's* mail (`teamLocale` in `@revio/db` — the reader's own panel language, else the owner's).
+  A screen that shows one of them says which it is.

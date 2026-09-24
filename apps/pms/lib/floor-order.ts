@@ -21,13 +21,3 @@ export function orderFloors(floors: Iterable<string>, saved: readonly string[] =
     return num(a) - num(b) || a.localeCompare(b, undefined, { numeric: true });
   });
 }
-
-/** The order after moving one floor a step up (-1) or down (+1). Saved as the whole list. */
-export function moveFloorInOrder(ordered: readonly string[], floor: string, step: -1 | 1): string[] {
-  const out = [...ordered];
-  const i = out.indexOf(floor);
-  const j = i + step;
-  if (i < 0 || j < 0 || j >= out.length) return out;
-  [out[i], out[j]] = [out[j]!, out[i]!];
-  return out;
-}

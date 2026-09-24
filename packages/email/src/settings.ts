@@ -14,7 +14,7 @@ import { EMAIL_LOCALES, EMAIL_TEMPLATE_BY_KEY, defaultsFor } from "@revio/core";
 /* eslint-disable @typescript-eslint/no-explicit-any -- a structural slice of the Prisma client */
 export interface EmailSettingsDb {
   emailTemplate: {
-    findMany: (args: any) => Promise<{ key: string; locale: string; enabled: boolean }[]>;
+    findMany: (args: any) => Promise<{ key: string; locale: string; enabled: boolean; subject: string }[]>;
     upsert: (args: any) => Promise<unknown>;
     deleteMany: (args: any) => Promise<unknown>;
   };
@@ -25,16 +25,21 @@ export interface EmailSettingsDb {
 
 export const isEmailLocale = (l: string): boolean => EMAIL_LOCALES.some((x) => x.key === l);
 
-/** Every saved row's state, per template, per language — what the list shows beside each email. */
-export async function templateStates(db: EmailSettingsDb, propertyId: string): Promise<
-  Record<string, { edited: string[]; off: string[] }>
-> {
-  const rows = await db.emailTemplate.findMany({ where: { propertyId }, select: { key: true, locale: true, enabled: true } });
-  const out: Record<string, { edited: string[]; off: string[] }> = {};
+/**
+ * Every saved row's state, per template, per language — what the list shows beside each email: which
+ * languages the hotel wrote, which it switched off or on, and its own subject line.
+ */
+export interface TemplateState { edited: string[]; off: string[]; on: string[]; subjects: Record<string, string> }
+export async function templateStates(db: EmailSettingsDb, propertyId: string): Promise<Record<string, TemplateState>> {
+  const rows = await db.emailTemplate.findMany({
+    where: { propertyId }, select: { key: true, locale: true, enabled: true, subject: true },
+  });
+  const out: Record<string, TemplateState> = {};
   for (const r of rows) {
-    const s = (out[r.key] ??= { edited: [], off: [] });
+    const s = (out[r.key] ??= { edited: [], off: [], on: [], subjects: {} });
     s.edited.push(r.locale);
-    if (!r.enabled) s.off.push(r.locale);
+    (r.enabled ? s.on : s.off).push(r.locale);
+    s.subjects[r.locale] = r.subject;
   }
   return out;
 }

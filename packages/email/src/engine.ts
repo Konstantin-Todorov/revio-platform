@@ -1,6 +1,7 @@
 import {
   EMAIL_TEMPLATES,
   EMAIL_TEMPLATE_BY_KEY,
+  EMAIL_OPT_IN,
   renderEmail,
   defaultsFor,
   type EmailBrand,
@@ -166,6 +167,9 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
         })
       : null);
   if (row && !row.enabled) return { ok: true, skipped: true };
+  // An opt-in email (the scheduled ones) sends only once the hotel has switched it on — a saved,
+  // enabled row. With nothing saved it is off, not "our default wording, sent".
+  if (!row && EMAIL_OPT_IN.has(args.key)) return { ok: true, skipped: true };
 
   const fallback = defaultsFor(def, locale);
   const brand = brandOf(property);

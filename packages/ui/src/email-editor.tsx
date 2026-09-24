@@ -17,7 +17,7 @@ import { guestEmailsStrings } from "./guest-emails-strings";
  * browser — what the hotel sees while typing is not an approximation of the output, it IS the output.
  */
 export function EmailEditor({
-  templateKey, label, description, canDisable, wired, variables,
+  templateKey, label, description, canDisable, notice, variables,
   locale, locales, enabled: initialEnabled, subject: initialSubject, body: initialBody,
   customised, brand, details, defaults, saveAction, resetAction, backHref, langHref,
 }: {
@@ -25,8 +25,9 @@ export function EmailEditor({
   label: string;
   description: string;
   canDisable: boolean;
-  /** Does anything send this email yet? Said on the page when not, so nobody writes it expecting it to go. */
-  wired: boolean;
+  /** Why this email will not go out as things stand (nothing this hotel runs sends it), said above the
+   *  wording so nobody writes it expecting it to go. Null when it sends. */
+  notice: string | null;
   variables: Record<string, string>;
   locale: string;
   locales: { key: string; label: string; edited: boolean; primary: boolean }[];
@@ -197,9 +198,9 @@ export function EmailEditor({
             that opens Bulgarian sees real Bulgarian — but it must never be ambiguous whether the
             text on screen is theirs or ours, because that decides whether they need to do anything.
           */}
-          {!wired && (
+          {notice && (
             <p className="flex items-start gap-2 rounded-lg border border-warning-200 bg-warning-50 px-4 py-2.5 text-[12px] text-warning-800">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {s.notYet}
+              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {notice}
             </p>
           )}
           {!customised && (

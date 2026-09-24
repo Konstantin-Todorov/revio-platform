@@ -1513,6 +1513,10 @@ model Reservation {
   // its own column means the question "has this stay ended?" has one authoritative answer without
   // touching any of that. Set only by check-out; cleared only by a manager reopening the stay.
   departedAt         DateTime?
+  /// When the scheduled "Before arrival" / "After departure" guest email went out (or was decided
+  /// against — switched off, no address). Set once, so a stay is never mailed twice by the job.
+  preArrivalMailedAt DateTime?
+  postStayMailedAt   DateTime?
   createdById        String? // staff user who entered a manual booking
 
   property      Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)

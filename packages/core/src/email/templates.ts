@@ -760,25 +760,67 @@ export const EMAIL_STAGE_OF: Record<string, EmailStage> = {
 };
 
 /**
- * Which part of the platform actually sends each email — `direct` is the booking page.
+ * Which part of the platform sends each email, and so what a hotel must run for it to go out:
+ * `direct` is the booking page (RevioCRS with the booking engine switched on), `crs` and `pms` are
+ * those products, `schedule` is the nightly-style job that needs only the shared reservation record.
  *
- * ⚠️ The Guest emails screen shows an email with an empty list as **"Not sent yet"** rather than
- * offering an on/off switch for it. Editing a pre-arrival note nobody will ever receive was a promise
- * the screen made and the product did not keep. When a sender is wired, it is added here in the same
- * change — `email-senders.test.ts` in each sending app checks its own entry.
+ * ⚠️ The Guest emails screen asks `emailStatus` rather than reading this directly, so a hotel that
+ * runs only RevioLink is told "Needs RevioCRS" instead of "Sent automatically" beside an email
+ * nothing in its account will ever send (founder, 2026-09-25). When a sender is wired, it is added
+ * here in the same change.
  */
-export type EmailSender = "direct" | "crs" | "pms";
+export type EmailSender = "direct" | "crs" | "pms" | "schedule";
 export const EMAIL_SENT_BY: Record<string, readonly EmailSender[]> = {
   booking_confirmation: ["direct", "crs"],
   booking_modified: ["crs"],
   booking_cancelled: ["crs"],
-  pre_arrival: [],
+  pre_arrival: ["schedule"],
   folio_receipt: ["pms"],
-  post_stay: [],
+  post_stay: ["schedule"],
   waitlist_joined: ["direct"],
   waitlist_offer: ["direct"],
   waitlist_expired: ["direct"],
 };
+
+/**
+ * Emails a hotel has to switch on before anything sends them.
+ *
+ * The scheduled ones: they reach guests nobody at the hotel is dealing with at that moment, and
+ * turning them on for every existing hotel the day the job shipped would have mailed thousands of
+ * guests on a decision nobody made. Every other email answers something that just happened.
+ */
+export const EMAIL_OPT_IN: ReadonlySet<string> = new Set(["pre_arrival", "post_stay"]);
+
+export type EmailStatus =
+  | { kind: "auto" }
+  | { kind: "on" }
+  | { kind: "off" }
+  /** Nothing this hotel runs sends it. `needs` says what would. */
+  | { kind: "needs"; needs: "crs" | "pms" | "bookingPage" };
+
+/** What the Guest emails screen says beside one email, for this hotel. Pure, so it is tested. */
+export function emailStatus(args: {
+  key: string;
+  runs: { crs: boolean; pms: boolean; bookingPage: boolean };
+  /** Whether the hotel's saved row for the guest language switches it off. */
+  switchedOff: boolean;
+  /** Whether the hotel has switched an opt-in email ON (a saved, enabled row). */
+  switchedOn: boolean;
+}): EmailStatus {
+  const def = EMAIL_TEMPLATE_BY_KEY[args.key];
+  const senders = EMAIL_SENT_BY[args.key] ?? [];
+  const live = senders.some((s) =>
+    s === "schedule" ? true : s === "crs" ? args.runs.crs : s === "pms" ? args.runs.pms : args.runs.crs && args.runs.bookingPage,
+  );
+  if (!live) {
+    if (senders.includes("pms")) return { kind: "needs", needs: "pms" };
+    if (senders.includes("crs") || !args.runs.crs) return { kind: "needs", needs: "crs" };
+    return { kind: "needs", needs: "bookingPage" };
+  }
+  if (EMAIL_OPT_IN.has(args.key)) return args.switchedOn && !args.switchedOff ? { kind: "on" } : { kind: "off" };
+  if (def && !def.canDisable) return { kind: "auto" };
+  return args.switchedOff ? { kind: "off" } : { kind: "on" };
+}
 
 /** The guest emails, grouped by stage, in journey order. Staff mail is configured elsewhere. */
 export function guestEmailsByStage(): { stage: EmailStage; templates: EmailTemplateDef[] }[] {

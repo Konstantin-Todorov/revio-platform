@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { CalendarCheck, Check, ChevronRight, Hourglass, Mail, Palette, PlaneLanding, Receipt } from "lucide-react";
 import {
-  EMAIL_FONTS, EMAIL_LOCALES, EMAIL_SENT_BY, EMAIL_TEMPLATE_BY_KEY, EMAIL_THEMES, defaultsFor, guestEmailsByStage,
+  EMAIL_FONTS, EMAIL_LOCALES, EMAIL_OPT_IN, EMAIL_TEMPLATE_BY_KEY, EMAIL_THEMES, defaultsFor, emailStatus, guestEmailsByStage,
   renderEmail, sampleDetails, type EmailBrand, type EmailStage,
 } from "@revio/core";
 import { translate, type Locale } from "./i18n";
@@ -54,10 +54,12 @@ export function GuestEmails({
   property,
   brand,
   states,
+  runs,
   setLanguageAction,
   saveLookAction,
   logoSlot,
   teamHref,
+  panelLanguageSwitch = false,
 }: {
   locale?: Locale;
   tab: "emails" | "look";
@@ -67,13 +69,17 @@ export function GuestEmails({
   property: GuestEmailsProperty;
   brand: EmailBrand;
   /** Per template key: the languages the hotel has written, and those it switched off. */
-  states: Record<string, { edited: string[]; off: string[] }>;
+  states: Record<string, { edited: string[]; off: string[]; on: string[]; subjects: Record<string, string> }>;
+  /** What this hotel runs — an email only "sends automatically" if something here sends it. */
+  runs: { crs: boolean; pms: boolean; bookingPage: boolean };
   setLanguageAction: (fd: FormData) => Promise<void>;
   saveLookAction: (fd: FormData) => Promise<void>;
   /** The app's own logo upload (its action), rendered in the Look tab. */
   logoSlot: ReactNode;
   /** Only where staff mail is configured (RevioLink): a link to it. */
   teamHref?: string;
+  /** This product lets a person choose the panel's language — say that it is a separate choice. */
+  panelLanguageSwitch?: boolean;
 }) {
   const s = translate(guestEmailsStrings, locale);
   const guestLang = EMAIL_LOCALES.some((l) => l.key === property.defaultLanguage) ? property.defaultLanguage : "en";
@@ -121,7 +127,10 @@ export function GuestEmails({
               );
             })}
           </span>
-          <p className="w-full text-[12px] leading-relaxed text-ink-500">{s.language.body}</p>
+          <p className="w-full text-[12px] leading-relaxed text-ink-500">
+            {s.language.body}
+            {panelLanguageSwitch && <span className="text-ink-400"> {s.language.panelNote}</span>}
+          </p>
         </form>
       </section>
 
@@ -141,16 +150,34 @@ export function GuestEmails({
                 </h3>
                 <ul className="divide-y divide-surface-border/70">
                   {templates.map((def) => {
-                    const st = states[def.key] ?? { edited: [], off: [] };
-                    const wired = (EMAIL_SENT_BY[def.key] ?? []).length > 0;
+                    const st = states[def.key] ?? { edited: [], off: [], on: [], subjects: {} };
                     const t = s.templates[def.key] ?? { label: def.label, when: def.description };
-                    const status = !wired
-                      ? { text: s.status.notYet, cls: "bg-surface-sunken text-ink-500" }
-                      : !def.canDisable
-                        ? { text: s.status.always, cls: "bg-success-50 text-success-700" }
-                        : st.off.includes(guestLang)
-                          ? { text: s.status.off, cls: "bg-surface-sunken text-ink-500" }
-                          : { text: s.status.on, cls: "bg-success-50 text-success-700" };
+                    const verdict = emailStatus({
+                      key: def.key, runs,
+                      switchedOff: st.off.includes(guestLang),
+                      switchedOn: st.on.includes(guestLang),
+                    });
+                    const live = verdict.kind !== "needs";
+                    const status =
+                      verdict.kind === "needs"
+                        ? { text: s.status.needs[verdict.needs], cls: "bg-surface-sunken text-ink-500" }
+                        : verdict.kind === "auto"
+                          ? { text: s.status.always, cls: "bg-success-50 text-success-700" }
+                          : verdict.kind === "off"
+                            ? { text: s.status.off, cls: "bg-surface-sunken text-ink-500" }
+                            : { text: s.status.on, cls: "bg-success-50 text-success-700" };
+                    // The subject a guest will actually see, in the language they will get it — so the
+                    // language of the mail is visible on the list, whatever language this panel is in.
+                    const words = defaultsFor(def, guestLang);
+                    const subject = (st.subjects[guestLang] ?? words.subject).replace(
+                      /\{\{(\w+)\}\}/g,
+                      (m, k: string) => (k === "propertyName" ? property.name : def.variables[k] ?? m),
+                    );
+                    const hint = !live
+                      ? s.status.needsHint[verdict.kind === "needs" ? verdict.needs : "crs"]
+                      : EMAIL_OPT_IN.has(def.key) && verdict.kind === "off"
+                        ? `${t.when} · ${s.status.optInHint}`
+                        : t.when;
                     return (
                       <li key={def.key}>
                         <Link
@@ -159,10 +186,13 @@ export function GuestEmails({
                         >
                           <span className="min-w-0 flex-1">
                             <span className="flex flex-wrap items-center gap-2">
-                              <span className={`text-[13.5px] font-semibold ${wired ? "text-ink-900" : "text-ink-500"}`}>{t.label}</span>
+                              <span className={`text-[13.5px] font-semibold ${live ? "text-ink-900" : "text-ink-500"}`}>{t.label}</span>
                               <span className={`rounded px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide ${status.cls}`}>{status.text}</span>
                             </span>
-                            <span className="mt-0.5 block text-[12px] text-ink-500">{wired ? t.when : s.status.notYetHint}</span>
+                            <span className="mt-0.5 block text-[12px] text-ink-500">{hint}</span>
+                            <span lang={guestLang} className="mt-1 block truncate text-[12px] text-ink-700">
+                              <span className="text-ink-400">{s.status.subject}</span> {subject}
+                            </span>
                             {/* Whose words, per language — the question a hotel has before it opens one. */}
                             <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-ink-400">
                               {EMAIL_LOCALES.map((l) => (

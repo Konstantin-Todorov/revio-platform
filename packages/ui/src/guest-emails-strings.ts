@@ -16,10 +16,16 @@ export interface GuestEmailsStrings {
     /** Shown before the choice: what the setting decides. */
     body: string;
     saved: string;
+    /** The panel's own language is a different, personal setting. */
+    panelNote: string;
   };
   tabs: { emails: string; look: string };
   stages: Record<"booking" | "before" | "after" | "waitlist", string>;
-  status: { always: string; on: string; off: string; notYet: string; notYetHint: string; yours: string; ours: string };
+  status: {
+    always: string; on: string; off: string; yours: string; ours: string; subject: string; optInHint: string;
+    needs: Record<"crs" | "pms" | "bookingPage", string>;
+    needsHint: Record<"crs" | "pms" | "bookingPage", string>;
+  };
   templates: Record<string, { label: string; when: string }>;
   team: string;
   teamLink: string;
@@ -67,7 +73,6 @@ export interface GuestEmailsStrings {
     /** "{language}" */
     yoursTitle: string;
     oursTitle: string;
-    notYet: string;
   };
   logo: {
     none: string;
@@ -91,6 +96,7 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
       title: "Your guests receive emails in",
       body: "Every email below goes out in this language. Change it and the next email a guest receives is in the new one.",
       saved: "Saved",
+      panelNote: "The language of this panel is yours alone — change it from your account menu, top right.",
     },
     tabs: { emails: "Emails", look: "Look & sender" },
     stages: { booking: "When they book", before: "Before they arrive", after: "After the stay", waitlist: "Waiting list" },
@@ -98,18 +104,24 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
       always: "Sent automatically",
       on: "On",
       off: "Off",
-      notYet: "Not sent yet",
-      notYetHint: "You can write it now; nothing sends it yet.",
       yours: "your wording",
       ours: "our wording",
+      subject: "Subject:",
+      optInHint: "off until you switch it on",
+      needs: { crs: "Needs RevioCRS", pms: "Needs RevioPMS", bookingPage: "Booking page is off" },
+      needsHint: {
+        crs: "Sent by RevioCRS, which this hotel does not run — you can still write it now.",
+        pms: "Sent by RevioPMS at check-out, which this hotel does not run — you can still write it now.",
+        bookingPage: "Sent from your booking page, which is switched off (RevioCRS → Booking Engine).",
+      },
     },
     templates: {
       booking_confirmation: { label: "Booking confirmation", when: "When a booking is made on your booking page, or confirmed in RevioCRS" },
       booking_modified: { label: "Booking changed", when: "When the dates, room or price of a booking change in RevioCRS" },
       booking_cancelled: { label: "Booking cancelled", when: "When a booking is cancelled in RevioCRS" },
-      pre_arrival: { label: "Before arrival", when: "A few days before check-in" },
+      pre_arrival: { label: "Before arrival", when: "Three days before check-in, in the morning at the hotel" },
       folio_receipt: { label: "Bill / receipt", when: "At check-out in RevioPMS, with the itemised bill" },
-      post_stay: { label: "After departure", when: "After check-out" },
+      post_stay: { label: "After departure", when: "The day after check-out, in the morning at the hotel" },
       waitlist_joined: { label: "Waitlist — joined", when: "When a guest joins the waiting list on your booking page" },
       waitlist_offer: { label: "Waitlist — a room opened", when: "When a room frees up for a guest on the waiting list" },
       waitlist_expired: { label: "Waitlist — the held room was released", when: "When a guest did not take up the room in time" },
@@ -162,7 +174,6 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
       defaultBadge: "guests get this",
       yoursTitle: "{language} — your own wording",
       oursTitle: "{language} — our wording, not yet edited",
-      notYet: "Nothing sends this email yet — you can write it now, and it will go out once it is switched on for your hotel.",
     },
     logo: {
       none: "No logo yet",
@@ -183,6 +194,7 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
       title: "Гостите Ви получават имейли на",
       body: "Всеки имейл по-долу се изпраща на този език. Смените ли го, следващият имейл до гост е на новия език.",
       saved: "Запазено",
+      panelNote: "Езикът на този панел е само Ваш — сменя се от менюто на профила горе вдясно.",
     },
     tabs: { emails: "Имейли", look: "Облик и подател" },
     stages: { booking: "При резервация", before: "Преди пристигане", after: "След престоя", waitlist: "Списък на чакащите" },
@@ -190,18 +202,24 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
       always: "Изпраща се автоматично",
       on: "Включен",
       off: "Изключен",
-      notYet: "Още не се изпраща",
-      notYetHint: "Можете да го напишете сега; все още нищо не го изпраща.",
       yours: "Ваш текст",
       ours: "наш текст",
+      subject: "Тема:",
+      optInHint: "изключен, докато не го включите",
+      needs: { crs: "Нужен е RevioCRS", pms: "Нужен е RevioPMS", bookingPage: "Страницата за резервации е изключена" },
+      needsHint: {
+        crs: "Изпраща се от RevioCRS, който този хотел не ползва — можете да го напишете още сега.",
+        pms: "Изпраща се от RevioPMS при напускане, който този хотел не ползва — можете да го напишете още сега.",
+        bookingPage: "Изпраща се от страницата Ви за резервации, която е изключена (RevioCRS → Booking Engine).",
+      },
     },
     templates: {
       booking_confirmation: { label: "Потвърждение на резервация", when: "При резервация от системата за директни резервации или потвърждение в RevioCRS" },
       booking_modified: { label: "Променена резервация", when: "Когато датите, стаята или цената на резервация се променят в RevioCRS" },
       booking_cancelled: { label: "Анулирана резервация", when: "Когато резервация се анулира в RevioCRS" },
-      pre_arrival: { label: "Преди пристигане", when: "Няколко дни преди настаняването" },
+      pre_arrival: { label: "Преди пристигане", when: "Три дни преди настаняването, сутринта по часа на хотела" },
       folio_receipt: { label: "Сметка", when: "При напускане в RevioPMS, с подробната сметка" },
-      post_stay: { label: "Благодарност след престоя", when: "След напускане" },
+      post_stay: { label: "Благодарност след престоя", when: "На следващия ден след напускане, сутринта по часа на хотела" },
       waitlist_joined: { label: "Списък на чакащите — записване", when: "Когато гост се запише в списъка на чакащите от системата за директни резервации" },
       waitlist_offer: { label: "Списък на чакащите — освободи се стая", when: "Когато се освободи стая за гост от списъка" },
       waitlist_expired: { label: "Списък на чакащите — стаята беше освободена", when: "Когато гостът не е резервирал стаята навреме" },
@@ -254,7 +272,6 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
       defaultBadge: "гостите получават този",
       yoursTitle: "{language} — Ваш текст",
       oursTitle: "{language} — наш текст, още нередактиран",
-      notYet: "Все още нищо не изпраща този имейл — можете да го напишете сега и той ще тръгне, щом бъде включен за Вашия хотел.",
     },
     logo: {
       none: "Още няма лого",

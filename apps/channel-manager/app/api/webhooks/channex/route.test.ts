@@ -5,10 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  * more than what it does. The database and the pull are mocked: what is under test is the gate.
  */
 const findMany = vi.fn(async (_args: { where: Record<string, unknown> }) => [{ id: "ch1" }]);
-const pullChannel = vi.fn(async () => ({ ok: true }));
+const pullChannel = vi.fn(async (): Promise<{ ok: boolean; imported?: number }> => ({ ok: true }));
+const deliverNewBookings = vi.fn(async () => ({ sent: true, to: [], note: "" }));
 
 vi.mock("@revio/db", () => ({ forSystem: () => ({ channel: { findMany } }) }));
 vi.mock("@revio/connectivity", () => ({ pullChannel, WEBHOOK_SECRET_HEADER: "x-revio-webhook" }));
+vi.mock("@/lib/booking-delivery", () => ({ deliverNewBookings }));
 
 const { POST } = await import("./route");
 
@@ -94,5 +96,26 @@ describe("what it does when it is really Channex", () => {
     const res = await ring({ "x-revio-webhook": "right" });
     expect(res.status).toBe(200);
     expect(released).toBe(false);
+  });
+});
+
+describe("the team is told", () => {
+  /*
+   * The webhook imports first, so the scheduled pull finds nothing new afterwards. Without this a
+   * RevioLink-only hotel was never emailed about a booking that arrived by webhook (2026-09-25).
+   */
+  it("hands every import to the one delivery function", async () => {
+    process.env.CHANNEX_WEBHOOK_SECRET = "right";
+    pullChannel.mockResolvedValueOnce({ ok: true, imported: 2 });
+    await ring({ "x-revio-webhook": "right" });
+    await vi.waitFor(() => expect(deliverNewBookings).toHaveBeenCalledWith("ch1", 2));
+  });
+
+  it("does not mail when nothing new arrived", async () => {
+    process.env.CHANNEX_WEBHOOK_SECRET = "right";
+    pullChannel.mockResolvedValueOnce({ ok: true, imported: 0 });
+    await ring({ "x-revio-webhook": "right" });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(deliverNewBookings).not.toHaveBeenCalled();
   });
 });

@@ -121,25 +121,20 @@ export async function updatePosItem(fd: FormData): Promise<void> {
 }
 
 /**
- * Move an item one step up or down within its outlet — the order it appears in on the catalog and
- * on the charge screen, where the most-used things should be the first ones under a thumb.
- * Renumbers the outlet 0…n first, so items created before ordering existed (all 0) move predictably.
+ * Save the order of one outlet's items after a drag — the order on the catalog and on the charge
+ * screen, where the most-used things should be the first ones under a thumb. Ids from another outlet
+ * or another property are not touched; items the list missed follow it.
  */
-export async function movePosItem(fd: FormData): Promise<void> {
+export async function reorderPosItems(outlet: string, ids: string[]): Promise<void> {
   const session = await ctx("manage");
-  const id = str(fd, "id");
-  const step = str(fd, "step") === "up" ? -1 : 1;
-  const item = await prisma.posItem.findFirst({ where: { id, propertyId: session.activePropertyId } });
-  if (!item) return flashError((await flashSay()).pos.itemGone);
   const siblings = await prisma.posItem.findMany({
-    where: { propertyId: session.activePropertyId, outlet: item.outlet },
+    where: { propertyId: session.activePropertyId, outlet },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: { id: true },
   });
-  const order = siblings.map((x) => x.id);
-  const i = order.indexOf(id);
-  const j = i + step;
-  if (j >= 0 && j < order.length) [order[i], order[j]] = [order[j]!, order[i]!];
+  if (siblings.length === 0) return flashError((await flashSay()).pos.itemGone);
+  const known = siblings.map((x) => x.id);
+  const order = [...ids.filter((id) => known.includes(id)), ...known.filter((id) => !ids.includes(id))];
   await Promise.all(order.map((itemId, n) => prisma.posItem.update({ where: { id: itemId }, data: { sortOrder: n } })));
   revalidatePath("/minibar/catalog");
   revalidatePath("/minibar", "layout");

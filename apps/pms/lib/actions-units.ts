@@ -11,7 +11,7 @@ import { recordOpsEvent } from "./events";
 import { flashError } from "@revio/ui/flash";
 import { i18n } from "./i18n/server";
 import { flash } from "./i18n/flash";
-import { moveFloorInOrder, orderFloors } from "./floor-order";
+import { orderFloors } from "./floor-order";
 
 /** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
 async function flashSay() {
@@ -181,16 +181,19 @@ export async function renameFloor(fd: FormData): Promise<void> {
 }
 
 /**
- * Move a floor one step up or down in the order every screen shows floors in. The whole order is
- * saved — the floors in use, as the hotel sees them now — so a floor typed later never jumps around
- * a list somebody already arranged.
+ * Save the order floors are shown in, after a drag on Rooms → Floors. The whole order is saved — the
+ * floors in use, as the hotel sees them now — so a floor typed later never jumps around a list
+ * somebody already arranged. Names not in use are ignored; floors the list missed keep their place
+ * after it.
  */
-export async function moveFloor(fd: FormData): Promise<void> {
+export async function reorderFloors(order: string[]): Promise<void> {
   const session = await ctx("manage");
-  const floor = str(fd, "floor").trim();
-  const step = str(fd, "step") === "up" ? -1 : 1;
-  if (!floor) return flashError((await flashSay()).units.floorGone);
-  await saveFloorOrder(session.activePropertyId, (order) => moveFloorInOrder(order, floor, step));
+  const wanted = order.map((f) => String(f).trim()).filter(Boolean);
+  if (wanted.length === 0) return flashError((await flashSay()).units.floorGone);
+  await saveFloorOrder(session.activePropertyId, (shown) => [
+    ...wanted.filter((f) => shown.includes(f)),
+    ...shown.filter((f) => !wanted.includes(f)),
+  ]);
   refresh();
   revalidatePath("/calendar");
 }

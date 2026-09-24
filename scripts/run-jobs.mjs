@@ -82,6 +82,8 @@ const JOBS = [
    * was already free.
    */
   { name: "waitlist-sweep", url: CRS && `${CRS}/api/jobs/waitlist` },
+  /* After the waitlist, with the other guest-facing mail; it reads only the reservation record. */
+  { name: "guest-mail", url: CRS && `${CRS}/api/jobs/guest-mail` },
   /*
    * Last, and on the operator rather than a hotel app: a trial is our commercial arrangement, and
    * the row that decides when access stops is operator-perimeter. Placed after everything else for

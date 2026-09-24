@@ -13,8 +13,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { JOB, withJobLease, forSystem } from "@revio/db";
 import { pullChannel } from "@revio/connectivity";
-import { sendEmail, deliveryRecipients } from "@revio/email";
-import { renderSystemEmail, renderSystemEmailText } from "@revio/core";
+import { deliverNewBookings } from "@/lib/booking-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -124,37 +123,8 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        // Reservation delivery: when the hotel runs neither CRS nor PMS, nothing else would surface the
-        // booking — email it to the configured address(es), same rule as the manual pull.
-        if (outcome.ok && outcome.imported > 0) {
-          const tenant = channel.property.tenant;
-          const takesDeliveryElsewhere = tenant.hasReservation || tenant.hasPms;
-          const to = deliveryRecipients(channel.property, "both");
-          if (!takesDeliveryElsewhere && to.length > 0) {
-            const fresh = await db.reservation.findMany({
-              where: { propertyId: channel.propertyId, channelId: channel.id },
-              include: { channel: true, lines: { include: { roomType: true } } },
-              orderBy: { importedAt: "desc" },
-              take: outcome.imported,
-            });
-            const rows = fresh.map((r) => {
-              const l = r.lines[0];
-              return `• ${r.guestName} — ${l?.roomType.name ?? ""} · ${l ? `${l.checkIn.toISOString().slice(0, 10)} → ${l.checkOut.toISOString().slice(0, 10)}` : ""} · ${r.channel?.name ?? "Direct"}`;
-            });
-            const mail = {
-              preview: `${outcome.imported} new from ${channel.name}.`,
-              heading: `${outcome.imported} new booking${outcome.imported > 1 ? "s" : ""}`,
-              product: "RevioLink",
-              blocks: [{ p: `Pulled from ${channel.name} for ${channel.property.name}.` }, { list: rows }],
-            };
-            await sendEmail({
-              to,
-              subject: `${outcome.imported} new booking${outcome.imported > 1 ? "s" : ""} — ${channel.property.name}`,
-              text: renderSystemEmailText(mail),
-              html: renderSystemEmail(mail),
-            });
-          }
-        }
+        // "N new bookings" to a hotel that runs RevioLink alone — one function for every import path.
+        if (outcome.ok && outcome.imported > 0) await deliverNewBookings(channel.id, outcome.imported);
       }
 
       return { ok: true, channels: channels.length, imported, updated, failed, rejected };

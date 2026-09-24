@@ -52,8 +52,7 @@ export interface ExtrasStrings {
     cancel: string;
     hidden: string;
     activeHint: string;
-    moveUp: string;
-    moveDown: string;
+    dragAria: string;
     deleteConfirm: string;
     kindHint: string;
   };
@@ -110,8 +109,7 @@ export const extras: Translations<ExtrasStrings> = {
       cancel: "Cancel",
       hidden: "Hidden",
       activeHint: "Shown on the charge screen",
-      moveUp: "Move {item} up",
-      moveDown: "Move {item} down",
+      dragAria: "Drag to reorder {item} — or press ↑ / ↓",
       deleteConfirm: "Delete {item} from the catalog? Charges already on guests’ bills stay exactly as they are.",
       kindHint: "An item is something you hand over (a drink); a service is something you do (a late check-out).",
     },
@@ -166,8 +164,7 @@ export const extras: Translations<ExtrasStrings> = {
       cancel: "Отказ",
       hidden: "Скрит",
       activeHint: "Показва се при начисляване",
-      moveUp: "Премести {item} нагоре",
-      moveDown: "Премести {item} надолу",
+      dragAria: "Плъзнете, за да преместите {item} — или натиснете ↑ / ↓",
       deleteConfirm: "Да изтрием ли {item} от каталога? Вече начислените суми по сметките на гостите остават непроменени.",
       kindHint: "Артикулът е нещо, което давате (напитка); услугата е нещо, което правите (късно напускане).",
     },

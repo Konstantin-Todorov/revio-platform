@@ -182,3 +182,29 @@ describe("stayDetails", () => {
     expect(d[4]).toEqual({ label: "Total to pay at the hotel", value: "€195.00", emphasis: true });
   });
 });
+
+import { emailStatus } from "./templates.js";
+
+describe("emailStatus — what the hotel actually runs decides what the screen says", () => {
+  const none = { switchedOff: false, switchedOn: false };
+  const cmOnly = { crs: false, pms: false, bookingPage: false };
+  it("a RevioLink-only hotel is told what each email needs, never 'sent automatically'", () => {
+    expect(emailStatus({ key: "booking_confirmation", runs: cmOnly, ...none })).toEqual({ kind: "needs", needs: "crs" });
+    expect(emailStatus({ key: "booking_cancelled", runs: cmOnly, ...none })).toEqual({ kind: "needs", needs: "crs" });
+    expect(emailStatus({ key: "folio_receipt", runs: cmOnly, ...none })).toEqual({ kind: "needs", needs: "pms" });
+    expect(emailStatus({ key: "waitlist_offer", runs: cmOnly, ...none })).toEqual({ kind: "needs", needs: "crs" });
+  });
+  it("the waiting list needs the booking page switched on, not just RevioCRS", () => {
+    expect(emailStatus({ key: "waitlist_offer", runs: { crs: true, pms: false, bookingPage: false }, ...none })).toEqual({ kind: "needs", needs: "bookingPage" });
+  });
+  it("confirmations are automatic where they are sent; receipts can be switched off", () => {
+    const all = { crs: true, pms: true, bookingPage: true };
+    expect(emailStatus({ key: "booking_confirmation", runs: all, ...none })).toEqual({ kind: "auto" });
+    expect(emailStatus({ key: "folio_receipt", runs: all, ...none })).toEqual({ kind: "on" });
+    expect(emailStatus({ key: "folio_receipt", runs: all, switchedOff: true, switchedOn: false })).toEqual({ kind: "off" });
+  });
+  it("scheduled emails are off until the hotel switches them on, whatever it runs", () => {
+    expect(emailStatus({ key: "pre_arrival", runs: cmOnly, ...none })).toEqual({ kind: "off" });
+    expect(emailStatus({ key: "pre_arrival", runs: cmOnly, switchedOff: false, switchedOn: true })).toEqual({ kind: "on" });
+  });
+});

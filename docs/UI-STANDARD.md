@@ -130,6 +130,35 @@ Doing that on this very change caught a bug in the first minute: the "mine" bubb
 background at all, because `tokens.ts` mirrors the shade as `"050"` and every app's Tailwind config
 calls it `50`. Nothing failed. It was just invisible.
 
+## 8 · Where you are on the left, what you are doing on top
+
+**Set by the founder on 2026-09-25, after Guest emails:** *"подредбата табове в ляво и после отгоре
+двете са топ, много ми харесва така — запиши го"*. The shape:
+
+- **Sections on the left** — the areas of a screen that you navigate between and that each hold
+  something different (Settings: Property · Guest emails · Team · Billing; Help: Articles · Your
+  requests). One shared component: `SettingsNav` in `@revio/ui`, with `prefix: true` when a section
+  has pages below it, so the left stays lit while you work inside it. On a phone it becomes a
+  scrolling row of chips at the top — same component, nothing to rebuild.
+- **Tabs on top** — the different *views of the one thing* the left says you are in (Guest emails:
+  Emails · Look & sender; Extras & Charges: Charge a guest · Catalog; Folios: Open · Receivables ·
+  History). Links, not client state: each tab is a URL, so it can be bookmarked, sent in a support
+  answer and opened in a new tab.
+- **The decision that changes everything below it sits above the tabs** (Guest emails: which
+  language guests receive). Asked first, because it changes what every row means.
+- **A list, then one thing** — a row opens the thing on its own page inside the same frame (Your
+  requests → one conversation; Guest emails → one email's editor), never an accordion of editors.
+
+⚠️ **Not at a front desk.** Tabs were rejected on the folio screen and the reason stands (see
+`apps/pms/CLAUDE.md`): at a desk you do not know in advance which tab you need, and a tab you never
+open is a feature you never learn exists. The shape is for places a person comes to *set something
+up*, not for a queue with a guest waiting. `docs/UI-GROUPING-AUDIT.md` lists which screens take it.
+
+**Reordering is by drag and drop, everywhere** (founder, same day: *"навсякъде … да е с драг и
+дроп"*). One component, `SortableList` in `@revio/ui/sortable`: pointer events so it works on a phone,
+the row moves while you drag, one save per drop, and the handle takes ↑/↓ from the keyboard. Never
+up/down arrow buttons.
+
 ---
 
 ## The check, before calling a screen done

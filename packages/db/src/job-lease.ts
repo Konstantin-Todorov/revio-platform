@@ -184,6 +184,12 @@ export const JOB = {
    */
   waitlistSweep: "waitlist-sweep",
   /**
+   * The two scheduled guest emails — "Before arrival" and "After departure" — for hotels that have
+   * switched them on. Leased because it sends mail to guests: two runners would mail the same stay
+   * twice before either stamped it.
+   */
+  guestMail: "guest-mail",
+  /**
    * Warns a hotel that a trial is ending, then stops access when it does.
    *
    * Leased because it sends email and revokes access: two runners could warn twice or revoke the

@@ -52,7 +52,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
           name: s.name, namePlaceholder: s.namePlaceholder, outlet: s.outlet, type: s.type, item: s.item, extra: s.extra,
           price: s.price(property.baseCurrency), adding: s.adding, add: s.add, active: s.active, activeHint: s.activeHint,
           save: s.save, cancel: s.cancel, itemsOne: s.itemsOne, itemsMany: s.itemsMany, addTo: s.addTo,
-          emptyOutlet: s.emptyOutlet, edit: s.edit, hidden: s.hidden, moveUp: s.moveUp, moveDown: s.moveDown,
+          emptyOutlet: s.emptyOutlet, edit: s.edit, hidden: s.hidden, dragAria: s.dragAria,
           deleteConfirm: s.deleteConfirm, delete: s.delete, kindHint: s.kindHint, outlets: x.outlets,
         }}
       />

@@ -53,8 +53,7 @@ export interface RoomsStrings {
     renameAria: string;
     removeAria: string;
     /** "{floor}" */
-    moveUp: string;
-    moveDown: string;
+    dragAria: string;
     /** "{floor}" "{rooms}" */
     removeConfirm: string;
   };
@@ -143,8 +142,7 @@ export const rooms: Translations<RoomsStrings> = {
       renameSave: "Save",
       renameAria: "Rename {floor}",
       removeAria: "Remove {floor}",
-      moveUp: "Move {floor} up",
-      moveDown: "Move {floor} down",
+      dragAria: "Drag to reorder {floor} — or press ↑ / ↓",
       removeConfirm: "Remove {floor}? Rooms {rooms} stay exactly as they are — they just have no floor until you give them one.",
     },
     roomPlaceholder: "e.g. 101",
@@ -230,8 +228,7 @@ export const rooms: Translations<RoomsStrings> = {
       renameSave: "Запази",
       renameAria: "Преименувай {floor}",
       removeAria: "Премахни {floor}",
-      moveUp: "Премести {floor} нагоре",
-      moveDown: "Премести {floor} надолу",
+      dragAria: "Плъзнете, за да преместите {floor} — или натиснете ↑ / ↓",
       removeConfirm: "Да премахнем ли {floor}? Стаи {rooms} остават такива, каквито са — просто няма да имат етаж, докато не им зададете нов.",
     },
     roomPlaceholder: "напр. 101",

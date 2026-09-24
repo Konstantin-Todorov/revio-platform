@@ -98,3 +98,5 @@ export * from "./invoicing/invoice-state.js";
 export * from "./metrics/fault-summary.js";
 export * from "./analytics/routes.js";
 export * from "./support/inbound.js";
+export * from "./email/guest-schedule.js";
+export * from "./email/staff-emails.js";
