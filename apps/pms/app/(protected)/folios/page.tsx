@@ -5,6 +5,7 @@ import { listFolios, listFolioHistory, listReceivables, folioOutcomeSummary } fr
 import { OutcomeSummary } from "@/components/folios/OutcomeSummary";
 import { OpenFoliosTable, type OpenFolioRow } from "@/components/folios/OpenFoliosTable";
 import { i18n } from "@/lib/i18n/server";
+import { template } from "@revio/ui/i18n";
 import { folios as foliosDict } from "@/lib/i18n/folios";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
           </Card>
         ) : (
           <Card surface="flat">
-            <OpenFoliosTable t={s.table} rows={openRows.map<OpenFolioRow>((r) => ({ reservationId: r.reservationId, guestName: r.guestName, units: r.units, balance: r.balance, currency: r.currency, balanceLabel: r.balance == null ? null : money(r.balance, r.currency) }))} />
+            <OpenFoliosTable t={{ search: s.table.search, whoOwes: s.table.whoOwes, notOpened: s.table.notOpened, settled: s.table.settled, room: template(s.table.room, "units"), noMatch: template(s.table.noMatch, "q") }} rows={openRows.map<OpenFolioRow>((r) => ({ reservationId: r.reservationId, guestName: r.guestName, units: r.units, balance: r.balance, currency: r.currency, balanceLabel: r.balance == null ? null : money(r.balance, r.currency) }))} />
           </Card>
         )
       ) : tab === "receivables" ? (

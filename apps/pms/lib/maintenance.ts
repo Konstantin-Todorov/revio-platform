@@ -16,7 +16,19 @@ export async function getMaintenanceBoard() {
   return { property, tasks, units };
 }
 
-export interface RoomEvent { at: Date; label: string; detail?: string; kind: "clean" | "in_progress" | "inspected" | "ooo" | "issue" | "repaired" | "guest" | "other" }
+/**
+ * `label`/`detail` are the English sentences. `code` + `subject` (+ `priority`) let a translated
+ * screen rebuild them in the reader's language; `subject` is data (a task title, a guest name).
+ */
+export interface RoomEvent {
+  at: Date; label: string; detail?: string;
+  kind: "clean" | "in_progress" | "inspected" | "ooo" | "issue" | "repaired" | "guest" | "other";
+  code?: "hk" | "issue_reported" | "issue_logged" | "repaired" | "checked_in" | "checked_out";
+  status?: string;
+  subject?: string;
+  priority?: string;
+  setsOoo?: boolean;
+}
 
 /**
  * Room lifecycle timeline (spec §3.8) — the industry-gap feature. Per-room history assembled from
@@ -51,18 +63,18 @@ export async function getRoomTimeline(unitId: string) {
 
   const events: RoomEvent[] = [];
   for (const a of statusAudit) {
-    if (a.entity === "maintenance_reported") { events.push({ at: a.createdAt, label: "Issue reported (housekeeping)", detail: a.newValue ?? undefined, kind: "issue" }); continue; }
+    if (a.entity === "maintenance_reported") { events.push({ at: a.createdAt, label: "Issue reported (housekeeping)", detail: a.newValue ?? undefined, kind: "issue", code: "issue_reported" }); continue; }
     const st = a.newValue ?? "";
-    events.push({ at: a.createdAt, label: HK_TXT[st] ?? `Status → ${st}`, kind: HK[st] ?? "other" });
+    events.push({ at: a.createdAt, label: HK_TXT[st] ?? `Status → ${st}`, kind: HK[st] ?? "other", code: "hk", status: st });
   }
   for (const t of tasks) {
-    events.push({ at: t.createdAt, label: `Issue logged: ${t.title}`, detail: t.setsOoo ? "took the room out of order" : `priority ${t.priority}`, kind: "issue" });
-    if (t.completedAt) events.push({ at: t.completedAt, label: `Repaired: ${t.title}`, detail: "back in service", kind: "repaired" });
+    events.push({ at: t.createdAt, label: `Issue logged: ${t.title}`, detail: t.setsOoo ? "took the room out of order" : `priority ${t.priority}`, kind: "issue", code: "issue_logged", subject: t.title, priority: t.priority, setsOoo: t.setsOoo });
+    if (t.completedAt) events.push({ at: t.completedAt, label: `Repaired: ${t.title}`, detail: "back in service", kind: "repaired", code: "repaired", subject: t.title });
   }
   for (const a of assignments) {
     const name = a.reservation.guest ? `${a.reservation.guest.firstName} ${a.reservation.guest.lastName}`.trim() : a.reservation.guestName;
-    if (a.checkedInAt) events.push({ at: a.checkedInAt, label: `${name} checked in`, kind: "guest" });
-    if (a.checkedOutAt) events.push({ at: a.checkedOutAt, label: `${name} checked out`, kind: "guest" });
+    if (a.checkedInAt) events.push({ at: a.checkedInAt, label: `${name} checked in`, kind: "guest", code: "checked_in", subject: name });
+    if (a.checkedOutAt) events.push({ at: a.checkedOutAt, label: `${name} checked out`, kind: "guest", code: "checked_out", subject: name });
   }
   events.sort((x, y) => x.at.getTime() - y.at.getTime());
 

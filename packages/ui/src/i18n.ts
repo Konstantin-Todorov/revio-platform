@@ -103,6 +103,23 @@ export function translationCoverage<T>(dict: Translations<T>): { total: number; 
   return { total, translated: total - missing.length, missing };
 }
 
+/**
+ * Fill a `{name}` template. For CLIENT components only.
+ *
+ * ⚠️ A server component can hand a client component strings, never functions — Next refuses to
+ * serialise a function prop and the whole page fails. So a dictionary's `(room) => \`Room ${room}\``
+ * is turned into "Room {room}" on the server (`template()`), and filled here in the browser. Anything
+ * whose WORDING depends on a number (Bulgarian plural forms) is computed on the server instead.
+ */
+export function fill(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+}
+
+/** A dictionary function turned into a `{name}` template for `fill` — see its note. */
+export function template<A extends string[]>(fn: (...args: A) => string, ...names: A): string {
+  return fn(...(names.map((n) => `{${n}}`) as A));
+}
+
 /* ── Formatting ────────────────────────────────────────────────────────────────────────────────
  * Bulgarian writes 24.09.2026 г., 1 234,50 € and "сряда" — a date or a price formatted for English
  * inside a Bulgarian sentence reads as a bug. Always through these, never `toLocaleString()` bare.

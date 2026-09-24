@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Receipt, ChevronRight, Search, ArrowDownWideNarrow } from "lucide-react";
 import { StatusPill } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
+import { fill } from "@revio/ui/i18n";
 
 export type OpenFolioRow = {
   reservationId: string;
@@ -15,8 +16,9 @@ export type OpenFolioRow = {
   /** Formatted on the server in the reader's language — this client bundle carries no formatter. */
   balanceLabel?: string | null;
 };
-export type OpenFoliosStrings = { search: string; whoOwes: string; room: (units: string) => string; notOpened: string; settled: string; noMatch: (q: string) => string };
-const EN: OpenFoliosStrings = { search: "Search guest or room…", whoOwes: "Who owes", room: (u) => `Room ${u}`, notOpened: "Not opened", settled: "Settled", noMatch: (q) => `No open folios match “${q}”.` };
+/** Strings only — a client component cannot receive functions from the server. `{units}`/`{q}` are filled here. */
+export type OpenFoliosStrings = { search: string; whoOwes: string; room: string; notOpened: string; settled: string; noMatch: string };
+const EN: OpenFoliosStrings = { search: "Search guest or room…", whoOwes: "Who owes", room: "Room {units}", notOpened: "Not opened", settled: "Settled", noMatch: "No open folios match “{q}”." };
 
 /** Open folios (PMS-REFINEMENT-R1 §4.3): the live operational list. Search by guest/room + a
  * "who owes money" sort that floats the biggest balances up. */
@@ -52,7 +54,7 @@ export function OpenFoliosTable({ rows, t = EN }: { rows: OpenFolioRow[]; t?: Op
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-50 text-accent-600"><Receipt className="h-4 w-4" /></div>
                 <div className="min-w-0">
                   <div className="truncate text-[13.5px] font-semibold text-ink-900">{r.guestName}</div>
-                  <div className="text-[11.5px] text-ink-500">{t.room(r.units.join(", ") || "—")}</div>
+                  <div className="text-[11.5px] text-ink-500">{fill(t.room, { units: r.units.join(", ") || "—" })}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -68,7 +70,7 @@ export function OpenFoliosTable({ rows, t = EN }: { rows: OpenFolioRow[]; t?: Op
             </Link>
           </li>
         ))}
-        {view.length === 0 && <li className="px-4 py-6 text-center text-[12.5px] text-ink-400">{t.noMatch(q)}</li>}
+        {view.length === 0 && <li className="px-4 py-6 text-center text-[12.5px] text-ink-400">{fill(t.noMatch, { q })}</li>}
       </ul>
     </div>
   );
