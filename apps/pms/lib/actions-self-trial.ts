@@ -7,6 +7,13 @@ import { PRODUCT_BY_KEY, type ProductKey } from "@revio/core";
 import { requireCapability } from "./authz";
 import { productOrigin } from "@revio/ui/product-links";
 import { flashError, setFlash } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
+
+/** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
+async function flashSay() {
+  return (await i18n()).t(flash);
+}
 
 /**
  * Start a trial of another product, from inside this one.
@@ -27,12 +34,12 @@ export async function beginSelfTrial(fd: FormData): Promise<void> {
    */
   const session = await requireCapability("subscription");
   if (!session) {
-    return flashError("Only the owner or an admin can decide what this account pays for. Ask one of them.");
+    return flashError((await flashSay()).trial.ownersOnly);
   }
 
   const product = String(fd.get("product") ?? "") as ProductKey;
   const info = PRODUCT_BY_KEY[product];
-  if (!info) return flashError("Unknown product.");
+  if (!info) return flashError((await flashSay()).trial.unknownProduct);
 
   const result = await selfStartTrial({
     tenantId: session.tenantId,
@@ -40,7 +47,7 @@ export async function beginSelfTrial(fd: FormData): Promise<void> {
     role: session.role,
     userId: session.userId,
   });
-  if (!result.ok) return flashError(result.message ?? "That trial could not be started.");
+  if (!result.ok) return flashError(result.message ?? (await flashSay()).trial.couldNotStart);
 
   await setFlash(
     "success",
@@ -77,7 +84,7 @@ export async function beginSelfTrial(fd: FormData): Promise<void> {
 export async function keepThisTrial(): Promise<void> {
   const session = await requireCapability("subscription");
   if (!session) {
-    return flashError("Only the owner or an admin can decide what this account pays for. Ask one of them.");
+    return flashError((await flashSay()).trial.ownersOnly);
   }
 
   const result = await requestKeepTrial({
@@ -86,7 +93,7 @@ export async function keepThisTrial(): Promise<void> {
     userId: session.userId,
   });
   if (!result.ok) {
-    return flashError("There is no trial running here to keep. Reload the page — it may have finished already.");
+    return flashError((await flashSay()).trial.noTrial);
   }
 
   await setFlash(

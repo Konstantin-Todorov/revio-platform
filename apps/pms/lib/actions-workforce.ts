@@ -7,6 +7,13 @@ import { recordOpsEvent } from "./events";
 import { DELEGATOR_ROLES } from "./roles";
 import { str } from "./mutation-helpers";
 import { flashError, setFlash } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
+
+/** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
+async function flashSay() {
+  return (await i18n()).t(flash);
+}
 
 /**
  * Clock-in mechanics (PMS-REFINEMENT-R1 §6.7 / §10.3) on the ONE shared identity. Staff self-clock from
@@ -83,7 +90,7 @@ export async function clockOutSelf(): Promise<void> {
 /** Delegated clock-in: a manager/supervisor/reception clocks another user in. Logged (clockedInById). */
 export async function clockInUser(fd: FormData): Promise<void> {
   const s = await getSession();
-  if (!s || !DELEGATOR_ROLES.has(s.role)) return flashError("Only a manager, supervisor or reception can clock somebody else in or out.");
+  if (!s || !DELEGATOR_ROLES.has(s.role)) return flashError((await flashSay()).workforce.delegatorsOnly);
   const userId = str(fd, "userId");
   const target = await prisma.user.findUnique({ where: { id: userId } });
   // Another hotel's user id is a crafted POST — there is no honest message for it, and naming the
@@ -91,7 +98,8 @@ export async function clockInUser(fd: FormData): Promise<void> {
   if (!target || target.tenantId !== s.tenantId) return;
   // Deactivated is a REAL case somebody hits: a leaver still listed on a stale roster page.
   if (!target.active) {
-    return flashError(`${target.name || "That person"} no longer has an active account, so they cannot be clocked in.`);
+    const say = (await flashSay()).workforce;
+    return flashError(say.inactive(target.name || say.thatPerson));
   }
   const open = await prisma.staffShift.findFirst({ where: { propertyId: s.activePropertyId, userId, clockOutAt: null } });
   if (open) {
@@ -111,7 +119,7 @@ export async function clockInUser(fd: FormData): Promise<void> {
 /** Delegated clock-out. */
 export async function clockOutUser(fd: FormData): Promise<void> {
   const s = await getSession();
-  if (!s || !DELEGATOR_ROLES.has(s.role)) return flashError("Only a manager, supervisor or reception can clock somebody else in or out.");
+  if (!s || !DELEGATOR_ROLES.has(s.role)) return flashError((await flashSay()).workforce.delegatorsOnly);
   const userId = str(fd, "userId");
   const open = await prisma.staffShift.findFirst({ where: { propertyId: s.activePropertyId, userId, clockOutAt: null } });
   if (!open) return setFlash("info", "They are not clocked in, so there is no shift to end.");

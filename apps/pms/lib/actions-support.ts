@@ -7,6 +7,13 @@ import { renderSystemEmail, renderSystemEmailText, supportKind, supportReference
 import type { GetHelpResult } from "@revio/ui/get-help";
 import type { SupportReplyResult } from "@revio/ui/support-reply";
 import { getSession } from "./session";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
+
+/** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
+async function flashSay() {
+  return (await i18n()).t(flash);
+}
 
 /**
  * "Get help" from RevioPMS.
@@ -22,7 +29,7 @@ import { getSession } from "./session";
 export async function submitSupportRequest(_prev: GetHelpResult, fd: FormData): Promise<GetHelpResult> {
   const session = await getSession();
   if (!session) {
-    return { ok: false, error: "Your session has expired. Sign in again and send it once more." };
+    return { ok: false, error: (await flashSay()).support.expired };
   }
 
   // Where a reply goes. Read here rather than carried in the session, which does not hold it.
@@ -112,11 +119,11 @@ export async function replyToSupport(
   fd: FormData,
 ): Promise<SupportReplyResult> {
   const session = await getSession();
-  if (!session) return { ok: false, error: "Your session has expired. Sign in again and send it once more." };
+  if (!session) return { ok: false, error: (await flashSay()).support.expired };
 
   const requestId = String(fd.get("requestId") ?? "");
   const body = String(fd.get("body") ?? "");
-  if (!requestId) return { ok: false, error: "That request could not be identified. Reload the page." };
+  if (!requestId) return { ok: false, error: (await flashSay()).support.unknownRequest };
 
   const result = await recordHotelReply({
     requestId,

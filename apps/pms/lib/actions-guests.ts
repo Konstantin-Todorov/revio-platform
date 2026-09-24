@@ -9,6 +9,13 @@ import { getSession } from "./session";
 import { MANAGER_ROLES } from "./roles";
 import { logAudit, str } from "./mutation-helpers";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
+
+/** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
+async function flashSay() {
+  return (await i18n()).t(flash);
+}
 
 /**
  * Guest merge (PMS-REFINEMENT-R1 §3.5). Collapses a duplicate (loser) onto a survivor (winner):
@@ -18,7 +25,7 @@ import { flashError } from "@revio/ui/flash";
  */
 export async function mergeGuests(fd: FormData): Promise<void> {
   const s = await getSession();
-  if (!s || !MANAGER_ROLES.has(s.role)) return flashError("Merging guest records is a manager’s job — ask one to do it.");
+  if (!s || !MANAGER_ROLES.has(s.role)) return flashError((await flashSay()).guests.managersMerge);
 
   const winnerId = str(fd, "winnerId");
   const loserId = str(fd, "loserId");

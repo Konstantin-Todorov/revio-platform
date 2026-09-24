@@ -13,6 +13,13 @@ import { chargeCard, refundCard } from "@revio/payments";
 import { logAudit, str, int } from "./mutation-helpers";
 import { flashError, setFlash } from "@revio/ui/flash";
 import { resolutionConfirmation } from "./folio-outcomes";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
+
+/** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
+async function flashSay() {
+  return (await i18n()).t(flash);
+}
 
 /**
  * Session + capability gate for every action in this file.
@@ -26,7 +33,7 @@ async function ctx(cap: Capability) {
   const session = await getSession();
   if (!session) throw new Error("No session");
   if (!roleHasCapability(session.role, cap)) {
-    await flashError("You don’t have permission to change this folio. Ask a manager or reception colleague.");
+    await flashError((await flashSay()).folio.noPermission);
     redirect(roleHome(session.role));
   }
   return session;
@@ -64,11 +71,11 @@ export async function postCharge(fd: FormData): Promise<void> {
   const description = str(fd, "description");
   const amountMinor = moneyMinor(fd, "amount");
   if (!CHARGE_KINDS.includes(kind) || !description || amountMinor <= 0) {
-    return flashError("Add a description and an amount above zero before posting the charge.");
+    return flashError((await flashSay()).folio.chargeFields);
   }
 
   const folioId = await openFolioId(session, reservationId);
-  if (!folioId) return flashError("This folio is closed, so no new charge was posted. Reopen it first.");
+  if (!folioId) return flashError((await flashSay()).folio.closedCharge);
   // Route through the single charge-posting service so the line is tagged (outlet + tax category).
   await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind, description, amountMinor, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_charge", field: description, newValue: `${kind} +${amountMinor}`, userId: session.userId });
@@ -84,11 +91,11 @@ export async function postPayment(fd: FormData): Promise<void> {
   const amountMinor = moneyMinor(fd, "amount");
   const ref = str(fd, "ref") || null;
   if (!PAY_METHODS[method] || amountMinor <= 0) {
-    return flashError("Choose a payment method and enter an amount above zero.");
+    return flashError((await flashSay()).folio.paymentFields);
   }
 
   const folioId = await openFolioId(session, reservationId);
-  if (!folioId) return flashError("This folio is closed, so no payment was recorded. Reopen it first.");
+  if (!folioId) return flashError((await flashSay()).folio.closedPayment);
 
   // Card payments flow through the gateway boundary (spec §4.5) — we store only the token + result,
   // never a card number. Cash / company / bank are drawer/manual entries and skip the gateway.
@@ -96,7 +103,7 @@ export async function postPayment(fd: FormData): Promise<void> {
   let gwRef = ref;
   if (method === "card") {
     const g = await chargeCard(amountMinor, "EUR", `Folio ${reservationId.slice(-6)}`);
-    if (!g.ok) return flashError("The card payment was declined by the gateway. Nothing was posted to the folio.");
+    if (!g.ok) return flashError((await flashSay()).folio.cardDeclined);
     gwRef = g.ref;
     description = g.mode === "stripe_test" ? `Card •••• ${g.last4 ?? "4242"} (test)` : "Card (mock gateway)";
   }
@@ -116,11 +123,11 @@ export async function addStayExtra(fd: FormData): Promise<void> {
   const reservationId = str(fd, "reservationId");
   const name = str(fd, "name");
   const priceMinor = moneyMinor(fd, "price");
-  if (!name || priceMinor <= 0) return flashError("Name the recurring extra and enter a nightly price above zero.");
+  if (!name || priceMinor <= 0) return flashError((await flashSay()).folio.extraFields);
 
   const reservation = await prisma.reservation.findFirst({ where: { id: reservationId, propertyId: session.activePropertyId }, select: { id: true } });
   if (!reservation) {
-    await flashError("That stay no longer exists, so the recurring extra was not added.");
+    await flashError((await flashSay()).folio.stayGone);
     redirect("/folios");
   }
   await prisma.stayExtra.create({
@@ -137,7 +144,7 @@ export async function removeStayExtra(fd: FormData): Promise<void> {
   const reservationId = str(fd, "reservationId");
   const id = str(fd, "id");
   const extra = await prisma.stayExtra.findFirst({ where: { id, propertyId: session.activePropertyId }, select: { id: true, name: true } });
-  if (!extra) return flashError("That recurring extra no longer exists. Reload the folio and try again.");
+  if (!extra) return flashError((await flashSay()).folio.extraGone);
   await prisma.stayExtra.delete({ where: { id } });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "stay_extra", field: extra!.name, newValue: "stopped", userId: session.userId });
   await setFlash("success", `${extra!.name} was stopped. Charges already accrued remain on the folio.`);
@@ -157,18 +164,18 @@ export async function captureDeposit(fd: FormData): Promise<void> {
   const depositTypeId = str(fd, "depositTypeId");
   const method = str(fd, "method") || "cash";
   const amountMinor = moneyMinor(fd, "amount");
-  if (amountMinor <= 0) return flashError("Enter a deposit amount above zero.");
+  if (amountMinor <= 0) return flashError((await flashSay()).folio.depositAmount);
 
   const type = await prisma.depositType.findFirst({ where: { id: depositTypeId, propertyId: session.activePropertyId, active: true } });
-  if (!type) return flashError("Choose an active deposit type before taking the deposit.");
+  if (!type) return flashError((await flashSay()).folio.depositType);
   const folioId = await openFolioId(session, reservationId);
-  if (!folioId) return flashError("This folio is closed, so no deposit was taken. Reopen it first.");
+  if (!folioId) return flashError((await flashSay()).folio.closedDeposit);
 
   // Card deposits are gateway transactions against the token; cash is a drawer entry (spec §4.5).
   let depositRef: string | null = null;
   if (method === "card") {
     const g = await chargeCard(amountMinor, "EUR", `${type!.name} deposit ${reservationId.slice(-6)}`);
-    if (!g.ok) return flashError("The deposit card payment was declined. Nothing was posted to the folio.");
+    if (!g.ok) return flashError((await flashSay()).folio.depositDeclined);
     depositRef = g.ref;
   }
   const applied = type!.behaviour === "applied";
@@ -192,14 +199,14 @@ export async function useDeposit(fd: FormData): Promise<void> {
   const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const folioId = await openFolioId(session, reservationId);
-  if (!folioId) return flashError("This folio is closed, so no deposit was applied. Reopen it first.");
+  if (!folioId) return flashError((await flashSay()).folio.closedApply);
 
   const lines = await prisma.folioLine.findMany({ where: { folioId: folioId! }, select: { kind: true, amountMinor: true, voided: true } });
   const { depositsHeld, balance } = folioBalance(lines);
   const requested = moneyMinor(fd, "amount");
   // Never apply more than is held, nor more than is owed.
   const amountMinor = Math.min(requested > 0 ? requested : depositsHeld, depositsHeld, Math.max(0, balance));
-  if (amountMinor <= 0) return flashError("There is no held deposit available against an outstanding balance.");
+  if (amountMinor <= 0) return flashError((await flashSay()).folio.noHeldToApply);
 
   await postFolioLine({
     tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!,
@@ -216,13 +223,13 @@ export async function refundDeposit(fd: FormData): Promise<void> {
   const session = await ctx("manage");
   const reservationId = str(fd, "reservationId");
   const folioId = await openFolioId(session, reservationId);
-  if (!folioId) return flashError("This folio is closed, so no deposit was refunded. Reopen it first.");
+  if (!folioId) return flashError((await flashSay()).folio.closedRefund);
 
   const lines = await prisma.folioLine.findMany({ where: { folioId: folioId! }, select: { kind: true, amountMinor: true, voided: true } });
   const { depositsHeld } = folioBalance(lines);
   const requested = moneyMinor(fd, "amount");
   const amountMinor = Math.min(requested > 0 ? requested : depositsHeld, depositsHeld);
-  if (amountMinor <= 0) return flashError("There is no held deposit available to refund.");
+  if (amountMinor <= 0) return flashError((await flashSay()).folio.noHeldToRefund);
 
   // Card refunds go back through the same gateway; cash refunds are a drawer entry (spec §4.5).
   const method = str(fd, "method") || "cash";
@@ -230,7 +237,7 @@ export async function refundDeposit(fd: FormData): Promise<void> {
   if (method === "card") {
     const held = await prisma.folioLine.findFirst({ where: { folioId: folioId!, kind: "deposit_held", ref: { not: null } }, orderBy: { postedAt: "desc" }, select: { ref: true } });
     const g = await refundCard(held?.ref ?? "mock_", amountMinor);
-    if (!g.ok) return flashError("The card refund failed at the gateway. Nothing was posted to the folio.");
+    if (!g.ok) return flashError((await flashSay()).folio.refundFailed);
     refundRef = g.ref;
   }
   await postFolioLine({
@@ -277,15 +284,15 @@ export async function removeFolio(fd: FormData): Promise<void> {
     where: { id: folioId, reservationId, propertyId: session.activePropertyId },
     include: { lines: { select: { id: true, voided: true } } },
   });
-  if (!folio) return flashError("That split folio no longer exists. Reload the stay and try again.");
-  if (folio!.isPrimary) return flashError("The primary folio is the stay’s bill and cannot be removed.");
-  if (folio!.status !== "open") return flashError("A closed folio is a financial record and cannot be removed.");
+  if (!folio) return flashError((await flashSay()).folio.splitGone);
+  if (folio!.isPrimary) return flashError((await flashSay()).folio.primaryStays);
+  if (folio!.status !== "open") return flashError((await flashSay()).folio.closedIsRecord);
 
   // Voided lines don't count as content: they are struck-through history, and keeping an empty split
   // alive because it once held a line that was cancelled is the same dead end in slower motion. They
   // are deleted with the folio, and the void itself is already in the audit log.
   const liveLines = folio!.lines.filter((l) => !l.voided);
-  if (liveLines.length > 0) return flashError("Move or void every active line on this split before removing it.");
+  if (liveLines.length > 0) return flashError((await flashSay()).folio.splitHasLines);
 
   await withTenantTransaction(session.tenantId, async (tx) => {
     await tx.folioLine.deleteMany({ where: { folioId } });
@@ -339,7 +346,7 @@ export async function resolveFolio(fd: FormData): Promise<void> {
    * nothing is worse than one that throws, because there is nothing to report and nothing to fix.
    */
   if (!FOLIO_RESOLUTIONS.includes(resolution as (typeof FOLIO_RESOLUTIONS)[number])) {
-    return flashError("That is not one of the four ways to resolve a folio. Reload the page and try again.");
+    return flashError((await flashSay()).folio.notAResolution);
   }
 
   const folio = await prisma.folio.findFirst({
@@ -347,13 +354,13 @@ export async function resolveFolio(fd: FormData): Promise<void> {
     select: { id: true, status: true, outcome: true, label: true, lines: { select: { kind: true, amountMinor: true, voided: true } } },
   });
   if (!folio) {
-    return flashError("That folio no longer exists on this stay. Reload the page.");
+    return flashError((await flashSay()).folio.folioGone);
   }
   if (folio.status !== "closed") {
     // The four resolutions are the exits from "closed with a balance". An OPEN folio takes a payment
     // the ordinary way, and offering to mark it paid off-system would be a second, quieter path to
     // the same place — with no line on the bill to show for it.
-    return flashError("This folio is still open. Post the payment on it directly, or close it first — these four are the ways out of a folio that closed still owing money.");
+    return flashError((await flashSay()).folio.stillOpen);
   }
 
   const now = new Date();
@@ -436,12 +443,12 @@ export async function resolveMoveDifference(fd: FormData): Promise<void> {
   const note = str(fd, "note");
 
   if (!MOVE_RESOLUTIONS.includes(resolution as (typeof MOVE_RESOLUTIONS)[number])) {
-    return flashError("Choose one of the available ways to settle the room-move difference.");
+    return flashError((await flashSay()).folio.moveChoice);
   }
 
   const assessment = await assessMoveForReservation(reservationId);
   if (!assessment || assessment.kind !== "rate_affecting") {
-    return flashError("There is no unresolved rate difference for this room move.");
+    return flashError((await flashSay()).folio.noMoveDifference);
   }
 
   // A custom amount overrides the computed one; everything else uses what was assessed. Read as an
@@ -455,7 +462,7 @@ export async function resolveMoveDifference(fd: FormData): Promise<void> {
 
   if ((posts || refunds) && magnitude > 0) {
     const folioId = await ensureFolio(session.tenantId, session.activePropertyId, reservationId);
-    if (!folioId) return flashError("The stay has no open folio, so the room-move amount was not posted. Reopen the folio first.");
+    if (!folioId) return flashError((await flashSay()).folio.noOpenFolioForMove);
     await postFolioLine({
       tenantId: session.tenantId,
       propertyId: session.activePropertyId,
@@ -493,13 +500,13 @@ export async function moveFolioLine(fd: FormData): Promise<void> {
   const targetFolioId = str(fd, "targetFolioId");
 
   const line = await prisma.folioLine.findFirst({ where: { id: lineId, propertyId: session.activePropertyId }, include: { folio: { select: { reservationId: true } } } });
-  if (!line) return flashError("That folio line no longer exists. Reload the stay and try again.");
-  if (line.voided) return flashError("A voided line cannot be moved to another folio.");
-  if (line.kind === "payment") return flashError("Payments stay on their original folio and cannot be moved.");
+  if (!line) return flashError((await flashSay()).folio.lineGone);
+  if (line.voided) return flashError((await flashSay()).folio.voidedCannotMove);
+  if (line.kind === "payment") return flashError((await flashSay()).folio.paymentsStay);
   const target = await prisma.folio.findFirst({ where: { id: targetFolioId, reservationId, status: "open" }, select: { id: true } });
   // Both source and target must belong to THIS reservation, and the target must be open.
   if (!target || line!.folio.reservationId !== reservationId) {
-    return flashError("Choose an open folio from this same stay before moving the line.");
+    return flashError((await flashSay()).folio.chooseOpenFolio);
   }
 
   await prisma.folioLine.update({ where: { id: lineId }, data: { folioId: target!.id } });
@@ -514,9 +521,9 @@ export async function voidFolioLine(fd: FormData): Promise<void> {
   const reservationId = str(fd, "reservationId");
   const lineId = str(fd, "lineId");
   const line = await prisma.folioLine.findFirst({ where: { id: lineId, propertyId: session.activePropertyId } });
-  if (!line) return flashError("That folio line no longer exists. Reload the stay and try again.");
-  if (line.voided) return flashError("That folio line has already been voided.");
-  if (line.kind === "accommodation") return flashError("Accommodation is authoritative and cannot be voided from the folio.");
+  if (!line) return flashError((await flashSay()).folio.lineGone);
+  if (line.voided) return flashError((await flashSay()).folio.alreadyVoided);
+  if (line.kind === "accommodation") return flashError((await flashSay()).folio.accommodationAuthoritative);
 
   await prisma.folioLine.update({ where: { id: lineId }, data: { voided: true } });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_void", field: line.description, oldValue: String(line.amountMinor), newValue: "voided", userId: session.userId });

@@ -9,6 +9,13 @@ import { takeUnitOoo, clearUnitOoo } from "./units";
 import { logAudit, str } from "./mutation-helpers";
 import { recordOpsEvent } from "./events";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
+
+/** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
+async function flashSay() {
+  return (await i18n()).t(flash);
+}
 
 /**
  * Session + capability gate for every action in this file.
@@ -65,7 +72,7 @@ export async function setMaintenanceStatus(fd: FormData): Promise<void> {
   const session = await ctx("maintenance");
   const id = str(fd, "id");
   const status = str(fd, "status");
-  if (!STATUSES.includes(status)) return flashError("That isn’t a status a task can be in. Reload the page and try again.");
+  if (!STATUSES.includes(status)) return flashError((await flashSay()).maintenance.notAStatus);
   const task = await prisma.maintenanceTask.findFirst({ where: { id, propertyId: session.activePropertyId }, include: { unit: { select: { id: true, label: true } } } });
   if (!task) return;
 

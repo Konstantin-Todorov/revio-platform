@@ -9,6 +9,13 @@ import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { logAudit, str, int } from "./mutation-helpers";
 import { recordOpsEvent } from "./events";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
+
+/** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
+async function flashSay() {
+  return (await i18n()).t(flash);
+}
 
 const HK_STATUSES = ["clean", "dirty", "in_progress", "inspected", "out_of_order"];
 
@@ -39,10 +46,10 @@ export async function createUnit(fd: FormData): Promise<void> {
   const roomTypeId = str(fd, "roomTypeId");
   const label = str(fd, "label");
   const floor = str(fd, "floor") || null;
-  if (!roomTypeId || !label) return flashError("A room needs a room type and a number before it can be added.");
+  if (!roomTypeId || !label) return flashError((await flashSay()).units.needTypeAndNumber);
 
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId } });
-  if (!roomType) return flashError("That room type no longer exists — somebody removed it while this page was open.");
+  if (!roomType) return flashError((await flashSay()).units.typeGone);
   if (roomType.propertyId !== session.activePropertyId) return; // crafted POST — see above
 
 
@@ -70,11 +77,11 @@ export async function generateUnits(fd: FormData): Promise<void> {
   const start = int(fd, "start", 1);
   const prefix = str(fd, "prefix");
   const floor = str(fd, "floor") || null;
-  if (!roomTypeId) return flashError("Pick a room type first.");
-  if (n <= 0) return flashError("Say how many rooms to create — a number above zero.");
+  if (!roomTypeId) return flashError((await flashSay()).units.pickType);
+  if (n <= 0) return flashError((await flashSay()).units.howMany);
 
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId } });
-  if (!roomType) return flashError("That room type no longer exists — somebody removed it while this page was open.");
+  if (!roomType) return flashError((await flashSay()).units.typeGone);
   if (roomType.propertyId !== session.activePropertyId) return; // crafted POST — see above
 
 
@@ -102,7 +109,7 @@ export async function updateUnit(fd: FormData): Promise<void> {
   const session = await ctx("manage");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  if (!unit) return flashError((await flashSay()).units.roomGone);
   // A different property's unit id is a crafted POST. There is no honest message for it, and naming
   // the row would confirm it exists.
   if (unit.propertyId !== session.activePropertyId) return;
@@ -155,7 +162,7 @@ export async function deleteUnit(fd: FormData): Promise<void> {
   const session = await ctx("manage");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  if (!unit) return flashError((await flashSay()).units.roomGone);
   // A different property's unit id is a crafted POST. There is no honest message for it, and naming
   // the row would confirm it exists.
   if (unit.propertyId !== session.activePropertyId) return;
@@ -188,10 +195,10 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
   const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const status = str(fd, "status");
-  if (!HK_STATUSES.includes(status)) return flashError("That isn’t a housekeeping status. Reload the page and try again.");
+  if (!HK_STATUSES.includes(status)) return flashError((await flashSay()).units.notHkStatus);
 
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  if (!unit) return flashError((await flashSay()).units.roomGone);
   // A different property's unit id is a crafted POST. There is no honest message for it, and naming
   // the row would confirm it exists.
   if (unit.propertyId !== session.activePropertyId) return;
@@ -240,7 +247,7 @@ export async function startCleaning(fd: FormData): Promise<void> {
   const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  if (!unit) return flashError((await flashSay()).units.roomGone);
   // A different property's unit id is a crafted POST. There is no honest message for it, and naming
   // the row would confirm it exists.
   if (unit.propertyId !== session.activePropertyId) return;
@@ -273,7 +280,7 @@ export async function finishCleaning(fd: FormData): Promise<void> {
   const session = await ctx("housekeeping");
   const unitId = str(fd, "unitId");
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  if (!unit) return flashError((await flashSay()).units.roomGone);
   // A different property's unit id is a crafted POST. There is no honest message for it, and naming
   // the row would confirm it exists.
   if (unit.propertyId !== session.activePropertyId) return;
@@ -297,9 +304,9 @@ export async function reportRoomIssue(fd: FormData): Promise<void> {
   const unitId = str(fd, "unitId");
   const title = str(fd, "title");
   // The description IS the report — a maintenance task with no words is one nobody can act on.
-  if (!title) return flashError("Say what is wrong with the room, so maintenance knows what to bring.");
+  if (!title) return flashError((await flashSay()).units.sayWhatIsWrong);
   const unit = await prisma.unit.findUnique({ where: { id: unitId } });
-  if (!unit) return flashError("That room no longer exists — somebody removed it while this page was open.");
+  if (!unit) return flashError((await flashSay()).units.roomGone);
   // A different property's unit id is a crafted POST. There is no honest message for it, and naming
   // the row would confirm it exists.
   if (unit.propertyId !== session.activePropertyId) return;
