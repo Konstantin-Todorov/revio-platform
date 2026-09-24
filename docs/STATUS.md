@@ -332,6 +332,12 @@ says who can move it. Details sit where the link points.
    trial reminder and trial finished (moved from the operator app into core `trial-emails.ts`), and the
    words around our support reply. The system shell sets `lang` and its footer per language. Mail to US
    (support, alerts) stays English; invoices stay English (legal). Guest mail was already per-language.
+   **Guest mail, 2026-09-25:** Settings → Guest emails is one shared screen in RevioLink, RevioCRS and
+   RevioPMS <!-- status: built packages/ui/src/guest-emails.tsx#GuestEmails --> with the guests'
+   language chosen at the top; RevioCRS emails confirm/change/cancel
+   <!-- status: built apps/reservation/lib/guest-mail.ts#emailGuestAbout --> and RevioPMS the bill at
+   check-out <!-- status: built apps/pms/lib/guest-receipt.ts#emailReceipt -->. Open: pre-arrival and
+   thank-you, per-guest language — `docs/PLAN-GUEST-EMAILS.md`.
 5. RevioDirect's guest page — the GUEST's language, a different choice from staff (browser, then hotel).
 Rule for every step: `lib/i18n/<screen>.ts`, add it to the completeness test when finished, look at the
 page at phone width. Not translated: legal documents, and anything the hotel typed.
