@@ -7,6 +7,14 @@ import {
 } from "@revio/db";
 import type { TwoFactorState } from "@revio/ui/two-factor-setup";
 import { getSession } from "./session";
+import { translate } from "@revio/ui/i18n";
+import { accountStrings } from "@revio/ui/account-strings";
+import { getLocale } from "./locale";
+
+/** What these actions refuse with, in the reader's language. */
+async function say() {
+  return translate(accountStrings, await getLocale()).twoFactor.errors;
+}
 
 export type { TwoFactorState };
 
@@ -42,14 +50,14 @@ async function qrFor(uri: string): Promise<string | null> {
 
 export async function startTwoFactor(): Promise<TwoFactorState> {
   const session = await getSession();
-  if (!session) return { step: "idle", error: "Sign in again." };
+  if (!session) return { step: "idle", error: (await say()).signInAgain };
   const offer = await beginUserTotpEnrolment(session.tenantId, session.userId, "Revio");
   return { step: "enrolling", secret: offer.secret, uri: offer.uri, qrDataUrl: await qrFor(offer.uri) };
 }
 
 export async function confirmTwoFactor(_prev: TwoFactorState | null, fd: FormData): Promise<TwoFactorState> {
   const session = await getSession();
-  if (!session) return { step: "idle", error: "Sign in again." };
+  if (!session) return { step: "idle", error: (await say()).signInAgain };
 
   const secret = String(fd.get("secret") ?? "");
   const uri = String(fd.get("uri") ?? "");
@@ -62,7 +70,7 @@ export async function confirmTwoFactor(_prev: TwoFactorState | null, fd: FormDat
     // Stay on the enrolling step with the SAME secret on screen. Re-minting one here would silently
     // invalidate the QR they have already scanned, so a mistyped digit would send them round the
     // whole setup again for no reason.
-    return { step: "enrolling", secret, uri, qrDataUrl: await qrFor(uri), error: result.error };
+    return { step: "enrolling", secret, uri, qrDataUrl: await qrFor(uri), error: (result.code && (await say())[result.code]) || result.error };
   }
   revalidatePath("/settings", "layout");
   return { step: "done", recoveryCodes: result.recoveryCodes ?? [] };
@@ -79,10 +87,10 @@ export async function turnOffTwoFactor(
   fd: FormData,
 ): Promise<{ error?: string }> {
   const session = await getSession();
-  if (!session) return { error: "Sign in again." };
+  if (!session) return { error: (await say()).signInAgain };
 
   const password = String(fd.get("password") ?? "");
-  if (!password) return { error: "Enter your password to turn two-factor off." };
+  if (!password) return { error: (await say()).enterPassword };
 
   const { verifyPassword } = await import("./auth");
   const user = await forSystem().user.findUnique({
@@ -90,7 +98,7 @@ export async function turnOffTwoFactor(
     select: { passwordHash: true },
   });
   if (!user?.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
-    return { error: "That password is not right." };
+    return { error: (await say()).wrongPassword };
   }
 
   await disableUserTotp({ tenantId: session.tenantId, userId: session.userId, scope: "pms" });

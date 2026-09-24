@@ -74,3 +74,20 @@ perimeter and not inside a hotel's own app.
 **RevioDirect is absent entirely.** The booking page wears the *hotel's* brand colour (computed per
 property in `apps/booking/lib/brand.ts`) and the hotel's own logo as its favicon. Painting Revio's
 identity on a guest-facing page would contradict the product.
+
+## Shared components in the reader's language (2026-09-24)
+
+A shared component's words live in a `*-strings.ts` module beside it (`auth-strings`,
+`account-strings`), as `Translations<T>` from `./i18n` — **strings only**, `{name}` placeholders filled
+with `fill()`, because most of these are client components and a function cannot cross to one.
+
+- **Client component** → `translate(xStrings, useLocale())`. No prop to thread through; a product that
+  renders no `LocaleProvider` gets English, exactly as before, so moving one product to Bulgarian never
+  changes another.
+- **Server component** (no hooks) → an optional `locale?: Locale` prop, default `"en"`.
+- **A message produced in `@revio/db` or `@revio/core`** keeps its English `message`/`error` for every
+  existing caller and gains a stable `code` (`TwoFactorErrorCode`, `RegisterProblemCode`); the screen
+  says `strings[code] ?? message`. Never translate by matching the English sentence.
+
+A finished strings module goes in `apps/pms/lib/i18n/coverage.test.ts`, which fails the build if any
+key has no Bulgarian.

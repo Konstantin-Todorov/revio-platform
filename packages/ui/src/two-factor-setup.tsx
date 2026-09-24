@@ -2,6 +2,9 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { ShieldCheck, ShieldOff, Copy, Download } from "lucide-react";
+import { fill, translate, type Locale } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { accountStrings, type AccountStrings } from "./account-strings";
 import { OtpInput } from "@revio/ui/otp-input";
 
 /**
@@ -46,14 +49,13 @@ const inputCls =
  * header says what the file is, because a bare list of ten strings found in Downloads next year
  * means nothing to whoever finds it.
  */
-function downloadRecoveryCodes(codes: string[], productName: string) {
+function downloadRecoveryCodes(codes: string[], productName: string, t: AccountStrings["twoFactor"]) {
+  const date = new Date().toISOString().slice(0, 10);
   const body = [
-    `${productName} — two-factor recovery codes`,
-    `Generated ${new Date().toISOString().slice(0, 10)}`,
+    fill(t.fileTitle, { product: productName }),
+    fill(t.fileGenerated, { date }),
     "",
-    "Each code works ONCE. Use one in place of the six-digit code if you lose",
-    "access to your authenticator app. Keep this file somewhere other than the",
-    "phone the app is on.",
+    ...t.fileNote,
     "",
     ...codes.map((c, i) => `${String(i + 1).padStart(2, " ")}. ${c}`),
     "",
@@ -74,7 +76,7 @@ export function TwoFactorSetup({
   actions,
   /** "Revio Operator" or the hotel product name — used in the recovery-code file header. */
   productName = "Revio",
-  reason = "A password on its own can be guessed, reused or stolen. Two-factor adds a code from your phone, so knowing the password is not enough.",
+  reason,
 }: {
   enabled: boolean;
   actions: TwoFactorActions;
@@ -90,6 +92,8 @@ export function TwoFactorSetup({
    */
   reason?: string;
 }) {
+  const locale: Locale = useLocale();
+  const t = translate(accountStrings, locale).twoFactor;
   const { start: startTwoFactor, confirm: confirmTwoFactor, turnOff: turnOffTwoFactor } = actions;
   const [state, formAction, pending] = useActionState<TwoFactorState | null, FormData>(confirmTwoFactor, null);
   const [offer, setOffer] = useState<{ secret: string; uri: string; qrDataUrl: string | null } | null>(null);
@@ -102,12 +106,10 @@ export function TwoFactorSetup({
     return (
       <div className="rounded-md border border-success-500 bg-success-50 p-4">
         <p className="flex items-center gap-1.5 text-[13px] font-bold text-success-700">
-          <ShieldCheck className="h-4 w-4" /> Two-factor authentication is on
+          <ShieldCheck className="h-4 w-4" /> {t.onTitle}
         </p>
         <p className="mt-2 text-[12.5px] text-ink-700">
-          Save these recovery codes somewhere other than the phone with your authenticator app. Each one works
-          once, and <span className="font-semibold">this is the only time they are shown</span> — only their
-          hashes are kept.
+          {t.saveCodesBefore} <span className="font-semibold">{t.onlyTime}</span> {t.saveCodesAfter}
         </p>
         <ul className="mt-2.5 grid grid-cols-2 gap-1.5">
           {state.recoveryCodes.map((c) => (
@@ -120,14 +122,14 @@ export function TwoFactorSetup({
             onClick={() => void navigator.clipboard?.writeText(state.recoveryCodes.join("\n"))}
             className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted"
           >
-            <Copy className="h-3.5 w-3.5" /> Copy all
+            <Copy className="h-3.5 w-3.5" /> {t.copyAll}
           </button>
           <button
             type="button"
-            onClick={() => downloadRecoveryCodes(state.recoveryCodes, productName)}
+            onClick={() => downloadRecoveryCodes(state.recoveryCodes, productName, t)}
             className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted"
           >
-            <Download className="h-3.5 w-3.5" /> Download .txt
+            <Download className="h-3.5 w-3.5" /> {t.download}
           </button>
         </div>
       </div>
@@ -138,13 +140,13 @@ export function TwoFactorSetup({
     return (
       <div>
         <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-success-700">
-          <ShieldCheck className="h-4 w-4" /> Two-factor authentication is on for your account
+          <ShieldCheck className="h-4 w-4" /> {t.onForYou}
         </p>
         <form action={offAction} className="mt-3 flex flex-wrap items-end gap-2">
           <label className="flex-1">
             {/* The password is required for the same reason 2FA exists: an unattended laptop must not
                 be enough to remove the protection against an unattended laptop. */}
-            <span className="mb-1 block text-[11.5px] font-semibold text-ink-600">Your password, to turn it off</span>
+            <span className="mb-1 block text-[11.5px] font-semibold text-ink-600">{t.passwordToTurnOff}</span>
             <input name="password" type="password" autoComplete="current-password" className={inputCls} placeholder="••••••••" />
           </label>
           <button
@@ -152,7 +154,7 @@ export function TwoFactorSetup({
             disabled={offPending}
             className="inline-flex h-10 items-center gap-1.5 rounded-md border border-danger-500 px-3 text-[12.5px] font-semibold text-danger-600 hover:bg-danger-50 disabled:opacity-60"
           >
-            <ShieldOff className="h-3.5 w-3.5" /> Turn off
+            <ShieldOff className="h-3.5 w-3.5" /> {t.turnOff}
           </button>
         </form>
         {offState?.error && <p role="alert" className="mt-2 text-[12px] font-medium text-danger-600">{offState.error}</p>}
@@ -164,7 +166,7 @@ export function TwoFactorSetup({
     return (
       <div>
         <p className="text-[12.5px] text-ink-600">
-          {reason}
+          {reason ?? t.reason}
         </p>
         <button
           type="button"
@@ -172,7 +174,7 @@ export function TwoFactorSetup({
           onClick={() => startTransition(async () => setOffer(await startTwoFactor().then((s) => (s.step === "enrolling" ? { secret: s.secret, uri: s.uri, qrDataUrl: s.qrDataUrl } : null))))}
           className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
         >
-          <ShieldCheck className="h-3.5 w-3.5" /> {starting ? "Preparing…" : "Set up two-factor"}
+          <ShieldCheck className="h-3.5 w-3.5" /> {starting ? t.preparing : t.setUp}
         </button>
       </div>
     );
@@ -183,20 +185,20 @@ export function TwoFactorSetup({
       <input type="hidden" name="secret" value={live.secret} />
       <input type="hidden" name="uri" value={live.uri} />
       <p className="text-[12.5px] text-ink-700">
-        Scan this with your authenticator app, then enter the code it shows to confirm it works.
+        {t.scan}
       </p>
       <div className="flex flex-wrap items-start gap-4">
         {live.qrDataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={live.qrDataUrl} alt="Two-factor QR code" width={160} height={160} className="rounded border border-surface-border bg-white p-1.5" />
+          <img src={live.qrDataUrl} alt={t.qrAlt} width={160} height={160} className="rounded border border-surface-border bg-white p-1.5" />
         ) : null}
         <div className="min-w-[180px]">
-          <div className="text-[11.5px] font-semibold text-ink-600">Or enter this key by hand</div>
+          <div className="text-[11.5px] font-semibold text-ink-600">{t.byHand}</div>
           <code className="mt-1 block break-all rounded bg-surface-sunken px-2 py-1.5 font-mono text-[12px] text-ink-800">{live.secret}</code>
         </div>
       </div>
       <label className="block max-w-[220px]">
-        <span className="mb-1 block text-[11.5px] font-semibold text-ink-600">Code from your app</span>
+        <span className="mb-1 block text-[11.5px] font-semibold text-ink-600">{t.code}</span>
         <OtpInput className={inputCls} />
       </label>
       {state?.step === "enrolling" && state.error && (
@@ -207,7 +209,7 @@ export function TwoFactorSetup({
         disabled={pending}
         className="inline-flex h-10 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
       >
-        {pending ? "Checking…" : "Confirm and turn on"}
+        {pending ? t.checking : t.confirm}
       </button>
     </form>
   );

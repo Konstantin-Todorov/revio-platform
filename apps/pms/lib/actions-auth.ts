@@ -15,6 +15,7 @@ import {
 import { roleHome } from "./roles";
 import { i18n } from "./i18n/server";
 import { auth as authDict } from "./i18n/auth";
+import { accountStrings } from "@revio/ui/account-strings";
 
 /** Before sign-in the language is the device's (the cookie from the sign-in screen's switch). */
 async function say() {
@@ -179,7 +180,7 @@ export async function verifyTwoFactor(_prev: LoginResult | null, fd: FormData): 
       scope: "pms", type: AUTH_EVENT.twoFactorFailed,
       userId: pending.userId, ...origin, detail: result.error,
     });
-    return { error: result.error };
+    return { error: (await i18n()).t(accountStrings).twoFactor.errors[result.code] ?? result.error };
   }
   await recordLoginSuccess("pms", `2fa:${pending.userId}`);
 

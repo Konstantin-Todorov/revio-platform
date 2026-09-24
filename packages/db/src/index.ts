@@ -85,6 +85,7 @@ export {
   verifyUserSecondFactor,
   userRequiresSecondFactor,
 } from "./user-2fa.js";
+export type { TwoFactorErrorCode } from "./two-factor.js";
 export {
   acquireJobLease,
   releaseJobLease,

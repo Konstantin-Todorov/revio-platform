@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export default async function AccountSettingsPage() {
   const session = await getSession();
   const twoFactorOn = session ? await userRequiresSecondFactor(session.userId) : false;
-  const { t: tr } = await i18n();
+  const { t: tr, locale } = await i18n();
   const t = tr(settings).account;
 
   // Named rather than "everything": a warning nobody can check is a warning nobody reads.
@@ -49,7 +49,7 @@ export default async function AccountSettingsPage() {
       <Card>
         <CardHeader title={t.signIn} subtitle={t.signInSub} />
         <div className="p-5">
-          <SignOutEverywhere action={signOutEverywhere} productNames={productNames} />
+          <SignOutEverywhere action={signOutEverywhere} productNames={productNames} locale={locale} />
         </div>
       </Card>
     </>

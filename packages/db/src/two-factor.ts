@@ -108,11 +108,19 @@ export async function beginEnrolment(
   return { secret, uri: totpUri({ secret, account: account.email, issuer }) };
 }
 
+/**
+ * Which way a code was refused — stable, so a screen in another language can say it in its own
+ * words. `error` stays the English sentence for every caller that has not moved.
+ */
+export type TwoFactorErrorCode =
+  | "no_pending" | "setup_mismatch" | "not_set_up" | "mismatch" | "reused" | "enter_code" | "recovery_used";
+
 export interface ConfirmResult {
   ok: boolean;
   /** Shown ONCE. Never retrievable afterwards — only their hashes are kept. */
   recoveryCodes?: string[];
   error?: string;
+  code?: TwoFactorErrorCode;
 }
 
 /**
@@ -130,7 +138,7 @@ export async function confirmEnrolment(
 ): Promise<ConfirmResult> {
   const account = await store.read(id);
   if (!account?.totpPendingSecret) {
-    return { ok: false, error: "Start again — there is no pending setup for this account." };
+    return { ok: false, code: "no_pending", error: "Start again — there is no pending setup for this account." };
   }
 
   // Verified against the PENDING secret, never the live one: this step exists to prove the new app
@@ -138,7 +146,7 @@ export async function confirmEnrolment(
   // people do — and the live factor keeps working right up until this succeeds.
   const secret = decryptSecret(account.totpPendingSecret);
   if (!verifyTotp(secret, code, now)) {
-    return { ok: false, error: "That code didn't match. Check your authenticator app and try the current code." };
+    return { ok: false, code: "setup_mismatch", error: "That code didn't match. Check your authenticator app and try the current code." };
   }
 
   const codes = generateRecoveryCodes();
@@ -161,7 +169,7 @@ export async function confirmEnrolment(
 
 export type SecondFactorResult =
   | { ok: true; usedRecoveryCode: boolean; recoveryCodesRemaining?: number }
-  | { ok: false; error: string };
+  | { ok: false; error: string; code: TwoFactorErrorCode };
 
 /**
  * Check the second factor at sign-in. Accepts either a TOTP code or a recovery code.
@@ -174,7 +182,7 @@ export async function verifySecond(
 ): Promise<SecondFactorResult> {
   const account = await store.read(id);
   if (!account?.totpEnabledAt || !account.totpSecret) {
-    return { ok: false, error: "Two-factor authentication is not set up for this account." };
+    return { ok: false, code: "not_set_up", error: "Two-factor authentication is not set up for this account." };
   }
 
   const entered = submitted.trim();
@@ -191,15 +199,15 @@ export async function verifySecond(
      */
     const step = matchTotpStep(secret, entered, now);
     if (step === null) {
-      return { ok: false, error: "That code didn't match. Try the current one from your app." };
+      return { ok: false, code: "mismatch", error: "That code didn't match. Try the current one from your app." };
     }
     if (account.totpLastStep != null && step <= account.totpLastStep) {
-      return { ok: false, error: "That code has already been used. Wait for the next one." };
+      return { ok: false, code: "reused", error: "That code has already been used. Wait for the next one." };
     }
     // The check above is a courtesy that produces a good message; THIS is the decision. Two
     // requests in the same step both pass the check and only one wins here.
     if (!(await store.consumeStep(id, step))) {
-      return { ok: false, error: "That code has already been used. Wait for the next one." };
+      return { ok: false, code: "reused", error: "That code has already been used. Wait for the next one." };
     }
     return { ok: true, usedRecoveryCode: false };
   }
@@ -207,7 +215,7 @@ export async function verifySecond(
   // Otherwise treat it as a recovery code. Every stored hash is compared so a wrong code takes the
   // same time as a right one, and so a used code is reported as used rather than as wrong.
   const normalised = normaliseRecoveryCode(entered);
-  if (!normalised) return { ok: false, error: "Enter the six-digit code from your app, or a recovery code." };
+  if (!normalised) return { ok: false, code: "enter_code", error: "Enter the six-digit code from your app, or a recovery code." };
 
   const stored = await store.listRecoveryCodes(id);
   let matched: { id: string; usedAt: Date | null } | null = null;
@@ -215,13 +223,13 @@ export async function verifySecond(
     if (await bcrypt.compare(normalised, row.codeHash)) matched = { id: row.id, usedAt: row.usedAt };
   }
 
-  if (!matched) return { ok: false, error: "That code didn't match. Try the current one from your app." };
-  if (matched.usedAt) return { ok: false, error: "That recovery code has already been used." };
+  if (!matched) return { ok: false, code: "mismatch", error: "That code didn't match. Try the current one from your app." };
+  if (matched.usedAt) return { ok: false, code: "recovery_used", error: "That recovery code has already been used." };
 
   // Conditional for the same reason as `consumeStep`: `matched.usedAt` was read a moment ago, and
   // two requests carrying the same recovery code would both find it unused. The write decides.
   if (!(await store.markRecoveryCodeUsed(matched.id, new Date(now)))) {
-    return { ok: false, error: "That recovery code has already been used." };
+    return { ok: false, code: "recovery_used", error: "That recovery code has already been used." };
   }
   const remaining = await store.countUnusedRecoveryCodes(id);
   return { ok: true, usedRecoveryCode: true, recoveryCodesRemaining: remaining };
