@@ -309,12 +309,16 @@ says who can move it. Details sit where the link points.
 2. The shared pieces every product shows — **mostly done in `@revio/ui`** (2026-09-24): sign-in, set-password,
    two-factor, sign out everywhere, the bell, ⌘K, Get help, first-run setup + the dashboard checklist, the
    activity log, the trial strip, the status pages. Each reads `LocaleProvider` (client) or a `locale` prop
-   (server); a product with no provider is unchanged English. **Still English:** Help centre articles and
-   "Your requests" thread, Billing panel + company details, Start-trial and the locked/role-locked screens.
+   (server); a product with no provider is unchanged English. Help + Your requests done too, and
+   restructured for all three products (sections on the left like Settings; requests as a list with one
+   open conversation, `/help/requests/<id>`). **Still English:** Billing panel + company details,
+   Start-trial and the locked/role-locked screens.
    Messages from `@revio/db`/`@revio/core` now carry codes (`TwoFactorErrorCode`, `WelcomeWriteCode`,
    `RegisterProblemCode`) so a screen translates by code, never by matching English. Rule written in
    `packages/ui/CLAUDE.md`.
-3. RevioCRS, then RevioLink, then Operator (ours — English is fine there longest).
+3. RevioCRS, then RevioLink. **Operator is not translated** — founder decision 2026-09-24, it is ours.
+   With it, the founder asked for **Rooms & Rates in RevioCRS and RevioLink to take the Settings shape**
+   (sections on the left, the open one on the right) — not built yet.
 4. Server-action messages — **RevioPMS done** (`lib/i18n/flash.ts`, sign-in, users, welcome, 2FA). Emails still English.
 5. RevioDirect's guest page — the GUEST's language, a different choice from staff (browser, then hotel).
 Rule for every step: `lib/i18n/<screen>.ts`, add it to the completeness test when finished, look at the
