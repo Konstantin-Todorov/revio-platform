@@ -31,8 +31,11 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const s = x.catalog;
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <PageHeader title={x.title} subtitle={s.subtitle(property.name)} />
+    /* Full width, like "Charge a guest" beside it: two tabs of one screen must not jump in size and
+       position when you switch between them (founder, 2026-09-25). */
+    <div>
+      {/* The same header as "Charge a guest": a tab changes what is below the tabs, never the page above. */}
+      <PageHeader title={x.title} subtitle={x.subtitle} />
       <ExtrasTabs active="catalog" t={x.tabs} catalogCount={items.length} />
 
       {(error === "price" || error === "fields") && (

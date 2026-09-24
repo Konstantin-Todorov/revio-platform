@@ -84,8 +84,14 @@ export async function addProperty(_prev: ActionResult | null, fd: FormData): Pro
   if (!s) return { ok: false, error: "Only an Owner or Admin can add a property." };
   const name = str(fd, "name");
   if (!name) return { ok: false, error: "Property name is required." };
+  // A second hotel starts in the guest-mail language the account already uses — a chain's properties
+  // are usually in one country. Changed per property in Settings → Guest emails.
+  const sibling = await prisma.property.findFirst({ where: { tenantId: s.tenantId }, orderBy: { id: "asc" }, select: { defaultLanguage: true } });
   await prisma.property.create({
-    data: { tenantId: s.tenantId, name, baseCurrency: str(fd, "baseCurrency") || "EUR", timezone: str(fd, "timezone") || "Europe/Sofia" },
+    data: {
+      tenantId: s.tenantId, name, baseCurrency: str(fd, "baseCurrency") || "EUR", timezone: str(fd, "timezone") || "Europe/Sofia",
+      defaultLanguage: sibling?.defaultLanguage ?? "en",
+    },
   });
   revalidatePath("/settings", "layout");
   return { ok: true };

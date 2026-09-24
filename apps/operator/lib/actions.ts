@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { deleteClientCompletely, forSystem, issueToken } from "@revio/db";
-import { inviteEmail, renderSystemEmail, renderSystemEmailText, PRODUCT_BY_KEY } from "@revio/core";
+import { initialGuestLanguage, inviteEmail, renderSystemEmail, renderSystemEmailText, PRODUCT_BY_KEY } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { originFor, primaryProduct } from "./product-origins";
 import { PLAN_BASE_MINOR, tierForRooms } from "./pricing";
@@ -33,6 +33,8 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
   if (!ownerEmail) return { ok: false, error: "Owner email is required." };
   const propertyName = str(fd, "propertyName") || name;
   const plan = str(fd, "plan") || "starter";
+  // Chosen on the form; English unless it is a language we send in (`initialGuestLanguage`).
+  const language = initialGuestLanguage(str(fd, "language"));
 
   const entitlements = {
     hasChannelManager: fd.get("hasChannelManager") != null,
@@ -57,8 +59,8 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
   const tenant = await prisma.tenant.create({
     data: {
       name, slug, plan, status: "active", ...entitlements,
-      users: { create: [{ name: ownerName, email: ownerEmail, role: "owner" }] },
-      properties: { create: [{ name: propertyName, baseCurrency: "EUR", timezone: "Europe/Sofia" }] },
+      users: { create: [{ name: ownerName, email: ownerEmail, role: "owner", ...(language !== "en" ? { locale: language } : {}) }] },
+      properties: { create: [{ name: propertyName, baseCurrency: "EUR", timezone: "Europe/Sofia", defaultLanguage: language }] },
     },
     include: { properties: true },
   });
@@ -81,6 +83,7 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
       name: ownerName,
       context: name,
       url: `${product.origin}/accept-invite/${token}`,
+      locale: language,
     });
     await sendEmail({ to: [ownerEmail], subject: mail.subject, text: mail.text, html: mail.html });
   }

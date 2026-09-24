@@ -208,3 +208,15 @@ describe("emailStatus — what the hotel actually runs decides what the screen s
     expect(emailStatus({ key: "pre_arrival", runs: cmOnly, switchedOff: false, switchedOn: true })).toEqual({ kind: "on" });
   });
 });
+
+import { initialGuestLanguage } from "./templates.js";
+
+describe("initialGuestLanguage — a new hotel starts in its founder's language, English otherwise", () => {
+  it("takes the first language we send in", () => {
+    expect(initialGuestLanguage("bg")).toBe("bg");
+    expect(initialGuestLanguage(null, undefined, "bg-BG,bg;q=0.9,en;q=0.8")).toBe("bg");
+    expect(initialGuestLanguage("de-DE,de;q=0.9")).toBe("en");
+    expect(initialGuestLanguage(undefined, "")).toBe("en");
+    expect(initialGuestLanguage("en", "bg")).toBe("en");
+  });
+});

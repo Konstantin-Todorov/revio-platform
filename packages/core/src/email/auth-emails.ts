@@ -121,7 +121,32 @@ export function inviteEmail({ name, context, invitedBy, url, locale }: AuthEmail
  * will never find them — the whole commercial argument for the platform is that the second and
  * third product cost them nothing to try.
  */
-export function signupEmail({ name, context, url, resent }: AuthEmailArgs & { resent?: boolean }): AuthEmail {
+export function signupEmail({ name, context, url, resent, locale }: AuthEmailArgs & { resent?: boolean }): AuthEmail {
+  if (locale === "bg") {
+    return compose(
+      resent ? "Връзката Ви за потвърждение в Revio, отново" : `Потвърдете имейла си, за да отворите ${context} в Revio`,
+      "Една връзка и 30-дневният Ви пробен период на трите продукта на Revio започва.",
+      resent ? "Ето връзката отново" : "Добре дошли в Revio",
+      [
+        { p: name ? `Здравейте, ${name},` : "Здравейте," },
+        {
+          p: resent
+            ? `Ето връзката Ви отново — започнахте да настройвате ${context} в Revio, а първата не беше използвана. Тази я заменя; предишната вече не работи.`
+            : `Започнахте да настройвате ${context} в Revio. Потвърдете този адрес и изберете парола, и профилът Ви е готов.`,
+        },
+        { action: { label: "Потвърдете и изберете парола", url } },
+        { note: `Връзката работи веднъж и изтича след ${TTL_BG.invite}.` },
+        {
+          p:
+            "Пробният Ви период обхваща и трите продукта — канален мениджър, система за резервации и система " +
+            "за управление на обекта — за 30 дни. Те ползват един вход и едни и същи стаи и цени, така че няма " +
+            "нищо за прехвърляне, ако запазите повече от един.",
+        },
+        { note: "Ако не сте били Вие, игнорирайте този имейл. Нищо не е активно, докато връзката по-горе не бъде използвана." },
+      ],
+      locale,
+    );
+  }
   const greeting = name ? `Hello ${name},` : "Hello,";
 
   /*

@@ -898,3 +898,21 @@ export const PAY_AT_HOTEL_LABEL: Record<string, string> = { en: "Total to pay at
 export function bookingReference(reservationId: string): string {
   return `RV-${reservationId.slice(-6).toUpperCase()}`;
 }
+
+/**
+ * The guest-mail language a NEW property starts with — the language of the person who set the hotel
+ * up, when it is one we send in; English otherwise (the base, founder 2026-09-25: *"основата му
+ * винаги да е на английски"*). Existing properties are never changed by this.
+ *
+ * `choices` in order of confidence: a language the person picked, then the site's cookie, then the
+ * browser's `Accept-Language` ("bg-BG,bg;q=0.9,en;q=0.8" → "bg").
+ */
+export function initialGuestLanguage(...choices: (string | null | undefined)[]): EmailLocale {
+  const known = new Set<string>(EMAIL_LOCALES.map((l) => l.key));
+  for (const raw of choices) {
+    if (!raw) continue;
+    const first = raw.split(",")[0]!.split(";")[0]!.trim().toLowerCase().split("-")[0]!;
+    if (known.has(first)) return first as EmailLocale;
+  }
+  return "en";
+}

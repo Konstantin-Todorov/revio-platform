@@ -26,7 +26,6 @@ export interface ExtrasStrings {
   catalog: {
     back: string;
     title: string;
-    subtitle: (property: string) => string;
     priceError: string;
     fieldsError: string;
     addItem: string;
@@ -61,7 +60,7 @@ export interface ExtrasStrings {
 export const extras: Translations<ExtrasStrings> = {
   en: {
     title: "Extras & Charges",
-    subtitle: "Pick a guest’s open folio to post minibar items, extras and other charges.",
+    subtitle: "Charge guests for the minibar, extras and services — and keep the list of what can be charged.",
     manageCatalog: "Manage catalog",
     noRooms: "No occupied rooms",
     noRoomsBefore: "Minibar charges post to an in-house guest’s folio. Check someone in from the",
@@ -84,7 +83,6 @@ export const extras: Translations<ExtrasStrings> = {
     catalog: {
       back: "Minibar / POS",
       title: "Catalog",
-      subtitle: (p) => `${p} · everything you can charge to a guest’s bill, by where it is sold`,
       priceError: "That price isn’t a number. Enter an amount like 12.50.",
       fieldsError: "Enter a name and a positive price.",
       addItem: "Add an item",
@@ -116,7 +114,7 @@ export const extras: Translations<ExtrasStrings> = {
   },
   bg: {
     title: "Екстри и такси",
-    subtitle: "Изберете отворената сметка на гост, за да начислите минибар, допълнителни услуги и други такси.",
+    subtitle: "Начислявайте на гостите минибар, екстри и услуги — и поддържайте списъка на това, което може да се начисли.",
     manageCatalog: "Каталог",
     noRooms: "Няма заети стаи",
     noRoomsBefore: "Минибарът се начислява по сметката на гост в хотела. Първо настанете гост от",
@@ -139,7 +137,6 @@ export const extras: Translations<ExtrasStrings> = {
     catalog: {
       back: "Минибар / ПОС",
       title: "Каталог",
-      subtitle: (p) => `${p} · всичко, което може да се начисли по сметката на гост, подредено по място на продажба`,
       priceError: "Цената не е число. Въведете сума, напр. 12,50.",
       fieldsError: "Въведете име и положителна цена.",
       addItem: "Нов артикул",

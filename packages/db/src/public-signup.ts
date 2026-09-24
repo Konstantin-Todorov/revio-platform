@@ -1,6 +1,7 @@
 import { forSystem } from "./rls.js";
 import { issueToken } from "./auth-tokens.js";
 import {
+  initialGuestLanguage,
   emailIdentityKey, signupSlug, signupVerdict, TRIAL_DAYS, validateSignup,
   type ProductKey,
 } from "@revio/core";
@@ -59,6 +60,11 @@ export async function createPublicSignup(args: {
   email: string;
   /** What they said they needed. Decides where they land — never what they get. */
   intent: ProductKey;
+  /**
+   * The language they signed up in (`initialGuestLanguage` — their choice, cookie, browser). The new
+   * property's guests get mail in it, and the owner's panel opens in it. English otherwise.
+   */
+  language?: string;
 }): Promise<SignupOutcome> {
   const prisma = forSystem();
 
@@ -67,6 +73,7 @@ export async function createPublicSignup(args: {
   const valid = validateSignup(args);
   if (!valid.ok) return { ok: false, message: valid.message };
   const { hotelName, ownerName, email, intent } = valid.fields;
+  const language = initialGuestLanguage(args.language);
 
   /*
    * ⚠️ A throwaway mailbox is NOT refused here, and that reversal is the point.
@@ -187,8 +194,8 @@ export async function createPublicSignup(args: {
       hasChannelManager: false,
       hasReservation: false,
       hasPms: false,
-      users: { create: [{ name: ownerName, email, emailKey: key, role: "owner" }] },
-      properties: { create: [{ name: hotelName, baseCurrency: "EUR", timezone: "Europe/Sofia" }] },
+      users: { create: [{ name: ownerName, email, emailKey: key, role: "owner", ...(language !== "en" ? { locale: language } : {}) }] },
+      properties: { create: [{ name: hotelName, baseCurrency: "EUR", timezone: "Europe/Sofia", defaultLanguage: language }] },
     },
     include: { properties: true, users: true },
   });

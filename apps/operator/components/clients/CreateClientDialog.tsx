@@ -31,6 +31,14 @@ export function CreateClientDialog() {
             <Field label="Owner name"><input name="ownerName" className={inputCls} placeholder="Lena Koch" /></Field>
             <Field label="Owner email"><input name="ownerEmail" type="email" required className={inputCls} placeholder="lena@grandmarina.com" /></Field>
           </div>
+          {/* The client's language: their guests' emails, the owner's invitation and the panel they
+              open start in it. English is the base; a Bulgarian hotel is set to Bulgarian here. */}
+          <Field label="Language (guests' emails and the owner's panel)">
+            <select name="language" defaultValue="en" className={inputCls}>
+              <option value="en">English</option>
+              <option value="bg">Български</option>
+            </select>
+          </Field>
           <Field label="Plan">
             <select name="plan" defaultValue="starter" className={inputCls}>
               <option value="starter">Starter (0–30 rooms)</option>

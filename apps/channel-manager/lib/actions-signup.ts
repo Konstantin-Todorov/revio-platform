@@ -1,8 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
+import { LOCALE_COOKIE } from "@revio/ui/i18n";
 import { createPublicSignup } from "@revio/db";
-import { signupEmail, validateSignup, readTurnstileResult, turnstileNotConfigured, type TurnstileVerdict } from "@revio/core";
+import { initialGuestLanguage, signupEmail, validateSignup, readTurnstileResult, turnstileNotConfigured, type TurnstileVerdict } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { productOrigin } from "@revio/ui/product-links";
 
@@ -58,7 +60,11 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
     console.warn(`[signup] challenge NOT verified (${challenge.reason}) — allowing ${valid.fields.email}`);
   }
 
-  const outcome = await createPublicSignup(valid.fields);
+  // The language they signed up in — the site's cookie, else the browser's. The new hotel's guest mail
+  // and the owner's panel start in it; English otherwise (`initialGuestLanguage`).
+  const [jar, h] = await Promise.all([cookies(), headers()]);
+  const language = initialGuestLanguage(jar.get(LOCALE_COOKIE)?.value, h.get("accept-language"));
+  const outcome = await createPublicSignup({ ...valid.fields, language });
   if (!outcome.ok) return { error: outcome.message };
 
   /*
@@ -75,6 +81,7 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
 
   const url = `${productOrigin(outcome.intent)}/accept-invite/${outcome.token}`;
   const mail = signupEmail({
+    locale: language,
     name: outcome.ownerName,
     context: outcome.hotelName,
     url,
