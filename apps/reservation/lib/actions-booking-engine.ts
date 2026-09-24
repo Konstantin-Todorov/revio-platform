@@ -85,7 +85,7 @@ export async function saveBookingEngineLook(
   await logAudit(propertyId, tenantId, {
     entity: "Booking engine", field: "appearance", newValue: preset,
   });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
   return { ok: true };
 }
 
@@ -130,7 +130,7 @@ export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormDa
     await logAudit(propertyId, tenantId, {
       entity: "Booking engine", field: "accepting bookings", newValue: enabled ? "on" : "off",
     });
-    revalidatePath("/booking-engine");
+    revalidatePath("/booking-engine", "layout");
     return { ok: true, slug: publicSlug };
   }
 
@@ -156,7 +156,7 @@ export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormDa
   await logAudit(propertyId, tenantId, {
     entity: "Booking engine", field: "link", newValue: `${slug} · ${enabled ? "live" : "off"}`,
   });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
   return { ok: true, slug };
 }
 
@@ -217,7 +217,7 @@ export async function uploadBookingLogo(_prev: LookResult | null, fd: FormData):
   await logAudit(propertyId, tenantId, {
     entity: "Booking engine", field: "logo", newValue: `uploaded (${Math.round(bytes.length / 1024)} KB)`,
   });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
   return { ok: true };
 }
 
@@ -229,7 +229,7 @@ export async function removeBookingLogo(): Promise<void> {
   await prisma.brandAsset.deleteMany({ where: { propertyId, kind: "booking_logo" } });
   await prisma.property.update({ where: { id: propertyId }, data: { bookingLogoUrl: null } });
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "logo", newValue: "removed" });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
 }
 
 /* ---------------------------------------------------------------------------------------------
@@ -282,7 +282,7 @@ export async function saveBookingHeroSettings(
   await logAudit(propertyId, tenantId, {
     entity: "Booking engine", field: "background", newValue: `${overlay || "unchanged"} · focal ${focalRaw}`,
   });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
   return { ok: true };
 }
 
@@ -340,7 +340,7 @@ export async function uploadBookingHero(_prev: LookResult | null, fd: FormData):
     field: "background image",
     newValue: `uploaded (${Math.round(processed.full.byteLength / 1024)} KB)`,
   });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
   return { ok: true };
 }
 
@@ -367,7 +367,7 @@ export async function removeBookingHero(): Promise<void> {
   await logAudit(propertyId, tenantId, {
     entity: "Booking engine", field: "background image", newValue: "removed",
   });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
 }
 
 /** Best-effort bucket cleanup. Orphaned bytes cost pennies; a failed delete must never surface as an
@@ -455,7 +455,7 @@ export async function refreshStripeStatus(): Promise<void> {
     where: { id: property.id },
     data: { stripeChargesEnabled: status.chargesEnabled, stripeCheckedAt: new Date() },
   });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
 }
 
 /**
@@ -569,7 +569,7 @@ export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): 
   }
 
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: name });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
   return { ok: true };
 }
 
@@ -589,5 +589,5 @@ export async function retireBookingExtra(id: string): Promise<void> {
     data: { active: false, directSellable: false },
   });
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: "retired" });
-  revalidatePath("/booking-engine");
+  revalidatePath("/booking-engine", "layout");
 }

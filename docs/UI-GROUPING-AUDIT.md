@@ -39,6 +39,9 @@ For every finding write: screen · who uses it · what is wrong · proposed shap
 | RevioCRS Rooms & Rates | 🟡 approved — `PLAN-ROOMS-RATES-CRS.md` |
 | RevioPMS Folio | ✅ decided earlier — one scroll with `Foldaway`, **no tabs** (front desk queue) |
 | Settings (all three) | ✅ already the Settings shape |
+| Settings → Guest emails (all three) | ✅ done 2026-09-25 — the founder's reference for the shape: "sections on the left, tabs on top — both are top" |
+| RevioPMS Extras & Charges | ✅ done 2026-09-25 — tabs "Charge a guest · Catalog", catalog by outlet, drag to reorder |
+| RevioCRS Booking Engine | ✅ done 2026-09-25 — sections Overview · Look (tabs: colours/words/logo · background photo) · Taking payment · Extras; Guest emails and room photos linked |
 
 ## The inventory to review
 
@@ -67,6 +70,30 @@ Generated from the route folders on 2026-09-24. Tick each as it is reviewed; lin
 - [ ] `/audit` · [ ] `/users` · [ ] `/search` · [x] `/help` · [x] `/settings/*`
 
 Revio Operator is out of scope (ours, and not translated either).
+
+## Where the §8 shape fits — first pass, 2026-09-25 (proposals, nothing built)
+
+Ranked by how much a person scrolls past to reach what they came for today (cards on the page), and
+whether the screen is used to *set something up* (the shape fits) or *with a guest waiting* (it does
+not — `docs/UI-STANDARD.md` §8).
+
+| Screen | Now | Proposed | Why |
+| --- | --- | --- | --- |
+| **RevioPMS Configuration** | 8 cards, one scroll: taxes · invoice issuer · housekeeping · end of day · compliance · deposits · invoice series · outlets | Sections on the left: **Money** (taxes, deposits, invoice series, issuer) · **Operations** (housekeeping, end of day) · **Compliance** · **Outlets** | Set up once, touched rarely, and the thing you came for is usually card six |
+| **RevioCRS Guest profile** | 6 cards stacked: contact · preferences · during their stay · privacy · notes · booking history | Tabs on top: **Profile** (contact, preferences, privacy) · **Stays** · **Notes** | One guest, three different questions; the history is what staff open it for and it is last |
+| **RevioCRS Distribution** | 3 cards: connected channel manager · what reaches channels · channels | Tabs: **Channels** · **What is sent** · **Channel manager** | Three views of one thing; fine today, tabs when the Cost of distribution view joins it |
+| **RevioLink Channels + Mapping** | two screens, a channel's settings on one and its mapping on the other | Sections on the left, **one per channel**; tabs on top: **Connection · Mapping · Sync** | One channel is spread over two screens — the pattern the review exists to catch |
+| **RevioLink Sync Center · Error Center · Audit** | three screens | One **Activity** area, tabs: **Syncs · Errors · Changes** | Three views of "what happened", chosen by the question, not the table |
+| **RevioLink Bulk update + Restrictions** | two screens | Tabs on one screen: **Change prices & availability · Your rules** | The rules are the standing version of a bulk change |
+| **RevioPMS Staff & Access** | who is on shift, then everyone and their access, one scroll | Tabs: **On shift now · People & roles** | The manager at 7am wants who is in; the owner wants who has access |
+| **RevioCRS Rooms & Rates / RevioLink Rooms & Rates** | cards per kind of data | Already planned: `PLAN-ROOMS-RATES-CRS.md` — RevioLink takes the same shape after | — |
+| **Dashboards (all three), Front Desk, Folio, Calendar, Housekeeping** | — | **No change** | Used with a guest waiting or read at a glance; tabs would hide what must be seen at once |
+| **RevioCRS Analytics** | 23 cards | Already has its own sub-views; review with the Analytics owner rather than here | — |
+
+**Decision needed from the founder:** which of these to build, and in what order. Recommended:
+RevioPMS Configuration and the RevioCRS guest profile first (most scrolling, used by every hotel), then
+RevioLink Channels + Mapping (the one-thing-in-two-places case), then the rest with each product's
+Bulgarian pass.
 
 ## Suggested order
 
