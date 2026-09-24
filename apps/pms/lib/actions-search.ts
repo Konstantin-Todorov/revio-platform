@@ -3,7 +3,11 @@
 import { isSearchable, roleCanOpenProduct, type SearchHit } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
-import { HK_LABEL, type HkStatus } from "./hk-meta";
+import { i18n } from "./i18n/server";
+import { pages } from "./i18n/pages";
+import { shell } from "./i18n/shell";
+import { common } from "./i18n/common";
+import { guests as guestsDict } from "./i18n/guests";
 import { firstAllowed, visibleTo } from "./search-scope";
 
 /**
@@ -97,6 +101,11 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
      Kept in one expression so a new hit kind cannot pick up one without the other. */
   const ctx = (id: string, name: string) => (propertyCount > 1 ? { context: name, propertyId: id } : { propertyId: id });
   const day = (d: Date) => d.toISOString().slice(0, 10);
+  const { t: tr } = await i18n();
+  const say = tr(pages).palette;
+  const nav = tr(shell).nav as Record<string, string>;
+  const hk = tr(common).statuses as Record<string, string>;
+  const resStatus = tr(guestsDict).profile.statuses;
 
   return visibleTo(session.role, [
     ...reservations.map((r): SearchHit => {
@@ -104,12 +113,12 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       /* ⚠️ `departedAt` decides whether a stay has ended — never `status`. `status` is the CRS's
          commercial record (a departed guest's stay is still sold and still earns), so reading it as
          "are they still here" tells the front desk the wrong thing about a checked-out room. */
-      const state = r.departedAt ? "departed" : r.status;
+      const state = r.departedAt ? say.departed : (resStatus[r.status] ?? r.status);
       return {
         id: r.id,
         kind: "reservation",
-        title: r.guestName || r.externalId || "Reservation",
-        subtitle: line ? `${day(line.checkIn)} → ${day(line.checkOut)} · ${state}` : `${state} · no nights`,
+        title: r.guestName || r.externalId || say.reservation,
+        subtitle: line ? `${day(line.checkIn)} → ${day(line.checkOut)} · ${state}` : `${state} · ${say.noNights}`,
         href: `/reservation/${r.id}`,
         ...ctx(r.propertyId, r.property.name),
       };
@@ -117,11 +126,11 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
     ...guests.map((g): SearchHit => ({
       id: g.id,
       kind: "guest",
-      title: [g.firstName, g.lastName].filter(Boolean).join(" ") || g.email || "Guest",
+      title: [g.firstName, g.lastName].filter(Boolean).join(" ") || g.email || say.guest,
       /* ⚠️ An OTA forwarding address is not the guest's address — the schema says so in as many
          words. It dies with the booking, so offering it to a receptionist about to make contact is
          worse than showing nothing. */
-      subtitle: (g.emailIsOtaAlias ? (g.phone ?? "channel forwarding address only") : (g.email ?? g.phone)) ?? "no contact details",
+      subtitle: (g.emailIsOtaAlias ? (g.phone ?? say.forwardingOnly) : (g.email ?? g.phone)) ?? say.noContact,
       href: `/guests?q=${encodeURIComponent([g.firstName, g.lastName].filter(Boolean).join(" ") || g.email || "")}`,
       ...ctx(g.propertyId, g.property.name),
     })),
@@ -134,7 +143,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
          does not have, while calling `inspected` "ready" where the board says "Inspected" — two
          names for one room state, which is exactly how a receptionist and a housekeeper end up
          describing the same room differently. */
-      subtitle: `${u.roomType.name} · ${HK_LABEL[u.hkStatus as HkStatus] ?? u.hkStatus}${u.floor ? ` · floor ${u.floor}` : ""}`,
+      subtitle: `${u.roomType.name} · ${hk[u.hkStatus] ?? u.hkStatus}${u.floor ? ` · ${/^\d+$/.test(u.floor) ? say.floor(u.floor) : u.floor}` : ""}`,
       /* The cleaning board first, the room inventory second — see `firstAllowed`. A room means the
          board to the person cleaning it and the record to the person fixing it, and neither can
          open the other's screen. `null` never survives the scope filter, so it is safe to coerce. */
@@ -145,7 +154,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       id: p.id, kind: "hotel", title: p.name, subtitle: p.timezone, href: "/settings",
     })),
     // Screens, so the palette is also how you move around.
-    ...PAGES.map((p): SearchHit => ({ id: p.href, kind: "page", title: p.title, subtitle: p.sub, href: p.href })),
+    ...PAGES.map((p): SearchHit => ({ id: p.href, kind: "page", title: nav[p.href] ?? p.title, subtitle: say.subs[p.href] ?? p.sub, href: p.href })),
   ]);
 }
 

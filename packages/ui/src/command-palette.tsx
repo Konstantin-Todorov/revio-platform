@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search, CornerDownLeft, Loader2 } from "lucide-react";
 import { groupHits, isSearchable, rankHits, shortcutLabel, type SearchHit } from "@revio/core";
+import { fill, translate } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { shellStrings } from "./shell-strings";
 
 /**
  * ⌘K / Ctrl K — one palette, four products.
@@ -35,7 +38,7 @@ import { groupHits, isSearchable, rankHits, shortcutLabel, type SearchHit } from
  */
 export function CommandPalette({
   search,
-  placeholder = "Search…",
+  placeholder,
   seeAllHref,
   onNavigate,
 }: {
@@ -69,6 +72,8 @@ export function CommandPalette({
   }, []);
 
   const ranked = rankHits(hits, q);
+  const t = translate(shellStrings, useLocale()).search;
+  const shown = placeholder ?? t.placeholder;
   const groups = groupHits(ranked);
   const flat = groups.flatMap((g) => g.hits);
 
@@ -162,17 +167,17 @@ export function CommandPalette({
         type="button"
         onClick={() => { setOpen(true); requestAnimationFrame(() => inputRef.current?.focus()); }}
         className="hidden h-9 w-full max-w-md items-center gap-2 rounded-md border border-surface-border bg-surface-muted px-3 text-[13px] text-ink-400 transition-colors hover:border-ink-300 hover:bg-white md:flex"
-        aria-label="Search"
+        aria-label={t.aria}
       >
         <Search className="h-4 w-4 shrink-0" />
-        <span className="truncate">{placeholder}</span>
+        <span className="truncate">{shown}</span>
         <kbd className="ml-auto shrink-0 rounded border border-surface-border px-1.5 py-0.5 text-[10.5px] font-medium text-ink-400">{mod}</kbd>
       </button>
       <button
         type="button"
         onClick={() => { setOpen(true); requestAnimationFrame(() => inputRef.current?.focus()); }}
         className="flex h-9 w-9 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-muted md:hidden"
-        aria-label="Search"
+        aria-label={t.aria}
       >
         <Search className="h-[18px] w-[18px]" />
       </button>
@@ -188,7 +193,7 @@ export function CommandPalette({
             onMouseDown={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Search"
+            aria-label={t.aria}
           >
             <div className="flex items-center gap-2.5 border-b border-surface-border px-4 py-3">
               <Search className="h-[17px] w-[17px] shrink-0 text-ink-400" />
@@ -216,8 +221,8 @@ export function CommandPalette({
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder={placeholder}
-                aria-label="Search"
+                placeholder={shown}
+                aria-label={t.aria}
                 autoComplete="off"
                 data-form-type="other"
                 data-lpignore="true"
@@ -236,16 +241,16 @@ export function CommandPalette({
             <div ref={listRef} className="max-h-[min(56vh,420px)] overflow-y-auto p-1.5">
               {!isSearchable(q) ? (
                 <p className="px-3 py-8 text-center text-[12.5px] text-ink-400">
-                  Type at least two characters.
+                  {t.typeMore}
                 </p>
               ) : ranked.length === 0 ? (
                 <p className="px-3 py-8 text-center text-[12.5px] text-ink-400">
-                  {busy ? "Searching…" : <>Nothing matches &ldquo;{q}&rdquo;.</>}
+                  {busy ? t.searching : fill(t.nothing, { q })}
                 </p>
               ) : (
                 groups.map((g) => (
                   <div key={g.kind}>
-                    <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold text-ink-400">{g.label}</p>
+                    <p className="px-2.5 pb-1 pt-2 text-[10.5px] font-semibold text-ink-400">{t.kinds[g.kind] ?? g.label}</p>
                     {g.hits.map((h) => {
                       const i = flat.indexOf(h);
                       return (
@@ -283,7 +288,7 @@ export function CommandPalette({
                 onClick={() => { close(); onNavigate(seeAllHref(q)); }}
                 className="w-full border-t border-surface-border px-4 py-2.5 text-left text-[12px] font-semibold text-brand-600 transition-colors hover:bg-surface-muted"
               >
-                See every result for &ldquo;{q}&rdquo; →
+                {fill(t.seeAll, { q })}
               </button>
             )}
           </div>

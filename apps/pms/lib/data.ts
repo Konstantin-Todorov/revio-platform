@@ -7,6 +7,8 @@ import { todayInTz, ymd, utcDay, minutesOfDayInTz } from "./format";
 import { sellableStatuses, type HkStatus } from "./hk-meta";
 import { folioBalance } from "./folio";
 import { getCloseEscalation } from "./closeday";
+import { i18n } from "./i18n/server";
+import { notifications as notificationsDict } from "./i18n/notifications";
 
 /** Parse a "HH:MM" time string to minutes-since-midnight. */
 function hhmmToMinutes(hhmm: string): number {
@@ -103,6 +105,7 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
   }).length;
 
   const items: NotifItem[] = [];
+  const say = (await i18n()).t(notificationsDict);
 
   // §3.1 — the Close Day nudge reaches everyone who can act, not only whoever happens to open the
   // Close Day screen. That was the gap: the one screen that knows the day is overdue is the screen
@@ -110,17 +113,17 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
   const businessDate = property.businessDate ? ymd(property.businessDate) : today;
   const escalation = await getCloseEscalation(property.id, property.timezone, businessDate);
   if (escalation.stage === "reminder") {
-    items.push({ text: `Close Day is due — ${businessDate}`, href: "/closeday", tone: "warning" });
+    items.push({ text: say.closeDue(businessDate), href: "/closeday", tone: "warning" });
   } else if (escalation.stage === "auto_close" || escalation.stage === "overdue_no_auto") {
     items.push({
-      text: `Business date ${escalation.daysBehind} day${escalation.daysBehind === 1 ? "" : "s"} behind`,
+      text: say.behind(escalation.daysBehind),
       href: "/closeday",
       tone: "danger",
     });
   }
 
-  if (arrivalsDue > 0) items.push({ text: `${arrivalsDue} arrival${arrivalsDue === 1 ? "" : "s"} to check in`, href: "/dashboard", tone: "info" });
-  if (dirty > 0) items.push({ text: `${dirty} room${dirty === 1 ? "" : "s"} to clean`, href: "/housekeeping", tone: "warning" });
+  if (arrivalsDue > 0) items.push({ text: say.arrivals(arrivalsDue), href: "/dashboard", tone: "info" });
+  if (dirty > 0) items.push({ text: say.toClean(dirty), href: "/housekeeping", tone: "warning" });
   /*
    * A room can be taken out of order from the housekeeping board with no maintenance task behind it,
    * and /maintenance lists tasks — so it opened on nothing. Maintenance when every such room has a
@@ -128,9 +131,9 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
    */
   if (ooo > 0) {
     const allTracked = oooUnits.every((u) => u.maintenanceTasks.length > 0);
-    items.push({ text: `${ooo} room${ooo === 1 ? "" : "s"} out of order`, href: allTracked ? "/maintenance" : "/housekeeping", tone: "danger" });
+    items.push({ text: say.outOfOrder(ooo), href: allTracked ? "/maintenance" : "/housekeeping", tone: "danger" });
   }
-  if (unsettled > 0) items.push({ text: `${unsettled} open balance${unsettled === 1 ? "" : "s"}`, href: "/folios", tone: "danger" });
+  if (unsettled > 0) items.push({ text: say.balances(unsettled), href: "/folios", tone: "danger" });
   return { items, count: items.length };
 }
 

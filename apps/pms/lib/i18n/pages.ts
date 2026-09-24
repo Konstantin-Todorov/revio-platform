@@ -26,6 +26,17 @@ export interface PagesStrings {
     changesSub: (from: string, to: string) => string;
     automaticNote: string;
   };
+  palette: {
+    reservation: string;
+    guest: string;
+    departed: string;
+    noNights: string;
+    forwardingOnly: string;
+    noContact: string;
+    floor: (f: string) => string;
+    /** Keyed by route — the page titles themselves come from the sidebar's own names (shell.nav). */
+    subs: Record<string, string>;
+  };
   status: {
     errorTitle: string;
     errorBody: string;
@@ -62,6 +73,30 @@ export const pages: Translations<PagesStrings> = {
       changesSub: (f, t) => `${f} → ${t} · newest first`,
       automaticNote: "channel syncs the software made by itself. They have their own screen in RevioLink.",
     },
+    palette: {
+      reservation: "Reservation",
+      guest: "Guest",
+      departed: "departed",
+      noNights: "no nights",
+      forwardingOnly: "channel forwarding address only",
+      noContact: "no contact details",
+      floor: (f) => `floor ${f}`,
+      subs: {
+        "/dashboard": "Arrivals, departures, in-house",
+        "/calendar": "Reservations by room and date",
+        "/guests": "Profiles, identity and preferences",
+        "/folios": "Open folios, charges and invoices",
+        "/register": "The statutory register of who stayed",
+        "/minibar": "Minibar, outlets and tap-to-post",
+        "/housekeeping": "Room status, assignments and inspection",
+        "/rooms": "Units, floors, beds and occupancy",
+        "/maintenance": "Faults, crew and out-of-order rooms",
+        "/users": "Roster, roles and clock-in",
+        "/configuration": "Property setup and operational rules",
+        "/closeday": "The night audit",
+        "/help": "Ask us anything",
+      },
+    },
     status: {
       errorTitle: "This screen didn’t load",
       errorBody: "Something went wrong on our side. Your data is safe — nothing was changed. Try again, and if it keeps happening send us the reference below.",
@@ -95,6 +130,30 @@ export const pages: Translations<PagesStrings> = {
       changes: "Промени",
       changesSub: (f, t) => `${f} → ${t} · най-новите първо`,
       automaticNote: "синхронизации с каналите, направени от системата сама. Те имат свой екран в RevioLink.",
+    },
+    palette: {
+      reservation: "Резервация",
+      guest: "Гост",
+      departed: "напуснал",
+      noNights: "без нощувки",
+      forwardingOnly: "само адрес за препращане от канала",
+      noContact: "няма данни за контакт",
+      floor: (f) => `етаж ${f}`,
+      subs: {
+        "/dashboard": "Пристигания, напускания, гости в хотела",
+        "/calendar": "Резервации по стая и дата",
+        "/guests": "Профили, самоличност и предпочитания",
+        "/folios": "Отворени сметки, начисления и фактури",
+        "/register": "Задължителният регистър на нощувалите",
+        "/minibar": "Минибар, точки на продажба и бързо начисляване",
+        "/housekeeping": "Състояние на стаите, разпределение и проверка",
+        "/rooms": "Стаи, етажи, легла и капацитет",
+        "/maintenance": "Повреди, екип и стаи извън експлоатация",
+        "/users": "Смени, роли и начало на смяна",
+        "/configuration": "Настройки на обекта и оперативни правила",
+        "/closeday": "Нощният одит",
+        "/help": "Попитайте ни каквото и да е",
+      },
     },
     status: {
       errorTitle: "Този екран не се зареди",

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import { groupByDay, relativeTime, type AttentionItem, type NotificationFeed } from "@revio/core";
+import { fill, translate, LOCALE_LABELS, type Locale } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { shellStrings } from "./shell-strings";
 
 const DOT: Record<string, string> = {
   danger: "bg-danger-500",
@@ -11,6 +14,20 @@ const DOT: Record<string, string> = {
   info: "bg-accent-500",
   success: "bg-success-500",
 };
+
+/** "5 min ago" in the reader's language. English is `relativeTime` itself, unchanged. */
+function ago(at: Date, timeZone: string, locale: Locale, t: { justNow: string; minAgo: string; hAgo: string; dAgoOne: string; dAgo: string }): string {
+  if (locale === "en") return relativeTime(at, timeZone);
+  const secs = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000));
+  if (secs < 60) return t.justNow;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return fill(t.minAgo, { n: mins });
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return fill(t.hAgo, { n: hours });
+  const days = Math.round(hours / 24);
+  if (days <= 7) return days === 1 ? t.dAgoOne : fill(t.dAgo, { n: days });
+  return new Intl.DateTimeFormat(LOCALE_LABELS[locale].intl, { timeZone, day: "numeric", month: "short", year: "numeric" }).format(at);
+}
 
 /** How often the panel asks the server what has happened. */
 const POLL_MS = 60_000;
@@ -120,7 +137,14 @@ export function NotificationCenter({
     });
   };
 
-  const days = groupByDay(feed.events, timeZone);
+  const locale = useLocale();
+  const t = translate(shellStrings, locale).notifications;
+  const days = groupByDay(feed.events, timeZone).map((d) => ({
+    ...d,
+    label: d.label === "Today" ? t.today : d.label === "Yesterday" ? t.yesterday
+      : locale === "en" ? d.label
+      : new Intl.DateTimeFormat(LOCALE_LABELS[locale].intl, { timeZone: "UTC", weekday: "short", day: "numeric", month: "long" }).format(new Date(`${d.day}T12:00:00Z`)),
+  }));
   const hasAnything = feed.attention.length > 0 || feed.events.length > 0;
 
   return (
@@ -128,7 +152,7 @@ export function NotificationCenter({
       <button
         type="button"
         onClick={() => { setOpen((o) => !o); if (!open) void refresh(); }}
-        aria-label={feed.unread > 0 ? `Notifications — ${feed.unread} unread` : "Notifications"}
+        aria-label={feed.unread > 0 ? fill(t.ariaUnread, { n: feed.unread }) : t.title}
         aria-expanded={open}
         className="relative flex h-9 w-9 items-center justify-center rounded-md text-ink-500 transition-colors hover:bg-surface-muted"
       >
@@ -145,7 +169,7 @@ export function NotificationCenter({
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
           <div className="flex items-center justify-between gap-2 border-b border-surface-border px-3 py-2">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">Notifications</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">{t.title}</span>
             {feed.unread > 0 && (
               <button
                 type="button"
@@ -154,7 +178,7 @@ export function NotificationCenter({
                 className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold text-brand-600 transition-colors hover:bg-surface-muted disabled:opacity-50"
               >
                 {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCheck className="h-3 w-3" />}
-                Mark all read
+                {t.markAllRead}
               </button>
             )}
           </div>
@@ -165,7 +189,7 @@ export function NotificationCenter({
             {feed.attention.length > 0 && (
               <div className="border-b border-surface-border bg-surface-muted/40">
                 <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-                  Needs attention
+                  {t.needsAttention}
                 </p>
                 {feed.attention.map((it: AttentionItem, i) => (
                   <button
@@ -205,7 +229,7 @@ export function NotificationCenter({
                       </span>
                       {e.body && <span className="block truncate text-[11.5px] text-ink-500">{e.body}</span>}
                       <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-ink-400">
-                        {relativeTime(e.at, timeZone)}
+                        {ago(e.at, timeZone, locale, t)}
                         {/* Which property — drawn only when the account holds more than one. */}
                         {e.context && <span className="rounded-full bg-surface-muted px-1.5 py-0.5 font-medium text-ink-500">{e.context}</span>}
                       </span>
@@ -217,7 +241,7 @@ export function NotificationCenter({
 
             {!hasAnything && (
               <p className="px-3 py-8 text-center text-[12.5px] text-ink-400">
-                Nothing needs you, and nothing has happened since you last looked.
+                {t.empty}
               </p>
             )}
           </div>

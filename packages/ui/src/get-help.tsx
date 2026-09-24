@@ -4,6 +4,9 @@ import { useActionState, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { SUPPORT_KINDS, searchHelp, type ProductKey, type SupportKind } from "@revio/core";
+import { translate } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { shellStrings } from "./shell-strings";
 
 /**
  * "Get help" — one dialog, shared by all three hotel products.
@@ -50,6 +53,7 @@ export type GetHelpResult = { ok: boolean; error?: string; reference?: string } 
  * So the trigger sits in the menu and the dialog sits beside it, at a level that is always mounted.
  */
 export function GetHelpTrigger({ onClick }: { onClick: () => void }) {
+  const t = translate(shellStrings, useLocale()).help;
   return (
     <button
       type="button"
@@ -60,7 +64,7 @@ export function GetHelpTrigger({ onClick }: { onClick: () => void }) {
         <circle cx="12" cy="12" r="9" />
         <path d="M9.5 9a2.5 2.5 0 1 1 3.2 2.4c-.7.2-1.2.9-1.2 1.6v.5M12 17h.01" strokeLinecap="round" />
       </svg>
-      Get help
+      {t.trigger}
     </button>
   );
 }
@@ -79,6 +83,7 @@ export function GetHelp({
   /** Which product this is, so the suggestions never offer an answer that is wrong here. */
   product: ProductKey;
 }) {
+  const t = translate(shellStrings, useLocale()).help;
   const [kind, setKind] = useState<SupportKind>("problem");
   const [state, formAction, pending] = useActionState<GetHelpResult, FormData>(action, null);
   const pathname = usePathname();
@@ -104,32 +109,32 @@ export function GetHelp({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Get help"
+      aria-label={t.trigger}
       className="fixed inset-0 z-[100] flex items-end justify-center overflow-y-auto bg-ink-900/50 p-0 sm:items-center sm:p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="my-auto max-h-[92dvh] w-full overflow-y-auto rounded-t-xl bg-white p-5 text-left shadow-pop sm:w-[480px] sm:max-w-[calc(100vw-2rem)] sm:rounded-xl">
         {state?.ok ? (
           <>
-            <h2 className="text-[16px] font-semibold text-ink-900">We have it</h2>
+            <h2 className="text-[16px] font-semibold text-ink-900">{t.weHaveIt}</h2>
             <p className="mt-2 text-[13.5px] leading-relaxed text-ink-600">
-              Your reference is{" "}
-              <span className="font-semibold tabular-nums text-ink-900">{state.reference}</span>. We
-              have your email address and will reply there — {SUPPORT_KINDS.find((k) => k.key === kind)?.promise}
+              {t.referenceBefore}{" "}
+              <span className="font-semibold tabular-nums text-ink-900">{state.reference}</span>.{" "}
+              {t.referenceAfter} {t.kinds[kind]?.promise ?? SUPPORT_KINDS.find((k) => k.key === kind)?.promise}
             </p>
             <button
               type="button"
               onClick={onClose}
               className="mt-4 h-10 rounded-md bg-brand-800 px-4 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700"
             >
-              Close
+              {t.close}
             </button>
           </>
         ) : (
           <form action={formAction}>
-            <h2 className="text-[16px] font-semibold text-ink-900">Get help</h2>
+            <h2 className="text-[16px] font-semibold text-ink-900">{t.trigger}</h2>
             <p className="mt-1 text-[12.5px] text-ink-500">
-              We can see which hotel and which screen you are on, so start with what went wrong.
+              {t.intro}
             </p>
 
             {/*
@@ -141,7 +146,7 @@ export function GetHelp({
             {suggestions.length > 0 && (
               <div className="mt-3 rounded-lg border border-surface-border bg-surface-muted/50 p-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                  This might be it
+                  {t.mightBeIt}
                 </p>
                 <ul className="mt-1.5 space-y-1.5">
                   {suggestions.map((a) => (
@@ -158,7 +163,7 @@ export function GetHelp({
                   ))}
                 </ul>
                 <a href="/help" className="mt-2 inline-block text-[11.5px] font-semibold text-ink-500 hover:text-ink-900">
-                  All help →
+                  {t.allHelp}
                 </a>
               </div>
             )}
@@ -167,7 +172,7 @@ export function GetHelp({
             <input type="hidden" name="kind" value={kind} />
 
             <fieldset className="mt-4">
-              <legend className="sr-only">How urgent is it?</legend>
+              <legend className="sr-only">{t.howUrgent}</legend>
               <div className="space-y-1.5">
                 {SUPPORT_KINDS.map((k) => (
                   <label
@@ -185,9 +190,9 @@ export function GetHelp({
                         className="mt-0.5 h-3.5 w-3.5"
                       />
                       <span className="min-w-0">
-                        <span className="block text-[13px] font-semibold text-ink-900">{k.label}</span>
-                        <span className="block text-[11.5px] leading-snug text-ink-500">{k.hint}</span>
-                        <span className="mt-0.5 block text-[11.5px] font-medium text-brand-700">{k.promise}</span>
+                        <span className="block text-[13px] font-semibold text-ink-900">{t.kinds[k.key]?.label ?? k.label}</span>
+                        <span className="block text-[11.5px] leading-snug text-ink-500">{t.kinds[k.key]?.hint ?? k.hint}</span>
+                        <span className="mt-0.5 block text-[11.5px] font-medium text-brand-700">{t.kinds[k.key]?.promise ?? k.promise}</span>
                       </span>
                     </span>
                   </label>
@@ -196,13 +201,13 @@ export function GetHelp({
             </fieldset>
 
             <label className="mt-4 block">
-              <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">What is happening?</span>
+              <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">{t.whatsHappening}</span>
               <textarea
                 name="message"
                 rows={4}
                 required
                 autoFocus
-                placeholder="Booking page returns an error when I press save on rates."
+                placeholder={t.placeholder}
                 className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-[14px] text-ink-900 outline-none transition-colors focus:border-brand-600"
               />
             </label>
@@ -217,14 +222,14 @@ export function GetHelp({
                 disabled={pending}
                 className="h-10 rounded-md bg-brand-800 px-4 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
               >
-                {pending ? "Sending…" : "Send to Revio"}
+                {pending ? t.sending : t.send}
               </button>
               <button
                 type="button"
                 onClick={onClose}
                 className="h-10 rounded-md px-3 text-[13.5px] font-medium text-ink-600 transition-colors hover:bg-surface-muted"
               >
-                Cancel
+                {t.cancel}
               </button>
               <span className="ml-auto text-[11px] text-ink-400">{productName}</span>
             </div>

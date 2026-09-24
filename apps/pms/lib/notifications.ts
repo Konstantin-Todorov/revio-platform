@@ -6,6 +6,8 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { getNotifications } from "./data";
 import { roleAllowsPath } from "./roles";
+import { i18n } from "./i18n/server";
+import { notifications as notificationsDict } from "./i18n/notifications";
 
 const WINDOW_DAYS = 14;
 const PER_SOURCE = 25;
@@ -85,14 +87,15 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
   ]);
 
   const ctx = (name: string) => (propertyCount > 1 ? { context: name } : {});
-  const room = (label?: string | null) => (label ? `Room ${label}` : "No room");
+  const say = (await i18n()).t(notificationsDict);
+  const room = (label?: string | null) => (label ? say.room(label) : say.noRoom);
 
   const events: NotificationEvent[] = [
     ...raised.map((t): NotificationEvent => ({
       key: `maint:${t.id}`,
       title: `${room(t.unit?.label)} — ${t.title}`,
       // Out of order is the half that costs money, so it is said rather than implied by a colour.
-      body: t.setsOoo ? "out of order — not sellable" : `${t.priority} priority`,
+      body: t.setsOoo ? say.oooBody : (say.priority[t.priority] ?? `${t.priority} priority`),
       href: "/maintenance",
       severity: t.setsOoo ? "critical" : "warning",
       at: t.createdAt,
@@ -100,7 +103,7 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
     })),
     ...fixed.map((t): NotificationEvent => ({
       key: `maintdone:${t.id}`,
-      title: `${room(t.unit?.label)} back in service`,
+      title: say.backInService(room(t.unit?.label)),
       body: t.title,
       href: "/maintenance",
       severity: "success",
@@ -112,7 +115,7 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
          `status` says nothing about whether they have gone — that is the CRS's commercial record,
          and reading it here would report an occupied room as free. */
       key: `departed:${r.id}`,
-      title: `${r.guestName || "Guest"} checked out`,
+      title: say.checkedOut(r.guestName || say.guest),
       href: `/reservation/${r.id}`,
       severity: "info",
       at: r.departedAt!,
@@ -120,7 +123,7 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
     })),
     ...arrivals.map((r): NotificationEvent => ({
       key: `booking:${r.id}`,
-      title: `New booking — ${r.guestName || r.externalId || "no name given"}`,
+      title: say.newBooking(r.guestName || r.externalId || say.noName),
       href: `/reservation/${r.id}`,
       severity: "success",
       at: r.importedAt,
