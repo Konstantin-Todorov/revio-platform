@@ -27,7 +27,7 @@
 
 import { PRODUCT_BY_KEY, type ProductKey } from "../products/products.js";
 import { TRIAL_DAYS } from "../trials/trials.js";
-import { renderSystemEmail, renderSystemEmailText } from "./system-shell.js";
+import { renderSystemEmail, renderSystemEmailText, type SystemEmailLocale } from "./system-shell.js";
 import type { AuthEmail } from "./auth-emails.js";
 
 export interface TrialOpenedArgs {
@@ -47,6 +47,8 @@ export interface TrialOpenedArgs {
   alreadyOpen?: ProductKey[];
   /** The caller's date formatter — the property's locale, not the server's. */
   formatDate: (d: Date) => string;
+  /** The owner's own language (`User.locale`). English otherwise. */
+  locale?: SystemEmailLocale;
 }
 
 /**
@@ -62,7 +64,9 @@ export function trialOpenedEmail({
   url,
   alreadyOpen = [],
   formatDate,
+  locale,
 }: TrialOpenedArgs): AuthEmail {
+  if (locale === "bg") return trialOpenedEmailBg({ ...(name ? { name } : {}), hotelName, product, endsAt, url, alreadyOpen, formatDate });
   const productName = PRODUCT_BY_KEY[product]?.name ?? product;
   const greeting = name ? `Hello ${name},` : "Hello,";
   const ends = formatDate(endsAt);
@@ -121,4 +125,158 @@ export function trialOpenedEmail({
     text: renderSystemEmailText(args),
     html: renderSystemEmail(args),
   };
+}
+
+/** The same email, the same blocks in the same order, in Bulgarian. */
+function trialOpenedEmailBg({
+  name, hotelName, product, endsAt, url, alreadyOpen = [], formatDate,
+}: TrialOpenedArgs): AuthEmail {
+  const productName = PRODUCT_BY_KEY[product]?.name ?? product;
+  const ends = formatDate(endsAt);
+  const others = alreadyOpen.filter((p) => p !== product).map((p) => PRODUCT_BY_KEY[p]?.name ?? p);
+  const from = others.length === 1 ? others[0] : `${others.slice(0, -1).join(", ")} и ${others.at(-1)}`;
+
+  const args = {
+    locale: "bg" as const,
+    preview: `Вашите ${TRIAL_DAYS} дни започват днес и продължават до ${ends}.`,
+    heading: `Пробният Ви период на ${productName} започва днес`,
+    product: productName,
+    blocks: [
+      { p: name ? `Здравейте, ${name},` : "Здравейте," },
+      {
+        p:
+          `${productName} е отворен за ${hotelName}. Вашите ${TRIAL_DAYS} дни започват днес — не от ` +
+          `регистрацията Ви — така че пробният период продължава до ${ends}.`,
+      },
+      { action: { label: `Отвори ${productName}`, url } },
+      others.length > 0
+        ? {
+            p:
+              `Обектът, типовете стаи и входовете на служителите Ви идват от ${from}. Нищо не е копирано — ` +
+              `това са същите данни, така че няма какво да се синхронизира и какво да се прехвърля, ако запазите и двата.`,
+          }
+        : {
+            p:
+              `Всичко, което настроите тук, се споделя с другите продукти на Revio, така че ако добавите ` +
+              `някой по-късно, стаите, цените и служителите Ви вече са в него.`,
+          },
+      {
+        p:
+          `Ще Ви напомним преди края. Нищо не се таксува автоматично и нищо не се изтрива, когато ` +
+          `пробният период свърши — първо ще говорим с Вас, а данните Ви остават точно където са във всеки случай.`,
+      },
+      { note: `Отговорете на този имейл, ако нещо Ви пречи. Той стига до човек.` },
+    ],
+  };
+
+  return {
+    subject: `${productName} е готов — пробният Ви период е до ${ends}`,
+    text: renderSystemEmailText(args),
+    html: renderSystemEmail(args),
+  };
+}
+
+/* ── The two the nightly sweep sends ─────────────────────────────────────────────────────────────
+ *
+ * Written here rather than in the operator app because the reader is the HOTEL, in the hotel's
+ * language — the console that sends them is English, the owner who reads them may not be. One hotel,
+ * one email per event: `products` is every product that event covers.
+ */
+
+function listIn(locale: SystemEmailLocale, names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} ${locale === "bg" ? "и" : "and"} ${names[names.length - 1]}`;
+}
+
+/** "Your trial has finished" — access is already removed when this is written. */
+export function trialFinishedEmail({ products, locale }: { products: readonly string[]; locale?: SystemEmailLocale }): AuthEmail {
+  const names = listIn(locale ?? "en", products);
+  const many = products.length > 1;
+  const args =
+    locale === "bg"
+      ? {
+          locale: "bg" as const,
+          preview: "Пробният Ви период в Revio приключи.",
+          heading: many ? "Пробният Ви период в Revio приключи" : `Пробният Ви период на ${names} приключи`,
+          product: "Revio",
+          blocks: [
+            { p: `Пробният период приключи и ${names} ${many ? "вече не са" : "вече не е"} във Вашия вход в Revio.` },
+            {
+              p: "Нищо не е изтрито. Стаите, цените, резервациите и гостите Ви се споделят между продуктите, така че са точно там, където бяха — и ако решите да запазите някой от тях, включването му връща всичко веднага, без нищо за прехвърляне.",
+            },
+            {
+              p: many
+                ? "Не е нужно да ги вземате всичките. Отговорете ни кои от тях наистина сте ползвали и ще включим само тях."
+                : "Ако Ви е бил полезен, отговорете на този имейл и ще го включим отново.",
+            },
+            {
+              note: "Не сте таксувани за пробния период и нищо не започва само. Ако решите да го запазите, плащате от деня, в който решите — никога не таксуваме ден от пробния период.",
+            },
+          ],
+        }
+      : {
+          preview: `Your Revio trial has finished.`,
+          heading: many ? "Your Revio trial has finished" : `Your ${names} trial has finished`,
+          product: "Revio",
+          blocks: [
+            { p: `The trial has ended and ${names} ${many ? "are" : "is"} no longer on your Revio login.` },
+            {
+              p: "Nothing has been deleted. Your rooms, rates, reservations and guests are shared across the products, so they are exactly where they were — and if you decide to keep any of them, switching it back on restores everything instantly, with nothing to import.",
+            },
+            {
+              p: many
+                ? "You do not have to take all of it back. Reply and tell us which of them you actually used, and we will switch on only those."
+                : "If it was useful, reply to this email and we will put it back.",
+            },
+            {
+              note: "You have not been charged for the trial, and nothing starts on its own. If you do decide to keep it, you pay from the day you decide — we never charge for a day of the trial.",
+            },
+          ],
+        };
+  return { subject: args.heading, text: renderSystemEmailText(args), html: renderSystemEmail(args) };
+}
+
+/** "N days left". `endsOn` is the day as the caller formats it; `url` opens the product. */
+export function trialReminderEmail({
+  products, left, endsOn, url, locale,
+}: { products: readonly string[]; left: number; endsOn: string; url: string; locale?: SystemEmailLocale }): AuthEmail {
+  const names = listIn(locale ?? "en", products);
+  const many = products.length > 1;
+  if (locale === "bg") {
+    const day = left === 1 ? "Остава 1 ден" : `Остават ${left} дни`;
+    const args = {
+      locale: "bg" as const,
+      preview: `${day} от пробния Ви период в Revio.`,
+      heading: `${day} от пробния Ви период ${many ? "в Revio" : `на ${names}`}`,
+      product: "Revio",
+      blocks: [
+        { p: `Пробният Ви период на ${names} приключва на ${endsOn}.` },
+        {
+          p: many
+            ? "Ако искате да запазите някой от тях, отговорете ни кои — плащате само за това, което запазите, и не е нужно да вземате и трите. Нищо не става автоматично и няма да бъдете таксувани без Вашето съгласие."
+            : "Ако искате да го запазите, отговорете на този имейл и ще го включим за постоянно. Нищо не става автоматично и няма да бъдете таксувани без Вашето съгласие.",
+        },
+        { action: { label: "Отвори Revio", url } },
+        { note: "Ако го оставите да изтече, нищо не се изтрива — данните Ви се споделят между продуктите и остават точно каквито са." },
+      ],
+    };
+    return { subject: `${day} от пробния Ви период в Revio`, text: renderSystemEmailText(args), html: renderSystemEmail(args) };
+  }
+  const day = `${left} day${left === 1 ? "" : "s"}`;
+  const args = {
+    preview: `${day} left on your Revio trial.`,
+    heading: `${day} left on your ${many ? "Revio" : names} trial`,
+    product: "Revio",
+    blocks: [
+      { p: `Your trial of ${names} ends on ${endsOn}.` },
+      {
+        p: many
+          ? "If you would like to keep any of them, reply and tell us which — you only pay for what you keep, and there is no obligation to take all three. Nothing happens automatically and you will not be charged without agreeing to it."
+          : "If you would like to keep it, reply to this email and we will switch it on properly. Nothing happens automatically and you will not be charged without agreeing to it.",
+      },
+      { action: { label: "Open Revio", url } },
+      { note: "If you let it run out, nothing is deleted — your data is shared across the products and stays exactly as it is." },
+    ],
+  };
+  return { subject: `${day} left on your Revio trial`, text: renderSystemEmailText(args), html: renderSystemEmail(args) };
 }

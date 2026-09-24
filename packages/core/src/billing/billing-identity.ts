@@ -47,27 +47,40 @@ export interface BillingIdentity {
 
 export type BillingIdentityField = keyof BillingIdentity;
 
+/**
+ * What is wrong, as a stable name a screen can say in the reader's language. The English `message`
+ * stays for every existing caller; a translated screen says `strings[code] ?? message`, and never
+ * matches the English sentence (`packages/ui/CLAUDE.md`).
+ */
+export type BillingIdentityProblemCode =
+  | "legalNameRequired" | "countryRequired" | "addressRequired" | "cityRequired"
+  | "countryShape" | "vatShape" | "emailShape";
+
 export interface BillingIdentityProblem {
   field: BillingIdentityField;
+  code: BillingIdentityProblemCode;
   /** Said to the hotel, in their words, with the reason. Never "invalid input". */
   message: string;
 }
 
 /** The fields without which an invoice cannot legally be issued. */
-const REQUIRED: { field: BillingIdentityField; message: string }[] = [
+const REQUIRED: { field: BillingIdentityField; code: BillingIdentityProblemCode; message: string }[] = [
   {
     field: "legalName",
+    code: "legalNameRequired",
     message: "We need the company's registered name, exactly as it appears on your company documents — not the hotel's trading name, if they differ.",
   },
   {
     field: "country",
+    code: "countryRequired",
     message: "The country decides whether VAT applies to your invoice at all, so we cannot issue one without it.",
   },
   {
     field: "addressLine",
+    code: "addressRequired",
     message: "A tax invoice must carry the customer's address.",
   },
-  { field: "city", message: "A tax invoice must carry the customer's city." },
+  { field: "city", code: "cityRequired", message: "A tax invoice must carry the customer's city." },
 ];
 
 /**
@@ -124,12 +137,12 @@ export function validateBillingIdentity(v: BillingIdentity): BillingIdentityProb
   const problems: BillingIdentityProblem[] = [];
 
   for (const r of REQUIRED) {
-    if (!v[r.field]?.trim()) problems.push({ field: r.field, message: r.message });
+    if (!v[r.field]?.trim()) problems.push({ field: r.field, code: r.code, message: r.message });
   }
 
   const country = v.country.trim().toUpperCase();
   if (country && !/^[A-Z]{2}$/.test(country)) {
-    problems.push({ field: "country", message: "Give the country as its two-letter code, for example BG or DE." });
+    problems.push({ field: "country", code: "countryShape", message: "Give the country as its two-letter code, for example BG or DE." });
   }
 
   const vat = normaliseVatId(v.vatId ?? "");
@@ -144,13 +157,14 @@ export function validateBillingIdentity(v: BillingIdentity): BillingIdentityProb
     if (shape && !shape.test(vat)) {
       problems.push({
         field: "vatId",
+        code: "vatShape",
         message: `That does not look like a ${country} VAT number. It should start with ${country === "GR" ? "EL" : country} — check it against your registration certificate.`,
       });
     }
   }
 
   if (v.billingEmail?.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.billingEmail.trim())) {
-    problems.push({ field: "billingEmail", message: "That email address does not look right — invoices sent to it would bounce." });
+    problems.push({ field: "billingEmail", code: "emailShape", message: "That email address does not look right — invoices sent to it would bounce." });
   }
 
   return problems;
@@ -170,14 +184,28 @@ export function canBeInvoiced(v: BillingIdentity): boolean {
  * they need one for their own accounts, and ours every month until they do.
  */
 export function billingIdentityPrompt(v: BillingIdentity | null): string | null {
-  if (!v) {
+  const facts = billingIdentityGap(v);
+  if (!facts) return null;
+  if (facts.code === "missing") {
     return "We do not have your company details yet, so we cannot issue you an invoice. It takes a minute and your bookkeeper will need it.";
   }
+  return `Your company details are incomplete, so an invoice cannot be issued yet: ${facts.fields
+    .map((f) => FIELD_LABEL[f].toLowerCase())
+    .join(", ")}.`;
+}
+
+/**
+ * The same verdict as `billingIdentityPrompt`, as facts rather than a sentence — so a screen in
+ * another language can word it without parsing ours. `fields` keeps the form's order and repeats a
+ * field once however many things are wrong with it.
+ */
+export function billingIdentityGap(
+  v: BillingIdentity | null,
+): null | { code: "missing" } | { code: "incomplete"; fields: BillingIdentityField[] } {
+  if (!v) return { code: "missing" };
   const problems = validateBillingIdentity(v);
   if (problems.length === 0) return null;
-  return `Your company details are incomplete, so an invoice cannot be issued yet: ${problems
-    .map((p) => FIELD_LABEL[p.field].toLowerCase())
-    .join(", ")}.`;
+  return { code: "incomplete", fields: problems.map((p) => p.field) };
 }
 
 export const FIELD_LABEL: Record<BillingIdentityField, string> = {

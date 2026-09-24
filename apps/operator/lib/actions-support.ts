@@ -115,9 +115,16 @@ export async function replyToSupportRequest(fd: FormData): Promise<void> {
   const db = forSystem();
   const request = await db.supportRequest.findUnique({
     where: { id },
-    select: { id: true, contactEmail: true, contactName: true, kind: true, message: true, product: true },
+    select: { id: true, contactEmail: true, contactName: true, kind: true, message: true, product: true, userId: true },
   });
   if (!request) return flashError("That request no longer exists.");
+  // The console is English; the person who asked may not be. Their own `User.locale` decides the
+  // words around our reply (the reply itself is whatever we typed). The marker never changes — the
+  // inbound reader cuts on it.
+  const asker = request.userId
+    ? await db.user.findUnique({ where: { id: request.userId }, select: { locale: true } })
+    : null;
+  const bg = asker?.locale === "bg";
 
   /*
    * Send FIRST, then record with the result.
@@ -132,19 +139,24 @@ export async function replyToSupportRequest(fd: FormData): Promise<void> {
     const mail = {
       preview: body.slice(0, 120),
       heading: `Re: ${reference}`,
+      ...(bg ? { locale: "bg" as const } : {}),
       blocks: [
         { p: body },
         // The line the inbound reader cuts on. Without it a reply arrives with the whole
         // conversation quoted under it and the thread fills with its own history.
         { note: REPLY_MARKER },
-        { note: `You asked: “${request.message.slice(0, 300)}”` },
-        { note: "Reply to this email and it reaches us — or open Get help in your Revio account." },
+        { note: `${bg ? "Попитахте" : "You asked"}: “${request.message.slice(0, 300)}”` },
+        {
+          note: bg
+            ? "Отговорете на този имейл и той ще стигне до нас — или отворете „Помощ“ в профила си в Revio."
+            : "Reply to this email and it reaches us — or open Get help in your Revio account.",
+        },
       ],
     };
     try {
       const res = await sendEmail({
         to: [request.contactEmail],
-        subject: `Re: ${reference} · Revio support`,
+        subject: `Re: ${reference} · ${bg ? "поддръжка Revio" : "Revio support"}`,
         text: renderSystemEmailText(mail),
         html: renderSystemEmail(mail),
       });

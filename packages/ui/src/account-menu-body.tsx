@@ -1,6 +1,10 @@
 "use client";
 
+import { TRIAL_DAYS } from "@revio/core";
 import type { ProductLink, ProductUpsell } from "./product-links";
+import { fill, translate } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { productStrings } from "./product-strings";
 
 /**
  * The inside of the account menu, shared by all four staff apps.
@@ -51,6 +55,8 @@ export function AccountMenuBody({
    */
   trialHref?: (productKey: string) => string;
 }) {
+  const t = translate(productStrings, useLocale());
+  const s = t.menu;
   return (
     <>
       <div className="border-b border-surface-border px-3 py-2.5">
@@ -64,7 +70,7 @@ export function AccountMenuBody({
       {products.length > 0 && (
         <div className="border-b border-surface-border py-1">
           <p className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-            Your products
+            {s.yourProducts}
           </p>
           {products.map((p) =>
             p.current ? (
@@ -75,10 +81,10 @@ export function AccountMenuBody({
               >
                 <span className="min-w-0">
                   <span className="block truncate text-[13px] font-semibold text-ink-900">{p.name}</span>
-                  <span className="block truncate text-[11px] text-ink-400">{p.tagline}</span>
+                  <span className="block truncate text-[11px] text-ink-400">{t.tagline[p.key] ?? p.tagline}</span>
                 </span>
                 <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-                  Here
+                  {s.here}
                 </span>
               </div>
             ) : openProduct ? (
@@ -100,7 +106,7 @@ export function AccountMenuBody({
                   className="block w-full px-3 py-1.5 text-left transition-colors hover:bg-surface-muted"
                 >
                   <span className="block truncate text-[13px] text-ink-700">{p.name}</span>
-                  <span className="block truncate text-[11px] text-ink-400">{p.tagline}</span>
+                  <span className="block truncate text-[11px] text-ink-400">{t.tagline[p.key] ?? p.tagline}</span>
                 </button>
               </form>
             ) : (
@@ -110,7 +116,7 @@ export function AccountMenuBody({
                 className="block px-3 py-1.5 transition-colors hover:bg-surface-muted"
               >
                 <span className="block truncate text-[13px] text-ink-700">{p.name}</span>
-                <span className="block truncate text-[11px] text-ink-400">{p.tagline}</span>
+                <span className="block truncate text-[11px] text-ink-400">{t.tagline[p.key] ?? p.tagline}</span>
               </a>
             ),
           )}
@@ -120,16 +126,16 @@ export function AccountMenuBody({
       {upsells.length > 0 && (
         <div className="border-b border-surface-border py-1">
           <p className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-400">
-            Also available
+            {s.alsoAvailable}
           </p>
           {upsells.map((p) => {
             const href = trialHref?.(p.key);
             const body = (
               <>
                 <span className="block text-[13px] text-ink-700">{p.name}</span>
-                <span className="block text-[11px] leading-snug text-ink-400">{p.reason}</span>
+                <span className="block text-[11px] leading-snug text-ink-400">{t.upsell[p.reasonCode] ?? p.reason}</span>
                 {href && (
-                  <span className="mt-0.5 block text-[11px] font-semibold text-brand-700">Try it free for 30 days →</span>
+                  <span className="mt-0.5 block text-[11px] font-semibold text-brand-700">{fill(s.tryFree, { days: TRIAL_DAYS })}</span>
                 )}
               </>
             );
@@ -149,7 +155,7 @@ export function AccountMenuBody({
           })}
           {!trialHref && (
             <p className="px-3 pb-1.5 pt-1 text-[10.5px] italic text-ink-400">
-              Ask your Revio contact to switch one on.
+              {s.askContact}
             </p>
           )}
         </div>

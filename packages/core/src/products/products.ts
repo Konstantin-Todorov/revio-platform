@@ -93,33 +93,36 @@ export function hasOtherProducts(e: ProductEntitlements, current: ProductKey): b
  * a button that cannot complete is worse than offering none, so the honest call to action is to ask
  * us — and that is what the UI says.
  */
+/** Which of the sentences below applies — a stable name, so a screen can say it in another language. */
+export type UpsellReasonCode = "cm.withCrs" | "cm.alone" | "crs.withCm" | "crs.alone" | "pms.withCrs" | "pms.alone";
+
 export interface ProductUpsell extends ProductInfo {
   /** One sentence, in the hotel's terms, about what they already have. */
   reason: string;
+  reasonCode: UpsellReasonCode;
 }
 
 export function unownedProducts(e: ProductEntitlements): ProductUpsell[] {
   const owned = new Set(entitledProducts(e).map((p) => p.key));
   if (owned.size === 0) return [];
 
-  return PRODUCTS.filter((p) => !owned.has(p.key)).map((p) => ({
-    ...p,
-    reason: upsellReason(p.key, owned),
-  }));
+  return PRODUCTS.filter((p) => !owned.has(p.key)).map((p) => {
+    const reasonCode = upsellReasonCode(p.key, owned);
+    return { ...p, reason: UPSELL_REASON[reasonCode], reasonCode };
+  });
 }
 
-function upsellReason(key: ProductKey, owned: ReadonlySet<ProductKey>): string {
-  if (key === "cm") {
-    return owned.has("crs")
-      ? "Send the rates you already keep here straight to Booking.com and Expedia."
-      : "Keep your rooms and prices in step across every booking site.";
-  }
-  if (key === "crs") {
-    return owned.has("cm")
-      ? "Your channel bookings already arrive — this is where they become a record you can report on."
-      : "One reservation record, with occupancy, ADR and RevPAR computed from it.";
-  }
-  return owned.has("crs")
-    ? "Run the arrival day on the same bookings: front desk, housekeeping and the guest's bill."
-    : "Front desk, housekeeping and folios on the rooms you already have here.";
+export const UPSELL_REASON: Record<UpsellReasonCode, string> = {
+  "cm.withCrs": "Send the rates you already keep here straight to Booking.com and Expedia.",
+  "cm.alone": "Keep your rooms and prices in step across every booking site.",
+  "crs.withCm": "Your channel bookings already arrive — this is where they become a record you can report on.",
+  "crs.alone": "One reservation record, with occupancy, ADR and RevPAR computed from it.",
+  "pms.withCrs": "Run the arrival day on the same bookings: front desk, housekeeping and the guest's bill.",
+  "pms.alone": "Front desk, housekeeping and folios on the rooms you already have here.",
+};
+
+function upsellReasonCode(key: ProductKey, owned: ReadonlySet<ProductKey>): UpsellReasonCode {
+  if (key === "cm") return owned.has("crs") ? "cm.withCrs" : "cm.alone";
+  if (key === "crs") return owned.has("cm") ? "crs.withCm" : "crs.alone";
+  return owned.has("crs") ? "pms.withCrs" : "pms.alone";
 }

@@ -54,6 +54,8 @@
     "./trial-banner": "./src/trial-banner.tsx",
     "./billing-panel": "./src/billing-panel.tsx",
     "./billing-identity-form": "./src/billing-identity-form.tsx",
+    "./billing-strings": "./src/billing-strings.ts",
+    "./product-strings": "./src/product-strings.ts",
     "./nav-tail": "./src/nav-tail.tsx",
     "./product-locked": "./src/product-locked.tsx",
     "./plan-tree": "./src/plan-tree.tsx",

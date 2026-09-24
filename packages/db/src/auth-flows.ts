@@ -9,7 +9,9 @@
  * identical treatment; `scope` selects which.
  */
 import bcrypt from "bcryptjs";
-import { validatePassword, inviteEmail, passwordResetEmail, passwordChangedEmail } from "@revio/core";
+import {
+  validatePassword, inviteEmail, passwordResetEmail, passwordChangedEmail, type AuthRefusalCode, type SystemEmailLocale,
+} from "@revio/core";
 import { isBreachedPassword, breachMessage } from "@revio/core/server";
 import { forSystem } from "./rls.js";
 import { activatePendingSignup } from "./public-signup.js";
@@ -21,6 +23,9 @@ import { checkLoginAllowed, recordLoginFailure, type LoginScope } from "./login-
 export type AuthScope = "cm" | "crs" | "pms" | "operator";
 
 const isOperator = (scope: AuthScope) => scope === "operator";
+
+/** A stored `User.locale` as a language our own mail is written in. Anything else is English. */
+const emailLocale = (l: string | null | undefined): SystemEmailLocale => (l === "bg" ? "bg" : "en");
 
 export interface SendableEmail {
   to: string;
@@ -63,6 +68,8 @@ export async function requestPasswordReset(args: {
   let name: string | undefined;
   let userId: string | undefined;
   let operatorUserId: string | undefined;
+  // The operator console is English; a hotel person gets the reset in the language they chose.
+  let locale: SystemEmailLocale = "en";
 
   if (isOperator(args.scope)) {
     const op = await prisma.operatorUser.findUnique({ where: { email: address } });
@@ -76,6 +83,7 @@ export async function requestPasswordReset(args: {
     if (!user || !user.active || user.tenant.status !== "active") return { email: null, throttled: false };
     name = user.name ?? undefined;
     userId = user.id;
+    locale = emailLocale(user.locale);
   }
 
   const token = await issueToken({
@@ -89,6 +97,7 @@ export async function requestPasswordReset(args: {
     ...(name ? { name } : {}),
     context: args.contextName,
     url: `${args.origin.replace(/\/$/, "")}/reset-password/${token}`,
+    locale,
   });
 
   return { email: { to: address, ...mail }, throttled: false };
@@ -107,6 +116,8 @@ export async function inviteStaff(args: {
   origin: string;
   contextName: string;
   invitedBy?: string;
+  /** The invitee has no language of their own yet; the inviter's is the best guess. */
+  locale?: SystemEmailLocale;
   /** Called with the created account's id so the caller can apply roles/tenancy. */
   createAccount: (email: string, name: string) => Promise<{ id: string }>;
 }): Promise<{ email: SendableEmail }> {
@@ -124,6 +135,7 @@ export async function inviteStaff(args: {
     context: args.contextName,
     ...(args.invitedBy ? { invitedBy: args.invitedBy } : {}),
     url: `${args.origin.replace(/\/$/, "")}/accept-invite/${token}`,
+    ...(args.locale ? { locale: args.locale } : {}),
   });
 
   return { email: { to: address, ...mail } };
@@ -140,7 +152,7 @@ export type SetPasswordResult =
        */
       accountEmail: string;
     }
-  | { ok: false; message: string };
+  | { ok: false; code: AuthRefusalCode; message: string; count?: number };
 
 /**
  * Spend an invite or reset token and set the chosen password.
@@ -156,10 +168,10 @@ export async function completePasswordSet(args: {
   contextName: string;
 }): Promise<SetPasswordResult> {
   const resolved = await resolveToken(args.token, args.purpose);
-  if (!resolved.ok) return { ok: false, message: resolved.message };
+  if (!resolved.ok) return { ok: false, code: resolved.code, message: resolved.message };
 
   const strength = validatePassword(args.password, { email: resolved.token.email });
-  if (!strength.ok) return { ok: false, message: strength.message };
+  if (!strength.ok) return { ok: false, code: strength.code, message: strength.message };
 
   /*
    * The breach check (N5), and this is the ONLY place it runs.
@@ -171,16 +183,23 @@ export async function completePasswordSet(args: {
    * their invitation. `skipped` says so rather than pretending the answer was "clean".
    */
   const breach = await isBreachedPassword(args.password);
-  if (breach.breached) return { ok: false, message: breachMessage(breach.count) };
+  if (breach.breached) {
+    const many = Boolean(breach.count && breach.count > 1);
+    return {
+      ok: false, code: many ? "password.breachedMany" : "password.breached",
+      message: breachMessage(breach.count), ...(many ? { count: breach.count! } : {}),
+    };
+  }
 
   // Atomic: the loser of a race gets this, not a second password write.
   if (!(await consumeToken(resolved.token.id))) {
-    return { ok: false, message: "This link has already been used." };
+    return { ok: false, code: "link.alreadyUsed", message: "This link has already been used." };
   }
 
   const prisma = forSystem();
   const passwordHash = await bcrypt.hash(args.password, 10);
   let name: string | undefined;
+  let locale: SystemEmailLocale = "en";
 
   /**
    * Changing the password ends every session that existed before it.
@@ -216,6 +235,7 @@ export async function completePasswordSet(args: {
       data: { passwordHash, sessionsValidFrom },
     });
     name = user.name ?? undefined;
+    locale = emailLocale(user.locale);
 
     /*
      * A hotel that signed itself up becomes a customer HERE, and nowhere else.
@@ -236,7 +256,7 @@ export async function completePasswordSet(args: {
       detail: resolved.token.purpose === "invite" ? "set from invitation" : "reset",
     });
   } else {
-    return { ok: false, message: "This link is not attached to an account." };
+    return { ok: false, code: "link.noAccount", message: "This link is not attached to an account." };
   }
 
   // Every other outstanding link for this address dies with the password change. A reset requested
@@ -247,7 +267,7 @@ export async function completePasswordSet(args: {
   // time is noise; telling them after a reset is how a stolen account gets noticed.
   const notice =
     args.purpose === "reset"
-      ? { to: resolved.token.email, ...passwordChangedEmail({ ...(name ? { name } : {}), context: args.contextName }) }
+      ? { to: resolved.token.email, ...passwordChangedEmail({ ...(name ? { name } : {}), context: args.contextName, locale }) }
       : null;
 
   return { ok: true, email: notice, accountEmail: resolved.token.email };

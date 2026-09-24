@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { fill, translate, type Locale } from "./i18n";
+import { productStrings } from "./product-strings";
 
 /**
  * The screen a hotel sees before it starts its own trial.
@@ -31,6 +33,7 @@ export function StartTrialPanel({
   action,
   cancelHref,
   children,
+  locale = "en",
 }: {
   productName: string;
   /** One line on what it does — the same sentence the account menu used to offer it with. */
@@ -43,13 +46,16 @@ export function StartTrialPanel({
   cancelHref: string;
   /** The hidden fields the app's own action needs. */
   children?: ReactNode;
+  /** A server component, so the language arrives as a prop. `promises` and `refusal` arrive in it. */
+  locale?: Locale;
 }) {
+  const s = translate(productStrings, locale).trial;
   return (
     <main className="mx-auto max-w-[620px] px-4 py-10">
       <div className="rounded-xl border border-surface-border bg-white p-7 shadow-sm">
-        <p className="text-[11px] font-bold uppercase tracking-[0.13em] text-ink-400">Free trial</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.13em] text-ink-400">{s.eyebrow}</p>
         <h1 className="mt-1.5 text-[22px] font-bold tracking-tight text-ink-900">
-          Try {productName} for {days} days
+          {fill(s.title, { product: productName, days })}
         </h1>
         <p className="mt-2 max-w-[56ch] text-[13.5px] leading-relaxed text-ink-600">{tagline}</p>
 
@@ -79,13 +85,13 @@ export function StartTrialPanel({
                 type="submit"
                 className="rounded-md bg-brand-800 px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700"
               >
-                Start the {days}-day trial
+                {fill(s.start, { days })}
               </button>
               <a
                 href={cancelHref}
                 className="text-[13px] font-semibold text-ink-500 transition-colors hover:text-ink-800"
               >
-                Not now
+                {s.notNow}
               </a>
             </form>
           </>
@@ -97,8 +103,7 @@ export function StartTrialPanel({
           * reads as a fact.
           */}
         <p className="mt-6 border-t border-surface-border pt-4 text-[11.5px] leading-relaxed text-ink-400">
-          No card, no contract, and no automatic renewal. If you want to keep it afterwards, reply to
-          any Revio email and we will price it with you first.
+          {s.footer}
         </p>
       </div>
     </main>

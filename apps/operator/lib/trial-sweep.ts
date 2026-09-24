@@ -6,8 +6,9 @@ import {
   daysRemaining,
   dueReminder,
   needsExpiring,
-  renderSystemEmail,
-  renderSystemEmailText,
+  trialFinishedEmail,
+  trialReminderEmail,
+  type SystemEmailLocale,
   type ProductKey,
 } from "@revio/core";
 import { originFor } from "./product-origins";
@@ -71,7 +72,7 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
       tenant: {
         select: {
           id: true, name: true,
-          users: { where: { role: "owner", active: true }, take: 1, select: { name: true, email: true } },
+          users: { where: { role: "owner", active: true }, take: 1, select: { name: true, email: true, locale: true } },
         },
       },
     },
@@ -97,14 +98,15 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
   const outbox = new Map<string, {
     tenantName: string;
     email: string | null;
+    locale: SystemEmailLocale;
     expired: string[];
     reminders: Map<number, { products: string[]; endsAt: Date; trialIds: string[]; due: number }>;
   }>();
-  const bucketFor = (tenantId: string, tenantName: string, email: string | null) => {
+  const bucketFor = (tenantId: string, tenantName: string, email: string | null, locale?: string | null) => {
     const existing = outbox.get(tenantId);
     if (existing) return existing;
     const fresh = {
-      tenantName, email, expired: [] as string[],
+      tenantName, email, locale: (locale === "bg" ? "bg" : "en") as SystemEmailLocale, expired: [] as string[],
       reminders: new Map<number, { products: string[]; endsAt: Date; trialIds: string[]; due: number }>(),
     };
     outbox.set(tenantId, fresh);
@@ -147,7 +149,7 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
       });
       if (!expired) continue;
 
-      bucketFor(t.tenantId, t.tenant.name, owner?.email ?? null).expired.push(product.name);
+      bucketFor(t.tenantId, t.tenant.name, owner?.email ?? null, owner?.locale).expired.push(product.name);
 
       result.expired++;
       result.details.push(
@@ -173,7 +175,7 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
        * hotel its warning, with nothing to retry because the threshold now says it was sent. The
        * send happens first and the ids travel in the bucket so they can be marked afterwards.
        */
-      const bucket = bucketFor(t.tenantId, t.tenant.name, owner.email);
+      const bucket = bucketFor(t.tenantId, t.tenant.name, owner.email, owner.locale);
       const at = bucket.reminders.get(left) ?? { products: [], endsAt: t.endsAt, trialIds: [], due };
       at.products.push(product.name);
       at.trialIds.push(t.id);
@@ -203,62 +205,28 @@ export async function sweepTrials(now = new Date()): Promise<TrialSweepResult> {
     if (!bucket.email) continue; // already counted as unreachable above
 
     if (bucket.expired.length > 0) {
-      const names = listOf(bucket.expired);
-      const many = bucket.expired.length > 1;
-      const mail = {
-        preview: `Your Revio trial has finished.`,
-        heading: many ? "Your Revio trial has finished" : `Your ${names} trial has finished`,
-        product: "Revio",
-        blocks: [
-          { p: `The trial has ended and ${names} ${many ? "are" : "is"} no longer on your Revio login.` },
-          {
-            p: "Nothing has been deleted. Your rooms, rates, reservations and guests are shared across the products, so they are exactly where they were — and if you decide to keep any of them, switching it back on restores everything instantly, with nothing to import.",
-          },
-          {
-            p: many
-              ? "You do not have to take all of it back. Reply and tell us which of them you actually used, and we will switch on only those."
-              : "If it was useful, reply to this email and we will put it back.",
-          },
-          {
-            note: "You have not been charged for the trial, and nothing starts on its own. If you do decide to keep it, you pay from the day you decide — we never charge for a day of the trial.",
-          },
-        ],
-      };
+      // Worded in core, in the OWNER's language (`User.locale`) — the console is English, they may not be.
+      const mail = trialFinishedEmail({ products: bucket.expired, locale: bucket.locale });
       await sendEmail({
         to: [bucket.email],
-        subject: many ? "Your Revio trial has finished" : `Your ${names} trial has finished`,
-        text: renderSystemEmailText(mail),
-        html: renderSystemEmail(mail),
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
       }).catch(() => { /* the entitlements are already correct; the mail is the softer half */ });
     }
 
     for (const [left, at] of bucket.reminders) {
+      // For the operator's own log, which stays English.
       const names = listOf(at.products);
-      const many = at.products.length > 1;
       const day = `${left} day${left === 1 ? "" : "s"}`;
-      const subject = `${day} left on your Revio trial`;
-      const mail = {
-        preview: `${day} left on your Revio trial.`,
-        heading: `${day} left on your ${many ? "Revio" : names} trial`,
-        product: "Revio",
-        blocks: [
-          { p: `Your trial of ${names} ends on ${at.endsAt.toISOString().slice(0, 10)}.` },
-          {
-            p: many
-              ? "If you would like to keep any of them, reply and tell us which — you only pay for what you keep, and there is no obligation to take all three. Nothing happens automatically and you will not be charged without agreeing to it."
-              : "If you would like to keep it, reply to this email and we will switch it on properly. Nothing happens automatically and you will not be charged without agreeing to it.",
-          },
-          { action: { label: "Open Revio", url: originFor("cm") } },
-          {
-            note: "If you let it run out, nothing is deleted — your data is shared across the products and stays exactly as it is.",
-          },
-        ],
-      };
+      const mail = trialReminderEmail({
+        products: at.products, left, endsOn: at.endsAt.toISOString().slice(0, 10), url: originFor("cm"), locale: bucket.locale,
+      });
       const sent = await sendEmail({
         to: [bucket.email],
-        subject,
-        text: renderSystemEmailText(mail),
-        html: renderSystemEmail(mail),
+        subject: mail.subject,
+        text: mail.text,
+        html: mail.html,
       }).catch(() => ({ ok: false, mode: "resend" as const, error: "send threw" }));
 
       /*

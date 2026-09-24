@@ -99,6 +99,8 @@ async function sendInvite(args: {
     context: args.hotel,
     ...(args.invitedBy ? { invitedBy: args.invitedBy } : {}),
     url: `${proto}://${host}/accept-invite/${token}`,
+    // The invitee has no language of their own yet; the person inviting them is the best guess.
+    locale: (await i18n()).locale,
   });
   await sendEmail({ to: [args.email], subject: mail.subject, text: mail.text, html: mail.html });
 }

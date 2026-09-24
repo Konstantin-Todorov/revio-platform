@@ -307,11 +307,11 @@ export async function openProductAndGreet(
 
   try {
     const db = forSystem();
-    const [tenant, owner, trial, others] = await Promise.all([
+    const [tenant, owner, trial, others, property] = await Promise.all([
       db.tenant.findUnique({ where: { id: tenantId }, select: { name: true } }),
       db.user.findFirst({
         where: { tenantId, role: "owner", active: true },
-        select: { name: true, email: true },
+        select: { name: true, email: true, locale: true },
         // Deterministic when a hotel has two owners — cuid ids sort by creation, so this is the
         // first owner, which is the account the operator or the signup created.
         orderBy: { id: "asc" },
@@ -321,6 +321,8 @@ export async function openProductAndGreet(
         where: { tenantId, openedAt: { not: null }, product: { not: product } },
         select: { product: true },
       }),
+      // The first property's zone — the end is an instant, and "which day" is the hotel's question.
+      db.property.findFirst({ where: { tenantId }, select: { timezone: true }, orderBy: { id: "asc" } }),
     ]);
 
     // No owner or no end date means something upstream is wrong, and a mail promising a date we
@@ -337,9 +339,12 @@ export async function openProductAndGreet(
       endsAt: trial.endsAt,
       url,
       alreadyOpen: others.map((o) => o.product as ProductKey),
-      // The hotel's own locale lives on the property, not the tenant; this is the platform default
-      // and the one place a date is formatted for a person rather than stored.
-      formatDate: (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }),
+      // In the owner's own language (`User.locale`), and the day as the hotel's clock reads it.
+      ...(owner.locale === "bg" ? { locale: "bg" as const } : {}),
+      formatDate: (d) =>
+        d.toLocaleDateString(owner.locale === "bg" ? "bg-BG" : "en-GB", {
+          day: "numeric", month: "long", year: "numeric", timeZone: property?.timezone ?? "Europe/Sofia",
+        }),
     });
 
     const sent = await sendEmail({ to: [owner.email], subject: mail.subject, text: mail.text, html: mail.html });

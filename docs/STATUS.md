@@ -311,8 +311,14 @@ says who can move it. Details sit where the link points.
    activity log, the trial strip, the status pages. Each reads `LocaleProvider` (client) or a `locale` prop
    (server); a product with no provider is unchanged English. Help + Your requests done too, and
    restructured for all three products (sections on the left like Settings; requests as a list with one
-   open conversation, `/help/requests/<id>`). **Still English:** Billing panel + company details,
-   Start-trial and the locked/role-locked screens.
+   open conversation, `/help/requests/<id>`). **✅ Finished 2026-09-24 (later):** Billing panel + company
+   details (`@revio/ui/billing-strings`), Start-trial, the locked and role-locked screens and the account
+   menu's "Your products / Also available" (`@revio/ui/product-strings`), and every refused link or password
+   on the set-password screens (`authRefusalStrings`, core `AuthRefusalCode`). New codes in core:
+   `BillingIdentityProblemCode` + `billingIdentityGap`, `UpsellReasonCode`, `AuthRefusalCode`. English is
+   held to core word for word by `apps/pms/lib/i18n/product-drift.test.ts`. Looked at in the browser, desk
+   and phone, Bulgarian and English. **RevioLink and RevioCRS pages still pass no `locale`**, so they are
+   unchanged English until their turn.
    Messages from `@revio/db`/`@revio/core` now carry codes (`TwoFactorErrorCode`, `WelcomeWriteCode`,
    `RegisterProblemCode`) so a screen translates by code, never by matching English. Rule written in
    `packages/ui/CLAUDE.md`.
@@ -320,7 +326,12 @@ says who can move it. Details sit where the link points.
    **Approved, not built:** RevioCRS Rooms & Rates regrouped by room and by plan in the Settings shape —
    `docs/PLAN-ROOMS-RATES-CRS.md`; and a grouping review of every screen — `docs/UI-GROUPING-AUDIT.md`.
    The session that did all of the above is recorded in `docs/SESSION-2026-09-24.md`.
-4. Server-action messages — **RevioPMS done** (`lib/i18n/flash.ts`, sign-in, users, welcome, 2FA). Emails still English.
+4. Server-action messages — **RevioPMS done** (`lib/i18n/flash.ts`, sign-in, users, welcome, 2FA).
+   **Emails ✅ (2026-09-24):** our own mail follows the READER's `User.locale` — invite (the inviter's
+   language, since the invitee has none yet), password reset, password changed, trial opened, the sweep's
+   trial reminder and trial finished (moved from the operator app into core `trial-emails.ts`), and the
+   words around our support reply. The system shell sets `lang` and its footer per language. Mail to US
+   (support, alerts) stays English; invoices stay English (legal). Guest mail was already per-language.
 5. RevioDirect's guest page — the GUEST's language, a different choice from staff (browser, then hotel).
 Rule for every step: `lib/i18n/<screen>.ts`, add it to the completeness test when finished, look at the
 page at phone width. Not translated: legal documents, and anything the hotel typed.

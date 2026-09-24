@@ -1,5 +1,7 @@
 import { ArrowRight, Clock, Lock, MailCheck } from "lucide-react";
-import { productAccessCopy, type ProductAccessState } from "@revio/core";
+import { TRIAL_DAYS, type ProductAccessState } from "@revio/core";
+import { fill, translate, type Locale } from "./i18n";
+import { productStrings } from "./product-strings";
 
 /**
  * The screen a hotel meets when it opens a product it cannot currently use.
@@ -21,14 +23,32 @@ export function ProductLocked({
   hrefFor,
   /** Rendered under the message — the app supplies its own form, since only it has the action. */
   action,
+  locale = "en",
 }: {
   state: ProductAccessState;
   hotelName: string;
   fmtDate: (d: Date) => string;
   hrefFor: (key: string) => string;
   action?: React.ReactNode;
+  /** A server component, so the language arrives as a prop. `fmtDate` should format in it too. */
+  locale?: Locale;
 }) {
-  const copy = productAccessCopy(state, hotelName, fmtDate);
+  const t = translate(productStrings, locale);
+  const s = t.locked;
+  // The same three situations as `productAccessCopy` in core, worded in the reader's language.
+  const vars = {
+    product: state.product.name,
+    hotel: hotelName,
+    ended: state.endedAt ? fmtDate(state.endedAt) : s.endDateFallback,
+    tagline: t.tagline[state.product.key],
+    days: TRIAL_DAYS,
+  };
+  const copy =
+    state.reason === "trial-ended"
+      ? { title: fill(s.trialEndedTitle, vars), body: fill(s.trialEndedBody, vars) }
+      : state.reason === "switched-off"
+        ? { title: fill(s.switchedOffTitle, vars), body: fill(s.switchedOffBody, vars) }
+        : { title: fill(s.neverHadTitle, vars), body: fill(s.neverHadBody, vars) };
   const ended = state.reason === "trial-ended";
 
   return (
@@ -63,7 +83,7 @@ export function ProductLocked({
               href={`${hrefFor(state.stillOpen[0]!.key)}/start-trial/${state.product.key}`}
               className="flex h-10 items-center gap-2 rounded-md bg-brand-800 px-4 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700"
             >
-              Start your free trial <ArrowRight className="h-4 w-4" />
+              {s.startTrial} <ArrowRight className="h-4 w-4" />
             </a>
           </div>
         )}
@@ -71,7 +91,7 @@ export function ProductLocked({
         {state.keepRequested ? (
           <p className="mx-auto mt-4 flex max-w-md items-center justify-center gap-1.5 rounded-md bg-success-50 px-3 py-2 text-[12.5px] font-semibold text-success-700">
             <MailCheck className="h-4 w-4 shrink-0" />
-            You've asked to keep {state.product.name} — we'll be in touch shortly.
+            {fill(s.keepRequested, vars)}
           </p>
         ) : (
           action && <div className="mt-5 flex justify-center">{action}</div>
@@ -85,7 +105,7 @@ export function ProductLocked({
         {state.stillOpen.length > 0 && (
           <div className="mt-7 border-t border-surface-border pt-5 text-left">
             <p className="text-center text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              Still yours, and open right now
+              {s.stillOpen}
             </p>
             <ul className="mx-auto mt-2.5 max-w-sm space-y-1.5">
               {state.stillOpen.map((p) => (
@@ -96,7 +116,7 @@ export function ProductLocked({
                   >
                     <span>
                       <span className="font-semibold text-brand-700">{p.name}</span>
-                      <span className="ml-2 text-ink-500">{p.tagline}</span>
+                      <span className="ml-2 text-ink-500">{t.tagline[p.key]}</span>
                     </span>
                     <ArrowRight className="h-4 w-4 shrink-0 text-ink-300" />
                   </a>
@@ -107,7 +127,7 @@ export function ProductLocked({
         )}
 
         <p className="mt-6 text-[12px] text-ink-400">
-          Questions?{" "}
+          {s.questions}{" "}
           <a href="mailto:support@reviosoft.app" className="font-semibold text-brand-700 hover:underline">
             support@reviosoft.app
           </a>

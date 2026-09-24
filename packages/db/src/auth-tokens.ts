@@ -16,7 +16,7 @@
  * exists, and a reset is by definition requested by someone who cannot sign in.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { TOKEN_POLICY, checkToken, type TokenPurpose, handoffPurposeFor, isHandoff } from "@revio/core";
+import { TOKEN_POLICY, checkToken, type AuthRefusalCode, type TokenPurpose, handoffPurposeFor, isHandoff, linkKind } from "@revio/core";
 import { forSystem } from "./rls.js";
 
 /** 32 bytes of CSPRNG, base64url. ~256 bits — not guessable, and short enough to survive a mail client. */
@@ -78,7 +78,7 @@ export interface ResolvedToken {
 
 export type TokenResolution =
   | { ok: true; token: ResolvedToken }
-  | { ok: false; message: string };
+  | { ok: false; code: AuthRefusalCode; message: string };
 
 /**
  * Look a token up and say whether it may be used — without spending it.
@@ -121,13 +121,13 @@ export async function resolveToken(token: string, purpose: TokenPurpose): Promis
         ? "That link is not valid any more. Open the product again from your account."
         : "This reset link is not valid or has expired. Request a new one.";
 
-  if (!row || row.purpose !== purpose) return { ok: false, message: dead };
+  if (!row || row.purpose !== purpose) return { ok: false, code: `${linkKind(purpose)}.invalid`, message: dead };
 
   const check = checkToken(
     { purpose: row.purpose as TokenPurpose, expiresAt: row.expiresAt.getTime(), usedAt: row.usedAt?.getTime() ?? null },
     Date.now(),
   );
-  if (!check.usable) return { ok: false, message: check.message };
+  if (!check.usable) return { ok: false, code: check.code, message: check.message };
 
   return {
     ok: true,

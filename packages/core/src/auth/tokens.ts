@@ -79,9 +79,27 @@ export interface TokenRecord {
   usedAt: number | null;
 }
 
+/**
+ * Why a link or a password was refused, as a stable name a screen says in the reader's language
+ * (`strings[code] ?? message`, never matching the English — `packages/ui/CLAUDE.md`).
+ */
+export type AuthRefusalCode =
+  | "invite.invalid" | "handoff.invalid" | "reset.invalid"
+  | "invite.used" | "handoff.used" | "reset.used"
+  | "invite.expired" | "handoff.expired" | "reset.expired"
+  | "link.alreadyUsed" | "link.noAccount"
+  | "password.tooShort" | "password.tooLong" | "password.obvious" | "password.repeated"
+  | "password.sequence" | "password.keyRow" | "password.email"
+  | "password.breached" | "password.breachedMany";
+
+/** The word a refusal code starts with for this purpose — every hand-off purpose shares one. */
+export function linkKind(purpose: TokenPurpose): "invite" | "handoff" | "reset" {
+  return purpose === "invite" ? "invite" : isHandoff(purpose) ? "handoff" : "reset";
+}
+
 export type TokenCheck =
   | { usable: true }
-  | { usable: false; reason: "expired" | "used"; message: string };
+  | { usable: false; reason: "expired" | "used"; code: AuthRefusalCode; message: string };
 
 /**
  * Is this token still good?
@@ -96,6 +114,7 @@ export function checkToken(record: TokenRecord, now: number): TokenCheck {
     return {
       usable: false,
       reason: "used",
+      code: `${linkKind(record.purpose)}.used`,
       message:
         isHandoff(record.purpose)
           /* Reassuring on purpose: this is the normal result of a reload or a back button, not a
@@ -110,6 +129,7 @@ export function checkToken(record: TokenRecord, now: number): TokenCheck {
     return {
       usable: false,
       reason: "expired",
+      code: `${linkKind(record.purpose)}.expired`,
       message:
         isHandoff(record.purpose)
           ? "That link timed out. Open the product again from your account — it takes a second."
@@ -124,7 +144,7 @@ export function checkToken(record: TokenRecord, now: number): TokenCheck {
 /** Password rules. Local checks here; the breach check is `isBreachedPassword` in core/server. */
 export const PASSWORD_MIN_LENGTH = 10;
 
-export type PasswordCheck = { ok: true } | { ok: false; message: string };
+export type PasswordCheck = { ok: true } | { ok: false; code: AuthRefusalCode; message: string };
 
 /**
  * Accept or reject a password the user chose.
@@ -148,10 +168,10 @@ function isSequential(value: string): boolean {
 
 export function validatePassword(password: string, context: { email?: string } = {}): PasswordCheck {
   if (password.length < PASSWORD_MIN_LENGTH) {
-    return { ok: false, message: `Use at least ${PASSWORD_MIN_LENGTH} characters.` };
+    return { ok: false, code: "password.tooShort", message: `Use at least ${PASSWORD_MIN_LENGTH} characters.` };
   }
   if (password.length > 200) {
-    return { ok: false, message: "That password is too long — 200 characters maximum." };
+    return { ok: false, code: "password.tooLong", message: "That password is too long — 200 characters maximum." };
   }
 
   const lower = password.toLowerCase();
@@ -159,7 +179,7 @@ export function validatePassword(password: string, context: { email?: string } =
   // The handful that would otherwise sail past a length check on this platform specifically.
   const OBVIOUS = ["revio1234", "password", "12345678", "qwertyuiop", "letmein123"];
   if (OBVIOUS.some((bad) => lower === bad || lower.startsWith(bad))) {
-    return { ok: false, message: "That password is too easy to guess. Choose something else." };
+    return { ok: false, code: "password.obvious", message: "That password is too easy to guess. Choose something else." };
   }
 
   /*
@@ -170,12 +190,12 @@ export function validatePassword(password: string, context: { email?: string } =
 
   // One character repeated: "aaaaaaaaaa", "1111111111".
   if (/^(.)\1+$/.test(password)) {
-    return { ok: false, message: "That's the same character repeated. Choose something else." };
+    return { ok: false, code: "password.repeated", message: "That's the same character repeated. Choose something else." };
   }
 
   // A run along the alphabet or the number row, forwards or backwards.
   if (isSequential(lower)) {
-    return { ok: false, message: "That's a simple sequence. Choose something less predictable." };
+    return { ok: false, code: "password.sequence", message: "That's a simple sequence. Choose something less predictable." };
   }
 
   // A walk across the keyboard: "qwertyuiop", "asdfghjkl", "1qaz2wsx".
@@ -185,19 +205,19 @@ export function validatePassword(password: string, context: { email?: string } =
     stripped.length >= 6 &&
     ROWS.some((row) => row.includes(stripped) || [...row].reverse().join("").includes(stripped))
   ) {
-    return { ok: false, message: "That's a row of keys. Choose something less predictable." };
+    return { ok: false, code: "password.keyRow", message: "That's a row of keys. Choose something less predictable." };
   }
 
   // The property or product name with numbers after it — the exact thing a hotel picks under
   // pressure, and the first thing anyone targeting THIS platform would try.
   if (/^(revio|hotel|reception|frontdesk|welcome|admin)\d*$/.test(stripped)) {
-    return { ok: false, message: "That password is too easy to guess. Choose something else." };
+    return { ok: false, code: "password.obvious", message: "That password is too easy to guess. Choose something else." };
   }
 
   // A password containing the account's own email local part is a password an attacker starts with.
   const local = context.email?.split("@")[0]?.toLowerCase();
   if (local && local.length >= 4 && lower.includes(local)) {
-    return { ok: false, message: "Don't use your email address in your password." };
+    return { ok: false, code: "password.email", message: "Don't use your email address in your password." };
   }
 
   return { ok: true };

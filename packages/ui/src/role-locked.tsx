@@ -1,5 +1,7 @@
 import { ShieldAlert, ArrowRight } from "lucide-react";
 import { productsForRole, type HotelProduct } from "@revio/core";
+import { fill, translate, type Locale } from "./i18n";
+import { productStrings } from "./product-strings";
 
 const PRODUCT_NAME: Record<HotelProduct, string> = {
   cm: "RevioLink",
@@ -30,6 +32,7 @@ export function RoleLocked({
   roleLabel,
   hrefFor,
   signOutHref = "/logout",
+  locale = "en",
 }: {
   product: HotelProduct;
   /** The raw role as stored, used to work out where they CAN go. */
@@ -39,7 +42,10 @@ export function RoleLocked({
   /** Server-resolved origins, since only the server can read the sibling hostnames. */
   hrefFor: (key: HotelProduct) => string;
   signOutHref?: string;
+  /** A server component, so the language arrives as a prop. `roleLabel` should be in it too. */
+  locale?: Locale;
 }) {
+  const s = translate(productStrings, locale).role;
   // Where this person actually belongs. Never includes the product they are standing in.
   const open = productsForRole(role).filter((p) => p !== product);
 
@@ -51,15 +57,16 @@ export function RoleLocked({
         </div>
 
         <h1 className="mt-4 text-[20px] font-bold tracking-tight text-ink-900">
-          {PRODUCT_NAME[product]} is not part of your role
+          {fill(s.title, { product: PRODUCT_NAME[product] })}
         </h1>
         {/* Names the role rather than saying "insufficient permissions", so the person can repeat the
             sentence to whoever gives them access without having to describe a screen. */}
         <p className="mx-auto mt-2 max-w-md text-[13.5px] leading-relaxed text-ink-600">
-          Your account is set up as <b className="font-semibold text-ink-900">{roleLabel}</b>, and that
-          role works in {open.length > 0 ? PRODUCT_NAME[open[0]!] : "a different part of the platform"}.
-          Ask an owner or admin at your hotel if you need {PRODUCT_NAME[product]} as well — they can
-          change it in Settings.
+          {s.bodyBefore}<b className="font-semibold text-ink-900">{roleLabel}</b>
+          {fill(s.bodyAfter, {
+            where: open.length > 0 ? PRODUCT_NAME[open[0]!] : s.elsewhere,
+            product: PRODUCT_NAME[product],
+          })}
         </p>
 
         {open.length > 0 && (
@@ -70,14 +77,14 @@ export function RoleLocked({
                 href={hrefFor(p)}
                 className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-900"
               >
-                Go to {PRODUCT_NAME[p]} <ArrowRight className="h-3.5 w-3.5" />
+                {fill(s.goTo, { product: PRODUCT_NAME[p] })} <ArrowRight className="h-3.5 w-3.5" />
               </a>
             ))}
           </div>
         )}
 
         <p className="mt-6 text-[12px] text-ink-400">
-          Signed in as the wrong account? <a href={signOutHref} className="font-semibold text-brand-600 hover:underline">Sign out</a>
+          {s.wrongAccount} <a href={signOutHref} className="font-semibold text-brand-600 hover:underline">{s.signOut}</a>
         </p>
       </div>
     </div>

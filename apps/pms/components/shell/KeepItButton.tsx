@@ -2,6 +2,9 @@
 
 import { useTransition } from "react";
 import { Sparkles } from "lucide-react";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { productStrings } from "@revio/ui/product-strings";
 import { keepThisTrial } from "@/lib/actions-self-trial";
 
 /**
@@ -14,6 +17,7 @@ import { keepThisTrial } from "@/lib/actions-self-trial";
  */
 export function KeepItButton({ product }: { product: string }) {
   const [pending, start] = useTransition();
+  const s = translate(productStrings, useLocale()).locked;
   return (
     <button
       type="button"
@@ -23,7 +27,7 @@ export function KeepItButton({ product }: { product: string }) {
       data-product={product}
     >
       <Sparkles className="h-4 w-4" />
-      {pending ? "Letting them know…" : "I want to keep it"}
+      {pending ? s.keeping : s.keep}
     </button>
   );
 }

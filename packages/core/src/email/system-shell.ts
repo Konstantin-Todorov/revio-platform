@@ -62,6 +62,18 @@ export interface SystemEmailBlock {
   list?: readonly string[];
 }
 
+/**
+ * The languages our own mail is written in. The person's language (`User.locale`) decides — a
+ * housekeeper who reads the product in Bulgarian gets her password reset in Bulgarian too.
+ * Anything else, or nothing, is English.
+ */
+export type SystemEmailLocale = "en" | "bg";
+
+const SHELL_WORDS: Record<SystemEmailLocale, { paste: string; footer: string }> = {
+  en: { paste: "Or paste this into your browser:", footer: "Sent by Revio, the software your property runs on." },
+  bg: { paste: "Или поставете този адрес в браузъра си:", footer: "Изпратено от Revio — софтуерът, на който работи Вашият обект." },
+};
+
 export interface SystemEmailArgs {
   /** Preheader: the grey line a client shows next to the subject. */
   preview: string;
@@ -70,6 +82,8 @@ export interface SystemEmailArgs {
   blocks: readonly SystemEmailBlock[];
   /** Which product this concerns, shown under the wordmark. Omit for platform-wide mail. */
   product?: string;
+  /** The reader's language, for the shell's own words. The blocks arrive already written in it. */
+  locale?: SystemEmailLocale;
 }
 
 /**
@@ -81,6 +95,8 @@ export interface SystemEmailArgs {
  * click it, which is the single most useful anti-phishing affordance an email can offer.
  */
 export function renderSystemEmail(args: SystemEmailArgs): string {
+  const locale: SystemEmailLocale = args.locale === "bg" ? "bg" : "en";
+  const words = SHELL_WORDS[locale];
   const body = args.blocks.map((b) => {
     if (b.p) {
       return `<tr><td style="padding:0 0 16px;font-size:15px;line-height:1.6;color:${INK}">${esc(b.p)}</td></tr>`;
@@ -110,7 +126,7 @@ export function renderSystemEmail(args: SystemEmailArgs): string {
 <td bgcolor="${LINK}" style="border-radius:6px">
 <a href="${href}" style="display:inline-block;padding:12px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:6px">${esc(b.action.label)}</a>
 </td></tr></table>
-<div style="padding-top:14px;font-size:12.5px;line-height:1.5;color:${MUTED}">Or paste this into your browser:<br>
+<div style="padding-top:14px;font-size:12.5px;line-height:1.5;color:${MUTED}">${esc(words.paste)}<br>
 <span style="color:${LINK};word-break:break-all">${href}</span></div>
 </td></tr>`;
     }
@@ -118,7 +134,7 @@ export function renderSystemEmail(args: SystemEmailArgs): string {
   }).join("");
 
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="${locale}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(args.heading)}</title></head>
 <body style="margin:0;padding:0;background:#f4f6f9">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">${esc(args.preview)}</div>
@@ -148,7 +164,7 @@ ${/*
    * here in a vaguer form. Each email states its own version where it can be precise; the reset says
    * the password has not changed, and the password-CHANGED mail deliberately reassures nobody,
    * because its whole job is to alarm you if it was not you.
-   */""}Sent by Revio, the software your property runs on.
+   */""}${esc(words.footer)}
 </div>
 </td></tr>
 

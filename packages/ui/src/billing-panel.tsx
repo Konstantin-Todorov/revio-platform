@@ -1,4 +1,6 @@
 import type { PriceBreakdown } from "@revio/core";
+import { billingStrings } from "./billing-strings";
+import { LOCALE_LABELS, fill, formatMoney, translate, type Locale } from "./i18n";
 
 /**
  * What a hotel pays us, and what we have billed them — inside their own product.
@@ -46,14 +48,13 @@ export interface BillingInvoiceRow {
   refundedMinor: number;
 }
 
-const money = (minor: number, currency = "EUR") =>
-  (minor / 100).toLocaleString("en-GB", { style: "currency", currency });
-
 /** "2026-09" → "September 2026". A billing period is a month, so it should read as one. */
-function periodLabel(period: string): string {
+function periodLabel(period: string, locale: Locale): string {
   const [y, m] = period.split("-").map(Number);
   if (!y || !m) return period;
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString(LOCALE_LABELS[locale].intl, {
+    month: "long", year: "numeric", timeZone: "UTC",
+  });
 }
 
 export function BillingPanel({
@@ -64,6 +65,7 @@ export function BillingPanel({
   invoices,
   payment,
   currency = "EUR",
+  locale = "en",
 }: {
   breakdown: PriceBreakdown;
   /** The room-count tier, in the words the price list uses. */
@@ -74,8 +76,14 @@ export function BillingPanel({
   invoices: BillingInvoiceRow[];
   payment: { legalName: string; iban: string; bic: string | null; bankName: string | null; email: string | null } | null;
   currency?: string;
+  /** A server component, so the language arrives as a prop. */
+  locale?: Locale;
 }) {
+  const s = translate(billingStrings, locale).panel;
+  const money = (minor: number, cur = "EUR") => formatMoney(minor, cur, locale);
+  const intl = LOCALE_LABELS[locale].intl;
   const outstanding = invoices.filter((i) => i.status !== "paid");
+  const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} ${s.and} ${xs[xs.length - 1]}`);
 
   return (
     <div className="space-y-4">
@@ -86,36 +94,36 @@ export function BillingPanel({
       <section className="rounded-xl border border-surface-border bg-white p-5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">Your monthly plan</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{s.monthlyPlan}</p>
             <p className="mt-1 text-[27px] font-bold leading-none tracking-tight text-ink-900">
               {money(breakdown.totalMinor, currency)}
-              <span className="ml-1.5 text-[13px] font-semibold text-ink-400">/ month</span>
+              <span className="ml-1.5 text-[13px] font-semibold text-ink-400">{s.perMonth}</span>
             </p>
           </div>
           <p className="text-[12px] text-ink-500">
-            {planLabel} · {rooms} room{rooms === 1 ? "" : "s"}
+            {planLabel} · {fill(rooms === 1 ? s.roomsOne : s.roomsMany, { n: rooms })}
           </p>
         </div>
 
         <dl className="mt-5 space-y-0 border-t border-surface-border">
-          <Row label="Platform fee" hint={planLabel} value={money(breakdown.platformMinor, currency)} />
+          <Row label={s.platformFee} hint={planLabel} value={money(breakdown.platformMinor, currency)} />
           {breakdown.modules.map((m) => (
             <Row key={m.key} label={m.label} value={money(m.minor, currency)} />
           ))}
           {breakdown.discountMinor > 0 && (
             <Row
-              label={`Bundle discount — ${breakdown.modules.length} products`}
+              label={fill(s.bundleDiscount, { n: breakdown.modules.length })}
               /*
                * The discount is stated as a reason, not just a number. It is the price list agreeing
                * with the architecture: the second and third products share the same database, the
                * same onboarding and need no migration, so they cost us almost nothing to deliver.
                */
-              hint="The products after the first cost us far less to run, so they cost you less"
+              hint={s.bundleHint}
               value={`− ${money(breakdown.discountMinor, currency)}`}
               tone="credit"
             />
           )}
-          <Row label="Total each month" value={money(breakdown.totalMinor, currency)} strong />
+          <Row label={s.total} value={money(breakdown.totalMinor, currency)} strong />
         </dl>
 
         {/*
@@ -126,17 +134,15 @@ export function BillingPanel({
           by a dashboard. The invoice is the document that carries it, and it already does.
         */}
         <p className="mt-3 text-[11.5px] leading-relaxed text-ink-400">
-          List prices exclude VAT. Whether VAT applies to you, and at what rate, depends on where your
-          company is registered — your invoice states the treatment that was applied to it.
+          {s.vatNote}
         </p>
 
         {trials.length > 0 && (
           <p className="mt-3 rounded-md bg-surface-sunken px-3 py-2 text-[12px] leading-relaxed text-ink-600">
-            {trials.map((t) => t.name).join(" and ")}{" "}
-            {trials.length === 1 ? "is" : "are"} on a free trial and {trials.length === 1 ? "is" : "are"} not in the
-            figure above. {trials.length === 1 ? "It runs" : "They run"} until{" "}
-            {trials.map((t) => t.endsAt.toLocaleDateString("en-GB", { day: "numeric", month: "long" })).join(" and ")},
-            and nothing starts charging on its own.
+            {fill(trials.length === 1 ? s.trialsOne : s.trialsMany, {
+              names: joinAnd(trials.map((t) => t.name)),
+              dates: joinAnd(trials.map((t) => t.endsAt.toLocaleDateString(intl, { day: "numeric", month: "long" }))),
+            })}
           </p>
         )}
       </section>
@@ -146,14 +152,14 @@ export function BillingPanel({
       {outstanding.length > 0 && (
         <section className="rounded-xl border border-warning-200 bg-warning-50 p-5">
           <h2 className="text-[13.5px] font-semibold text-warning-800">
-            {outstanding.length === 1 ? "One invoice is waiting to be paid" : `${outstanding.length} invoices are waiting to be paid`}
+            {outstanding.length === 1 ? s.owedOne : fill(s.owedMany, { n: outstanding.length })}
           </h2>
           <p className="mt-1 text-[12.5px] text-ink-600">
-            {money(outstanding.reduce((s, i) => s + i.amountMinor, 0), currency)} in total.
+            {fill(s.owedTotal, { amount: money(outstanding.reduce((sum, i) => sum + i.amountMinor, 0), currency) })}
           </p>
           {payment && (
             <div className="mt-3 rounded-lg border border-warning-200 bg-white px-4 py-3 text-[12.5px] leading-relaxed text-ink-700">
-              <p className="font-semibold text-ink-900">By bank transfer</p>
+              <p className="font-semibold text-ink-900">{s.byTransfer}</p>
               <p className="mt-1">
                 {payment.legalName}
                 {payment.bankName ? ` · ${payment.bankName}` : ""}
@@ -170,7 +176,7 @@ export function BillingPanel({
               </p>
               {payment.bic && <p className="mt-0.5 text-[11.5px] text-ink-500">BIC {payment.bic}</p>}
               <p className="mt-1.5 text-[11.5px] text-ink-500">
-                Quote the invoice number as the reference so we can match it the same day.
+                {s.reference}
               </p>
             </div>
           )}
@@ -180,32 +186,32 @@ export function BillingPanel({
       {/* 3. THE HISTORY. A bill with no history is a demand; with one it is an account. */}
       <section className="rounded-xl border border-surface-border bg-white">
         <div className="border-b border-surface-border px-5 py-3.5">
-          <h2 className="text-[13.5px] font-semibold text-ink-900">Invoices</h2>
+          <h2 className="text-[13.5px] font-semibold text-ink-900">{s.invoices}</h2>
           <p className="mt-0.5 text-[12px] text-ink-500">
-            Every invoice we have issued you. Each one is emailed to the account owner when it is sent.
+            {s.invoicesIntro}
           </p>
         </div>
 
         {invoices.length === 0 ? (
           <p className="px-5 py-6 text-[12.5px] text-ink-500">
-            Nothing has been invoiced yet. Your first invoice arrives at the end of your first full month.
+            {s.noInvoices}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-surface-border text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                  <th className="px-5 py-2">Period</th>
-                  <th className="px-5 py-2">For</th>
-                  <th className="px-5 py-2 text-right">Amount</th>
-                  <th className="px-5 py-2">Status</th>
+                  <th className="px-5 py-2">{s.cols.period}</th>
+                  <th className="px-5 py-2">{s.cols.for}</th>
+                  <th className="px-5 py-2 text-right">{s.cols.amount}</th>
+                  <th className="px-5 py-2">{s.cols.status}</th>
                   <th className="px-5 py-2" />
                 </tr>
               </thead>
               <tbody>
                 {invoices.map((i) => (
                   <tr key={i.id} className="border-b border-surface-border last:border-0 align-top">
-                    <td className="px-5 py-3 text-[12.5px] font-semibold text-ink-900">{periodLabel(i.period)}</td>
+                    <td className="px-5 py-3 text-[12.5px] font-semibold text-ink-900">{periodLabel(i.period, locale)}</td>
                     <td className="px-5 py-3 text-[12px] text-ink-500">{i.lineItems ?? "—"}</td>
                     <td className="px-5 py-3 text-right text-[12.5px] font-semibold tabular-nums text-ink-900">
                       {money(i.amountMinor, i.currency)}
@@ -213,18 +219,18 @@ export function BillingPanel({
                           the invoice still records what was supplied and what was paid. */}
                       {i.refundedMinor > 0 && (
                         <span className="mt-0.5 block text-[11px] font-normal text-ink-400">
-                          {money(i.refundedMinor, i.currency)} refunded
+                          {fill(s.refunded, { amount: money(i.refundedMinor, i.currency) })}
                         </span>
                       )}
                     </td>
                     <td className="px-5 py-3">
                       {i.status === "paid" ? (
                         <span className="rounded bg-success-50 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-success-700">
-                          paid{i.paidAt ? ` ${i.paidAt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}` : ""}
+                          {s.paid}{i.paidAt ? ` ${i.paidAt.toLocaleDateString(intl, { day: "numeric", month: "short" })}` : ""}
                         </span>
                       ) : (
                         <span className="rounded bg-warning-100 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-warning-800">
-                          due
+                          {s.due}
                         </span>
                       )}
                     </td>
@@ -234,14 +240,14 @@ export function BillingPanel({
                           href={i.payUrl}
                           className="inline-block rounded-md bg-brand-800 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700"
                         >
-                          Pay by card
+                          {s.payByCard}
                         </a>
                       )}
                       {/* A test-mode link looks identical to a real one and takes no money. Somebody
                           must never believe they have paid. */}
                       {i.payUrl && i.sandbox && (
                         <span className="mt-1 block text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
-                          test link — charges nothing
+                          {s.testLink}
                         </span>
                       )}
                     </td>
@@ -254,9 +260,9 @@ export function BillingPanel({
       </section>
 
       <p className="px-1 text-[12px] leading-relaxed text-ink-500">
-        Something here looks wrong? Reply to any Revio email
-        {payment?.email ? ` or write to ${payment.email}` : ""} and a person will check it. We would
-        rather fix a number than have you pay one you disagree with.
+        {s.wrongBefore}
+        {payment?.email ? fill(s.wrongEmail, { email: payment.email }) : ""}
+        {s.wrongAfter}
       </p>
     </div>
   );

@@ -7,6 +7,7 @@ import { sendEmail } from "@revio/email";
 import { clearSessionCookie } from "./auth";
 import { i18n } from "./i18n/server";
 import { auth as authDict } from "./i18n/auth";
+import { sayAuthRefusal } from "./auth-refusal";
 
 /**
  * Invite and password-reset actions. The rules live in @revio/core, the storage in @revio/db; this
@@ -56,7 +57,7 @@ export async function setPassword(_prev: AccountResult | null, fd: FormData): Pr
   if (password !== confirm) return { error: (await i18n()).t(authDict).errors.mismatch };
 
   const result = await completePasswordSet({ token, purpose, password, contextName: CONTEXT });
-  if (!result.ok) return { error: result.message };
+  if (!result.ok) return { error: sayAuthRefusal(result, (await i18n()).locale) };
 
   if (result.email) {
     await sendEmail({ to: [result.email.to], subject: result.email.subject, text: result.email.text });

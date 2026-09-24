@@ -34,7 +34,7 @@ export async function saveBillingIdentity(
    */
   const session = await requireCapability("subscription");
   if (!session) {
-    return { ok: false, message: "Only the owner or an admin can change what this account pays for. Ask one of them." };
+    return { ok: false, messageCode: "notPermitted", message: "Only the owner or an admin can change what this account pays for. Ask one of them." };
   }
 
   const values = Object.fromEntries(
@@ -46,6 +46,9 @@ export async function saveBillingIdentity(
     return {
       ok: false,
       problems: Object.fromEntries(problems.map((p) => [p.field, p.message])),
+      problemCodes: Object.fromEntries(problems.map((p) => [p.field, p.code])),
+      problemCountry: values.country.toUpperCase(),
+      messageCode: "nothingSaved",
       message: "Nothing was saved — see the fields marked below.",
     };
   }

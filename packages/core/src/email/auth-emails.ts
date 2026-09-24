@@ -31,7 +31,7 @@
  */
 
 import { TOKEN_POLICY, type TokenPurpose } from "../auth/tokens.js";
-import { renderSystemEmail, renderSystemEmailText, type SystemEmailBlock } from "./system-shell.js";
+import { renderSystemEmail, renderSystemEmailText, type SystemEmailLocale, type SystemEmailBlock } from "./system-shell.js";
 
 export interface AuthEmailArgs {
   /** The person's name if we know it — the mail still works if we do not. */
@@ -42,6 +42,8 @@ export interface AuthEmailArgs {
   invitedBy?: string;
   /** The full, ready-to-click URL. Built by the caller because only it knows its own origin. */
   url: string;
+  /** The reader's language — their own `User.locale` where there is one. English otherwise. */
+  locale?: SystemEmailLocale;
 }
 
 export interface AuthEmail {
@@ -51,11 +53,19 @@ export interface AuthEmail {
   html: string;
 }
 
+/**
+ * How long a link lives, in Bulgarian. Beside `TOKEN_POLICY` rather than in it: that is policy, this
+ * is how one language says it. `auth-emails.test.ts` fails if a policy changes and this does not.
+ */
+export const TTL_BG: Record<"invite" | "reset", string> = { invite: "7 дни", reset: "1 час" };
+
 /** Build both parts from ONE set of blocks, so the two can never drift apart. */
-function compose(subject: string, preview: string, heading: string, blocks: SystemEmailBlock[]): AuthEmail {
+function compose(
+  subject: string, preview: string, heading: string, blocks: SystemEmailBlock[], locale?: SystemEmailLocale,
+): AuthEmail {
   // No `product`: an invitation covers every Revio product the hotel has, so naming one would
   // be wrong on the exact promise the email goes on to make.
-  const args = { preview, heading, blocks };
+  const args = { preview, heading, blocks, ...(locale ? { locale } : {}) };
   return { subject, text: renderSystemEmailText(args), html: renderSystemEmail(args) };
 }
 
@@ -63,7 +73,23 @@ function compose(subject: string, preview: string, heading: string, blocks: Syst
  * The invitation. Says who invited them and to what, because an unexplained link asking for a
  * password is indistinguishable from an attack — and staff are trained, correctly, to ignore those.
  */
-export function inviteEmail({ name, context, invitedBy, url }: AuthEmailArgs): AuthEmail {
+export function inviteEmail({ name, context, invitedBy, url, locale }: AuthEmailArgs): AuthEmail {
+  if (locale === "bg") {
+    return compose(
+      `Добавени сте към ${context} в Revio`,
+      `Изберете парола, за да започнете работа с ${context}.`,
+      `Добавени сте към ${context}`,
+      [
+        { p: name ? `Здравейте, ${name},` : "Здравейте," },
+        { p: invitedBy ? `${invitedBy} Ви добави към ${context} в Revio.` : `Добавени сте към ${context} в Revio.` },
+        { action: { label: "Изберете парола", url } },
+        { note: `Връзката работи веднъж и изтича след ${TTL_BG.invite}.` },
+        { p: "Един вход важи за всички продукти на Revio, които ползва Вашият хотел — няма да Ви трябва отделен профил за всеки." },
+        { note: "Ако не сте очаквали този имейл, просто го игнорирайте. Профилът не е активен, докато връзката по-горе не бъде използвана." },
+      ],
+      locale,
+    );
+  }
   const greeting = name ? `Hello ${name},` : "Hello,";
   const who = invitedBy ? `${invitedBy} has added you` : "You have been added";
 
@@ -134,7 +160,23 @@ export function signupEmail({ name, context, url, resent }: AuthEmailArgs & { re
  * an address that has never been seen, because the alternative — "no account found" — lets anyone
  * enumerate who works at a hotel by typing addresses into a form.
  */
-export function passwordResetEmail({ name, context, url }: AuthEmailArgs): AuthEmail {
+export function passwordResetEmail({ name, context, url, locale }: AuthEmailArgs): AuthEmail {
+  if (locale === "bg") {
+    return compose(
+      "Нова парола за Revio",
+      "Изберете нова парола за профила си в Revio.",
+      "Смяна на паролата",
+      [
+        { p: name ? `Здравейте, ${name},` : "Здравейте," },
+        { p: `Някой поиска смяна на паролата за този имейл адрес в ${context}.` },
+        { p: "Ако сте били Вие, изберете нова парола тук:" },
+        { action: { label: "Изберете нова парола", url } },
+        { note: `Връзката работи веднъж и изтича след ${TTL_BG.reset}.` },
+        { note: "Ако не сте били Вие, игнорирайте този имейл — паролата Ви не е променена и никой не може да я промени без връзката по-горе. Ако продължавате да получавате такива имейли, кажете на човека, който управлява профила на хотела Ви в Revio." },
+      ],
+      locale,
+    );
+  }
   const greeting = name ? `Hello ${name},` : "Hello,";
 
   return compose(
@@ -153,7 +195,21 @@ export function passwordResetEmail({ name, context, url }: AuthEmailArgs): AuthE
 }
 
 /** Confirmation after the fact. The one email whose entire job is to be alarming if unexpected. */
-export function passwordChangedEmail({ name, context }: Omit<AuthEmailArgs, "url">): AuthEmail {
+export function passwordChangedEmail({ name, context, locale }: Omit<AuthEmailArgs, "url">): AuthEmail {
+  if (locale === "bg") {
+    return compose(
+      "Паролата Ви за Revio беше сменена",
+      "Паролата Ви току-що беше сменена.",
+      "Паролата Ви беше сменена",
+      [
+        { p: name ? `Здравейте, ${name},` : "Здравейте," },
+        { p: `Паролата за профила Ви в Revio за ${context} току-що беше сменена.` },
+        { p: "Ако сте били Вие, няма нужда да правите нищо." },
+        { p: "Ако не сте били Вие, някой друг има достъп до този профил. Помолете собственик във Вашия хотел незабавно да смени паролата Ви." },
+      ],
+      locale,
+    );
+  }
   const greeting = name ? `Hello ${name},` : "Hello,";
 
   return compose(
