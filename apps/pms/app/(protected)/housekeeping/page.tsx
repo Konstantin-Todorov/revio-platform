@@ -1,3 +1,5 @@
+import { orderFloors } from "@/lib/floor-order";
+import { fill } from "@revio/ui/i18n";
 import Link from "next/link";
 import { User, TriangleAlert, ListOrdered, LayoutGrid, Clock, LogIn, LogOut } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
@@ -84,9 +86,11 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
     const key = u.floor?.trim() || UNASSIGNED;
     (byFloor.get(key) ?? byFloor.set(key, []).get(key)!).push(u);
   }
-  const floors = [...byFloor.keys()].sort((a, b) =>
-    a === UNASSIGNED ? 1 : b === UNASSIGNED ? -1 : a.localeCompare(b, undefined, { numeric: true }),
-  );
+  // The hotel's own floor order (Rooms → Floors), the same one the calendar uses; no floor goes last.
+  const floors = [
+    ...orderFloors([...byFloor.keys()].filter((k) => k !== UNASSIGNED), property.floorOrder),
+    ...(byFloor.has(UNASSIGNED) ? [UNASSIGNED] : []),
+  ];
 
   // Smart order: the cleaning queue (dirty / in-progress) first, by priority, then the rest.
   const queue = units.filter((u) => u.cleanReason).sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label, undefined, { numeric: true }));
@@ -187,7 +191,7 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
             <div className="space-y-5">
               {floors.map((floor) => (
                 <section key={floor}>
-                  <h2 className="mb-2 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400">{floor === UNASSIGNED ? t.unassignedFloor : floor}</h2>
+                  <h2 className="mb-2 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400">{floor === UNASSIGNED ? t.unassignedFloor : /^\d+$/.test(floor) ? fill(t.numberedFloor, { floor }) : floor}</h2>
                   <div className={GRID}>{byFloor.get(floor)!.map((u) => <RoomTile key={u.id} u={u} t={t} />)}</div>
                 </section>
               ))}

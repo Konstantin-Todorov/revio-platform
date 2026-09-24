@@ -42,6 +42,21 @@ export interface RoomsStrings {
     save: string;
     saving: string;
     empty: string;
+    /** The floor dropdown. */
+    noFloorOption: string;
+    addFloorOption: string;
+    newFloorPlaceholder: string;
+    backToList: string;
+    rename: string;
+    renameSave: string;
+    /** "{floor}" */
+    renameAria: string;
+    removeAria: string;
+    /** "{floor}" */
+    moveUp: string;
+    moveDown: string;
+    /** "{floor}" "{rooms}" */
+    removeConfirm: string;
   };
   roomPlaceholder: string;
   features: string;
@@ -113,13 +128,24 @@ export const rooms: Translations<RoomsStrings> = {
       close: "Close",
       whichFloor: "Floor",
       whichFloorPlaceholder: "e.g. 1, 2 or Ground",
-      whichFloorHint: "Type a number — “1” shows as “Floor 1”. Leave it empty to take the ticked rooms off any floor.",
+      whichFloorHint: "Pick a floor, or “+ Add a floor” to name a new one — a number like “1” shows as “Floor 1”.",
       whichRooms: "Which rooms are on this floor?",
       selectAll: "Tick all",
       selectNone: "Clear",
       save: "Save floor",
       saving: "Saving…",
       empty: "No room has a floor yet. Use “Arrange rooms by floor” to set them all at once.",
+      noFloorOption: "No floor",
+      addFloorOption: "+ Add a floor…",
+      newFloorPlaceholder: "New floor, e.g. 3 or Annex",
+      backToList: "Choose from the list",
+      rename: "Rename",
+      renameSave: "Save",
+      renameAria: "Rename {floor}",
+      removeAria: "Remove {floor}",
+      moveUp: "Move {floor} up",
+      moveDown: "Move {floor} down",
+      removeConfirm: "Remove {floor}? Rooms {rooms} stay exactly as they are — they just have no floor until you give them one.",
     },
     roomPlaceholder: "e.g. 101",
     features: "Features",
@@ -189,13 +215,24 @@ export const rooms: Translations<RoomsStrings> = {
       close: "Затвори",
       whichFloor: "Етаж",
       whichFloorPlaceholder: "напр. 1, 2 или Приземен",
-      whichFloorHint: "Въведете число — „1“ се показва като „Етаж 1“. Оставете празно, за да махнете етажа на отметнатите стаи.",
+      whichFloorHint: "Изберете етаж или „+ Добави етаж“, за да въведете нов — число като „1“ се показва като „Етаж 1“.",
       whichRooms: "Кои стаи са на този етаж?",
       selectAll: "Отметни всички",
       selectNone: "Изчисти",
       save: "Запази етажа",
       saving: "Запазване…",
       empty: "Все още никоя стая няма етаж. Използвайте „Подреди стаите по етажи“, за да ги зададете наведнъж.",
+      noFloorOption: "Без етаж",
+      addFloorOption: "+ Добави етаж…",
+      newFloorPlaceholder: "Нов етаж, напр. 3 или Анекс",
+      backToList: "Избери от списъка",
+      rename: "Преименувай",
+      renameSave: "Запази",
+      renameAria: "Преименувай {floor}",
+      removeAria: "Премахни {floor}",
+      moveUp: "Премести {floor} нагоре",
+      moveDown: "Премести {floor} надолу",
+      removeConfirm: "Да премахнем ли {floor}? Стаи {rooms} остават такива, каквито са — просто няма да имат етаж, докато не им зададете нов.",
     },
     roomPlaceholder: "напр. 101",
     features: "Особености",

@@ -51,6 +51,8 @@ export interface FlashStrings {
     notHkStatus: string;
     sayWhatIsWrong: string;
     pickRooms: string;
+    floorGone: string;
+    nameTheFloor: string;
   };
   workforce: { delegatorsOnly: string; inactive: (name: string) => string; thatPerson: string };
   support: { expired: string; unknownRequest: string };
@@ -106,6 +108,8 @@ export const flash: Translations<FlashStrings> = {
       notHkStatus: "That isn’t a housekeeping status. Reload the page and try again.",
       sayWhatIsWrong: "Say what is wrong with the room, so maintenance knows what to bring.",
       pickRooms: "Tick the rooms that are on this floor.",
+      floorGone: "That floor no longer has any rooms — somebody changed it while this page was open. Reload the page.",
+      nameTheFloor: "Give the floor a name — a number like 3, or a word like Annex.",
     },
     workforce: {
       delegatorsOnly: "Only a manager, supervisor or reception can clock somebody else in or out.",
@@ -171,6 +175,8 @@ export const flash: Translations<FlashStrings> = {
       notHkStatus: "Това не е статус на хаускийпинга. Презаредете страницата и опитайте отново.",
       sayWhatIsWrong: "Опишете какво не е наред със стаята, за да знае поддръжката какво да носи.",
       pickRooms: "Отметнете стаите, които са на този етаж.",
+      floorGone: "Този етаж вече няма стаи — някой го е променил, докато страницата е била отворена. Презаредете страницата.",
+      nameTheFloor: "Дайте име на етажа — число като 3 или дума като Анекс.",
     },
     workforce: {
       delegatorsOnly: "Само управител, старши служител или рецепцията може да започва и приключва смяна на друг.",

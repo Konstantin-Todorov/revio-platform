@@ -11,6 +11,7 @@ import { recordOpsEvent } from "./events";
 import { flashError } from "@revio/ui/flash";
 import { i18n } from "./i18n/server";
 import { flash } from "./i18n/flash";
+import { moveFloorInOrder, orderFloors } from "./floor-order";
 
 /** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
 async function flashSay() {
@@ -34,6 +35,12 @@ async function ctx(cap: Capability) {
   return session;
 }
 
+/** The floor a form chose. The dropdown's "+ Add a floor…" sentinel is never a floor's name. */
+function floorFrom(fd: FormData): string | null {
+  const f = str(fd, "floor").trim();
+  return f && f !== "__new" ? f : null;
+}
+
 function refresh() {
   revalidatePath("/rooms");
   revalidatePath("/housekeeping");
@@ -45,7 +52,7 @@ export async function createUnit(fd: FormData): Promise<void> {
   const session = await ctx("manage");
   const roomTypeId = str(fd, "roomTypeId");
   const label = str(fd, "label");
-  const floor = str(fd, "floor") || null;
+  const floor = floorFrom(fd);
   if (!roomTypeId || !label) return flashError((await flashSay()).units.needTypeAndNumber);
 
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId } });
@@ -76,7 +83,7 @@ export async function generateUnits(fd: FormData): Promise<void> {
   const n = Math.min(200, Math.max(1, int(fd, "count", 0)));
   const start = int(fd, "start", 1);
   const prefix = str(fd, "prefix");
-  const floor = str(fd, "floor") || null;
+  const floor = floorFrom(fd);
   if (!roomTypeId) return flashError((await flashSay()).units.pickType);
   if (n <= 0) return flashError((await flashSay()).units.howMany);
 
@@ -109,7 +116,7 @@ export async function generateUnits(fd: FormData): Promise<void> {
  */
 export async function setUnitsFloor(fd: FormData): Promise<void> {
   const session = await ctx("manage");
-  const floor = str(fd, "floor").trim() || null;
+  const floor = floorFrom(fd);
   const ids = fd.getAll("unitIds").map(String).filter(Boolean);
   if (ids.length === 0) return flashError((await flashSay()).units.pickRooms);
   // Only this property's rooms: an id from elsewhere is a crafted POST and is simply not touched.
@@ -122,6 +129,80 @@ export async function setUnitsFloor(fd: FormData): Promise<void> {
   });
   refresh();
   revalidatePath("/calendar");
+}
+
+/**
+ * Take a floor away — its rooms stay, and simply have no floor until they are given another.
+ *
+ * A floor is what its rooms say, so "deleting" one can only ever mean emptying it: nothing else
+ * refers to it, and no room, booking or housekeeping record is removed.
+ */
+export async function removeFloor(fd: FormData): Promise<void> {
+  const session = await ctx("manage");
+  const floor = str(fd, "floor").trim();
+  if (!floor) return flashError((await flashSay()).units.floorGone);
+  const { count } = await prisma.unit.updateMany({
+    where: { propertyId: session.activePropertyId, floor },
+    data: { floor: null },
+  });
+  await saveFloorOrder(session.activePropertyId, (order) => order.filter((f) => f !== floor));
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "unit", field: "floor", oldValue: floor, newValue: `— · ${count} rooms`, userId: session.userId,
+  });
+  refresh();
+  revalidatePath("/calendar");
+}
+
+/**
+ * Rename a floor on every room that is on it. Renaming onto a floor that already exists merges the
+ * two, which is exactly what "these were the same floor, typed twice" wants.
+ */
+export async function renameFloor(fd: FormData): Promise<void> {
+  const session = await ctx("manage");
+  const from = str(fd, "floor").trim();
+  const to = str(fd, "to").trim();
+  if (!from) return flashError((await flashSay()).units.floorGone);
+  if (!to) return flashError((await flashSay()).units.nameTheFloor);
+  // The same name back is not a change, and writes nothing.
+  if (from !== to) {
+    // Order first, read while the rooms still carry the old name, so the floor keeps its place.
+    // Renamed onto an existing floor, the two become one entry.
+    await saveFloorOrder(session.activePropertyId, (order) => [...new Set(order.map((f) => (f === from ? to : f)))]);
+    const { count } = await prisma.unit.updateMany({
+      where: { propertyId: session.activePropertyId, floor: from },
+      data: { floor: to },
+    });
+    await logAudit(session.activePropertyId, session.tenantId, {
+      entity: "unit", field: "floor", oldValue: from, newValue: `${to} · ${count} rooms`, userId: session.userId,
+    });
+  }
+  refresh();
+  revalidatePath("/calendar");
+}
+
+/**
+ * Move a floor one step up or down in the order every screen shows floors in. The whole order is
+ * saved — the floors in use, as the hotel sees them now — so a floor typed later never jumps around
+ * a list somebody already arranged.
+ */
+export async function moveFloor(fd: FormData): Promise<void> {
+  const session = await ctx("manage");
+  const floor = str(fd, "floor").trim();
+  const step = str(fd, "step") === "up" ? -1 : 1;
+  if (!floor) return flashError((await flashSay()).units.floorGone);
+  await saveFloorOrder(session.activePropertyId, (order) => moveFloorInOrder(order, floor, step));
+  refresh();
+  revalidatePath("/calendar");
+}
+
+/** Read the order as shown (saved order over the floors in use), change it, write it back whole. */
+async function saveFloorOrder(propertyId: string, change: (order: string[]) => string[]): Promise<void> {
+  const [property, units] = await Promise.all([
+    prisma.property.findUnique({ where: { id: propertyId }, select: { floorOrder: true } }),
+    prisma.unit.findMany({ where: { propertyId, floor: { not: null } }, select: { floor: true } }),
+  ]);
+  const shown = orderFloors(units.map((u) => u.floor!), property?.floorOrder ?? []);
+  await prisma.property.update({ where: { id: propertyId }, data: { floorOrder: change(shown) } });
 }
 
 const UNIT_FEATURES = ["quiet", "accessible", "view", "smoking"];
@@ -150,7 +231,7 @@ export async function updateUnit(fd: FormData): Promise<void> {
     where: { id: unitId },
     data: {
       label: str(fd, "label") || unit.label,
-      floor: str(fd, "floor") || null,
+      floor: floorFrom(fd),
       active: fd.get("active") != null,
       features,
       connectingUnitIds: nextConnecting,

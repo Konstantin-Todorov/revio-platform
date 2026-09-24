@@ -6,6 +6,7 @@ import { i18n } from "@/lib/i18n/server";
 import { template } from "@revio/ui/i18n";
 import { rooms } from "@/lib/i18n/rooms";
 import { common } from "@/lib/i18n/common";
+import { orderFloors } from "@/lib/floor-order";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
   // Flat list of every unit (for the connecting-room picker) — connections can cross room types.
   const allUnits = data.flatMap((rt) => rt.units.map((u) => ({ id: u.id, label: u.label })));
   const totalUnits = allUnits.length;
+  const floorOrder = orderFloors(data.flatMap((rt) => rt.units.map((u) => u.floor ?? "")), property.floorOrder);
 
   return (
     <div>
@@ -50,7 +52,7 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
         </Card>
       ) : (
         <RoomsManager
-          roomTypes={data} allUnits={allUnits} blocked={blocked} statuses={c.statuses}
+          roomTypes={data} allUnits={allUnits} floorOrder={floorOrder} blocked={blocked} statuses={c.statuses}
           t={{
             // Named one by one: spreading the dictionary would carry its functions across to the
             // client component, which Next refuses — the page fails.

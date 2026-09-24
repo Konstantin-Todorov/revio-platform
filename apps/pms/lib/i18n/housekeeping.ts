@@ -29,6 +29,8 @@ export interface HousekeepingStrings {
   queueEmpty: string;
   restHeading: (n: number) => string;
   unassignedFloor: string;
+  /** "{floor}" — only for a bare number; a named floor shows as typed. */
+  numberedFloor: string;
   footnoteLead: string;
   footnoteOoo: string;
   footnoteTail: string;
@@ -61,6 +63,7 @@ export const housekeeping: Translations<HousekeepingStrings> = {
     queueEmpty: "Nothing waiting to be cleaned — all rooms are clean, inspected or occupied.",
     restHeading: (n) => `Not in the queue (${n})`,
     unassignedFloor: "Unassigned",
+    numberedFloor: "Floor {floor}",
     footnoteLead: "Smart order cleans by priority — turn-for-arrival first, no-pressure last — with the reason on each room so staff trust it. The one-room-in-progress rule blocks starting a second, non-connecting room. Marking a room",
     footnoteOoo: "Out of order",
     footnoteTail: "takes it off sale on every channel via the shared waterfall.",
@@ -97,6 +100,7 @@ export const housekeeping: Translations<HousekeepingStrings> = {
     queueEmpty: "Няма стаи за почистване — всички са чисти, проверени или заети.",
     restHeading: (n) => `Извън опашката (${n})`,
     unassignedFloor: "Без етаж",
+    numberedFloor: "Етаж {floor}",
     footnoteLead: "Подредбата по приоритет почиства първо стаите за пристигащи гости и последно тези без спешност, като причината е изписана на всяка стая. Правилото „по една стая наведнъж“ не позволява да започнете втора стая, освен ако е свързана. Стая, маркирана като",
     footnoteOoo: "Извън експлоатация",
     footnoteTail: "се спира от продажба във всички канали.",

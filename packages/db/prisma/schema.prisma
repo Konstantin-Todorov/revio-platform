@@ -749,6 +749,10 @@ model Property {
   phone                     String?
   checkInTime               String    @default("14:00")
   checkOutTime              String    @default("12:00")
+  /// The order the hotel put its floors in (RevioPMS → Rooms → Floors). A floor is still only what
+  /// its rooms say (`Unit.floor`); this is the order they are shown in everywhere — the Floors card,
+  /// the calendar, the housekeeping board. A floor missing from it follows, by its number.
+  floorOrder                String[]  @default([])
   status                    String    @default("active")
   // PMS Phase 5: the current open operational date (night audit rolls it forward). Null until first close.
   businessDate              DateTime? @db.Date

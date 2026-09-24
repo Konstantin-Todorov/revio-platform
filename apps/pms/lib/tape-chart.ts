@@ -1,4 +1,5 @@
 import "server-only";
+import { orderFloors } from "./floor-order";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { ymd, todayInTz, addDaysYmd } from "./format";
@@ -187,6 +188,12 @@ export async function getTapeChart(opts: { from?: string; days?: number } = {}) 
       },
     ]);
   }
+
+  // Floors in the hotel's own order (Rooms → Floors), not alphabetically — the query's `floor: asc`
+  // put "10" before "2". Stable sort, so rooms keep their order within a floor; no floor goes last.
+  const floorRank = new Map(orderFloors(units.map((u) => u.floor ?? ""), property.floorOrder).map((f, i) => [f, i]));
+  const rankOf = (f: string | null) => floorRank.get(f?.trim() ?? "") ?? Number.POSITIVE_INFINITY;
+  units.sort((a, b) => rankOf(a.floor) - rankOf(b.floor));
 
   const rows: TapeRow[] = units.map((u) => ({
     unitId: u.id,
