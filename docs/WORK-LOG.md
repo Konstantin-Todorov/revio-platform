@@ -7,6 +7,13 @@ how each finds out what the other is doing. See `AGENTS.md` §5.
 
 Newest at the top. Keep entries short — the commit message carries the detail.
 
+### 2026-09-24 · Claude · DONE · RevioPMS in Bulgarian, shared pieces, Help restructure, floors
+All of RevioPMS and the shared `@revio/ui` pieces it shows in Bulgarian; Help + Your requests in the
+Settings shape for all three products; floors on the Rooms screen. Full record, rules added and what is
+open: `docs/SESSION-2026-09-24.md`. **Next (approved, unclaimed):** finish RevioPMS (billing, trial,
+locked screens, emails) → `docs/PLAN-ROOMS-RATES-CRS.md` → `docs/UI-GROUPING-AUDIT.md` → RevioCRS and
+RevioLink in Bulgarian. Operator is not translated.
+
 ### 2026-09-13 · Codex · CLAIM · Publish trial docs and add docs identity
 Scope design/docs-preview only: publish the three current trial/account articles
 already committed, plus favicon and social preview metadata using existing Revio

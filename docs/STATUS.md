@@ -317,8 +317,9 @@ says who can move it. Details sit where the link points.
    `RegisterProblemCode`) so a screen translates by code, never by matching English. Rule written in
    `packages/ui/CLAUDE.md`.
 3. RevioCRS, then RevioLink. **Operator is not translated** — founder decision 2026-09-24, it is ours.
-   With it, the founder asked for **Rooms & Rates in RevioCRS and RevioLink to take the Settings shape**
-   (sections on the left, the open one on the right) — not built yet.
+   **Approved, not built:** RevioCRS Rooms & Rates regrouped by room and by plan in the Settings shape —
+   `docs/PLAN-ROOMS-RATES-CRS.md`; and a grouping review of every screen — `docs/UI-GROUPING-AUDIT.md`.
+   The session that did all of the above is recorded in `docs/SESSION-2026-09-24.md`.
 4. Server-action messages — **RevioPMS done** (`lib/i18n/flash.ts`, sign-in, users, welcome, 2FA). Emails still English.
 5. RevioDirect's guest page — the GUEST's language, a different choice from staff (browser, then hotel).
 Rule for every step: `lib/i18n/<screen>.ts`, add it to the completeness test when finished, look at the
