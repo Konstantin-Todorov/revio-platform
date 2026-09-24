@@ -300,9 +300,39 @@ says who can move it. Details sit where the link points.
   overrides the platform key (root `CLAUDE.md` §4). Decide before reinstating them.
 - **`docs.reviosoft.app`** has no HSTS or frame protection and is built outside both repos. `HANDOFF` §9.
 
-**Later, when a hotel asks** — the staff products in Bulgarian (write the terminology lint *first*, and add
-Cyrillic to `fetch-fonts.mjs` in the same change; `HANDOFF` §8), the hotel's own Stripe keys, groups and
-corporate, the AI assistant. The roadmap page holds them.
+**Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
+1. RevioPMS, by who reads it: Front Desk → reservation view → folio → maintenance → the rest. Housekeeping ✅.
+2. The shared pieces every product shows: Get help, notifications panel, ⌘K, sign-in, first-run setup.
+3. RevioCRS, then RevioLink, then Operator (ours — English is fine there longest).
+4. Server-action messages (flash errors) and emails — these need the locale passed into the action.
+5. RevioDirect's guest page — the GUEST's language, a different choice from staff (browser, then hotel).
+Rule for every step: `lib/i18n/<screen>.ts`, add it to the completeness test when finished, look at the
+page at phone width. Not translated: legal documents, and anything the hotel typed.
+
+**Later, when a hotel asks** — the hotel's own Stripe keys, groups and corporate, the AI assistant. The
+roadmap page holds them.
+
+### Shipped 2026-09-24 — every notification counts what its screen shows; Bulgarian begins
+
+**Notifications** (`4e7e47d`, reported by the founder: "3 unmapped products", and Mapping said all mapped).
+Every bell item in all four products was checked against the screen it opens. RevioLink counted mapping
+rows across the whole account (every property, disconnected channels, switched-off plans) — now the
+Mapping screen's own rows per channel; "open errors" counted channel limitations and opened the wrong tab.
+RevioCRS's errors opened a page with no errors on it, its arrivals counted reservation *lines*. RevioPMS's
+arrivals skipped nearly every booking since auto-assign. Operator counted limitations as errors.
+
+**Two faults found on the way, both of the same family — `status` stays `confirmed` after departure, and
+"has a room" stopped meaning "arrived" when auto-assign arrived** (`4e7e47d`, `1429618`): the front desk
+listed every guest who left before today under *To check in* as OVERDUE (20 in production, 2 a real
+client's; reproduced and gone), and no booking could ever become a no-show, so a no-show kept its room and
+its remaining nights off sale. `hasArrived` is now the one test; no-shows release rooms and push.
+
+**Bulgarian** (`5610e91`, `0c3c4e4`). The product fonts have **no Bulgarian letters** (Google ships Hanken
+Grotesk and Plus Jakarta Sans with `cyrillic-ext` only) — every Cyrillic name already rendered in a system
+face. Fixed with a Cyrillic-only Source Sans 3 (the website's Bulgarian face); Latin measured unchanged.
+Then the base: `@revio/ui/i18n` (missing Bulgarian falls back to English per key — a gap can never break a
+screen), `User.locale` (the person's choice, every product), `terminology-lint` in verify and CI, and a test
+that a finished dictionary stays 100% Bulgarian. **Translated so far: RevioPMS's frame and housekeeping board.**
 
 ### Shipped 2026-09-23 — production Channex read back for the first time, and what the hotel sees
 
