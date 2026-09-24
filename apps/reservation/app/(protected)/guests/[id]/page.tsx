@@ -7,10 +7,12 @@ import { DuplicateGuests } from "@/components/guests/DuplicateGuests";
 import { DataRights } from "@/components/guests/DataRights";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { LinkTabs } from "@revio/ui/link-tabs";
-import { money } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { guests as guestsDict } from "@/lib/i18n/guests";
+import { common } from "@/lib/i18n/common";
+import { LOCALE_LABELS } from "@revio/ui/i18n";
 import { sampleLabel, hasPattern } from "@revio/core";
 import { CalendarPlus } from "lucide-react";
-import { OTA_ALIAS_NOTE } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +25,6 @@ const inputCls =
   "w-full rounded-md border border-surface-border bg-white px-3 py-2 text-[13px] text-ink-900 outline-none transition-colors focus:border-brand-600";
 const labelCls = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400";
 
-const ERASE_NOTICE: Record<string, string> = {
-  confirm: "Type ERASE in the box to confirm — this cannot be undone.",
-  "already-erased": "This guest record has already been erased.",
-  "merged-record":
-    "This record has been merged into another. Erase the surviving record instead — that is the one holding the guest's data.",
-};
 
 const TABS = ["profile", "stays", "notes", "privacy"] as const;
 type Tab = (typeof TABS)[number];
@@ -54,6 +50,11 @@ export default async function GuestDetailPage({
   if (!detail) notFound();
   const duplicates = await findDuplicateGuests(id);
   const { property, guest, derived, fromPms, notes } = detail;
+  const { t: tr, money, day, locale } = await i18n();
+  const t = tr(guestsDict).profile;
+  const cm = tr(common);
+  const one = new Intl.NumberFormat(LOCALE_LABELS[locale].intl, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const eraseNotice = eraseState ? t.erase[eraseState as keyof typeof t.erase] : undefined;
   const noteRows: GuestNoteRow[] = notes.map((n) => ({
     id: n.id,
     authorName: n.authorName,
@@ -66,7 +67,7 @@ export default async function GuestDetailPage({
     <div className="space-y-5">
       <PageHeader
         title={`${guest.firstName} ${guest.lastName}`}
-        subtitle={`${property.name} · guest since ${guest.createdAt.toISOString().slice(0, 10)}`}
+        subtitle={t.since(property.name, day(guest.createdAt.toISOString().slice(0, 10)))}
         action={
           <div className="flex items-center gap-3">
             {/* §4.2 — the concrete home for the §3.2 bypass, and the highest-leverage add on this
@@ -77,20 +78,20 @@ export default async function GuestDetailPage({
               className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700"
             >
               <CalendarPlus className="h-4 w-4" />
-              {derived.stays > 0 ? "Book again" : "New reservation"}
+              {derived.stays > 0 ? t.bookAgain : t.newReservation}
             </Link>
-            <Link href="/guests" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← All guests</Link>
+            <Link href="/guests" className="text-[12.5px] font-semibold text-brand-700 hover:underline">{t.all}</Link>
           </div>
         }
       />
 
       <LinkTabs
-        label="Guest views"
+        label={t.tabsAria}
         tabs={[
-          { href: `/guests/${guest.id}`, label: "Profile", active: tab === "profile" },
-          { href: `/guests/${guest.id}?tab=stays`, label: "Stays", active: tab === "stays", badge: String(guest.reservations.length) },
-          { href: `/guests/${guest.id}?tab=notes`, label: "Notes", active: tab === "notes", badge: String(notes.length) },
-          { href: `/guests/${guest.id}?tab=privacy`, label: "Privacy & data", active: tab === "privacy" },
+          { href: `/guests/${guest.id}`, label: t.tabs.profile, active: tab === "profile" },
+          { href: `/guests/${guest.id}?tab=stays`, label: t.tabs.stays, active: tab === "stays", badge: String(guest.reservations.length) },
+          { href: `/guests/${guest.id}?tab=notes`, label: t.tabs.notes, active: tab === "notes", badge: String(notes.length) },
+          { href: `/guests/${guest.id}?tab=privacy`, label: t.tabs.privacy, active: tab === "privacy" },
         ]}
       />
 
@@ -105,27 +106,27 @@ export default async function GuestDetailPage({
       />
 
       <Card>
-        <CardHeader title="Contact & requests" />
+        <CardHeader title={t.contact} />
         <form action={updateGuest} className="grid grid-cols-2 items-end gap-3 p-4 lg:grid-cols-3">
           <input type="hidden" name="id" value={guest.id} />
-          <div><label className={labelCls}>First name</label><input name="firstName" defaultValue={guest.firstName} className={inputCls} /></div>
-          <div><label className={labelCls}>Last name</label><input name="lastName" defaultValue={guest.lastName} className={inputCls} /></div>
+          <div><label className={labelCls}>{t.firstName}</label><input name="firstName" defaultValue={guest.firstName} className={inputCls} /></div>
+          <div><label className={labelCls}>{t.lastName}</label><input name="lastName" defaultValue={guest.lastName} className={inputCls} /></div>
           <div>
-            <label className={labelCls}>Email</label>
+            <label className={labelCls}>{t.email}</label>
             <input type="email" name="email" defaultValue={guest.email ?? ""} className={inputCls} />
             {/*
               F4 rule 3. Without this line the address looks like the guest's own, and a hotel emails
               a relay that stopped forwarding when the booking closed — believing it reached someone.
             */}
             {guest.emailIsOtaAlias && (
-              <p className="mt-1 text-[11.5px] leading-relaxed text-warning-600">{OTA_ALIAS_NOTE}</p>
+              <p className="mt-1 text-[11.5px] leading-relaxed text-warning-600">{t.otaAlias}</p>
             )}
           </div>
-          <div><label className={labelCls}>Phone</label><input name="phone" defaultValue={guest.phone ?? ""} className={inputCls} /></div>
-          <div><label className={labelCls}>Company</label><input name="company" defaultValue={guest.company ?? ""} className={inputCls} /></div>
-          <div><label className={labelCls}>Special requests</label><input name="specialRequests" defaultValue={guest.specialRequests ?? ""} className={inputCls} /></div>
+          <div><label className={labelCls}>{t.phone}</label><input name="phone" defaultValue={guest.phone ?? ""} className={inputCls} /></div>
+          <div><label className={labelCls}>{t.company}</label><input name="company" defaultValue={guest.company ?? ""} className={inputCls} /></div>
+          <div><label className={labelCls}>{t.requests}</label><input name="specialRequests" defaultValue={guest.specialRequests ?? ""} className={inputCls} /></div>
           <div className="col-span-2 flex justify-end lg:col-span-3">
-            <button className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Save</button>
+            <button className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">{t.save}</button>
           </div>
         </form>
       </Card>
@@ -139,44 +140,44 @@ export default async function GuestDetailPage({
               there is no pattern, only the one value that happened. Below two stays the wording
               drops to "Last", and the sample is stated. */}
           <CardHeader
-            title="Preferences"
+            title={t.preferences}
             subtitle={
               derived.stays === 0
-                ? "Nothing to work from yet — this fills in after their first stay"
+                ? t.prefNone
                 : hasPattern(derived.stays)
-                  ? `Worked out from ${derived.stays} past stays`
-                  : "From their single stay so far — not yet a pattern"
+                  ? t.prefPattern(derived.stays)
+                  : t.prefSingle
             }
           />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Preferred room type", "Room type booked")}</dt><dd className="mt-0.5 font-semibold text-ink-900">{derived.preferredRoomType ?? "—"}</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Average stay", "Last stay")}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLosNights.toFixed(1)} nights` : "—"}</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Average lead time", "Lead time")}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? `${derived.avgLeadDays} days` : "—"}</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Booking frequency</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays} stay{derived.stays === 1 ? "" : "s"}</dd></div>
-            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Lifetime accommodation</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(derived.lifetimeAccommodationMinor, property.baseCurrency)}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, t.preferredRoom, t.roomBooked)}</dt><dd className="mt-0.5 font-semibold text-ink-900">{derived.preferredRoomType ?? "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, t.avgStay, t.lastStay)}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? t.nights(one.format(derived.avgLosNights)) : "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, t.avgLead, t.lead)}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{derived.stays > 0 ? t.days(derived.avgLeadDays) : "—"}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.frequency}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{t.stays(derived.stays)}</dd></div>
+            <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.lifetime}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(derived.lifetimeAccommodationMinor, property.baseCurrency)}</dd></div>
             <div>
-              <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Cancellation behaviour</dt>
+              <dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.cancellations}</dt>
               <dd className="mt-0.5 font-semibold text-ink-900">
                 {derived.cancelled + derived.noShows === 0
-                  ? "clean record"
-                  : `${derived.cancelled} cancelled · ${derived.noShows} no-show of ${derived.totalBookings}`}
+                  ? t.clean
+                  : t.cancelRecord(derived.cancelled, derived.noShows, derived.totalBookings)}
               </dd>
             </div>
           </dl>
         </Card>
 
         <Card>
-          <CardHeader title="During their stay" subtitle="Recorded by RevioPMS — shown here, edited there" />
+          <CardHeader title={t.duringStay} subtitle={t.duringStaySub} />
           {fromPms.hasPmsData ? (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 p-4 text-[13px]">
-              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Ancillary spend (lifetime)</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.ancillarySpendMinor, property.baseCurrency)}</dd></div>
-              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Avg ancillary / stay</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.avgAncillaryPerStayMinor, property.baseCurrency)}</dd></div>
-              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Usual room", "Last room")}</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteUnit ?? "—"}</dd></div>
-              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, "Usual floor", "Last floor")}</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteFloor ?? "—"}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.ancillary}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.ancillarySpendMinor, property.baseCurrency)}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.avgAncillary}</dt><dd className="tnum mt-0.5 font-semibold text-ink-900">{money(fromPms.avgAncillaryPerStayMinor, property.baseCurrency)}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, t.usualRoom, t.lastRoom)}</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteUnit ?? "—"}</dd></div>
+              <div><dt className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{sampleLabel(derived.stays, t.usualFloor, t.lastFloor)}</dt><dd className="mt-0.5 font-semibold text-ink-900">{fromPms.favouriteFloor ?? "—"}</dd></div>
             </dl>
           ) : (
             <p className="px-4 py-5 text-[13px] text-ink-500">
-              No PMS data for this guest yet — these fields fill in once the property runs RevioPMS (folio + room-assignment history).
+              {t.noPms}
             </p>
           )}
         </Card>
@@ -188,20 +189,20 @@ export default async function GuestDetailPage({
       {tab === "stays" && (
         <>
       <Card>
-        <CardHeader title={`Booking history (${guest.reservations.length})`} />
+        <CardHeader title={t.history(guest.reservations.length)} />
         {guest.reservations.length === 0 ? (
-          <div className="px-4 py-5 text-[13px] text-ink-500">No reservations for this guest yet.</div>
+          <div className="px-4 py-5 text-[13px] text-ink-500">{t.noHistory}</div>
         ) : (
           <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                <th className="px-4 py-2.5">Reservation</th>
-                <th className="px-4 py-2.5">Stay</th>
-                <th className="px-4 py-2.5">Room</th>
-                <th className="px-4 py-2.5">Source</th>
-                <th className="px-4 py-2.5 text-right">Total</th>
-                <th className="px-4 py-2.5">Status</th>
+                <th className="px-4 py-2.5">{t.cols.reservation}</th>
+                <th className="px-4 py-2.5">{t.cols.stay}</th>
+                <th className="px-4 py-2.5">{t.cols.room}</th>
+                <th className="px-4 py-2.5">{t.cols.source}</th>
+                <th className="px-4 py-2.5 text-right">{t.cols.total}</th>
+                <th className="px-4 py-2.5">{t.cols.status}</th>
               </tr>
             </thead>
             <tbody>
@@ -212,11 +213,11 @@ export default async function GuestDetailPage({
                     <td className="px-4 py-2.5">
                       <Link href={`/reservations/${r.id}`} className="tnum font-semibold text-brand-700 hover:underline">#{r.externalId ?? r.id.slice(-6)}</Link>
                     </td>
-                    <td className="tnum px-4 py-2.5 text-ink-600">{line ? `${line.checkIn.toISOString().slice(0, 10)} → ${line.checkOut.toISOString().slice(0, 10)}` : "—"}</td>
+                    <td className="tnum px-4 py-2.5 text-ink-600">{line ? `${day(line.checkIn.toISOString().slice(0, 10))} → ${day(line.checkOut.toISOString().slice(0, 10))}` : "—"}</td>
                     <td className="px-4 py-2.5 text-ink-600">{line?.roomType.name ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-ink-600">{r.channel?.name ?? r.bookingSource?.name ?? "Direct"}</td>
+                    <td className="px-4 py-2.5 text-ink-600">{r.channel?.name ?? r.bookingSource?.name ?? cm.direct}</td>
                     <td className="tnum px-4 py-2.5 text-right font-semibold text-ink-900">{money(r.totalMinor, r.currency)}</td>
-                    <td className="px-4 py-2.5"><StatusPill tone={TONES[r.status] ?? "neutral"}>{r.status.replace("_", " ")}</StatusPill></td>
+                    <td className="px-4 py-2.5"><StatusPill tone={TONES[r.status] ?? "neutral"}>{cm.statuses[r.status] ?? r.status.replace("_", " ")}</StatusPill></td>
                   </tr>
                 );
               })}
@@ -234,8 +235,8 @@ export default async function GuestDetailPage({
       {/* Staff notes (spec §4) — on the SHARED guest record, so they travel wherever the guest does. */}
       <Card>
         <CardHeader
-          title={`Notes (${notes.length})`}
-          subtitle="Staff notes — visible wherever this guest appears, in every Revio product you run"
+          title={t.notesTitle(notes.length)}
+          subtitle={t.notesSub}
         />
         <GuestNotes guestId={guest.id} notes={noteRows} />
       </Card>
@@ -251,8 +252,8 @@ export default async function GuestDetailPage({
           a hotel keeps the booking and invoice records it is legally required to keep. */}
       <Card>
         <CardHeader
-          title="Privacy"
-          subtitle="What this guest has asked us not to do — honoured across RevioDirect, RevioCRS and RevioPMS at once"
+          title={t.privacy}
+          subtitle={t.privacySub}
         />
         <form action={setGuestRecognitionOptOut} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
           <input type="hidden" name="guestId" value={guest.id} />
@@ -264,18 +265,15 @@ export default async function GuestDetailPage({
               className="mt-0.5 h-4 w-4 rounded border-surface-border text-brand-600"
             />
             <span>
-              <span className="font-semibold text-ink-900">Do not recognise this guest across stays</span>
-              <span className="mt-0.5 block text-[12px] text-ink-500">
-                Suppresses &ldquo;welcome back&rdquo; on the booking page and the returning-guest note for the
-                front desk. Their stay history is unchanged and still counts in every report.
-              </span>
+              <span className="font-semibold text-ink-900">{t.optOut}</span>
+              <span className="mt-0.5 block text-[12px] text-ink-500">{t.optOutBody}</span>
             </span>
           </label>
           <button
             type="submit"
             className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
           >
-            Save
+            {t.save}
           </button>
         </form>
       </Card>
@@ -286,7 +284,7 @@ export default async function GuestDetailPage({
         guestId={guest.id}
         guestName={`${guest.firstName} ${guest.lastName}`}
         erasedAt={guest.erasedAt}
-        {...(eraseState && ERASE_NOTICE[eraseState] ? { notice: ERASE_NOTICE[eraseState] } : {})}
+        {...(eraseNotice ? { notice: eraseNotice } : {})}
       />
         </>
       )}

@@ -16,3 +16,12 @@ describe("the RevioCRS dashboard checklist says core's steps word for word, in E
     }
   });
 });
+
+import { ERASURE_RETAINED } from "@revio/core";
+import { guests } from "./guests";
+
+describe("what an erasure keeps is said in core's own words, in English", () => {
+  it("ERASURE_RETAINED", () => {
+    expect(guests.en.data.kept).toEqual(ERASURE_RETAINED.map((r) => ({ what: r.what, why: r.why })));
+  });
+});

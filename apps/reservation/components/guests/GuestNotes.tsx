@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { NotebookPen, Pencil, Trash2, X } from "lucide-react";
 import { addGuestNote, editGuestNote, deleteGuestNote } from "@/lib/actions-reservations";
-import { relativeTime } from "@/lib/format";
+import { formatDay, translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { guests as guestsDict } from "@/lib/i18n/guests";
+import { relativeTimeIn } from "@/lib/i18n/relative";
 
 import { SubmitButton } from "@revio/ui/submit-button";
 export type GuestNoteRow = {
@@ -23,6 +26,9 @@ export type GuestNoteRow = {
  */
 export function GuestNotes({ guestId, notes }: { guestId: string; notes: GuestNoteRow[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const locale = useLocale();
+  const t = translate(guestsDict, locale).notes;
+  const relativeTime = relativeTimeIn(locale);
 
   return (
     <div id="notes" className="space-y-4 p-4">
@@ -33,12 +39,12 @@ export function GuestNotes({ guestId, notes }: { guestId: string; notes: GuestNo
           name="body"
           required
           rows={2}
-          placeholder="Add a note about this guest — a preference, a heads-up, a follow-up…"
+          placeholder={t.placeholder}
           className="w-full resize-y rounded-md border border-surface-border bg-white px-3 py-2 text-[13px] text-ink-900 outline-none transition-colors placeholder:text-ink-400 focus:border-brand-600"
         />
         <div className="flex justify-end">
-          <SubmitButton className="flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Adding…">
-            <NotebookPen className="h-3.5 w-3.5" /> Add note
+          <SubmitButton className="flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel={t.adding}>
+            <NotebookPen className="h-3.5 w-3.5" /> {t.add}
           </SubmitButton>
         </div>
       </form>
@@ -46,7 +52,7 @@ export function GuestNotes({ guestId, notes }: { guestId: string; notes: GuestNo
       {/* List — newest first */}
       {notes.length === 0 ? (
         <p className="rounded-md border border-dashed border-surface-border px-3 py-4 text-center text-[12.5px] text-ink-400">
-          No notes yet. The first one you add stays with this guest wherever their record appears.
+          {t.empty}
         </p>
       ) : (
         <ul className="space-y-2.5">
@@ -55,16 +61,16 @@ export function GuestNotes({ guestId, notes }: { guestId: string; notes: GuestNo
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <div className="text-[11px] text-ink-400">
                   <span className="font-semibold text-ink-600">{n.authorName}</span>
-                  <span className="tnum"> · {new Date(n.createdIso).toISOString().slice(0, 10)}</span>
+                  <span className="tnum"> · {formatDay(n.createdIso.slice(0, 10), locale, "short")}</span>
                   <span className="tnum"> · {relativeTime(n.createdIso)}</span>
-                  {n.edited && <span className="italic"> · edited</span>}
+                  {n.edited && <span className="italic"> · {t.edited}</span>}
                 </div>
                 {editingId !== n.id && (
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => setEditingId(n.id)}
-                      title="Edit note"
+                      title={t.edit}
                       className="rounded p-1 text-ink-400 transition-colors hover:bg-white hover:text-brand-700"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -74,7 +80,7 @@ export function GuestNotes({ guestId, notes }: { guestId: string; notes: GuestNo
                       <input type="hidden" name="noteId" value={n.id} />
                       <button
                         type="submit"
-                        title="Delete note"
+                        title={t.delete}
                         className="rounded p-1 text-ink-400 transition-colors hover:bg-white hover:text-danger-600"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -101,10 +107,10 @@ export function GuestNotes({ guestId, notes }: { guestId: string; notes: GuestNo
                       onClick={() => setEditingId(null)}
                       className="flex items-center gap-1 rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted"
                     >
-                      <X className="h-3.5 w-3.5" /> Cancel
+                      <X className="h-3.5 w-3.5" /> {t.cancel}
                     </button>
                     <button className="rounded-md bg-brand-800 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700">
-                      Save
+                      {t.save}
                     </button>
                   </div>
                 </form>

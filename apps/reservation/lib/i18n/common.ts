@@ -50,7 +50,7 @@ export const common: Translations<CommonStrings> = {
     statuses: {
       confirmed: "confirmed", modified: "modified", cancelled: "cancelled", no_show: "no-show",
       overbooked: "overbooked", failed_import: "failed import", expired: "expired", hold: "hold",
-      requested: "requested", new: "new",
+      requested: "requested", new: "new", draft: "draft",
     },
     ranges: {
       today: "Today", tomorrow: "Tomorrow", l7d: "Last 7 days", l28d: "Last 28 days", mtd: "Month to date",
@@ -88,7 +88,7 @@ export const common: Translations<CommonStrings> = {
     statuses: {
       confirmed: "потвърдена", modified: "променена", cancelled: "анулирана", no_show: "неявил се",
       overbooked: "свръхрезервирана", failed_import: "неуспешен внос", expired: "изтекла", hold: "задържана",
-      requested: "заявка", new: "нова",
+      requested: "заявка", new: "нова", draft: "чернова",
     },
     ranges: {
       today: "Днес", tomorrow: "Утре", l7d: "Последните 7 дни", l28d: "Последните 28 дни", mtd: "От началото на месеца",

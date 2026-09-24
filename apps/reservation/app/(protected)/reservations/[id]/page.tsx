@@ -5,7 +5,10 @@ import { getReservationDetail, getCreateFormData, PAYMENT_GUARANTEES } from "@/l
 import { earliestSelectable } from "@revio/core";
 import { cancelCrsReservation, markNoShow, modifyReservation } from "@/lib/actions-reservations";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
-import { money, relativeTime } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { reservations as reservationsDict } from "@/lib/i18n/reservations";
+import { common } from "@/lib/i18n/common";
+import { relativeTimeIn } from "@/lib/i18n/relative";
 import { DateField } from "@revio/ui/date-field";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +35,10 @@ export default async function ReservationDetailPage({
   const { property, reservation: r, timeline, todayIso } = detail;
   const line = r.lines[0];
   const { roomTypes } = await getCreateFormData();
+  const { t: tr, money, day, locale } = await i18n();
+  const t = tr(reservationsDict).detail;
+  const cm = tr(common);
+  const relativeTime = relativeTimeIn(locale);
 
   const isLive = ["confirmed", "modified", "overbooked"].includes(r.status);
   // Channel bookings are mailed by the channel itself; a guest with no address cannot be mailed at all.
@@ -50,17 +57,19 @@ export default async function ReservationDetailPage({
    * See `packages/core/src/stays/past-dates.ts` for the four intents and which screens take which.
    */
   const stayFloor = earliestSelectable(todayIso, checkInIso || null);
-  const guarantee = PAYMENT_GUARANTEES.find((g) => g.value === r.paymentGuarantee)?.label ?? "—";
+  const guarantee = r.paymentGuarantee
+    ? tr(reservationsDict).guarantees[r.paymentGuarantee] ?? PAYMENT_GUARANTEES.find((g) => g.value === r.paymentGuarantee)?.label ?? "—"
+    : "—";
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={r.guestName}
-        subtitle={`Reservation #${r.externalId ?? r.id.slice(-6)} · ${property.name}`}
+        subtitle={t.subtitle(r.externalId ?? r.id.slice(-6), property.name)}
         action={
           <div className="flex items-center gap-2">
-            <StatusPill tone={TONES[r.status] ?? "neutral"}>{r.status.replace("_", " ")}</StatusPill>
-            <Link href="/reservations" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← All reservations</Link>
+            <StatusPill tone={TONES[r.status] ?? "neutral"}>{cm.statuses[r.status] ?? r.status.replace("_", " ")}</StatusPill>
+            <Link href="/reservations" className="text-[12.5px] font-semibold text-brand-700 hover:underline">{t.all}</Link>
           </div>
         }
       />
@@ -82,22 +91,20 @@ export default async function ReservationDetailPage({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
             <div className="min-w-0">
               <h2 className="text-[13.5px] font-bold text-danger-700">
-                This booking is not in your calendar, and the room is still on sale
+                {t.failedTitle}
               </h2>
               <p className="mt-1 text-[13px] leading-relaxed text-ink-700">
-                {detail.importFailure?.message?.replace(/^Booking #\S+ could not be imported — /, "") ??
-                  "The channel sold it under a room type or rate plan that is not mapped here."}{" "}
-                We deliberately did not guess which room it meant — guessing is how two guests end up
-                in one room. The guest has been confirmed by the channel, so somebody may still
-                arrive.
+                {/* The stored cause is RevioLink's own English; a reader in another language gets ours. */}
+                {(locale === "en" ? detail.importFailure?.message?.replace(/^Booking #\S+ could not be imported — /, "") : null) ??
+                  t.failedCause}{" "}
+                {t.failedWhy}
               </p>
               <p className="mt-2 text-[13px] leading-relaxed text-ink-700">
-                {detail.importFailure?.recommendedAction ??
-                  "Map that room type and rate plan in RevioLink, then re-sync to bring the booking in."}
+                {(locale === "en" ? detail.importFailure?.recommendedAction : null) ?? t.failedFix}
               </p>
               {/* The fix lives in the other product, so link to it rather than describing where it is. */}
               <p className="mt-2 text-[12.5px] text-ink-500">
-                Nothing here was lost — the booking is held until the mapping is finished.
+                {t.failedNothingLost}
               </p>
             </div>
           </div>
@@ -112,38 +119,38 @@ export default async function ReservationDetailPage({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Stay" />
+          <CardHeader title={t.stay} />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 px-4 py-3.5 text-[13px]">
-            <dt className="text-ink-400">Room</dt>
+            <dt className="text-ink-400">{t.room}</dt>
             <dd className="font-semibold text-ink-900">{line ? `${line.roomType.name}${line.quantity > 1 ? ` ×${line.quantity}` : ""}` : "—"}</dd>
-            <dt className="text-ink-400">Dates</dt>
-            <dd className="tnum text-ink-700">{line ? `${checkInIso} → ${line.checkOut.toISOString().slice(0, 10)}` : "—"}</dd>
-            <dt className="text-ink-400">Guests</dt>
+            <dt className="text-ink-400">{t.dates}</dt>
+            <dd className="tnum text-ink-700">{line ? `${day(checkInIso)} → ${day(line.checkOut.toISOString().slice(0, 10))}` : "—"}</dd>
+            <dt className="text-ink-400">{t.guests}</dt>
             <dd className="text-ink-700">{line?.guestsCount ?? "—"}</dd>
-            <dt className="text-ink-400">Rate plan</dt>
+            <dt className="text-ink-400">{t.ratePlan}</dt>
             <dd className="text-ink-700">{line?.ratePlan.name ?? "—"}</dd>
-            <dt className="text-ink-400">Total</dt>
+            <dt className="text-ink-400">{t.total}</dt>
             <dd className="tnum font-semibold text-ink-900">{money(r.totalMinor, r.currency)}</dd>
-            <dt className="text-ink-400">Source</dt>
-            <dd className="text-ink-700">{r.channel?.name ?? r.bookingSource?.name ?? "Direct"}</dd>
-            <dt className="text-ink-400">Payment guarantee</dt>
+            <dt className="text-ink-400">{t.source}</dt>
+            <dd className="text-ink-700">{r.channel?.name ?? r.bookingSource?.name ?? cm.direct}</dd>
+            <dt className="text-ink-400">{t.guarantee}</dt>
             <dd className="text-ink-700">{guarantee}</dd>
-            <dt className="text-ink-400">Booked</dt>
-            <dd className="tnum text-ink-700">{r.importedAt.toISOString().slice(0, 10)}</dd>
-            {r.cancelledAt && (<><dt className="text-ink-400">Cancelled</dt><dd className="tnum text-ink-700">{r.cancelledAt.toISOString().slice(0, 10)}</dd></>)}
-            {r.notes && (<><dt className="text-ink-400">Notes</dt><dd className="text-ink-700">{r.notes}</dd></>)}
+            <dt className="text-ink-400">{t.booked}</dt>
+            <dd className="tnum text-ink-700">{day(r.importedAt.toISOString().slice(0, 10))}</dd>
+            {r.cancelledAt && (<><dt className="text-ink-400">{t.cancelled}</dt><dd className="tnum text-ink-700">{day(r.cancelledAt.toISOString().slice(0, 10))}</dd></>)}
+            {r.notes && (<><dt className="text-ink-400">{t.notes}</dt><dd className="text-ink-700">{r.notes}</dd></>)}
           </dl>
           {isLive && (
             <div className="flex items-center gap-2 border-t border-surface-border/60 px-4 py-3">
               <form action={cancelCrsReservation} className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="id" value={r.id} />
                 <button className="rounded-md border border-danger-500/40 px-3 py-1.5 text-[12.5px] font-semibold text-danger-600 transition-colors hover:bg-danger-50">
-                  Cancel reservation
+                  {t.cancel}
                 </button>
                 {canEmailGuest && (
                   <label className="flex items-center gap-1.5 text-[12px] text-ink-600">
                     <input type="checkbox" name="emailGuest" defaultChecked className="h-3.5 w-3.5 rounded border-surface-border" />
-                    Email the guest
+                    {t.emailGuest}
                   </label>
                 )}
               </form>
@@ -151,7 +158,7 @@ export default async function ReservationDetailPage({
                 <form action={markNoShow}>
                   <input type="hidden" name="id" value={r.id} />
                   <button className="rounded-md border border-warning-500/40 px-3 py-1.5 text-[12.5px] font-semibold text-warning-600 transition-colors hover:bg-warning-50">
-                    Mark no-show
+                    {t.noShow}
                   </button>
                 </form>
               )}
@@ -160,16 +167,16 @@ export default async function ReservationDetailPage({
         </Card>
 
         <Card>
-          <CardHeader title="Guest" />
+          <CardHeader title={t.guest} />
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 px-4 py-3.5 text-[13px]">
-            <dt className="text-ink-400">Name</dt>
+            <dt className="text-ink-400">{t.name}</dt>
             <dd className="font-semibold text-ink-900">
               {r.guest ? <Link href={`/guests/${r.guest.id}`} className="text-brand-700 hover:underline">{r.guest.firstName} {r.guest.lastName}</Link> : r.guestName}
             </dd>
-            <dt className="text-ink-400">Email</dt><dd className="text-ink-700">{r.guest?.email ?? "—"}</dd>
-            <dt className="text-ink-400">Phone</dt><dd className="tnum text-ink-700">{r.guest?.phone ?? "—"}</dd>
-            <dt className="text-ink-400">Company</dt><dd className="text-ink-700">{r.guest?.company ?? "—"}</dd>
-            <dt className="text-ink-400">Special requests</dt><dd className="text-ink-700">{r.guest?.specialRequests ?? "—"}</dd>
+            <dt className="text-ink-400">{t.email}</dt><dd className="text-ink-700">{r.guest?.email ?? "—"}</dd>
+            <dt className="text-ink-400">{t.phone}</dt><dd className="tnum text-ink-700">{r.guest?.phone ?? "—"}</dd>
+            <dt className="text-ink-400">{t.company}</dt><dd className="text-ink-700">{r.guest?.company ?? "—"}</dd>
+            <dt className="text-ink-400">{t.requests}</dt><dd className="text-ink-700">{r.guest?.specialRequests ?? "—"}</dd>
           </dl>
         </Card>
       </div>
@@ -178,26 +185,26 @@ export default async function ReservationDetailPage({
         <Card>
           <details>
             <summary className="flex cursor-pointer items-center gap-2 px-4 py-3 text-[13px] font-bold text-ink-900 hover:bg-surface-muted">
-              <PencilLine className="h-4 w-4 text-brand-700" /> Modify stay
-              <span className="text-[11.5px] font-medium text-ink-400">— validated first; if the new stay doesn’t fit, nothing changes</span>
+              <PencilLine className="h-4 w-4 text-brand-700" /> {t.modify}
+              <span className="text-[11.5px] font-medium text-ink-400">{t.modifyHint}</span>
             </summary>
             <form action={modifyReservation} className="grid grid-cols-2 items-end gap-3 border-t border-surface-border/60 p-4 lg:grid-cols-6">
               <input type="hidden" name="id" value={r.id} />
               <div>
-                <label className={labelCls}>Room type</label>
+                <label className={labelCls}>{t.roomType}</label>
                 <select name="roomTypeId" defaultValue={line.roomTypeId} className={inputCls}>
                   {roomTypes.map((rt) => <option key={rt.id} value={rt.id}>{rt.name}</option>)}
                 </select>
               </div>
-              <div><label className={labelCls}>Arrival</label><DateField name="checkIn" defaultValue={checkInIso} min={stayFloor} className={inputCls} /></div>
-              <div><label className={labelCls}>Departure</label><DateField name="checkOut" defaultValue={line.checkOut.toISOString().slice(0, 10)} min={stayFloor} className={inputCls} /></div>
-              <div><label className={labelCls}>Rooms</label><input type="number" name="quantity" min={1} defaultValue={line.quantity} className={inputCls} /></div>
-              <div><label className={labelCls}>Total ({r.currency})</label><input type="number" name="price" step="0.01" min="0" defaultValue={(r.totalMinor / 100).toFixed(2)} className={inputCls} /></div>
-              <button className="h-[38px] rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">Apply change</button>
+              <div><label className={labelCls}>{t.arrival}</label><DateField name="checkIn" defaultValue={checkInIso} min={stayFloor} className={inputCls} /></div>
+              <div><label className={labelCls}>{t.departure}</label><DateField name="checkOut" defaultValue={line.checkOut.toISOString().slice(0, 10)} min={stayFloor} className={inputCls} /></div>
+              <div><label className={labelCls}>{t.rooms}</label><input type="number" name="quantity" min={1} defaultValue={line.quantity} className={inputCls} /></div>
+              <div><label className={labelCls}>{t.totalIn(r.currency)}</label><input type="number" name="price" step="0.01" min="0" defaultValue={(r.totalMinor / 100).toFixed(2)} className={inputCls} /></div>
+              <button className="h-[38px] rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">{t.apply}</button>
               {canEmailGuest && (
                 <label className="col-span-2 flex items-center gap-1.5 text-[12px] text-ink-600 lg:col-span-6">
                   <input type="checkbox" name="emailGuest" defaultChecked className="h-3.5 w-3.5 rounded border-surface-border" />
-                  Email the guest the updated booking
+                  {t.emailUpdated}
                 </label>
               )}
             </form>
@@ -206,22 +213,22 @@ export default async function ReservationDetailPage({
       )}
 
       <Card>
-        <CardHeader title="Timeline" />
+        <CardHeader title={t.timeline} />
         {timeline.length === 0 ? (
           <div className="px-4 py-5 text-[13px] text-ink-500">
             {r.status === "failed_import"
               ? /* Not "nothing happened" — something happened and we know when. Saying "no events"
                    on the one status that HAS a recorded cause is how this screen misled somebody. */
-                `This booking arrived from ${r.channel?.name ?? "the channel"} on ${r.importedAt.toISOString().slice(0, 10)} and could not be imported. Nothing else will be recorded until it is brought in.`
-              : "No events recorded for this reservation yet."}
+                t.timelineFailed(r.channel?.name ?? t.theChannel, day(r.importedAt.toISOString().slice(0, 10)))
+              : t.timelineEmpty}
           </div>
         ) : (
           <ul className="divide-y divide-surface-border/60">
             {timeline.map((e) => (
               <li key={e.id} className="flex flex-wrap items-baseline gap-2 px-4 py-2.5 text-[13px]">
-                <span className="font-semibold capitalize text-ink-900">{e.field ?? "event"}</span>
-                {e.oldValue && <span className="text-ink-400 line-through">{e.oldValue}</span>}
-                {e.newValue && <span className="text-ink-700">{e.newValue}</span>}
+                <span className="font-semibold capitalize text-ink-900">{e.field ? t.fields[e.field] ?? e.field : t.event}</span>
+                {e.oldValue && <span className="text-ink-400 line-through">{cm.statuses[e.oldValue] ?? e.oldValue}</span>}
+                {e.newValue && <span className="text-ink-700">{cm.statuses[e.newValue] ?? e.newValue}</span>}
                 <span className="ml-auto text-[11.5px] text-ink-400">{relativeTime(e.createdAt)}</span>
               </li>
             ))}

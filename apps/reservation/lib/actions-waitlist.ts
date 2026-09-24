@@ -2,6 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { flashError, setFlash } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { waitlist as waitlistDict } from "./i18n/waitlist";
+
+async function sayW() {
+  return (await i18n()).t(waitlistDict);
+}
 import { JOB, forTenant, withJobLease } from "@revio/db";
 import { waitlistSweep } from "@revio/booking";
 import { sendSweepEmails } from "./waitlist-emails";
@@ -49,14 +55,15 @@ export async function sweepWaitlistForm(): Promise<void> {
    * an early return.
    */
   if (r.skipped) {
-    return setFlash("info", "A check is already running. This list will update in a moment.");
+    return setFlash("info", (await sayW()).sweep.running);
   }
+  const w = (await sayW()).sweep;
   const parts: string[] = [];
-  if (r.offered > 0) parts.push(`${r.offered} offer${r.offered === 1 ? "" : "s"} sent`);
-  if (r.lapsed > 0) parts.push(`${r.lapsed} expired offer${r.lapsed === 1 ? "" : "s"} back on the list`);
-  if (r.staled > 0) parts.push(`${r.staled} past their arrival date, closed`);
+  if (r.offered > 0) parts.push(w.offered(r.offered));
+  if (r.lapsed > 0) parts.push(w.lapsed(r.lapsed));
+  if (r.staled > 0) parts.push(w.staled(r.staled));
   if (parts.length === 0) {
-    return setFlash("info", "Checked — nothing has opened up for anyone waiting.");
+    return setFlash("info", w.nothing);
   }
   return setFlash("success", parts.join(" · "));
 }
@@ -118,7 +125,7 @@ export async function removeWaitlistEntry(fd: FormData): Promise<void> {
   // Not a silent bail-out. This can only happen to a POST that did not come from our own form, but
   // a void action that returns nothing leaves the page looking untouched — so whoever is looking at
   // it presses the button again, and the second press is as silent as the first.
-  if (!id) return flashError("Nothing was selected to remove. Reload the page and try again.");
+  if (!id) return flashError((await sayW()).nothingSelected);
 
   const property = await getProperty();
   // Scoped by property as well as by RLS: the tenant may run several hotels, and an id from another

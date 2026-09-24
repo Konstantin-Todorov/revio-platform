@@ -4,6 +4,8 @@ import { bookingReference } from "@revio/booking";
 import { stayDetails } from "@revio/core";
 import { setFlash } from "@revio/ui/flash";
 import { prisma } from "./db";
+import { i18n } from "./i18n/server";
+import { reservations as reservationsDict } from "./i18n/reservations";
 
 export type StayEmailKey = "booking_confirmation" | "booking_modified" | "booking_cancelled";
 export type StayEmailOutcome = "sent" | "switched-off" | "no-address" | "channel" | "failed";
@@ -77,18 +79,20 @@ export async function emailGuestAbout(reservationId: string, key: StayEmailKey):
  * Say what happened to the guest's email, after the change itself. Never silent: "did they get it?"
  * is the question the front desk is asked next, and a screen that does not say invites a resend.
  */
-export async function flashMailOutcome(done: string, outcome: StayEmailOutcome | null): Promise<void> {
-  if (outcome === null) return setFlash("success", `${done} No email was sent to the guest.`);
+export async function flashMailOutcome(done: "confirmed" | "modified" | "cancelled", outcome: StayEmailOutcome | null): Promise<void> {
+  const m = (await i18n()).t(reservationsDict).mail;
+  const d = m[done];
+  if (outcome === null) return setFlash("success", m.none(d));
   switch (outcome) {
     case "sent":
-      return setFlash("success", `${done} The guest has been emailed.`);
+      return setFlash("success", m.sent(d));
     case "no-address":
-      return setFlash("info", `${done} No email was sent — this guest has no email address on file.`);
+      return setFlash("info", m.noAddress(d));
     case "channel":
-      return setFlash("success", `${done} The channel emails its own guest, so we did not.`);
+      return setFlash("success", m.channel(d));
     case "switched-off":
-      return setFlash("info", `${done} No email was sent — that email is switched off in Settings → Guest emails.`);
+      return setFlash("info", m.switchedOff(d));
     case "failed":
-      return setFlash("error", `${done} The email to the guest could not be sent — the reservation itself is saved.`);
+      return setFlash("error", m.failed(d));
   }
 }

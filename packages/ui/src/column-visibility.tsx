@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Columns3, Lock, RotateCcw } from "lucide-react";
+import { fill, translate } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { columnStrings } from "./column-strings";
 import { Menu } from "./menu";
 
 /**
@@ -151,6 +154,7 @@ export function ColumnsMenu({
   onReset: () => void;
 }) {
   const count = hidden.size;
+  const t = translate(columnStrings, useLocale());
   return (
     <Menu
       align="right"
@@ -165,14 +169,14 @@ export function ColumnsMenu({
           }`}
         >
           <Columns3 className="h-3.5 w-3.5" />
-          Columns
+          {t.columns}
           {/* Rule 3 — hidden is a state the reader can see, not a state they have to remember. */}
-          {count > 0 && <span className="tnum">· {count} hidden</span>}
+          {count > 0 && <span className="tnum">· {fill(t.hidden, { n: count })}</span>}
         </button>
       )}
     >
       <div className="px-2.5 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
-        Show columns
+        {t.show}
       </div>
       {columns.map((c) => {
         const on = c.locked || !hidden.has(c.key);
@@ -201,7 +205,7 @@ export function ColumnsMenu({
             {/* Rule 2 — listed and explained, never quietly absent. */}
             {c.locked && (
               <span className="ml-auto flex items-center gap-1 text-[10.5px] uppercase tracking-wide text-ink-400">
-                <Lock className="h-2.5 w-2.5" /> always
+                <Lock className="h-2.5 w-2.5" /> {t.always}
               </span>
             )}
           </button>
@@ -216,7 +220,7 @@ export function ColumnsMenu({
             onClick={onReset}
             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] text-brand-700 outline-none transition-colors duration-fast hover:bg-accent-50 focus-visible:shadow-focus"
           >
-            <RotateCcw className="h-3 w-3" /> Show all columns
+            <RotateCcw className="h-3 w-3" /> {t.showAll}
           </button>
         </>
       )}

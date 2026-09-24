@@ -3,6 +3,8 @@ import { Users } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { mergeGuest } from "@/lib/actions-reservations";
 import type { DuplicateCandidate } from "@revio/core";
+import { i18n } from "@/lib/i18n/server";
+import { guests as guestsDict } from "@/lib/i18n/guests";
 
 /**
  * Possible duplicates of this guest — F2.
@@ -21,13 +23,9 @@ import type { DuplicateCandidate } from "@revio/core";
  * signal, which is exactly the one that should be checked hardest.
  */
 
-const REASON_LABEL: Record<DuplicateCandidate["reason"], { text: string; strong: boolean }> = {
-  email: { text: "Same email address", strong: true },
-  phone: { text: "Same phone number", strong: true },
-  name: { text: "Same name — check before merging", strong: false },
-};
+const STRONG: Record<DuplicateCandidate["reason"], boolean> = { email: true, phone: true, name: false };
 
-export function DuplicateGuests({
+export async function DuplicateGuests({
   guestId,
   guestName,
   candidates,
@@ -37,16 +35,17 @@ export function DuplicateGuests({
   candidates: DuplicateCandidate[];
 }) {
   if (candidates.length === 0) return null;
+  const t = (await i18n()).t(guestsDict).duplicates;
 
   return (
     <Card>
       <CardHeader
-        title="Possible duplicates"
-        subtitle={`${candidates.length} other record${candidates.length === 1 ? "" : "s"} may be the same person`}
+        title={t.title}
+        subtitle={t.subtitle(candidates.length)}
       />
       <ul className="divide-y divide-surface-border">
         {candidates.map((c) => {
-          const reason = REASON_LABEL[c.reason];
+          const reason = { text: t.reasons[c.reason], strong: STRONG[c.reason] };
           return (
             <li key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
               <Users className="h-4 w-4 shrink-0 text-ink-300" />
@@ -55,7 +54,7 @@ export function DuplicateGuests({
                   {c.name}
                 </Link>
                 <p className="mt-0.5 text-[12px] text-ink-500">
-                  {[c.email, c.phone].filter(Boolean).join(" · ") || "No contact details"}
+                  {[c.email, c.phone].filter(Boolean).join(" · ") || t.noContact}
                 </p>
                 <p className={`mt-0.5 text-[11.5px] ${reason.strong ? "text-ink-400" : "text-warning-600"}`}>
                   {reason.text}
@@ -73,7 +72,7 @@ export function DuplicateGuests({
                   type="submit"
                   className="rounded-md border border-surface-border px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
                 >
-                  Merge into {guestName.split(" ")[0]}
+                  {t.merge(guestName.split(" ")[0] ?? guestName)}
                 </button>
               </form>
             </li>
@@ -81,9 +80,7 @@ export function DuplicateGuests({
         })}
       </ul>
       <p className="border-t border-surface-border px-4 py-2.5 text-[11.5px] leading-relaxed text-ink-400">
-        Merging moves the other record&rsquo;s bookings and notes here and fills in any contact detail
-        this profile is missing. Nothing already on this profile is overwritten, and the other record
-        is kept — it stops appearing in lists but its history is not lost.
+        {t.note}
       </p>
     </Card>
   );

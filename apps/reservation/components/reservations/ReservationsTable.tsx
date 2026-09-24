@@ -5,7 +5,12 @@ import Link from "next/link";
 import { ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { ColumnsMenu, useColumnVisibility, type ColumnDef } from "@revio/ui/column-visibility";
 import { StatusPill, type Tone } from "@/components/ui/primitives";
-import { money } from "@/lib/format";
+import { translate, type Locale } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { reservations as reservationsDict } from "@/lib/i18n/reservations";
+import { common } from "@/lib/i18n/common";
+import { moneyIn } from "@/lib/i18n/money";
+import { formatDay } from "@revio/ui/i18n";
 
 export type ResRow = {
   id: string;
@@ -51,10 +56,15 @@ interface ResColumn extends ColumnDef {
   cell: (r: ResRow) => ReactNode;
 }
 
-const COLUMNS: ResColumn[] = [
+function columnsFor(locale: Locale): ResColumn[] {
+  const t = translate(reservationsDict, locale).table.cols;
+  const cm = translate(common, locale);
+  const money = moneyIn(locale);
+  const day = (iso: string) => formatDay(iso, locale, "short");
+  return [
   {
     key: "guest",
-    label: "Guest",
+    label: t.guest,
     // The only column that cannot be hidden: it carries the link out of the row, so a table
     // without it is a list you can read and never open.
     locked: true,
@@ -68,42 +78,43 @@ const COLUMNS: ResColumn[] = [
   },
   {
     key: "stay",
-    label: "Stay",
+    label: t.stay,
     sortKey: (r) => r.checkIn ?? "",
-    cell: (r) => <span className="tnum text-ink-600">{r.checkIn && r.checkOut ? `${r.checkIn} → ${r.checkOut}` : "—"}</span>,
+    cell: (r) => <span className="tnum text-ink-600">{r.checkIn && r.checkOut ? `${day(r.checkIn)} → ${day(r.checkOut)}` : "—"}</span>,
   },
   {
     key: "room",
-    label: "Room",
+    label: t.room,
     sortKey: (r) => `${r.roomTypeName ?? ""}`.toLowerCase() + String(r.quantity).padStart(3, "0"),
     cell: (r) => <span className="text-ink-600">{r.roomTypeName ? `${r.roomTypeName}${r.quantity > 1 ? ` ×${r.quantity}` : ""}` : "—"}</span>,
   },
   {
     key: "source",
-    label: "Source",
+    label: t.source,
     sortKey: (r) => r.source.toLowerCase(),
     cell: (r) => <span className="text-ink-600">{r.source}</span>,
   },
   {
     key: "total",
-    label: "Total",
+    label: t.total,
     align: "right",
     sortKey: (r) => r.totalMinor,
     cell: (r) => <span className="tnum font-semibold text-ink-900">{money(r.totalMinor, r.currency)}</span>,
   },
   {
     key: "status",
-    label: "Status",
+    label: t.status,
     sortKey: (r) => STATUS_RANK[r.status] ?? 99,
-    cell: (r) => <StatusPill tone={STATUS_TONES[r.status] ?? "neutral"}>{r.status.replace("_", " ")}</StatusPill>,
+    cell: (r) => <StatusPill tone={STATUS_TONES[r.status] ?? "neutral"}>{cm.statuses[r.status] ?? r.status.replace("_", " ")}</StatusPill>,
   },
   {
     key: "booked",
-    label: "Booked",
+    label: t.booked,
     sortKey: (r) => r.bookedIso,
-    cell: (r) => <span className="tnum text-ink-500">{r.bookedIso}</span>,
+    cell: (r) => <span className="tnum text-ink-500">{day(r.bookedIso)}</span>,
   },
-];
+  ];
+}
 
 /** Per browser, per table. Named for the screen so the Guests picker never inherits this one. */
 const STORAGE_KEY = "revio.crs.reservations.columns";
@@ -112,6 +123,9 @@ const STORAGE_KEY = "revio.crs.reservations.columns";
  * default chronological order. Single active sort; display-only (never mutates data); respects the
  * server-applied filters (it only reorders the rows it was given). */
 export function ReservationsTable({ rows }: { rows: ResRow[] }) {
+  const locale = useLocale();
+  const COLUMNS = useMemo(() => columnsFor(locale), [locale]);
+  const count = translate(reservationsDict, locale).table.count;
   const [sort, setSort] = useState<Sort>(null);
   const { hidden, visible, toggle, reset } = useColumnVisibility(STORAGE_KEY, COLUMNS);
 
@@ -136,7 +150,7 @@ export function ReservationsTable({ rows }: { rows: ResRow[] }) {
       if (typeof ka === "number" && typeof kb === "number") return (ka - kb) * dir;
       return String(ka).localeCompare(String(kb)) * dir;
     });
-  }, [rows, sort]);
+  }, [rows, sort, COLUMNS]);
 
   const cols = visible as ResColumn[];
 
@@ -144,7 +158,7 @@ export function ReservationsTable({ rows }: { rows: ResRow[] }) {
     <div>
       <div className="flex items-center justify-between gap-2 border-b border-surface-border px-3 py-2">
         <span className="tnum text-[11.5px] text-ink-400">
-          {rows.length} reservation{rows.length === 1 ? "" : "s"}
+          {count(rows.length)}
         </span>
         <ColumnsMenu columns={COLUMNS} hidden={hidden} onToggle={(k) => toggle(k)} onReset={reset} />
       </div>

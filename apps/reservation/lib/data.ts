@@ -13,6 +13,7 @@ import { CAPABILITY_ERROR_CODE, computeWaterfall, expandInventoryPeriods, isAdva
 import { getSession } from "./session";
 import { i18n } from "./i18n/server";
 import { notifications as notificationsDict } from "./i18n/notifications";
+import { reservations as reservationsDict } from "./i18n/reservations";
 
 const DAY = 86_400_000;
 
@@ -952,7 +953,9 @@ export async function stayViolation(
   const property = await getProperty();
   const propertyId = property.id;
   const nights = nightsOf(checkIn, checkOut);
-  if (nights.length === 0) return "Departure must be after arrival.";
+  const { t: tr, day } = await i18n();
+  const v = tr(reservationsDict).violations;
+  if (nights.length === 0) return tr(reservationsDict).errors.departureAfter;
   const start = new Date(`${checkIn}T00:00:00Z`);
   const end = new Date(`${checkOut}T00:00:00Z`);
 
@@ -989,7 +992,7 @@ export async function stayViolation(
       ...(standard?.defStopSell ? { ratePlanDefault: true } : {}),
       ...(defaults?.defStopSell ? { propertyDefault: true } : {}),
     });
-    if (stop.value) return `Closed to sale on ${d} (stop sell — ${stop.source.replace(/_/g, " ")}).`;
+    if (stop.value) return v.stopSell(day(d));
   }
 
   // Closed to arrival — the check-in night only.
@@ -1000,7 +1003,7 @@ export async function stayViolation(
     ...(standard?.defCta ? { ratePlanDefault: true } : {}),
     ...(defaults?.defCta ? { propertyDefault: true } : {}),
   });
-  if (cta.value) return `Arrivals are closed on ${checkIn}.`;
+  if (cta.value) return v.arrivalsClosed(day(checkIn));
 
   // Minimum stay — resolved for the arrival night.
   const minRes = resolveRestriction("min_los", {
@@ -1010,7 +1013,7 @@ export async function stayViolation(
     ...(defaults?.defMinLos != null ? { propertyDefault: defaults.defMinLos } : {}),
   });
   if (minRes.source !== "none" && nights.length < Number(minRes.value)) {
-    return `Minimum stay is ${minRes.value} nights for ${checkIn}.`;
+    return v.minStay(Number(minRes.value), day(checkIn));
   }
 
   // Advance purchase — rolling window against the property's "today".
@@ -1026,7 +1029,7 @@ export async function stayViolation(
   const apMin = apOf("advance_purchase_min", standard?.defAdvancePurchaseMin, defaults?.defAdvancePurchaseMin);
   const apMax = apOf("advance_purchase_max", standard?.defAdvancePurchaseMax, defaults?.defAdvancePurchaseMax);
   if (isAdvancePurchaseClosed(todayIso, checkIn, { min: apMin, max: apMax })) {
-    return `The advance-purchase window for ${checkIn} is closed (book ${apMin != null ? `≥${apMin}` : ""}${apMin != null && apMax != null ? " and " : ""}${apMax != null ? `≤${apMax}` : ""} days ahead).`;
+    return v.advance(day(checkIn), `${apMin != null ? v.atLeast(apMin) : ""}${apMin != null && apMax != null ? v.and : ""}${apMax != null ? v.atMost(apMax) : ""}`);
   }
 
   return null;

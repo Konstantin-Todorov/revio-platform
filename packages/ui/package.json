@@ -50,6 +50,8 @@
     "./support-thread": "./src/support-thread.tsx",
     "./settings-nav": "./src/settings-nav.tsx",
     "./link-tabs": "./src/link-tabs.tsx",
+    "./column-strings": "./src/column-strings.ts",
+    "./stay-range-strings": "./src/stay-range-strings.ts",
     "./usage-beacon": "./src/usage-beacon.tsx",
     "./submit-button": "./src/submit-button.tsx",
     "./trial-banner": "./src/trial-banner.tsx",

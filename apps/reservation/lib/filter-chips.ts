@@ -62,16 +62,28 @@ export function filterChips(
     dateTypeLabels: Record<string, string>;
     /** A lit segment tab already states the date filter — rule 4. */
     segmentActive?: boolean;
+    /** The chips' own words, in the reader's language. English when omitted. */
+    words?: {
+      search: string; status: string; date: string;
+      from: (d: string) => string; until: (d: string) => string;
+      statusValue: (s: string) => string; day: (iso: string) => string;
+    };
   },
 ): FilterChip[] {
   if (opts.segmentActive) return [];
+  const w = opts.words ?? {
+    search: "Search", status: "Status", date: "Date",
+    from: (d: string) => `from ${d}`, until: (d: string) => `until ${d}`,
+    // The database's `no_show` is not a word. Say it the way the pill on the row says it.
+    statusValue: (st: string) => st.replace(/_/g, " "), day: (iso: string) => iso,
+  };
 
   const chips: FilterChip[] = [];
 
   if (params.q) {
     chips.push({
       key: "q",
-      label: "Search",
+      label: w.search,
       value: params.q,
       href: hrefWithout(opts.basePath, params, ["q"]),
     });
@@ -80,21 +92,20 @@ export function filterChips(
   if (params.status) {
     chips.push({
       key: "status",
-      label: "Status",
-      // The database's `no_show` is not a word. Say it the way the pill on the row says it.
-      value: params.status.replace(/_/g, " "),
+      label: w.status,
+      value: w.statusValue(params.status),
       href: hrefWithout(opts.basePath, params, ["status"]),
     });
   }
 
   // Rule 2 + rule 3 — one chip, and only when a range is actually set.
   if (params.from || params.to) {
-    const label = opts.dateTypeLabels[params.dateType ?? ""] ?? opts.dateTypeLabels.check_in ?? "Date";
+    const label = opts.dateTypeLabels[params.dateType ?? ""] ?? opts.dateTypeLabels.check_in ?? w.date;
     const value = params.from && params.to
-      ? `${params.from} → ${params.to}`
+      ? `${w.day(params.from)} → ${w.day(params.to)}`
       : params.from
-        ? `from ${params.from}`
-        : `until ${params.to}`;
+        ? w.from(w.day(params.from))
+        : w.until(w.day(params.to!));
     chips.push({
       key: "date",
       label,

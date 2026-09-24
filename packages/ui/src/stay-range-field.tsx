@@ -2,9 +2,42 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
-import {
-  WEEKDAYS, addDays, fmtDay, fmtDayLong, fmtMonth, monthGrid, nightsBetween, parseISO, todayISO,
-} from "@revio/core";
+import { addDays, monthGrid, nightsBetween, parseISO, todayISO } from "@revio/core";
+import { fill, LOCALE_LABELS, translate, type Locale } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { stayRangeStrings } from "./stay-range-strings";
+
+/**
+ * Dates in the reader's language, built from `formatToParts` and joined by us.
+ *
+ * The server (Node's ICU) and the browser (Chromium's) disagree on the punctuation of the same
+ * format — "Thu, 24 Sept" against "Thu 24 Sept" — and the summary on the button is rendered on
+ * both, so the page failed to hydrate. Taking only the words and placing the spaces ourselves makes
+ * the two identical.
+ */
+function words(locale: Locale, opts: Intl.DateTimeFormatOptions) {
+  const f = new Intl.DateTimeFormat(LOCALE_LABELS[locale].intl, { ...opts, timeZone: "UTC" });
+  return (d: Date) => f.formatToParts(d).filter((p) => p.type !== "literal").map((p) => p.value).join(" ");
+}
+function formatters(locale: Locale) {
+  // Some languages have no abbreviated month name — Bulgarian's "short" month is the number, which
+  // reads as a date in the wrong order ("сб 10 10"). There, the month is written out.
+  const numericShort = /^\d+$/.test(
+    new Intl.DateTimeFormat(LOCALE_LABELS[locale].intl, { month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(2026, 9, 1))),
+  );
+  const day = words(locale, { weekday: "short", day: "numeric", month: numericShort ? "long" : "short" });
+  const long = new Intl.DateTimeFormat(LOCALE_LABELS[locale].intl, { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  const month = words(locale, { month: "long", year: "numeric" });
+  // Monday-first narrow weekday names: 2024-01-01 was a Monday.
+  const narrow = new Intl.DateTimeFormat(LOCALE_LABELS[locale].intl, { weekday: "narrow", timeZone: "UTC" });
+  const weekdays = Array.from({ length: 7 }, (_, i) => narrow.format(new Date(Date.UTC(2024, 0, 1 + i))));
+  return {
+    fmtDay: (iso: string) => day(parseISO(iso)),
+    fmtDayLong: (iso: string) => long.format(parseISO(iso)),
+    fmtMonth: (y: number, m: number) => month(new Date(Date.UTC(y, m, 1))),
+    weekdays,
+  };
+}
 
 /**
  * Arrival → departure, as one two-month calendar — E2 (§3.3).
@@ -57,8 +90,12 @@ export function StayRangeField({
   minISO,
   accentBg = "bg-brand-800",
   accentText = "text-brand-700",
-  label = "Stay dates",
+  label,
 }: StayRangeFieldProps) {
+  const locale = useLocale();
+  const t = translate(stayRangeStrings, locale);
+  const { fmtDay, fmtDayLong, fmtMonth, weekdays: WEEKDAYS } = useMemo(() => formatters(locale), [locale]);
+  const nightsLabel = (n: number) => fill(n === 1 ? t.nightOne : t.nightMany, { n });
   const today = useMemo(todayISO, []);
   const min = minISO ?? today;
 
@@ -113,10 +150,10 @@ export function StayRangeField({
   const nights = from && to ? nightsBetween(from, to) : 0;
   const summary =
     from && to
-      ? `${fmtDay(from)} → ${fmtDay(to)} · ${nights} night${nights === 1 ? "" : "s"}`
+      ? `${fmtDay(from)} → ${fmtDay(to)} · ${nightsLabel(nights)}`
       : from
-        ? `${fmtDay(from)} → choose a departure`
-        : "Choose your dates";
+        ? `${fmtDay(from)} → ${t.chooseDeparture}`
+        : t.chooseDates;
 
   const months = [cursor, nextMonth(cursor)];
   const maxISO = addDays(today, MAX_MONTHS_AHEAD * 31);
@@ -127,7 +164,7 @@ export function StayRangeField({
       <input type="hidden" name={toName} value={to ?? ""} />
 
       <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-        {label}
+        {label ?? t.label}
       </label>
       <button
         type="button"
@@ -143,7 +180,7 @@ export function StayRangeField({
       {open && (
         <div
           role="dialog"
-          aria-label="Choose arrival and departure"
+          aria-label={t.dialog}
           className="absolute left-0 top-full z-30 mt-1.5 w-[19rem] rounded-xl border border-surface-border bg-white p-3 shadow-lg sm:w-[35rem]"
         >
           <div className="mb-2 flex items-center justify-between">
@@ -203,7 +240,7 @@ export function StayRangeField({
 
           <div className="mt-2.5 flex items-center justify-between border-t border-surface-border pt-2.5">
             <span className={`text-[12px] font-semibold ${accentText}`}>
-              {from && to ? `${nights} night${nights === 1 ? "" : "s"}` : "Click arrival, then departure"}
+              {from && to ? nightsLabel(nights) : t.clickArrival}
             </span>
             <div className="flex gap-2">
               <button
@@ -214,14 +251,14 @@ export function StayRangeField({
                 }}
                 className="rounded-md px-2.5 py-1 text-[12px] font-semibold text-ink-500 hover:bg-surface-muted"
               >
-                Clear
+                {t.clear}
               </button>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 className={`rounded-md ${accentBg} px-3 py-1 text-[12px] font-semibold text-white hover:opacity-90`}
               >
-                Done
+                {t.done}
               </button>
             </div>
           </div>
@@ -238,7 +275,7 @@ function NavButton({ dir, onClick, disabled }: { dir: "prev" | "next"; onClick: 
       type="button"
       onClick={onClick}
       disabled={disabled}
-      aria-label={dir === "prev" ? "Previous month" : "Next month"}
+      aria-label={translate(stayRangeStrings, useLocale())[dir === "prev" ? "prev" : "next"]}
       className="rounded p-1 text-ink-500 transition-colors hover:bg-surface-muted disabled:opacity-30"
     >
       <Icon className="h-4 w-4" />

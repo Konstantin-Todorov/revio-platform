@@ -15,6 +15,16 @@ import { earliestSelectable, hasChanges, pastRangeRefusal, planMerge, planGuestE
 import { withTenantTransaction } from "@revio/db";
 import { flashError } from "@revio/ui/flash";
 import { emailGuestAbout, flashMailOutcome } from "./guest-mail";
+import { i18n } from "./i18n/server";
+import { reservations as reservationsDict } from "./i18n/reservations";
+
+/** An action's refusal, in the reader's language. */
+async function say() {
+  return (await i18n()).t(reservationsDict).errors;
+}
+async function sayDay(iso: string) {
+  return (await i18n()).day(iso);
+}
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -64,7 +74,7 @@ export async function placeHold(fd: FormData): Promise<void> {
   const back = `/reservations/new?from=${checkIn}&to=${checkOut}&guests=${guests}&qty=${quantity}${sourceId ? `&src=${sourceId}` : ""}`;
 
   if (!roomTypeId || !DATE_RE.test(checkIn) || !DATE_RE.test(checkOut) || checkOut <= checkIn) {
-    redirect(`${back}&error=${encodeURIComponent("Pick valid arrival and departure dates.")}`);
+    redirect(`${back}&error=${encodeURIComponent((await say()).pickDates)}`);
   }
 
   const roomType = await prisma.roomType.findFirst({ where: { id: roomTypeId, propertyId: property.id } });
@@ -73,7 +83,7 @@ export async function placeHold(fd: FormData): Promise<void> {
   const nights = await remainingByNight(roomTypeId, checkIn, checkOut);
   const short = nights.filter((n) => n.remaining < quantity);
   if (short.length > 0) {
-    redirect(`${back}&error=${encodeURIComponent(`${roomType!.name} has no availability on ${short[0]!.date} — pick an alternative.`)}`);
+    redirect(`${back}&error=${encodeURIComponent((await say()).noAvailability(roomType!.name, await sayDay(short[0]!.date)))}`);
   }
 
   // Restriction gate (4-level resolution, booking-source-scoped) — a stay that violates a sales
@@ -81,7 +91,7 @@ export async function placeHold(fd: FormData): Promise<void> {
   const source = sourceId ? await prisma.bookingSource.findFirst({ where: { id: sourceId, propertyId: property.id } }) : null;
   const violation = await stayViolation(roomTypeId, checkIn, checkOut, source?.category);
   if (violation) {
-    redirect(`${back}&error=${encodeURIComponent(`${roomType!.name}: ${violation}`)}`);
+    redirect(`${back}&error=${encodeURIComponent((await say()).restricted(roomType!.name, violation))}`);
   }
 
   const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } });
@@ -113,15 +123,13 @@ export async function placeHold(fd: FormData): Promise<void> {
   });
   if (!claim.ok) {
     redirect(
-      `${back}&error=${encodeURIComponent(
-        `${roomType!.name} was taken while you were choosing — search again to see what is left.`,
-      )}`,
+      `${back}&error=${encodeURIComponent((await say()).taken(roomType!.name))}`,
     );
   }
   // `redirect()` throws, so anything past the guard above has a won claim — but TypeScript only
   // knows that if the guard narrows, and a bare `claim.holdId` here would be a compile error the day
   // someone changes `redirect` to a return. The explicit check keeps the invariant readable.
-  if (!claim.ok) return flashError("Those dates just sold out — there is no longer a room free for the whole stay.");
+  if (!claim.ok) return flashError((await say()).soldOut);
   const holdId = claim.holdId;
 
   await logAudit(property.id, property.tenantId, {
@@ -162,7 +170,7 @@ export async function confirmReservation(fd: FormData): Promise<void> {
     include: { roomType: true },
   });
   if (!hold) {
-    redirect(`/reservations/new?error=${encodeURIComponent("This hold has expired — availability was re-opened. Please search again.")}`);
+    redirect(`/reservations/new?error=${encodeURIComponent((await say()).holdExpired)}`);
   }
 
   const firstName = str(fd, "firstName");
@@ -180,17 +188,17 @@ export async function confirmReservation(fd: FormData): Promise<void> {
    */
   const priceRaw = str(fd, "price");
   if (priceRaw !== "" && !Number.isFinite(Number(priceRaw))) {
-    redirect(`/reservations/new?hold=${holdId}&error=${encodeURIComponent("That price isn’t a number we can read. Enter an amount like 129.50.")}`);
+    redirect(`/reservations/new?hold=${holdId}&error=${encodeURIComponent((await say()).priceUnreadable)}`);
   }
   const priceMinor = money(fd, "price", 0);
   const guestsCount = Math.max(1, int(fd, "guests", 1));
   if (!firstName || !lastName || !ratePlanId) {
-    redirect(`/reservations/new?hold=${holdId}&guests=${guestsCount}&error=${encodeURIComponent("Guest name and rate plan are required.")}`);
+    redirect(`/reservations/new?hold=${holdId}&guests=${guestsCount}&error=${encodeURIComponent((await say()).nameAndPlan)}`);
   }
 
   const ratePlan = await prisma.ratePlan.findFirst({ where: { id: ratePlanId, propertyId: property.id } });
   const source = bookingSourceId ? await prisma.bookingSource.findFirst({ where: { id: bookingSourceId, propertyId: property.id } }) : null;
-  if (!ratePlan) redirect(`/reservations/new?hold=${holdId}&error=${encodeURIComponent("Pick a rate plan.")}`);
+  if (!ratePlan) redirect(`/reservations/new?hold=${holdId}&error=${encodeURIComponent((await say()).pickPlan)}`);
 
   let converted: { reservationId: string; guestName: string };
   try {
@@ -213,7 +221,7 @@ export async function confirmReservation(fd: FormData): Promise<void> {
     // Lost the race for this hold: somebody else's confirm won and ours was rolled back whole.
     // Said in words, because the screen they came from still shows the hold as available.
     if (err instanceof HoldAlreadyTaken) {
-      redirect(`/reservations/new?error=${encodeURIComponent("Somebody else confirmed this hold a moment ago, so it is already a reservation. Search again to book another room.")}`);
+      redirect(`/reservations/new?error=${encodeURIComponent((await say()).alreadyConfirmed)}`);
     }
     throw err;
   }
@@ -233,7 +241,7 @@ export async function confirmReservation(fd: FormData): Promise<void> {
   // "Email the guest a confirmation" — ticked by default on the form; a phone booking sometimes
   // should not be mailed, so it is a choice rather than a rule.
   await flashMailOutcome(
-    "Reservation confirmed.",
+    "confirmed",
     fd.get("emailGuest") != null ? await emailGuestAbout(reservation.id, "booking_confirmation") : null,
   );
   redirect(`/reservations/${reservation.id}`);
@@ -264,11 +272,11 @@ export async function modifyReservation(fd: FormData): Promise<void> {
   // Same NaN class as `confirmHold` above. Empty keeps the reservation's current total.
   const priceRaw = str(fd, "price");
   if (priceRaw !== "" && !Number.isFinite(Number(priceRaw))) {
-    redirect(`/reservations/${id}?error=${encodeURIComponent("That price isn’t a number we can read. Enter an amount like 129.50.")}`);
+    redirect(`/reservations/${id}?error=${encodeURIComponent((await say()).priceUnreadable)}`);
   }
   const priceMinor = money(fd, "price", reservation!.totalMinor);
   if (checkOut <= checkIn) {
-    redirect(`/reservations/${id}?error=${encodeURIComponent("Departure must be after arrival.")}`);
+    redirect(`/reservations/${id}?error=${encodeURIComponent((await say()).departureAfter)}`);
   }
 
   /*
@@ -284,9 +292,14 @@ export async function modifyReservation(fd: FormData): Promise<void> {
     todayInTimeZone(property.timezone),
     line!.checkIn.toISOString().slice(0, 10),
   );
-  const stayRefusal = pastRangeRefusal({
-    from: checkIn, to: checkOut, earliest: stayFloor, fromLabel: "Arrival", toLabel: "Departure",
-  });
+  // Core decides WHETHER the range is refused; the words are the reader's.
+  const stayRefusal = pastRangeRefusal({ from: checkIn, to: checkOut, earliest: stayFloor })
+    ? await (async () => {
+        const [e, d] = [(await say()), (await i18n()).t(reservationsDict).detail];
+        const past = checkIn < stayFloor ? { label: d.arrival, iso: checkIn } : { label: d.departure, iso: checkOut };
+        return e.past(past.label, await sayDay(past.iso), await sayDay(stayFloor));
+      })()
+    : null;
   if (stayRefusal) {
     redirect(`/reservations/${id}?error=${encodeURIComponent(stayRefusal)}`);
   }
@@ -298,7 +311,7 @@ export async function modifyReservation(fd: FormData): Promise<void> {
   const nights = await remainingByNight(roomTypeId, checkIn, checkOut, { reservationId: id });
   const short = nights.filter((n) => n.remaining < quantity);
   if (short.length > 0) {
-    redirect(`/reservations/${id}?error=${encodeURIComponent(`No availability for the new stay on ${short[0]!.date} — the reservation was NOT changed.`)}`);
+    redirect(`/reservations/${id}?error=${encodeURIComponent((await say()).noAvailabilityModify(await sayDay(short[0]!.date)))}`);
   }
 
   // Sequential, not $transaction — the RLS proxy forwards model ops only (each already runs in its
@@ -330,7 +343,7 @@ export async function modifyReservation(fd: FormData): Promise<void> {
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
   await flashMailOutcome(
-    "Reservation changed.",
+    "modified",
     fd.get("emailGuest") != null ? await emailGuestAbout(id, "booking_modified") : null,
   );
   redirect(`/reservations/${id}`);
@@ -360,9 +373,7 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   // and the room is released and marked for cleaning. That path already exists and does all of it.
   if (await isStayInHouse(prisma, id)) {
     redirect(
-      `/reservations/${id}?error=${encodeURIComponent(
-        "This guest has already checked in. Check them out in RevioPMS to end the stay — cancelling would put an occupied room back on sale.",
-      )}`,
+      `/reservations/${id}?error=${encodeURIComponent((await say()).inHouseCancel)}`,
     );
   }
 
@@ -401,7 +412,7 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
   await flashMailOutcome(
-    "Reservation cancelled.",
+    "cancelled",
     fd.get("emailGuest") != null ? await emailGuestAbout(id, "booking_cancelled") : null,
   );
   redirect(`/reservations/${id}`);
@@ -422,13 +433,13 @@ export async function markNoShow(fd: FormData): Promise<void> {
 
   const todayIso = todayInTz(property.timezone);
   if (line!.checkIn.toISOString().slice(0, 10) >= todayIso) {
-    redirect(`/reservations/${id}?error=${encodeURIComponent("No-show can only be set after the check-in date has passed.")}`);
+    redirect(`/reservations/${id}?error=${encodeURIComponent((await say()).noShowTooEarly)}`);
   }
 
   // A guest who checked in is not a no-show — the same guard cancel has, for the same reason: the
   // room would go back on sale with somebody in it.
   if (await isStayInHouse(prisma, id)) {
-    redirect(`/reservations/${id}?error=${encodeURIComponent("This guest has already checked in, so they are not a no-show. End the stay with a check-out in RevioPMS.")}`);
+    redirect(`/reservations/${id}?error=${encodeURIComponent((await say()).noShowCheckedIn)}`);
   }
   await prisma.reservation.update({ where: { id }, data: { status: "no_show" } });
   // The room auto-assign held for them, and the nights they will not use: both go back, and every
