@@ -11,6 +11,8 @@ import { getSession } from "./session";
 import { str } from "./mutation-helpers";
 import { PMS_ROLES, MANAGER_ROLES, type PmsRole } from "./roles";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { users as usersDict } from "./i18n/users";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -23,14 +25,15 @@ async function requireManager() {
 
 export async function inviteStaff(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
   const s = await requireManager();
-  if (!s) return { ok: false, error: "Only an Owner, Admin or Manager can manage staff." };
+  const say = (await i18n()).t(usersDict).actions;
+  if (!s) return { ok: false, error: say.notManager };
 
   const name = str(fd, "name");
   const email = str(fd, "email").toLowerCase();
   const role = str(fd, "role");
-  if (!name || !email) return { ok: false, error: "Name and email are required." };
-  if (!PMS_ROLES.includes(role as PmsRole)) return { ok: false, error: "Pick a valid role." };
-  if (await prisma.user.findUnique({ where: { email } })) return { ok: false, error: "A person with that email already exists on the platform." };
+  if (!name || !email) return { ok: false, error: say.nameEmail };
+  if (!PMS_ROLES.includes(role as PmsRole)) return { ok: false, error: say.validRole };
+  if (await prisma.user.findUnique({ where: { email } })) return { ok: false, error: say.exists };
 
   // No password. The account is unusable until the invitee sets one from the emailed link.
   const user = await prisma.user.create({ data: { tenantId: s.tenantId, name, email, role, active: true } });
@@ -44,7 +47,7 @@ export async function setStaffRole(fd: FormData): Promise<void> {
   if (!s) return;
   const id = str(fd, "id");
   const role = str(fd, "role");
-  if (!PMS_ROLES.includes(role as PmsRole)) return flashError("That isn’t a role this property has. Reload the page and try again.");
+  if (!PMS_ROLES.includes(role as PmsRole)) return flashError((await i18n()).t(usersDict).actions.notARole);
   const u = await prisma.user.findUnique({ where: { id } });
   if (!u || u.tenantId !== s.tenantId) return;
   // Never demote the last remaining owner.

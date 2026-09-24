@@ -137,12 +137,12 @@ function dayKey(d: Date): string {
 }
 
 /** `7h 20m`. Null (an open shift) is never rendered as a duration. */
-export function formatMinutes(minutes: number | null): string {
+export function formatMinutes(minutes: number | null, units: { h: string; m: string } = { h: "h", m: "m" }): string {
   if (minutes === null) return "—";
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  if (h === 0) return `${m}m`;
-  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  if (h === 0) return `${m}${units.m}`;
+  return m === 0 ? `${h}${units.h}` : `${h}${units.h} ${m}${units.m}`;
 }
 
 export interface ShiftTotals {

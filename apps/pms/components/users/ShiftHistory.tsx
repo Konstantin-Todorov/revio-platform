@@ -1,7 +1,7 @@
 import { AlertTriangle, CalendarRange } from "lucide-react";
 import { Card, CardHeader } from "@/components/ui/primitives";
-import { ROLE_LABEL } from "@/lib/roles";
 import { formatMinutes, shiftTotals, SUSPECT_HOURS, type PersonShifts } from "@/lib/shifts";
+import type { UsersStrings } from "@/lib/i18n/users";
 
 /**
  * Who worked, when — the other half of "Working today".
@@ -17,25 +17,28 @@ import { formatMinutes, shiftTotals, SUSPECT_HOURS, type PersonShifts } from "@/
  *    there are no ranks, no targets and no comparison between people — the schema note about EU
  *    worker monitoring was written when this data was designed and it still applies to the screen.
  */
-export function ShiftHistory({ people, fromIso, toIso }: { people: PersonShifts[]; fromIso: string; toIso: string }) {
+export function ShiftHistory({ people, fromIso, toIso, t, roles }: {
+  people: PersonShifts[]; fromIso: string; toIso: string; t: UsersStrings["shifts"]; roles: Record<string, string>;
+}) {
   const totals = shiftTotals(people);
+  const units = { h: t.h, m: t.m };
 
   return (
     <Card className="mb-4">
       <CardHeader
-        title="Shift record"
-        subtitle={`${fromIso} → ${toIso} · who worked and for how long`}
+        title={t.title}
+        subtitle={t.subtitle(fromIso, toIso)}
         action={
           <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-400">
             <CalendarRange className="h-3.5 w-3.5" />
-            {formatMinutes(totals.closedMinutes)} across {totals.people} {totals.people === 1 ? "person" : "people"}
+            {t.total(formatMinutes(totals.closedMinutes, units), totals.people)}
           </span>
         }
       />
 
       {people.length === 0 ? (
         <p className="px-4 py-4 text-[12.5px] text-ink-400">
-          No shifts recorded in this period. Staff clock in from their own view (Housekeeping / Maintenance).
+          {t.none}
         </p>
       ) : (
         <>
@@ -43,9 +46,7 @@ export function ShiftHistory({ people, fromIso, toIso }: { people: PersonShifts[
             <p className="mx-4 mt-1 flex items-start gap-2 rounded-md bg-warning-50 px-3 py-2 text-[12px] text-warning-700">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
-                {totals.suspectCount} shift{totals.suspectCount === 1 ? " has" : "s have"} been open for more than{" "}
-                {SUSPECT_HOURS} hours — almost certainly a missed clock-out. They are excluded from the totals rather
-                than guessed at.
+                {t.suspect(totals.suspectCount, SUSPECT_HOURS)}
               </span>
             </p>
           )}
@@ -54,11 +55,11 @@ export function ShiftHistory({ people, fromIso, toIso }: { people: PersonShifts[
             <table className="w-full text-[12.5px]">
               <thead>
                 <tr className="border-b border-surface-border text-left text-[11px] font-bold uppercase tracking-wide text-ink-500">
-                  <th className="pb-2 pr-3 font-bold">Staff member</th>
-                  <th className="pb-2 pr-3 font-bold">Worked as</th>
-                  <th className="pb-2 pr-3 text-right font-bold">Days</th>
-                  <th className="pb-2 pr-3 text-right font-bold">Shifts</th>
-                  <th className="pb-2 text-right font-bold">Hours</th>
+                  <th className="pb-2 pr-3 font-bold">{t.cols.member}</th>
+                  <th className="pb-2 pr-3 font-bold">{t.cols.workedAs}</th>
+                  <th className="pb-2 pr-3 text-right font-bold">{t.cols.days}</th>
+                  <th className="pb-2 pr-3 text-right font-bold">{t.cols.shifts}</th>
+                  <th className="pb-2 text-right font-bold">{t.cols.hours}</th>
                 </tr>
               </thead>
               <tbody>
@@ -66,19 +67,19 @@ export function ShiftHistory({ people, fromIso, toIso }: { people: PersonShifts[
                   <tr key={p.userId} className="border-b border-surface-border/60 align-top last:border-0">
                     <td className="py-2.5 pr-3 font-semibold text-ink-900">{p.userName}</td>
                     <td className="py-2.5 pr-3 text-ink-600">
-                      {p.roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ")}
+                      {p.roles.map((r) => roles[r] ?? r).join(" · ")}
                     </td>
                     <td className="tnum py-2.5 pr-3 text-right text-ink-700">{p.days}</td>
                     <td className="tnum py-2.5 pr-3 text-right text-ink-700">
                       {p.sessions.length}
                       {p.openCount > 0 && (
                         <span className="ml-1 text-[11px] font-semibold text-warning-600">
-                          ({p.openCount} open)
+                          {t.open(p.openCount)}
                         </span>
                       )}
                     </td>
                     <td className="tnum py-2.5 text-right font-semibold text-ink-900">
-                      {formatMinutes(p.closedMinutes)}
+                      {formatMinutes(p.closedMinutes, units)}
                     </td>
                   </tr>
                 ))}
@@ -89,7 +90,7 @@ export function ShiftHistory({ people, fromIso, toIso }: { people: PersonShifts[
           {/* Said on the screen, not only in the schema. A table of hours worked is exactly the thing
               that gets forwarded to an accountant, and it is not built to carry that. */}
           <p className="border-t border-surface-border px-4 py-2.5 text-[11.5px] text-ink-400">
-            An operational record of clock-ins, not a payroll or attendance system. Totals count closed shifts only.
+            {t.note}
           </p>
         </>
       )}
