@@ -5,7 +5,12 @@ with the RevioCRS translation). Built as written, with three details decided whi
 addresses (`/rooms-rates`, `/rates`, `/setup`) redirect in `next.config.mjs` rather than in a page (a
 page redirect runs after the layout has started streaming and threw a React hook error); "Add" asks
 only the basics and then opens the new room's or plan's page; the plan form posts no `priceLogic`, so
-saving a plan's name or defaults never touches where its price comes from. RevioCRS only for now; RevioLink's Rooms &
+saving a plan's name or defaults never touches where its price comes from.
+**Revised the same day after the founder looked at it:** a room type's page and a plan's page are
+TABS (Basics · What a guest reads · Photos · Rate plans; Plan & defaults · Price · Rooms it sells),
+each a card whose save is its last line — the stacked page had a save bar in the middle with more
+page after it. `saveRoomType` takes a `section` so one tab never writes the other's fields. Photos:
+the cover is said in words, marked, and settable in one click; dragging follows the pointer. RevioCRS only for now; RevioLink's Rooms &
 Rates stays as it is until the grouping review (`docs/UI-GROUPING-AUDIT.md`) reaches it.
 
 ## The problem, in the founder's words

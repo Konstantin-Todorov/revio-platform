@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { GripVertical } from "lucide-react";
+
+type Rect = { left: number; top: number; right: number; bottom: number };
 
 /**
  * A list you reorder by dragging — the one way to change an order anywhere in the platform.
@@ -12,10 +14,15 @@ import { GripVertical } from "lucide-react";
  *
  * - **Pointer events, not the HTML5 drag API**, because the HTML5 API does nothing on a touchscreen
  *   and a housekeeper's supervisor reorders floors on a phone.
- * - **The row moves as you drag**, so where it will land is visible before you let go (rule 2 of
- *   `docs/UI-STANDARD.md`: say it before it is read).
- * - **The handle is a real button.** Focus it and press ↑/↓ to move the row a place — the list is
- *   reorderable without a mouse, which the old arrow buttons were and this must stay.
+ * - **The row you hold stays under your finger** and the others glide out of its way, so where it
+ *   will land is visible before you let go (rule 2 of `docs/UI-STANDARD.md`: say it before it is
+ *   read). The first version snapped the held row from slot to slot and felt like it was jumping —
+ *   the founder's "не работи окей и смуут" (2026-09-25).
+ * - **Slots, not rows, decide where it lands.** The places are measured once when the drag starts,
+ *   and the pointer is matched against those; matching against rows that are themselves moving made
+ *   the order flicker back and forth at a boundary.
+ * - **The handle is a real button.** Focus it and press ↑/↓ (and ←/→ in a grid) to move the row a
+ *   place — reorderable without a mouse, which the old arrow buttons were and this must stay.
  * - **One save per drag**, with the whole new order, when the pointer is released.
  */
 export function SortableList<T extends { id: string }>({
@@ -24,6 +31,7 @@ export function SortableList<T extends { id: string }>({
   onReorder,
   handleLabel,
   className = "",
+  itemClassName,
   layout = "list",
 }: {
   items: T[];
@@ -34,9 +42,11 @@ export function SortableList<T extends { id: string }>({
   /** "Drag to reorder {name}" — filled per row by the caller's `render` label. */
   handleLabel: (item: T) => string;
   className?: string;
+  /** Classes for the slot at `index` — a gallery makes its first slot (the cover) larger. */
+  itemClassName?: (index: number) => string;
   /**
-   * `grid` for tiles that wrap — a photo gallery. The drop position is then read in reading order
-   * (row, then side of the tile), and ←/→ move a tile as well as ↑/↓.
+   * `grid` for tiles that wrap — a photo gallery. The slot under the pointer is found in both
+   * directions, and ←/→ move a tile as well as ↑/↓.
    */
   layout?: "list" | "grid";
 }) {
@@ -49,6 +59,10 @@ export function SortableList<T extends { id: string }>({
   const current = useRef(order);
   current.current = order;
 
+  const drag = useRef<{ id: string; grabX: number; grabY: number; x: number; y: number; slots: Rect[] } | null>(null);
+  /** Where every row was ON SCREEN just before the order changed — the "first" of FLIP. */
+  const before = useRef<Map<string, DOMRect> | null>(null);
+
   // A server refresh brings a new list; take it unless a drag is in progress.
   const key = items.map((i) => i.id).join("|");
   useEffect(() => {
@@ -58,40 +72,117 @@ export function SortableList<T extends { id: string }>({
 
   const byId = new Map(items.map((i) => [i.id, i]));
 
-  function moveTo(id: string, clientX: number, clientY: number) {
-    setOrder((now) => {
-      const others = now.filter((x) => x !== id);
-      let index = others.length;
-      for (let i = 0; i < others.length; i++) {
-        const el = rows.current.get(others[i]!);
-        if (!el) continue;
-        const box = el.getBoundingClientRect();
-        const before = layout === "grid"
-          ? clientY < box.top || (clientY <= box.bottom && clientX < box.left + box.width / 2)
-          : clientY < box.top + box.height / 2;
-        if (before) { index = i; break; }
-      }
-      const next = [...others.slice(0, index), id, ...others.slice(index)];
-      return next.join("|") === now.join("|") ? now : next;
-    });
+  /** Keep the held row under the pointer, wherever its slot now is. */
+  function followPointer() {
+    const d = drag.current;
+    const el = d && rows.current.get(d.id);
+    if (!d || !el) return;
+    el.style.transition = "none";
+    el.style.transform = "";
+    const r = el.getBoundingClientRect();
+    el.style.transform = `translate(${d.x - d.grabX - r.left}px, ${d.y - d.grabY - r.top}px) scale(1.02)`;
   }
 
-  function commit(next: string[]) {
-    if (next.join("|") !== start.current.join("|")) void onReorder(next);
+  /** Slide every other row from where it was to where it now is. */
+  useLayoutEffect(() => {
+    const first = before.current;
+    before.current = null;
+    if (first) {
+      for (const [id, el] of rows.current) {
+        if (id === drag.current?.id) continue;
+        const was = first.get(id);
+        if (!was) continue;
+        el.style.transition = "none";
+        el.style.transform = "";
+        const now = el.getBoundingClientRect();
+        const dx = was.left - now.left;
+        const dy = was.top - now.top;
+        if (dx === 0 && dy === 0) continue;
+        el.style.transform = `translate(${dx}px, ${dy}px)`;
+        void el.offsetWidth; // commit the inverted position before animating out of it
+        el.style.transition = "transform 180ms cubic-bezier(0.2, 0, 0, 1)";
+        el.style.transform = "";
+      }
+    }
+    followPointer();
+  }, [order]);
+
+  function snapshot() {
+    const m = new Map<string, DOMRect>();
+    for (const [id, el] of rows.current) m.set(id, el.getBoundingClientRect());
+    before.current = m;
+  }
+
+  function slotAt(px: number, py: number, slots: Rect[]): number | null {
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i]!;
+      const inY = py >= s.top && py <= s.bottom;
+      const inX = layout === "list" || (px >= s.left && px <= s.right);
+      if (inX && inY) return i;
+    }
+    // Above the first slot or below the last: the ends of the list.
+    if (slots.length > 0 && py < slots[0]!.top) return 0;
+    if (slots.length > 0 && py > Math.max(...slots.map((s) => s.bottom))) return slots.length - 1;
+    return null;
   }
 
   function onPointerDown(id: string, e: React.PointerEvent<HTMLButtonElement>) {
     if (e.button !== 0) return;
+    const el = rows.current.get(id);
+    if (!el) return;
     e.preventDefault();
+    const box = el.getBoundingClientRect();
+    const sx = window.scrollX;
+    const sy = window.scrollY;
+    // Slots in PAGE coordinates, so a wheel scroll mid-drag does not shift where things land.
+    const slots = order.map((oid) => {
+      const r = rows.current.get(oid)!.getBoundingClientRect();
+      return { left: r.left + sx, top: r.top + sy, right: r.right + sx, bottom: r.bottom + sy };
+    });
+    drag.current = { id, grabX: e.clientX - box.left, grabY: e.clientY - box.top, x: e.clientX, y: e.clientY, slots };
     start.current = order;
     setDragging(id);
-    const move = (ev: PointerEvent) => moveTo(id, ev.clientX, ev.clientY);
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+
+    const move = (ev: PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      d.x = ev.clientX;
+      d.y = ev.clientY;
+      // Near the edge of the screen, scroll — a long floor list on a phone does not fit.
+      if (ev.clientY < 60) window.scrollBy(0, -12);
+      else if (ev.clientY > window.innerHeight - 60) window.scrollBy(0, 12);
+      const to = slotAt(ev.clientX + window.scrollX, ev.clientY + window.scrollY, d.slots);
+      const now = current.current;
+      const from = now.indexOf(d.id);
+      if (to !== null && to !== from) {
+        const next = now.filter((x) => x !== d.id);
+        next.splice(to, 0, d.id);
+        snapshot();
+        setOrder(next);
+      } else {
+        followPointer();
+      }
+    };
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+      const held = rows.current.get(id);
+      drag.current = null;
+      if (held) {
+        // Settle into its slot rather than teleporting there.
+        held.style.transition = "transform 180ms cubic-bezier(0.2, 0, 0, 1)";
+        held.style.transform = "";
+      }
       setDragging(null);
-      commit(current.current);
+      const next = current.current;
+      if (next.join("|") !== start.current.join("|")) void onReorder(next);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -108,9 +199,9 @@ export function SortableList<T extends { id: string }>({
     if (j < 0 || j >= order.length) return;
     const next = [...order];
     [next[i], next[j]] = [next[j]!, next[i]!];
-    start.current = order;
+    snapshot();
     setOrder(next);
-    commit(next);
+    void onReorder(next);
     // Keep focus on the handle that moved, so a second press keeps moving the same row.
     requestAnimationFrame(() => rows.current.get(id)?.querySelector<HTMLButtonElement>("[data-sort-handle]")?.focus());
   }
@@ -128,7 +219,7 @@ export function SortableList<T extends { id: string }>({
             title={handleLabel(item)}
             onPointerDown={(e) => onPointerDown(id, e)}
             onKeyDown={(e) => onKey(id, e)}
-            className="flex h-8 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-ink-300 transition-colors hover:bg-surface-muted hover:text-ink-600 focus-visible:text-ink-700 active:cursor-grabbing"
+            className="flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-700 focus-visible:text-ink-700 active:cursor-grabbing"
           >
             <GripVertical className="h-4 w-4" />
           </button>
@@ -137,7 +228,7 @@ export function SortableList<T extends { id: string }>({
           <li
             key={id}
             ref={(el) => { if (el) rows.current.set(id, el); else rows.current.delete(id); }}
-            className={`transition-shadow ${dragging === id ? "relative z-10 bg-white shadow-pop ring-1 ring-brand-600/30" : ""}`}
+            className={`${itemClassName?.(index) ?? ""} ${dragging === id ? "relative z-20 rounded-lg bg-white shadow-pop ring-1 ring-brand-600/30" : "relative"}`}
           >
             {render(item, handle, index)}
           </li>

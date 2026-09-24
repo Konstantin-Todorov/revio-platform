@@ -788,8 +788,17 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   const name = str(fd, "name");
   const code = str(fd, "code").toUpperCase();
   const rowId = str(fd, "id");
-  if (!name) return { ok: false, error: "Name is required." };
-  if (!code) return { ok: false, error: "Code is required." };
+  /*
+   * A room type's page has a tab for the basics and a tab for what a guest reads, each with its own
+   * form. `section` says which half the form carries, and only that half is written — otherwise
+   * saving one tab would post blanks for the other and wipe its description or its physical count.
+   * No section (the "Add" dialog) writes everything.
+   */
+  const section = rowId ? str(fd, "section") : "";
+  const withBasics = section !== "content";
+  const withContent = section !== "basics";
+  if (withBasics && !name) return { ok: false, error: "Name is required." };
+  if (withBasics && !code) return { ok: false, error: "Code is required." };
 
   const totalRooms = Math.max(0, int(fd, "totalRooms"));
   const maxGuests = Math.max(1, int(fd, "maxGuests", 1));
@@ -820,23 +829,28 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
     .filter((v): v is string => typeof v === "string")
     .filter((k) => k in ROOM_AMENITY_BY_KEY);
 
-  const clash = await prisma.roomType.findFirst({
-    where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) },
-  });
-  if (clash) return { ok: false, error: `Code "${code}" is already used by another room type.` };
+  if (withBasics) {
+    const clash = await prisma.roomType.findFirst({
+      where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) },
+    });
+    if (clash) return { ok: false, error: `Code "${code}" is already used by another room type.` };
+  }
 
   if (rowId) {
     const before = await prisma.roomType.findUnique({ where: { id: rowId } });
     if (!before || before.propertyId !== propertyId) return { ok: false, error: "Room type not found." };
     await prisma.roomType.update({
       where: { id: rowId },
-      data: { name, code, unitKind, totalRooms, maxGuests, defaultOccupancy, description, active, sizeSqm, bedSetup, amenities },
+      data: {
+        ...(withBasics ? { name, code, unitKind, totalRooms, maxGuests, defaultOccupancy, active } : {}),
+        ...(withContent ? { description, sizeSqm, bedSetup, amenities } : {}),
+      },
     });
-    await logAudit(propertyId, tenantId, {
-      entity: `Room Type · ${name}`, field: "edit",
-      oldValue: `${before.name} (${before.totalRooms})`, newValue: `${name} (${totalRooms})`,
-    });
-    await recordPush(propertyId, tenantId, `Room type "${name}" updated`);
+    const label = withBasics ? name : before.name;
+    await logAudit(propertyId, tenantId, withBasics
+      ? { entity: `Room Type · ${label}`, field: "edit", oldValue: `${before.name} (${before.totalRooms})`, newValue: `${name} (${totalRooms})` }
+      : { entity: `Room Type · ${label}`, field: "guest content", newValue: "description, size, beds, amenities" });
+    await recordPush(propertyId, tenantId, `Room type "${label}" updated`);
   } else {
     const count = await prisma.roomType.count({ where: { propertyId } });
     const created = await prisma.roomType.create({

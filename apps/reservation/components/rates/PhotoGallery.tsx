@@ -50,6 +50,15 @@ export function PhotoGallery({
   return (
     <div className="space-y-3">
       {photos.length > 0 && (
+        <p className="flex items-start gap-1.5 text-[12.5px] text-ink-600">
+          <Star className="mt-0.5 h-3.5 w-3.5 shrink-0 fill-brand-700 text-brand-700" />
+          <span>
+            <span className="font-semibold text-ink-900">The first photo is the cover</span> — the one guests see first, on the room&rsquo;s card.
+            Drag a photo by its <span className="whitespace-nowrap">⠿ handle</span> to change the order, or press <span className="font-semibold">Make cover</span>.
+          </span>
+        </p>
+      )}
+      {photos.length > 0 && (
         <SortableList
           items={photos}
           layout="grid"
@@ -57,7 +66,7 @@ export function PhotoGallery({
           handleLabel={(p) => `Drag to reorder ${p.alt || "this photo"}`}
           onReorder={reorder}
           render={(photo, handle, i) => (
-              <div className="relative h-full overflow-hidden rounded-lg border border-surface-border bg-white">
+              <div className={`relative h-full overflow-hidden rounded-lg bg-white ${i === 0 ? "border-2 border-brand-700" : "border border-surface-border"}`}>
                 <div className="relative aspect-[4/3] bg-surface-muted">
                   {/* Not next/image: the src is our own already-resized WebP, so a second
                       optimisation pass would cost CPU to produce the same bytes. */}
@@ -69,8 +78,8 @@ export function PhotoGallery({
                     draggable={false}
                   />
                   {i === 0 && (
-                    <span className="absolute left-1.5 top-1.5 inline-flex items-center gap-1 rounded bg-brand-800/90 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                      <Star className="h-2.5 w-2.5 fill-current" /> Cover
+                    <span className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-brand-800/90 px-2 py-1 text-[11px] font-bold text-white">
+                      <Star className="h-3 w-3 fill-current" /> Cover photo
                     </span>
                   )}
                   <span className="absolute right-1.5 top-1.5 rounded bg-white/90 shadow-sm">{handle}</span>
@@ -89,7 +98,18 @@ export function PhotoGallery({
                       className="w-full rounded border border-surface-border px-1.5 py-1 text-[11.5px] text-ink-700 outline-none focus:border-brand-600"
                     />
                   </form>
-                  <div className="flex items-center justify-end">
+                  <div className="flex items-center justify-between gap-1">
+                    {i === 0 ? (
+                      <span className="text-[11px] font-semibold text-brand-700">Shown first</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void reorder([photo.id, ...photos.map((p) => p.id).filter((x) => x !== photo.id)])}
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted hover:text-brand-700"
+                      >
+                        <Star className="h-3 w-3" /> Make cover
+                      </button>
+                    )}
                     <form action={deleteRoomPhoto}>
                       <input type="hidden" name="id" value={photo.id} />
                       <button
@@ -131,9 +151,8 @@ export function PhotoGallery({
       )}
 
       <p className="text-[11.5px] leading-snug text-ink-400">
-        The first photo is what a guest sees on the room card — drag to reorder. Large images are
-        resized automatically, so upload straight from your phone. No photos is fine: the room still
-        shows with its name, size and what&rsquo;s included.
+        Large images are resized automatically, so upload straight from your phone. No photos is fine:
+        the room still shows with its name, size and what&rsquo;s included.
       </p>
     </div>
   );

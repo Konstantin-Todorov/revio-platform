@@ -9,19 +9,25 @@ import { offsetOf } from "@/components/rates/plan-labels";
 import { BlockedNotice } from "@/components/rates/BlockedNotice";
 import { BackLink } from "@/components/rates/BackLink";
 import { DeleteButton } from "@/components/ui/DeleteButton";
+import { LinkTabs } from "@/components/ui/LinkTabs";
 import { Card, CardHeader } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
 
+const TABS = ["plan", "price", "rooms"] as const;
+type Tab = (typeof TABS)[number];
+
 /**
- * One rate plan with everything about it: the plan, how it prices, where its price comes from, its
- * defaults and the rooms it sells. These were three cards on the old page, each listing every plan.
+ * One rate plan, in three tabs: the plan and its defaults · its price (how it prices, and where the
+ * price comes from) · the rooms it sells. The same shape as a room type's page, so the two are read
+ * the same way.
  */
 export default async function RatePlanPage({ params, searchParams }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ blocked?: string }>;
+  searchParams: Promise<{ blocked?: string; tab?: string }>;
 }) {
-  const [{ id }, { blocked }] = await Promise.all([params, searchParams]);
+  const [{ id }, { blocked, tab: rawTab }] = await Promise.all([params, searchParams]);
+  const tab: Tab = (TABS as readonly string[]).includes(rawTab ?? "") ? (rawTab as Tab) : "plan";
   const [{ ratePlans, defaults }, { roomTypes }] = await Promise.all([getRatesData(), getSetupData()]);
   const rp = ratePlans.find((p) => p.id === id);
   if (!rp) notFound();
@@ -35,7 +41,7 @@ export default async function RatePlanPage({ params, searchParams }: {
   });
   const dependents = ratePlans
     .filter((p) => p.priceLogic === "derived" && p.parentRatePlanId === rp.id)
-    .map((p) => ({ id: p.id, name: p.name, offset: offsetOf(toLink(p)) }));
+    .map((p) => ({ id: p.id, name: p.name, offset: offsetOf(p) }));
   const rooms = roomTypes.filter((r) => rp.roomTypeLinks.some((l) => l.roomTypeId === r.id));
   const pricing = {
     id: rp.id, name: rp.name, active: rp.active,
@@ -45,6 +51,7 @@ export default async function RatePlanPage({ params, searchParams }: {
     ceiling: Math.min(50, ...(rp.roomTypeLinks.length > 0 ? rp.roomTypeLinks.map((l) => Math.max(1, l.roomType.maxGuests)) : [1])),
     roomCount: rp._count.roomTypeLinks,
   };
+  const base = `/rooms-rates/plans/${rp.id}`;
 
   return (
     <>
@@ -57,41 +64,61 @@ export default async function RatePlanPage({ params, searchParams }: {
         </h2>
         <p className="text-[12px] text-ink-500">
           {rp.code} · {rp.mealPlan?.name ?? "room only"}{rp.cancellationPolicy ? ` · ${rp.cancellationPolicy.name}` : ""}
+          {rp.priceLogic === "derived" && rp.parent ? ` · priced from ${rp.parent.name} ${offsetOf(rp)}` : ""}
         </p>
       </div>
 
-      <RatePlanEditor ratePlan={rp} />
-      <PlanPricingCard plan={pricing} propertyModel={propertyModel} />
-      <PlanLinkageCard plan={toLink(rp)} options={ratePlans.map(toLink)} dependents={dependents} />
+      <LinkTabs
+        label={`${rp.name} views`}
+        tabs={[
+          { href: base, label: "Plan & defaults", active: tab === "plan" },
+          { href: `${base}?tab=price`, label: "Price", active: tab === "price" },
+          { href: `${base}?tab=rooms`, label: "Rooms it sells", active: tab === "rooms", badge: String(rooms.length) },
+        ]}
+      />
 
-      <Card>
-        <CardHeader title="Rooms it sells" subtitle="This plan's price applies to each of these rooms" />
-        <div className="px-5 pb-5">
-          {rooms.length === 0 ? (
-            <p className="text-[13px] text-ink-500">This plan sells no room yet.</p>
-          ) : (
-            <ul className="flex flex-wrap gap-1.5">
-              {rooms.map((r) => (
-                <li key={r.id}>
-                  <Link
-                    href={`/rooms-rates/rooms/${r.id}`}
-                    className={`inline-flex items-center rounded-full border border-surface-border px-2.5 py-1 text-[12px] font-semibold hover:border-ink-300 ${r.active ? "text-ink-700" : "text-ink-400 line-through"}`}
-                  >
-                    {r.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </Card>
+      {tab === "plan" && (
+        <>
+          <RatePlanEditor key={rp.id} ratePlan={rp} />
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-surface-border px-4 py-3">
+            <p className="text-[12px] text-ink-500">
+              Delete this plan. A plan mapped in RevioLink must be unmapped first; one in use is deactivated instead.
+            </p>
+            <DeleteButton action={deleteRatePlan} id={rp.id} label={rp.name} note="Mapped plans must be unmapped in RevioLink first; plans in use are deactivated instead." />
+          </div>
+        </>
+      )}
 
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-surface-border px-4 py-3">
-        <p className="text-[12px] text-ink-500">
-          Delete this plan. A plan mapped in RevioLink must be unmapped first; one in use is deactivated instead.
-        </p>
-        <DeleteButton action={deleteRatePlan} id={rp.id} label={rp.name} note="Mapped plans must be unmapped in RevioLink first; plans in use are deactivated instead." />
-      </div>
+      {tab === "price" && (
+        <>
+          <PlanLinkageCard plan={toLink(rp)} options={ratePlans.map(toLink)} dependents={dependents} />
+          <PlanPricingCard plan={pricing} propertyModel={propertyModel} />
+        </>
+      )}
+
+      {tab === "rooms" && (
+        <Card>
+          <CardHeader title="Rooms it sells" subtitle="This plan's price applies to each of these rooms" />
+          <div className="px-5 pb-5">
+            {rooms.length === 0 ? (
+              <p className="text-[13px] text-ink-500">This plan sells no room yet.</p>
+            ) : (
+              <ul className="flex flex-wrap gap-1.5">
+                {rooms.map((r) => (
+                  <li key={r.id}>
+                    <Link
+                      href={`/rooms-rates/rooms/${r.id}`}
+                      className={`inline-flex items-center rounded-full border border-surface-border px-2.5 py-1 text-[12px] font-semibold hover:border-ink-300 ${r.active ? "text-ink-700" : "text-ink-400 line-through"}`}
+                    >
+                      {r.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </Card>
+      )}
     </>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Check } from "lucide-react";
 import { Card, CardHeader } from "@revio/ui/primitives";
 import { saveRatePlan, type ActionResult } from "@/lib/actions-rates";
 import { Field, inputCls } from "@/components/ui/Modal";
+import { SaveFooter } from "./RoomTypeForm";
 
 export type RatePlanValues = {
   id: string; name: string; code: string; tags: string[]; active: boolean; directChannelEnabled: boolean;
@@ -73,9 +73,9 @@ export function RatePlanDefaultsFields({ ratePlan }: { ratePlan?: RatePlanValues
 }
 
 /**
- * The plan and its defaults, as two cards of ONE form on the plan's own page — `saveRatePlan` writes
- * both at once. It posts no `priceLogic`, so saving here never touches where the price comes from;
- * that has its own section with its own guardrails.
+ * The plan and its defaults — one card, one save at its end, on the plan's own page. `saveRatePlan`
+ * writes both at once. It posts no `priceLogic`, so saving here never touches where the price comes
+ * from; that has its own tab with its own guardrails.
  */
 export function RatePlanEditor({ ratePlan }: { ratePlan: RatePlanValues }) {
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(saveRatePlan, null);
@@ -83,25 +83,18 @@ export function RatePlanEditor({ ratePlan }: { ratePlan: RatePlanValues }) {
   useEffect(() => { if (state?.ok) setSavedAt(Date.now()); }, [state]);
 
   return (
-    <form action={formAction} onChange={() => setSavedAt(null)} className="space-y-5">
+    <form action={formAction} onChange={() => setSavedAt(null)}>
       <input type="hidden" name="id" value={ratePlan.id} />
       <Card>
         <CardHeader title="The plan" subtitle="Its name, and where it is sold" />
         <div className="px-5 pb-5"><RatePlanBasicsFields ratePlan={ratePlan} /></div>
+        <div className="border-t border-surface-border/70 px-5 py-4">
+          <h3 className="text-[13.5px] font-bold text-ink-900">Defaults</h3>
+          <p className="mb-3 text-[11.5px] text-ink-400">Minimum stay and advance purchase, used on every date that has no rule of its own</p>
+          <RatePlanDefaultsFields ratePlan={ratePlan} />
+        </div>
+        <SaveFooter pending={pending} error={state?.error} saved={!!savedAt && !state?.error} />
       </Card>
-      <Card>
-        <CardHeader title="Defaults" subtitle="Minimum stay and advance purchase, used on every date that has no rule of its own" />
-        <div className="px-5 pb-5"><RatePlanDefaultsFields ratePlan={ratePlan} /></div>
-      </Card>
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        {state?.error && <p className="mr-auto text-[12.5px] font-medium text-danger-600">{state.error}</p>}
-        {savedAt && !state?.error && (
-          <p className="mr-auto inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success-600"><Check className="h-4 w-4" /> Saved</p>
-        )}
-        <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">
-          {pending ? "Saving…" : "Save changes"}
-        </button>
-      </div>
     </form>
   );
 }

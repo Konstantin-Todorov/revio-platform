@@ -112,37 +112,44 @@ export function RoomTypeGuestFields({ roomType }: { roomType?: RoomTypeValues })
 }
 
 /**
- * A room type edited on its own page: the basics and what a guest reads, as two cards of ONE form.
- * One form because `saveRoomType` writes every field at once — two forms would each post the other
- * half's defaults and quietly undo an edit made in it.
+ * One tab of a room type's page — the basics, or what a guest reads — as one card whose save button
+ * is its last line. `section` tells `saveRoomType` which half this form carries, so saving one tab
+ * never touches the other's fields.
  */
-export function RoomTypeEditor({ roomType }: { roomType: RoomTypeValues }) {
+export function RoomTypeSectionForm({ roomType, section }: { roomType: RoomTypeValues; section: "basics" | "content" }) {
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(saveRoomType, null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   useEffect(() => { if (state?.ok) setSavedAt(Date.now()); }, [state]);
+  const basics = section === "basics";
 
   return (
-    <form action={formAction} onChange={() => setSavedAt(null)} className="space-y-5">
+    <form action={formAction} onChange={() => setSavedAt(null)}>
       <input type="hidden" name="id" value={roomType.id} />
+      <input type="hidden" name="section" value={section} />
       <Card>
-        <CardHeader title="The basics" subtitle="What you sell and how many of it exist — the physical count is the cap every channel sells under" />
-        <div className="px-5 pb-5"><RoomTypeBasicsFields roomType={roomType} /></div>
+        <CardHeader
+          title={basics ? "The basics" : "What a guest reads"}
+          subtitle={basics
+            ? "What you sell and how many of it exist — the physical count is the cap every channel sells under"
+            : "Shown on your booking page. All optional — a room with none of this still sells, it just says less"}
+        />
+        <div className="px-5 pb-5">{basics ? <RoomTypeBasicsFields roomType={roomType} /> : <RoomTypeGuestFields roomType={roomType} />}</div>
+        {/* The card's own last line. Sticky on the long tab (thirty-five amenity chips) so saving is in
+            reach from anywhere in it, and it stops at the card's end — nothing follows it. */}
+        <SaveFooter sticky={!basics} pending={pending} error={state?.error} saved={!!savedAt && !state?.error} />
       </Card>
-      <Card>
-        <CardHeader title="What a guest reads" subtitle="Shown on your booking page. All optional — a room with none of this still sells, it just says less" />
-        <div className="px-5 pb-5"><RoomTypeGuestFields roomType={roomType} /></div>
-      </Card>
-
-      {/* Sticky, so saving is in reach after the thirty-five amenity chips. */}
-      <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-3 rounded-lg border border-surface-border bg-white/95 px-4 py-3 shadow-card backdrop-blur">
-        {state?.error && <p className="mr-auto text-[12.5px] font-medium text-danger-600">{state.error}</p>}
-        {savedAt && !state?.error && (
-          <p className="mr-auto inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success-600"><Check className="h-4 w-4" /> Saved</p>
-        )}
-        <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">
-          {pending ? "Saving…" : "Save changes"}
-        </button>
-      </div>
     </form>
+  );
+}
+
+export function SaveFooter({ sticky, pending, error, saved }: { sticky?: boolean; pending: boolean; error?: string | undefined; saved: boolean }) {
+  return (
+    <div className={`flex flex-wrap items-center justify-end gap-3 rounded-b-xl border-t border-surface-border bg-white px-5 py-3 ${sticky ? "sticky bottom-0 z-10" : ""}`}>
+      {error && <p className="mr-auto text-[12.5px] font-medium text-danger-600">{error}</p>}
+      {saved && <p className="mr-auto inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success-600"><Check className="h-4 w-4" /> Saved</p>}
+      <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">
+        {pending ? "Saving…" : "Save changes"}
+      </button>
+    </div>
   );
 }

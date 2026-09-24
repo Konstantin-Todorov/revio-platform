@@ -148,6 +148,11 @@ calls it `50`. Nothing failed. It was just invisible.
   language guests receive). Asked first, because it changes what every row means.
 - **A list, then one thing** — a row opens the thing on its own page inside the same frame (Your
   requests → one conversation; Guest emails → one email's editor), never an accordion of editors.
+- **That one thing gets tabs too when it is long** (RevioCRS Rooms & Rates, 2026-09-25: a room type
+  is Basics · What a guest reads · Photos · Rate plans). The founder's objection to the first,
+  stacked version was the tell: *"по средата има някъв бутон за сейв, а след това страницата
+  продължава"*. **A save button is the last thing in its card, and nothing it does not save comes
+  after it.** A tab carrying a warning a guest would notice shows a dot before it is opened.
 
 ⚠️ **Not at a front desk.** Tabs were rejected on the folio screen and the reason stands (see
 `apps/pms/CLAUDE.md`): at a desk you do not know in advance which tab you need, and a tab you never
@@ -156,8 +161,10 @@ up*, not for a queue with a guest waiting. `docs/UI-GROUPING-AUDIT.md` lists whi
 
 **Reordering is by drag and drop, everywhere** (founder, same day: *"навсякъде … да е с драг и
 дроп"*). One component, `SortableList` in `@revio/ui/sortable`: pointer events so it works on a phone,
-the row moves while you drag, one save per drop, and the handle takes ↑/↓ from the keyboard. Never
-up/down arrow buttons.
+the row you hold stays under your finger while the others glide out of its way, one save per drop,
+and the handle takes ↑/↓ (←/→ in a grid) from the keyboard. Never up/down arrow buttons. When an
+order carries meaning — the first photo is the cover — say it in words above the list, mark the
+first item unmistakably, and give a one-click way to put something first ("Make cover").
 
 ---
 
