@@ -11,7 +11,10 @@ const OCCUPYING = ["confirmed", "modified"];
 export interface CloseDayRow {
   reservationId: string;
   guestName: string;
+  /** The English sentence; `room` + `date` let a translated screen rebuild it. */
   detail: string;
+  room?: string;
+  date?: string;
 }
 
 /**
@@ -47,10 +50,10 @@ export async function getCloseDayView() {
       : r.assignments.filter((a) => a.status === "active" && a.checkedOutAt == null && a.checkedInAt != null);
 
     if (!everCheckedIn && ci <= businessDate) {
-      noShowCandidates.push({ reservationId: r.id, guestName, detail: `${r.lines[0]!.roomType.name} · arrival ${ci}` });
+      noShowCandidates.push({ reservationId: r.id, guestName, detail: `${r.lines[0]!.roomType.name} · arrival ${ci}`, room: r.lines[0]!.roomType.name, date: ci });
     }
     if (active.length > 0 && co <= businessDate) {
-      dueOutStillIn.push({ reservationId: r.id, guestName, detail: `Room ${active.map((a) => a.unit.label).join(", ")} · due out ${co}` });
+      dueOutStillIn.push({ reservationId: r.id, guestName, detail: `Room ${active.map((a) => a.unit.label).join(", ")} · due out ${co}`, room: active.map((a) => a.unit.label).join(", "), date: co });
     }
   }
 

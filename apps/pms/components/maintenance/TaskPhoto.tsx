@@ -9,7 +9,10 @@ import { setTaskPhoto } from "@/lib/actions-maintenance";
  * JPEG data URL before it's posted, so the demo stores evidence without object storage (swapped for
  * real blob storage in production). Serves the technician, HK exception reports and deposit evidence.
  */
-export function TaskPhoto({ id, photoUrl }: { id: string; photoUrl: string | null }) {
+export type TaskPhotoStrings = { view: string; remove: string; attach: string; alt: string };
+const EN: TaskPhotoStrings = { view: "View photo", remove: "Remove photo", attach: "Attach a photo of the fault", alt: "Fault" };
+
+export function TaskPhoto({ id, photoUrl, t = EN }: { id: string; photoUrl: string | null; t?: TaskPhotoStrings }) {
   const formRef = useRef<HTMLFormElement>(null);
   const valueRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -33,13 +36,13 @@ export function TaskPhoto({ id, photoUrl }: { id: string; photoUrl: string | nul
       <input ref={valueRef} type="hidden" name="photoUrl" defaultValue={photoUrl ?? ""} />
       {photoUrl ? (
         <>
-          <button type="button" onClick={() => setPreview(true)} title="View photo" className="relative h-8 w-8 overflow-hidden rounded-md border border-surface-border">
+          <button type="button" onClick={() => setPreview(true)} title={t.view} className="relative h-8 w-8 overflow-hidden rounded-md border border-surface-border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photoUrl} alt="Fault" className="h-full w-full object-cover" />
+            <img src={photoUrl} alt={t.alt} className="h-full w-full object-cover" />
           </button>
           <button
             type="button"
-            title="Remove photo"
+            title={t.remove}
             onClick={() => { if (valueRef.current) valueRef.current.value = ""; formRef.current?.requestSubmit(); }}
             className="flex h-8 w-8 items-center justify-center rounded-md text-ink-300 hover:bg-danger-50 hover:text-danger-600"
           >
@@ -48,12 +51,12 @@ export function TaskPhoto({ id, photoUrl }: { id: string; photoUrl: string | nul
           {preview && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" onClick={() => setPreview(false)}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl} alt="Fault" className="max-h-[85vh] max-w-[90vw] rounded-lg" />
+              <img src={photoUrl} alt={t.alt} className="max-h-[85vh] max-w-[90vw] rounded-lg" />
             </div>
           )}
         </>
       ) : (
-        <label title="Attach a photo of the fault" className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-surface-border text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-600">
+        <label title={t.attach} className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-surface-border text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-600">
           {busy ? <ImageIcon className="h-3.5 w-3.5 animate-pulse" /> : <Camera className="h-3.5 w-3.5" />}
           <input type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
         </label>

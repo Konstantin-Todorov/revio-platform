@@ -11,7 +11,10 @@ const TINT: Record<string, string> = {
 };
 
 /** Compact maintenance-status changer: a native select that submits setMaintenanceStatus on change. */
-export function MaintStatusControl({ id, status }: { id: string; status: string }) {
+export type MaintStatusStrings = { aria: string; open: string; in_progress: string; on_hold: string; done: string };
+const EN: MaintStatusStrings = { aria: "Task status", open: "Reported", in_progress: "In progress", on_hold: "On hold — awaiting parts", done: "Done" };
+
+export function MaintStatusControl({ id, status, t = EN }: { id: string; status: string; t?: MaintStatusStrings }) {
   const ref = useRef<HTMLFormElement>(null);
   return (
     <form ref={ref} action={setMaintenanceStatus}>
@@ -21,13 +24,13 @@ export function MaintStatusControl({ id, status }: { id: string; status: string 
         name="status"
         defaultValue={status}
         onChange={() => ref.current?.requestSubmit()}
-        aria-label="Task status"
+        aria-label={t.aria}
         className={`cursor-pointer rounded-md border bg-white px-2 py-1 text-[12px] font-semibold outline-none focus:border-accent-600 ${TINT[status] ?? TINT.open}`}
       >
-        <option value="open">Reported</option>
-        <option value="in_progress">In progress</option>
-        <option value="on_hold">On hold — awaiting parts</option>
-        <option value="done">Done</option>
+        <option value="open">{t.open}</option>
+        <option value="in_progress">{t.in_progress}</option>
+        <option value="on_hold">{t.on_hold}</option>
+        <option value="done">{t.done}</option>
       </select>
     </form>
   );
