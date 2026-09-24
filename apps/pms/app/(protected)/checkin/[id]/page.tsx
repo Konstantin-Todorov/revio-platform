@@ -4,28 +4,25 @@ import { ArrowLeft, LogIn, DoorOpen, AlertTriangle, Wand2 } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getReservationForCheckin, availableUnitsFor, suggestUnit, type AvailableUnit } from "@/lib/data";
 import { checkIn } from "@/lib/actions-frontdesk";
-import { HK_LABEL } from "@/lib/hk-meta";
+import { i18n } from "@/lib/i18n/server";
+import { common } from "@/lib/i18n/common";
+import { stays } from "@/lib/i18n/stays";
 import { ymd } from "@/lib/format";
 
 import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
-const ERRORS: Record<string, string> = {
-  pick: "Select a room for every slot.",
-  dup: "Each room can only be assigned once.",
-  type: "That room is a different room type — tick “Allow override” to assign it anyway.",
-  dirty: "That room isn’t clean/inspected — tick “Allow override” to assign it anyway.",
-  busy: "That room is already occupied for these dates.",
-};
-
-function unitLabel(u: AvailableUnit): string {
-  const state = u.occupied ? "Occupied" : u.hkStatus === "clean" || u.hkStatus === "inspected" ? "" : HK_LABEL[u.hkStatus];
+function unitLabel(u: AvailableUnit, occupied: string, statuses: Record<string, string>): string {
+  const state = u.occupied ? occupied : u.hkStatus === "clean" || u.hkStatus === "inspected" ? "" : statuses[u.hkStatus];
   return `${u.label}${u.floor ? ` · ${u.floor}` : ""}${state ? ` · ${state}` : ""}`;
 }
 
 export default async function CheckinPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
   const { id } = await params;
   const { error } = await searchParams;
+  const { t } = await i18n();
+  const s = t(stays);
+  const c = t(common);
   const data = await getReservationForCheckin(id);
   if (!data) redirect("/dashboard");
   const { reservation: r, preferredFloor } = data!;
@@ -62,33 +59,32 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
   return (
     <div className="mx-auto max-w-2xl">
       <Link href="/dashboard" className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-ink-700">
-        <ArrowLeft className="h-4 w-4" /> Front Desk
+        <ArrowLeft className="h-4 w-4" /> {s.backToDesk}
       </Link>
-      <PageHeader title={`Check in — ${guestName}`} subtitle={`${ymd(r.lines[0]!.checkIn)} → ${ymd(r.lines[r.lines.length - 1]!.checkOut)} · ${r.lines.length} room${r.lines.length === 1 ? "" : "s"}`} />
+      <PageHeader title={s.checkin.title(guestName)} subtitle={s.checkin.subtitle(ymd(r.lines[0]!.checkIn), ymd(r.lines[r.lines.length - 1]!.checkOut), c.rooms(r.lines.length))} />
 
       {departed ? (
         <Card className="p-6 text-center">
-          <p className="text-[14px] font-semibold text-ink-900">This stay has already checked out</p>
+          <p className="text-[14px] font-semibold text-ink-900">{s.checkin.departedTitle}</p>
           <p className="mx-auto mt-1 max-w-md text-[12.5px] text-ink-500">
-            It left on {ymd(r.departedAt!)}. A returning guest needs a new reservation. If this one was checked out
-            by mistake, a manager can reopen it — the rooms are not held, so it will need checking in again.
+            {s.checkin.departedBody(ymd(r.departedAt!))}
           </p>
           <div className="mt-3 flex items-center justify-center gap-2">
-            <Link href="/dashboard" className="rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 hover:bg-surface-muted">Back to Front Desk</Link>
-            <Link href={`/reservation/${r.id}`} className="rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700">Open the reservation</Link>
+            <Link href="/dashboard" className="rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 hover:bg-surface-muted">{s.checkin.backToDeskButton}</Link>
+            <Link href={`/reservation/${r.id}`} className="rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700">{s.checkin.openReservation}</Link>
           </div>
         </Card>
       ) : alreadyIn ? (
         <Card className="p-6 text-center">
-          <p className="text-[14px] font-semibold text-ink-900">Already checked in</p>
-          <p className="mt-1 text-[12.5px] text-ink-500">This reservation is in house ({r.assignments.map((a) => a.unit.label).join(", ")}).</p>
-          <Link href="/dashboard" className="mt-3 inline-block rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700">Back to Front Desk</Link>
+          <p className="text-[14px] font-semibold text-ink-900">{s.checkin.alreadyTitle}</p>
+          <p className="mt-1 text-[12.5px] text-ink-500">{s.checkin.alreadyBody(r.assignments.map((a) => a.unit.label).join(", "))}</p>
+          <Link href="/dashboard" className="mt-3 inline-block rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700">{s.checkin.backToDeskButton}</Link>
         </Card>
       ) : (
         <Card className="p-4">
           {error && (
             <div className="mb-4 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {ERRORS[error] ?? "Something went wrong — try again."}
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {s.checkin.errors[error as keyof typeof s.checkin.errors] ?? s.somethingWrong}
             </div>
           )}
           <form action={checkIn} className="space-y-4">
@@ -100,11 +96,11 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
                 <div key={slot.key}>
                   <label className="mb-1 flex flex-wrap items-center gap-2 text-[12.5px] font-semibold text-ink-700">
                     <DoorOpen className="h-4 w-4 text-accent-500" />
-                    Room {slots.length > 1 ? idx + 1 : ""} · {slot.roomTypeName}
-                    <span className="text-[11px] font-medium text-ink-400">({free.length} free)</span>
+                    {s.checkin.roomSlot(slots.length > 1 ? idx + 1 : "")} · {slot.roomTypeName}
+                    <span className="text-[11px] font-medium text-ink-400">{s.checkin.free(free.length)}</span>
                     {slot.suggestReason && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5 text-[10.5px] font-semibold text-accent-700">
-                        <Wand2 className="h-3 w-3" /> Suggested · {slot.suggestReason}
+                        <Wand2 className="h-3 w-3" /> {s.checkin.suggested(s.checkin.reasons[slot.suggestReason] ?? slot.suggestReason)}
                       </span>
                     )}
                   </label>
@@ -114,10 +110,10 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
                     required
                     className="h-10 w-full rounded-md border border-surface-border bg-white px-2.5 text-[13.5px] text-ink-900 outline-none focus:border-accent-600"
                   >
-                    <option value="" disabled>Select a room…</option>
+                    <option value="" disabled>{s.checkin.selectRoom}</option>
                     {slot.units.map((u) => (
                       <option key={u.id} value={`${slot.lineId}:${u.id}`} disabled={u.occupied}>
-                        {unitLabel(u)}
+                        {unitLabel(u, s.occupied, c.statuses)}
                       </option>
                     ))}
                   </select>
@@ -127,17 +123,17 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
 
             <label className="flex items-center gap-2 text-[12.5px] text-ink-700">
               <input type="checkbox" name="override" className="h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
-              Allow override (assign a room that isn’t clean or is a different type — logged)
+              {s.checkin.override}
             </label>
 
             {!anyFree && (
               <p className="rounded-md bg-warning-50 px-3 py-2 text-[12px] font-medium text-warning-600">
-                No clean, free rooms of this type right now. Tick “Allow override” to assign one anyway, or clean a room first.
+                {s.checkin.noneFree}
               </p>
             )}
 
-            <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel="Checking in…">
-              <LogIn className="h-4 w-4" /> Check in
+            <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel={c.checkingIn}>
+              <LogIn className="h-4 w-4" /> {c.checkIn}
             </SubmitButton>
           </form>
         </Card>

@@ -261,7 +261,8 @@ export async function reservationBalance(reservationId: string): Promise<number>
   return folios.reduce((s, f) => s + folioBalance(f.lines).balance, 0);
 }
 
-export interface TimelineEvent { at: Date; label: string; detail?: string; kind: "booking" | "assigned" | "moved" | "checkin" | "checkout" | "charge" | "payment" | "cancel" }
+/** `label` is the English sentence; `room` lets a translated screen rebuild it in the reader's language. */
+export interface TimelineEvent { at: Date; label: string; detail?: string; room?: string; kind: "booking" | "assigned" | "moved" | "checkin" | "checkout" | "charge" | "payment" | "cancel" }
 export type StayState = "booked" | "assigned" | "in_house" | "departed" | "cancelled";
 
 /**
@@ -357,9 +358,9 @@ export async function getReservationDetail(reservationId: string) {
   ];
   for (const a of r.assignments) {
     const moved = a.note?.startsWith("moved from") ?? false;
-    events.push({ at: a.createdAt, label: moved ? `Moved to room ${a.unit.label}` : `Room ${a.unit.label} assigned`, detail: a.note ?? undefined, kind: moved ? "moved" : "assigned" });
-    if (a.checkedInAt) events.push({ at: a.checkedInAt, label: `Checked in — room ${a.unit.label}`, kind: "checkin" });
-    if (a.checkedOutAt) events.push({ at: a.checkedOutAt, label: `Checked out — room ${a.unit.label}`, kind: "checkout" });
+    events.push({ at: a.createdAt, label: moved ? `Moved to room ${a.unit.label}` : `Room ${a.unit.label} assigned`, room: a.unit.label, detail: a.note ?? undefined, kind: moved ? "moved" : "assigned" });
+    if (a.checkedInAt) events.push({ at: a.checkedInAt, label: `Checked in — room ${a.unit.label}`, room: a.unit.label, kind: "checkin" });
+    if (a.checkedOutAt) events.push({ at: a.checkedOutAt, label: `Checked out — room ${a.unit.label}`, room: a.unit.label, kind: "checkout" });
   }
   for (const l of allFolioLines) {
     if (l.voided) continue;
