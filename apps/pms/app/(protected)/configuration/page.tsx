@@ -3,8 +3,11 @@ import { Lock, Percent, ReceiptText, ShieldCheck, Sparkles, Wine, Landmark } fro
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getConfiguration } from "@/lib/config";
 import { saveConfiguration, saveDepositType, deleteDepositType } from "@/lib/actions-config";
-import { POS_OUTLETS, POS_OUTLET_LABEL } from "@/lib/roles";
-import { DOC_LABEL } from "@/lib/invoice";
+import { POS_OUTLETS } from "@/lib/roles";
+import { i18n } from "@/lib/i18n/server";
+import { configuration } from "@/lib/i18n/configuration";
+import { extras } from "@/lib/i18n/extras";
+import { folio } from "@/lib/i18n/folio";
 
 export const dynamic = "force-dynamic";
 
@@ -14,89 +17,93 @@ const labelCls = "mb-1 block text-[11px] font-semibold text-ink-600";
 export default async function ConfigurationPage() {
   const { property, canManage, defaults, depositTypes, nextByDoc, outletCounts, suggestedBeds } = await getConfiguration();
   const d = defaults;
+  const { t: tr } = await i18n();
+  const t = tr(configuration);
+  const outletLabel = tr(extras).outlets;
+  const docLabel = tr(folio).docs;
 
   if (!canManage) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-warning-50 text-warning-600"><Lock className="h-6 w-6" /></div>
-        <h1 className="text-[16px] font-bold text-ink-900">Configuration is manager-only</h1>
-        <p className="mt-1 text-[13px] text-ink-500">Ask an Owner, Admin or Manager to change tax, invoicing and deposit settings.</p>
+        <h1 className="text-[16px] font-bold text-ink-900">{t.lockedTitle}</h1>
+        <p className="mt-1 text-[13px] text-ink-500">{t.lockedBody}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Configuration" subtitle={`${property.name} · taxes, invoicing, housekeeping and outlets`} />
+      <PageHeader title={t.title} subtitle={t.subtitle(property.name)} />
 
       {/* Taxes, invoicing & compliance — one save */}
       <form action={saveConfiguration} className="space-y-4">
         <Card>
-          <CardHeader title="Taxes & VAT" subtitle="Shared with the CRS tax setup; the invoice-specific rates live here" />
+          <CardHeader title={t.taxes.title} subtitle={t.taxes.subtitle} />
           <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
             <div>
-              <label className={labelCls}><Percent className="mr-1 inline h-3 w-3" />Standard VAT %</label>
+              <label className={labelCls}><Percent className="mr-1 inline h-3 w-3" />{t.taxes.vatStandard}</label>
               <input name="vatStandardPct" type="number" min={0} max={100} defaultValue={d?.vatStandardPct ?? 20} className={`${inputCls} w-full`} />
             </div>
             <div>
-              <label className={labelCls}><Percent className="mr-1 inline h-3 w-3" />Reduced VAT % <span className="text-ink-400">(accommodation)</span></label>
+              <label className={labelCls}><Percent className="mr-1 inline h-3 w-3" />{t.taxes.vatReduced} <span className="text-ink-400">{t.taxes.accommodation}</span></label>
               <input name="vatReducedPct" type="number" min={0} max={100} defaultValue={d?.vatReducedPct ?? 9} className={`${inputCls} w-full`} />
             </div>
             <div>
-              <label className={labelCls}>Tourist tax per night <span className="text-ink-400">(туристически данък)</span></label>
+              <label className={labelCls}>{t.taxes.touristTax} <span className="text-ink-400">{t.taxes.touristTaxAside}</span></label>
               {/* Blank, never a default. The council sets this per settlement and per category, and a
                   number we invented would eventually be filed as though we knew it. */}
               <input
                 name="touristTaxRate" type="number" step="0.01" min={0} max={100}
                 defaultValue={d?.touristTaxRateMinor != null ? (d.touristTaxRateMinor / 100).toFixed(2) : ""}
-                placeholder="e.g. 1.00" className={`${inputCls} w-full`}
+                placeholder={t.taxes.touristTaxPlaceholder} className={`${inputCls} w-full`}
               />
-              <p className="mt-1 text-[10.5px] text-ink-400">The rate your municipal council set, per night.</p>
+              <p className="mt-1 text-[10.5px] text-ink-400">{t.taxes.touristTaxHint}</p>
             </div>
             <div>
-              <label className={labelCls}>Declared beds <span className="text-ink-400">(легла)</span></label>
+              <label className={labelCls}>{t.taxes.beds} <span className="text-ink-400">{t.taxes.bedsAside}</span></label>
               <input
                 name="touristTaxBeds" type="number" min={0} max={10000}
                 defaultValue={d?.touristTaxBeds ?? ""} placeholder={String(suggestedBeds)}
                 className={`${inputCls} w-full`}
               />
               <p className="mt-1 text-[10.5px] text-ink-400">
-                For the 30% annual minimum. Your rooms suggest {suggestedBeds} — confirm what you declared.
+                {t.taxes.bedsHint(suggestedBeds)}
               </p>
             </div>
             <div className="col-span-2">
-              <label className={labelCls}>City tax</label>
+              <label className={labelCls}>{t.taxes.cityTax}</label>
               <select name="cityTaxMode" defaultValue={d?.cityTaxMode ?? "payable_on_spot"} className={`${inputCls} w-full`}>
-                <option value="payable_on_spot">Payable on spot — posts as a folio fee</option>
-                <option value="included">Included in the rate — suppressed on the folio</option>
+                <option value="payable_on_spot">{t.taxes.payableOnSpot}</option>
+                <option value="included">{t.taxes.included}</option>
               </select>
             </div>
           </div>
         </Card>
 
         <Card>
-          <CardHeader title="Invoice issuer" subtitle="Your legal identity on the tax document (falls back to the property name/address)" />
+          <CardHeader title={t.issuer.title} subtitle={t.issuer.subtitle} />
           <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-3">
-            <div><label className={labelCls}>Legal name</label><input name="invoiceIssuerName" defaultValue={d?.invoiceIssuerName ?? ""} placeholder={property.name} className={`${inputCls} w-full`} /></div>
-            <div><label className={labelCls}>VAT ID</label><input name="invoiceVatId" defaultValue={d?.invoiceVatId ?? ""} placeholder="e.g. BG123456789" className={`${inputCls} w-full`} /></div>
-            <div><label className={labelCls}>Address</label><input name="invoiceAddress" defaultValue={d?.invoiceAddress ?? ""} placeholder={property.address ?? ""} className={`${inputCls} w-full`} /></div>
+            <div><label className={labelCls}>{t.issuer.legalName}</label><input name="invoiceIssuerName" defaultValue={d?.invoiceIssuerName ?? ""} placeholder={property.name} className={`${inputCls} w-full`} /></div>
+            <div><label className={labelCls}>{t.issuer.vatId}</label><input name="invoiceVatId" defaultValue={d?.invoiceVatId ?? ""} placeholder={t.issuer.vatIdPlaceholder} className={`${inputCls} w-full`} /></div>
+            <div><label className={labelCls}>{t.issuer.address}</label><input name="invoiceAddress" defaultValue={d?.invoiceAddress ?? ""} placeholder={property.address ?? ""} className={`${inputCls} w-full`} /></div>
           </div>
         </Card>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Housekeeping & assignment" subtitle="Whether cleaned rooms need inspecting, and how rooms get assigned" />
+            <CardHeader title={t.housekeeping.title} subtitle={t.housekeeping.subtitle} />
             <div className="divide-y divide-surface-border/60">
               <label className="flex cursor-pointer items-start gap-2.5 p-4">
                 <input type="checkbox" name="inspectionGate" defaultChecked={d?.inspectionGate ?? false} className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
                 <span className="text-[12.5px] text-ink-700">
-                  <span className="font-semibold text-ink-900">Require inspection before a room is sellable.</span> On: a cleaned room is <em>pending inspection</em> and can’t be assigned until a supervisor marks it Inspected. Off: cleaned counts as ready.
+                  <span className="font-semibold text-ink-900">{t.housekeeping.inspectionLead}</span> {t.housekeeping.inspectionBefore} <em>{t.housekeeping.pendingInspection}</em> {t.housekeeping.inspectionAfter}
                 </span>
               </label>
               <label className="flex cursor-pointer items-start gap-2.5 p-4">
                 <input type="checkbox" name="autoAssignEnabled" defaultChecked={d?.autoAssignEnabled ?? false} className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
                 <span className="text-[12.5px] text-ink-700">
-                  <span className="font-semibold text-ink-900">Auto-assign physical rooms the evening before.</span> Off by default — "Suggest a room" works either way. When on, the evening pass assigns late and pins manual overrides so a later run never reshuffles them.
+                  <span className="font-semibold text-ink-900">{t.housekeeping.autoAssignLead}</span> {t.housekeeping.autoAssignBody}
                 </span>
               </label>
             </div>
@@ -106,11 +113,11 @@ export default async function ConfigurationPage() {
               system ends it. Per-property because the business-day boundary already varies: a
               property that audits at 03:00 and one that audits at midnight cannot share a deadline. */}
           <Card>
-            <CardHeader title="End of day" subtitle="When an unclosed day is chased, and when it closes itself" />
+            <CardHeader title={t.endOfDay.title} subtitle={t.endOfDay.subtitle} />
             <div className="space-y-2.5 p-4">
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <div>
-                  <label className={labelCls}>Remind after (minutes past midnight)</label>
+                  <label className={labelCls}>{t.endOfDay.remindAfter}</label>
                   <input
                     name="closeDeadlineMinutes"
                     type="number"
@@ -119,10 +126,10 @@ export default async function ConfigurationPage() {
                     defaultValue={d?.closeDeadlineMinutes ?? 30}
                     className={`${inputCls} w-full`}
                   />
-                  <p className="mt-1 text-[11px] text-ink-400">30 = 00:30 the following day.</p>
+                  <p className="mt-1 text-[11px] text-ink-400">{t.endOfDay.remindHint}</p>
                 </div>
                 <div>
-                  <label className={labelCls}>Then close automatically after (hours)</label>
+                  <label className={labelCls}>{t.endOfDay.closeAfter}</label>
                   <input
                     name="closeReminderWindowHours"
                     type="number"
@@ -131,7 +138,7 @@ export default async function ConfigurationPage() {
                     defaultValue={d?.closeReminderWindowHours ?? 22}
                     className={`${inputCls} w-full`}
                   />
-                  <p className="mt-1 text-[11px] text-ink-400">22 hours after the reminder, so ≈22:30 the next day.</p>
+                  <p className="mt-1 text-[11px] text-ink-400">{t.endOfDay.closeHint}</p>
                 </div>
               </div>
               <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-surface-border p-3">
@@ -142,89 +149,87 @@ export default async function ConfigurationPage() {
                   className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600"
                 />
                 <span className="text-[12.5px] text-ink-700">
-                  <span className="font-semibold text-ink-900">Close the day automatically if nobody does.</span>{" "}
-                  An automatic close is a real close — it marks no-shows, accrues the night&rsquo;s extras and rolls the
-                  date — and is recorded as having had no person in it. Switch it off and unclosed days will accumulate
-                  until somebody closes each one.
+                  <span className="font-semibold text-ink-900">{t.endOfDay.autoCloseLead}</span>{" "}
+                  {t.endOfDay.autoCloseBody}
                 </span>
               </label>
             </div>
           </Card>
 
           <Card>
-            <CardHeader title="Compliance pack" subtitle="Fiscalization and e-invoicing rules for your country" />
+            <CardHeader title={t.compliance.title} subtitle={t.compliance.subtitle} />
             <div className="space-y-2.5 p-4">
               <div>
-                <label className={labelCls}><Landmark className="mr-1 inline h-3 w-3" />Jurisdiction</label>
+                <label className={labelCls}><Landmark className="mr-1 inline h-3 w-3" />{t.compliance.jurisdiction}</label>
                 <select name="jurisdiction" defaultValue={d?.jurisdiction ?? "generic"} className={`${inputCls} w-full`}>
-                  <option value="generic">Generic (EU)</option>
-                  <option value="bg">Bulgaria</option>
-                  <option value="eu">EU (structured e-invoicing)</option>
+                  <option value="generic">{t.compliance.generic}</option>
+                  <option value="bg">{t.compliance.bulgaria}</option>
+                  <option value="eu">{t.compliance.eu}</option>
                 </select>
               </div>
-              <label className="flex items-center gap-2 text-[12.5px] text-ink-700"><input type="checkbox" name="fiscalizationEnabled" defaultChecked={d?.fiscalizationEnabled ?? false} className="h-4 w-4 rounded border-surface-border text-accent-600" /> Real-time fiscalization (BG N-18) — routes receipts through a certified provider</label>
-              <label className="flex items-center gap-2 text-[12.5px] text-ink-700"><input type="checkbox" name="eInvoicingEnabled" defaultChecked={d?.eInvoicingEnabled ?? false} className="h-4 w-4 rounded border-surface-border text-accent-600" /> Structured e-invoicing (EN 16931 / Peppol) for B2B</label>
-              <p className="text-[11px] text-ink-400">The boundary is built (F3); flipping these on connects the certified provider — the invoice/receipt core stays generic.</p>
+              <label className="flex items-center gap-2 text-[12.5px] text-ink-700"><input type="checkbox" name="fiscalizationEnabled" defaultChecked={d?.fiscalizationEnabled ?? false} className="h-4 w-4 rounded border-surface-border text-accent-600" /> {t.compliance.fiscalization}</label>
+              <label className="flex items-center gap-2 text-[12.5px] text-ink-700"><input type="checkbox" name="eInvoicingEnabled" defaultChecked={d?.eInvoicingEnabled ?? false} className="h-4 w-4 rounded border-surface-border text-accent-600" /> {t.compliance.eInvoicing}</label>
+              <p className="text-[11px] text-ink-400">{t.compliance.note}</p>
             </div>
           </Card>
         </div>
 
         <div className="flex justify-end">
-          <button className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">Save configuration</button>
+          <button className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">{t.save}</button>
         </div>
       </form>
 
       {/* Deposit types */}
       <Card>
-        <CardHeader title="Deposit types" subtitle="A deposit is money you hold, not money you have earned — set when each type becomes revenue" />
+        <CardHeader title={t.deposits.title} subtitle={t.deposits.subtitle} />
         <div className="divide-y divide-surface-border/60">
-          {depositTypes.map((t) => (
-            <form key={t.id} action={saveDepositType} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-              <input type="hidden" name="id" value={t.id} />
-              <input name="name" defaultValue={t.name} className={`${inputCls} w-36`} />
-              <select name="behaviour" defaultValue={t.behaviour} className={`${inputCls} w-28`}>
-                <option value="held">Held</option>
-                <option value="applied">Applied</option>
+          {depositTypes.map((dt) => (
+            <form key={dt.id} action={saveDepositType} className="flex flex-wrap items-center gap-2 px-4 py-2.5">
+              <input type="hidden" name="id" value={dt.id} />
+              <input name="name" defaultValue={dt.name} className={`${inputCls} w-36`} />
+              <select name="behaviour" defaultValue={dt.behaviour} className={`${inputCls} w-28`}>
+                <option value="held">{t.deposits.held}</option>
+                <option value="applied">{t.deposits.applied}</option>
               </select>
-              <select name="vatTiming" defaultValue={t.vatTiming} className={`${inputCls} w-36`} title="When VAT applies">
-                <option value="use">VAT at use</option>
-                <option value="capture">VAT at capture</option>
+              <select name="vatTiming" defaultValue={dt.vatTiming} className={`${inputCls} w-36`} title={t.deposits.vatWhen}>
+                <option value="use">{t.deposits.vatAtUse}</option>
+                <option value="capture">{t.deposits.vatAtCapture}</option>
               </select>
-              <label className="flex items-center gap-1.5 text-[11.5px] text-ink-600"><input type="checkbox" name="active" defaultChecked={t.active} className="h-4 w-4 rounded border-surface-border text-accent-600" /> Active</label>
-              <button className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted">Save</button>
-              <button formAction={deleteDepositType} className="rounded-md px-2 py-1.5 text-[12px] font-semibold text-ink-400 hover:text-danger-600">Delete</button>
+              <label className="flex items-center gap-1.5 text-[11.5px] text-ink-600"><input type="checkbox" name="active" defaultChecked={dt.active} className="h-4 w-4 rounded border-surface-border text-accent-600" /> {t.deposits.active}</label>
+              <button className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted">{t.deposits.save}</button>
+              <button formAction={deleteDepositType} className="rounded-md px-2 py-1.5 text-[12px] font-semibold text-ink-400 hover:text-danger-600">{t.deposits.delete}</button>
             </form>
           ))}
         </div>
         <form action={saveDepositType} className="flex flex-wrap items-end gap-2 border-t border-surface-border bg-surface-muted px-4 py-3">
-          <input name="name" required placeholder="New type (e.g. Damage)" className={`${inputCls} w-40`} />
-          <select name="behaviour" defaultValue="held" className={`${inputCls} w-28`}><option value="held">Held</option><option value="applied">Applied</option></select>
-          <select name="vatTiming" defaultValue="use" className={`${inputCls} w-36`}><option value="use">VAT at use</option><option value="capture">VAT at capture</option></select>
-          <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white hover:bg-accent-500"><ShieldCheck className="h-3.5 w-3.5" /> Add type</button>
+          <input name="name" required placeholder={t.deposits.newPlaceholder} className={`${inputCls} w-40`} />
+          <select name="behaviour" defaultValue="held" className={`${inputCls} w-28`}><option value="held">{t.deposits.held}</option><option value="applied">{t.deposits.applied}</option></select>
+          <select name="vatTiming" defaultValue="use" className={`${inputCls} w-36`}><option value="use">{t.deposits.vatAtUse}</option><option value="capture">{t.deposits.vatAtCapture}</option></select>
+          <button className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white hover:bg-accent-500"><ShieldCheck className="h-3.5 w-3.5" /> {t.deposits.add}</button>
         </form>
       </Card>
 
       {/* Read-only: invoice series + outlets */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Invoice series" subtitle="Gapless numbering — invoices and credit notes share one range" />
+          <CardHeader title={t.series.title} subtitle={t.series.subtitle} />
           <div className="p-4 text-[13px]">
             {(["invoice", "proforma", "credit_note"] as const).map((dt) => (
               <div key={dt} className="flex items-center justify-between border-b border-surface-border/50 py-1.5 last:border-0">
-                <span className="flex items-center gap-1.5 text-ink-700"><ReceiptText className="h-3.5 w-3.5 text-ink-400" /> {DOC_LABEL[dt]}</span>
-                <span className="tnum text-ink-500">next {nextByDoc[dt] ?? "—"}</span>
+                <span className="flex items-center gap-1.5 text-ink-700"><ReceiptText className="h-3.5 w-3.5 text-ink-400" /> {docLabel[dt]}</span>
+                <span className="tnum text-ink-500">{t.series.next(String(nextByDoc[dt] ?? "—"))}</span>
               </div>
             ))}
           </div>
         </Card>
 
         <Card>
-          <CardHeader title="Outlets" subtitle="Charge sources & their catalogs" action={<Link href="/minibar/catalog" className="text-[12px] font-semibold text-accent-600 hover:underline">Manage catalog →</Link>} />
+          <CardHeader title={t.outlets.title} subtitle={t.outlets.subtitle} action={<Link href="/minibar/catalog" className="text-[12px] font-semibold text-accent-600 hover:underline">{t.outlets.manage}</Link>} />
           <div className="flex flex-wrap gap-2 p-4">
             {POS_OUTLETS.map((o) => (
               <span key={o} className="inline-flex items-center gap-1.5 rounded-full border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700">
                 {o === "spa" ? <Sparkles className="h-3 w-3 text-accent-500" /> : <Wine className="h-3 w-3 text-accent-500" />}
-                {POS_OUTLET_LABEL[o]}
+                {outletLabel[o] ?? o}
                 <StatusPill tone="neutral">{outletCounts.get(o) ?? 0}</StatusPill>
               </span>
             ))}
