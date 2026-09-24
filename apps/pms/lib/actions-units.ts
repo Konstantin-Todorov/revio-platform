@@ -100,6 +100,30 @@ export async function generateUnits(fd: FormData): Promise<void> {
   refresh();
 }
 
+/**
+ * Put several rooms on one floor at once — or take them off any floor, with the name left empty.
+ *
+ * A floor is not a separate record: it is what the rooms on it say. That is why there was no "add a
+ * floor" anywhere, and why the founder asked where it was — the only way to give 38 rooms a floor was
+ * to open each room's edit panel in turn. This is the one-screen way: name the floor, tick its rooms.
+ */
+export async function setUnitsFloor(fd: FormData): Promise<void> {
+  const session = await ctx("manage");
+  const floor = str(fd, "floor").trim() || null;
+  const ids = fd.getAll("unitIds").map(String).filter(Boolean);
+  if (ids.length === 0) return flashError((await flashSay()).units.pickRooms);
+  // Only this property's rooms: an id from elsewhere is a crafted POST and is simply not touched.
+  const { count } = await prisma.unit.updateMany({
+    where: { id: { in: ids }, propertyId: session.activePropertyId },
+    data: { floor },
+  });
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "unit", field: "floor", newValue: `${floor ?? "—"} · ${count} rooms`, userId: session.userId,
+  });
+  refresh();
+  revalidatePath("/calendar");
+}
+
 const UNIT_FEATURES = ["quiet", "accessible", "view", "smoking"];
 
 /** Edit a unit's label / floor / active flag + assignment attributes (features, connecting rooms).

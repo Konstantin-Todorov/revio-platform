@@ -63,6 +63,7 @@ export default async function RoomsPage({ searchParams }: { searchParams: Promis
             blocked: template(s.blocked, "room"), historyAria: template(s.historyAria, "room"),
             editAria: template(s.editAria, "room"), deleteAria: template(s.deleteAria, "room"),
             deleteConfirm: template(s.deleteConfirm, "room"), connected: template(s.connected, "rooms"),
+            floors: s.floors,
           }}
         />
       )}

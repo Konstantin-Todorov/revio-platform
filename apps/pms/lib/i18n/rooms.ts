@@ -21,6 +21,28 @@ export interface RoomsStrings {
   roomName: string;
   floor: string;
   floorPlaceholder: string;
+  /** The Floors card at the top of Rooms — strings only, the manager is a client component. */
+  floors: {
+    title: string;
+    subtitle: string;
+    noFloor: string;
+    /** "{n} rooms" */
+    roomsOne: string;
+    roomsMany: string;
+    /** "Floor {floor}" — only for a bare number; a named floor ("Ground", "Annex") shows as typed. */
+    numbered: string;
+    arrange: string;
+    close: string;
+    whichFloor: string;
+    whichFloorPlaceholder: string;
+    whichFloorHint: string;
+    whichRooms: string;
+    selectAll: string;
+    selectNone: string;
+    save: string;
+    saving: string;
+    empty: string;
+  };
   roomPlaceholder: string;
   features: string;
   featureLabels: Record<string, string>;
@@ -80,6 +102,25 @@ export const rooms: Translations<RoomsStrings> = {
     roomName: "Room number / name",
     floor: "Floor / zone",
     floorPlaceholder: "Floor 1",
+    floors: {
+      title: "Floors",
+      subtitle: "Floors group your rooms on the calendar and on the housekeeping board.",
+      noFloor: "No floor yet",
+      roomsOne: "1 room",
+      roomsMany: "{n} rooms",
+      numbered: "Floor {floor}",
+      arrange: "Arrange rooms by floor",
+      close: "Close",
+      whichFloor: "Floor",
+      whichFloorPlaceholder: "e.g. 1, 2 or Ground",
+      whichFloorHint: "Type a number — “1” shows as “Floor 1”. Leave it empty to take the ticked rooms off any floor.",
+      whichRooms: "Which rooms are on this floor?",
+      selectAll: "Tick all",
+      selectNone: "Clear",
+      save: "Save floor",
+      saving: "Saving…",
+      empty: "No room has a floor yet. Use “Arrange rooms by floor” to set them all at once.",
+    },
     roomPlaceholder: "e.g. 101",
     features: "Features",
     featureLabels: { quiet: "Quiet", accessible: "Accessible", view: "View", smoking: "Smoking" },
@@ -137,6 +178,25 @@ export const rooms: Translations<RoomsStrings> = {
     roomName: "Номер / име на стаята",
     floor: "Етаж / зона",
     floorPlaceholder: "Етаж 1",
+    floors: {
+      title: "Етажи",
+      subtitle: "Етажите групират стаите в календара и на таблото на хаускийпинга.",
+      noFloor: "Все още без етаж",
+      roomsOne: "1 стая",
+      roomsMany: "{n} стаи",
+      numbered: "Етаж {floor}",
+      arrange: "Подреди стаите по етажи",
+      close: "Затвори",
+      whichFloor: "Етаж",
+      whichFloorPlaceholder: "напр. 1, 2 или Приземен",
+      whichFloorHint: "Въведете число — „1“ се показва като „Етаж 1“. Оставете празно, за да махнете етажа на отметнатите стаи.",
+      whichRooms: "Кои стаи са на този етаж?",
+      selectAll: "Отметни всички",
+      selectNone: "Изчисти",
+      save: "Запази етажа",
+      saving: "Запазване…",
+      empty: "Все още никоя стая няма етаж. Използвайте „Подреди стаите по етажи“, за да ги зададете наведнъж.",
+    },
     roomPlaceholder: "напр. 101",
     features: "Особености",
     featureLabels: { quiet: "Тиха", accessible: "Достъпна", view: "С гледка", smoking: "За пушачи" },
