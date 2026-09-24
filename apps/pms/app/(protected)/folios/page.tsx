@@ -4,13 +4,16 @@ import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { listFolios, listFolioHistory, listReceivables, folioOutcomeSummary } from "@/lib/folio";
 import { OutcomeSummary } from "@/components/folios/OutcomeSummary";
 import { OpenFoliosTable, type OpenFolioRow } from "@/components/folios/OpenFoliosTable";
-import { money } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { folios as foliosDict } from "@/lib/i18n/folios";
 
 export const dynamic = "force-dynamic";
 
 export default async function FoliosPage({ searchParams }: { searchParams: Promise<{ tab?: string; q?: string }> }) {
   const sp = await searchParams;
   const tab = sp.tab === "history" ? "history" : sp.tab === "receivables" ? "receivables" : "open";
+  const { t, money } = await i18n();
+  const s = t(foliosDict);
 
   // Open / History split (§4.1): Open = today's operational work; History = the read-only financial record.
   // Receivables is loaded on EVERY tab, not just its own, because its count belongs on the tab
@@ -38,26 +41,26 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
 
   return (
     <div>
-      <PageHeader title="Folios &amp; Billing" subtitle="Open = live bills for in-house guests. Receivables = money owed by guests who have left. History = the settled financial record." />
+      <PageHeader title={s.title} subtitle={s.subtitle} />
 
       <div className="mb-4 flex items-center gap-1 border-b border-surface-border">
-        <Tab id="open" label="Open" icon={Receipt} />
-        <Tab id="receivables" label="Receivables" icon={CircleDollarSign} count={receivables.rows.length} />
-        <Tab id="history" label="History" icon={Archive} />
+        <Tab id="open" label={s.tabs.open} icon={Receipt} />
+        <Tab id="receivables" label={s.tabs.receivables} icon={CircleDollarSign} count={receivables.rows.length} />
+        <Tab id="history" label={s.tabs.history} icon={Archive} />
       </div>
 
       {tab === "open" ? (
         openRows.length === 0 ? (
           <Card surface="flat" className="p-8 text-center">
-            <p className="text-[14px] font-semibold text-ink-900">No one in house</p>
+            <p className="text-[14px] font-semibold text-ink-900">{s.noOneTitle}</p>
             <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-ink-500">
-              Folios open automatically when a guest checks in. Check someone in from the{" "}
-              <Link href="/dashboard" className="font-semibold text-accent-600 underline">Front Desk</Link>.
+              {s.noOneBefore}{" "}
+              <Link href="/dashboard" className="font-semibold text-accent-600 underline">{s.frontDesk}</Link>.
             </p>
           </Card>
         ) : (
           <Card surface="flat">
-            <OpenFoliosTable rows={openRows.map<OpenFolioRow>((r) => ({ reservationId: r.reservationId, guestName: r.guestName, units: r.units, balance: r.balance, currency: r.currency }))} />
+            <OpenFoliosTable t={s.table} rows={openRows.map<OpenFolioRow>((r) => ({ reservationId: r.reservationId, guestName: r.guestName, units: r.units, balance: r.balance, currency: r.currency, balanceLabel: r.balance == null ? null : money(r.balance, r.currency) }))} />
           </Card>
         )
       ) : tab === "receivables" ? (
@@ -66,16 +69,16 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
            so the debt was both invisible as a receivable and misleading as a live bill. */
         receivables.rows.length === 0 ? (
           <Card surface="flat" className="p-8 text-center">
-            <p className="text-[14px] font-semibold text-ink-900">Nothing outstanding</p>
+            <p className="text-[14px] font-semibold text-ink-900">{s.nothingOutstanding}</p>
             <p className="mx-auto mt-1 max-w-sm text-[12.5px] text-ink-500">
-              Every departed guest has settled. A stay checked out with an unpaid balance lands here until a manager resolves it.
+              {s.nothingOutstandingBody}
             </p>
           </Card>
         ) : (
           <Card surface="flat">
             <div className="flex items-baseline justify-between border-b border-surface-border px-4 py-3">
               <span className="text-[12.5px] font-semibold text-ink-700">
-                {receivables.rows.length} unpaid folio{receivables.rows.length === 1 ? "" : "s"} · oldest first
+                {s.unpaid(receivables.rows.length)}
               </span>
               <span className="tnum text-[15px] font-bold text-danger-600">
                 {money(receivables.totalMinor, receivables.rows[0]!.currency)}
@@ -90,7 +93,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
                     </Link>
                     <div className="mt-0.5 text-[11.5px] text-ink-500">
                       {row.label}
-                      {row.closedAt ? ` · left ${row.closedAt.toISOString().slice(0, 10)}` : ""}
+                      {row.closedAt ? s.left(row.closedAt.toISOString().slice(0, 10)) : ""}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
@@ -98,7 +101,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
                         yesterday's are not the same task, and a date you have to subtract in your
                         head does not say so. */}
                     <StatusPill tone={row.ageDays >= 30 ? "danger" : row.ageDays >= 7 ? "warning" : "neutral"}>
-                      {row.ageDays === 0 ? "today" : `${row.ageDays}d`}
+                      {row.ageDays === 0 ? s.today : s.days(row.ageDays)}
                     </StatusPill>
                     <span className="tnum text-[13px] font-bold text-danger-600">{money(row.balance, row.currency)}</span>
                   </div>
@@ -106,7 +109,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
               ))}
             </ul>
             <p className="border-t border-surface-border px-4 py-2.5 text-[11px] text-ink-400">
-              Open a folio to resolve it — reopen and take payment, mark it paid off-system, keep chasing it, or write it off.
+              {s.receivablesNote}
             </p>
           </Card>
         )
@@ -120,29 +123,31 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
             headline={outcomes.headline}
             sinceDays={outcomes.sinceDays}
             currency={receivables.property.baseCurrency}
+            t={s.outcomes}
+            money={(m) => money(m, receivables.property.baseCurrency)}
           />
         )}
         <Card surface="flat">
           {/* History search (§4.2) — read-only archive; find a guest's folio, its invoices reachable. */}
           <form method="GET" className="flex items-center gap-2 border-b border-surface-border px-4 py-2.5">
             <input type="hidden" name="tab" value="history" />
-            <input name="q" defaultValue={sp.q ?? ""} placeholder="Search guest, reservation # or invoice #…" className="w-full bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400" />
-            <button className="shrink-0 rounded-md bg-accent-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-accent-500">Search</button>
-            {sp.q && <Link href="/folios?tab=history" className="shrink-0 text-[12px] font-semibold text-ink-500 hover:underline">Clear</Link>}
+            <input name="q" defaultValue={sp.q ?? ""} placeholder={s.searchHistory} className="w-full bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400" />
+            <button className="shrink-0 rounded-md bg-accent-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-accent-500">{s.search}</button>
+            {sp.q && <Link href="/folios?tab=history" className="shrink-0 text-[12px] font-semibold text-ink-500 hover:underline">{s.clear}</Link>}
           </form>
           {!history || history.rows.length === 0 ? (
-            <div className="px-4 py-8 text-center text-[12.5px] text-ink-400">{sp.q ? `No settled folios match “${sp.q}”.` : "No departed stays yet — the archive fills as guests check out."}</div>
+            <div className="px-4 py-8 text-center text-[12.5px] text-ink-400">{sp.q ? s.noMatch(sp.q) : s.noArchive}</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                    <th className="px-4 py-2.5">Guest</th>
-                    <th className="px-4 py-2.5">Stay</th>
-                    <th className="px-4 py-2.5">Room</th>
-                    <th className="px-4 py-2.5">Invoice</th>
-                    <th className="px-4 py-2.5 text-right">Balance</th>
-                    <th className="px-4 py-2.5">Status</th>
+                    <th className="px-4 py-2.5">{s.cols.guest}</th>
+                    <th className="px-4 py-2.5">{s.cols.stay}</th>
+                    <th className="px-4 py-2.5">{s.cols.room}</th>
+                    <th className="px-4 py-2.5">{s.cols.invoice}</th>
+                    <th className="px-4 py-2.5 text-right">{s.cols.balance}</th>
+                    <th className="px-4 py-2.5">{s.cols.status}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -162,7 +167,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
                       <td className="tnum px-4 py-2.5 text-right font-semibold text-ink-900">{r.balanceMinor == null ? "—" : money(r.balanceMinor, r.currency)}</td>
                       <td className="px-4 py-2.5">
                         <StatusPill tone={r.settled ? "success" : (r.balanceMinor ?? 0) > 0 ? "danger" : "neutral"}>
-                          {r.settled ? "Settled" : (r.balanceMinor ?? 0) > 0 ? "Balance due" : "Open"}
+                          {r.settled ? s.settled : (r.balanceMinor ?? 0) > 0 ? s.balanceDue : s.open}
                         </StatusPill>
                       </td>
                     </tr>
@@ -172,7 +177,7 @@ export default async function FoliosPage({ searchParams }: { searchParams: Promi
             </div>
           )}
           <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-            History is read-only — a closed folio is corrected with a credit note, never edited.
+            {s.readOnly}
           </p>
         </Card>
         </>

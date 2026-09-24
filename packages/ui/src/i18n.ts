@@ -94,6 +94,8 @@ export function translationCoverage<T>(dict: Translations<T>): { total: number; 
       for (const [k, v] of Object.entries(en)) walk(v, isBranch(bg) ? bg[k] : undefined, path ? `${path}.${k}` : k);
       return;
     }
+    // An English value that is deliberately empty (no placeholder, no suffix) has nothing to translate.
+    if (en === "") return;
     total++;
     if (bg === undefined || bg === null || bg === "") missing.push(path);
   };

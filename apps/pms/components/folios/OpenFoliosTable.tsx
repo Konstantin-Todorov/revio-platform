@@ -12,11 +12,15 @@ export type OpenFolioRow = {
   units: string[];
   balance: number | null;
   currency: string;
+  /** Formatted on the server in the reader's language — this client bundle carries no formatter. */
+  balanceLabel?: string | null;
 };
+export type OpenFoliosStrings = { search: string; whoOwes: string; room: (units: string) => string; notOpened: string; settled: string; noMatch: (q: string) => string };
+const EN: OpenFoliosStrings = { search: "Search guest or room…", whoOwes: "Who owes", room: (u) => `Room ${u}`, notOpened: "Not opened", settled: "Settled", noMatch: (q) => `No open folios match “${q}”.` };
 
 /** Open folios (PMS-REFINEMENT-R1 §4.3): the live operational list. Search by guest/room + a
  * "who owes money" sort that floats the biggest balances up. */
-export function OpenFoliosTable({ rows }: { rows: OpenFolioRow[] }) {
+export function OpenFoliosTable({ rows, t = EN }: { rows: OpenFolioRow[]; t?: OpenFoliosStrings }) {
   const [q, setQ] = useState("");
   const [byBalance, setByBalance] = useState(false);
 
@@ -31,13 +35,13 @@ export function OpenFoliosTable({ rows }: { rows: OpenFolioRow[] }) {
     <div>
       <div className="flex items-center gap-2 border-b border-surface-border px-4 py-2.5">
         <Search className="h-4 w-4 text-ink-400" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search guest or room…" className="w-full bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t.search} className="w-full bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400" />
         <button
           type="button"
           onClick={() => setByBalance((v) => !v)}
           className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-semibold transition-colors ${byBalance ? "border-accent-500 bg-accent-50 text-accent-700" : "border-surface-border text-ink-500 hover:bg-surface-muted"}`}
         >
-          <ArrowDownWideNarrow className="h-3.5 w-3.5" /> Who owes
+          <ArrowDownWideNarrow className="h-3.5 w-3.5" /> {t.whoOwes}
         </button>
       </div>
       <ul className="divide-y divide-surface-border">
@@ -48,23 +52,23 @@ export function OpenFoliosTable({ rows }: { rows: OpenFolioRow[] }) {
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-50 text-accent-600"><Receipt className="h-4 w-4" /></div>
                 <div className="min-w-0">
                   <div className="truncate text-[13.5px] font-semibold text-ink-900">{r.guestName}</div>
-                  <div className="text-[11.5px] text-ink-500">Room {r.units.join(", ") || "—"}</div>
+                  <div className="text-[11.5px] text-ink-500">{t.room(r.units.join(", ") || "—")}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 {r.balance == null ? (
-                  <StatusPill tone="neutral">Not opened</StatusPill>
+                  <StatusPill tone="neutral">{t.notOpened}</StatusPill>
                 ) : r.balance === 0 ? (
-                  <StatusPill tone="success">Settled</StatusPill>
+                  <StatusPill tone="success">{t.settled}</StatusPill>
                 ) : (
-                  <span className="tnum text-[13.5px] font-bold text-danger-600">{money(r.balance, r.currency)}</span>
+                  <span className="tnum text-[13.5px] font-bold text-danger-600">{r.balanceLabel ?? money(r.balance, r.currency)}</span>
                 )}
                 <ChevronRight className="h-4 w-4 text-ink-300" />
               </div>
             </Link>
           </li>
         ))}
-        {view.length === 0 && <li className="px-4 py-6 text-center text-[12.5px] text-ink-400">No open folios match “{q}”.</li>}
+        {view.length === 0 && <li className="px-4 py-6 text-center text-[12.5px] text-ink-400">{t.noMatch(q)}</li>}
       </ul>
     </div>
   );
