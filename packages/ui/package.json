@@ -65,7 +65,8 @@
     "./auth-strings": "./src/auth-strings.ts",
     "./account-strings": "./src/account-strings.ts",
     "./shell-strings": "./src/shell-strings.ts",
-    "./welcome-strings": "./src/welcome-strings.ts"
+    "./welcome-strings": "./src/welcome-strings.ts",
+    "./activity-strings": "./src/activity-strings.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

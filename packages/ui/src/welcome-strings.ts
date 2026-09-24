@@ -91,6 +91,18 @@ export interface WelcomeStrings {
     viewBooking: string;
     sameColour: string;
   };
+  /** The dashboard checklist that follows setup — its frame, not its steps (each product says those). */
+  checklist: {
+    /** "Welcome to {product}" */
+    welcome: string;
+    /** "{done} of {total} done" */
+    progress: string;
+    /** "Shared with {products} — you never enter this twice." */
+    shared: string;
+    alreadyThere: string;
+    setUpForYou: string;
+    done: string;
+  };
   /** Keyed by `WelcomeWriteCode` from `@revio/db`. `price_no_plan` takes "{screen}". */
   errors: Record<
     "property_name" | "contact_email" | "roomtype_name" | "roomtype_count" | "roomtype_guests"
@@ -175,6 +187,14 @@ export const welcomeStrings: Translations<WelcomeStrings> = {
       dear: "Dear Elena, your booking is confirmed.",
       viewBooking: "View your booking",
       sameColour: "The same colour is used on your own booking page unless you change it there.",
+    },
+    checklist: {
+      welcome: "Welcome to {product}",
+      progress: "{done} of {total} done",
+      shared: "Shared with {products} — you never enter this twice.",
+      alreadyThere: "Already there",
+      setUpForYou: "Set up for you",
+      done: "Done",
     },
     errors: {
       property_name: "Your property needs a name.",
@@ -265,6 +285,14 @@ export const welcomeStrings: Translations<WelcomeStrings> = {
       dear: "Здравейте, Елена, резервацията Ви е потвърдена.",
       viewBooking: "Вижте резервацията си",
       sameColour: "Същият цвят се използва и на страницата Ви за директни резервации, освен ако не го смените там.",
+    },
+    checklist: {
+      welcome: "Добре дошли в {product}",
+      progress: "{done} от {total} готови",
+      shared: "Общо с {products} — никога не го въвеждате два пъти.",
+      alreadyThere: "Вече е налице",
+      setUpForYou: "Настроено за Вас",
+      done: "Готово",
     },
     errors: {
       property_name: "Обектът трябва да има име.",

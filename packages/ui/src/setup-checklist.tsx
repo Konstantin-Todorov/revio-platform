@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { fill, translate, type Locale } from "./i18n";
+import { welcomeStrings } from "./welcome-strings";
 
 /**
  * The first-run setup checklist, shared by RevioLink, RevioCRS and RevioPMS.
@@ -33,9 +35,13 @@ export interface SetupChecklistProps {
   total: number;
   /** Rendered top-right — e.g. a "hide" control. Optional. */
   action?: ReactNode;
+  /** A server component, so the language arrives as a prop. English by default. */
+  locale?: Locale;
 }
 
-export function SetupChecklist({ productName, promise, steps, done, total, action }: SetupChecklistProps) {
+export function SetupChecklist({ productName, promise, steps, done, total, action, locale = "en" }: SetupChecklistProps) {
+  const t = translate(welcomeStrings, locale).checklist;
+  const and = translate(welcomeStrings, locale).shell.and;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const nextKey = steps.find((s) => !s.done)?.key;
 
@@ -45,7 +51,7 @@ export function SetupChecklist({ productName, promise, steps, done, total, actio
       <div className="bg-brand-900 px-5 py-4 text-white">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-[16px] font-bold tracking-tight">Welcome to {productName}</h2>
+            <h2 className="text-[16px] font-bold tracking-tight">{fill(t.welcome, { product: productName })}</h2>
             <p className="mt-0.5 text-[12.5px] text-white/70">{promise}</p>
           </div>
           {action}
@@ -58,7 +64,7 @@ export function SetupChecklist({ productName, promise, steps, done, total, actio
             />
           </div>
           <span className="tnum shrink-0 text-[12px] font-semibold text-white/80">
-            {done} of {total} done
+            {fill(t.progress, { done, total })}
           </span>
         </div>
       </div>
@@ -96,14 +102,14 @@ export function SetupChecklist({ productName, promise, steps, done, total, actio
                     would contradict itself on a hotel that runs all three. */}
                 {s.sharedWith && s.sharedWith.length > 0 && (
                   <div className="mt-0.5 text-[12px] leading-snug text-success-600">
-                    Shared with {listProducts(s.sharedWith)} — you never enter this twice.
+                    {fill(t.shared, { products: listProducts(s.sharedWith, and) })}
                   </div>
                 )}
               </div>
 
               {s.done ? (
                 <span className="shrink-0 text-[12px] font-semibold text-success-600">
-                  {s.sharedWith ? "Already there" : s.providedForYou ? "Set up for you" : "Done"}
+                  {s.sharedWith ? t.alreadyThere : s.providedForYou ? t.setUpForYou : t.done}
                 </span>
               ) : (
                 <a
@@ -134,7 +140,7 @@ function CheckMark() {
 }
 
 /** "RevioLink" · "RevioLink and RevioPMS" — an Oxford-comma-free list for two or three products. */
-function listProducts(names: string[]): string {
+function listProducts(names: string[], and = "and"): string {
   if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${names.slice(0, -1).join(", ")} ${and} ${names[names.length - 1]}`;
 }

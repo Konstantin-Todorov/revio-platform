@@ -79,7 +79,7 @@ export default async function DashboardPage() {
     if (unitCount === 0) redirect("/welcome/property");
   }
 
-  const [{ property, today, arrivals, inHouse, departures, departedToday, conflicts, kpis, exceptions }, setup, { t, money, day }] =
+  const [{ property, today, arrivals, inHouse, departures, departedToday, conflicts, kpis, exceptions }, setup, { t, money, day, locale }] =
     await Promise.all([getFrontDeskOverview(), getSetup(), i18n()]);
   const s = t(frontdesk);
   const c = t(common);
@@ -119,9 +119,10 @@ export default async function DashboardPage() {
         <SetupChecklist
           productName="RevioPMS"
           promise={s.setupPromise}
-          steps={setup.steps}
+          steps={setup.steps.map((st) => ({ ...st, ...(s.setupSteps[st.key] ?? {}) }))}
           done={setup.done}
           total={setup.total}
+          locale={locale}
         />
       )}
 

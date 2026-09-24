@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { ActivityTable, ActivityFilters } from "@revio/ui/activity-table";
 import { getActivity } from "@/lib/activity";
+import { getProperty } from "@/lib/data";
 import { guard } from "@/lib/authz";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 
@@ -15,7 +16,10 @@ export default async function ActivityPage({
 
   const sp = await searchParams;
   const includeAutomatic = sp.auto === "1";
-  const view = await getActivity({ from: sp.from, to: sp.to, actorId: sp.actor, includeAutomatic });
+  const [view, property] = await Promise.all([
+    getActivity({ from: sp.from, to: sp.to, actorId: sp.actor, includeAutomatic }),
+    getProperty(),
+  ]);
 
   const showAuto = new URLSearchParams({ from: view.from, to: view.to, auto: "1" });
   if (sp.actor) showAuto.set("actor", sp.actor);
@@ -36,6 +40,8 @@ export default async function ActivityPage({
           view={view}
           showAutomaticHref={`/activity?${showAuto.toString()}`}
           labels={{ automaticNote: "channel syncs the software made by itself. They have their own screen in RevioLink." }}
+          // The property's clock, not the server's UTC one.
+          timeZone={property.timezone}
         />
       </Card>
     </div>

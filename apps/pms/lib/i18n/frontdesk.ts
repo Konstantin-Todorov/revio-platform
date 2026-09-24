@@ -6,6 +6,8 @@ export interface FrontDeskStrings {
   subtitle: (property: string, date: string) => string;
   walkIn: string;
   setupPromise: string;
+  /** The checklist's steps, by the key `reviopmsSetup` in core gives them. */
+  setupSteps: Record<string, { title: string; body: string; cta: string }>;
   strip: {
     overstayed: (n: number) => string;
     pastTime: (n: number) => string;
@@ -39,6 +41,13 @@ export const frontdesk: Translations<FrontDeskStrings> = {
     subtitle: (property, date) => `${property} · ${date} (property time)`,
     walkIn: "Walk-in",
     setupPromise: "Four steps and your front desk can check a guest into a real room.",
+    setupSteps: {
+      property: { title: "Your property is set up", body: "Created with your account, along with a starting rate plan.", cta: "Review" },
+      "room-types": { title: "Add your room types", body: "Defined once for the whole platform, in RevioLink or RevioCRS under Rooms & Rates.", cta: "See rooms" },
+      units: { title: "Add your physical rooms", body: "Room 101, 102, 201 — the actual doors housekeeping cleans and guests sleep behind.", cta: "Add rooms" },
+      configuration: { title: "Check your property setup", body: "Check-out time, VAT and city tax, and whether cleaned rooms need inspecting.", cta: "Open configuration" },
+      staff: { title: "Add your team", body: "Reception, housekeeping and maintenance each see only the screens they need.", cta: "Add staff" },
+    },
     strip: {
       overstayed: (n) => `${n} overstayed — past departure, still in-house (distorts occupancy)`,
       pastTime: (n) => `${n} past checkout time`,
@@ -70,6 +79,13 @@ export const frontdesk: Translations<FrontDeskStrings> = {
     subtitle: (property, date) => `${property} · ${date} (часът на обекта)`,
     walkIn: "Гост без резервация",
     setupPromise: "Четири стъпки и рецепцията може да настани гост в истинска стая.",
+    setupSteps: {
+      property: { title: "Обектът Ви е създаден", body: "Създаден е заедно с профила Ви, с начален ценови план.", cta: "Преглед" },
+      "room-types": { title: "Добавете типовете стаи", body: "Задават се веднъж за цялата платформа — в RevioLink или RevioCRS, в „Стаи и цени“.", cta: "Към стаите" },
+      units: { title: "Добавете физическите стаи", body: "Стая 101, 102, 201 — истинските врати, които хаускийпингът почиства и зад които спят гостите.", cta: "Добави стаи" },
+      configuration: { title: "Проверете настройките на обекта", body: "Час за напускане, ДДС и туристически данък и дали почистените стаи се проверяват.", cta: "Към конфигурацията" },
+      staff: { title: "Добавете екипа си", body: "Рецепцията, хаускийпингът и поддръжката виждат само екраните, които им трябват.", cta: "Добави служители" },
+    },
     strip: {
       overstayed: (n) => `${n} ${n === 1 ? "гост е останал" : "гости са останали"} след датата на напускане — изкривява заетостта`,
       pastTime: (n) => `${n} ${n === 1 ? "гост е" : "гости са"} след часа за напускане`,

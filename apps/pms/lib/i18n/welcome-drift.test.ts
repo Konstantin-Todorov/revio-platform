@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { emptyFacts, inheritedSteps, welcomeFlow, type ProductName } from "@revio/core";
+import { emptyFacts, inheritedSteps, reviopmsSetup, welcomeFlow, type ProductName } from "@revio/core";
+import { frontdesk } from "./frontdesk";
 import { welcomeStepText } from "@revio/ui/welcome-strings";
 
 /**
@@ -32,4 +33,14 @@ describe("welcome step headings match core, word for word, in English", () => {
       if (shared) expect(welcomeStepText("shared", product, "en", shared).lead).toBe(shared.lead);
     });
   }
+});
+
+describe("the dashboard checklist says core's steps word for word, in English", () => {
+  it("RevioPMS", () => {
+    const facts = { roomTypes: 0, units: 0, hasTaxes: false, staff: 1, alsoRuns: [] } as unknown as Parameters<typeof reviopmsSetup>[0];
+    for (const step of reviopmsSetup(facts).steps) {
+      const said = frontdesk.en.setupSteps[step.key];
+      expect({ key: step.key, ...said }).toEqual({ key: step.key, title: step.title, body: step.body, cta: step.cta });
+    }
+  });
 });
