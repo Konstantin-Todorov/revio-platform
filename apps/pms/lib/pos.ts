@@ -8,7 +8,7 @@ export async function getCatalog() {
   const { property } = await activeProperty();
   const items = await prisma.posItem.findMany({
     where: { propertyId: property.id },
-    orderBy: [{ outlet: "asc" }, { category: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
   return { property, items };
 }
@@ -24,7 +24,8 @@ export async function getMinibarBoard(reservationId: string) {
 
   await ensureFolio(session.tenantId, property.id, reservationId);
   const [items, folio] = await Promise.all([
-    prisma.posItem.findMany({ where: { propertyId: property.id, active: true }, orderBy: [{ outlet: "asc" }, { category: "asc" }, { sortOrder: "asc" }, { name: "asc" }] }),
+    // The hotel's own order within each outlet (Catalog ↑/↓); the page groups by outlet.
+    prisma.posItem.findMany({ where: { propertyId: property.id, active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     // Tap-to-post lands on the PRIMARY (guest) folio; split/company folios are handled on the bill.
     prisma.folio.findFirst({ where: { reservationId, isPrimary: true }, include: { lines: { orderBy: { postedAt: "desc" } } } }),
   ]);

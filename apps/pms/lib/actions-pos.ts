@@ -8,6 +8,14 @@ import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { ensureFolio } from "./folio";
 import { postFolioLine, type Outlet } from "./posting";
 import { logAudit, str } from "./mutation-helpers";
+import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
+
+/** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
+async function flashSay() {
+  return (await i18n()).t(flash);
+}
 
 /**
  * Session + capability gate for every action in this file.
@@ -110,6 +118,31 @@ export async function updatePosItem(fd: FormData): Promise<void> {
   await logAudit(session.activePropertyId, session.tenantId, { entity: "pos_item", field: "edit", newValue: str(fd, "name"), userId: session.userId });
   revalidatePath("/minibar/catalog");
   revalidatePath("/minibar");
+}
+
+/**
+ * Move an item one step up or down within its outlet — the order it appears in on the catalog and
+ * on the charge screen, where the most-used things should be the first ones under a thumb.
+ * Renumbers the outlet 0…n first, so items created before ordering existed (all 0) move predictably.
+ */
+export async function movePosItem(fd: FormData): Promise<void> {
+  const session = await ctx("manage");
+  const id = str(fd, "id");
+  const step = str(fd, "step") === "up" ? -1 : 1;
+  const item = await prisma.posItem.findFirst({ where: { id, propertyId: session.activePropertyId } });
+  if (!item) return flashError((await flashSay()).pos.itemGone);
+  const siblings = await prisma.posItem.findMany({
+    where: { propertyId: session.activePropertyId, outlet: item.outlet },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true },
+  });
+  const order = siblings.map((x) => x.id);
+  const i = order.indexOf(id);
+  const j = i + step;
+  if (j >= 0 && j < order.length) [order[i], order[j]] = [order[j]!, order[i]!];
+  await Promise.all(order.map((itemId, n) => prisma.posItem.update({ where: { id: itemId }, data: { sortOrder: n } })));
+  revalidatePath("/minibar/catalog");
+  revalidatePath("/minibar", "layout");
 }
 
 export async function deletePosItem(fd: FormData): Promise<void> {

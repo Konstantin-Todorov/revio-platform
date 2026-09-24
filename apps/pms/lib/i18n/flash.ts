@@ -54,6 +54,7 @@ export interface FlashStrings {
     floorGone: string;
     nameTheFloor: string;
   };
+  pos: { itemGone: string };
   workforce: { delegatorsOnly: string; inactive: (name: string) => string; thatPerson: string };
   support: { expired: string; unknownRequest: string };
   maintenance: { notAStatus: string };
@@ -111,6 +112,7 @@ export const flash: Translations<FlashStrings> = {
       floorGone: "That floor no longer has any rooms — somebody changed it while this page was open. Reload the page.",
       nameTheFloor: "Give the floor a name — a number like 3, or a word like Annex.",
     },
+    pos: { itemGone: "That item is no longer in the catalog — somebody removed it while this page was open." },
     workforce: {
       delegatorsOnly: "Only a manager, supervisor or reception can clock somebody else in or out.",
       inactive: (n) => `${n} no longer has an active account, so they cannot be clocked in.`,
@@ -178,6 +180,7 @@ export const flash: Translations<FlashStrings> = {
       floorGone: "Този етаж вече няма стаи — някой го е променил, докато страницата е била отворена. Презаредете страницата.",
       nameTheFloor: "Дайте име на етажа — число като 3 или дума като Анекс.",
     },
+    pos: { itemGone: "Този артикул вече не е в каталога — някой го е премахнал, докато страницата е била отворена." },
     workforce: {
       delegatorsOnly: "Само управител, старши служител или рецепцията може да започва и приключва смяна на друг.",
       inactive: (n) => `${n} вече няма активен профил, затова не може да започне смяна.`,

@@ -1,28 +1,30 @@
 import Link from "next/link";
-import { ChevronRight, Settings2, DoorOpen } from "lucide-react";
+import { ChevronRight, DoorOpen } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { listFolios } from "@/lib/folio";
 import { i18n } from "@/lib/i18n/server";
 import { extras } from "@/lib/i18n/extras";
+import { ExtrasTabs } from "@/components/extras/ExtrasTabs";
+import { prisma } from "@/lib/db";
+import { getSession } from "@/lib/session";
+import { roleHasCapability } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
 export default async function MinibarPage() {
-  const { rows } = await listFolios();
+  const session = await getSession();
+  const [{ rows }, catalogCount] = await Promise.all([
+    listFolios(),
+    session ? prisma.posItem.count({ where: { propertyId: session.activePropertyId } }) : Promise.resolve(0),
+  ]);
   const { t, money } = await i18n();
   const s = t(extras);
 
   return (
     <div>
-      <PageHeader
-        title={s.title}
-        subtitle={s.subtitle}
-        action={
-          <Link href="/minibar/catalog" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[13px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
-            <Settings2 className="h-4 w-4" /> {s.manageCatalog}
-          </Link>
-        }
-      />
+      <PageHeader title={s.title} subtitle={s.subtitle} />
+      {/* Only somebody who may change the catalog is offered it — an outlet account only charges. */}
+      {session && roleHasCapability(session.role, "manage") && <ExtrasTabs active="post" t={s.tabs} catalogCount={catalogCount} />}
 
       {rows.length === 0 ? (
         <Card className="p-8 text-center">

@@ -1,111 +1,61 @@
-import Link from "next/link";
-import { ArrowLeft, Plus, Trash2, Save, AlertTriangle } from "lucide-react";
-import { Card, PageHeader } from "@/components/ui/primitives";
+import { AlertTriangle } from "lucide-react";
+import { PageHeader } from "@/components/ui/primitives";
 import { getCatalog } from "@/lib/pos";
-import { createPosItem, updatePosItem, deletePosItem } from "@/lib/actions-pos";
-import { POS_OUTLETS, POS_OUTLET_LABEL } from "@/lib/roles";
+import { POS_OUTLETS } from "@/lib/roles";
 import { i18n } from "@/lib/i18n/server";
 import { extras } from "@/lib/i18n/extras";
+import { ExtrasTabs } from "@/components/extras/ExtrasTabs";
+import { CatalogManager } from "@/components/extras/CatalogManager";
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/session";
+import { roleHasCapability } from "@/lib/roles";
 
-import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
 
-const inputCls = "h-9 rounded-md border border-surface-border bg-white px-2.5 text-[13px] text-ink-900 outline-none placeholder:text-ink-400 focus:border-accent-600";
-
+/**
+ * The catalog — the second tab of Extras & Charges.
+ *
+ * It was an inline spreadsheet: four inputs, a checkbox and two icon buttons on every row, every
+ * item in one list whatever it was, and "Breakfast" filed under Minibar because that was the
+ * default. Now it reads like the charge screen it feeds — by outlet, a name and a price per line,
+ * and the editing tucked behind ✎ until somebody asks for it.
+ */
 export default async function CatalogPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const { error } = await searchParams;
+  // Every write here needs `manage`; an outlet account that types the address goes back to charging.
+  const session = await getSession();
+  if (!session || !roleHasCapability(session.role, "manage")) redirect("/minibar");
   const { property, items } = await getCatalog();
-  const x = (await i18n()).t(extras);
+  const { t, money } = await i18n();
+  const x = t(extras);
   const s = x.catalog;
-  const outletLabel = (o: string) => x.outlets[o] ?? POS_OUTLET_LABEL[o] ?? o;
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <Link href="/minibar" className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-ink-700">
-        <ArrowLeft className="h-4 w-4" /> {s.back}
-      </Link>
-      <PageHeader title={s.title} subtitle={s.subtitle(property.name)} />
+    <div className="mx-auto max-w-3xl">
+      <PageHeader title={x.title} subtitle={s.subtitle(property.name)} />
+      <ExtrasTabs active="catalog" t={x.tabs} catalogCount={items.length} />
 
-      {error === "price" && (
-        <div className="mb-4 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
-          {s.priceError}
-        </div>
-      )}
-      {error === "fields" && (
+      {(error === "price" || error === "fields") && (
         <div className="mb-4 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {s.fieldsError}
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {error === "price" ? s.priceError : s.fieldsError}
         </div>
       )}
 
-      {/* Add */}
-      <Card className="mb-4 p-4">
-        <h3 className="mb-3 text-[13px] font-bold text-ink-900">{s.addItem}</h3>
-        <form action={createPosItem} className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold text-ink-600">{s.name}</span>
-            <input name="name" required placeholder={s.namePlaceholder} className={`${inputCls} w-40`} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold text-ink-600">{s.outlet}</span>
-            <select name="outlet" defaultValue="minibar" className={`${inputCls} w-28`}>
-              {POS_OUTLETS.map((o) => <option key={o} value={o}>{outletLabel(o)}</option>)}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold text-ink-600">{s.type}</span>
-            <select name="category" defaultValue="minibar" className={`${inputCls} w-24`}>
-              <option value="minibar">{s.item}</option>
-              <option value="extra">{s.extra}</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-semibold text-ink-600">{s.price(property.baseCurrency)}</span>
-            <input name="price" type="text" inputMode="decimal" required placeholder="0.00" className={`${inputCls} w-24`} />
-          </label>
-          <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel={s.adding}>
-            <Plus className="h-3.5 w-3.5" /> {s.add}
-          </SubmitButton>
-        </form>
-      </Card>
-
-      {/* List — inline editable */}
-      {items.length === 0 ? (
-        <Card className="p-6 text-center text-[13px] text-ink-500">{s.empty}</Card>
-      ) : (
-        <Card>
-          <ul className="divide-y divide-surface-border">
-            {items.map((it) => (
-              <li key={it.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
-                <form action={updatePosItem} className="flex flex-1 flex-wrap items-center gap-2">
-                  <input type="hidden" name="id" value={it.id} />
-                  <input name="name" defaultValue={it.name} className={`${inputCls} w-36 flex-1`} />
-                  <select name="outlet" defaultValue={it.outlet ?? "minibar"} className={`${inputCls} w-24`}>
-                    {POS_OUTLETS.map((o) => <option key={o} value={o}>{outletLabel(o)}</option>)}
-                  </select>
-                  <select name="category" defaultValue={it.category} className={`${inputCls} w-20`}>
-                    <option value="minibar">{s.item}</option>
-                    <option value="extra">{s.extra}</option>
-                  </select>
-                  <input name="price" type="text" inputMode="decimal" defaultValue={(it.priceMinor / 100).toFixed(2)} className={`${inputCls} w-20`} />
-                  <label className="flex items-center gap-1.5 text-[11.5px] text-ink-600">
-                    <input type="checkbox" name="active" defaultChecked={it.active} className="h-4 w-4 rounded border-surface-border text-accent-600 focus:ring-accent-600" />
-                    {s.active}
-                  </label>
-                  <SubmitButton aria-label={s.save} title={s.save} className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border text-ink-500 transition-colors hover:bg-surface-muted hover:text-accent-600">
-                    <Save className="h-3.5 w-3.5" />
-                  </SubmitButton>
-                </form>
-                <form action={deletePosItem}>
-                  <input type="hidden" name="id" value={it.id} />
-                  <SubmitButton aria-label={s.delete} title={s.delete} className="flex h-8 w-8 items-center justify-center rounded-md text-ink-300 transition-colors hover:bg-danger-50 hover:text-danger-600">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </SubmitButton>
-                </form>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
+      <CatalogManager
+        outlets={POS_OUTLETS}
+        items={items.map((i) => ({
+          id: i.id, name: i.name, outlet: i.outlet ?? "minibar", category: i.category, priceMinor: i.priceMinor,
+          active: i.active, price: money(i.priceMinor, property.baseCurrency),
+        }))}
+        t={{
+          // Named one by one: the dictionary carries functions, which cannot cross to a client component.
+          name: s.name, namePlaceholder: s.namePlaceholder, outlet: s.outlet, type: s.type, item: s.item, extra: s.extra,
+          price: s.price(property.baseCurrency), adding: s.adding, add: s.add, active: s.active, activeHint: s.activeHint,
+          save: s.save, cancel: s.cancel, itemsOne: s.itemsOne, itemsMany: s.itemsMany, addTo: s.addTo,
+          emptyOutlet: s.emptyOutlet, edit: s.edit, hidden: s.hidden, moveUp: s.moveUp, moveDown: s.moveDown,
+          deleteConfirm: s.deleteConfirm, delete: s.delete, kindHint: s.kindHint, outlets: x.outlets,
+        }}
+      />
     </div>
   );
 }

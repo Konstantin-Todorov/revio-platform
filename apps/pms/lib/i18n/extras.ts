@@ -10,6 +10,7 @@ export interface ExtrasStrings {
   frontDesk: string;
   noRoomsAfter: string;
   outlets: Record<string, string>;
+  tabs: { post: string; catalog: string };
   stage: {
     room: (rooms: string) => string;
     subtitle: (guest: string) => string;
@@ -42,6 +43,19 @@ export interface ExtrasStrings {
     active: string;
     save: string;
     delete: string;
+    /** The grouped catalog (strings only — it is a client component). "{n}" / "{outlet}" / "{item}". */
+    itemsOne: string;
+    itemsMany: string;
+    addTo: string;
+    emptyOutlet: string;
+    edit: string;
+    cancel: string;
+    hidden: string;
+    activeHint: string;
+    moveUp: string;
+    moveDown: string;
+    deleteConfirm: string;
+    kindHint: string;
   };
 }
 
@@ -55,6 +69,7 @@ export const extras: Translations<ExtrasStrings> = {
     frontDesk: "Front Desk",
     noRoomsAfter: "first.",
     outlets: { minibar: "Minibar", spa: "Spa", bar: "Bar", restaurant: "Restaurant" },
+    tabs: { post: "Charge a guest", catalog: "Catalog" },
     stage: {
       room: (r) => `Room ${r}`,
       subtitle: (g) => `${g} · tap an item to add it to the folio`,
@@ -70,7 +85,7 @@ export const extras: Translations<ExtrasStrings> = {
     catalog: {
       back: "Minibar / POS",
       title: "Catalog",
-      subtitle: (p) => `${p} · items you can tap-to-post to a folio`,
+      subtitle: (p) => `${p} · everything you can charge to a guest’s bill, by where it is sold`,
       priceError: "That price isn’t a number. Enter an amount like 12.50.",
       fieldsError: "Enter a name and a positive price.",
       addItem: "Add an item",
@@ -87,6 +102,18 @@ export const extras: Translations<ExtrasStrings> = {
       active: "Active",
       save: "Save",
       delete: "Delete",
+      itemsOne: "1 item",
+      itemsMany: "{n} items",
+      addTo: "Add to {outlet}",
+      emptyOutlet: "Nothing here yet.",
+      edit: "Edit {item}",
+      cancel: "Cancel",
+      hidden: "Hidden",
+      activeHint: "Shown on the charge screen",
+      moveUp: "Move {item} up",
+      moveDown: "Move {item} down",
+      deleteConfirm: "Delete {item} from the catalog? Charges already on guests’ bills stay exactly as they are.",
+      kindHint: "An item is something you hand over (a drink); a service is something you do (a late check-out).",
     },
   },
   bg: {
@@ -98,6 +125,7 @@ export const extras: Translations<ExtrasStrings> = {
     frontDesk: "Рецепцията",
     noRoomsAfter: ".",
     outlets: { minibar: "Минибар", spa: "СПА", bar: "Бар", restaurant: "Ресторант" },
+    tabs: { post: "Начисли към гост", catalog: "Каталог" },
     stage: {
       room: (r) => `Стая ${r}`,
       subtitle: (g) => `${g} · докоснете артикул, за да го добавите към сметката`,
@@ -113,7 +141,7 @@ export const extras: Translations<ExtrasStrings> = {
     catalog: {
       back: "Минибар / ПОС",
       title: "Каталог",
-      subtitle: (p) => `${p} · артикули, които се начисляват с едно докосване`,
+      subtitle: (p) => `${p} · всичко, което може да се начисли по сметката на гост, подредено по място на продажба`,
       priceError: "Цената не е число. Въведете сума, напр. 12,50.",
       fieldsError: "Въведете име и положителна цена.",
       addItem: "Нов артикул",
@@ -130,6 +158,18 @@ export const extras: Translations<ExtrasStrings> = {
       active: "Активен",
       save: "Запази",
       delete: "Изтрий",
+      itemsOne: "1 артикул",
+      itemsMany: "{n} артикула",
+      addTo: "Добави в {outlet}",
+      emptyOutlet: "Все още няма нищо тук.",
+      edit: "Редактирай {item}",
+      cancel: "Отказ",
+      hidden: "Скрит",
+      activeHint: "Показва се при начисляване",
+      moveUp: "Премести {item} нагоре",
+      moveDown: "Премести {item} надолу",
+      deleteConfirm: "Да изтрием ли {item} от каталога? Вече начислените суми по сметките на гостите остават непроменени.",
+      kindHint: "Артикулът е нещо, което давате (напитка); услугата е нещо, което правите (късно напускане).",
     },
   },
 };
