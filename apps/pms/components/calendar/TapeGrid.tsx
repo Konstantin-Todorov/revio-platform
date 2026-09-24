@@ -2,10 +2,13 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pin } from "lucide-react";
+import { Pin, User } from "lucide-react";
 import type { TapeRow, TapeDay, BarStatus, TapeBar } from "@/lib/tape-chart";
 import { StayModal } from "./StayModal";
-import { money } from "@/lib/format";
+import { fill, LOCALE_LABELS } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { moneyIn } from "@/lib/i18n/money";
+import type { CalendarGridStrings } from "@/lib/i18n/calendar";
 
 /**
  * The draggable half of the calendar (§2.5).
@@ -28,15 +31,6 @@ const BAR_TONE: Record<BarStatus, string> = {
   confirmed: "bg-brand-200 text-brand-900",
   blocked: "bg-ink-300 text-ink-700",
 };
-const BAR_LABEL: Record<BarStatus, string> = {
-  arrival: "Arriving today",
-  in_house: "In house",
-  due_out: "Due out today",
-  overstayed: "Overstayed",
-  confirmed: "Confirmed",
-  blocked: "Out of order",
-};
-
 export interface TapeGridProps {
   rows: TapeRow[];
   dates: string[];
@@ -48,6 +42,8 @@ export interface TapeGridProps {
   moveAction: (fd: FormData) => Promise<{ moved: true; crossType: boolean; reservationId: string } | void>;
   /** Reads the pending price difference after a cross-type drop, so the prompt can open in place. */
   assessAction: (reservationId: string) => Promise<MoveAssessmentDto | null>;
+  /** Strings only — see `CalendarGridStrings`. */
+  t: CalendarGridStrings;
 }
 
 /** Only what the prompt renders — the shape `assessMoveForReservation` returns. */
@@ -68,7 +64,10 @@ function occupiedDuring(row: TapeRow, bar: TapeBar): boolean {
   return row.bars.some((b) => b.assignmentId !== bar.assignmentId && b.from <= bar.to && bar.from <= b.to);
 }
 
-export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveAction, assessAction }: TapeGridProps) {
+export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveAction, assessAction, t }: TapeGridProps) {
+  const locale = useLocale();
+  const money = moneyIn(locale);
+  const count = (n: number, one: string, many: string) => fill(n === 1 ? one : many, { n });
   type Drag = { assignmentId: string; fromUnitId: string; roomTypeId: string; bar: TapeBar };
   /*
    * The drag lives in a REF, and only a mirror of it in state.
@@ -137,7 +136,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
         assessmentReservationId.current = result.reservationId;
         if (a && a.kind === "rate_affecting") setAssessment(a);
       } else {
-        setToast(`Moved to ${target?.label ?? "the new room"}`);
+        setToast(fill(t.movedTo, { room: target ? fill(t.roomNamed, { room: target.label }) : t.theNewRoom }));
         window.setTimeout(() => setToast(null), 2600);
       }
     } finally {
@@ -149,12 +148,12 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
     <div className={`overflow-x-auto transition-opacity ${pending || busy ? "pointer-events-none opacity-60" : ""}`}>
       <div style={{ minWidth: labelCol + span * col }}>
         <div className="grid border-b border-surface-border bg-surface-muted" style={{ gridTemplateColumns: gridCols }}>
-          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">Room</div>
+          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">{t.room}</div>
           {tapeDays.map((d) => (
             <div key={d.date}
               className={`border-l border-surface-border py-1.5 text-center ${d.weekend ? "bg-brand-50" : ""} ${d.today ? "bg-accent-50" : ""}`}>
               <div className={`text-[10px] uppercase ${d.today ? "font-bold text-accent-700" : "text-ink-400"}`}>
-                {new Date(`${d.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}
+                {new Date(`${d.date}T00:00:00Z`).toLocaleDateString(LOCALE_LABELS[locale].intl, { weekday: "short", timeZone: "UTC" })}
               </div>
               <div className={`text-[12px] font-semibold ${d.today ? "text-accent-700" : "text-ink-700"}`}>{d.date.slice(8)}</div>
             </div>
@@ -165,7 +164,9 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
           <div key={floor}>
             <div className="grid border-b border-surface-border bg-surface-muted/60" style={{ gridTemplateColumns: gridCols }}>
               <div className="px-3 py-1 text-[11px] font-bold text-ink-500">
-                {floor === "—" ? "No floor set" : `Floor ${floor}`}
+                {/* A floor is a named object now ("Floor 1", "Ground", "Annex"), so only a bare number
+                    gets the prefix — "Floor Floor 1" was on screen in both languages. */}
+                {floor === "—" ? t.noFloor : /^\d+$/.test(floor) ? fill(t.floor, { floor }) : floor}
                 <span className="ml-1.5 font-normal text-ink-400">{floorRows.length}</span>
               </div>
             </div>
@@ -233,7 +234,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                           style={{ left: startIdx * col + 2, width: dragging.bar.columns * col - 4 }}
                         >
                           <span className="truncate">
-                            {blocked ? "Occupied these nights" : dragging.bar.guestName}
+                            {blocked ? t.occupiedNights : dragging.bar.guestName}
                           </span>
                         </div>
                       );
@@ -266,7 +267,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                             setDragging({ assignmentId: bar.assignmentId, fromUnitId: row.unitId, roomTypeId: row.roomTypeId, bar });
                           }}
                           onDragEnd={() => { draggedAt.current = Date.now(); setDragging(null); setOver(null); }}
-                          title={`${bar.guestName}${bar.occupancy != null ? ` · ${bar.occupancy} guest${bar.occupancy === 1 ? "" : "s"}` : ""} · ${bar.from} → ${bar.to} · ${BAR_LABEL[bar.status]}${bar.pinned ? " · room pinned" : ""}${bar.movable ? " · drag to another room to move" : ""}`}
+                          title={`${bar.guestName}${bar.occupancy != null ? ` · ${count(bar.occupancy, t.guestOne, t.guestMany)}` : ""} · ${bar.from} → ${bar.to} · ${t.bars[bar.status]}${bar.pinned ? ` · ${t.pinned}` : ""}${bar.movable ? ` · ${t.dragToMove}` : ""}`}
                           className={`absolute inset-y-1 flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] font-semibold shadow-sm transition-all duration-150 hover:opacity-90 hover:shadow-md ${BAR_TONE[bar.status]} ${
                             bar.continuesLeft ? "rounded-l-none" : ""
                           } ${bar.continuesRight ? "rounded-r-none" : ""} ${bar.movable ? "cursor-grab active:cursor-grabbing" : ""} ${
@@ -279,8 +280,10 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                           {/* The occupancy badge (§P5): what the stay is priced at. Still no RATE
                               on this chart — that is deliberate (PMS §4.5) and unchanged. */}
                           {bar.occupancy != null && (
-                            <span className="ml-1 shrink-0 rounded bg-white/25 px-1 text-[9.5px] font-bold leading-4">
-                              {bar.occupancy}p
+                            // A person glyph, not a word: "2p" / "2 чов." cost the guest's name the
+                            // space, and the bar's title already says "2 guests" in full.
+                            <span className="ml-1 inline-flex shrink-0 items-center gap-px rounded bg-white/25 px-1 text-[9.5px] font-bold leading-4">
+                              <User aria-hidden className="h-2.5 w-2.5" />{bar.occupancy}
                             </span>
                           )}
                         </button>
@@ -294,7 +297,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
         ))}
 
         <div className="grid border-t-2 border-surface-border bg-surface-muted" style={{ gridTemplateColumns: gridCols }}>
-          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">Free · occ.</div>
+          <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">{t.freeOcc}</div>
           {tapeDays.map((d) => (
             <div key={d.date} className={`border-l border-surface-border py-1.5 text-center ${d.weekend ? "bg-brand-50" : ""}`}>
               <div className={`text-[12px] font-bold ${d.availableRooms === 0 ? "text-danger-600" : "text-ink-800"}`}>{d.availableRooms}</div>
@@ -306,7 +309,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
 
       {/* Rendered unconditionally so the dialog's exit animation has something to animate — it
           returns null until it has been given a stay at least once. */}
-      <StayModal bar={openBar} open={openBar != null} onClose={() => setOpenBar(null)} money={money} />
+      <StayModal bar={openBar} open={openBar != null} onClose={() => setOpenBar(null)} money={money} t={t.stay} />
 
       {/* §2.5's reconciliation PROMPT, on the calendar rather than on another screen. The move has
           already happened — what is open is money, and the spec asks a human to classify it. */}
@@ -314,34 +317,34 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-900/40 p-4" role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl">
             <h2 className="text-[15px] font-bold text-ink-900">
-              {assessment.direction === "upgrade" ? "Upgraded" : assessment.direction === "downgrade" ? "Downgraded" : "Moved"} to a different room type
+              {assessment.direction === "upgrade" ? t.assess.upgraded : assessment.direction === "downgrade" ? t.assess.downgraded : t.assess.moved}
             </h2>
             <p className="mt-1 text-[12.5px] text-ink-600">
-              Booked <span className="font-semibold">{assessment.bookedRoomTypeName}</span>, now in{" "}
-              <span className="font-semibold">{assessment.accommodatedRoomTypeName}</span> (room {assessment.unitLabel}).
-              The booking is unchanged and nothing went to any channel.
+              {t.assess.booked} <span className="font-semibold">{assessment.bookedRoomTypeName}</span>{t.assess.nowIn}{" "}
+              <span className="font-semibold">{assessment.accommodatedRoomTypeName}</span> {fill(t.assess.roomParen, { room: assessment.unitLabel })}{" "}
+              {t.assess.unchanged}
             </p>
             <p className="mt-2 text-[13px]">
-              <span className="text-ink-500">Difference over {assessment.nights.length} night{assessment.nights.length === 1 ? "" : "s"}: </span>
+              <span className="text-ink-500">{count(assessment.nights.length, t.assess.differenceOne, t.assess.differenceMany)}</span>
               <span className="tnum font-bold text-ink-900">
                 {assessment.differenceMinor >= 0 ? "+" : "−"}{money(Math.abs(assessment.differenceMinor), assessment.currency)}
               </span>
             </p>
             <p className="mt-3 text-[12px] text-ink-500">
-              Decide what happens to it on the folio — comp it, charge it, refund it or set an amount.
+              {t.assess.decide}
             </p>
             <div className="mt-3 flex flex-wrap justify-end gap-2">
               <button
                 onClick={() => setAssessment(null)}
                 className="rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 hover:bg-surface-muted"
               >
-                Later
+                {t.assess.later}
               </button>
               <a
                 href={`/folio/${assessmentReservationId.current ?? ""}?moved=1`}
                 className="rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700"
               >
-                Settle it now
+                {t.assess.settle}
               </a>
             </div>
           </div>
@@ -358,9 +361,8 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
 
       {dragging && (
         <p className="border-t border-surface-border px-3 py-2 text-[11.5px] text-ink-500">
-          Drop on another room to move this stay. A room of a{" "}
-          <span className="font-semibold text-warning-700">different type</span> is allowed — the booking does not change,
-          but you will be asked what to do about the price difference.
+          {t.dragHintLead}{" "}
+          <span className="font-semibold text-warning-700">{t.differentType}</span> {t.dragHintTail}
         </p>
       )}
     </div>

@@ -1,7 +1,7 @@
 import "server-only";
-import { formatDay, LOCALE_LABELS, translate, type Locale, type Translations } from "@revio/ui/i18n";
+import { formatDay, translate, type Locale, type Translations } from "@revio/ui/i18n";
 import { getLocale } from "../locale";
-import { money as moneyEn } from "../format";
+import { moneyIn } from "./money";
 
 /**
  * Everything a server-rendered screen needs to speak the reader's language, resolved once:
@@ -22,15 +22,7 @@ export async function i18n(): Promise<{
   return {
     locale,
     t: (dict) => translate(dict, locale),
-    // English keeps its exact current form ("€120", "€120.50"); Bulgarian follows the same rule —
-    // whole amounts without decimals — in its own notation ("120 €", "120,50 €").
-    money: (minor, currency = "EUR") =>
-      locale === "en"
-        ? moneyEn(minor, currency)
-        : new Intl.NumberFormat(LOCALE_LABELS[locale].intl, {
-            style: "currency", currency,
-            minimumFractionDigits: minor % 100 === 0 ? 0 : 2, maximumFractionDigits: 2,
-          }).format(minor / 100),
+    money: moneyIn(locale),
     day: (isoDate, style = "short") => formatDay(isoDate, locale, style),
   };
 }

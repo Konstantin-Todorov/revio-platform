@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Receipt, ChevronRight, Search, ArrowDownWideNarrow } from "lucide-react";
 import { StatusPill } from "@/components/ui/primitives";
-import { money } from "@/lib/format";
 import { fill } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { moneyIn } from "@/lib/i18n/money";
 
 export type OpenFolioRow = {
   reservationId: string;
@@ -23,6 +24,7 @@ const EN: OpenFoliosStrings = { search: "Search guest or room…", whoOwes: "Who
 /** Open folios (PMS-REFINEMENT-R1 §4.3): the live operational list. Search by guest/room + a
  * "who owes money" sort that floats the biggest balances up. */
 export function OpenFoliosTable({ rows, t = EN }: { rows: OpenFolioRow[]; t?: OpenFoliosStrings }) {
+  const money = moneyIn(useLocale());
   const [q, setQ] = useState("");
   const [byBalance, setByBalance] = useState(false);
 

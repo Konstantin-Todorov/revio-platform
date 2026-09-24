@@ -4,7 +4,9 @@ import { useRef } from "react";
 import Link from "next/link";
 import { LogIn, LogOut, Receipt, PlusCircle, ArrowUpRight, Pin, AlertTriangle } from "lucide-react";
 import { Dialog } from "@revio/ui/dialog";
+import { fill } from "@revio/ui/i18n";
 import type { TapeBar } from "@/lib/tape-chart";
+import type { CalendarStayStrings } from "@/lib/i18n/calendar";
 
 /**
  * Manage a stay without leaving the calendar (§2.6).
@@ -34,9 +36,11 @@ export interface StayModalProps {
   open: boolean;
   onClose: () => void;
   money: (minor: number, currency: string) => string;
+  /** Strings only — a function prop cannot cross to a client component. */
+  t: CalendarStayStrings;
 }
 
-export function StayModal({ bar, open, onClose, money }: StayModalProps) {
+export function StayModal({ bar, open, onClose, money, t }: StayModalProps) {
   // The call site drops the bar the instant it closes, which would unmount the panel mid-exit and
   // make the close look like a cut rather than a dismissal. Holding the last one lets the 195ms
   // exit actually play; it is never read while the dialog is open.
@@ -54,40 +58,40 @@ export function StayModal({ bar, open, onClose, money }: StayModalProps) {
         if (!next) onClose();
       }}
       title={stay.guestName}
-      description={`Room ${stay.unitLabel} · ${stay.stayFrom} → ${stay.stayTo} · ${stay.stayNights} night${
-        stay.stayNights === 1 ? "" : "s"
-      }`}
+      description={fill(stay.stayNights === 1 ? t.descOne : t.descMany, {
+        room: stay.unitLabel, from: stay.stayFrom, to: stay.stayTo, n: stay.stayNights,
+      })}
       footerAlign="start"
       footer={
         <>
-          {!stay.arrived && <Action href={`/checkin/${stay.reservationId}`} icon={LogIn} label="Check in" primary />}
-          {stay.arrived && <Action href={`/folio/${stay.reservationId}`} icon={LogOut} label="Check out" primary />}
-          <Action href={`/folio/${stay.reservationId}`} icon={Receipt} label="Folio" />
-          {stay.arrived && <Action href={`/minibar/${stay.reservationId}`} icon={PlusCircle} label="Post charge" />}
-          <Action href={`/reservation/${stay.reservationId}`} icon={ArrowUpRight} label="Full view" />
+          {!stay.arrived && <Action href={`/checkin/${stay.reservationId}`} icon={LogIn} label={t.checkIn} primary />}
+          {stay.arrived && <Action href={`/folio/${stay.reservationId}`} icon={LogOut} label={t.checkOut} primary />}
+          <Action href={`/folio/${stay.reservationId}`} icon={Receipt} label={t.folio} />
+          {stay.arrived && <Action href={`/minibar/${stay.reservationId}`} icon={PlusCircle} label={t.postCharge} />}
+          <Action href={`/reservation/${stay.reservationId}`} icon={ArrowUpRight} label={t.fullView} />
         </>
       }
     >
       <div className="space-y-2.5 pb-2">
-        <Row label="Status" value={stay.arrived ? "In house" : "Not arrived — room held"} />
+        <Row label={t.status} value={stay.arrived ? t.inHouse : t.notArrived} />
 
         {/* One record, two facts (§2.7). Shown together or not at all: "upgraded to a Deluxe"
             loses what was sold, and the room type alone loses where they are sleeping. */}
         {crossType ? (
           <div className="rounded-md bg-brand-50 px-2.5 py-2 text-[12px] text-brand-800">
-            <div className="font-semibold">Accommodated in a different room type</div>
+            <div className="font-semibold">{t.crossTitle}</div>
             <div className="mt-0.5">
-              Booked <span className="font-semibold">{stay.bookedRoomTypeName}</span> · staying in{" "}
-              <span className="font-semibold">{stay.accommodatedRoomTypeName}</span>. The booking is unchanged.
+              {t.booked} <span className="font-semibold">{stay.bookedRoomTypeName}</span> {t.stayingIn}{" "}
+              <span className="font-semibold">{stay.accommodatedRoomTypeName}</span>{t.unchanged}
             </div>
           </div>
         ) : (
-          <Row label="Room type" value={stay.bookedRoomTypeName} />
+          <Row label={t.roomType} value={stay.bookedRoomTypeName} />
         )}
 
         {stay.balanceMinor != null && (
           <Row
-            label="Folio balance"
+            label={t.folioBalance}
             value={money(stay.balanceMinor, stay.currency)}
             tone={stay.balanceMinor === 0 ? "ok" : "owing"}
           />
@@ -96,14 +100,14 @@ export function StayModal({ bar, open, onClose, money }: StayModalProps) {
         {stay.pinned && (
           <p className="flex items-start gap-1.5 text-[11.5px] text-ink-500">
             <Pin className="mt-0.5 h-3 w-3 shrink-0" />
-            A person chose this room, so it will not be re-assigned automatically.
+            {t.pinned}
           </p>
         )}
 
         {stay.status === "overstayed" && (
           <p className="flex items-start gap-1.5 rounded-md bg-danger-50 px-2.5 py-2 text-[12px] text-danger-700">
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            Past its departure date and still in house. This distorts occupancy until it is resolved.
+            {t.overstayed}
           </p>
         )}
       </div>
