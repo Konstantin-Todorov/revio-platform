@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Link2, Unlink, Pencil } from "lucide-react";
+import { Link2, Unlink } from "lucide-react";
 import { saveRatePlanLinkage, type ActionResult } from "@/lib/actions-rates";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 
@@ -19,56 +19,13 @@ export type LinkPlan = {
   directChannelEnabled: boolean;
 };
 
-function offsetOf(p: LinkPlan): string {
-  const sign = p.derivedDirection === "increase" ? "+" : "−";
-  return p.derivedType === "percent" ? `${sign}${p.derivedValue}%` : `${sign}€${((p.derivedValue ?? 0) / 100).toLocaleString("en-US")}`;
-}
 
 /**
- * Editable Rate Plan Linkage (CRS-REFINEMENT-R2 §6) — the CRS twin of RevioLink's board. A derivation
- * tree for overview + per-plan Edit / Unlink. Derived prices compute live from the parent, so a change
- * recalculates every child; the guardrails (no cycles, manual root, max depth) are enforced server-side.
+ * Editable Rate Plan Linkage (CRS-REFINEMENT-R2 §6) — the CRS twin of RevioLink's board, edited on the
+ * plan's own page. Derived prices compute live from the parent, so a change recalculates every child;
+ * the guardrails (no cycles, manual root, max depth) are enforced server-side.
  */
-export function RatePlanLinkageBoard({ plans }: { plans: LinkPlan[] }) {
-  const [editing, setEditing] = useState<LinkPlan | null>(null);
-  const roots = plans.filter((p) => p.priceLogic === "manual");
-  const childrenOf = (id: string) => plans.filter((p) => p.parentRatePlanId === id);
-
-  const Node = ({ plan, depth }: { plan: LinkPlan; depth: number }) => {
-    const kids = childrenOf(plan.id);
-    return (
-      <div className={depth > 0 ? "mt-1.5 pl-4" : ""}>
-        <div className="flex items-center gap-2 text-[12.5px]">
-          {depth > 0 && <span className="text-ink-300">↓</span>}
-          {depth > 0 && <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-semibold text-ink-600">{offsetOf(plan)}</span>}
-          <span className={`font-semibold ${plan.active ? (depth === 0 ? "text-brand-800" : "text-ink-800") : "text-ink-400 line-through"}`}>{plan.name}</span>
-          {depth === 0 && <span className="rounded bg-brand-50 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-brand-700">manual</span>}
-          {!plan.directChannelEnabled && <span title="Not bookable on the direct channel" className="rounded bg-surface-sunken px-1 py-0.5 text-[9px] font-bold uppercase text-ink-400">OTA/corp</span>}
-          <button type="button" onClick={() => setEditing(plan)} title="Edit linkage" className="ml-1 flex h-6 w-6 items-center justify-center rounded text-ink-300 transition-colors hover:bg-surface-muted hover:text-brand-600">
-            <Pencil className="h-3 w-3" />
-          </button>
-        </div>
-        {kids.map((k) => <Node key={k.id} plan={k} depth={depth + 1} />)}
-      </div>
-    );
-  };
-
-  return (
-    <div className="p-5">
-      <div className="grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2 xl:grid-cols-3">
-        {roots.map((root) => <Node key={root.id} plan={root} depth={0} />)}
-        {roots.length === 0 && <p className="text-[13px] text-ink-400">Add a manual rate plan first — derived plans hang off it.</p>}
-      </div>
-      <p className="mt-4 text-[11.5px] text-ink-400">
-        Click the <Pencil className="mb-0.5 inline h-3 w-3" /> on any rate plan to change its parent or offset, or to switch it
-        between manual and derived. Loops and over-deep chains are rejected; a derived rate always traces back to a manual base rate.
-      </p>
-      {editing && <LinkageEditor plan={editing} options={plans} onClose={() => setEditing(null)} />}
-    </div>
-  );
-}
-
-function LinkageEditor({ plan, options, onClose }: { plan: LinkPlan; options: LinkPlan[]; onClose: () => void }) {
+export function LinkageEditor({ plan, options, onClose }: { plan: LinkPlan; options: LinkPlan[]; onClose: () => void }) {
   const [derived, setDerived] = useState(plan.priceLogic === "derived");
   const [parentId, setParentId] = useState(plan.parentRatePlanId ?? options.find((o) => o.id !== plan.id)?.id ?? "");
   const [direction, setDirection] = useState(plan.derivedDirection ?? "decrease");

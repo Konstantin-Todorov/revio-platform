@@ -193,7 +193,6 @@ export async function applyPricingModel(fd: FormData): Promise<void> {
   }
 
   revalidatePath("/settings", "layout");
-  revalidatePath("/rates");
   revalidatePath("/inventory");
 }
 
@@ -290,7 +289,7 @@ export async function saveRatePlanOccupancy(fd: FormData): Promise<ObpResult> {
     }
   });
 
-  revalidatePath("/rates");
+  revalidatePath("/rooms-rates", "layout");
   return {
     ok: true,
     message: `${plan.name} now prices ${resolved === "per_person" ? "per person" : "per room"}.`,

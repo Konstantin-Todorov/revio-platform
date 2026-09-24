@@ -1,6 +1,11 @@
 # RevioCRS → Rooms & Rates: grouped by what the hotel thinks about
 
-**Status: APPROVED by the founder 2026-09-24, not built.** RevioCRS only for now; RevioLink's Rooms &
+**Status: APPROVED by the founder 2026-09-24, BUILT 2026-09-25** (steps 1–5; step 6, Bulgarian, comes
+with the RevioCRS translation). Built as written, with three details decided while building: the old
+addresses (`/rooms-rates`, `/rates`, `/setup`) redirect in `next.config.mjs` rather than in a page (a
+page redirect runs after the layout has started streaming and threw a React hook error); "Add" asks
+only the basics and then opens the new room's or plan's page; the plan form posts no `priceLogic`, so
+saving a plan's name or defaults never touches where its price comes from. RevioCRS only for now; RevioLink's Rooms &
 Rates stays as it is until the grouping review (`docs/UI-GROUPING-AUDIT.md`) reaches it.
 
 ## The problem, in the founder's words

@@ -15,8 +15,8 @@ function addDay(ymd: string): string {
 }
 
 function revalidateInventory() {
+  revalidatePath("/rooms-rates", "layout");
   revalidatePath("/inventory");
-  revalidatePath("/setup");
   revalidatePath("/dashboard");
   /*
    * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
@@ -33,6 +33,7 @@ function revalidateInventory() {
    * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
    * an action that forgot to list it.
    */
+  revalidatePath("/", "layout");
 }
 
 export async function addInventoryPeriod(fd: FormData): Promise<void> {

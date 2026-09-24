@@ -121,7 +121,7 @@ export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData):
     field: "photos",
     newValue: `${uploaded} added`,
   });
-  revalidatePath("/rooms-rates");
+  revalidatePath("/rooms-rates", "layout");
   return { ok: true, uploaded };
 }
 
@@ -145,7 +145,7 @@ export async function deleteRoomPhoto(fd: FormData): Promise<void> {
   await logAudit(property.id, property.tenantId, {
     entity: "Room type photos", field: "delete", newValue: "removed",
   });
-  revalidatePath("/rooms-rates");
+  revalidatePath("/rooms-rates", "layout");
 }
 
 /**
@@ -176,7 +176,7 @@ export async function reorderRoomPhotos(fd: FormData): Promise<void> {
     await prisma.roomTypePhoto.update({ where: { id }, data: { sortOrder: order++ } });
   }
 
-  revalidatePath("/rooms-rates");
+  revalidatePath("/rooms-rates", "layout");
 }
 
 /** Alt text — what a screen reader announces, and what shows if the image fails to load. */
@@ -191,5 +191,5 @@ export async function saveRoomPhotoAlt(fd: FormData): Promise<void> {
     where: { id: photo.id },
     data: { alt: str(fd, "alt").trim().slice(0, 160) },
   });
-  revalidatePath("/rooms-rates");
+  revalidatePath("/rooms-rates", "layout");
 }

@@ -43,6 +43,20 @@ const nextConfig = {
   async headers() {
     return securityHeaders();
   },
+  /**
+   * Old addresses of Rooms & Rates. Redirected here, before routing, rather than by `redirect()` in
+   * a page: that runs after the protected layout has started streaming, so the browser got a 200 and
+   * a client-side hop that threw a React hook error on the way (and `/rates` → `/rooms-rates` →
+   * `/rooms-rates/rooms` was two of them). Next keeps the query string, so an old
+   * `/rooms-rates?blocked=…` still shows its message.
+   */
+  async redirects() {
+    return [
+      { source: "/rooms-rates", destination: "/rooms-rates/rooms", permanent: false },
+      { source: "/rates", destination: "/rooms-rates/rooms", permanent: false },
+      { source: "/setup", destination: "/rooms-rates/rooms", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

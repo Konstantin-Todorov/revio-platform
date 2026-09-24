@@ -36,7 +36,7 @@ For every finding write: screen · who uses it · what is wrong · proposed shap
 | --- | --- |
 | Help + Your requests (all three) | ✅ done 2026-09-24 — Settings shape, list-then-conversation |
 | RevioPMS Rooms — floors | ✅ done 2026-09-24 — Floors card + arrange by floor |
-| RevioCRS Rooms & Rates | 🟡 approved — `PLAN-ROOMS-RATES-CRS.md` |
+| RevioCRS Rooms & Rates | ✅ built 2026-09-25 — `PLAN-ROOMS-RATES-CRS.md` |
 | RevioPMS Folio | ✅ decided earlier — one scroll with `Foldaway`, **no tabs** (front desk queue) |
 | Settings (all three) | ✅ already the Settings shape |
 | Settings → Guest emails (all three) | ✅ done 2026-09-25 — the founder's reference for the shape: "sections on the left, tabs on top — both are top" |
@@ -60,7 +60,7 @@ Generated from the route folders on 2026-09-24. Tick each as it is reviewed; lin
 ### RevioCRS (`apps/reservation`)
 - [ ] `/dashboard` · [ ] `/reservations` · [ ] `/reservations/[id]` · [ ] `/reservations/new` · [ ] `/waitlist`
 - [ ] `/guests` · [ ] `/guests/[id]`
-- [ ] `/inventory` · [ ] `/bulk` · [x] `/rooms-rates` (approved plan)
+- [ ] `/inventory` · [ ] `/bulk` · [x] `/rooms-rates` (built)
 - [ ] `/booking-engine` · [ ] `/distribution` · [ ] `/reports`
 - [ ] `/activity` · [ ] `/search` · [x] `/help` · [x] `/settings/*`
 

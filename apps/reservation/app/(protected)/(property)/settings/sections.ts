@@ -26,7 +26,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
  */
 export const SETTINGS_ELSEWHERE: SettingsSection[] = [
   { href: "/booking-engine", label: "Booking engine", blurb: "Branding, hero image and the direct-booking page" },
-  { href: "/rates", label: "Rates & restrictions", blurb: "Prices, rate plans and restriction rules" },
+  { href: "/rooms-rates/rooms", label: "Rooms & Rates", blurb: "Room types, photos, rate plans and closures" },
   { href: "/distribution", label: "Distribution", blurb: "Channels and cost of distribution" },
   { href: "/help", label: "Help & support", blurb: "Answers, and every request you have sent us" },
 ];

@@ -325,8 +325,11 @@ says who can move it. Details sit where the link points.
    `RegisterProblemCode`) so a screen translates by code, never by matching English. Rule written in
    `packages/ui/CLAUDE.md`.
 3. RevioCRS, then RevioLink. **Operator is not translated** — founder decision 2026-09-24, it is ours.
-   **Approved, not built:** RevioCRS Rooms & Rates regrouped by room and by plan in the Settings shape —
-   `docs/PLAN-ROOMS-RATES-CRS.md`; and a grouping review of every screen — `docs/UI-GROUPING-AUDIT.md`.
+   **Built 2026-09-25:** RevioCRS Rooms & Rates regrouped by room and by plan in the Settings shape —
+   `docs/PLAN-ROOMS-RATES-CRS.md` (sections Room types · Rate plans · Closures; each room type and each
+   plan has one page with everything about it; photos reorder by drag, on a phone too). Checked in the
+   browser at desk and phone width: save, photo drag, a derived plan's save keeps its parent, a loop
+   refused. **Approved:** a grouping review of every screen — `docs/UI-GROUPING-AUDIT.md`.
    The session that did all of the above is recorded in `docs/SESSION-2026-09-24.md`.
 4. Server-action messages — **RevioPMS done** (`lib/i18n/flash.ts`, sign-in, users, welcome, 2FA).
    **Emails ✅ (2026-09-24):** our own mail follows the READER's `User.locale` — invite (the inviter's

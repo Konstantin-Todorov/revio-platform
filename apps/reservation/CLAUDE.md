@@ -67,7 +67,7 @@
 > posting only these two would send blanks for the rest and wipe the hotel's headline. **A server
 > action is only as safe as the narrowest form that posts to it.**
 >
-> **Room photos live in Rooms & Rates, not here** (`/rooms-rates` → a room type → Room photos): a
+> **Room photos live in Rooms & Rates, not here** (`/rooms-rates/rooms/<id>` → Photos — each room type has its own page since 2026-09-25, `docs/PLAN-ROOMS-RATES-CRS.md`): a
 > photograph belongs to the ROOM, and the same image will feed the OTA push and the confirmation email
 > later — moving it then would be a migration. Uploads go through `@revio/storage` (bytes in object
 > storage, only keys in `RoomTypePhoto`) and are re-encoded by `sharp` into two WebP variants. **A

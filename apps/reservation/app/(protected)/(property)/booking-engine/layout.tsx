@@ -25,7 +25,7 @@ const SECTIONS: SettingsSection[] = [
 
 const ELSEWHERE: SettingsSection[] = [
   { href: "/settings/emails", label: "Guest emails", blurb: "The confirmation a guest receives after booking here" },
-  { href: "/rooms-rates", label: "Room photos & descriptions", blurb: "What each room shows on the page — kept with the room" },
+  { href: "/rooms-rates/rooms", label: "Room photos & descriptions", blurb: "What each room shows on the page — kept with the room" },
 ];
 
 export default async function BookingEngineLayout({ children }: { children: ReactNode }) {

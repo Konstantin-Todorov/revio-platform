@@ -147,7 +147,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       kind: "room",
       title: r.name,
       subtitle: `${r.code} · ${r.totalRooms} room${r.totalRooms === 1 ? "" : "s"}`,
-      href: "/rooms-rates",
+      href: `/rooms-rates/rooms/${r.id}`,
       ...ctx(r.propertyId, r.property.name),
     })),
     ...ratePlans.map((r): SearchHit => ({
@@ -155,7 +155,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       kind: "rate",
       title: r.name,
       subtitle: r.active ? (r.code ?? "rate plan") : "inactive",
-      href: "/rooms-rates",
+      href: `/rooms-rates/plans/${r.id}`,
       ...ctx(r.propertyId, r.property.name),
     })),
     // Screens, so the palette is also how you move around.
@@ -170,7 +170,7 @@ const PAGES = [
   { title: "Waitlist", sub: "Guests waiting on a sold-out date", href: "/waitlist" },
   { title: "Guests", sub: "Profiles, history and notes", href: "/guests" },
   { title: "Inventory Calendar", sub: "Availability by room type and date", href: "/inventory" },
-  { title: "Rooms & Rates", sub: "Room types, rate plans, restrictions", href: "/rooms-rates" },
+  { title: "Rooms & Rates", sub: "Room types, photos, rate plans, closures", href: "/rooms-rates" },
   { title: "Bulk Rates & Availability", sub: "Mass edits across dates and rooms", href: "/bulk" },
   { title: "Analytics", sub: "Occupancy, ADR, RevPAR and reports", href: "/reports" },
   { title: "Distribution", sub: "Channels and cost of distribution", href: "/distribution" },

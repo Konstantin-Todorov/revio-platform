@@ -1,54 +1,42 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Plus, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import { saveRatePlan, type ActionResult } from "@/lib/actions-rates";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
+import { RatePlanBasicsFields, RatePlanDefaultsFields } from "./RatePlanForm";
 
-type RatePlan = {
-  id: string; name: string; code: string; tags: string[]; priceLogic: string; active: boolean;
-  directChannelEnabled: boolean;
-  parentRatePlanId: string | null; derivedType: string | null; derivedDirection: string | null;
-  derivedValue: number | null; derivedRounding: string | null;
-  defMinLos: number | null; defMaxLos: number | null;
-  defAdvancePurchaseMin: number | null; defAdvancePurchaseMax: number | null;
-};
 type Parent = { id: string; name: string };
 
-export function RatePlanDialog({ ratePlan, parents }: { ratePlan?: RatePlan; parents: Parent[] }) {
+/**
+ * Add a rate plan. Saving opens the new plan's own page, where how it prices and the rooms it sells
+ * are read and changed; editing lives there too, so this dialog only ever creates.
+ */
+export function RatePlanDialog({ parents }: { parents: Parent[] }) {
   const [open, setOpen] = useState(false);
-  const [derived, setDerived] = useState(ratePlan?.priceLogic === "derived");
+  const [derived, setDerived] = useState(false);
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(saveRatePlan, null);
-  const isEdit = !!ratePlan;
+  const router = useRouter();
 
   useEffect(() => {
-    if (state?.ok) setOpen(false);
-  }, [state]);
+    if (state?.ok) {
+      setOpen(false);
+      if (state.id) router.push(`/rooms-rates/plans/${state.id}`);
+    }
+  }, [state, router]);
 
   return (
     <>
-      {isEdit ? (
-        <button onClick={() => setOpen(true)} aria-label="Edit rate plan" className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-brand-600">
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-      ) : (
-        <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-          <Plus className="h-4 w-4" /> Add Rate Plan
-        </button>
-      )}
+      <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+        <Plus className="h-4 w-4" /> Add rate plan
+      </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={isEdit ? `Edit ${ratePlan!.name}` : "Add Rate Plan"}>
+      <Modal open={open} onClose={() => setOpen(false)} title="Add rate plan">
         <form action={formAction} className="space-y-3.5">
-          {isEdit && <input type="hidden" name="id" value={ratePlan!.id} />}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Name"><input name="name" defaultValue={ratePlan?.name} required className={inputCls} placeholder="Non Refundable" /></Field>
-            <Field label="Code"><input name="code" defaultValue={ratePlan?.code} required className={inputCls} placeholder="NR" /></Field>
-          </div>
-          <Field label="Tags" hint="Comma-separated, e.g. breakfast, non-refundable">
-            <input name="tags" defaultValue={ratePlan?.tags.join(", ")} className={inputCls} placeholder="breakfast, BB" />
-          </Field>
+          <RatePlanBasicsFields />
           <Field label="Pricing">
-            <select name="priceLogic" defaultValue={ratePlan?.priceLogic ?? "manual"} onChange={(e) => setDerived(e.target.value === "derived")} className={inputCls}>
+            <select name="priceLogic" defaultValue={"manual"} onChange={(e) => setDerived(e.target.value === "derived")} className={inputCls}>
               <option value="manual">Manual — entered by hand</option>
               <option value="derived">Derived — computed from a parent</option>
             </select>
@@ -57,27 +45,27 @@ export function RatePlanDialog({ ratePlan, parents }: { ratePlan?: RatePlan; par
           {derived && (
             <div className="space-y-3 rounded-md border border-surface-border bg-surface-muted p-3">
               <Field label="Derived from (parent)">
-                <select name="parentRatePlanId" defaultValue={ratePlan?.parentRatePlanId ?? parents[0]?.id} className={inputCls}>
+                <select name="parentRatePlanId" defaultValue={parents[0]?.id} className={inputCls}>
                   {parents.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </Field>
               <div className="grid grid-cols-3 gap-3">
                 <Field label="Direction">
-                  <select name="derivedDirection" defaultValue={ratePlan?.derivedDirection ?? "decrease"} className={inputCls}>
+                  <select name="derivedDirection" defaultValue={"decrease"} className={inputCls}>
                     <option value="decrease">Decrease</option>
                     <option value="increase">Increase</option>
                   </select>
                 </Field>
                 <Field label="By">
-                  <select name="derivedType" defaultValue={ratePlan?.derivedType ?? "percent"} className={inputCls}>
+                  <select name="derivedType" defaultValue={"percent"} className={inputCls}>
                     <option value="percent">Percent %</option>
                     <option value="fixed">Fixed (cents)</option>
                   </select>
                 </Field>
-                <Field label="Value"><input name="derivedValue" type="number" min={0} defaultValue={ratePlan?.derivedValue ?? 10} className={inputCls} /></Field>
+                <Field label="Value"><input name="derivedValue" type="number" min={0} defaultValue={10} className={inputCls} /></Field>
               </div>
               <Field label="Rounding">
-                <select name="derivedRounding" defaultValue={ratePlan?.derivedRounding ?? "none"} className={inputCls}>
+                <select name="derivedRounding" defaultValue={"none"} className={inputCls}>
                   <option value="none">None</option>
                   <option value="end_99">End in .99</option>
                   <option value="nearest_minor_1">Nearest whole</option>
@@ -87,49 +75,9 @@ export function RatePlanDialog({ ratePlan, parents }: { ratePlan?: RatePlan; par
             </div>
           )}
 
-          {/* Rate-plan-level restrictions — sent for all dates (Min/Max stay) and rolling-close
-              (advance purchase). Leave a field blank to mean "no rule". */}
           <div className="space-y-3 rounded-md border border-surface-border bg-surface-muted/60 p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Stay &amp; advance-purchase restrictions</div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Minimum stay (nights)" hint="Applies to all dates">
-                <input name="defMinLos" type="number" min={0} defaultValue={ratePlan?.defMinLos ?? ""} className={inputCls} placeholder="—" />
-              </Field>
-              <Field label="Maximum stay (nights)" hint="Applies to all dates">
-                <input name="defMaxLos" type="number" min={0} defaultValue={ratePlan?.defMaxLos ?? ""} className={inputCls} placeholder="—" />
-              </Field>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Advance purchase — min days" hint="Auto-closes the next N days (rolling)">
-                <input name="defAdvancePurchaseMin" type="number" min={0} defaultValue={ratePlan?.defAdvancePurchaseMin ?? ""} className={inputCls} placeholder="—" />
-              </Field>
-              <Field label="Advance purchase — max days" hint="Auto-closes beyond N days (rolling)">
-                <input name="defAdvancePurchaseMax" type="number" min={0} defaultValue={ratePlan?.defAdvancePurchaseMax ?? ""} className={inputCls} placeholder="—" />
-              </Field>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-[13px] font-medium text-ink-700">
-              <input type="checkbox" name="active" defaultChecked={ratePlan?.active ?? true} className="h-4 w-4 cursor-pointer rounded border-surface-border text-brand-600" /> Active
-            </label>
-            {/* Switching this off is how a corporate or tour-operator rate stays off the hotel's own
-                public page while still going to the OTAs it was negotiated for. */}
-            <label className="flex items-start gap-2 text-[13px] font-medium text-ink-700">
-              <input
-                type="checkbox"
-                name="directChannelEnabled"
-                defaultChecked={ratePlan?.directChannelEnabled ?? true}
-                className="mt-0.5 h-4 w-4 cursor-pointer rounded border-surface-border text-brand-600"
-              />
-              <span>
-                Sell on our own booking page
-                <span className="block text-[11.5px] font-normal text-ink-400">
-                  Off for rates that belong to a specific partner — corporate, tour operator, an
-                  OTA-only promotion.
-                </span>
-              </span>
-            </label>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Stay &amp; advance-purchase defaults</div>
+            <RatePlanDefaultsFields />
           </div>
 
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
@@ -137,7 +85,7 @@ export function RatePlanDialog({ ratePlan, parents }: { ratePlan?: RatePlan; par
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Cancel</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">
-              {pending ? "Saving…" : isEdit ? "Save changes" : "Create rate plan"}
+              {pending ? "Saving…" : "Create rate plan"}
             </button>
           </div>
         </form>

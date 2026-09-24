@@ -28,12 +28,13 @@ async function upsertRoomCell(
   else await prisma.dailyCell.create({ data: { tenantId, propertyId, roomTypeId, ratePlanId: null, date, ...data, source } });
 }
 
-export type ActionResult = { ok: boolean; error?: string };
+/** `id` is the row a create made, so the screen can open it. */
+export type ActionResult = { ok: boolean; error?: string; id?: string };
 
 const BOOL_TYPES = new Set(["stop_sell", "cta", "ctd"]);
 
 function revalidateRates() {
-  revalidatePath("/rates");
+  revalidatePath("/rooms-rates", "layout");
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
   revalidatePath("/reservations/new");
@@ -52,6 +53,7 @@ function revalidateRates() {
    * line is the safety net: `"layout"` clears the whole subtree, so no screen can be left behind by
    * an action that forgot to list it.
    */
+  revalidatePath("/", "layout");
 }
 
 // --- Rate plans (same shared tables the CM manages — one write path per app, same engines) ----
@@ -69,6 +71,12 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
   if (!code) return { ok: false, error: "Code is required." };
 
   const tags = str(fd, "tags").split(",").map((t) => t.trim()).filter(Boolean);
+  /*
+   * A plan's own page edits its linkage in a section of its own (`saveRatePlanLinkage`, with the
+   * cycle and depth guardrails), so its plan form posts no `priceLogic`. Absent on an edit means
+   * "leave where the price comes from alone" — not "make it manual", which would silently unlink.
+   */
+  const keepLinkage = rowId !== "" && fd.get("priceLogic") == null;
   const priceLogic = str(fd, "priceLogic") || "manual";
   const active = fd.get("active") != null;
   // Whether this rate is sold on the hotel's OWN booking page. Enforced in
@@ -86,7 +94,7 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
           derivedRounding: str(fd, "derivedRounding") || "none",
         }
       : { parentRatePlanId: null, derivedType: null, derivedDirection: null, derivedValue: null, derivedRounding: null };
-  if (priceLogic === "derived" && !derived.parentRatePlanId) {
+  if (!keepLinkage && priceLogic === "derived" && !derived.parentRatePlanId) {
     return { ok: false, error: "A derived rate needs a parent rate plan." };
   }
 
@@ -107,7 +115,8 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
   if (clash) return { ok: false, error: `Code "${code}" is already used by another rate plan.` };
 
   if (rowId) {
-    await prisma.ratePlan.update({ where: { id: rowId }, data: { name, code, tags, priceLogic, active, directChannelEnabled, ...derived, ...restrictions } });
+    const linkage = keepLinkage ? {} : { priceLogic, ...derived };
+    await prisma.ratePlan.update({ where: { id: rowId }, data: { name, code, tags, active, directChannelEnabled, ...linkage, ...restrictions } });
     await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${name}`, field: "edit", newValue: name });
     await recordPush(propertyId, tenantId, `Rate plan "${name}" updated`);
   } else {
@@ -119,6 +128,8 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
     await prisma.ratePlanRoomType.createMany({ data: roomTypes.map((rt) => ({ ratePlanId: rp.id, roomTypeId: rt.id })) });
     await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${name}`, field: "create", newValue: name });
     await recordPush(propertyId, tenantId, `Rate plan "${name}" created`);
+    revalidateRates();
+    return { ok: true, id: rp.id };
   }
   revalidateRates();
   return { ok: true };
@@ -136,7 +147,7 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
   // the CM-side call would fail. Unmap in RevioLink → Mapping first.
   const mapped = await prisma.channelRatePlanMapping.count({ where: { ratePlanId: id, externalRateId: { not: null } } });
   if (mapped > 0) {
-    redirect(`/rooms-rates?blocked=${encodeURIComponent(rp.name)}`);
+    redirect(`/rooms-rates/plans/${id}?blocked=${encodeURIComponent(rp.name)}`);
   }
 
   if (rp._count.children > 0 || rp._count.resLines > 0) {
@@ -148,6 +159,8 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
     await recordPush(property.id, property.tenantId, `Rate plan "${rp.name}" removed`);
   }
   revalidateRates();
+  // Deleted from the plan's own page: that page is gone (or shows an inactive plan), so the list.
+  redirect("/rooms-rates/plans");
 }
 
 // --- Restriction rules (level 2) — with CRS booking-source scope --------------
@@ -719,7 +732,6 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
     await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${plan.name}`, field: "linkage", newValue: "unlinked → manual" });
     await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" is now a manual rate`);
     revalidateRates();
-    revalidatePath("/rooms-rates");
     return { ok: true };
   }
 
@@ -760,7 +772,6 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${plan.name}`, field: "linkage", newValue: `derives from ${parent.name}` });
   await recordPush(propertyId, tenantId, `Rate plan "${plan.name}" now derives from "${parent.name}" — children recalculated`);
   revalidateRates();
-  revalidatePath("/rooms-rates");
   return { ok: true };
 }
 
@@ -838,9 +849,10 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
     }
     await logAudit(propertyId, tenantId, { entity: `Room Type · ${name}`, field: "create", newValue: `${name} · ${totalRooms} units` });
     await recordPush(propertyId, tenantId, `Room type "${name}" created`);
+    revalidateRates();
+    return { ok: true, id: created.id };
   }
 
-  revalidatePath("/rooms-rates");
   revalidateRates();
   return { ok: true };
 }
@@ -866,7 +878,7 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
   // Same deletion guard as the rate plans: a room type mapped to the channel manager can't go —
   // the OTA side would keep selling a product we no longer have.
   const mapped = await prisma.channelRoomTypeMapping.count({ where: { roomTypeId: id, externalRoomId: { not: null } } });
-  if (mapped > 0) redirect(`/rooms-rates?blocked=${encodeURIComponent(rt.name)}`);
+  if (mapped > 0) redirect(`/rooms-rates/rooms/${id}?blocked=${encodeURIComponent(rt.name)}`);
 
   // Anything with history or physical rooms behind it is deactivated, never deleted — deleting
   // would orphan past reservations and the housekeeping board.
@@ -878,6 +890,6 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
     await logAudit(property.id, property.tenantId, { entity: `Room Type · ${rt.name}`, field: "delete", oldValue: rt.name });
     await recordPush(property.id, property.tenantId, `Room type "${rt.name}" removed`);
   }
-  revalidatePath("/rooms-rates");
   revalidateRates();
+  redirect("/rooms-rates/rooms");
 }

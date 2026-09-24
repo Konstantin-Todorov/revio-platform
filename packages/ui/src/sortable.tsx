@@ -24,14 +24,21 @@ export function SortableList<T extends { id: string }>({
   onReorder,
   handleLabel,
   className = "",
+  layout = "list",
 }: {
   items: T[];
-  render: (item: T, handle: ReactNode) => ReactNode;
+  /** `index` is the row's place in the order as it stands now — mid-drag included. */
+  render: (item: T, handle: ReactNode, index: number) => ReactNode;
   /** Called once, with every id in its new order, when a drag or a keypress ends in a change. */
   onReorder: (ids: string[]) => void | Promise<void>;
   /** "Drag to reorder {name}" — filled per row by the caller's `render` label. */
   handleLabel: (item: T) => string;
   className?: string;
+  /**
+   * `grid` for tiles that wrap — a photo gallery. The drop position is then read in reading order
+   * (row, then side of the tile), and ←/→ move a tile as well as ↑/↓.
+   */
+  layout?: "list" | "grid";
 }) {
   const [order, setOrder] = useState(items.map((i) => i.id));
   const [dragging, setDragging] = useState<string | null>(null);
@@ -51,7 +58,7 @@ export function SortableList<T extends { id: string }>({
 
   const byId = new Map(items.map((i) => [i.id, i]));
 
-  function moveTo(id: string, clientY: number) {
+  function moveTo(id: string, clientX: number, clientY: number) {
     setOrder((now) => {
       const others = now.filter((x) => x !== id);
       let index = others.length;
@@ -59,7 +66,10 @@ export function SortableList<T extends { id: string }>({
         const el = rows.current.get(others[i]!);
         if (!el) continue;
         const box = el.getBoundingClientRect();
-        if (clientY < box.top + box.height / 2) { index = i; break; }
+        const before = layout === "grid"
+          ? clientY < box.top || (clientY <= box.bottom && clientX < box.left + box.width / 2)
+          : clientY < box.top + box.height / 2;
+        if (before) { index = i; break; }
       }
       const next = [...others.slice(0, index), id, ...others.slice(index)];
       return next.join("|") === now.join("|") ? now : next;
@@ -75,7 +85,7 @@ export function SortableList<T extends { id: string }>({
     e.preventDefault();
     start.current = order;
     setDragging(id);
-    const move = (ev: PointerEvent) => moveTo(id, ev.clientY);
+    const move = (ev: PointerEvent) => moveTo(id, ev.clientX, ev.clientY);
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
@@ -89,10 +99,12 @@ export function SortableList<T extends { id: string }>({
   }
 
   function onKey(id: string, e: React.KeyboardEvent<HTMLButtonElement>) {
-    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    const back = e.key === "ArrowUp" || (layout === "grid" && e.key === "ArrowLeft");
+    const forward = e.key === "ArrowDown" || (layout === "grid" && e.key === "ArrowRight");
+    if (!back && !forward) return;
     e.preventDefault();
     const i = order.indexOf(id);
-    const j = i + (e.key === "ArrowUp" ? -1 : 1);
+    const j = i + (back ? -1 : 1);
     if (j < 0 || j >= order.length) return;
     const next = [...order];
     [next[i], next[j]] = [next[j]!, next[i]!];
@@ -105,7 +117,7 @@ export function SortableList<T extends { id: string }>({
 
   return (
     <ul className={className}>
-      {order.map((id) => {
+      {order.map((id, index) => {
         const item = byId.get(id);
         if (!item) return null;
         const handle = (
@@ -127,7 +139,7 @@ export function SortableList<T extends { id: string }>({
             ref={(el) => { if (el) rows.current.set(id, el); else rows.current.delete(id); }}
             className={`transition-shadow ${dragging === id ? "relative z-10 bg-white shadow-pop ring-1 ring-brand-600/30" : ""}`}
           >
-            {render(item, handle)}
+            {render(item, handle, index)}
           </li>
         );
       })}
