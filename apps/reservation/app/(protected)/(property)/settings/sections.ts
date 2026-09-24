@@ -9,6 +9,7 @@ import type { SettingsSection } from "@revio/ui/settings-nav";
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { href: "/settings/property", label: "Property", blurb: "Name, timezone, currency, check-in and check-out" },
+  { href: "/settings/emails", label: "Guest emails", blurb: "What your guests receive, in which language, and how it looks", prefix: true },
   { href: "/settings/policies", label: "Rates & policies", blurb: "Standing defaults applied when nothing more specific does, and how you price rooms" },
   { href: "/settings/taxes", label: "Taxes & fees", blurb: "What is added to a stay, and how it is shown to the guest" },
   { href: "/settings/users", label: "Users & permissions", blurb: "Roles, and the people assigned to them on the one shared Revio identity" },

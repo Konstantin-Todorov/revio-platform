@@ -312,7 +312,14 @@ async function HoldForm({ holdId, guests, sourceId, error, guestId }: { holdId: 
             </p>
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-surface-border/60 pt-4">
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-surface-border/60 pt-4">
+            {/* On by default: a guest booked by phone or at the desk expects it in writing. Unticked
+                when they asked not to be mailed. Sent in the hotel's own wording and language
+                (Settings → Guest emails), and only if an email address is filled in above. */}
+            <label className="mr-auto flex items-center gap-2 text-[12.5px] text-ink-700">
+              <input type="checkbox" name="emailGuest" defaultChecked className="h-4 w-4 rounded border-surface-border text-brand-700 focus:ring-brand-600" />
+              Email the guest a confirmation
+            </label>
             <button formAction={releaseHold} name="id" value={hold.id} formNoValidate className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">
               Release hold
             </button>

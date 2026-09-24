@@ -54,5 +54,7 @@ export const config = {
   // api/health is polled by an EXTERNAL uptime monitor that has no session, so the cookie gate
   // must not redirect it — a monitor following a 307 to /login would report the service
   // healthy while its database was unreachable.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/jobs|api/health|.*\\.[a-zA-Z0-9]+$).*)"],
+  // api/brand serves a hotel's email logo to mail clients, which carry no cookie at all — gated, it
+  // answered every inbox with a redirect to /login and the logo rendered broken. Same as RevioLink.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/jobs|api/health|api/brand|.*\\.[a-zA-Z0-9]+$).*)"],
 };

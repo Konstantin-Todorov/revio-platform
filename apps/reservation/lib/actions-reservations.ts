@@ -14,6 +14,7 @@ import { requireCapability } from "./authz";
 import { earliestSelectable, hasChanges, pastRangeRefusal, planMerge, planGuestErasure, todayInTimeZone } from "@revio/core";
 import { withTenantTransaction } from "@revio/db";
 import { flashError } from "@revio/ui/flash";
+import { emailGuestAbout, flashMailOutcome } from "./guest-mail";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -229,6 +230,12 @@ export async function confirmReservation(fd: FormData): Promise<void> {
     stayScope([{ roomTypeId: hold!.roomTypeId, checkIn: hold!.checkIn, checkOut: hold!.checkOut }]),
   );
   revalidateReservations();
+  // "Email the guest a confirmation" — ticked by default on the form; a phone booking sometimes
+  // should not be mailed, so it is a choice rather than a rule.
+  await flashMailOutcome(
+    "Reservation confirmed.",
+    fd.get("emailGuest") != null ? await emailGuestAbout(reservation.id, "booking_confirmation") : null,
+  );
   redirect(`/reservations/${reservation.id}`);
 }
 
@@ -322,6 +329,10 @@ export async function modifyReservation(fd: FormData): Promise<void> {
   );
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
+  await flashMailOutcome(
+    "Reservation changed.",
+    fd.get("emailGuest") != null ? await emailGuestAbout(id, "booking_modified") : null,
+  );
   redirect(`/reservations/${id}`);
 }
 
@@ -389,6 +400,10 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
   );
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
+  await flashMailOutcome(
+    "Reservation cancelled.",
+    fd.get("emailGuest") != null ? await emailGuestAbout(id, "booking_cancelled") : null,
+  );
   redirect(`/reservations/${id}`);
 }
 

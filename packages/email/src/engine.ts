@@ -187,7 +187,9 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
     subject: rendered.subject,
     text: rendered.text,
     html: rendered.html,
-    fromName: brand.senderName ?? null,
+    // The name the preview shows — the sender name, else the hotel's own name. Passing the raw
+    // `senderName` sent every hotel that had not typed one as "Revio", which the guest did not book.
+    fromName: rendered.fromName,
     replyTo: brand.replyTo ?? null,
   });
   return res.ok ? { ok: true } : { ok: false, ...(res.error ? { error: res.error } : {}) };

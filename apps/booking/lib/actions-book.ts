@@ -5,6 +5,7 @@ import { forTenant } from "@revio/db";
 import { bookingReference, publicCreateReservation, publicGetHold, publicReleaseHold } from "@revio/booking";
 import { createCardGuarantee } from "@revio/payments";
 import { sendTemplatedEmail } from "@revio/email";
+import { PAY_AT_HOTEL_LABEL, stayDetails } from "@revio/core";
 import { forSystem } from "@revio/db";
 import { getPublicProperty } from "./property";
 import { nightsBetween } from "./dates";
@@ -137,21 +138,24 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
         nights: String(nightsBetween(str(fd, "checkIn"), str(fd, "checkOut"))),
         roomType: result.roomTypeName ?? "",
         reference,
-        total: formatMoney(result.totalMinor ?? 0, result.currency ?? property.baseCurrency),
+        total: formatMoney(result.totalMinor ?? 0, result.currency ?? property.baseCurrency, property.defaultLanguage),
       },
-      // The stay, itemised the same way the confirmation page shows it.
-      details: [
-        { label: "Reference", value: reference },
-        { label: "Room", value: result.roomTypeName ?? "" },
-        { label: "Check-in", value: `${str(fd, "checkIn")} from ${property.checkInTime}` },
-        { label: "Check-out", value: `${str(fd, "checkOut")} by ${property.checkOutTime}` },
-        { label: "Guests", value: str(fd, "guests") || "2" },
-        {
-          label: "Total to pay at the hotel",
-          value: formatMoney(result.totalMinor ?? 0, result.currency ?? property.baseCurrency),
-          emphasis: true,
-        },
-      ],
+      // The stay, itemised the same way the confirmation page shows it — in the email's own language,
+      // labels, dates and money included (`stayDetails`). It was hard-coded English, so a Bulgarian
+      // confirmation arrived with an English middle.
+      details: stayDetails({
+        locale: property.defaultLanguage,
+        reference,
+        roomType: result.roomTypeName ?? "",
+        checkIn: str(fd, "checkIn"),
+        checkOut: str(fd, "checkOut"),
+        checkInTime: property.checkInTime,
+        checkOutTime: property.checkOutTime,
+        guests: guestCount,
+        totalMinor: result.totalMinor ?? 0,
+        currency: result.currency ?? property.baseCurrency,
+        totalLabel: PAY_AT_HOTEL_LABEL[property.defaultLanguage] ?? PAY_AT_HOTEL_LABEL.en!,
+      }),
     });
   } catch {
     /* logged by the transport; the guest already has their confirmation on screen */
@@ -173,6 +177,6 @@ export async function abandonHold(fd: FormData): Promise<void> {
 }
 
 /** Money for an email body — plain text, so no HTML entities and no locale surprises. */
-function formatMoney(minor: number, currency: string): string {
-  return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(minor / 100);
+function formatMoney(minor: number, currency: string, locale = "en"): string {
+  return new Intl.NumberFormat(locale === "bg" ? "bg-BG" : "en-GB", { style: "currency", currency }).format(minor / 100);
 }

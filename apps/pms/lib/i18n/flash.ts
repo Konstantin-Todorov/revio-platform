@@ -55,6 +55,7 @@ export interface FlashStrings {
     nameTheFloor: string;
   };
   pos: { itemGone: string };
+  emails: { denied: string; gone: string; notALanguage: string; savedLook: string };
   workforce: { delegatorsOnly: string; inactive: (name: string) => string; thatPerson: string };
   support: { expired: string; unknownRequest: string };
   maintenance: { notAStatus: string };
@@ -111,6 +112,12 @@ export const flash: Translations<FlashStrings> = {
       pickRooms: "Tick the rooms that are on this floor.",
       floorGone: "That floor no longer has any rooms — somebody changed it while this page was open. Reload the page.",
       nameTheFloor: "Give the floor a name — a number like 3, or a word like Annex.",
+    },
+    emails: {
+      denied: "Only a manager, owner or admin can change guest emails. Ask one of them.",
+      gone: "That email or language no longer exists. Reload the page and try again.",
+      notALanguage: "That isn’t a language we send in. Reload the page and try again.",
+      savedLook: "Saved — every guest email now carries this look.",
     },
     pos: { itemGone: "That item is no longer in the catalog — somebody removed it while this page was open." },
     workforce: {
@@ -179,6 +186,12 @@ export const flash: Translations<FlashStrings> = {
       pickRooms: "Отметнете стаите, които са на този етаж.",
       floorGone: "Този етаж вече няма стаи — някой го е променил, докато страницата е била отворена. Презаредете страницата.",
       nameTheFloor: "Дайте име на етажа — число като 3 или дума като Анекс.",
+    },
+    emails: {
+      denied: "Само управител, собственик или администратор може да променя имейлите към гостите. Обърнете се към някой от тях.",
+      gone: "Този имейл или език вече не съществува. Презаредете страницата и опитайте отново.",
+      notALanguage: "Не изпращаме на този език. Презаредете страницата и опитайте отново.",
+      savedLook: "Запазено — всеки имейл до гост вече е с този облик.",
     },
     pos: { itemGone: "Този артикул вече не е в каталога — някой го е премахнал, докато страницата е била отворена." },
     workforce: {

@@ -139,3 +139,17 @@ describe("link and password refusals match core, in English", () => {
     }
   });
 });
+
+import { EMAIL_FONTS, EMAIL_TEMPLATES, EMAIL_THEMES } from "@revio/core";
+import { guestEmailsStrings } from "@revio/ui/guest-emails-strings";
+
+describe("guest-email words match core, in English", () => {
+  it("every guest email has a label and a when-line, and the label is core's", () => {
+    const en = guestEmailsStrings.en;
+    const guest = EMAIL_TEMPLATES.filter((t) => t.audience === "guest");
+    expect(Object.keys(en.templates).sort()).toEqual(guest.map((t) => t.key).sort());
+    for (const t of guest) expect(en.templates[t.key]!.label).toBe(t.label);
+    for (const th of EMAIL_THEMES) expect(en.themes[th.key]).toEqual({ label: th.label, blurb: th.blurb });
+    for (const f of EMAIL_FONTS) expect(en.fonts[f.key]).toBe(f.label);
+  });
+});

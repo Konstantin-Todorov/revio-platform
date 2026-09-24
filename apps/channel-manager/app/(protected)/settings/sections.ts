@@ -9,7 +9,8 @@ import type { SettingsSection } from "@revio/ui/settings-nav";
  */
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { href: "/settings/property", label: "Property", blurb: "Your hotel's details, and the properties on this account" },
-  { href: "/settings/delivery", label: "Bookings & email", blurb: "Where channel bookings are sent, the daily arrivals summary, and the mail your guests receive" },
+  { href: "/settings/emails", label: "Guest emails", blurb: "What your guests receive, in which language, and how it looks", prefix: true },
+  { href: "/settings/delivery", label: "Bookings & email", blurb: "Where channel bookings are sent, and the daily arrivals summary for your team" },
   { href: "/settings/team", label: "Team", blurb: "The people on this account and what they may do" },
   { href: "/settings/billing", label: "Billing", blurb: "What you pay, and every invoice we have issued" },
   { href: "/settings/account", label: "Your account", blurb: "Two-factor authentication and your sessions" },
@@ -17,7 +18,6 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
 /** Linked rather than moved — each already owns a URL that support answers point at. */
 export const SETTINGS_ELSEWHERE: SettingsSection[] = [
-  { href: "/settings/emails", label: "Guest emails", blurb: "Your branding, and the wording of every email your guests receive" },
   { href: "/users", label: "Users", blurb: "Add, edit and deactivate the people on this account" },
   { href: "/channels", label: "Channels", blurb: "Connect an OTA and map your rooms and rates" },
   { href: "/rooms-rates", label: "Rooms & rates", blurb: "Room types, rate plans and prices" },

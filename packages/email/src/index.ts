@@ -7,3 +7,4 @@
  */
 export * from "./transport.js";
 export * from "./engine.js";
+export * from "./settings.js";

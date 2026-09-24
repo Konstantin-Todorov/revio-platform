@@ -4,6 +4,7 @@ import type { SettingsStrings } from "@/lib/i18n/settings";
 /** The Settings sections, in the order they appear. Same shape as RevioLink and RevioCRS. */
 const SECTIONS = [
   { href: "/settings/property", key: "property" },
+  { href: "/settings/emails", key: "emails" },
   { href: "/settings/operations", key: "operations" },
   { href: "/settings/connections", key: "connections" },
   { href: "/settings/billing", key: "billing" },
@@ -23,7 +24,8 @@ export const FIRST_SECTION_HREF = SECTIONS[0].href;
 
 export function settingsSections(t: SettingsStrings): { sections: SettingsSection[]; elsewhere: SettingsSection[] } {
   return {
-    sections: SECTIONS.map((s) => ({ href: s.href, ...t.sections[s.key] })),
+    // Guest emails has pages below it (one per email); the nav stays on it while you edit one.
+    sections: SECTIONS.map((s) => ({ href: s.href, ...t.sections[s.key], ...(s.key === "emails" ? { prefix: true } : {}) })),
     elsewhere: ELSEWHERE.map((s) => ({ href: s.href, ...t.elsewhere[s.key] })),
   };
 }

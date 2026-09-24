@@ -29,7 +29,7 @@ export default async function GuestEmailsPage({ searchParams }: { searchParams: 
       setLanguageAction={setDefaultLanguage}
       saveLookAction={saveEmailBranding}
       logoSlot={<EmailLogoUpload currentUrl={brand.logoUrl ?? null} uploadAction={uploadEmailLogo} removeAction={removeEmailLogo} />}
-      teamHref="/settings/delivery"
+      
     />
   );
 }

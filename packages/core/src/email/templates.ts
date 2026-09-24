@@ -737,3 +737,113 @@ export function sampleDetails(locale: string): EmailDetail[] {
       ]
     : SAMPLE_DETAILS;
 }
+
+/* ── Where each email sits in the guest's stay, and what actually sends it ─────────────────────── */
+
+/**
+ * The guest's journey, in the order it happens — how the Guest emails screen groups the list, so a
+ * hotel reads its mail the way a guest receives it rather than in the order we happened to add them.
+ */
+export const EMAIL_STAGES = ["booking", "before", "after", "waitlist"] as const;
+export type EmailStage = (typeof EMAIL_STAGES)[number];
+
+export const EMAIL_STAGE_OF: Record<string, EmailStage> = {
+  booking_confirmation: "booking",
+  booking_modified: "booking",
+  booking_cancelled: "booking",
+  pre_arrival: "before",
+  folio_receipt: "after",
+  post_stay: "after",
+  waitlist_joined: "waitlist",
+  waitlist_offer: "waitlist",
+  waitlist_expired: "waitlist",
+};
+
+/**
+ * Which part of the platform actually sends each email — `direct` is the booking page.
+ *
+ * ⚠️ The Guest emails screen shows an email with an empty list as **"Not sent yet"** rather than
+ * offering an on/off switch for it. Editing a pre-arrival note nobody will ever receive was a promise
+ * the screen made and the product did not keep. When a sender is wired, it is added here in the same
+ * change — `email-senders.test.ts` in each sending app checks its own entry.
+ */
+export type EmailSender = "direct" | "crs" | "pms";
+export const EMAIL_SENT_BY: Record<string, readonly EmailSender[]> = {
+  booking_confirmation: ["direct", "crs"],
+  booking_modified: ["crs"],
+  booking_cancelled: ["crs"],
+  pre_arrival: [],
+  folio_receipt: [],
+  post_stay: [],
+  waitlist_joined: ["direct"],
+  waitlist_offer: ["direct"],
+  waitlist_expired: ["direct"],
+};
+
+/** The guest emails, grouped by stage, in journey order. Staff mail is configured elsewhere. */
+export function guestEmailsByStage(): { stage: EmailStage; templates: EmailTemplateDef[] }[] {
+  return EMAIL_STAGES.map((stage) => ({
+    stage,
+    // In the order a guest receives them (EMAIL_STAGE_OF's own order), not the catalogue's.
+    templates: Object.keys(EMAIL_STAGE_OF)
+      .filter((k) => EMAIL_STAGE_OF[k] === stage)
+      .map((k) => EMAIL_TEMPLATE_BY_KEY[k]!)
+      .filter((t) => t && t.audience === "guest"),
+  })).filter((g) => g.templates.length > 0);
+}
+
+const INTL: Record<string, string> = { en: "en-GB", bg: "bg-BG" };
+
+/**
+ * The stay, itemised, in the email's own language — the block `{{details}}` renders.
+ *
+ * One builder for every sender, so a Bulgarian confirmation never carries an English middle again:
+ * the booking page used to hard-code "Reference", "Check-in 2026-10-24 from 14:00" and "€195.00"
+ * into mail whose prose was Bulgarian. Dates are calendar days (`YYYY-MM-DD`) and are formatted as
+ * that day, never shifted through a time zone.
+ */
+export function stayDetails(args: {
+  locale: string;
+  reference: string;
+  roomType: string;
+  checkIn: string;
+  checkOut: string;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  guests?: number | null;
+  totalMinor?: number | null;
+  currency?: string;
+  /** Override for the total's label — "Total to pay at the hotel" on the booking page. */
+  totalLabel?: string;
+}): EmailDetail[] {
+  const bg = args.locale === "bg";
+  const L = DETAIL_LABELS[bg ? "bg" : "en"]!;
+  const intl = INTL[bg ? "bg" : "en"]!;
+  const day = (ymd: string) =>
+    new Date(`${ymd}T12:00:00Z`).toLocaleDateString(intl, {
+      weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+    });
+  const nights = Math.max(1, Math.round((Date.parse(`${args.checkOut}T00:00:00Z`) - Date.parse(`${args.checkIn}T00:00:00Z`)) / 86_400_000));
+  const nightsWord = bg ? (nights === 1 ? "1 нощувка" : `${nights} нощувки`) : nights === 1 ? "1 night" : `${nights} nights`;
+  const guestsWord = args.guests ? (bg ? (args.guests === 1 ? "1 гост" : `${args.guests} гости`) : args.guests === 1 ? "1 guest" : `${args.guests} guests`) : null;
+  const from = args.checkInTime ? (bg ? ` — от ${args.checkInTime} ч.` : ` — from ${args.checkInTime}`) : "";
+  const until = args.checkOutTime ? (bg ? ` — до ${args.checkOutTime} ч.` : ` — until ${args.checkOutTime}`) : "";
+
+  const rows: EmailDetail[] = [
+    { label: L.reference!, value: args.reference },
+    { label: L.arrival!, value: `${day(args.checkIn)}${from}` },
+    { label: L.departure!, value: `${day(args.checkOut)}${until}` },
+    { label: L.accommodation!, value: [args.roomType, nightsWord, guestsWord].filter(Boolean).join(" · ") },
+  ];
+  if (args.totalMinor != null && args.currency) {
+    rows.push({
+      label: args.totalLabel ?? L.total!,
+      value: new Intl.NumberFormat(intl, { style: "currency", currency: args.currency }).format(args.totalMinor / 100),
+      emphasis: true,
+    });
+  }
+  return rows;
+}
+
+/** "Total to pay at the hotel" — the booking page's own wording for the total, per language. */
+export const PAY_AT_HOTEL_LABEL: Record<string, string> = { en: "Total to pay at the hotel", bg: "Общо за плащане в хотела" };

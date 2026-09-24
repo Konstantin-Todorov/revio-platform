@@ -229,6 +229,21 @@ export default async function BookingEnginePage() {
         </div>
       </Card>
 
+      {/* The mail a guest gets after booking here is configured in one place for every product — said
+          here too, because this is where a hotel thinks about its guests' booking experience. */}
+      <a
+        href="/settings/emails"
+        className="flex items-center justify-between gap-3 rounded-lg border border-surface-border bg-white px-5 py-3.5 shadow-card transition-colors hover:bg-surface-muted"
+      >
+        <span>
+          <span className="block text-[13.5px] font-semibold text-ink-900">Guest emails</span>
+          <span className="block text-[12px] text-ink-500">
+            The confirmation a guest receives after booking here — its wording, language ({property.defaultLanguage === "bg" ? "Bulgarian" : "English"} today) and look.
+          </span>
+        </span>
+        <span className="text-[12.5px] font-semibold text-brand-700">Settings → Guest emails →</span>
+      </a>
+
       <Card>
         <CardHeader
           title="Appearance"

@@ -34,6 +34,8 @@ export default async function ReservationDetailPage({
   const { roomTypes } = await getCreateFormData();
 
   const isLive = ["confirmed", "modified", "overbooked"].includes(r.status);
+  // Channel bookings are mailed by the channel itself; a guest with no address cannot be mailed at all.
+  const canEmailGuest = !r.channelId && Boolean(r.guest?.email);
   const checkInIso = line?.checkIn.toISOString().slice(0, 10) ?? "";
   const canNoShow = isLive && r.status !== "overbooked" && checkInIso < todayIso;
   /*
@@ -133,11 +135,17 @@ export default async function ReservationDetailPage({
           </dl>
           {isLive && (
             <div className="flex items-center gap-2 border-t border-surface-border/60 px-4 py-3">
-              <form action={cancelCrsReservation}>
+              <form action={cancelCrsReservation} className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="id" value={r.id} />
                 <button className="rounded-md border border-danger-500/40 px-3 py-1.5 text-[12.5px] font-semibold text-danger-600 transition-colors hover:bg-danger-50">
                   Cancel reservation
                 </button>
+                {canEmailGuest && (
+                  <label className="flex items-center gap-1.5 text-[12px] text-ink-600">
+                    <input type="checkbox" name="emailGuest" defaultChecked className="h-3.5 w-3.5 rounded border-surface-border" />
+                    Email the guest
+                  </label>
+                )}
               </form>
               {canNoShow && (
                 <form action={markNoShow}>
@@ -186,6 +194,12 @@ export default async function ReservationDetailPage({
               <div><label className={labelCls}>Rooms</label><input type="number" name="quantity" min={1} defaultValue={line.quantity} className={inputCls} /></div>
               <div><label className={labelCls}>Total ({r.currency})</label><input type="number" name="price" step="0.01" min="0" defaultValue={(r.totalMinor / 100).toFixed(2)} className={inputCls} /></div>
               <button className="h-[38px] rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700">Apply change</button>
+              {canEmailGuest && (
+                <label className="col-span-2 flex items-center gap-1.5 text-[12px] text-ink-600 lg:col-span-6">
+                  <input type="checkbox" name="emailGuest" defaultChecked className="h-3.5 w-3.5 rounded border-surface-border" />
+                  Email the guest the updated booking
+                </label>
+              )}
             </form>
           </details>
         </Card>

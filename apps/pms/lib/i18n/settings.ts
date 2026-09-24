@@ -11,7 +11,7 @@ type Section = { label: string; blurb: string };
 export interface SettingsStrings {
   title: string;
   nav: { aria: string; elsewhere: string };
-  sections: Record<"property" | "operations" | "connections" | "billing" | "account", Section>;
+  sections: Record<"property" | "emails" | "operations" | "connections" | "billing" | "account", Section>;
   elsewhere: Record<"rooms" | "catalog" | "closeday" | "help", Section>;
   property: {
     title: string;
@@ -51,6 +51,7 @@ export const settings: Translations<SettingsStrings> = {
     nav: { aria: "Settings sections", elsewhere: "Elsewhere" },
     sections: {
       property: { label: "Property", blurb: "Your hotel's profile and who may use it — both shared across the platform" },
+      emails: { label: "Guest emails", blurb: "What your guests receive, in which language, and how it looks" },
       operations: { label: "Operations", blurb: "Rooms, the minibar catalogue and the night audit" },
       connections: { label: "Connections", blurb: "The channels this property sells on" },
       billing: { label: "Billing", blurb: "What you pay, and every invoice we have issued" },
@@ -103,6 +104,7 @@ export const settings: Translations<SettingsStrings> = {
     nav: { aria: "Раздели на настройките", elsewhere: "Другаде" },
     sections: {
       property: { label: "Обект", blurb: "Профилът на хотела и кой има достъп — общи за цялата платформа" },
+      emails: { label: "Имейли към гостите", blurb: "Какво получават гостите Ви, на какъв език и как изглежда" },
       operations: { label: "Операции", blurb: "Стаите, каталогът на минибара и затварянето на деня" },
       connections: { label: "Връзки", blurb: "Каналите, по които продава обектът" },
       billing: { label: "Плащания към Revio", blurb: "Какво плащате и всички фактури, които сме издали" },

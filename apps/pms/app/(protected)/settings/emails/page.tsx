@@ -3,7 +3,8 @@ import { GuestEmails } from "@revio/ui/guest-emails";
 import { EmailLogoUpload } from "@revio/ui/email-logo-upload";
 import { prisma } from "@/lib/db";
 import { saveEmailBranding, setDefaultLanguage, uploadEmailLogo, removeEmailLogo } from "@/lib/actions-email";
-import { getProperty } from "@/lib/data";
+import { activeProperty } from "@/lib/data";
+import { getLocale } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +14,14 @@ export const dynamic = "force-dynamic";
  */
 export default async function GuestEmailsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab } = await searchParams;
-  const property = await getProperty();
+  const { property } = await activeProperty();
+  const locale = await getLocale();
   const brand = brandOf(property);
   const states = await templateStates(prisma, property.id);
 
   return (
     <GuestEmails
-      
+      locale={locale}
       tab={tab === "look" ? "look" : "emails"}
       basePath="/settings/emails"
       editorHref={(key, lang) => `/settings/emails/${key}?lang=${lang}`}
@@ -29,7 +31,7 @@ export default async function GuestEmailsPage({ searchParams }: { searchParams: 
       setLanguageAction={setDefaultLanguage}
       saveLookAction={saveEmailBranding}
       logoSlot={<EmailLogoUpload currentUrl={brand.logoUrl ?? null} uploadAction={uploadEmailLogo} removeAction={removeEmailLogo} />}
-      teamHref="/settings/delivery"
+      
     />
   );
 }

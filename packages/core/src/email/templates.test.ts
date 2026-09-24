@@ -154,3 +154,31 @@ describe("renderEmail — the rating ask", () => {
     expect(plain.text).not.toContain("★");
   });
 });
+
+import { EMAIL_SENT_BY, EMAIL_STAGE_OF, EMAIL_TEMPLATES, guestEmailsByStage, stayDetails } from "./templates.js";
+
+describe("the guest journey", () => {
+  it("every guest email has a stage and a sender list", () => {
+    for (const t of EMAIL_TEMPLATES.filter((x) => x.audience === "guest")) {
+      expect(EMAIL_STAGE_OF[t.key], t.key).toBeDefined();
+      expect(EMAIL_SENT_BY[t.key], t.key).toBeDefined();
+    }
+    expect(guestEmailsByStage().map((g) => g.stage)).toEqual(["booking", "before", "after", "waitlist"]);
+  });
+});
+
+describe("stayDetails", () => {
+  const base = { reference: "RV-07NR0F", roomType: "Deluxe Double", checkIn: "2026-08-04", checkOut: "2026-08-06", checkInTime: "14:00", checkOutTime: "12:00", guests: 2, totalMinor: 19500, currency: "EUR" };
+  it("Bulgarian is Bulgarian all the way down — labels, dates, nights and money", () => {
+    const d = stayDetails({ ...base, locale: "bg" });
+    expect(d.map((r) => r.label)).toEqual(["Номер", "Настаняване", "Напускане", "Настаняване в", "Общо"]);
+    expect(d[1]!.value).toBe("вторник, 4 август 2026 г. — от 14:00 ч.");
+    expect(d[3]!.value).toBe("Deluxe Double · 2 нощувки · 2 гости");
+    expect(d[4]!.value).toMatch(/^195,00\s€$/);
+  });
+  it("English", () => {
+    const d = stayDetails({ ...base, locale: "en", totalLabel: "Total to pay at the hotel" });
+    expect(d[1]!.value).toBe("Tuesday, 4 August 2026 — from 14:00");
+    expect(d[4]).toEqual({ label: "Total to pay at the hotel", value: "€195.00", emphasis: true });
+  });
+});
