@@ -44,6 +44,20 @@ export interface PagesStrings {
     backToDesk: string;
     notFoundTitle: string;
     notFoundBody: string;
+    updatedTitle: string;
+    updatedBody: string;
+    reload: string;
+    pageNotFound: string;
+    pageNotFoundBody: string;
+    goToPms: string;
+    pageDidntLoad: string;
+  };
+  wrongProperty: {
+    title: (guest: string, property: string) => string;
+    thatBooking: string;
+    body: string;
+    switchTo: (property: string) => string;
+    stay: string;
   };
 }
 
@@ -104,6 +118,20 @@ export const pages: Translations<PagesStrings> = {
       backToDesk: "Back to Front Desk",
       notFoundTitle: "We couldn’t find that",
       notFoundBody: "The page or record you’re looking for doesn’t exist, or it may have been removed. Check the link, or start again from the menu.",
+      updatedTitle: "RevioPMS was just updated",
+      updatedBody: "This page was open while a new version went out. Reloading picks it up — nothing you entered has been lost.",
+      reload: "Reload the page",
+      pageNotFound: "Page not found",
+      pageNotFoundBody: "That address doesn’t exist in RevioPMS. If you followed a link from us, let us know.",
+      goToPms: "Go to RevioPMS",
+      pageDidntLoad: "This page didn’t load",
+    },
+    wrongProperty: {
+      title: (g, p) => `${g} is at ${p}`,
+      thatBooking: "That booking",
+      body: "You are working in a different hotel right now, so this booking cannot be opened here. Switching takes you straight to it — everything else moves with you.",
+      switchTo: (p) => `Switch to ${p}`,
+      stay: "Stay here",
     },
   },
   bg: {
@@ -162,6 +190,20 @@ export const pages: Translations<PagesStrings> = {
       backToDesk: "Обратно към рецепцията",
       notFoundTitle: "Не намерихме това",
       notFoundBody: "Страницата или записът, който търсите, не съществува или е премахнат. Проверете връзката или започнете отново от менюто.",
+      updatedTitle: "RevioPMS току-що беше обновен",
+      updatedBody: "Страницата е била отворена, докато излизаше нова версия. Презареждането я зарежда — нищо въведено не е изгубено.",
+      reload: "Презареди страницата",
+      pageNotFound: "Страницата не е намерена",
+      pageNotFoundBody: "Този адрес не съществува в RevioPMS. Ако сте стигнали тук по връзка от нас, моля, кажете ни.",
+      goToPms: "Към RevioPMS",
+      pageDidntLoad: "Страницата не се зареди",
+    },
+    wrongProperty: {
+      title: (g, p) => `${g} е в ${p}`,
+      thatBooking: "Тази резервация",
+      body: "В момента работите в друг хотел, затова резервацията не може да се отвори тук. Превключването Ви отвежда директно при нея — всичко останало се премества с Вас.",
+      switchTo: (p) => `Превключи към ${p}`,
+      stay: "Остани тук",
     },
   },
 };

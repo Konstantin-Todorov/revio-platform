@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { Building2 } from "lucide-react";
 import { StatusPage, statusPrimaryCls, statusSecondaryCls } from "@revio/ui/status-page";
 import { setActiveProperty } from "@/lib/actions-session";
+import { i18n } from "@/lib/i18n/server";
+import { pages } from "@/lib/i18n/pages";
 
 /**
  * "This booking is at your other hotel."
@@ -16,7 +18,7 @@ import { setActiveProperty } from "@/lib/actions-session";
  * So it names the hotel and offers the one action that helps. Switching is a form rather than a link
  * because it writes a cookie, and that is a POST — the same reason every other write here is one.
  */
-export function WrongProperty({
+export async function WrongProperty({
   reservationId, guestName, propertyId, propertyName,
 }: {
   reservationId: string;
@@ -32,19 +34,20 @@ export function WrongProperty({
     redirect(`/reservation/${reservationId}`);
   }
 
+  const t = (await i18n()).t(pages).wrongProperty;
   return (
     <StatusPage
       tone="notFound"
-      title={`${guestName || "That booking"} is at ${propertyName}`}
-      body="You are working in a different hotel right now, so this booking cannot be opened here. Switching takes you straight to it — everything else moves with you."
+      title={t.title(guestName || t.thatBooking, propertyName)}
+      body={t.body}
     >
       <form action={switchAndOpen}>
         <button type="submit" className={statusPrimaryCls}>
           <Building2 className="mr-1.5 inline h-4 w-4" />
-          Switch to {propertyName}
+          {t.switchTo(propertyName)}
         </button>
       </form>
-      <Link href="/dashboard" className={statusSecondaryCls}>Stay here</Link>
+      <Link href="/dashboard" className={statusSecondaryCls}>{t.stay}</Link>
     </StatusPage>
   );
 }
