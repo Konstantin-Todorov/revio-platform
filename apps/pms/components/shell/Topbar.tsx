@@ -29,12 +29,12 @@ export function Topbar({
   timeZone: string;
   locale?: Locale;
   /** Translated menu strings and role names — `lib/i18n/shell.ts`. */
-  t?: { menu: UserMenuStrings; roles: Record<string, string> };
+  t?: { menu: UserMenuStrings; roles: Record<string, string>; search: string };
 }) {
   return (
     <header className="sticky top-0 z-20 flex h-[60px] items-center gap-3 border-b border-surface-border bg-white/95 px-4 backdrop-blur lg:gap-4 lg:px-6">
       <MobileMenuButton />
-      <TopbarSearch activePropertyId={activeId} />
+      <TopbarSearch activePropertyId={activeId} {...(t ? { placeholder: t.search } : {})} />
 
       <div className="ml-auto">
         <WorkspaceSwitcher properties={properties} activeId={activeId} activeName={activeName} />

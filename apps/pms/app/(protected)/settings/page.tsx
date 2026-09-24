@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { SETTINGS_SECTIONS } from "./sections";
+import { FIRST_SECTION_HREF } from "./sections";
 
 /**
  * `/settings` is the entrance to four sections rather than a page of its own.
@@ -8,5 +8,5 @@ import { SETTINGS_SECTIONS } from "./sections";
  * on the first section.
  */
 export default function SettingsIndex() {
-  redirect(SETTINGS_SECTIONS[0]!.href);
+  redirect(FIRST_SECTION_HREF);
 }

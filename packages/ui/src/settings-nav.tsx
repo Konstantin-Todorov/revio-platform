@@ -33,6 +33,7 @@ export interface SettingsSection {
 export function SettingsNav({
   sections,
   elsewhere = [],
+  labels = { nav: "Settings sections", elsewhere: "Elsewhere" },
 }: {
   sections: SettingsSection[];
   /**
@@ -41,11 +42,13 @@ export function SettingsNav({
    * nav's job is that somebody looking for a setting finds it — not that everything renders here.
    */
   elsewhere?: SettingsSection[];
+  /** The nav's own two words, for a product rendering in another language. English by default. */
+  labels?: { nav: string; elsewhere: string };
 }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Settings sections" className="lg:w-[212px] lg:shrink-0">
+    <nav aria-label={labels.nav} className="lg:w-[212px] lg:shrink-0">
       <ul className="flex gap-1 overflow-x-auto pb-1 lg:block lg:space-y-0.5 lg:overflow-visible lg:pb-0">
         {sections.map((s) => {
           const active = pathname === s.href;
@@ -70,7 +73,7 @@ export function SettingsNav({
       {elsewhere.length > 0 && (
         <>
           <p className="mt-4 hidden px-2.5 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400 lg:block">
-            Elsewhere
+            {labels.elsewhere}
           </p>
           <ul className="mt-1 hidden space-y-0.5 lg:block">
             {elsewhere.map((s) => (

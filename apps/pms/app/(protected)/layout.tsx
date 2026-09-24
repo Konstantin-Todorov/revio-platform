@@ -126,7 +126,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar role={session.role} footer={t.businessDate(businessDate)} t={{ sections: t.sections, nav: t.nav, menu: t.menu }} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
-          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} feed={feed} timeZone={property.timezone} locale={locale} t={{ menu: t.menu, roles: t.roles }} />
+          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} feed={feed} timeZone={property.timezone} locale={locale} t={{ menu: t.menu, roles: t.roles, search: t.search }} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate

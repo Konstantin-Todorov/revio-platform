@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { StatusPage, statusPrimaryCls, statusSecondaryCls } from "@revio/ui/status-page";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { pages } from "@/lib/i18n/pages";
 
 /**
  * In-shell error boundary. The nav stays visible, so a failed screen never looks like the whole
@@ -16,15 +19,16 @@ export default function ProtectedError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = translate(pages, useLocale()).status;
   return (
     <StatusPage
       tone="error"
-      title="This screen didn’t load"
-      body="Something went wrong on our side. Your data is safe — nothing was changed. Try again, and if it keeps happening send us the reference below."
+      title={t.errorTitle}
+      body={t.errorBody}
       reference={error.digest}
     >
-      <button onClick={reset} className={statusPrimaryCls}>Try again</button>
-      <Link href="/dashboard" className={statusSecondaryCls}>Back to Front Desk</Link>
+      <button onClick={reset} className={statusPrimaryCls}>{t.tryAgain}</button>
+      <Link href="/dashboard" className={statusSecondaryCls}>{t.backToDesk}</Link>
     </StatusPage>
   );
 }

@@ -1,18 +1,29 @@
 import type { SettingsSection } from "@revio/ui/settings-nav";
+import type { SettingsStrings } from "@/lib/i18n/settings";
 
 /** The Settings sections, in the order they appear. Same shape as RevioLink and RevioCRS. */
-export const SETTINGS_SECTIONS: SettingsSection[] = [
-  { href: "/settings/property", label: "Property", blurb: "Your hotel's profile and who may use it — both shared across the platform" },
-  { href: "/settings/operations", label: "Operations", blurb: "Rooms, the minibar catalogue and the night audit" },
-  { href: "/settings/connections", label: "Connections", blurb: "The channels this property sells on" },
-  { href: "/settings/billing", label: "Billing", blurb: "What you pay, and every invoice we have issued" },
-  { href: "/settings/account", label: "Your account", blurb: "Two-factor authentication and your sessions" },
-];
+const SECTIONS = [
+  { href: "/settings/property", key: "property" },
+  { href: "/settings/operations", key: "operations" },
+  { href: "/settings/connections", key: "connections" },
+  { href: "/settings/billing", key: "billing" },
+  { href: "/settings/account", key: "account" },
+] as const;
 
 /** Linked rather than moved — each owns a URL that support answers already point at. */
-export const SETTINGS_ELSEWHERE: SettingsSection[] = [
-  { href: "/rooms", label: "Rooms & units", blurb: "The physical rooms and their types" },
-  { href: "/minibar/catalog", label: "Minibar / POS", blurb: "What can be posted to a folio" },
-  { href: "/closeday", label: "Close Day", blurb: "Roll the business date" },
-  { href: "/help", label: "Help & support", blurb: "Answers, and every request you have sent us" },
-];
+const ELSEWHERE = [
+  { href: "/rooms", key: "rooms" },
+  { href: "/minibar/catalog", key: "catalog" },
+  { href: "/closeday", key: "closeday" },
+  { href: "/help", key: "help" },
+] as const;
+
+/** Where `/settings` lands. */
+export const FIRST_SECTION_HREF = SECTIONS[0].href;
+
+export function settingsSections(t: SettingsStrings): { sections: SettingsSection[]; elsewhere: SettingsSection[] } {
+  return {
+    sections: SECTIONS.map((s) => ({ href: s.href, ...t.sections[s.key] })),
+    elsewhere: ELSEWHERE.map((s) => ({ href: s.href, ...t.elsewhere[s.key] })),
+  };
+}

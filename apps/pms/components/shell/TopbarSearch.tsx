@@ -19,13 +19,13 @@ import { setActiveProperty } from "@/lib/actions-session";
  * Unlike RevioLink and RevioCRS there is no screen this hides on: RevioPMS's calendar is narrower
  * than a year-wide ARI grid, and the front desk is exactly where the fast path is worth most.
  */
-export function TopbarSearch({ activePropertyId }: { activePropertyId: string }) {
+export function TopbarSearch({ activePropertyId, placeholder = "Search rooms, guests, reservations…" }: { activePropertyId: string; placeholder?: string }) {
   const router = useRouter();
   return (
     <div className="flex flex-1 justify-start">
       <CommandPalette
         search={searchEverything}
-        placeholder="Search rooms, guests, reservations…"
+        placeholder={placeholder}
         seeAllHref={(q) => `/search?q=${encodeURIComponent(q)}`}
         onNavigate={async (href, hit) => {
           /* ⚠️ A record in another of the account's hotels needs the workspace switched first, or

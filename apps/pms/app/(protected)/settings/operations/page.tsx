@@ -1,17 +1,21 @@
 import Link from "next/link";
 import { BedDouble, Wine, Moon } from "lucide-react";
 import { getPmsSettings } from "@/lib/data";
+import { i18n } from "@/lib/i18n/server";
+import { settings } from "@/lib/i18n/settings";
 
 export const dynamic = "force-dynamic";
 
 /** The three things this product configures for itself, each on its own screen. */
 export default async function OperationsSettingsPage() {
   const { counts } = await getPmsSettings();
+  const { t: tr } = await i18n();
+  const t = tr(settings).operations;
 
   const links = [
-    { href: "/rooms", icon: BedDouble, label: "Rooms & Units", sub: `${counts.units} rooms · ${counts.roomTypes} types` },
-    { href: "/minibar/catalog", icon: Wine, label: "Minibar / POS catalog", sub: `${counts.posItems} items` },
-    { href: "/closeday", icon: Moon, label: "Close Day (night audit)", sub: "roll the business date" },
+    { href: "/rooms", icon: BedDouble, label: t.rooms, sub: t.roomsSub(counts.units, counts.roomTypes) },
+    { href: "/minibar/catalog", icon: Wine, label: t.catalog, sub: t.catalogSub(counts.posItems) },
+    { href: "/closeday", icon: Moon, label: t.closeday, sub: t.closedaySub },
   ];
 
   return (

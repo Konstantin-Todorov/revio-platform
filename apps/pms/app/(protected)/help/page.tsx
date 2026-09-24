@@ -4,6 +4,8 @@ import { HelpCentre } from "@revio/ui/help-centre";
 import { MyRequests, type MyRequestRow } from "@revio/ui/my-requests";
 import { replyToSupport } from "@/lib/actions-support";
 import { getSession } from "@/lib/session";
+import { i18n } from "@/lib/i18n/server";
+import { pages } from "@/lib/i18n/pages";
 
 export const dynamic = "force-dynamic";
 
@@ -37,26 +39,27 @@ export default async function HelpPage({
   // two sides can never disagree about who is waiting for whom.
   const open = requests.filter((r) => r.handledAt === null).length;
   const requested = (await searchParams).tab;
+  const t = (await i18n()).t(pages).help;
   const tab = requested === "requests" || (requested !== "help" && open > 0) ? "requests" : "help";
 
   const tabs = [
-    { key: "help", label: "Help", href: "/help?tab=help" },
+    { key: "help", label: t.help, href: "/help?tab=help" },
     {
       key: "requests",
-      label: requests.length === 0 ? "Your requests" : `Your requests (${requests.length})`,
+      label: t.requests(requests.length),
       href: "/help?tab=requests",
     },
   ];
 
   return (
     <div className="space-y-5">
-      <nav aria-label="Help sections" className="flex gap-1 border-b border-surface-border">
-        {tabs.map((t) => {
-          const active = tab === t.key;
+      <nav aria-label={t.aria} className="flex gap-1 border-b border-surface-border">
+        {tabs.map((tb) => {
+          const active = tab === tb.key;
           return (
             <Link
-              key={t.key}
-              href={t.href}
+              key={tb.key}
+              href={tb.href}
               aria-current={active ? "page" : undefined}
               className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
                 active
@@ -64,11 +67,11 @@ export default async function HelpPage({
                   : "border-transparent text-ink-500 hover:text-ink-900"
               }`}
             >
-              {t.label}
+              {tb.label}
               {/* Said in words as well as colour: how many are still with us. */}
-              {t.key === "requests" && open > 0 && (
+              {tb.key === "requests" && open > 0 && (
                 <span className="ml-1.5 rounded-full bg-warning-50 px-1.5 py-0.5 text-[10.5px] font-bold text-warning-600">
-                  {open} open
+                  {t.open(open)}
                 </span>
               )}
             </Link>
