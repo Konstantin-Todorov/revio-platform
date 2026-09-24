@@ -1,8 +1,11 @@
 import { AlertTriangle, Ban, Check, Plus, RotateCcw, Trash2 } from "lucide-react";
 import {
-  validateRegisterEntry, registerCategory, expectedNameScript, countryName, COUNTRY_NAMES,
+  validateRegisterEntry, registerCategory, expectedNameScript, COUNTRY_NAMES,
   type TouristRegisterEntry,
 } from "@revio/core";
+import { i18n } from "@/lib/i18n/server";
+import { register } from "@/lib/i18n/register";
+import { countryIn } from "@/lib/i18n/country";
 import { saveStayGuest, addStayGuest, removeStayGuest, cancelStayGuest } from "@/lib/actions-register";
 import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
 
@@ -31,19 +34,22 @@ function Lbl({ children, hint }: { children: React.ReactNode; hint?: string }) {
  * The card shows what is missing rather than refusing to save what is present. A half-typed entry is
  * worth keeping — the alternative is the receptionist writing the passport on paper "for later".
  */
-export function GuestRegisterCard({ reservationId, rows, today }: { reservationId: string; rows: RegisterRow[]; today: string }) {
+export async function GuestRegisterCard({ reservationId, rows, today }: { reservationId: string; rows: RegisterRow[]; today: string }) {
+  const { t: tr, locale } = await i18n();
+  const t = tr(register).card;
+  const countryName = countryIn(locale);
   const problemsById = new Map(rows.map((r) => [r.id, validateRegisterEntry(r)]));
   const complete = rows.filter((r) => problemsById.get(r.id)!.length === 0).length;
 
   return (
     <Card className="mt-4">
       <CardHeader
-        title="Guest register"
-        subtitle="Регистър на настанените туристи · required by law for every guest who stays the night, not only the person who booked"
+        title={t.title}
+        subtitle={t.subtitle}
         action={
           rows.length > 0 ? (
             <StatusPill tone={complete === rows.length ? "success" : "warning"}>
-              {complete} of {rows.length} complete
+              {t.completeOf(complete, rows.length)}
             </StatusPill>
           ) : undefined
         }
@@ -51,7 +57,7 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
 
       {rows.length === 0 && (
         <p className="px-4 py-6 text-[13px] text-ink-400">
-          The register opens at check-in, one entry per guest in the room.
+          {t.opensAtCheckIn}
         </p>
       )}
 
@@ -75,16 +81,16 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
                   ? <Check className="h-4 w-4 shrink-0 text-success-600" />
                   : <AlertTriangle className="h-4 w-4 shrink-0 text-warning-600" />}
                 <span className={`flex-1 truncate text-[13px] font-semibold ${named ? "text-ink-900" : "text-ink-400 italic"} ${r.cancelled ? "line-through decoration-ink-300" : ""}`}>
-                  {named || "Not captured yet"}
+                  {named || t.notCapturedYet}
                 </span>
                 {r.cancelled && (
                   <span className="shrink-0 rounded bg-surface-sunken px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-ink-400">
-                    cancelled
+                    {t.cancelled}
                   </span>
                 )}
                 <span className="shrink-0 text-[11.5px] text-ink-400">
                   {r.nationality ? countryName(r.nationality) : "—"}
-                  {r.unitLabel ? ` · room ${r.unitLabel}` : ""}
+                  {r.unitLabel ? t.room(r.unitLabel) : ""}
                 </span>
               </summary>
 
@@ -93,19 +99,19 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
 
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   <label>
-                    <Lbl hint={!known ? undefined : script === "cyrillic" ? "кирилица" : "latin"}>First name</Lbl>
-                    <input name="firstName" defaultValue={r.firstName} className={input} placeholder={known && script === "cyrillic" ? "Мария" : "John"} />
+                    <Lbl hint={!known ? undefined : script === "cyrillic" ? t.cyrillic : t.latin}>{t.firstName}</Lbl>
+                    <input name="firstName" defaultValue={r.firstName} className={input} placeholder={known && script === "cyrillic" ? t.firstNamePlaceholder.cyrillic : t.firstNamePlaceholder.latin} />
                   </label>
                   <label>
-                    <Lbl hint="бащино · often blank">Patronymic</Lbl>
+                    <Lbl hint={t.patronymicHint}>{t.patronymic}</Lbl>
                     <input name="middleName" defaultValue={r.middleName ?? ""} className={input} placeholder="—" />
                   </label>
                   <label>
-                    <Lbl hint={!known ? undefined : script === "cyrillic" ? "кирилица" : "latin"}>Family name</Lbl>
-                    <input name="lastName" defaultValue={r.lastName} className={input} placeholder={known && script === "cyrillic" ? "Иванова" : "Smith"} />
+                    <Lbl hint={!known ? undefined : script === "cyrillic" ? t.cyrillic : t.latin}>{t.familyName}</Lbl>
+                    <input name="lastName" defaultValue={r.lastName} className={input} placeholder={known && script === "cyrillic" ? t.familyNamePlaceholder.cyrillic : t.familyNamePlaceholder.latin} />
                   </label>
                   <label>
-                    <Lbl>Date of birth</Lbl>
+                    <Lbl>{t.dateOfBirth}</Lbl>
                     {/*
                       ⚠️ The reverse of the rule everywhere else: a birth date may be as far in the
                       past as it likes, and can never be in the future. `max` rather than `min` —
@@ -114,46 +120,46 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
                     <input name="dateOfBirth" type="date" max={today} defaultValue={r.dateOfBirth ?? ""} className={input} />
                   </label>
                   <label>
-                    <Lbl>Sex</Lbl>
+                    <Lbl>{t.sex}</Lbl>
                     <select name="sex" defaultValue={r.sex ?? ""} className={input}>
                       <option value="">—</option>
-                      <option value="f">Female</option>
-                      <option value="m">Male</option>
+                      <option value="f">{t.female}</option>
+                      <option value="m">{t.male}</option>
                     </select>
                   </label>
 
                   <label>
-                    <Lbl>Citizenship</Lbl>
+                    <Lbl>{t.citizenship}</Lbl>
                     <input name="nationality" list="revio-countries" defaultValue={r.nationality} className={input} placeholder="BG" maxLength={2} />
                   </label>
                   <label>
-                    <Lbl hint="ЕГН / ЛЧН">Personal number</Lbl>
+                    <Lbl hint={t.personalNumberHint}>{t.personalNumber}</Lbl>
                     <input name="personalId" defaultValue={r.personalId ?? ""} className={input} placeholder="—" />
                   </label>
                   <label>
-                    <Lbl>Document type</Lbl>
+                    <Lbl>{t.documentType}</Lbl>
                     <select name="documentType" defaultValue={r.documentType ?? ""} className={input}>
                       <option value="">—</option>
-                      <option value="id_card">Лична карта · ID card</option>
-                      <option value="passport">Паспорт · Passport</option>
-                      <option value="other">Друг · Other</option>
+                      <option value="id_card">{t.docTypes.id_card}</option>
+                      <option value="passport">{t.docTypes.passport}</option>
+                      <option value="other">{t.docTypes.other}</option>
                     </select>
                   </label>
                   <label>
-                    <Lbl>Document number</Lbl>
+                    <Lbl>{t.documentNumber}</Lbl>
                     <input name="documentNumber" defaultValue={r.documentNumber ?? ""} className={input} placeholder="641234567" />
                   </label>
                   <label>
-                    <Lbl hint={!known ? "non-EU/EEA only" : needsSeries ? "required" : "not needed"}>Document series</Lbl>
+                    <Lbl hint={!known ? t.seriesHint.unknown : needsSeries ? t.seriesHint.required : t.seriesHint.notNeeded}>{t.documentSeries}</Lbl>
                     <input name="documentSeries" defaultValue={r.documentSeries ?? ""} className={input} placeholder="—" />
                   </label>
 
                   <label>
-                    <Lbl>Issued by</Lbl>
+                    <Lbl>{t.issuedBy}</Lbl>
                     <input name="documentCountry" list="revio-countries" defaultValue={r.documentCountry ?? ""} className={input} placeholder="BG" maxLength={2} />
                   </label>
                   <div>
-                    <Lbl>Room · floor</Lbl>
+                    <Lbl>{t.roomFloor}</Lbl>
                     {/* Read-only: a snapshot of where this person actually slept, taken at check-in. */}
                     <p className="flex h-9 items-center text-[13px] font-semibold text-ink-700">
                       {r.unitLabel ?? "—"}{r.floor ? ` · ${r.floor}` : ""}
@@ -161,14 +167,16 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
                   </div>
                   <label className="col-span-2 flex items-end gap-2 pb-1.5">
                     <input type="checkbox" name="touristPackage" defaultChecked={r.touristPackage} className="h-4 w-4 rounded border-surface-border" />
-                    <span className="text-[12.5px] text-ink-700">Part of a tourist package</span>
+                    <span className="text-[12.5px] text-ink-700">{t.touristPackage}</span>
                   </label>
                 </div>
 
                 {problems.length > 0 && (
                   <ul className="mt-3 space-y-0.5">
-                    {problems.map((p) => (
-                      <li key={p.field} className="text-[11.5px] text-warning-700">· {p.message}</li>
+                    {/* One line per rule, not per field: a name in the wrong script fails on first
+                        AND family name, and the same sentence twice reads as a glitch. */}
+                    {[...new Set(problems.map((p) => t.problems[p.code] ?? p.message))].map((m) => (
+                      <li key={m} className="text-[11.5px] text-warning-700">· {m}</li>
                     ))}
                   </ul>
                 )}
@@ -178,21 +186,21 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
                     <SubmitButton formAction={removeStayGuest}
                       className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-ink-400 transition-colors hover:text-danger-600"
                     >
-                      <Trash2 className="h-3.5 w-3.5" /> Remove
+                      <Trash2 className="h-3.5 w-3.5" /> {t.remove}
                     </SubmitButton>
                   )}
                   {!blank && (
                     <SubmitButton formAction={cancelStayGuest}
-                      title={r.cancelled ? "Put this registration back" : "Mark this registration cancelled — it keeps its number"}
+                      title={r.cancelled ? t.reinstateTitle : t.cancelTitle}
                       className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-ink-400 transition-colors hover:text-warning-700"
                     >
                       {r.cancelled
-                        ? <><RotateCcw className="h-3.5 w-3.5" /> Reinstate</>
-                        : <><Ban className="h-3.5 w-3.5" /> Cancel</>}
+                        ? <><RotateCcw className="h-3.5 w-3.5" /> {t.reinstate}</>
+                        : <><Ban className="h-3.5 w-3.5" /> {t.cancel}</>}
                     </SubmitButton>
                   )}
                   <SubmitButton className="rounded-md bg-brand-700 px-3.5 py-1.5 text-[13px] font-semibold text-white transition-colors hover:bg-brand-800">
-                    Save
+                    {t.save}
                   </SubmitButton>
                 </div>
               </form>
@@ -204,13 +212,12 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
       {rows.length > 0 && (
         <div className="flex items-center justify-between gap-3 border-t border-surface-border/60 px-4 py-2.5">
           <p className="text-[11.5px] text-ink-400">
-            Kept for two years. A guest asking to be forgotten has their profile anonymised — the register
-            entry stands, because the law requires it.
+            {t.keptFor}
           </p>
           <form action={addStayGuest}>
             <input type="hidden" name="reservationId" value={reservationId} />
-            <SubmitButton className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700" pendingLabel="Adding…">
-              <Plus className="h-3.5 w-3.5" /> Add a guest
+            <SubmitButton className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700" pendingLabel={t.adding}>
+              <Plus className="h-3.5 w-3.5" /> {t.addGuest}
             </SubmitButton>
           </form>
         </div>
@@ -218,8 +225,8 @@ export function GuestRegisterCard({ reservationId, rows, today }: { reservationI
 
       {/* One list for every country field on the card. Suggestions only — any code can be typed. */}
       <datalist id="revio-countries">
-        {Object.entries(COUNTRY_NAMES).map(([code, name]) => (
-          <option key={code} value={code}>{name}</option>
+        {Object.keys(COUNTRY_NAMES).map((code) => (
+          <option key={code} value={code}>{countryName(code)}</option>
         ))}
       </datalist>
     </Card>

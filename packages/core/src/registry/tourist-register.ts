@@ -151,9 +151,21 @@ export function nameScriptMatches(name: string, script: "cyrillic" | "latin"): b
 
 export interface RegisterProblem {
   field: keyof TouristRegisterEntry;
-  /** Shown to the receptionist, so it says what to do rather than what is wrong. */
+  /**
+   * Which rule failed — stable, so a screen in another language can say it in its own words.
+   * A field can fail two ways (missing, or written in the wrong script), which is why `field`
+   * alone is not enough to translate from.
+   */
+  code: RegisterProblemCode;
+  /** Shown to the receptionist, so it says what to do rather than what is wrong. English. */
   message: string;
 }
+
+export type RegisterProblemCode =
+  | "register_no" | "registered_at" | "first_name" | "last_name" | "nationality"
+  | "script_cyrillic" | "script_latin" | "sex" | "date_of_birth" | "document_type"
+  | "document_number" | "document_country" | "unit" | "arrival_date" | "document_series"
+  | "personal_id" | "departure_invalid" | "departure_before_arrival";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -173,17 +185,17 @@ export function validateRegisterEntry(e: TouristRegisterEntry): RegisterProblem[
   if (e.cancelled) return p;
 
   if (e.registerNo < 1 || !Number.isInteger(e.registerNo)) {
-    p.push({ field: "registerNo", message: "The register number is missing." });
+    p.push({ field: "registerNo", code: "register_no", message: "The register number is missing." });
   }
   if (!ISO_DATE.test(e.registeredAt)) {
-    p.push({ field: "registeredAt", message: "The registration date is missing." });
+    p.push({ field: "registeredAt", code: "registered_at", message: "The registration date is missing." });
   }
 
-  if (blank(e.firstName)) p.push({ field: "firstName", message: "First name is required." });
-  if (blank(e.lastName)) p.push({ field: "lastName", message: "Family name is required." });
+  if (blank(e.firstName)) p.push({ field: "firstName", code: "first_name", message: "First name is required." });
+  if (blank(e.lastName)) p.push({ field: "lastName", code: "last_name", message: "Family name is required." });
 
   if (blank(e.nationality)) {
-    p.push({ field: "nationality", message: "Citizenship is required." });
+    p.push({ field: "nationality", code: "nationality", message: "Citizenship is required." });
   } else {
     /*
      * The script rule, from the образец itself: Bulgarians in Cyrillic, foreigners in Latin, as the
@@ -192,38 +204,39 @@ export function validateRegisterEntry(e: TouristRegisterEntry): RegisterProblem[
      * transliteration as a German entered as "Мюлер".
      */
     const script = expectedNameScript(e.nationality);
+    const code: RegisterProblemCode = script === "cyrillic" ? "script_cyrillic" : "script_latin";
     const say = script === "cyrillic"
       ? "A Bulgarian citizen's name goes in Cyrillic, as the document writes it."
       : "A foreign citizen's name goes in Latin, as the passport writes it.";
-    if (!nameScriptMatches(e.firstName, script)) p.push({ field: "firstName", message: say });
-    if (!nameScriptMatches(e.middleName ?? "", script)) p.push({ field: "middleName", message: say });
-    if (!nameScriptMatches(e.lastName, script)) p.push({ field: "lastName", message: say });
+    if (!nameScriptMatches(e.firstName, script)) p.push({ field: "firstName", code, message: say });
+    if (!nameScriptMatches(e.middleName ?? "", script)) p.push({ field: "middleName", code, message: say });
+    if (!nameScriptMatches(e.lastName, script)) p.push({ field: "lastName", code, message: say });
   }
 
-  if (e.sex == null) p.push({ field: "sex", message: "Sex is required." });
+  if (e.sex == null) p.push({ field: "sex", code: "sex", message: "Sex is required." });
   if (blank(e.dateOfBirth) || !ISO_DATE.test(e.dateOfBirth!)) {
-    p.push({ field: "dateOfBirth", message: "Date of birth is required." });
+    p.push({ field: "dateOfBirth", code: "date_of_birth", message: "Date of birth is required." });
   }
   if (e.documentType == null) {
-    p.push({ field: "documentType", message: "Say which kind of document this is." });
+    p.push({ field: "documentType", code: "document_type", message: "Say which kind of document this is." });
   }
   if (blank(e.documentNumber)) {
-    p.push({ field: "documentNumber", message: "Identity document number is required." });
+    p.push({ field: "documentNumber", code: "document_number", message: "Identity document number is required." });
   }
   if (blank(e.documentCountry)) {
-    p.push({ field: "documentCountry", message: "The country that issued the document is required." });
+    p.push({ field: "documentCountry", code: "document_country", message: "The country that issued the document is required." });
   }
   if (blank(e.unitLabel)) {
-    p.push({ field: "unitLabel", message: "Assign a room — the register records which one the guest slept in." });
+    p.push({ field: "unitLabel", code: "unit", message: "Assign a room — the register records which one the guest slept in." });
   }
   if (!ISO_DATE.test(e.arrivalDate)) {
-    p.push({ field: "arrivalDate", message: "Arrival date is missing." });
+    p.push({ field: "arrivalDate", code: "arrival_date", message: "Arrival date is missing." });
   }
 
   const cat = registerCategory(e.nationality);
   if (cat === "other" && blank(e.documentSeries)) {
     // т. 1.2 asks for "номера И серия"; т. 1.1 asks for the number alone.
-    p.push({ field: "documentSeries", message: "For a non-EU/EEA citizen the register needs the document series as well as its number." });
+    p.push({ field: "documentSeries", code: "document_series", message: "For a non-EU/EEA citizen the register needs the document series as well as its number." });
   }
   /*
    * ЕГН is required of a Bulgarian citizen and of nobody else.
@@ -234,14 +247,14 @@ export function validateRegisterEntry(e: TouristRegisterEntry): RegisterProblem[
    * where it always exists, captured where it sometimes does.
    */
   if (e.nationality.trim().toUpperCase() === "BG" && blank(e.personalId)) {
-    p.push({ field: "personalId", message: "ЕГН is required for a Bulgarian citizen." });
+    p.push({ field: "personalId", code: "personal_id", message: "ЕГН is required for a Bulgarian citizen." });
   }
 
   if (e.departureDate != null) {
     if (!ISO_DATE.test(e.departureDate)) {
-      p.push({ field: "departureDate", message: "Departure date is not a valid date." });
+      p.push({ field: "departureDate", code: "departure_invalid", message: "Departure date is not a valid date." });
     } else if (e.departureDate < e.arrivalDate) {
-      p.push({ field: "departureDate", message: "Departure is before arrival." });
+      p.push({ field: "departureDate", code: "departure_before_arrival", message: "Departure is before arrival." });
     }
   }
   return p;

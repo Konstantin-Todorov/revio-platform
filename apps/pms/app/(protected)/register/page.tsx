@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, Download, FileSpreadsheet } from "lucide-react";
-import { validateRegisterEntry, countryName, DOCUMENT_TYPE_BG } from "@revio/core";
+import { validateRegisterEntry, DOCUMENT_TYPE_BG } from "@revio/core";
+import { LOCALE_LABELS } from "@revio/ui/i18n";
 import { roleHasCapability } from "@/lib/roles";
 import { activeProperty } from "@/lib/data";
 import { getRegisterEntries, getTouristTax } from "@/lib/register";
 import { todayInTz } from "@/lib/format";
-import { money } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { register } from "@/lib/i18n/register";
+import { countryIn } from "@/lib/i18n/country";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +26,9 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   // Identity documents. Tighter than the nav guard, which only keeps the scoped roles out.
   if (!roleHasCapability(session.role, "frontDesk")) redirect("/dashboard?error=forbidden");
   const today = todayInTz(property.timezone);
+  const { t: tr, money, locale } = await i18n();
+  const t = tr(register);
+  const countryName = countryIn(locale);
   const { month } = await searchParams;
   const anchor = /^\d{4}-\d{2}$/.test(month ?? "") ? `${month}-01` : today;
   const { from, to } = monthBounds(anchor);
@@ -40,21 +46,21 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
     const d = new Date(Date.UTC(y!, m! - 1 + delta, 1));
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
   };
-  const label = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })
+  const label = new Intl.DateTimeFormat(LOCALE_LABELS[locale].intl, { month: "long", year: "numeric", timeZone: "UTC" })
     .format(new Date(`${ym}-01T00:00:00Z`));
 
   return (
     <div>
       <PageHeader
-        title="Guest register"
-        subtitle="Регистър на настанените туристи · every guest who stayed the night, in the order they were registered"
+        title={t.title}
+        subtitle={t.subtitle}
         action={
           <div className="flex items-center gap-2">
             <a
               href={`/api/register/export?from=${from}&to=${to}`}
               className="inline-flex items-center gap-1.5 rounded-md bg-brand-700 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-800"
             >
-              <Download className="h-4 w-4" /> Export {label}
+              <Download className="h-4 w-4" /> {t.export(label)}
             </a>
             {/* Excel is the primary button because ЕСТИ publishes an Excel образец. */}
             <a
@@ -72,7 +78,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
         <span className="text-[13.5px] font-bold text-ink-900">{label}</span>
         <Link href={`/register?month=${shift(1)}`} className="rounded-md border border-surface-border px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 hover:border-brand-600 hover:text-brand-700">→</Link>
         <span className="ml-2 text-[12px] text-ink-400">
-          {entries.length} registration{entries.length === 1 ? "" : "s"} · {nights} night{nights === 1 ? "" : "s"}
+          {t.counts(entries.length, nights)}
         </span>
       </div>
 
@@ -80,58 +86,57 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
         <div className="mb-4 flex items-start gap-2.5 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning-600" />
           <div className="text-[13px] text-warning-700">
-            <strong className="font-semibold">{incomplete.length} of these {entries.length} aren’t ready to file.</strong>{" "}
-            Something the register has to contain is still missing — click a name below to finish it. The
-            export includes them as they are, so the gaps are visible rather than silent.
+            <strong className="font-semibold">{t.notReady(incomplete.length, entries.length)}</strong>{" "}
+            {t.notReadyBody}
           </div>
         </div>
       )}
 
       <Card className="mb-4">
         <CardHeader
-          title="Tourist tax"
-          subtitle="Туристически данък · ЗМДТ чл. 61с — the municipality assesses this from your ЕСТИ data, so the register is the tax base"
+          title={t.tax.title}
+          subtitle={t.tax.subtitle}
         />
         {tax.rateMinor == null ? (
           <p className="px-4 py-5 text-[13px] text-ink-500">
-            Your municipality’s rate per night isn’t set yet, so there is nothing to total.
-            Add it in <Link href="/configuration" className="font-semibold text-accent-600 hover:underline">Configuration</Link> —
-            each council sets its own, by settlement and by category.
+            {t.tax.noRateBefore}{" "}
+            <Link href="/configuration" className="font-semibold text-accent-600 hover:underline">{t.tax.configuration}</Link>{" "}
+            {t.tax.noRateAfter}
           </p>
         ) : (
           <div className="grid grid-cols-1 gap-px bg-surface-border sm:grid-cols-3">
             <div className="bg-surface px-4 py-3.5">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">This month</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.tax.thisMonth}</div>
               <div className="tnum mt-1 text-[20px] font-bold text-ink-900">{money(tax.monthTaxMinor, property.baseCurrency)}</div>
               <div className="mt-0.5 text-[11.5px] text-ink-500">
-                {tax.monthNights} night{tax.monthNights === 1 ? "" : "s"} · pay by {tax.monthDueDate}
+                {t.tax.monthLine(tax.monthNights, tax.monthDueDate)}
               </div>
             </div>
             <div className="bg-surface px-4 py-3.5">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Year to date</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.tax.yearToDate}</div>
               <div className="tnum mt-1 text-[20px] font-bold text-ink-900">{money(tax.yearTaxMinor, property.baseCurrency)}</div>
               <div className="mt-0.5 text-[11.5px] text-ink-500">
-                {tax.yearNights} night{tax.yearNights === 1 ? "" : "s"} · declare by {tax.declarationDueDate}
+                {t.tax.yearLine(tax.yearNights, tax.declarationDueDate)}
               </div>
             </div>
             <div className="bg-surface px-4 py-3.5">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Annual floor · 30%</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{t.tax.floor}</div>
               {tax.beds == null ? (
                 <p className="mt-1 text-[12px] text-ink-500">
-                  Set your declared bed count to see this. Your rooms suggest <strong>{tax.suggestedBeds}</strong>.
+                  {t.tax.setBedsBefore} <strong>{tax.suggestedBeds}</strong>{t.tax.setBedsAfter}
                 </p>
               ) : tax.clearsFloor ? (
                 <>
-                  <div className="tnum mt-1 text-[20px] font-bold text-success-600">Cleared</div>
+                  <div className="tnum mt-1 text-[20px] font-bold text-success-600">{t.tax.cleared}</div>
                   <div className="mt-0.5 text-[11.5px] text-ink-500">
-                    Above the {money(tax.floorMinor, property.baseCurrency)} minimum — nothing extra owed.
+                    {t.tax.clearedLine(money(tax.floorMinor, property.baseCurrency))}
                   </div>
                 </>
               ) : (
                 <>
                   <div className="tnum mt-1 text-[20px] font-bold text-warning-700">{money(tax.topUpMinor, property.baseCurrency)}</div>
                   <div className="mt-0.5 text-[11.5px] text-ink-500">
-                    Short of the {money(tax.floorMinor, property.baseCurrency)} minimum · due {tax.topUpDueDate}
+                    {t.tax.shortLine(money(tax.floorMinor, property.baseCurrency), tax.topUpDueDate)}
                   </div>
                 </>
               )}
@@ -139,29 +144,26 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           </div>
         )}
         <p className="border-t border-surface-border/60 px-4 py-2.5 text-[11.5px] text-ink-400">
-          The 30% floor is measured over the whole <strong>calendar year</strong>, never a single month — a quiet
-          February is not topped up, only a quiet twelve months. The year-to-date figure moves as the year fills,
-          so treat it as a projection until December. These are your own nights at your own rate; have your
-          accountant confirm the return before it is filed.
+          {t.tax.note[0]} <strong>{t.tax.note[1]}</strong>{t.tax.note[2]}
         </p>
       </Card>
 
       <Card>
         <CardHeader
-          title="Registrations"
-          subtitle={`${from} → ${to} · ordered by пореден номер, the way the register is kept`}
+          title={t.list.title}
+          subtitle={t.list.subtitle(from, to)}
         />
         {entries.length === 0 ? (
           <p className="px-4 py-8 text-center text-[13px] text-ink-400">
-            Nobody was registered this month. Entries open automatically when a guest is checked in.
+            {t.list.empty}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">
               <thead>
                 <tr className="border-b border-surface-border text-left text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
-                  {["№", "Registered", "Guest", "Citizenship", "Document", "Room", "Arrived", "Departed", "Nights", ""].map((h) => (
-                    <th key={h} className="whitespace-nowrap px-3 py-2.5">{h}</th>
+                  {[t.list.cols.no, t.list.cols.registered, t.list.cols.guest, t.list.cols.citizenship, t.list.cols.document, t.list.cols.room, t.list.cols.arrived, t.list.cols.departed, t.list.cols.nights, ""].map((h, i) => (
+                    <th key={i} className="whitespace-nowrap px-3 py-2.5">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -179,7 +181,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
                       <td className="tnum whitespace-nowrap px-3 py-2 text-ink-600">{e.registeredAt} {e.registeredAtTime}</td>
                       <td className={`px-3 py-2 font-semibold ${e.cancelled ? "text-ink-400 line-through" : name ? "text-ink-900" : "text-ink-400 italic"}`}>
                         <Link href={`/reservation/${e.reservationId}`} className="hover:text-brand-700 hover:underline">
-                          {name || "not captured"}
+                          {name || t.list.notCaptured}
                         </Link>
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-ink-600">{e.nationality ? countryName(e.nationality) : "—"}</td>
@@ -189,14 +191,14 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-ink-600">{e.unitLabel ?? "—"}</td>
                       <td className="tnum whitespace-nowrap px-3 py-2 text-ink-600">{e.arrivalDate || "—"}</td>
-                      <td className="tnum whitespace-nowrap px-3 py-2 text-ink-600">{e.departureDate ?? "in house"}</td>
+                      <td className="tnum whitespace-nowrap px-3 py-2 text-ink-600">{e.departureDate ?? t.list.inHouse}</td>
                       <td className="tnum whitespace-nowrap px-3 py-2 text-ink-600">{e.nights}</td>
                       <td className="whitespace-nowrap px-3 py-2">
                         {e.cancelled
-                          ? <StatusPill tone="neutral">cancelled</StatusPill>
+                          ? <StatusPill tone="neutral">{t.list.cancelled}</StatusPill>
                           : problems.length > 0
-                            ? <StatusPill tone="warning">{problems.length} missing</StatusPill>
-                            : <StatusPill tone="success">complete</StatusPill>}
+                            ? <StatusPill tone="warning">{t.list.missing(problems.length)}</StatusPill>
+                            : <StatusPill tone="success">{t.list.complete}</StatusPill>}
                       </td>
                     </tr>
                   );
@@ -207,11 +209,7 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
         )}
         <div className="flex items-start gap-2 border-t border-surface-border/60 px-4 py-3 text-[11.5px] text-ink-400">
           <FileSpreadsheet className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <p>
-            The export has the columns of the official образец, in its order, so it can be checked against the
-            template line by line. It downloads as an Excel workbook — open it, check it, and upload it to ЕСТИ. The CSV button is there if you prefer one. Documents are shown here by their last
-            four characters only — the full number is in the export and on the guest’s own entry.
-          </p>
+          <p>{t.list.exportNote}</p>
         </div>
       </Card>
     </div>

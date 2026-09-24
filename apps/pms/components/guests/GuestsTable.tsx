@@ -3,7 +3,10 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from "lucide-react";
-import { money } from "@/lib/format";
+import { fill } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { moneyIn } from "@/lib/i18n/money";
+import type { GuestsTableStrings } from "@/lib/i18n/guests";
 
 export type GuestRow = {
   key: string;
@@ -32,7 +35,8 @@ function keyOf(r: GuestRow, col: Col): string | number {
 
 /** Operational guest list (PMS-REFINEMENT-R1 §3.1): search by name + 3-click sortable columns
  * (asc → desc → default). Default order is lifetime value, richest first. */
-export function GuestsTable({ rows, currency }: { rows: GuestRow[]; currency: string }) {
+export function GuestsTable({ rows, currency, t }: { rows: GuestRow[]; currency: string; t: GuestsTableStrings }) {
+  const money = moneyIn(useLocale());
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<Sort>(null);
 
@@ -57,7 +61,7 @@ export function GuestsTable({ rows, currency }: { rows: GuestRow[]; currency: st
     const Icon = !active ? ChevronsUpDown : sort!.dir === "asc" ? ArrowUp : ArrowDown;
     return (
       <th className={`px-4 py-2.5 ${align === "right" ? "text-right" : "text-left"}`}>
-        <button type="button" onClick={() => click(col)} className={`group inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""} ${active ? "text-accent-600" : "text-ink-400 hover:text-ink-600"}`}>
+        <button type="button" onClick={() => click(col)} className={`group inline-flex items-center gap-1 whitespace-nowrap ${align === "right" ? "flex-row-reverse" : ""} ${active ? "text-accent-600" : "text-ink-400 hover:text-ink-600"}`}>
           {label}<Icon className={`h-3 w-3 ${active ? "opacity-100" : "opacity-40 group-hover:opacity-70"}`} />
         </button>
       </th>
@@ -71,21 +75,21 @@ export function GuestsTable({ rows, currency }: { rows: GuestRow[]; currency: st
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name or email…"
+          placeholder={t.search}
           className="w-full bg-transparent text-[13px] text-ink-900 outline-none placeholder:text-ink-400"
         />
-        <span className="shrink-0 text-[11.5px] text-ink-400">{view.length} of {rows.length}</span>
+        <span className="shrink-0 text-[11.5px] text-ink-400">{fill(t.count, { shown: view.length, total: rows.length })}</span>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-surface-border text-[11px] font-semibold uppercase tracking-wide">
-              <Th col="name" label="Guest" />
-              <Th col="stays" label="Stays" align="right" />
-              <Th col="nights" label="Nights" align="right" />
-              <Th col="ancillary" label="Ancillary spend" align="right" />
-              <Th col="lifetime" label="Lifetime" align="right" />
-              <Th col="last" label="Last stay" />
+              <Th col="name" label={t.cols.guest} />
+              <Th col="stays" label={t.cols.stays} align="right" />
+              <Th col="nights" label={t.cols.nights} align="right" />
+              <Th col="ancillary" label={t.cols.ancillary} align="right" />
+              <Th col="lifetime" label={t.cols.lifetime} align="right" />
+              <Th col="last" label={t.cols.last} />
             </tr>
           </thead>
           <tbody>
@@ -103,7 +107,7 @@ export function GuestsTable({ rows, currency }: { rows: GuestRow[]; currency: st
               </tr>
             ))}
             {view.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-[12.5px] text-ink-400">No guests match “{q}”.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-6 text-center text-[12.5px] text-ink-400">{fill(t.noMatch, { q })}</td></tr>
             )}
           </tbody>
         </table>

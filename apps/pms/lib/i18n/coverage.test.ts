@@ -12,6 +12,8 @@ import { operations } from "./operations";
 import { extras } from "./extras";
 import { rooms } from "./rooms";
 import { calendar } from "./calendar";
+import { guests } from "./guests";
+import { register } from "./register";
 
 /**
  * Dictionaries that are fully Bulgarian stay fully Bulgarian.
@@ -21,7 +23,7 @@ import { calendar } from "./calendar";
  * half-English screen. A new English string in a finished dictionary fails here until its Bulgarian
  * lands in the same change. A dictionary still being translated is simply not listed yet.
  */
-const COMPLETE: Record<string, Translations<unknown>> = { shell, housekeeping, common, frontdesk, stays, reservation, folio, folios, operations, extras, rooms, calendar } as Record<string, Translations<unknown>>;
+const COMPLETE: Record<string, Translations<unknown>> = { shell, housekeeping, common, frontdesk, stays, reservation, folio, folios, operations, extras, rooms, calendar, guests, register } as Record<string, Translations<unknown>>;
 
 describe("finished dictionaries have every string in Bulgarian", () => {
   for (const [name, dict] of Object.entries(COMPLETE)) {
