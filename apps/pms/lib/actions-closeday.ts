@@ -6,7 +6,9 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
-import { logAudit, str } from "./mutation-helpers";
+import { logAudit, recordSync, str } from "./mutation-helpers";
+import { releaseRoomsForCancellation } from "@revio/db";
+import { hasArrived } from "./arrived";
 import { DayAlreadyClosedError, InvalidCloseDayError, runCloseDay } from "./close-day-run";
 
 /**
@@ -32,8 +34,12 @@ export async function markNoShow(fd: FormData): Promise<void> {
     where: { id: reservationId, propertyId: session.activePropertyId },
     include: { assignments: true },
   });
-  if (!res || res.assignments.length > 0) redirect("/closeday"); // arrived guests aren't no-shows
+  // Arrived = a check-in stamp. "Any assignment" refused every auto-assigned booking, i.e. nearly all.
+  if (!res || res.departedAt || hasArrived(res.assignments)) redirect("/closeday");
   await prisma.reservation.update({ where: { id: reservationId }, data: { status: "no_show" } });
+  // Their room and the nights they will not use go back, and the channels are told.
+  await releaseRoomsForCancellation(prisma, reservationId);
+  await recordSync(session.activePropertyId, session.tenantId, "Availability restored — no-show", `${res.guestName} marked no-show`);
   await logAudit(session.activePropertyId, session.tenantId, { entity: "no_show", field: res.guestName, newValue: "marked no-show", userId: session.userId });
   revalidatePath("/closeday");
   revalidatePath("/dashboard");

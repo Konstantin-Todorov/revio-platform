@@ -1,5 +1,6 @@
 import "server-only";
-import { forTenant, withTenantTransaction } from "@revio/db";
+import { forTenant, releaseRoomsForCancellation, withTenantTransaction } from "@revio/db";
+import { hasArrived } from "./arrived";
 import { closeDayEscalation } from "@revio/core";
 import { accrueStayExtras, folioBalance } from "./folio";
 import { logAudit, recordSync } from "./mutation-helpers";
@@ -141,6 +142,8 @@ export async function runCloseDay(
       where: {
         propertyId, status: "active", checkedOutAt: null,
         checkOut: { lte: utcDay(businessDate) },
+        // Arrived — a room auto-assigned to a guest who never came is not somebody still in the house.
+        checkedInAt: { not: null },
         reservation: { departedAt: null },
       },
     });
@@ -153,10 +156,13 @@ export async function runCloseDay(
 
     let noShows = 0;
     for (const r of candidates) {
-      if (r.assignments.length > 0 || r.lines.length === 0) continue; // arrived, or no stay
+      if (r.departedAt || hasArrived(r.assignments) || r.lines.length === 0) continue; // arrived, or no stay
       const ci = ymd(r.lines.map((l) => l.checkIn).sort((a, b) => a.getTime() - b.getTime())[0]!);
       if (ci <= businessDate) {
         await tx.reservation.update({ where: { id: r.id }, data: { status: "no_show" } });
+        // The room auto-assign placed them in goes back — otherwise it stays held for nights nobody
+        // is coming for. Only rooms never checked into are touched (see `releaseRoomsForCancellation`).
+        await releaseRoomsForCancellation(tx, r.id);
         noShows++;
       }
     }

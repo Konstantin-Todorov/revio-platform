@@ -4,6 +4,7 @@ import { activeProperty } from "./data";
 import { closeDayEscalation, type CloseDayEscalation, dayBoundsInTimeZone } from "@revio/core";
 import { ymd, todayInTz, minutesOfDayInTz } from "./format";
 import { folioBalance } from "./folio";
+import { hasArrived } from "./arrived";
 
 const OCCUPYING = ["confirmed", "modified"];
 
@@ -35,7 +36,8 @@ export async function getCloseDayView() {
     const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
     const ci = ymd(r.lines.map((l) => l.checkIn).sort((a, b) => a.getTime() - b.getTime())[0]!);
     const co = ymd(r.lines.map((l) => l.checkOut).sort((a, b) => b.getTime() - a.getTime())[0]!);
-    const everCheckedIn = r.assignments.length > 0; // any assignment (active/moved/departed) = they arrived
+    // A check-in stamp, not merely a room: auto-assign gives every booking one. See `hasArrived`.
+    const everCheckedIn = r.departedAt != null || hasArrived(r.assignments);
     // A departed stay is never "due out and still in" — that readiness warning exists to catch a guest
     // the desk forgot to check out, and a checked-out guest is precisely not that.
     // Arrived, not merely allocated. "Due out and still in" is about a guest the desk forgot to

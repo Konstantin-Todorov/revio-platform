@@ -410,7 +410,16 @@ export async function markNoShow(fd: FormData): Promise<void> {
     redirect(`/reservations/${id}?error=${encodeURIComponent("No-show can only be set after the check-in date has passed.")}`);
   }
 
+  // A guest who checked in is not a no-show — the same guard cancel has, for the same reason: the
+  // room would go back on sale with somebody in it.
+  if (await isStayInHouse(prisma, id)) {
+    redirect(`/reservations/${id}?error=${encodeURIComponent("This guest has already checked in, so they are not a no-show. End the stay with a check-out in RevioPMS.")}`);
+  }
   await prisma.reservation.update({ where: { id }, data: { status: "no_show" } });
+  // The room auto-assign held for them, and the nights they will not use: both go back, and every
+  // channel is told. Neither happened, so a no-show kept its remaining nights off sale everywhere.
+  await releaseRoomsForCancellation(prisma, id);
+  await recordPush(property.id, property.tenantId, "Availability restored — no-show", stayScope(reservation!.lines));
   await logAudit(property.id, property.tenantId, {
     entity: tag(id, reservation!.guestName),
     field: "no-show",
