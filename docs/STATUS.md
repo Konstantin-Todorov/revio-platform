@@ -254,10 +254,55 @@ invoicing its own clients, and only the second one is ready.
 
 ### In progress
 
-**Nothing is half-built.** *Checked with `git status` — the tree is clean, and `main` and
-`production` are the same commit.* The two items this section named as Codex's uncommitted work
-both shipped: the city-tax VAT base in `f828cac` on 09-09, and the operator sidebar in `7e70a38`
-the same day.
+**Nothing is half-built.** *Checked 2026-09-24 with `git status` — the tree is clean, and `main` and
+`production` are the same commit.*
+
+### What is left — the whole list, 2026-09-24
+
+One list, so nothing lives only in a conversation. Ordered by what it risks, not by size. Each line
+says who can move it. Details sit where the link points.
+
+**Waiting on a person, not on code**
+
+| | Who | Where |
+| --- | --- | --- |
+| Cabacum sells nothing on any OTA until 2027-03-31 — a stop-sell on every plan, set 09-13 | the hotel | `ACTION-REQUIRED.md` §4c |
+| Cabacum's BB Non-Refundable: €333 in Revio, €299.70 on OTAs (Channex derives it −10%) | the hotel | §4c |
+| Two open folios on DesManagement test stays (€8.94, €5.67) | the hotel | §4c |
+| Rotate `CRON_SECRET` — its value was printed into a working transcript on 09-22 | founder | Railway, every service + the cron |
+| An accountant signs off the VAT reading (city tax inside the accommodation base) | founder + external | `ACTION-REQUIRED.md` §2 |
+| A guest can pay by card on RevioDirect — `apps/booking` carries no Stripe keys yet | founder decision, then small build | roadmap `live-card-payments` |
+| The two Ethno Villa Cherry duplicate properties, cleared inside Channex | founder | `ACTION-REQUIRED.md` §0 |
+
+**Build next — engineering, in this order**
+
+1. **Read every live channel back every night** and alert on a difference. The check exists (Verify,
+   `channex:readback`); nobody runs it unless they remember to. Roadmap `nightly-read-back`.
+2. **Verify covers the headline price and room counts only.** Per-occupancy prices (a per-person plan's
+   array) and restrictions (min stay, CTA/CTD, stop-sell) are not read back yet.
+3. **A lint for multi-write server actions not inside `withTenantTransaction`** — a rough scan on 09-23 found ~44 candidates, counted and
+   not read. The primitive is proven; its use is not. `HANDOFF` §2, §10.1.
+4. **An idempotency key on "create" actions** — a double submit is blocked in the browser
+   (`submit:lint`), not on the server.
+5. **Money reconciled end to end** — one invoice by hand, and an exhaustive test of the all-in promise
+   across occupancy, extras, nights and city-tax exemptions. `HANDOFF` §5.
+
+**Check — each is a question nobody has answered yet**
+
+- **A switched-off plan's frozen rate at Channex** — is it still bookable on the OTA? One sandbox booking
+  against a switched-off plan settles it. `HANDOFF` §4.
+- **Scale** — seed 50 and 200 properties and time the cron tick against its interval. `HANDOFF` §6.
+- **Multi-property and time zones** — a report that sums properties in two zones; the property switcher
+  across every screen. `HANDOFF` §7.
+- **RevioLink's "every plan closed" rule** reads plan cells and defaults, not RevioCRS's date-ranged
+  restriction rules; the push reads both. Harmless until a CRS rule stop-sells every plan.
+- **Ventsi Group** is suspended and disconnected and still holds a per-tenant Channex credential, which
+  overrides the platform key (root `CLAUDE.md` §4). Decide before reinstating them.
+- **`docs.reviosoft.app`** has no HSTS or frame protection and is built outside both repos. `HANDOFF` §9.
+
+**Later, when a hotel asks** — the staff products in Bulgarian (write the terminology lint *first*, and add
+Cyrillic to `fetch-fonts.mjs` in the same change; `HANDOFF` §8), the hotel's own Stripe keys, groups and
+corporate, the AI assistant. The roadmap page holds them.
 
 ### Shipped 2026-09-23 — production Channex read back for the first time, and what the hotel sees
 

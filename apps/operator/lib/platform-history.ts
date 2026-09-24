@@ -233,6 +233,22 @@ export const PLATFORM_MILESTONES = [
     kind: "reliability",
     evidence: ["2472e66", "52c5b3f"],
   },
+  {
+    id: "races-proven",
+    date: "2026-09-23",
+    title: "One room, one guest — proven under load, not argued",
+    summary: "The front desk could turn one hold into twelve reservations, put twelve guests in one room and take six rooms off sale with one broken unit. Each is now a row lock or a conditional write, each has a race harness that runs in CI, and a harness that could not fail was rewritten until it could.",
+    kind: "reliability",
+    evidence: ["b615ad9", "66d98f0", "af61dba", "afaf897"],
+  },
+  {
+    id: "production-read-back",
+    date: "2026-09-23",
+    title: "Production Channex read back for the first time",
+    summary: "Reading a real hotel's live channel found that the Verify button had never once completed, that one closed rate plan could take a whole room off every OTA, and that the calendar and the front desk said 'no price' about nights the channel was selling. The calendar, the quote and the check now all run the resolver the push runs, and each channel card says which step the hotel is on.",
+    kind: "reliability",
+    evidence: ["2463c18", "f43f3a3", "2c51d6d"],
+  },
 ] as const satisfies readonly PlatformMilestone[];
 
 /**
@@ -248,7 +264,7 @@ export const PLATFORM_ROADMAP = [
     owner: "Engineering",
     title: "Real-hotel Channex rehearsal",
     outcome: "One production property completes connect, map, push, book, modify, cancel, retry and disconnect with recorded evidence.",
-    dependency: "Hotel OTA credentials and channel approval",
+    dependency: "Sandbox lifecycle and a read-only production check are done (2026-09-23). A real booking on the live property waits on the hotel lifting a stop-sell it set on every plan until March 2027",
   },
   {
     id: "vat-invoicing-signoff",
@@ -289,14 +305,14 @@ export const PLATFORM_ROADMAP = [
     dependency: "Charging OUR clients is already possible — a live key is stored, tested, BG/EUR, charges enabled; the console is set to sandbox by deliberate choice. What is missing is apps/booking, which carries no Stripe variables at all",
   },
   {
-    id: "job-failures-noticed",
+    id: "nightly-read-back",
     horizon: "now",
     priority: "must",
     effort: "M",
     owner: "Engineering",
-    title: "A failed job reaches a person",
-    outcome: "One retry policy across all thirteen jobs, and a run that was suppressed stops answering ok, so a night that closed no books is noticed before the morning.",
-    dependency: "The codebase holds both retry positions in its own comments — see ACTION-REQUIRED §2d. It is a decision, not a bug to fix quietly",
+    title: "Every live channel is read back every night",
+    outcome: "What each OTA is actually offering — prices, room counts, then restrictions — is compared with what Revio sends, and a difference reaches a person before a guest books at it.",
+    dependency: "The check exists (Verify and channex:readback, read-only). What is missing is running it on a schedule and routing a mismatch to an alert",
   },
   {
     id: "incident-operations",
