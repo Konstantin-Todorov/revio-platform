@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { Logo } from "@/components/shell/Logo";
+import { LanguageSwitch } from "./LanguageSwitch";
+import { i18n } from "@/lib/i18n/server";
+import { auth } from "@/lib/i18n/auth";
 
 /** The plain frame the three account pages share — no nav, no session, one job per screen. */
-export function AuthShell({
+export async function AuthShell({
   title,
   intro,
   children,
@@ -13,8 +16,11 @@ export function AuthShell({
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  const { t: tr, locale } = await i18n();
+  const a = tr(auth);
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-muted p-6">
+    <div className="relative flex min-h-screen items-center justify-center bg-surface-muted p-6">
+      <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={a.language} /></div>
       <div className="w-full max-w-sm">
         <div className="mb-7 flex items-center gap-2.5">
           <Logo className="h-9 w-9" />
@@ -28,7 +34,7 @@ export function AuthShell({
         <div className="mt-6 text-[12.5px] text-ink-500">
           {footer ?? (
             <Link href="/login" className="font-semibold text-brand-700 hover:underline">
-              Back to sign in
+              {a.backToSignIn}
             </Link>
           )}
         </div>

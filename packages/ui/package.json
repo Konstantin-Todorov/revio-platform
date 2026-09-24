@@ -61,7 +61,8 @@
     "./role-locked": "./src/role-locked.tsx",
     "./notification-center": "./src/notification-center.tsx",
     "./i18n": "./src/i18n.ts",
-    "./i18n-context": "./src/i18n-context.tsx"
+    "./i18n-context": "./src/i18n-context.tsx",
+    "./auth-strings": "./src/auth-strings.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

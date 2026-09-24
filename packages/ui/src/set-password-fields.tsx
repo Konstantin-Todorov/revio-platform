@@ -2,6 +2,9 @@
 
 import { useId, useState } from "react";
 import { Eye, EyeOff, Check } from "lucide-react";
+import { fill, translate } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { authStrings } from "./auth-strings";
 
 /**
  * Choosing a password — the screen a new staff member meets first.
@@ -57,6 +60,8 @@ export function SetPasswordFields({
   // Said while they type, not after they submit. Retyping both boxes because the second one did not
   // match is the most avoidable friction on this screen.
   const longEnough = password.length >= MIN_LENGTH;
+  const t = translate(authStrings, useLocale());
+  const sp = t.setPassword;
   const matches = confirm.length > 0 && password === confirm;
   const mismatch = confirm.length > 0 && !matches;
 
@@ -67,7 +72,7 @@ export function SetPasswordFields({
         submitted and is skipped by password managers, which would defeat the entire purpose.
       */}
       <label className="block">
-        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">Your email</span>
+        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">{sp.yourEmail}</span>
         <input
           name="username"
           type="email"
@@ -79,7 +84,7 @@ export function SetPasswordFields({
       </label>
 
       <label className="block" htmlFor={passwordId}>
-        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">New password</span>
+        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">{sp.newPassword}</span>
         <div className="relative">
           <input
             id={passwordId}
@@ -95,13 +100,13 @@ export function SetPasswordFields({
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? errorId : undefined}
             className={`${inputCls} ${borderCls} pr-10`}
-            placeholder={`At least ${MIN_LENGTH} characters`}
+            placeholder={fill(sp.atLeast, { n: MIN_LENGTH })}
           />
           <button
             type="button"
             onClick={() => setReveal((v) => !v)}
             aria-pressed={reveal}
-            aria-label={reveal ? "Hide password" : "Show password"}
+            aria-label={reveal ? t.hidePassword : t.showPassword}
             // Out of the tab order, same as sign-in: tabbing out of the password should reach the
             // confirm box, not a toggle.
             tabIndex={-1}
@@ -110,16 +115,16 @@ export function SetPasswordFields({
             {reveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
-        {capsLock && <p className="mt-1 text-[11.5px] font-medium text-warning-600">Caps Lock is on.</p>}
+        {capsLock && <p className="mt-1 text-[11.5px] font-medium text-warning-600">{t.capsLock}</p>}
         {password.length > 0 && !longEnough && (
           <p className="mt-1 text-[11.5px] text-ink-500">
-            {MIN_LENGTH - password.length} more character{MIN_LENGTH - password.length === 1 ? "" : "s"}.
+            {MIN_LENGTH - password.length === 1 ? sp.moreOne : fill(sp.moreMany, { n: MIN_LENGTH - password.length })}
           </p>
         )}
       </label>
 
       <label className="block" htmlFor={confirmId}>
-        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">Confirm password</span>
+        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">{sp.confirm}</span>
         <input
           id={confirmId}
           name="confirm"
@@ -132,12 +137,12 @@ export function SetPasswordFields({
           onChange={(e) => setConfirm(e.target.value)}
           aria-invalid={mismatch || error ? true : undefined}
           className={`${inputCls} ${mismatch ? "border-danger-500" : borderCls}`}
-          placeholder="Type it again"
+          placeholder={sp.typeAgain}
         />
-        {mismatch && <p className="mt-1 text-[11.5px] font-medium text-danger-600">These don&apos;t match yet.</p>}
+        {mismatch && <p className="mt-1 text-[11.5px] font-medium text-danger-600">{sp.mismatch}</p>}
         {matches && longEnough && (
           <p className="mt-1 flex items-center gap-1 text-[11.5px] font-medium text-success-600">
-            <Check className="h-3 w-3" /> Passwords match.
+            <Check className="h-3 w-3" /> {sp.match}
           </p>
         )}
       </label>
@@ -149,15 +154,13 @@ export function SetPasswordFields({
       )}
 
       <button type="submit" disabled={pending || !longEnough || !matches} className={submitClassName}>
-        {pending ? "Saving…" : purpose === "invite" ? "Save password and continue" : "Change my password"}
+        {pending ? sp.saving : purpose === "invite" ? sp.saveInvite : sp.saveReset}
       </button>
 
       {/* Says what happens next, because it is not what people assume. Setting a password does not
           sign you in — and if somebody else is signed in on this computer, they are signed out. */}
       <p className="pt-1 text-center text-[11.5px] leading-relaxed text-ink-400">
-        {purpose === "invite"
-          ? "You'll sign in with this on the next screen. Let your browser save it."
-          : "You'll be asked to sign in again with the new password."}
+        {purpose === "invite" ? sp.nextInvite : sp.nextReset}
       </p>
     </>
   );

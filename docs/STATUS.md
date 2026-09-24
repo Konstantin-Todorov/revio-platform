@@ -301,7 +301,11 @@ says who can move it. Details sit where the link points.
 - **`docs.reviosoft.app`** has no HSTS or frame protection and is built outside both repos. `HANDOFF` §9.
 
 **Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
-1. RevioPMS, by who reads it: Front Desk → reservation view → folio → maintenance → the rest. Housekeeping ✅.
+1. RevioPMS, by who reads it — **✅ every screen RevioPMS owns** (2026-09-24): front desk, check-in, walk-in,
+   move, reservation view, folio + folio list, maintenance, Close Day, extras + catalog, rooms, calendar,
+   guests, guest register, staff & access, configuration, settings frame, search, activity, status pages.
+   Eighteen dictionaries in `apps/pms/lib/i18n/`, all in the completeness test. What is still English on a
+   RevioPMS screen is a SHARED component (step 2) or a server-action message (step 4).
 2. The shared pieces every product shows: Get help, notifications panel, ⌘K, sign-in, first-run setup.
 3. RevioCRS, then RevioLink, then Operator (ours — English is fine there longest).
 4. Server-action messages (flash errors) and emails — these need the locale passed into the action.
@@ -332,7 +336,12 @@ Grotesk and Plus Jakarta Sans with `cyrillic-ext` only) — every Cyrillic name 
 face. Fixed with a Cyrillic-only Source Sans 3 (the website's Bulgarian face); Latin measured unchanged.
 Then the base: `@revio/ui/i18n` (missing Bulgarian falls back to English per key — a gap can never break a
 screen), `User.locale` (the person's choice, every product), `terminology-lint` in verify and CI, and a test
-that a finished dictionary stays 100% Bulgarian. **Translated so far: RevioPMS's frame and housekeeping board.**
+that a finished dictionary stays 100% Bulgarian. **Translated so far: every screen RevioPMS owns** (step 1
+above). Found by looking, fixed on the way: a function crossed to a client component and would have failed
+the open-folio list in either language (`14291de`; client props are now strings only, filled with `fill()`);
+the shift board printed UTC ("since 06:00" for a 09:00 Sofia clock-in); the calendar said "Floor Floor 1";
+the register printed the same name-script warning twice. Register problems now carry a stable `code` in
+core so any screen can say them in its own words; country names in Bulgarian come from CLDR.
 
 ### Shipped 2026-09-23 — production Channex read back for the first time, and what the hotel sees
 

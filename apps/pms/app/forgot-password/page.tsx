@@ -1,15 +1,20 @@
 import { AuthShell } from "@/components/auth/AuthShell";
 import { ForgotPasswordForm } from "@/components/auth/AccountForms";
+import { i18n } from "@/lib/i18n/server";
+import { auth } from "@/lib/i18n/auth";
 
-export const metadata = { title: "Reset your password · RevioPMS" };
+export async function generateMetadata() {
+  return { title: (await i18n()).t(auth).forgot.meta };
+}
 
-export default function ForgotPasswordPage() {
+export default async function ForgotPasswordPage() {
+  const a = (await i18n()).t(auth);
   return (
     <AuthShell
-      title="Reset your password"
-      intro="Enter the email you sign in with and we'll send you a link."
+      title={a.forgot.title}
+      intro={a.forgot.intro}
     >
-      <ForgotPasswordForm />
+      <ForgotPasswordForm t={a.forms} />
     </AuthShell>
   );
 }

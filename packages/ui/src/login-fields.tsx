@@ -2,6 +2,9 @@
 
 import { useId, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { translate } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { authStrings } from "./auth-strings";
 
 /**
  * The fields every staff sign-in screen needs, in one place.
@@ -52,6 +55,7 @@ export function LoginFields({
   defaultEmail,
   forgotHref = "/forgot-password",
 }: LoginFieldsProps) {
+  const t = translate(authStrings, useLocale());
   const [reveal, setReveal] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const emailId = useId();
@@ -64,7 +68,7 @@ export function LoginFields({
   return (
     <>
       <label className="block" htmlFor={emailId}>
-        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">Email</span>
+        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">{t.email}</span>
         <input
           id={emailId}
           name="email"
@@ -86,7 +90,7 @@ export function LoginFields({
       </label>
 
       <label className="block" htmlFor={passwordId}>
-        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">Password</span>
+        <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">{t.password}</span>
         <div className="relative">
           <input
             id={passwordId}
@@ -110,7 +114,7 @@ export function LoginFields({
             // A control that toggles gets `aria-pressed`, and its label says what the NEXT press
             // does — "Show password" while hidden — which is what a screen-reader user needs.
             aria-pressed={reveal}
-            aria-label={reveal ? "Hide password" : "Show password"}
+            aria-label={reveal ? t.hidePassword : t.showPassword}
             // Never in the tab order between the password and the submit button: a keyboard user
             // tabbing out of the password expects to reach "Sign in", not a toggle.
             tabIndex={-1}
@@ -120,7 +124,7 @@ export function LoginFields({
           </button>
         </div>
         {capsLock && (
-          <p className="mt-1 text-[11.5px] font-medium text-warning-600">Caps Lock is on.</p>
+          <p className="mt-1 text-[11.5px] font-medium text-warning-600">{t.capsLock}</p>
         )}
       </label>
 
@@ -128,12 +132,12 @@ export function LoginFields({
           it, and a box that remembers by default is how a terminal ends up permanently signed in. */}
       <label className="flex items-center gap-2 pt-0.5">
         <input type="checkbox" name="remember" className="h-4 w-4 rounded border-surface-border" />
-        <span className="text-[12.5px] text-ink-600">Keep me signed in on this device</span>
+        <span className="text-[12.5px] text-ink-600">{t.remember}</span>
       </label>
 
       {justSet && !error && (
         <p className="rounded-md bg-success-50 px-3 py-2 text-[12.5px] font-medium text-success-600">
-          Password saved. Sign in with it now.
+          {t.passwordSaved}
         </p>
       )}
 
@@ -146,12 +150,12 @@ export function LoginFields({
       )}
 
       <button type="submit" disabled={pending} className={submitClassName}>
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? t.signingIn : t.signIn}
       </button>
 
       <p className="pt-1 text-center text-[12.5px]">
         <a href={forgotHref} className="font-semibold text-brand-700 hover:underline">
-          Forgot your password?
+          {t.forgot}
         </a>
       </p>
 

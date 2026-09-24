@@ -5,6 +5,7 @@ import "./globals.css";
 import "./cyrillic-font.css";
 import { LOCALE_LABELS } from "@revio/ui/i18n";
 import { getLocale } from "@/lib/locale";
+import { LocaleProvider } from "@revio/ui/i18n-context";
 import { DatePickerAffordance } from "@revio/ui/date-picker-affordance";
 
 /*
@@ -57,7 +58,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={LOCALE_LABELS[locale].htmlLang} className={hanken.variable}>
       <body>
-        {children}
+        {/* Here, not only in the signed-in shell: the sign-in screens are read before there is a
+            session, and their shared fields take the language from this. */}
+        <LocaleProvider locale={locale}>{children}</LocaleProvider>
         {/* One listener: every native date field opens its picker from anywhere on it. */}
         <DatePickerAffordance />
       </body>
