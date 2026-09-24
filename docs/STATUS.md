@@ -306,9 +306,16 @@ says who can move it. Details sit where the link points.
    guests, guest register, staff & access, configuration, settings frame, search, activity, status pages.
    Eighteen dictionaries in `apps/pms/lib/i18n/`, all in the completeness test. What is still English on a
    RevioPMS screen is a SHARED component (step 2) or a server-action message (step 4).
-2. The shared pieces every product shows: Get help, notifications panel, ⌘K, sign-in, first-run setup.
+2. The shared pieces every product shows — **mostly done in `@revio/ui`** (2026-09-24): sign-in, set-password,
+   two-factor, sign out everywhere, the bell, ⌘K, Get help, first-run setup + the dashboard checklist, the
+   activity log, the trial strip, the status pages. Each reads `LocaleProvider` (client) or a `locale` prop
+   (server); a product with no provider is unchanged English. **Still English:** Help centre articles and
+   "Your requests" thread, Billing panel + company details, Start-trial and the locked/role-locked screens.
+   Messages from `@revio/db`/`@revio/core` now carry codes (`TwoFactorErrorCode`, `WelcomeWriteCode`,
+   `RegisterProblemCode`) so a screen translates by code, never by matching English. Rule written in
+   `packages/ui/CLAUDE.md`.
 3. RevioCRS, then RevioLink, then Operator (ours — English is fine there longest).
-4. Server-action messages (flash errors) and emails — these need the locale passed into the action.
+4. Server-action messages — **RevioPMS done** (`lib/i18n/flash.ts`, sign-in, users, welcome, 2FA). Emails still English.
 5. RevioDirect's guest page — the GUEST's language, a different choice from staff (browser, then hotel).
 Rule for every step: `lib/i18n/<screen>.ts`, add it to the completeness test when finished, look at the
 page at phone width. Not translated: legal documents, and anything the hotel typed.
