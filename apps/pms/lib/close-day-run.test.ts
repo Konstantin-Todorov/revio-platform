@@ -13,6 +13,10 @@ const io = vi.hoisted(() => ({
 vi.mock("@revio/db", () => ({
   forTenant: () => io.db,
   withTenantTransaction: (...args: unknown[]) => io.transaction(...args),
+  // Writes through the client it is handed, like the real one — so a release on the outer client
+  // would leak past a rollback and fail these tests.
+  releaseRoomsForCancellation: (db: { roomAssignment: { updateMany: (a: unknown) => Promise<{ count: number }> } }, id: string) =>
+    db.roomAssignment.updateMany({ where: { reservationId: id } }).then((r) => r.count),
 }));
 vi.mock("./folio", () => ({
   folioBalance: () => ({ balance: 0 }),
@@ -46,7 +50,7 @@ function client(read: () => State) {
     },
     propertyDefaults: { findUnique: vi.fn(async () => ({ autoCloseEnabled: autoEnabled, closeDeadlineMinutes: 30, closeReminderWindowHours: 22 })) },
     folio: { findMany: vi.fn(async () => []) },
-    roomAssignment: { count: vi.fn(async () => 0) },
+    roomAssignment: { count: vi.fn(async () => 0), updateMany: vi.fn(async () => ({ count: 0 })) },
     reservation: {
       findMany: vi.fn(async () => read().noShow ? [] : [{ id: "reservation", lines: [{ checkIn: day("2026-09-07") }], assignments: [] }]),
       update: vi.fn(async () => {
