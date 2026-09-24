@@ -11,7 +11,11 @@ import { login, type LoginResult } from "@/lib/actions-auth";
  * accent colour and a placeholder — so every omission was made four times, and every fix had to be.
  * What differs per product stays here; what should never differ does not.
  */
-export function LoginForm({ justSet = false, defaultEmail }: { justSet?: boolean; defaultEmail?: string }) {
+export function LoginForm({
+  justSet = false, defaultEmail,
+  emailPlaceholder = "you@hotel.com",
+  accessNote = "RevioCRS accounts are created by your hotel's owner or administrator. If you need access, ask them to invite you.",
+}: { justSet?: boolean; defaultEmail?: string; emailPlaceholder?: string; accessNote?: string }) {
   const [state, formAction, pending] = useActionState<LoginResult | null, FormData>(login, null);
 
   return (
@@ -19,8 +23,8 @@ export function LoginForm({ justSet = false, defaultEmail }: { justSet?: boolean
       <LoginFields
         submitClassName="h-10 w-full rounded-md bg-brand-800 hover:bg-brand-700 text-[14px] font-semibold text-white transition-colors disabled:opacity-60"
         inputFocusClassName="focus:border-brand-600"
-        emailPlaceholder="you@hotel.com"
-        accessNote="RevioCRS accounts are created by your hotel's owner or administrator. If you need access, ask them to invite you."
+        emailPlaceholder={emailPlaceholder}
+        accessNote={accessNote}
         pending={pending}
         error={state?.error}
         justSet={justSet}

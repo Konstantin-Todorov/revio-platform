@@ -4,6 +4,8 @@ import { getActivity } from "@/lib/activity";
 import { getProperty } from "@/lib/data";
 import { guard } from "@/lib/authz";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
+import { i18n } from "@/lib/i18n/server";
+import { pages } from "@/lib/i18n/pages";
 
 export const dynamic = "force-dynamic";
 
@@ -21,25 +23,28 @@ export default async function ActivityPage({
     getProperty(),
   ]);
 
+  const { t: tr, locale } = await i18n();
+  const t = tr(pages).activity;
   const showAuto = new URLSearchParams({ from: view.from, to: view.to, auto: "1" });
   if (sp.actor) showAuto.set("actor", sp.actor);
 
   return (
     <div>
       <PageHeader
-        title="Activity"
-        subtitle={`${view.rows.length} change${view.rows.length === 1 ? "" : "s"} · who changed what, and when`}
+        title={t.title}
+        subtitle={t.subtitle(view.rows.length)}
       />
-      <ActivityFilters view={view} currentActor={sp.actor} includeAutomatic={includeAutomatic} />
+      <ActivityFilters view={view} currentActor={sp.actor} includeAutomatic={includeAutomatic} locale={locale} />
       <Card>
         <CardHeader
-          title="Changes"
-          subtitle={`${view.from} → ${view.to} · newest first · one history for this property, whichever product wrote it`}
+          title={t.changes}
+          subtitle={t.changesSub(view.from, view.to)}
         />
         <ActivityTable
           view={view}
           showAutomaticHref={`/activity?${showAuto.toString()}`}
-          labels={{ automaticNote: "channel syncs the software made by itself. They have their own screen in RevioLink." }}
+          labels={{ automaticNote: t.automaticNote }}
+          locale={locale}
           // The property's clock, not the server's UTC one.
           timeZone={property.timezone}
         />

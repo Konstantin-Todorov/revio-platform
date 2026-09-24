@@ -24,6 +24,8 @@ export interface Session {
    * property). Only reachable when the tenant actually owns more than one property. */
   scope: "property" | "group";
   propertyCount: number;
+  /** The panel language this person chose (`User.locale`) — the same choice in every product. */
+  locale: string | null;
 }
 
 export const ACTIVE_PROPERTY_COOKIE = "revio_property";
@@ -72,6 +74,7 @@ export async function getSession(): Promise<Session | null> {
     tenantName: tenant.name,
     scope: isGroup ? "group" : "property",
     propertyCount: properties.length,
+    locale: user.locale ?? null,
   };
 }
 

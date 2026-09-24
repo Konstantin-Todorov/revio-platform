@@ -9,31 +9,35 @@ import {
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 import { NAV_HEADING_CLASS, NAV_ROW_CLASS, NAV_SCROLL_CLASS, navTail } from "@revio/ui/nav-tail";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { shell, type ShellStrings } from "@/lib/i18n/shell";
 
-type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
+type Item = { href: NavHref; label: string; icon: LucideIcon; soon?: string };
+type NavHref = keyof ShellStrings["nav"];
 
 // Phase 1 ships the inventory foundation; later phases light up the rest of the sitemap
 // (docs/CRS-REFERENCE.md "MVP build order"). "soon" items render disabled with their phase tag.
 // V2 nav (docs/specs/CRS-GUIDE-V1.md §2): screens sorted by mode — overview / bookings /
 // commercial control / configuration. Rates & Restrictions dissolved three ways (products →
 // Rooms & Rates; standing defaults → Settings; rules → Bulk); Inventory Setup merged away.
-const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
-  { title: "Overview", items: [
+const SECTIONS: { title?: keyof ShellStrings["sections"]; tail?: boolean; items: Item[] }[] = [
+  { title: "overview", items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/reports", label: "Analytics", icon: BarChart3 },
   ] },
-  { title: "Bookings", items: [
+  { title: "bookings", items: [
     { href: "/reservations", label: "Reservations", icon: CalendarCheck },
     // Next to Reservations, because a waitlist entry is a reservation that has not happened yet.
     { href: "/waitlist", label: "Waitlist", icon: Clock },
     { href: "/guests", label: "Guests", icon: Users },
   ] },
-  { title: "Inventory & Rates", items: [
+  { title: "inventory", items: [
     { href: "/inventory", label: "Inventory Calendar", icon: CalendarRange },
     { href: "/rooms-rates", label: "Rooms & Rates", icon: Tags },
     { href: "/bulk", label: "Bulk Rates & Availability", icon: Wrench },
   ] },
-  { title: "Distribution", items: [
+  { title: "distribution", items: [
     { href: "/distribution", label: "Distribution", icon: Share2 },
     // The direct channel gets its own screen next to the OTA one — it is a sales channel the hotel
     // configures, not a preference buried in Settings.
@@ -51,7 +55,7 @@ const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
   {
     tail: true,
     items: navTail(["/activity", "/help", "/settings"]).map((t) => ({
-      href: t.href,
+      href: t.href as NavHref,
       label: t.label,
       icon: t.Icon,
     })),
@@ -60,6 +64,8 @@ const SECTIONS: { title?: string; tail?: boolean; items: Item[] }[] = [
 
 export function Sidebar({ footer }: { footer: string }) {
   const pathname = usePathname();
+  // Labels come from the dictionary by route; the English in SECTIONS is only the fallback shape.
+  const t = translate(shell, useLocale());
   const { open, setOpen } = useShell();
   /*
    * One section, rendered from a named function so the TAIL can live outside the scrolling
@@ -72,10 +78,11 @@ export function Sidebar({ footer }: { footer: string }) {
               className="mb-1">
             {section.title && (
               <div className={`${NAV_HEADING_CLASS} text-[10px] font-bold uppercase tracking-[0.15em] text-white/30`}>
-                {section.title}
+                {t.sections[section.title]}
               </div>
             )}
-            {section.items.map((item) => {
+            {section.items.map((raw) => {
+              const item = { ...raw, label: t.nav[raw.href] ?? raw.label };
               const Icon = item.icon;
               if (item.soon) {
                 return (
@@ -158,13 +165,13 @@ export function Sidebar({ footer }: { footer: string }) {
             Revio<span className="text-product-mark">CRS</span>
           </div>
           <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-white/45">
-            Central Reservations
+            {t.product}
           </div>
         </div>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          aria-label="Close menu"
+          aria-label={t.menu.closeMenu}
           className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-white/60 outline-none transition-[background-color,color,transform] duration-fast ease-standard hover:scale-105 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-product-mark/70 lg:hidden"
         >
           <X className="h-5 w-5" />

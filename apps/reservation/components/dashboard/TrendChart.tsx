@@ -1,5 +1,10 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { dashboard } from "@/lib/i18n/dashboard";
+import { moneyIn } from "@/lib/i18n/money";
+
 import { useRef, useState } from "react";
 import { smoothPath, smoothAreaPath, nearestIndex, type Pt } from "@revio/ui/chart-path";
 
@@ -53,13 +58,15 @@ export function TrendChart({
   /** "gross" or "net" — the hotel's own setting, stated so the number is not ambiguous. */
   revenueBasis: string;
 }) {
+  const locale = useLocale();
+  const t = translate(dashboard, locale).trend;
   const [showOcc, setShowOcc] = useState(true);
   const [showRev, setShowRev] = useState(true);
   const [hover, setHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   if (points.length < 2) {
-    return <p className="px-4 py-6 text-[13px] text-ink-500">Not enough days in this range to draw a trend.</p>;
+    return <p className="px-4 py-6 text-[13px] text-ink-500">{t.notEnough}</p>;
   }
 
   const W = 1000, H = 240, padL = 38, padR = 46, padT = 14, padB = 26;
@@ -81,7 +88,7 @@ export function TrendChart({
   const barW = Math.max(1.5, (plotW / points.length) * 0.55);
 
   const money = (m: number) =>
-    `${currency === "EUR" ? "€" : currency === "USD" ? "$" : currency + " "}${Math.round(m / 100).toLocaleString("en-GB")}`;
+    moneyIn(locale)(Math.round(m / 100) * 100, currency);
 
   const occPts: Pt[] = points.map((p, i) => [x(i), yOcc(p.occupancyPct)]);
   const occLine = smoothPath(occPts);
@@ -120,9 +127,9 @@ export function TrendChart({
   return (
     <div className="px-4 py-3">
       <div className="mb-1 flex flex-wrap items-center gap-3">
-        {legend(showOcc, OCC, "Occupancy %", () => setShowOcc((v) => !v))}
-        {legend(showRev, REV, `Revenue (${revenueBasis})`, () => setShowRev((v) => !v))}
-        <span className="ml-auto text-[10.5px] text-ink-300">click a legend to isolate</span>
+        {legend(showOcc, OCC, t.occupancyPct, () => setShowOcc((v) => !v))}
+        {legend(showRev, REV, t.revenue(revenueBasis), () => setShowRev((v) => !v))}
+        <span className="ml-auto text-[10.5px] text-ink-300">{t.isolate}</span>
       </div>
 
       <div className="relative">
@@ -136,11 +143,11 @@ export function TrendChart({
             <div className="mb-1 font-bold">{label(hp.date)}</div>
             <div className="flex items-center gap-1.5 tabular-nums text-white/80">
               <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: OCC }} />
-              Occupancy {hp.occupancyPct.toFixed(0)}%
+              {t.occupancyAt(hp.occupancyPct.toFixed(0))}
             </div>
             <div className="flex items-center gap-1.5 tabular-nums text-white/80">
               <span className="h-2 w-2 shrink-0 rounded-sm" style={{ background: REV }} />
-              Revenue {money(hp.revenueMinor)}
+              {t.revenueAt(money(hp.revenueMinor))}
             </div>
           </div>
         )}
@@ -154,7 +161,7 @@ export function TrendChart({
           onPointerMove={onMove}
           onPointerLeave={() => setHover(null)}
           role="img"
-          aria-label={`Occupancy and revenue over ${points.length} days`}
+          aria-label={t.aria(points.length)}
         >
           <defs>
             <linearGradient id="occFill" x1="0" y1="0" x2="0" y2="1">

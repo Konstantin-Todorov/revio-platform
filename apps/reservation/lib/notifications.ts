@@ -6,6 +6,8 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { getNotifications } from "./data";
 import { productOrigin } from "@revio/ui/product-links";
+import { i18n } from "./i18n/server";
+import { notifications as notificationsDict } from "./i18n/notifications";
 
 const WINDOW_DAYS = 14;
 const PER_SOURCE = 25;
@@ -70,15 +72,15 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
   ]);
 
   const ctx = (name: string) => (session.propertyCount > 1 ? { context: name } : {});
-  const money = (minor: number, currency: string) =>
-    new Intl.NumberFormat("en-IE", { style: "currency", currency }).format(minor / 100);
+  const { t: tr, money } = await i18n();
+  const say = tr(notificationsDict);
   const q = (r: { externalId: string | null; guestName: string | null }) =>
     `/reservations?q=${encodeURIComponent(r.externalId ?? r.guestName ?? "")}`;
 
   const events: NotificationEvent[] = [
     ...arrived.map((r): NotificationEvent => ({
       key: `reservation:${r.id}`,
-      title: `New booking — ${r.guestName || r.externalId || "no name given"}`,
+      title: say.newBooking(r.guestName || r.externalId || say.noName),
       body: [r.channel?.name ?? r.bookingSource?.name, money(r.totalMinor, r.currency)].filter(Boolean).join(" · "),
       href: q(r),
       severity: "success",
@@ -90,8 +92,8 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
       // reservation's key would make reading one mark the other read, and the cancellation — the
       // half somebody actually has to act on — would arrive already grey.
       key: `cancelled:${r.id}`,
-      title: `Cancelled — ${r.guestName || r.externalId || "no name given"}`,
-      body: r.channel?.name ? `via ${r.channel.name}` : undefined,
+      title: say.cancelled(r.guestName || r.externalId || say.noName),
+      body: r.channel?.name ? say.via(r.channel.name) : undefined,
       href: q(r),
       severity: "warning",
       at: r.cancelledAt!,
@@ -99,7 +101,7 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
     })),
     ...errors.map((e): NotificationEvent => ({
       key: `error:${e.id}`,
-      title: e.resolved ? `Resolved — ${e.message}` : e.message,
+      title: e.resolved ? say.resolved(e.message) : e.message,
       // RevioLink's Errors tab — /distribution holds no errors and only says where they are.
       href: `${productOrigin("cm")}/sync?tab=errors`,
       severity: e.resolved ? "info" : e.severity === "critical" ? "critical" : "warning",

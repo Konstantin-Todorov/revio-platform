@@ -1,4 +1,4 @@
-import { ROLE_LABEL, type NotificationFeed } from "@revio/core";
+import type { NotificationFeed } from "@revio/core";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { MobileMenuButton } from "./MobileMenuButton";
 import { NotificationBell } from "./NotificationBell";
@@ -9,15 +9,17 @@ import { TopbarSearch } from "./TopbarSearch";
 type Property = { id: string; name: string; tenantName: string };
 
 export function Topbar({
-  properties, activeId, activeName, scope, canGroup, role, userName, feed, timeZone, products, upsells,
+  properties, activeId, activeName, scope, canGroup, roleLabel, userName, feed, timeZone, products, upsells, canSwitchLanguage,
 }: {
   properties: Property[];
   activeId: string;
   activeName: string;
   scope: "property" | "group";
   canGroup: boolean;
-  role: string;
+  /** Worded on the server in the reader's language. */
+  roleLabel: string;
   userName: string;
+  canSwitchLanguage: boolean;
   products: ProductLink[];
   upsells: ProductUpsell[];
   feed: NotificationFeed;
@@ -34,7 +36,7 @@ export function Topbar({
       </div>
 
       <NotificationBell initial={feed} timeZone={timeZone} />
-      <UserMenu products={products} upsells={upsells} userName={userName} roleLabel={ROLE_LABEL[role] ?? role} />
+      <UserMenu products={products} upsells={upsells} userName={userName} roleLabel={roleLabel} canSwitchLanguage={canSwitchLanguage} />
     </header>
   );
 }

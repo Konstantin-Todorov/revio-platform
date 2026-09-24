@@ -3,6 +3,9 @@
 import { useTransition } from "react";
 import { Building2, Layers } from "lucide-react";
 import { setActiveProperty } from "@/lib/actions-session";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { shell } from "@/lib/i18n/shell";
 
 /**
  * What a screen shows instead of itself when the user is in portfolio scope.
@@ -17,6 +20,7 @@ import { setActiveProperty } from "@/lib/actions-session";
  */
 export function PickProperty({ properties }: { properties: { id: string; name: string }[] }) {
   const [pending, start] = useTransition();
+  const t = translate(shell, useLocale()).pick;
 
   return (
     <div className="mx-auto max-w-xl py-10">
@@ -25,12 +29,10 @@ export function PickProperty({ properties }: { properties: { id: string; name: s
           <Layers className="h-5 w-5" />
         </div>
         <h1 className="text-[17px] font-bold tracking-tight text-ink-900">
-          This screen belongs to one hotel
+          {t.title}
         </h1>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-500">
-          You are viewing <span className="font-semibold text-ink-700">All properties</span>, which is for
-          comparing performance across the group. This screen changes the settings of a single hotel, so
-          choose which one.
+          {t.bodyBefore} <span className="font-semibold text-ink-700">{t.allProperties}</span>{t.bodyAfter}
         </p>
 
         <div className="mt-5 space-y-2">
@@ -48,8 +50,7 @@ export function PickProperty({ properties }: { properties: { id: string; name: s
         </div>
 
         <p className="mt-4 text-[11.5px] text-ink-400">
-          Dashboard and Analytics still show the whole portfolio — switch back from the picker at the top
-          whenever you want the group view.
+          {t.note}
         </p>
       </div>
     </div>

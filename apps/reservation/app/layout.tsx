@@ -4,6 +4,9 @@ import "./globals.css";
 // Bulgarian letters — a Cyrillic-only face. Generated; see scripts/fetch-fonts.mjs.
 import "./cyrillic-font.css";
 import { DatePickerAffordance } from "@revio/ui/date-picker-affordance";
+import { LOCALE_LABELS } from "@revio/ui/i18n";
+import { LocaleProvider } from "@revio/ui/i18n-context";
+import { getLocale } from "@/lib/locale";
 
 /*
   ⚠️ `next/font/local`, not `next/font/google` — the bytes are in the repository.
@@ -48,11 +51,16 @@ export const viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // `lang` is the reader's language: letterforms and the screen reader's voice both follow it.
+  // English for everyone until RevioCRS is fully translated — see `lib/i18n/ready.ts`.
+  const locale = await getLocale();
   return (
-    <html lang="en" className={hanken.variable}>
+    <html lang={LOCALE_LABELS[locale].htmlLang} className={hanken.variable}>
       <body>
-        {children}
+        {/* Here, not only in the signed-in shell: the sign-in screens are read before there is a
+            session, and their shared fields take the language from this. */}
+        <LocaleProvider locale={locale}>{children}</LocaleProvider>
         {/* One listener: every native date field opens its picker from anywhere on it. */}
         <DatePickerAffordance />
       </body>

@@ -3,6 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import { Building2, ChevronDown, Check, Layers } from "lucide-react";
 import { setActiveProperty, setGroupScope } from "@/lib/actions-session";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { shell } from "@/lib/i18n/shell";
 
 type Item = { id: string; name: string; tenantName: string };
 
@@ -17,6 +20,7 @@ export function WorkspaceSwitcher({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const t = translate(shell, useLocale()).switcher;
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -47,7 +51,7 @@ export function WorkspaceSwitcher({
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-72 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
           <div className="border-b border-surface-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-            Your properties
+            {t.yourProperties}
           </div>
           {/* Portfolio scope — Dashboard + Analytics aggregate across every property (spec §4.1). */}
           {canGroup && (
@@ -56,7 +60,7 @@ export function WorkspaceSwitcher({
               className={`flex w-full items-center gap-2 border-b border-surface-border px-3 py-2.5 text-left text-[13px] transition-colors hover:bg-surface-muted ${isGroup ? "font-semibold text-brand-700" : "text-ink-700"}`}
             >
               <Layers className="h-4 w-4 text-brand-600" />
-              <span className="flex-1">All properties <span className="text-[11px] font-normal text-ink-400">· portfolio totals</span></span>
+              <span className="flex-1">{t.allProperties} <span className="text-[11px] font-normal text-ink-400">{t.portfolioTotals}</span></span>
               {isGroup && <Check className="h-4 w-4 text-brand-600" />}
             </button>
           )}

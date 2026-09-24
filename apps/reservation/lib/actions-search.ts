@@ -3,6 +3,10 @@
 import { isSearchable, roleCanOpenProduct, type SearchHit } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
+import { i18n } from "./i18n/server";
+import { pages } from "./i18n/pages";
+import { shell } from "./i18n/shell";
+import { common } from "./i18n/common";
 
 /**
  * What ⌘K finds in RevioCRS.
@@ -109,6 +113,10 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
      Kept in one expression so a new hit kind cannot pick up one without the other. */
   const ctx = (id: string, name: string) => (multi ? { context: name, propertyId: id } : { propertyId: id });
   const day = (d: Date) => d.toISOString().slice(0, 10);
+  const { t: tr } = await i18n();
+  const say = tr(pages).palette;
+  const nav = tr(shell).nav as Record<string, string>;
+  const statuses = tr(common).statuses;
 
   return [
     ...reservations.map((r): SearchHit => {
@@ -119,10 +127,10 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       return {
         id: r.id,
         kind: "reservation",
-        title: r.guestName || r.externalId || "Reservation",
+        title: r.guestName || r.externalId || say.reservation,
         subtitle: line
-          ? `${day(line.checkIn)} → ${day(line.checkOut)} · ${r.status}`
-          : `${r.status} · no nights`,
+          ? `${day(line.checkIn)} → ${day(line.checkOut)} · ${statuses[r.status] ?? r.status}`
+          : `${statuses[r.status] ?? r.status} · ${say.noNights}`,
         href: `/reservations?q=${encodeURIComponent(r.externalId ?? r.guestName ?? "")}`,
         ...ctx(r.propertyId, r.property.name),
       };
@@ -130,12 +138,12 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
     ...guests.map((g): SearchHit => ({
       id: g.id,
       kind: "guest",
-      title: [g.firstName, g.lastName].filter(Boolean).join(" ") || g.email || "Guest",
+      title: [g.firstName, g.lastName].filter(Boolean).join(" ") || g.email || say.guest,
       /* ⚠️ An OTA forwarding address is not the guest's address — the schema says in as many words
          that no screen may present it as one. It stops working when the booking ends, so showing it
          here would hand a receptionist a dead address to phone about. Prefer the phone; say what the
          address is when it is all we hold. */
-      subtitle: (g.emailIsOtaAlias ? (g.phone ?? "channel forwarding address only") : (g.email ?? g.phone)) ?? "no contact details",
+      subtitle: (g.emailIsOtaAlias ? (g.phone ?? say.forwardingOnly) : (g.email ?? g.phone)) ?? say.noContact,
       href: `/guests?q=${encodeURIComponent([g.firstName, g.lastName].filter(Boolean).join(" ") || g.email || "")}`,
       ...ctx(g.propertyId, g.property.name),
     })),
@@ -146,7 +154,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       id: r.id,
       kind: "room",
       title: r.name,
-      subtitle: `${r.code} · ${r.totalRooms} room${r.totalRooms === 1 ? "" : "s"}`,
+      subtitle: `${r.code} · ${say.rooms(r.totalRooms)}`,
       href: `/rooms-rates/rooms/${r.id}`,
       ...ctx(r.propertyId, r.property.name),
     })),
@@ -154,12 +162,12 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       id: r.id,
       kind: "rate",
       title: r.name,
-      subtitle: r.active ? (r.code ?? "rate plan") : "inactive",
+      subtitle: r.active ? (r.code ?? say.ratePlan) : say.inactive,
       href: `/rooms-rates/plans/${r.id}`,
       ...ctx(r.propertyId, r.property.name),
     })),
     // Screens, so the palette is also how you move around.
-    ...PAGES.map((p): SearchHit => ({ id: p.href, kind: "page", title: p.title, subtitle: p.sub, href: p.href })),
+    ...PAGES.map((p): SearchHit => ({ id: p.href, kind: "page", title: nav[p.href] ?? p.title, subtitle: say.subs[p.href] ?? p.sub, href: p.href })),
   ];
 }
 

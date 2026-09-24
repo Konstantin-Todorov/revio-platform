@@ -11,7 +11,11 @@ import { DashboardView, type KpiCard } from "@/components/dashboard/DashboardVie
 import { ensurePickupSnapshot } from "@/lib/pickup";
 import { releaseExpiredHolds } from "@/lib/holds";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { money, FORECAST_DISCLAIMER } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { LOCALE_LABELS } from "@revio/ui/i18n";
+import { dashboard } from "@/lib/i18n/dashboard";
+import { common } from "@/lib/i18n/common";
+import { rangeLabel } from "@/lib/i18n/range";
 import { TrendChart } from "@/components/dashboard/TrendChart";
 import { Donut } from "@/components/reports/Visuals";
 import { isCommissionFreeCategory } from "@revio/core";
@@ -20,17 +24,7 @@ export const dynamic = "force-dynamic";
 
 // Spec §3.1 presets. L* = actuals (realized past); N* = on-the-books (confirmed future).
 // 28 = four whole weeks — never "tidy" back to 30 (day-of-week comparability).
-const PRESETS: { key: RangePreset; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "tomorrow", label: "Tomorrow" },
-  { key: "l7d", label: "L7D" },
-  { key: "l28d", label: "L28D" },
-  { key: "ytd", label: "YTD" },
-  { key: "n7d", label: "N7D" },
-  { key: "n28d", label: "N28D" },
-];
-
-const pct = (v: number) => `${v.toFixed(v >= 10 ? 0 : 1)}%`;
+const PRESETS = ["today", "tomorrow", "l7d", "l28d", "ytd", "n7d", "n28d"] as const satisfies readonly RangePreset[];
 
 export default async function DashboardPage({
   searchParams,
@@ -38,6 +32,13 @@ export default async function DashboardPage({
   searchParams: Promise<{ range?: string; from?: string; to?: string; basis?: string }>;
 }) {
   const sp = await searchParams;
+  const { t: tr, money, day, locale } = await i18n();
+  const t = tr(dashboard);
+  const c0 = tr(common);
+  const tag = LOCALE_LABELS[locale].intl;
+  // One decimal, always — "2.0pp", "3.0 nights" — in the reader's notation ("2,0" in Bulgarian).
+  const one = new Intl.NumberFormat(tag, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const pct = (v: number) => `${new Intl.NumberFormat(tag, { maximumFractionDigits: v >= 10 ? 0 : 1, minimumFractionDigits: v >= 10 ? 0 : 1 }).format(v)}%`;
 
   /**
    * A hotel that has never configured anything goes into the guided flow instead of a dashboard of
@@ -57,7 +58,7 @@ export default async function DashboardPage({
   const range = resolveRange(ops.todayIso, sp.range, sp.from, sp.to);
   // Comparison basis (§1.2): one toggle governs every card. YoY = 364d back, LW = 7d back.
   const basis: CompareBasis = sp.basis === "lw" ? "lw" : "yoy";
-  const basisLabel = basis === "lw" ? "LW" : "YoY";
+  const basisLabel = basis === "lw" ? c0.basis.lw : c0.basis.yoy;
   const isGroup = scope.scope === "group";
   const [metrics, stly, board, f7, f30] = await Promise.all([
     getRangeMetrics(range),
@@ -72,6 +73,16 @@ export default async function DashboardPage({
     failedSyncs24h: ops.failedSyncs24h,
     openErrors: ops.openErrors,
   });
+  const alertText = (a: (typeof alerts)[number]) => {
+    const d = a.date ? day(a.date) : "";
+    switch (a.kind) {
+      case "overbooked": return t.actions.overbooked(a.room ?? "", a.n ?? 0, d);
+      case "soldOut": return t.actions.soldOut(a.room ?? "", d);
+      case "low": return t.actions.low(a.room ?? "", a.n ?? 0, d);
+      case "failedSyncs": return t.actions.failedSyncs(a.n ?? 0);
+      case "openErrors": return t.actions.openErrors(a.n ?? 0);
+    }
+  };
   const c = metrics.cards;
   const s = stly.cards;
   const currency = ops.property.baseCurrency;
@@ -82,17 +93,18 @@ export default async function DashboardPage({
   const relYoy = (now: number, then: number): KpiCard["yoy"] =>
     then <= 0 ? null : { text: `${now >= then ? "+" : ""}${(((now - then) / then) * 100).toFixed(0)}% ${basisLabel}`, dir: now > then ? "up" : now < then ? "down" : "flat" };
   const ppYoy = (now: number, then: number): KpiCard["yoy"] =>
-    ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp ${basisLabel}`, dir: now > then ? "up" : now < then ? "down" : "flat" });
+    ({ text: `${now >= then ? "+" : ""}${one.format(now - then)}${c0.pp} ${basisLabel}`, dir: now > then ? "up" : now < then ? "down" : "flat" });
 
+  const revBasis = t.revenueBasis[c.revenueDisplay] ?? c.revenueDisplay;
   const cards: KpiCard[] = [
-    { key: "occupancy", tone: "brand", label: otb ? "Committed occupancy" : "Occupancy", value: pct(c.occupancyPct), sub: `${c.roomsSoldNights} of ${c.availableRoomNights} room-nights`, href: "/inventory", yoy: ppYoy(c.occupancyPct, s.occupancyPct) },
-    { key: "sold", tone: "brand", label: otb ? "Rooms on the books" : "Rooms sold", value: String(c.roomsSoldNights), sub: "room-nights in range", href: "/reservations", yoy: relYoy(c.roomsSoldNights, s.roomsSoldNights) },
-    { key: "available", tone: "neutral", label: "Rooms available", value: String(c.availableRoomNights), sub: "physical − OOO − closed", href: "/rooms-rates", yoy: relYoy(c.availableRoomNights, s.availableRoomNights) },
-    { key: "revenue", tone: "success", label: otb ? `Revenue on the books (${c.revenueDisplay})` : `Room revenue (${c.revenueDisplay})`, value: money(c.revenueMinor, currency), sub: "accommodation only", href: "/reports?report=performance", yoy: relYoy(c.revenueMinor, s.revenueMinor) },
-    { key: "adr", tone: "success", label: "ADR", value: money(c.adrMinor, currency), sub: "revenue ÷ rooms sold", href: "/reports?report=performance", yoy: relYoy(c.adrMinor, s.adrMinor) },
-    { key: "revpar", tone: "accent", label: "RevPAR", value: money(c.revparMinor, currency), sub: "the #1 hotel KPI", href: "/reports?report=performance", yoy: relYoy(c.revparMinor, s.revparMinor) },
-    { key: "cancellation", tone: "danger", goodDirection: "down", label: "Cancellation rate", value: pct(c.cancellationRatePct), sub: `${c.cancelledCount} of ${c.createdCount} created`, href: "/reservations?status=cancelled", yoy: ppYoy(c.cancellationRatePct, s.cancellationRatePct) },
-    { key: "pickup", tone: "warning", label: "Pickup · 30d", value: (c.pickup.value >= 0 ? "+" : "") + c.pickup.value, sub: c.pickup.vsDate ? `room-nights vs ${c.pickup.vsDate}` : "baseline recorded today", href: "/reports?report=pickup", yoy: null },
+    { key: "occupancy", tone: "brand", label: otb ? t.kpi.committedOccupancy : t.kpi.occupancy, value: pct(c.occupancyPct), sub: t.kpi.occupancySub(c.roomsSoldNights, c.availableRoomNights), href: "/inventory", yoy: ppYoy(c.occupancyPct, s.occupancyPct) },
+    { key: "sold", tone: "brand", label: otb ? t.kpi.soldOtb : t.kpi.sold, value: String(c.roomsSoldNights), sub: t.kpi.soldSub, href: "/reservations", yoy: relYoy(c.roomsSoldNights, s.roomsSoldNights) },
+    { key: "available", tone: "neutral", label: t.kpi.available, value: String(c.availableRoomNights), sub: t.kpi.availableSub, href: "/rooms-rates", yoy: relYoy(c.availableRoomNights, s.availableRoomNights) },
+    { key: "revenue", tone: "success", label: otb ? t.kpi.revenueOtb(revBasis) : t.kpi.revenue(revBasis), value: money(c.revenueMinor, currency), sub: t.kpi.revenueSub, href: "/reports?report=performance", yoy: relYoy(c.revenueMinor, s.revenueMinor) },
+    { key: "adr", tone: "success", label: t.kpi.adr, value: money(c.adrMinor, currency), sub: t.kpi.adrSub, href: "/reports?report=performance", yoy: relYoy(c.adrMinor, s.adrMinor) },
+    { key: "revpar", tone: "accent", label: t.kpi.revpar, value: money(c.revparMinor, currency), sub: t.kpi.revparSub, href: "/reports?report=performance", yoy: relYoy(c.revparMinor, s.revparMinor) },
+    { key: "cancellation", tone: "danger", goodDirection: "down", label: t.kpi.cancellation, value: pct(c.cancellationRatePct), sub: t.kpi.cancellationSub(c.cancelledCount, c.createdCount), href: "/reservations?status=cancelled", yoy: ppYoy(c.cancellationRatePct, s.cancellationRatePct) },
+    { key: "pickup", tone: "warning", label: t.kpi.pickup, value: (c.pickup.value >= 0 ? "+" : "") + c.pickup.value, sub: c.pickup.vsDate ? t.kpi.pickupVs(day(c.pickup.vsDate)) : t.kpi.pickupBaseline, href: "/reports?report=pickup", yoy: null },
   ];
 
   /*
@@ -133,11 +145,11 @@ export default async function DashboardPage({
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Dashboard"
-        subtitle={`${isGroup ? `${scope.label}` : ops.property.name} · ${range.label}`}
+        title={t.title}
+        subtitle={`${isGroup ? `${scope.label}` : ops.property.name} · ${rangeLabel(range, c0, day)}`}
         action={
           <Link href="/reports" className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-            <TrendingUp className="h-3.5 w-3.5" /> Reports
+            <TrendingUp className="h-3.5 w-3.5" /> {t.reports}
           </Link>
         }
       />
@@ -146,8 +158,9 @@ export default async function DashboardPage({
       {setup.show && (
         <SetupChecklist
           productName="RevioCRS"
-          promise="Four steps and you can take, price and invoice a booking."
-          steps={setup.steps}
+          promise={t.setupPromise}
+          steps={setup.steps.map((st) => ({ ...st, ...(t.setupSteps[st.key] ?? {}) }))}
+          locale={locale}
           done={setup.done}
           total={setup.total}
         />
@@ -155,7 +168,7 @@ export default async function DashboardPage({
 
       {/* Date selector + KPI grid — per-user customizable, YoY vs STLY-364 on every card. */}
       <DashboardView
-        presets={PRESETS}
+        presets={PRESETS.map((key) => ({ key, label: c0.presetButtons[key] }))}
         activePreset={range.preset}
         cards={cards}
         basis={basis}
@@ -167,17 +180,17 @@ export default async function DashboardPage({
         {/* Occupancy + revenue per day */}
         <Card>
           <CardHeader
-            title="Occupancy & revenue by day"
+            title={t.trend.title}
             subtitle={
               trendIsFallback
-                ? "Last 28 days — pick a multi-day range above to match the KPIs"
-                : `${series.length} days${trendMetrics.perDay.length > 62 ? " (first 62 shown)" : ""}`
+                ? t.trend.fallback
+                : `${t.trend.days(series.length)}${trendMetrics.perDay.length > 62 ? t.trend.firstShown : ""}`
             }
           />
           <TrendChart
             points={series.map((d) => ({ date: d.date, occupancyPct: d.occupancyPct, revenueMinor: d.revenueMinor }))}
             currency={currency}
-            revenueBasis={c.revenueDisplay}
+            revenueBasis={revBasis}
           />
         </Card>
 
@@ -186,13 +199,15 @@ export default async function DashboardPage({
              shows the shares; the note on each row carries the commercial half — direct at ~0%
              against an OTA at 15–18% is the strongest argument this product has, and it was absent. */}
         <Card>
-          <CardHeader title="Source mix" subtitle="Revenue share, and what each channel costs you" />
+          <CardHeader title={t.sourceMix.title} subtitle={t.sourceMix.subtitle} />
           {metrics.sourceMix.length === 0 ? (
-            <div className="px-4 py-6 text-[13px] text-ink-500">No sold reservations in this range yet.</div>
+            <div className="px-4 py-6 text-[13px] text-ink-500">{t.sourceMix.empty}</div>
           ) : (
             <Donut
               centreLabel={money(metrics.sourceMix.reduce((t, x) => t + x.revenueMinor, 0), currency)}
-              centreSub="revenue"
+              centreSub={t.sourceMix.revenue}
+              emptyMessage={t.sourceMix.noRevenue}
+              aria={t.sourceMix.bySource(money(metrics.sourceMix.reduce((t2, x) => t2 + x.revenueMinor, 0), currency))}
               slices={metrics.sourceMix.map((src) => {
                 const row = metrics.economics.rows.find((r) => r.sourceName === src.name);
                 const free = row ? isCommissionFreeCategory(row.category) : false;
@@ -203,7 +218,7 @@ export default async function DashboardPage({
                   valueLabel: money(src.revenueMinor, currency),
                   // Never render an unconfigured rate as "no commission" — the §2.5 lesson, which is
                   // the same mistake one screen over.
-                  note: free ? "no commission" : unset ? "rate not set" : row ? `${row.commissionPct}% commission` : undefined,
+                  note: free ? t.sourceMix.noCommission : unset ? t.sourceMix.rateNotSet : row ? t.sourceMix.commission(String(row.commissionPct)) : undefined,
                   noteTone: unset ? "warning" : "muted",
                 };
               })}
@@ -216,9 +231,8 @@ export default async function DashboardPage({
         <div className="flex items-start gap-2 rounded-md border border-brand-600/25 bg-brand-50 px-3.5 py-2.5 text-[12.5px] text-brand-800">
           <Layers className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
           <span>
-            <span className="font-semibold">Portfolio view.</span> KPIs, charts, source mix and forecast above sum across all {scope.count} properties
-            (ratios recomputed from combined totals). The operational lists below auto-select <span className="font-semibold">{ops.property.name}</span> —
-            switch to a single property to act on its arrivals, alerts and bookings.
+            <span className="font-semibold">{t.portfolio.lead}</span> {t.portfolio.body(scope.count)} <span className="font-semibold">{ops.property.name}</span>{" "}
+            {t.portfolio.switchTo}
           </span>
         </div>
       )}
@@ -226,45 +240,45 @@ export default async function DashboardPage({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Action Center */}
         <Card>
-          <CardHeader title="Action Center" />
+          <CardHeader title={t.actions.title} />
           {alerts.length === 0 ? (
-            <div className="px-4 py-6 text-[13px] text-ink-500">Nothing needs attention — no overbookings, sell-outs or sync failures.</div>
+            <div className="px-4 py-6 text-[13px] text-ink-500">{t.actions.empty}</div>
           ) : (
             <ul className="divide-y divide-surface-border/60">
               {alerts.map((a, i) => (
                 <li key={i}>
                   <Link href={a.href} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px] transition-colors hover:bg-surface-muted">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${a.severity === "critical" ? "bg-danger-500" : a.severity === "warning" ? "bg-warning-500" : "bg-brand-600"}`} />
-                    <span className={a.severity === "critical" ? "font-semibold text-danger-600" : "text-ink-700"}>{a.message}</span>
+                    <span className={a.severity === "critical" ? "font-semibold text-danger-600" : "text-ink-700"}>{alertText(a)}</span>
                   </Link>
                 </li>
               ))}
             </ul>
           )}
           <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-            Thresholds are Settings (low availability ≤ {ops.defaults?.lowAvailabilityThreshold ?? 2}) — tune them under Rates → Property defaults.
+            {t.actions.thresholds(ops.defaults?.lowAvailabilityThreshold ?? 2)}
           </p>
         </Card>
 
         {/* Forecast */}
         <Card>
-          <CardHeader title="Forecast — the same data read forward" />
+          <CardHeader title={t.forecast.title} />
           <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                <th className="px-4 py-2.5">Window</th>
-                <th className="px-4 py-2.5 text-right">Occupancy</th>
-                <th className="px-4 py-2.5 text-right">Room-nights</th>
-                <th className="px-4 py-2.5 text-right">Revenue</th>
-                <th className="px-4 py-2.5 text-right">Arrivals</th>
-                <th className="px-4 py-2.5 text-right">Departures</th>
+                <th className="px-4 py-2.5">{t.forecast.window}</th>
+                <th className="px-4 py-2.5 text-right">{t.forecast.occupancy}</th>
+                <th className="px-4 py-2.5 text-right">{t.forecast.roomNights}</th>
+                <th className="px-4 py-2.5 text-right">{t.forecast.revenue}</th>
+                <th className="px-4 py-2.5 text-right">{t.forecast.arrivals}</th>
+                <th className="px-4 py-2.5 text-right">{t.forecast.departures}</th>
               </tr>
             </thead>
             <tbody>
               {[f7, f30].map((f) => (
                 <tr key={f.days} className="border-b border-surface-border/60 last:border-0">
-                  <td className="px-4 py-2.5 font-semibold text-ink-900">Next {f.days} days</td>
+                  <td className="px-4 py-2.5 font-semibold text-ink-900">{t.forecast.next(f.days)}</td>
                   <td className="tnum px-4 py-2.5 text-right text-ink-700">{pct(f.occupancyPct)}</td>
                   <td className="tnum px-4 py-2.5 text-right text-ink-700">{f.roomsSoldNights}</td>
                   <td className="tnum px-4 py-2.5 text-right font-semibold text-ink-900">{money(f.revenueMinor, currency)}</td>
@@ -276,16 +290,16 @@ export default async function DashboardPage({
           </table>
           </div>
           <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-            {FORECAST_DISCLAIMER}
+            {t.forecast.disclaimer}
           </p>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title={`Arrivals today (${ops.arrivals.length}) · Departures today (${ops.departures.length})`} />
+          <CardHeader title={t.today.title(ops.arrivals.length, ops.departures.length)} />
           {ops.arrivals.length === 0 && ops.departures.length === 0 ? (
-            <div className="px-4 py-6 text-[13px] text-ink-500">No arrivals or departures today.</div>
+            <div className="px-4 py-6 text-[13px] text-ink-500">{t.today.empty}</div>
           ) : (
             <ul className="divide-y divide-surface-border/60">
               {ops.arrivals.map((l) => (
@@ -307,21 +321,21 @@ export default async function DashboardPage({
         </Card>
 
         <Card>
-          <CardHeader title="New & cancelled · last 24h" action={<Link href="/reservations" className="text-[12px] font-semibold text-brand-700 hover:underline">All reservations</Link>} />
+          <CardHeader title={t.recent.title} action={<Link href="/reservations" className="text-[12px] font-semibold text-brand-700 hover:underline">{t.recent.all}</Link>} />
           {ops.newRes.length === 0 && ops.cancelledRes.length === 0 ? (
-            <div className="px-4 py-6 text-[13px] text-ink-500">No booking activity in the last 24 hours.</div>
+            <div className="px-4 py-6 text-[13px] text-ink-500">{t.recent.empty}</div>
           ) : (
             <ul className="divide-y divide-surface-border/60">
               {ops.newRes.map((r) => (
                 <li key={r.id} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px]">
-                  <StatusPill tone={r.status === "cancelled" ? "neutral" : "success"}>{r.status === "cancelled" ? "cancelled" : "new"}</StatusPill>
+                  <StatusPill tone={r.status === "cancelled" ? "neutral" : "success"}>{r.status === "cancelled" ? t.recent.cancelled : t.recent.new}</StatusPill>
                   <Link href={`/reservations/${r.id}`} className="font-semibold text-brand-700 hover:underline">{r.guestName}</Link>
                   <span className="ml-auto text-ink-500">{r.lines[0]?.roomType.name ?? "—"} · {money(r.totalMinor, r.currency)}</span>
                 </li>
               ))}
               {ops.cancelledRes.filter((r) => !ops.newRes.some((n) => n.id === r.id)).map((r) => (
                 <li key={r.id} className="flex items-center gap-2.5 px-4 py-2.5 text-[13px]">
-                  <StatusPill tone="neutral">cancelled</StatusPill>
+                  <StatusPill tone="neutral">{t.recent.cancelled}</StatusPill>
                   <Link href={`/reservations/${r.id}`} className="font-semibold text-brand-700 hover:underline">{r.guestName}</Link>
                   <span className="ml-auto text-ink-500">{r.lines[0]?.roomType.name ?? "—"} · {money(r.totalMinor, r.currency)}</span>
                 </li>
@@ -332,9 +346,9 @@ export default async function DashboardPage({
       </div>
 
       <p className="flex items-center gap-1.5 text-[11.5px] text-ink-400">
-        <AlertTriangle className="h-3.5 w-3.5" /> Avg length of stay {c.avgLosNights.toFixed(1)} nights · avg lead time {c.avgLeadDays.toFixed(0)} days ·
-        no-shows {ops.defaults?.countNoShowsAsSold === false ? "excluded from" : "count as"} sold ·{" "}
-        <Link href="/inventory" className="font-semibold text-brand-700 hover:underline"><CalendarRange className="mr-0.5 inline h-3 w-3" />Inventory Calendar</Link>
+        <AlertTriangle className="h-3.5 w-3.5" /> {t.footer.avgStay(one.format(c.avgLosNights))} · {t.footer.avgLead(c.avgLeadDays.toFixed(0))} ·{" "}
+        {ops.defaults?.countNoShowsAsSold === false ? t.footer.noShowsExcluded : t.footer.noShowsCount} ·{" "}
+        <Link href="/inventory" className="font-semibold text-brand-700 hover:underline"><CalendarRange className="mr-0.5 inline h-3 w-3" />{t.footer.calendar}</Link>
       </p>
     </div>
   );

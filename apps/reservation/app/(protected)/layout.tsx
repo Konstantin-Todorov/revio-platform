@@ -15,6 +15,10 @@ import { publicBaseUrl } from "@revio/email";
 import { trialBanner, isTrialDecider, roleCanOpenProduct } from "@revio/core";
 import { TrialStrip } from "@revio/ui/trial-banner";
 import { keepThisTrial } from "@/lib/actions-self-trial";
+import { LOCALE_LABELS } from "@revio/ui/i18n";
+import { i18n } from "@/lib/i18n/server";
+import { shell } from "@/lib/i18n/shell";
+import { translationOn } from "@/lib/i18n/ready";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -70,9 +74,11 @@ export default async function ProtectedLayout({ children }: { children: React.Re
      likely to be reading this. */
   const activeTimeZone = allProperties.find((p) => p.id === session.activePropertyId)?.timezone ?? "UTC";
   const canGroup = properties.length > 1;
+  const { t: tr, locale } = await i18n();
+  const t = tr(shell);
   const activeName =
     session.scope === "group"
-      ? "All properties"
+      ? t.switcher.allProperties
       : properties.find((p) => p.id === session.activePropertyId)?.name ?? session.tenantName;
   const feed = await getNotificationFeed();
 
@@ -103,7 +109,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           keepRequested: trial.keepRequestedAt !== null,
         },
         new Date(),
-        (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long" }),
+        (d) => d.toLocaleDateString(locale === "en" ? "en-GB" : LOCALE_LABELS[locale].intl, { day: "numeric", month: "long" }),
       )
     : null;
 
@@ -115,7 +121,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar footer={session.tenantName} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
-          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} scope={session.scope} canGroup={canGroup} role={session.role} userName={session.userName} feed={feed} timeZone={activeTimeZone} />
+          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} scope={session.scope} canGroup={canGroup} roleLabel={t.roles[session.role] ?? session.role} userName={session.userName} feed={feed} timeZone={activeTimeZone} canSwitchLanguage={translationOn()} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate
@@ -148,6 +154,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             {banner && (
               <TrialStrip
                 banner={banner}
+                locale={locale}
                 {...(isTrialDecider(session.role) ? { keepAction: keepThisTrial } : {})}
               />
             )}

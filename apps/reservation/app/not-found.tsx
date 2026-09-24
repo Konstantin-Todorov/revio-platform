@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { StatusPage, statusPrimaryCls } from "@revio/ui/status-page";
+import { i18n } from "@/lib/i18n/server";
+import { pages } from "@/lib/i18n/pages";
 
 /** 404 for URLs outside the signed-in shell. */
-export default function NotFound() {
+export default async function NotFound() {
+  const t = (await i18n()).t(pages).status;
   return (
     <main className="min-h-screen bg-surface-muted">
       <StatusPage
         tone="notFound"
-        title="Page not found"
-        body="That address doesn’t exist in RevioCRS. If you followed a link from us, let us know."
+        title={t.pageNotFound}
+        body={t.pageNotFoundBody}
       >
-        <Link href="/dashboard" className={statusPrimaryCls}>Go to RevioCRS</Link>
+        <Link href="/dashboard" className={statusPrimaryCls}>{t.goToProduct}</Link>
       </StatusPage>
     </main>
   );

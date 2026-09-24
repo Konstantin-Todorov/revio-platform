@@ -11,6 +11,8 @@ import { CAPABILITY_ERROR_CODE, computeWaterfall, expandInventoryPeriods, isAdva
   ratePlanRows, displayedRate, rateSourceNote, toResolvablePlan,
 } from "@revio/core";
 import { getSession } from "./session";
+import { i18n } from "./i18n/server";
+import { notifications as notificationsDict } from "./i18n/notifications";
 
 const DAY = 86_400_000;
 
@@ -85,6 +87,7 @@ export interface NotifItem { text: string; href: string; tone: "danger" | "warni
 /** Notification-bell items: open errors + today's arrivals / departures. */
 export async function getNotifications(): Promise<{ items: NotifItem[]; count: number }> {
   const property = await getProperty();
+  const say = (await i18n()).t(notificationsDict);
   const today = todayInTz(property.timezone);
   const [openErrors, counts] = await Promise.all([
     // Channel limitations are not errors — RevioLink's Sync Center counts them apart. See the CM bell.
@@ -105,12 +108,12 @@ export async function getNotifications(): Promise<{ items: NotifItem[]; count: n
    * no distribution errors to be told about.
    */
   if (openErrors > 0 && property.tenant.hasChannelManager) {
-    items.push({ text: `${openErrors} open channel error${openErrors === 1 ? "" : "s"} — in RevioLink`, href: `${productOrigin("cm")}/sync?tab=errors`, tone: "danger" });
+    items.push({ text: say.channelErrors(openErrors), href: `${productOrigin("cm")}/sync?tab=errors`, tone: "danger" });
   }
   const arriving = counts.arriving ?? 0;
   const departing = counts.departing ?? 0;
-  if (arriving > 0 && seg.arriving) items.push({ text: `${arriving} arrival${arriving === 1 ? "" : "s"} today`, href: segmentHref(seg.arriving), tone: "info" });
-  if (departing > 0 && seg.departing) items.push({ text: `${departing} departure${departing === 1 ? "" : "s"} today`, href: segmentHref(seg.departing), tone: "info" });
+  if (arriving > 0 && seg.arriving) items.push({ text: say.arrivals(arriving), href: segmentHref(seg.arriving), tone: "info" });
+  if (departing > 0 && seg.departing) items.push({ text: say.departures(departing), href: segmentHref(seg.departing), tone: "info" });
   return { items, count: items.length };
 }
 

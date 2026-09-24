@@ -4,6 +4,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { CommandPalette } from "@revio/ui/command-palette";
 import { searchEverything } from "@/lib/actions-search";
 import { setActiveProperty } from "@/lib/actions-session";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { shell } from "@/lib/i18n/shell";
 
 /**
  * Global search — now a ⌘K palette, in exactly the slot the old form occupied.
@@ -22,13 +25,14 @@ import { setActiveProperty } from "@/lib/actions-session";
 export function TopbarSearch({ activePropertyId }: { activePropertyId: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const t = translate(shell, useLocale());
   if (pathname?.startsWith("/inventory")) return <div className="hidden flex-1 md:block" aria-hidden />;
 
   return (
     <div className="flex flex-1 justify-start">
       <CommandPalette
         search={searchEverything}
-        placeholder="Search reservations, guests, rooms, rates…"
+        placeholder={t.search}
         seeAllHref={(q) => `/search?q=${encodeURIComponent(q)}`}
         onNavigate={async (href, hit) => {
           /* ⚠️ A record in another of the account's hotels needs the workspace switched first, or

@@ -5,6 +5,10 @@ import Link from "next/link";
 import { Settings2 } from "lucide-react";
 import { DateField } from "@revio/ui/date-field";
 import { StatCard, type StatTone } from "@revio/ui/stat-card";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { dashboard } from "@/lib/i18n/dashboard";
+import { common } from "@/lib/i18n/common";
 
 /**
  * The dashboard's preset row + KPI grid, customizable PER USER (spec §3.1: "let the customer
@@ -57,6 +61,9 @@ export function DashboardView({
   customStart: string;
   customEnd: string;
 }) {
+  const locale = useLocale();
+  const t = translate(dashboard, locale).view;
+  const c = translate(common, locale);
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -118,14 +125,14 @@ export function DashboardView({
           <DateField name="from" defaultValue={customStart} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
           <span className="text-[11px] text-ink-400">→</span>
           <DateField name="to" defaultValue={customEnd} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
-          <button className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted">Apply</button>
+          <button className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted">{c.apply}</button>
         </form>
 
         {/* Comparison basis toggle (§1.2): governs every card's delta at once. */}
         <div className="ml-2 flex items-center gap-1.5">
-          <span className="text-[11px] font-medium text-ink-400">Compared with</span>
+          <span className="text-[11px] font-medium text-ink-400">{t.comparedWith}</span>
           <div className="flex items-center gap-0.5 rounded-md border border-surface-border bg-white p-0.5">
-            {([["yoy", "Last year"], ["lw", "Last week"]] as const).map(([b, label]) => (
+            {([["yoy", t.lastYear], ["lw", t.lastWeek]] as const).map(([b, label]) => (
               <Link
                 key={b}
                 href={basisHref(b)}
@@ -143,11 +150,11 @@ export function DashboardView({
             onClick={() => setOpen((v) => !v)}
             className="flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12px] font-semibold text-ink-600 hover:bg-surface-muted"
           >
-            <Settings2 className="h-3.5 w-3.5" /> Customize view
+            <Settings2 className="h-3.5 w-3.5" /> {t.customize}
           </button>
           {open && (
             <div className="absolute right-0 z-30 mt-1 w-64 rounded-lg border border-surface-border bg-white p-3 shadow-lg">
-              <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">Period presets</div>
+              <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{t.periodPresets}</div>
               <div className="mb-2 grid grid-cols-2 gap-1">
                 {presets.map((p) => (
                   <label key={p.key} className="flex cursor-pointer items-center gap-1.5 text-[12px] text-ink-700">
@@ -156,7 +163,7 @@ export function DashboardView({
                   </label>
                 ))}
               </div>
-              <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">KPI cards</div>
+              <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{t.kpiCards}</div>
               <div className="grid grid-cols-2 gap-1">
                 {cards.map((c) => (
                   <label key={c.key} className="flex cursor-pointer items-center gap-1.5 text-[12px] text-ink-700">
@@ -165,7 +172,7 @@ export function DashboardView({
                   </label>
                 ))}
               </div>
-              <p className="mt-2 border-t border-surface-border pt-2 text-[10.5px] text-ink-400">Saved on this device, per user.</p>
+              <p className="mt-2 border-t border-surface-border pt-2 text-[10.5px] text-ink-400">{t.savedOnDevice}</p>
             </div>
           )}
         </div>
@@ -186,9 +193,7 @@ export function DashboardView({
                   dir: card.yoy.dir,
                   goodDirection: card.goodDirection,
                   hint:
-                    basis === "lw"
-                      ? "vs last week (7 days back — same weekday)"
-                      : "vs same time last year (364 days back — same weekday)",
+                    basis === "lw" ? t.hintLw : t.hintYoy,
                 }
               }
             />

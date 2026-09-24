@@ -1,7 +1,12 @@
 import { Logo } from "@/components/shell/Logo";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { LanguageSwitch } from "@/components/auth/LanguageSwitch";
+import { i18n } from "@/lib/i18n/server";
+import { auth } from "@/lib/i18n/auth";
 
-export const metadata = { title: "Sign in · RevioCRS" };
+export async function generateMetadata() {
+  return { title: (await i18n()).t(auth).login.meta };
+}
 
 export default async function LoginPage({
   searchParams,
@@ -13,6 +18,9 @@ export default async function LoginPage({
   const sp = await searchParams;
   const justSet = sp.passwordSet === "1";
   const defaultEmail = sp.email;
+  const { t: tr, locale } = await i18n();
+  const a = tr(auth);
+  const t = a.login;
   return (
     <div className="flex min-h-screen items-stretch bg-surface-muted">
       {/* Brand panel */}
@@ -21,33 +29,34 @@ export default async function LoginPage({
           <Logo className="h-9 w-9" />
           <div className="leading-none">
             <div className="text-[17px] font-bold">Revio<span className="text-product-mark">CRS</span></div>
-            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Central Reservations</div>
+            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">{t.tagline}</div>
           </div>
         </div>
         <div>
-          <h1 className="max-w-sm text-[28px] font-bold leading-tight tracking-tight">Every booking. One record. Real numbers.</h1>
-          <p className="mt-3 max-w-sm text-[14px] text-white/60">The system of record for every reservation from every source — with occupancy, ADR and RevPAR computed from the truth.</p>
+          <h1 className="max-w-sm text-[28px] font-bold leading-tight tracking-tight">{t.headline}</h1>
+          <p className="mt-3 max-w-sm text-[14px] text-white/60">{t.pitch}</p>
         </div>
-        <div className="text-[12px] text-white/40">© Revio · central reservations</div>
+        <div className="text-[12px] text-white/40">{t.footer}</div>
       </div>
 
       {/* Form */}
-      <div className="flex w-full items-center justify-center p-6 lg:w-1/2">
+      <div className="relative flex w-full items-center justify-center p-6 lg:w-1/2">
+        <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={a.language} /></div>
         <div className="w-full max-w-sm">
           <div className="mb-6 lg:hidden">
             <Logo className="h-9 w-9" />
           </div>
-          <h2 className="text-[20px] font-bold tracking-tight text-ink-900">Sign in to RevioCRS</h2>
-          <p className="mb-6 mt-1 text-[13px] text-ink-500">Welcome back — manage your reservations.</p>
+          <h2 className="text-[20px] font-bold tracking-tight text-ink-900">{t.title}</h2>
+          <p className="mb-6 mt-1 text-[13px] text-ink-500">{t.intro}</p>
 
-          <LoginForm justSet={justSet} {...(defaultEmail ? { defaultEmail } : {})} />
+          <LoginForm justSet={justSet} emailPlaceholder={t.emailPlaceholder} accessNote={t.accessNote} {...(defaultEmail ? { defaultEmail } : {})} />
 
           {/* Opt-in, and off unless SHOW_DEMO_LOGINS=1 is set — a paying hotel must never be shown
               someone else's credentials on the sign-in page. Server-side env (never NEXT_PUBLIC), so
               the credentials are not in the client bundle either. */}
           {process.env.SHOW_DEMO_LOGINS === "1" && (
             <div className="mt-6 rounded-md border border-dashed border-surface-border bg-white px-3 py-2.5 text-[11.5px] text-ink-500">
-              <span className="font-semibold text-ink-700">Demo logins</span> (password <code className="rounded bg-surface-sunken px-1">revio1234</code>):<br />
+              <span className="font-semibold text-ink-700">{t.demoLogins}</span> ({t.password} <code className="rounded bg-surface-sunken px-1">revio1234</code>):<br />
               Hotel Sofia → <code className="rounded bg-surface-sunken px-1">admin@hotelsofia.demo</code> · Black Sea Resort → <code className="rounded bg-surface-sunken px-1">owner@blacksea.demo</code>
             </div>
           )}

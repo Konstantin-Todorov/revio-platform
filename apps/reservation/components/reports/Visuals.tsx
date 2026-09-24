@@ -92,16 +92,20 @@ export interface DonutSlice {
  * arcs: a 3% slice has no room for its own label, and a chart where the small slices are unlabelled
  * is exactly the "decoration" the doc's bar forbids.
  */
-export function Donut({ slices, centreLabel, centreSub }: { slices: DonutSlice[]; centreLabel: string; centreSub?: string }) {
+export function Donut({ slices, centreLabel, centreSub, emptyMessage = "No revenue in this period.", aria }: {
+  slices: DonutSlice[]; centreLabel: string; centreSub?: string;
+  /** Worded by the page in the reader's language; English by default. */
+  emptyMessage?: string; aria?: string;
+}) {
   const total = slices.reduce((s, d) => s + Math.max(0, d.value), 0);
-  if (total <= 0) return <p className="px-4 py-6 text-[13px] text-ink-500">No revenue in this period.</p>;
+  if (total <= 0) return <p className="px-4 py-6 text-[13px] text-ink-500">{emptyMessage}</p>;
 
   const R = 60, STROKE = 22, C = 2 * Math.PI * R;
   let offset = 0;
 
   return (
     <div className="flex flex-wrap items-center gap-6 px-4 py-4">
-      <svg viewBox="0 0 160 160" className="h-[160px] w-[160px] shrink-0" role="img" aria-label={`${centreLabel} by source`}>
+      <svg viewBox="0 0 160 160" className="h-[160px] w-[160px] shrink-0" role="img" aria-label={aria ?? `${centreLabel} by source`}>
         <g transform="translate(80,80) rotate(-90)">
           {slices.map((s, i) => {
             const share = Math.max(0, s.value) / total;

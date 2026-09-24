@@ -5,6 +5,8 @@ import { productAccessState } from "@revio/core";
 import { allTrialsFor } from "@revio/db";
 import { KeepItButton } from "@/components/shell/KeepItButton";
 import { getSession } from "@/lib/session";
+import { getLocale } from "@/lib/locale";
+import { LOCALE_LABELS } from "@revio/ui/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -43,11 +45,13 @@ export default async function LockedPage() {
     },
   });
 
+  const locale = await getLocale();
   return (
     <ProductLocked
+      locale={locale}
       state={access}
       hotelName={session.tenantName}
-      fmtDate={(d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}
+      fmtDate={(d) => d.toLocaleDateString(LOCALE_LABELS[locale].intl, { day: "numeric", month: "long", year: "numeric" })}
       hrefFor={(k) => productOrigin(k as "cm" | "crs" | "pms")}
       {...(access.reason === "trial-ended" ? { action: <KeepItButton product="crs" /> } : {})}
     />

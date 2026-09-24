@@ -3,6 +3,7 @@ import { RequestsView, type MyRequestRow } from "@revio/ui/my-requests";
 import { replyToSupport } from "@/lib/actions-support";
 import { getSession } from "@/lib/session";
 import { getProperty } from "@/lib/data";
+import { i18n } from "@/lib/i18n/server";
 
 /**
  * "Your requests": the list, and the conversation of the one in the URL. Read through this product's
@@ -16,7 +17,7 @@ export async function Requests({ selectedId }: { selectedId?: string }) {
       requests={requests as unknown as MyRequestRow[]}
       {...(selectedId ? { selectedId } : {})}
       replyAction={replyToSupport}
-      locale={"en" as const}
+      locale={(await i18n()).locale}
       timeZone={(await getProperty()).timezone}
     />
   );

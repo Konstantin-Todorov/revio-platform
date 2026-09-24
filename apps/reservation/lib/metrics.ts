@@ -426,8 +426,14 @@ export async function getOperations() {
 
 export interface ActionAlert {
   severity: "critical" | "warning" | "info";
+  /** English, for any caller that does not word it itself. The screen words it from `kind`. */
   message: string;
   href: string;
+  /** What happened, so the screen can say it in the reader's language — never by matching `message`. */
+  kind: "overbooked" | "soldOut" | "low" | "failedSyncs" | "openErrors";
+  room?: string;
+  n?: number;
+  date?: string;
 }
 
 /** Action Center — prioritized alerts; every threshold comes from PropertyDefaults (a Setting). */
@@ -442,20 +448,22 @@ export function buildActionAlerts(args: {
     section.cells.forEach((cell, i) => {
       const date = args.board.dates[i]!;
       if (cell.remaining < 0) {
-        alerts.push({ severity: "critical", message: `${section.roomType.name} is OVERBOOKED by ${-cell.remaining} on ${date}`, href: `/inventory?start=${date}&days=7` });
+        alerts.push({ severity: "critical", kind: "overbooked", room: section.roomType.name, n: -cell.remaining, date, message: `${section.roomType.name} is OVERBOOKED by ${-cell.remaining} on ${date}`, href: `/inventory?start=${date}&days=7` });
       } else if (cell.remaining === 0) {
-        alerts.push({ severity: "warning", message: `${section.roomType.name} sells out on ${date}`, href: `/inventory?start=${date}&days=7` });
+        alerts.push({ severity: "warning", kind: "soldOut", room: section.roomType.name, date, message: `${section.roomType.name} sells out on ${date}`, href: `/inventory?start=${date}&days=7` });
       } else if (cell.remaining <= args.threshold) {
-        alerts.push({ severity: "info", message: `${section.roomType.name}: only ${cell.remaining} left on ${date}`, href: `/inventory?start=${date}&days=7` });
+        alerts.push({ severity: "info", kind: "low", room: section.roomType.name, n: cell.remaining, date, message: `${section.roomType.name}: only ${cell.remaining} left on ${date}`, href: `/inventory?start=${date}&days=7` });
       }
     });
   }
-  if (args.failedSyncs24h > 0) alerts.push({ severity: "critical", message: `${args.failedSyncs24h} failed sync${args.failedSyncs24h === 1 ? "" : "s"} in the last 24h`, href: "/inventory" });
+  if (args.failedSyncs24h > 0) alerts.push({ severity: "critical", kind: "failedSyncs", n: args.failedSyncs24h, message: `${args.failedSyncs24h} failed sync${args.failedSyncs24h === 1 ? "" : "s"} in the last 24h`, href: "/inventory" });
   // The verb agrees too: "1 unresolved error need attention" is what this read, on a panel a manager
   // scans in a second. Small, but it is the first thing they see when something is wrong.
   if (args.openErrors > 0) {
     alerts.push({
       severity: "warning",
+      kind: "openErrors",
+      n: args.openErrors,
       message: `${args.openErrors} unresolved error${args.openErrors === 1 ? " needs" : "s need"} attention`,
       href: "/inventory",
     });
