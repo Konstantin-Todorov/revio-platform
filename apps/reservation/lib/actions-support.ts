@@ -148,6 +148,6 @@ export async function replyToSupport(
     /* the row is the record; the queue reads the row, not an inbox */
   }
 
-  revalidatePath("/help");
+  revalidatePath("/help", "layout"); // the list, the counts in the nav, and the open conversation
   return { ok: true };
 }

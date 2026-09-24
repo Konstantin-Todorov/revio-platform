@@ -7,6 +7,7 @@ import { SUPPORT_KINDS, searchHelp, type ProductKey, type SupportKind } from "@r
 import { translate } from "./i18n";
 import { useLocale } from "./i18n-context";
 import { shellStrings } from "./shell-strings";
+import { helpStrings } from "./help-strings";
 
 /**
  * "Get help" — one dialog, shared by all three hotel products.
@@ -89,7 +90,8 @@ export function GetHelp({
   const pathname = usePathname();
   // Route-led, so the answers fit the screen they are stuck on rather than a search they have
   // not written yet. Two at most — see the note where they are rendered.
-  const suggestions = searchHelp({ product, route: pathname }, 2);
+  const articles = translate(helpStrings, useLocale()).articles;
+  const suggestions = searchHelp({ product, route: pathname }, 2).map((a) => ({ ...a, ...(articles[a.id] ?? {}) }));
 
   // The portal target only exists in the browser; on the server there is no document to render into.
   const [mounted, setMounted] = useState(false);

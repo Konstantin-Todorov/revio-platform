@@ -28,6 +28,13 @@ export interface SettingsSection {
   label: string;
   /** What a person is looking for when they land here. Used by the section's own heading. */
   blurb: string;
+  /**
+   * Also active on the pages below it — `/help/requests/abc` highlights "Your requests". Off by
+   * default because `/settings` sections are leaves, and a prefix there would light up two at once.
+   */
+  prefix?: boolean;
+  /** A short note beside the label — "2 open" — so a count is read without opening the section. */
+  badge?: string;
 }
 
 export function SettingsNav({
@@ -51,7 +58,7 @@ export function SettingsNav({
     <nav aria-label={labels.nav} className="lg:w-[212px] lg:shrink-0">
       <ul className="flex gap-1 overflow-x-auto pb-1 lg:block lg:space-y-0.5 lg:overflow-visible lg:pb-0">
         {sections.map((s) => {
-          const active = pathname === s.href;
+          const active = pathname === s.href || (s.prefix === true && pathname.startsWith(`${s.href}/`));
           return (
             <li key={s.href}>
               <Link
@@ -64,6 +71,11 @@ export function SettingsNav({
                 }`}
               >
                 {s.label}
+                {s.badge && (
+                  <span className="ml-1.5 rounded-full bg-warning-50 px-1.5 py-0.5 text-[10.5px] font-bold text-warning-600">
+                    {s.badge}
+                  </span>
+                )}
               </Link>
             </li>
           );

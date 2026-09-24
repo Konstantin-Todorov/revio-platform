@@ -74,10 +74,10 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     id: "where-staff",
     question: "Where do I add someone to my team?",
     answer:
-      "Settings → Users & permissions. Add the person, choose their role, and they receive an invitation to set their own password.\n\nNobody at Revio ever knows or sets a password, and nobody shares one. The same login works in every Revio product your hotel uses, so a person you add here can open all of them.",
+      "In RevioPMS, Staff & Access; in RevioLink and RevioCRS, Settings → Users & permissions. Add the person, choose their role, and they receive an invitation to set their own password.\n\nNobody at Revio ever knows or sets a password, and nobody shares one. The same login works in every Revio product your hotel uses, so a person you add here can open all of them.",
     category: "where",
     products: ["crs", "cm", "pms"],
-    routes: ["/settings/users", "/settings"],
+    routes: ["/settings/users", "/settings", "/users"],
     keywords: ["staff", "user", "invite", "colleague", "password", "team"],
   },
   {
@@ -160,7 +160,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       "Because it was sold. A stay that has ended still counts towards the night's occupancy and revenue — the guest left, but the room was not available to anyone else that night.\n\nThe front desk shows them as departed. The commercial figures keep the sale, which is what makes last month's numbers stay correct.",
     category: "understand",
     products: ["pms", "crs"],
-    routes: ["/front-desk", "/reservations"],
+    routes: ["/front-desk", "/reservations", "/reservation"],
     keywords: ["departed", "checked out", "occupancy", "still showing"],
   },
   {
@@ -202,7 +202,8 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
       "There is usually money outstanding on the folio. Check-out is blocked while a balance is unsettled so a guest does not walk out on an open bill by accident.\n\nOpen the folio, settle or write off the balance with a reason, and check-out will proceed. If the charge is wrong, void it rather than deleting it, so the correction is on the record.",
     category: "trouble",
     products: ["pms"],
-    routes: ["/front-desk", "/folios"],
+    // RevioPMS's front desk lives at /dashboard and a guest's bill at /folio/<id>.
+    routes: ["/dashboard", "/folio", "/folios"],
     keywords: ["check out", "balance", "folio", "blocked", "cannot"],
   },
   {

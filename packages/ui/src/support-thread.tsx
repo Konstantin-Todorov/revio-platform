@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { LOCALE_LABELS, translate, type Locale } from "./i18n";
+import { helpStrings } from "./help-strings";
 
 /**
  * A support case read as a conversation, not as a log.
@@ -42,17 +44,25 @@ export interface ThreadMessage {
   createdAt: Date;
 }
 
-const dayOf = (d: Date) => d.toISOString().slice(0, 10);
-const timeOf = (d: Date) => d.toISOString().slice(11, 16);
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-function dayLabel(d: Date, today: Date): string {
-  if (dayOf(d) === dayOf(today)) return "Today";
-  const yesterday = new Date(today.getTime() - 86_400_000);
-  if (dayOf(d) === dayOf(yesterday)) return "Yesterday";
-  const [y, m, day] = dayOf(d).split("-").map(Number) as [number, number, number];
-  const label = `${day} ${MONTHS[m - 1]}`;
-  return y === today.getUTCFullYear() ? label : `${label} ${y}`;
+/**
+ * The day and the time in the zone the reader is in. Formatting with `toISOString` printed UTC — a
+ * reply sent at 10:15 in Sofia read "07:15", and one sent after 21:00 appeared under the next day.
+ */
+function clock(timeZone: string, locale: Locale) {
+  const intl = LOCALE_LABELS[locale].intl;
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" });
+  const time = new Intl.DateTimeFormat(intl, { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const label = new Intl.DateTimeFormat(intl, { timeZone, day: "numeric", month: "short" });
+  const labelYear = new Intl.DateTimeFormat(intl, { timeZone, day: "numeric", month: "short", year: "numeric" });
+  return {
+    dayOf: (d: Date) => day.format(d),
+    timeOf: (d: Date) => time.format(d),
+    dayLabel(d: Date, today: Date, t: { today: string; yesterday: string }): string {
+      if (day.format(d) === day.format(today)) return t.today;
+      if (day.format(d) === day.format(new Date(today.getTime() - 86_400_000))) return t.yesterday;
+      return day.format(d).slice(0, 4) === day.format(today).slice(0, 4) ? label.format(d) : labelYear.format(d);
+    },
+  };
 }
 
 export function SupportThread({
@@ -60,6 +70,8 @@ export function SupportThread({
   messages,
   perspective,
   now = new Date(),
+  locale = "en",
+  timeZone = "Europe/Sofia",
 }: {
   /** The request itself — the hotel's first message, wherever it is stored. */
   opening: { authorName: string; body: string; createdAt: Date };
@@ -67,7 +79,12 @@ export function SupportThread({
   /** Whose side of the conversation is the reader on. */
   perspective: "hotel" | "revio";
   now?: Date;
+  locale?: Locale;
+  /** The reader's zone: the property's for a hotel, Sofia for us. */
+  timeZone?: string;
 }) {
+  const t = translate(helpStrings, locale).thread;
+  const { dayOf, timeOf, dayLabel } = clock(timeZone, locale);
   const all: ThreadMessage[] = [
     { id: "opening", side: "hotel", authorName: opening.authorName, body: opening.body, createdAt: opening.createdAt },
     ...messages,
@@ -88,7 +105,7 @@ export function SupportThread({
       rows.push(
         <li key={`day-${day}`} className="flex justify-center py-1.5">
           <span className="rounded-full bg-surface-sunken px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-ink-500">
-            {dayLabel(m.createdAt, now)}
+            {dayLabel(m.createdAt, now, t)}
           </span>
         </li>,
       );
@@ -99,7 +116,7 @@ export function SupportThread({
         <div className={`flex max-w-[85%] flex-col sm:max-w-[75%] ${mine ? "items-end" : "items-start"}`}>
           {!grouped && (
             <span className="mb-0.5 px-1 text-[11px] font-semibold text-ink-500">
-              {m.side === "revio" ? `${m.authorName} · Revio` : m.authorName}
+              {m.side === "revio" ? `${m.authorName} · ${t.revio}` : m.authorName}
             </span>
           )}
           <div
@@ -116,7 +133,7 @@ export function SupportThread({
               rather than left to look sent. Only our own messages are ones we deliver. */}
           {m.side === "revio" && m.id !== "opening" && m.emailedAt === null && (
             <span className="mt-0.5 px-1 text-[10.5px] font-semibold text-danger-600">
-              the email did not send
+              {t.notSent}
             </span>
           )}
         </div>

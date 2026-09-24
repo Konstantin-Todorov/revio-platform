@@ -1,13 +1,12 @@
 import type { Translations } from "@revio/ui/i18n";
 
 /**
- * The small screens: help's tabs, search, the activity header and the two status pages.
+ * The small screens: search, the activity header and the two status pages.
  *
  * `status` is **strings only** — `error.tsx` is a client component (Next requires it) and reads it
  * with `translate(pages, useLocale())`.
  */
 export interface PagesStrings {
-  help: { aria: string; help: string; requests: (n: number) => string; open: (n: number) => string };
   search: {
     title: string;
     results: (q: string) => string;
@@ -63,12 +62,6 @@ export interface PagesStrings {
 
 export const pages: Translations<PagesStrings> = {
   en: {
-    help: {
-      aria: "Help sections",
-      help: "Help",
-      requests: (n) => (n === 0 ? "Your requests" : `Your requests (${n})`),
-      open: (n) => `${n} open`,
-    },
     search: {
       title: "Search",
       results: (q) => `Results for “${q}”`,
@@ -135,12 +128,6 @@ export const pages: Translations<PagesStrings> = {
     },
   },
   bg: {
-    help: {
-      aria: "Раздели на помощта",
-      help: "Помощ",
-      requests: (n) => (n === 0 ? "Вашите запитвания" : `Вашите запитвания (${n})`),
-      open: (n) => `${n} ${n === 1 ? "отворено" : "отворени"}`,
-    },
     search: {
       title: "Търсене",
       results: (q) => `Резултати за „${q}“`,

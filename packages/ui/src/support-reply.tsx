@@ -1,6 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
+import { translate } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { helpStrings } from "./help-strings";
 
 /**
  * The hotel's half of a support conversation.
@@ -30,6 +33,7 @@ export function SupportReply({
 }) {
   const [state, formAction, pending] = useActionState<SupportReplyResult, FormData>(action, null);
   const box = useRef<HTMLTextAreaElement>(null);
+  const t = translate(helpStrings, useLocale()).reply;
 
   // Clear it only once the server has taken it. Clearing on submit would lose what somebody wrote
   // the one time it matters — when the send failed and they have to try again.
@@ -41,7 +45,7 @@ export function SupportReply({
     <form action={formAction} className="mt-2.5">
       <input type="hidden" name="requestId" value={requestId} />
       <label htmlFor={`reply-${requestId}`} className="sr-only">
-        Reply to this request
+        {t.label}
       </label>
       <textarea
         id={`reply-${requestId}`}
@@ -49,7 +53,7 @@ export function SupportReply({
         name="body"
         rows={2}
         required
-        placeholder="Add to this request…"
+        placeholder={t.placeholder}
         className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-[16px] text-ink-900 placeholder:text-ink-400 focus:border-brand-500 focus:outline-none sm:text-[13px]"
       />
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -58,7 +62,7 @@ export function SupportReply({
           disabled={pending}
           className="h-8 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
         >
-          {pending ? "Sending…" : "Send"}
+          {pending ? t.sending : t.send}
         </button>
         {state?.ok === false && (
           <span role="alert" className="text-[12px] font-medium text-danger-600">
@@ -67,7 +71,7 @@ export function SupportReply({
         )}
         {state?.ok === true && (
           <span role="status" className="text-[12px] text-success-600">
-            Sent — this request is open again.
+            {t.sent}
           </span>
         )}
       </div>

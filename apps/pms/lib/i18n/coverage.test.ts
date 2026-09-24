@@ -27,6 +27,7 @@ import { welcome } from "./welcome";
 import { flash } from "./flash";
 import { activityStrings } from "@revio/ui/activity-strings";
 import { trialStrings } from "@revio/ui/trial-banner";
+import { helpStrings } from "@revio/ui/help-strings";
 import { welcomeStrings } from "@revio/ui/welcome-strings";
 
 /**
@@ -37,7 +38,7 @@ import { welcomeStrings } from "@revio/ui/welcome-strings";
  * half-English screen. A new English string in a finished dictionary fails here until its Bulgarian
  * lands in the same change. A dictionary still being translated is simply not listed yet.
  */
-const COMPLETE: Record<string, Translations<unknown>> = { shell, housekeeping, common, frontdesk, stays, reservation, folio, folios, operations, extras, rooms, calendar, guests, register, users, configuration, settings, pages, auth, authStrings, accountStrings, shellStrings, notifications, welcome, welcomeStrings, flash, activityStrings, trialStrings } as Record<string, Translations<unknown>>;
+const COMPLETE: Record<string, Translations<unknown>> = { shell, housekeeping, common, frontdesk, stays, reservation, folio, folios, operations, extras, rooms, calendar, guests, register, users, configuration, settings, pages, auth, authStrings, accountStrings, shellStrings, notifications, welcome, welcomeStrings, flash, activityStrings, trialStrings, helpStrings } as Record<string, Translations<unknown>>;
 
 describe("finished dictionaries have every string in Bulgarian", () => {
   for (const [name, dict] of Object.entries(COMPLETE)) {
@@ -45,4 +46,14 @@ describe("finished dictionaries have every string in Bulgarian", () => {
       expect(translationCoverage(dict).missing).toEqual([]);
     });
   }
+});
+
+import { HELP_ARTICLES } from "@revio/core";
+
+/** The articles are keyed by id and sit outside the English dictionary, so they are counted here. */
+describe("every help article is in Bulgarian", () => {
+  it("helpStrings.articles", () => {
+    const bg = helpStrings.bg.articles ?? {};
+    expect(HELP_ARTICLES.filter((a) => !bg[a.id]?.question || !bg[a.id]?.answer).map((a) => a.id)).toEqual([]);
+  });
 });

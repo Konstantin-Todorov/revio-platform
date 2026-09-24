@@ -6,8 +6,40 @@ import {
   helpForProduct,
   searchHelp,
   type HelpCategory,
+  type HelpArticle,
   type ProductKey,
 } from "@revio/core";
+import { fill, translate, type Locale } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { helpStrings, type HelpStrings } from "./help-strings";
+
+/** An article in the reader's language — core's English where there is no translation yet. */
+function said(a: HelpArticle, t: HelpStrings): HelpArticle {
+  const x = t.articles[a.id];
+  return x ? { ...a, question: x.question, answer: x.answer } : a;
+}
+
+/**
+ * Search in the reader's language. English keeps `searchHelp` from core (keywords and all); another
+ * language matches every word of the query against the translated question and answer, questions
+ * first — 17 articles do not need an index, they need to be findable in the words on the screen.
+ */
+function searchSaid(product: ProductKey, text: string, locale: Locale, t: HelpStrings): HelpArticle[] {
+  if (locale === "en") return searchHelp({ product, text }, 20);
+  const words = text.toLocaleLowerCase("bg").split(/\s+/).filter((w) => w.length > 1);
+  if (words.length === 0) return [];
+  return helpForProduct(product)
+    .map((a) => said(a, t))
+    .map((a) => {
+      const q = a.question.toLocaleLowerCase("bg");
+      const body = a.answer.toLocaleLowerCase("bg");
+      if (!words.every((w) => q.includes(w) || body.includes(w))) return null;
+      return { a, score: words.filter((w) => q.includes(w)).length };
+    })
+    .filter((x): x is { a: HelpArticle; score: number } => x !== null)
+    .sort((x, y) => y.score - x.score)
+    .map((x) => x.a);
+}
 
 /**
  * The help centre — one component, three products.
@@ -25,35 +57,31 @@ import {
  * scanning is one scroll rather than a sequence of back buttons — and the browser's own find works
  * across all of it, which no set of separate pages can offer.
  */
-export function HelpCentre({ product, productName }: { product: ProductKey; productName: string }) {
+export function HelpCentre({ product }: { product: ProductKey; productName?: string }) {
+  const locale = useLocale();
+  const t = translate(helpStrings, locale);
   const [query, setQuery] = useState("");
-  const all = useMemo(() => helpForProduct(product), [product]);
+  const all = useMemo(() => helpForProduct(product).map((a) => said(a, t)), [product, t]);
   const results = useMemo(
-    () => (query.trim() ? searchHelp({ product, text: query }, 20) : null),
-    [product, query],
+    () => (query.trim() ? searchSaid(product, query, locale, t).map((a) => said(a, t)) : null),
+    [product, query, locale, t],
   );
 
   const grouped = HELP_CATEGORIES.map((c) => ({
     ...c,
+    ...t.categories[c.key],
     articles: all.filter((a) => a.category === (c.key as HelpCategory)),
   })).filter((g) => g.articles.length > 0);
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight text-ink-900">Help</h1>
-        <p className="mt-1 text-[13.5px] text-ink-500">
-          {productName} — how things work and where to find them.
-        </p>
-      </div>
-
       <label className="block">
-        <span className="sr-only">Search help</span>
+        <span className="sr-only">{t.searchLabel}</span>
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search — try “price”, “stop sell”, “check out”"
+          placeholder={t.searchPlaceholder}
           className="w-full rounded-md border border-surface-border bg-white px-3 py-2 text-[14px] text-ink-900 outline-none transition-colors focus:border-brand-600"
         />
       </label>
@@ -61,14 +89,11 @@ export function HelpCentre({ product, productName }: { product: ProductKey; prod
       {results ? (
         results.length === 0 ? (
           <div className="rounded-lg border border-surface-border bg-white p-5">
-            <p className="text-[13.5px] font-medium text-ink-900">Nothing here matches that.</p>
-            <p className="mt-1 text-[13px] text-ink-600">
-              That is a gap in our help rather than a bad question. Use <strong>Get help</strong> in
-              the menu under your name — it reaches a person, and it tells us what to write next.
-            </p>
+            <p className="text-[13.5px] font-medium text-ink-900">{t.noMatchTitle}</p>
+            <p className="mt-1 text-[13px] text-ink-600">{t.noMatchBody}</p>
           </div>
         ) : (
-          <Section title={`${results.length} answer${results.length === 1 ? "" : "s"}`} articles={results} />
+          <Section title={results.length === 1 ? t.answerOne : fill(t.answerMany, { n: results.length })} articles={results} />
         )
       ) : (
         grouped.map((g) => (
@@ -77,8 +102,7 @@ export function HelpCentre({ product, productName }: { product: ProductKey; prod
       )}
 
       <p className="text-[12.5px] text-ink-500">
-        Not here? <strong>Get help</strong> in the menu under your name sends it to us with the
-        screen you are on already attached.
+        {t.notHere} {t.getHelp}
       </p>
     </div>
   );
