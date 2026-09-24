@@ -104,7 +104,7 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
     await logAudit(propertyId, tenantId, { entity: `Restriction · ${name}`, field: "create", newValue: type, source: "rule" });
   }
   await recordPush(propertyId, tenantId, `Restriction rule "${name}" pushed`, ruleScope(data));
-  revalidatePath("/restrictions");
+  revalidatePath("/bulk-update");
   revalidatePath("/calendar");
   return { ok: true };
 }
@@ -120,7 +120,7 @@ export async function deleteRestrictionRule(fd: FormData): Promise<void> {
   // Deleting a rule used to push nothing, so the channel kept enforcing a minimum stay the hotel had
   // just removed. The dates it covered have to be re-sent for the next tier down to take effect.
   await recordPush(propertyId, tenantId, `Restriction rule "${rule.name}" removed`, ruleScope(rule));
-  revalidatePath("/restrictions");
+  revalidatePath("/bulk-update");
   revalidatePath("/calendar");
 }
 
@@ -397,7 +397,7 @@ export async function resyncChannel(fd: FormData): Promise<void> {
   });
   revalidatePath("/channels");
   revalidatePath("/sync");
-  revalidatePath("/errors");
+  revalidatePath("/sync");
   revalidatePath("/dashboard");
 }
 
@@ -564,7 +564,7 @@ export async function pullChannelBookings(fd: FormData): Promise<void> {
   }
   revalidatePath("/channels");
   revalidatePath("/sync");
-  revalidatePath("/errors");
+  revalidatePath("/sync");
   revalidatePath("/reservations");
   revalidatePath("/calendar");
   revalidatePath("/dashboard");

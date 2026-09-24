@@ -5,6 +5,7 @@ import { CrsBulkPanel } from "@/components/rates/CrsBulkPanel";
 import { todayInTz } from "@/lib/data";
 import { RestrictionDialog } from "@/components/rates/RestrictionDialog";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { LinkTabs } from "@revio/ui/link-tabs";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { PRECEDENCE_LINE, resolveMainGuestCount } from "@revio/core";
 
@@ -17,8 +18,13 @@ const SOURCE_LABEL: Record<string, string> = {
 /** Bulk Rates & Availability (spec §3.7) — date-scoped ARI: the CRS twin of RevioLink's bulk
  * screen, with open/close added. Standing restriction RULES live here too (moved from the
  * dissolved Rates & Restrictions screen), keeping their source-level targeting. */
-export default async function BulkPage({ searchParams }: { searchParams: Promise<{ rt?: string }> }) {
-  const { rt } = await searchParams;
+/**
+ * Two tabs — change prices & availability · your standing rules — the same as RevioLink's Bulk
+ * screen (docs/UI-STANDARD.md §8). Stacked, the rules sat below a long editor, a scroll away.
+ */
+export default async function BulkPage({ searchParams }: { searchParams: Promise<{ rt?: string; tab?: string }> }) {
+  const { rt, tab: rawTab } = await searchParams;
+  const tab = rawTab === "rules" ? "rules" : "change";
   const { property, ratePlans, rules, defaults, roomTypes, channels } = await getRatesData();
   // Whether the Price control is a single field or an occupancy matrix (OBP §6.4).
   const perPerson = (defaults?.pricingModel ?? "per_room") === "per_person";
@@ -44,7 +50,15 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
         title="Bulk Rates & Availability"
         subtitle={`${property.name} · date-scoped rate, restriction and open/close edits in one operation`}
       />
+      <LinkTabs
+        label="Bulk views"
+        tabs={[
+          { href: "/bulk", label: "Change prices & availability", active: tab === "change" },
+          { href: "/bulk?tab=rules", label: "Your active restriction rules", active: tab === "rules", badge: String(rules.filter((r) => r.active).length) },
+        ]}
+      />
 
+      {tab === "change" && (
       <Card surface="flat">
         <CardHeader surface="flat" title="Bulk update" subtitle="One run, one entry in the audit log, sent once to your channel manager" />
         {roomTypes.length === 0 ? (
@@ -74,7 +88,9 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
         />
         )}
       </Card>
+      )}
 
+      {tab === "rules" && (<>
       <Card surface="flat">
         <CardHeader surface="flat"
           title="Your active restriction rules"
@@ -121,6 +137,7 @@ export default async function BulkPage({ searchParams }: { searchParams: Promise
       <p className="text-[12px] text-ink-400">
         Which setting wins: {PRECEDENCE_LINE}.
       </p>
+      </>)}
     </div>
   );
 }

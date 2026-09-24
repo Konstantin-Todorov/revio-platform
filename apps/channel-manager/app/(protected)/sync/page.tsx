@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getProperty, getDashboard } from "@/lib/data";
 import { resolveErrorItem } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
+import { LinkTabs } from "@revio/ui/link-tabs";
 import { relativeTime } from "@/lib/format";
 import { CAPABILITY_ERROR_CODE, syncCadence } from "@revio/core";
 
@@ -58,21 +59,18 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ t
         </Link>
       </div>
 
-      <div className="mb-3 flex items-center gap-1 border-b border-surface-border">
-        {TABS.map(([key, label]) => (
-          <Link
-            key={key}
-            href={`/sync?tab=${key}`}
-            className={`-mb-px border-b-2 px-3.5 py-2 text-[13px] font-semibold transition-colors ${
-              tab === key ? "border-brand-700 text-brand-700" : "border-transparent text-ink-500 hover:text-ink-800"
-            }`}
-          >
-            {label}
-            {key === "errors" && errorItems.length > 0 && (
-              <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-0.5 text-[10px] font-bold text-white tabular-nums">{errorItems.length}</span>
-            )}
-          </Link>
-        ))}
+      <div className="mb-3">
+        <LinkTabs
+          label="Sync Center views"
+          tabs={TABS.map(([key, label]) => ({
+            href: `/sync?tab=${key}`,
+            label,
+            active: tab === key,
+            // Red counts real problems only — a channel limitation is not a failure (spec §5.2), and
+            // counting it made the badge say 2 beside a "1 critical error" tile.
+            ...(key === "errors" && real.length > 0 ? { badge: String(real.length), badgeTone: "danger" as const } : {}),
+          }))}
+        />
       </div>
 
       {tab === "activity" && <ActivityTab ch={sp.ch} />}

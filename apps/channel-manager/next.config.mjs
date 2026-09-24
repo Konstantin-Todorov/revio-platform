@@ -29,6 +29,18 @@ const nextConfig = {
   async headers() {
     return securityHeaders();
   },
+  /**
+   * Old addresses from before the V2 screens merged. Redirected here, before routing: a `redirect()`
+   * inside a page runs after the protected layout has started streaming, and the browser was left on
+   * the old address (RevioCRS's `/rates` did the same and threw a React hook error on the way).
+   */
+  async redirects() {
+    return [
+      { source: "/restrictions", destination: "/bulk-update?tab=rules", permanent: false },
+      { source: "/errors", destination: "/sync?tab=errors", permanent: false },
+      { source: "/audit", destination: "/sync?tab=audit", permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

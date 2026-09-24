@@ -374,7 +374,7 @@ export default async function DashboardPage() {
 
           {errorItems.length > 0 && (
             <Card className="border-danger-500/30 bg-danger-50/40">
-              <CardHeader title="Needs Attention" action={<a href="/errors" className="text-[12px] font-semibold text-danger-600 hover:underline">Error Center</a>} />
+              <CardHeader title="Needs Attention" action={<a href="/sync?tab=errors" className="text-[12px] font-semibold text-danger-600 hover:underline">Error Center</a>} />
               <ul className="divide-y divide-danger-500/10">
                 {errorItems.slice(0, 3).map((e) => (
                   <li key={e.id} className="px-4 py-2.5">

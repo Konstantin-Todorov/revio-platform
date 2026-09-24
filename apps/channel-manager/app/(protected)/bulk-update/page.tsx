@@ -1,6 +1,7 @@
 import { getRoomsAndRates, getRestrictions } from "@/lib/data";
 import { deleteRestrictionRule } from "@/lib/actions-config";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { LinkTabs } from "@revio/ui/link-tabs";
 import { BulkUpdatePanel } from "@/components/bulk/BulkUpdatePanel";
 import { RestrictionDialog } from "@/components/restrictions/RestrictionDialog";
 import { DeleteButton } from "@/components/ui/DeleteButton";
@@ -15,9 +16,14 @@ const TYPE_LABEL: Record<string, string> = {
   ctd: "Closed to Departure", advance_purchase_min: "Adv. Purchase min", advance_purchase_max: "Adv. Purchase max",
 };
 
-/** V2 IA: Bulk Update and Restrictions are ONE screen — one-off mass edits on top, standing rules below. */
-export default async function Page({ searchParams }: { searchParams: Promise<{ rt?: string }> }) {
-  const { rt } = await searchParams;
+/**
+ * V2 IA: Bulk Update and Restrictions are ONE screen — one-off mass edits, and the standing rules.
+ * Two tabs since 2026-09-25 (docs/UI-STANDARD.md §8): stacked, the rules sat below a long editor
+ * and were a scroll away from anyone who came to read them; a tab says how many there are unopened.
+ */
+export default async function Page({ searchParams }: { searchParams: Promise<{ rt?: string; tab?: string }> }) {
+  const { rt, tab: rawTab } = await searchParams;
+  const tab = rawTab === "rules" ? "rules" : "change";
   const [property, { roomTypes, ratePlans }, { rules, channels }] = await Promise.all([getProperty(), getRoomsAndRates(), getRestrictions()]);
   // Capability flags (spec §3.3 / §5.2): a rule aimed at a channel that can't honour its type is
   // flagged here, not silently created — and it is a limitation, never an error.
@@ -40,7 +46,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
   return (
     <div>
       <PageHeader title="Bulk Rates & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
-      {roomTypes.length === 0 ? (
+      <div className="mb-4">
+        <LinkTabs
+          label="Bulk views"
+          tabs={[
+            { href: "/bulk-update", label: "Change prices & availability", active: tab === "change" },
+            { href: "/bulk-update?tab=rules", label: "Your active restriction rules", active: tab === "rules", badge: String(rules.filter((r) => r.active).length) },
+          ]}
+        />
+      </div>
+      {tab === "change" && (roomTypes.length === 0 ? (
         <Card surface="flat" className="p-8 text-center text-[13px] text-ink-400">
           A bulk update changes rates and restrictions across your room types — so you need at least one first.{" "}
           <a href="/rooms-rates" className="font-semibold text-brand-600 hover:underline">Add a room type</a>.
@@ -57,9 +72,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
         today={today}
         {...(preselect ? { preselectRoomTypeIds: preselect } : {})}
       />
-      )}
+      ))}
 
-      <Card surface="flat" className="mt-4">
+      {tab === "rules" && (<>
+      <Card surface="flat">
         <CardHeader surface="flat" title="Your active restriction rules" action={<RestrictionDialog today={today} roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
@@ -105,6 +121,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
         Which value wins, in order: a date-scoped edit (calendar or bulk — the most recent one) &gt; a restriction
         rule &gt; the rate-plan default &gt; the property default.
       </p>
+      </>)}
     </div>
   );
 }

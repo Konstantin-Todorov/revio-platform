@@ -8,6 +8,8 @@ export type LinkTab = {
   icon?: ReactNode;
   /** A count read without opening the tab — "3" photos, "12" items. */
   badge?: string | undefined;
+  /** `danger` when the count is of things that are wrong — failed pushes, not photos. */
+  badgeTone?: "neutral" | "danger";
   /** A dot: something here needs attention (a guest would miss something), said before it is opened. */
   warn?: boolean;
 };
@@ -37,7 +39,9 @@ export function LinkTabs({ tabs, label }: { tabs: LinkTab[]; label: string }) {
             >
               {t.icon}
               {t.label}
-              {t.badge && <span className="tnum rounded-full bg-surface-sunken px-1.5 py-px text-[10.5px] font-bold text-ink-500">{t.badge}</span>}
+              {t.badge && (
+                <span className={`tnum rounded-full px-1.5 py-px text-[10.5px] font-bold ${t.badgeTone === "danger" ? "bg-danger-500 text-white" : "bg-surface-sunken text-ink-500"}`}>{t.badge}</span>
+              )}
               {t.warn && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-warning-500" />}
             </Link>
           </li>

@@ -17,7 +17,7 @@ function revalidateCalendar() {
   revalidatePath("/dashboard");
   revalidatePath("/reservations");
   revalidatePath("/sync");
-  revalidatePath("/audit");
+  revalidatePath("/sync");
   /*
    * Y2 — drop the CLIENT router cache for EVERY route under this layout, not just the ones named
    * above.
@@ -694,7 +694,7 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
   if (outcome.failedImport > 0) return { ok: false, error: "The channel sent the booking but it could not be imported — see the Error Center." };
 
   await logAudit(property.id, property.tenantId, { entity: `Reservation · ${guestName}`, field: "import", newValue: `${room.name} ×${quantity} · ${nights}n`, source: "api" });
-  revalidatePath("/errors");
+  revalidatePath("/sync");
   revalidateCalendar();
   return { ok: true, affected: nights };
 }
