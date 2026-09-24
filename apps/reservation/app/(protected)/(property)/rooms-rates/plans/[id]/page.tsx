@@ -9,7 +9,7 @@ import { offsetOf } from "@/components/rates/plan-labels";
 import { BlockedNotice } from "@/components/rates/BlockedNotice";
 import { BackLink } from "@/components/rates/BackLink";
 import { DeleteButton } from "@/components/ui/DeleteButton";
-import { LinkTabs } from "@/components/ui/LinkTabs";
+import { LinkTabs } from "@revio/ui/link-tabs";
 import { Card, CardHeader } from "@/components/ui/primitives";
 
 export const dynamic = "force-dynamic";

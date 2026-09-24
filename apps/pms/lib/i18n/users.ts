@@ -26,6 +26,8 @@ export interface UsersManagerStrings {
 export interface UsersStrings {
   title: string;
   subtitle: (property: string) => string;
+  /** The page's three views: who is in now · when people worked · who can sign in. */
+  tabs: { aria: string; now: string; history: string; people: string };
   working: {
     title: string;
     subtitle: string;
@@ -66,6 +68,7 @@ export const users: Translations<UsersStrings> = {
   en: {
     title: "Staff & Access Management",
     subtitle: (p) => `${p} · who’s working today + who can sign in and what they can touch — one shared Revio identity`,
+    tabs: { aria: "Staff views", now: "On shift now", history: "Shift history", people: "People & access" },
     working: {
       title: "Working today",
       subtitle: "Live — staff currently clocked in, by department",
@@ -122,6 +125,7 @@ export const users: Translations<UsersStrings> = {
   bg: {
     title: "Персонал и достъп",
     subtitle: (p) => `${p} · кой работи днес, кой може да влиза и до какво има достъп — един общ профил в Revio`,
+    tabs: { aria: "Изгледи на персонала", now: "На смяна сега", history: "История на смените", people: "Хора и достъп" },
     working: {
       title: "На смяна днес",
       subtitle: "На живо — служителите, които в момента са на смяна, по отдели",

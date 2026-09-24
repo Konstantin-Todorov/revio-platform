@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { BookOpen, DoorOpen } from "lucide-react";
+import { LinkTabs } from "@revio/ui/link-tabs";
 
 /**
  * The two jobs of Extras & Charges, side by side at the top of both screens: charge a guest, and
@@ -14,22 +14,15 @@ export function ExtrasTabs({ active, t, catalogCount }: {
   t: { post: string; catalog: string };
   catalogCount: number;
 }) {
-  const tab = (id: "post" | "catalog", href: string, label: string, Icon: typeof DoorOpen, count?: number) => (
-    <Link
-      href={href}
-      aria-current={active === id ? "page" : undefined}
-      className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
-        active === id ? "border-accent-600 text-accent-700" : "border-transparent text-ink-500 hover:text-ink-700"
-      }`}
-    >
-      <Icon className="h-4 w-4" /> {label}
-      {count !== undefined && <span className="rounded-full bg-surface-muted px-1.5 py-0.5 text-[10.5px] font-bold text-ink-500">{count}</span>}
-    </Link>
-  );
   return (
-    <div className="mb-4 flex items-center gap-1 border-b border-surface-border">
-      {tab("post", "/minibar", t.post, DoorOpen)}
-      {tab("catalog", "/minibar/catalog", t.catalog, BookOpen, catalogCount)}
+    <div className="mb-4">
+      <LinkTabs
+        label={`${t.post} · ${t.catalog}`}
+        tabs={[
+          { href: "/minibar", label: t.post, active: active === "post", icon: <DoorOpen className="h-4 w-4" /> },
+          { href: "/minibar/catalog", label: t.catalog, active: active === "catalog", icon: <BookOpen className="h-4 w-4" />, badge: String(catalogCount) },
+        ]}
+      />
     </div>
   );
 }

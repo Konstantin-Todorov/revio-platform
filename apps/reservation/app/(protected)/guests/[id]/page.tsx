@@ -6,6 +6,7 @@ import { GuestNotes, type GuestNoteRow } from "@/components/guests/GuestNotes";
 import { DuplicateGuests } from "@/components/guests/DuplicateGuests";
 import { DataRights } from "@/components/guests/DataRights";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
+import { LinkTabs } from "@revio/ui/link-tabs";
 import { money } from "@/lib/format";
 import { sampleLabel, hasPattern } from "@revio/core";
 import { CalendarPlus } from "lucide-react";
@@ -29,15 +30,26 @@ const ERASE_NOTICE: Record<string, string> = {
     "This record has been merged into another. Erase the surviving record instead — that is the one holding the guest's data.",
 };
 
+const TABS = ["profile", "stays", "notes", "privacy"] as const;
+type Tab = (typeof TABS)[number];
+
+/**
+ * One guest, in four tabs: Profile (contact, what we have learned, what RevioPMS saw) · Stays ·
+ * Notes · Privacy & data. It was eight stacked cards — and the booking history, the thing staff
+ * most often open a guest for, was the last of them, below the erasure controls (which were, by a
+ * copy-paste, rendered twice). One guest, different questions: each tab answers one.
+ */
 export default async function GuestDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ erase?: string }>;
+  searchParams: Promise<{ erase?: string; tab?: string }>;
 }) {
   const { id } = await params;
-  const eraseState = (await searchParams).erase;
+  const { erase: eraseState, tab: rawTab } = await searchParams;
+  // An erasure step always lands on Privacy & data, where its message is.
+  const tab: Tab = eraseState ? "privacy" : (TABS as readonly string[]).includes(rawTab ?? "") ? (rawTab as Tab) : "profile";
   const detail = await getGuestDetail(id);
   if (!detail) notFound();
   const duplicates = await findDuplicateGuests(id);
@@ -70,6 +82,26 @@ export default async function GuestDetailPage({
             <Link href="/guests" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← All guests</Link>
           </div>
         }
+      />
+
+      <LinkTabs
+        label="Guest views"
+        tabs={[
+          { href: `/guests/${guest.id}`, label: "Profile", active: tab === "profile" },
+          { href: `/guests/${guest.id}?tab=stays`, label: "Stays", active: tab === "stays", badge: String(guest.reservations.length) },
+          { href: `/guests/${guest.id}?tab=notes`, label: "Notes", active: tab === "notes", badge: String(notes.length) },
+          { href: `/guests/${guest.id}?tab=privacy`, label: "Privacy & data", active: tab === "privacy" },
+        ]}
+      />
+
+      {tab === "profile" && (
+        <>
+      {/* First on the profile: a possible duplicate changes what every number below means, so the
+          offer to merge is read before them. Renders nothing when there is no candidate. */}
+      <DuplicateGuests
+        guestId={guest.id}
+        guestName={`${guest.firstName} ${guest.lastName}`}
+        candidates={duplicates}
       />
 
       <Card>
@@ -150,67 +182,11 @@ export default async function GuestDetailPage({
         </Card>
       </div>
 
-      {/* Recognition opt-out (K6). A guest who asks not to be greeted as a regular gets that honoured
-          everywhere at once, because there is one guest record — the booking page stops saying
-          "welcome back" and the front desk stops being told to. Deliberately separate from erasure:
-          a hotel keeps the booking and invoice records it is legally required to keep. */}
-      <Card>
-        <CardHeader
-          title="Privacy"
-          subtitle="What this guest has asked us not to do — honoured across RevioDirect, RevioCRS and RevioPMS at once"
-        />
-        <form action={setGuestRecognitionOptOut} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
-          <input type="hidden" name="guestId" value={guest.id} />
-          <label className="flex cursor-pointer items-start gap-2.5 text-[13px] text-ink-700">
-            <input
-              type="checkbox"
-              name="optOut"
-              defaultChecked={guest.recognitionOptOut}
-              className="mt-0.5 h-4 w-4 rounded border-surface-border text-brand-600"
-            />
-            <span>
-              <span className="font-semibold text-ink-900">Do not recognise this guest across stays</span>
-              <span className="mt-0.5 block text-[12px] text-ink-500">
-                Suppresses &ldquo;welcome back&rdquo; on the booking page and the returning-guest note for the
-                front desk. Their stay history is unchanged and still counts in every report.
-              </span>
-            </span>
-          </label>
-          <button
-            type="submit"
-            className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
-          >
-            Save
-          </button>
-        </form>
-      </Card>
+        </>
+      )}
 
-      {/* Staff notes (spec §4) — on the SHARED guest record, so they travel wherever the guest does. */}
-      <Card>
-        <CardHeader
-          title={`Notes (${notes.length})`}
-          subtitle="Staff notes — visible wherever this guest appears, in every Revio product you run"
-        />
-        <GuestNotes guestId={guest.id} notes={noteRows} />
-      </Card>
-
-      {/* Above the booking history on purpose: the history is what a merge changes, so the offer to
-          merge should be read before it, not after. */}
-      <DuplicateGuests
-        guestId={guest.id}
-        guestName={`${guest.firstName} ${guest.lastName}`}
-        candidates={duplicates}
-      />
-
-      {/* Last on the page, deliberately: erasure is irreversible and should not sit above the
-          everyday editing. */}
-      <DataRights
-        guestId={guest.id}
-        guestName={`${guest.firstName} ${guest.lastName}`}
-        erasedAt={guest.erasedAt}
-        {...(eraseState && ERASE_NOTICE[eraseState] ? { notice: ERASE_NOTICE[eraseState] } : {})}
-      />
-
+      {tab === "stays" && (
+        <>
       <Card>
         <CardHeader title={`Booking history (${guest.reservations.length})`} />
         {guest.reservations.length === 0 ? (
@@ -250,14 +226,70 @@ export default async function GuestDetailPage({
         )}
       </Card>
 
-      {/* Last on the page, deliberately. Erasure is irreversible and there is no undo anywhere in
-          this product, so it sits below the everyday editing rather than beside it. */}
+        </>
+      )}
+
+      {tab === "notes" && (
+        <>
+      {/* Staff notes (spec §4) — on the SHARED guest record, so they travel wherever the guest does. */}
+      <Card>
+        <CardHeader
+          title={`Notes (${notes.length})`}
+          subtitle="Staff notes — visible wherever this guest appears, in every Revio product you run"
+        />
+        <GuestNotes guestId={guest.id} notes={noteRows} />
+      </Card>
+
+        </>
+      )}
+
+      {tab === "privacy" && (
+        <>
+      {/* Recognition opt-out (K6). A guest who asks not to be greeted as a regular gets that honoured
+          everywhere at once, because there is one guest record — the booking page stops saying
+          "welcome back" and the front desk stops being told to. Deliberately separate from erasure:
+          a hotel keeps the booking and invoice records it is legally required to keep. */}
+      <Card>
+        <CardHeader
+          title="Privacy"
+          subtitle="What this guest has asked us not to do — honoured across RevioDirect, RevioCRS and RevioPMS at once"
+        />
+        <form action={setGuestRecognitionOptOut} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+          <input type="hidden" name="guestId" value={guest.id} />
+          <label className="flex cursor-pointer items-start gap-2.5 text-[13px] text-ink-700">
+            <input
+              type="checkbox"
+              name="optOut"
+              defaultChecked={guest.recognitionOptOut}
+              className="mt-0.5 h-4 w-4 rounded border-surface-border text-brand-600"
+            />
+            <span>
+              <span className="font-semibold text-ink-900">Do not recognise this guest across stays</span>
+              <span className="mt-0.5 block text-[12px] text-ink-500">
+                Suppresses &ldquo;welcome back&rdquo; on the booking page and the returning-guest note for the
+                front desk. Their stay history is unchanged and still counts in every report.
+              </span>
+            </span>
+          </label>
+          <button
+            type="submit"
+            className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
+          >
+            Save
+          </button>
+        </form>
+      </Card>
+
+      {/* Last in its tab, deliberately. Erasure is irreversible and there is no undo anywhere in
+          this product, so it sits below the everyday privacy choice rather than beside it. */}
       <DataRights
         guestId={guest.id}
         guestName={`${guest.firstName} ${guest.lastName}`}
         erasedAt={guest.erasedAt}
         {...(eraseState && ERASE_NOTICE[eraseState] ? { notice: ERASE_NOTICE[eraseState] } : {})}
       />
+        </>
+      )}
     </div>
   );
 }

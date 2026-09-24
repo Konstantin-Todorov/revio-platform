@@ -13,7 +13,7 @@ async function requireManager() {
 }
 
 function refresh() {
-  revalidatePath("/configuration");
+  revalidatePath("/configuration", "layout");
   revalidatePath("/housekeeping");
   revalidatePath("/dashboard");
 }
@@ -24,36 +24,55 @@ export async function saveConfiguration(fd: FormData): Promise<void> {
   const s = await requireManager();
   if (!s) return;
   const propertyId = s.activePropertyId;
-  const data = {
-    vatStandardPct: Math.max(0, Math.min(100, int(fd, "vatStandardPct", 20))),
-    vatReducedPct: Math.max(0, Math.min(100, int(fd, "vatReducedPct", 9))),
-    // Null when cleared, rather than 0. A rate of zero is a rate somebody set; an empty field is a
-    // rate nobody has stated yet, and the register screen has to be able to say which.
-    touristTaxRateMinor: money2minor(fd, "touristTaxRate"),
-    touristTaxBeds: positiveOrNull(fd, "touristTaxBeds"),
-    cityTaxMode: str(fd, "cityTaxMode") === "included" ? "included" : "payable_on_spot",
-    invoiceIssuerName: str(fd, "invoiceIssuerName") || null,
-    invoiceVatId: str(fd, "invoiceVatId") || null,
-    invoiceAddress: str(fd, "invoiceAddress") || null,
-    inspectionGate: fd.get("inspectionGate") != null,
-    autoAssignEnabled: fd.get("autoAssignEnabled") != null,
-    jurisdiction: ["generic", "bg", "eu"].includes(str(fd, "jurisdiction")) ? str(fd, "jurisdiction") : "generic",
-    fiscalizationEnabled: fd.get("fiscalizationEnabled") != null,
-    eInvoicingEnabled: fd.get("eInvoicingEnabled") != null,
+  /*
+   * Configuration is one section per page (Taxes · Invoices · Housekeeping · End of day ·
+   * Compliance), each with its own form and its own save. `section` names the fields a form carries,
+   * and only those are written — a form that posted one section while this wrote all five would
+   * switch every checkbox of the other four off (an absent checkbox reads as "off").
+   */
+  const section = str(fd, "section");
+  const bySection: Record<string, Record<string, unknown>> = {
+    taxes: {
+      vatStandardPct: Math.max(0, Math.min(100, int(fd, "vatStandardPct", 20))),
+      vatReducedPct: Math.max(0, Math.min(100, int(fd, "vatReducedPct", 9))),
+      // Null when cleared, rather than 0. A rate of zero is a rate somebody set; an empty field is a
+      // rate nobody has stated yet, and the register screen has to be able to say which.
+      touristTaxRateMinor: money2minor(fd, "touristTaxRate"),
+      touristTaxBeds: positiveOrNull(fd, "touristTaxBeds"),
+      cityTaxMode: str(fd, "cityTaxMode") === "included" ? "included" : "payable_on_spot",
+    },
+    invoices: {
+      invoiceIssuerName: str(fd, "invoiceIssuerName") || null,
+      invoiceVatId: str(fd, "invoiceVatId") || null,
+      invoiceAddress: str(fd, "invoiceAddress") || null,
+    },
+    housekeeping: {
+      inspectionGate: fd.get("inspectionGate") != null,
+      autoAssignEnabled: fd.get("autoAssignEnabled") != null,
+    },
+    compliance: {
+      jurisdiction: ["generic", "bg", "eu"].includes(str(fd, "jurisdiction")) ? str(fd, "jurisdiction") : "generic",
+      fiscalizationEnabled: fd.get("fiscalizationEnabled") != null,
+      eInvoicingEnabled: fd.get("eInvoicingEnabled") != null,
+    },
     // Close Day escalation (§3.4). Per-property because the business-day boundary already varies —
     // some properties audit at 03:00, some at midnight — so one fixed time fits nobody.
     // Clamped rather than trusted: a deadline outside the day, or a zero-hour window, would make
     // the reminder stage vanish and turn every overdue day into an immediate unattended close.
-    closeDeadlineMinutes: Math.max(0, Math.min(1439, int(fd, "closeDeadlineMinutes", 30))),
-    closeReminderWindowHours: Math.max(1, Math.min(72, int(fd, "closeReminderWindowHours", 22))),
-    autoCloseEnabled: fd.get("autoCloseEnabled") != null,
+    endOfDay: {
+      closeDeadlineMinutes: Math.max(0, Math.min(1439, int(fd, "closeDeadlineMinutes", 30))),
+      closeReminderWindowHours: Math.max(1, Math.min(72, int(fd, "closeReminderWindowHours", 22))),
+      autoCloseEnabled: fd.get("autoCloseEnabled") != null,
+    },
   };
+  const data = bySection[section];
+  if (!data) return;
   await prisma.propertyDefaults.upsert({
     where: { propertyId },
     create: { tenantId: s.tenantId, propertyId, ...data },
     update: data,
   });
-  await logAudit(propertyId, s.tenantId, { entity: "configuration", field: "tax/invoicing", newValue: `VAT ${data.vatStandardPct}/${data.vatReducedPct}, gate ${data.inspectionGate}`, userId: s.userId });
+  await logAudit(propertyId, s.tenantId, { entity: "configuration", field: section, newValue: JSON.stringify(data), userId: s.userId });
   refresh();
 }
 
@@ -78,7 +97,7 @@ export async function saveDepositType(fd: FormData): Promise<void> {
     await prisma.depositType.create({ data: { tenantId: s.tenantId, propertyId: s.activePropertyId, ...data, active: true, sortOrder: count } });
   }
   await logAudit(s.activePropertyId, s.tenantId, { entity: "deposit_type", field: name, newValue: `${data.behaviour}/${data.vatTiming}`, userId: s.userId });
-  revalidatePath("/configuration");
+  revalidatePath("/configuration", "layout");
 }
 
 export async function deleteDepositType(fd: FormData): Promise<void> {
@@ -89,7 +108,7 @@ export async function deleteDepositType(fd: FormData): Promise<void> {
   if (!t) return;
   await prisma.depositType.delete({ where: { id } });
   await logAudit(s.activePropertyId, s.tenantId, { entity: "deposit_type", field: t.name, newValue: "deleted", userId: s.userId });
-  revalidatePath("/configuration");
+  revalidatePath("/configuration", "layout");
 }
 
 /** A decimal amount typed into a form, as minor units. Null for a blank or unparseable field. */

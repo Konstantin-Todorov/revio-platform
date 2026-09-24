@@ -504,7 +504,7 @@ export async function setGuestRecognitionOptOut(fd: FormData): Promise<void> {
     },
   });
   revalidatePath(`/guests/${guestId}`);
-  redirect(`/guests/${guestId}`);
+  redirect(`/guests/${guestId}?tab=privacy`);
 }
 
 // --- Guest notes (CRS-REFINEMENT-R2 §4) — multi-note, author + timestamp, on the shared record ---
@@ -526,7 +526,7 @@ export async function addGuestNote(fd: FormData): Promise<void> {
     });
   }
   revalidatePath(`/guests/${guestId}`);
-  redirect(`/guests/${guestId}#notes`);
+  redirect(`/guests/${guestId}?tab=notes`);
 }
 
 /** Edit an existing note's body. Scoped to the guest under this property; author/byline is preserved
@@ -544,7 +544,7 @@ export async function editGuestNote(fd: FormData): Promise<void> {
     await prisma.guestNote.update({ where: { id: noteId }, data: { body } });
   }
   revalidatePath(`/guests/${guestId}`);
-  redirect(`/guests/${guestId}#notes`);
+  redirect(`/guests/${guestId}?tab=notes`);
 }
 
 /** Remove a note. Same guest/property scope guard as edit. */
@@ -558,7 +558,7 @@ export async function deleteGuestNote(fd: FormData): Promise<void> {
   const note = await prisma.guestNote.findFirst({ where: { id: noteId, guestId } });
   if (note) await prisma.guestNote.delete({ where: { id: noteId } });
   revalidatePath(`/guests/${guestId}`);
-  redirect(`/guests/${guestId}#notes`);
+  redirect(`/guests/${guestId}?tab=notes`);
 }
 
 /**

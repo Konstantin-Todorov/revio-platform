@@ -11,13 +11,23 @@ import { i18n } from "@/lib/i18n/server";
 import { users as usersDict } from "@/lib/i18n/users";
 import { shell } from "@/lib/i18n/shell";
 import { LOCALE_LABELS } from "@revio/ui/i18n";
+import { LinkTabs } from "@revio/ui/link-tabs";
 
 export const dynamic = "force-dynamic";
 
 /** The shift record's default window. Long enough to see a pattern, short enough to read. */
 const HISTORY_DAYS = 14;
 
-export default async function UsersPage() {
+const TABS = ["now", "history", "people"] as const;
+type Tab = (typeof TABS)[number];
+
+/**
+ * Staff & Access, in three tabs: who is on shift now · when people worked · who can sign in and as
+ * what. Three different people open this screen for three different questions — the manager at 7am
+ * wants who is in, the owner wants who has access — and stacked, each scrolled past the other two.
+ */
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab: rawTab } = await searchParams;
   const to = new Date();
   const from = new Date(to.getTime() - HISTORY_DAYS * 86_400_000);
   const fromIso = from.toISOString().slice(0, 10);
@@ -42,6 +52,10 @@ export default async function UsersPage() {
   // The property's wall clock, not the server's UTC: "since 06:00" for a 09:00 Sofia clock-in was
   // three hours wrong on every shift.
   const clock = new Intl.DateTimeFormat(LOCALE_LABELS[locale].intl, { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: property.timezone });
+  // Shift history is employee data: a tab only a manager sees, and a manager-less role asking for it
+  // by address gets the live board instead.
+  const asked: Tab = (TABS as readonly string[]).includes(rawTab ?? "") ? (rawTab as Tab) : "now";
+  const tab: Tab = asked === "history" && !canManage ? "now" : asked;
   const onShift = new Set(workforce.groups.flatMap((g) => g.active.map((a) => a.userId)));
   const offShift = users.filter((u) => u.active && !onShift.has(u.id));
 
@@ -51,9 +65,20 @@ export default async function UsersPage() {
         title={t.title}
         subtitle={t.subtitle(property.name)}
       />
+      <div className="mb-4">
+        <LinkTabs
+          label={t.tabs.aria}
+          tabs={[
+            { href: "/users", label: t.tabs.now, active: tab === "now", badge: String(workforce.totalActive) },
+            ...(canManage ? [{ href: "/users?tab=history", label: t.tabs.history, active: tab === "history" }] : []),
+            { href: "/users?tab=people", label: t.tabs.people, active: tab === "people", badge: String(users.filter((u) => u.active).length) },
+          ]}
+        />
+      </div>
 
       {/* Workforce dashboard (§10.2) — who's available right now, grouped by role/department, live (not
           history). Fed by the J0 clock-in mechanism (StaffShift). Availability + light KPI, not payroll. */}
+      {tab === "now" && (
       <Card className="mb-4">
         <CardHeader
           title={t.working.title}
@@ -113,13 +138,14 @@ export default async function UsersPage() {
           </form>
         )}
       </Card>
+      )}
 
       {/* Manager-only. Hiding it from a housekeeper is not just tidiness: a record of when colleagues
           worked is employee data, and the route guard already keeps scoped roles off this screen —
           this is the second gate for a manager-less role that can still reach it. */}
-      {canManage && <ShiftHistory people={history} fromIso={fromIso} toIso={toIso} t={t.shifts} roles={roles} />}
+      {tab === "history" && canManage && <ShiftHistory people={history} fromIso={fromIso} toIso={toIso} t={t.shifts} roles={roles} />}
 
-      <UsersManager users={users} meId={meId} canManage={canManage} t={t.manager} roles={roles} />
+      {tab === "people" && <UsersManager users={users} meId={meId} canManage={canManage} t={t.manager} roles={roles} />}
     </div>
   );
 }

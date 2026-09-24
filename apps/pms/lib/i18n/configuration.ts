@@ -72,7 +72,16 @@ export interface ConfigurationStrings {
   };
   series: { title: string; subtitle: string; next: (n: string) => string };
   outlets: { title: string; subtitle: string; manage: string };
+  /** The section nav: one section per thing a manager comes here to set. */
+  nav: {
+    aria: string;
+    elsewhere: string;
+    sections: Record<ConfigSectionKey, { label: string; blurb: string }>;
+    links: Record<"catalog" | "rooms" | "staff" | "settings", { label: string; blurb: string }>;
+  };
 }
+
+export type ConfigSectionKey = "taxes" | "invoices" | "deposits" | "housekeeping" | "endOfDay" | "compliance" | "outlets";
 
 export const configuration: Translations<ConfigurationStrings> = {
   en: {
@@ -136,7 +145,7 @@ export const configuration: Translations<ConfigurationStrings> = {
       eInvoicing: "Structured e-invoicing (EN 16931 / Peppol) for B2B",
       note: "The boundary is built (F3); flipping these on connects the certified provider — the invoice/receipt core stays generic.",
     },
-    save: "Save configuration",
+    save: "Save changes",
     deposits: {
       title: "Deposit types",
       subtitle: "A deposit is money you hold, not money you have earned — set when each type becomes revenue",
@@ -157,6 +166,25 @@ export const configuration: Translations<ConfigurationStrings> = {
       next: (n) => `next ${n}`,
     },
     outlets: { title: "Outlets", subtitle: "Charge sources & their catalogs", manage: "Manage catalog →" },
+    nav: {
+      aria: "Configuration sections",
+      elsewhere: "Elsewhere",
+      sections: {
+        taxes: { label: "Taxes", blurb: "VAT, tourist tax and how the city tax is shown" },
+        invoices: { label: "Invoices", blurb: "Your legal identity on invoices, and the numbering" },
+        deposits: { label: "Deposits", blurb: "Deposit types and when each becomes revenue" },
+        housekeeping: { label: "Housekeeping", blurb: "Inspection before sale, and room assignment" },
+        endOfDay: { label: "End of day", blurb: "When an unclosed day is chased, and closed" },
+        compliance: { label: "Compliance", blurb: "Fiscalization and e-invoicing for your country" },
+        outlets: { label: "Outlets", blurb: "Where charges come from" },
+      },
+      links: {
+        catalog: { label: "Extras catalog", blurb: "What each outlet sells, and its price" },
+        rooms: { label: "Rooms & floors", blurb: "The physical rooms and their floors" },
+        staff: { label: "Staff & access", blurb: "Who works here, and what they may open" },
+        settings: { label: "Settings", blurb: "Property, guest emails, billing" },
+      },
+    },
   },
   bg: {
     lockedTitle: "Конфигурацията е само за управители",
@@ -219,7 +247,7 @@ export const configuration: Translations<ConfigurationStrings> = {
       eInvoicing: "Структурирани електронни фактури (EN 16931 / Peppol) за B2B",
       note: "Връзката е изградена; включването на тези опции свързва сертифицирания доставчик — ядрото за фактури и бележки остава общо.",
     },
-    save: "Запази конфигурацията",
+    save: "Запази промените",
     deposits: {
       title: "Видове депозити",
       subtitle: "Депозитът е пари, които държите, а не пари, които сте спечелили — задайте кога всеки вид става приход",
@@ -240,5 +268,24 @@ export const configuration: Translations<ConfigurationStrings> = {
       next: (n) => `следващ № ${n}`,
     },
     outlets: { title: "Точки на продажба", subtitle: "Източници на начисления и техните каталози", manage: "Управление на каталога →" },
+    nav: {
+      aria: "Раздели на конфигурацията",
+      elsewhere: "На друго място",
+      sections: {
+        taxes: { label: "Данъци", blurb: "ДДС, туристически данък и как се показва" },
+        invoices: { label: "Фактури", blurb: "Вашите данни във фактурите и номерацията" },
+        deposits: { label: "Депозити", blurb: "Видове депозити и кога стават приход" },
+        housekeeping: { label: "Хаускийпинг", blurb: "Проверка преди продажба и разпределяне на стаи" },
+        endOfDay: { label: "Край на деня", blurb: "Кога незатвореният ден се напомня и затваря" },
+        compliance: { label: "Съответствие", blurb: "Фискализация и е-фактури за Вашата държава" },
+        outlets: { label: "Точки на продажба", blurb: "Откъде идват таксите" },
+      },
+      links: {
+        catalog: { label: "Каталог с екстри", blurb: "Какво продава всяка точка и на каква цена" },
+        rooms: { label: "Стаи и етажи", blurb: "Физическите стаи и техните етажи" },
+        staff: { label: "Персонал и достъп", blurb: "Кой работи тук и какво може да отваря" },
+        settings: { label: "Настройки", blurb: "Обект, имейли до гостите, абонамент" },
+      },
+    },
   },
 };

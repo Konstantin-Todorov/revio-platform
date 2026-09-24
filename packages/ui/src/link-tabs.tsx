@@ -1,11 +1,25 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 
-export type LinkTab = { href: string; label: string; active: boolean; badge?: string | undefined; warn?: boolean };
+export type LinkTab = {
+  href: string;
+  label: string;
+  active: boolean;
+  icon?: ReactNode;
+  /** A count read without opening the tab — "3" photos, "12" items. */
+  badge?: string | undefined;
+  /** A dot: something here needs attention (a guest would miss something), said before it is opened. */
+  warn?: boolean;
+};
 
 /**
- * Views of one thing, on top — the second half of the Settings shape (docs/UI-STANDARD.md §8):
- * sections on the left, tabs on top. Links, not buttons, so each view has an address that a support
- * answer or a "Save" can land on, and the browser's Back goes where a person expects.
+ * Views of one thing, on top — the second half of the shape every set-up screen has
+ * (docs/UI-STANDARD.md §8): sections on the left, tabs on top.
+ *
+ * Links, not buttons: each view is an address that a support answer, a bookmark or a save's redirect
+ * can land on, and the browser's Back goes where a person expects. One component for every product,
+ * because the same concept drawn three ways is three things to learn (and the copy that drifts is the
+ * one that loses the badge).
  */
 export function LinkTabs({ tabs, label }: { tabs: LinkTab[]; label: string }) {
   return (
@@ -21,9 +35,10 @@ export function LinkTabs({ tabs, label }: { tabs: LinkTab[]; label: string }) {
                 t.active ? "border-brand-700 text-brand-800" : "border-transparent text-ink-500 hover:text-ink-700"
               }`}
             >
+              {t.icon}
               {t.label}
               {t.badge && <span className="tnum rounded-full bg-surface-sunken px-1.5 py-px text-[10.5px] font-bold text-ink-500">{t.badge}</span>}
-              {t.warn && <span aria-label="Something a guest would miss" className="h-1.5 w-1.5 rounded-full bg-warning-500" />}
+              {t.warn && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-warning-500" />}
             </Link>
           </li>
         ))}
