@@ -10,7 +10,9 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ["var(--font-hanken)", "ui-sans-serif", "system-ui", "sans-serif"],
+        // "Revio Cyrillic" first: Cyrillic glyphs only (unicode-range) — Hanken has no Bulgarian letters.
+        // See scripts/fetch-fonts.mjs.
+        sans: ["\"Revio Cyrillic\"", "var(--font-hanken)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
         brand: { 900: "#0e1f3a", 800: "#15366a", 700: "#1d4ea0", 600: "#2563c9", 500: "#3d7fe0", 200: "#bcd2f5", 100: "#d7e4fa", 50: "#e7eefb" },

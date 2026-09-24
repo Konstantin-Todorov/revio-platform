@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+// Bulgarian letters — a Cyrillic-only face. Generated; see scripts/fetch-fonts.mjs.
+import "./cyrillic-font.css";
 
 /**
  * Two families, loaded once, switched per hotel by CSS variable.

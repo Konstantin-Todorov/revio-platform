@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+// Bulgarian letters — a Cyrillic-only face. Generated; see scripts/fetch-fonts.mjs.
+import "./cyrillic-font.css";
 import { DatePickerAffordance } from "@revio/ui/date-picker-affordance";
 
 /*

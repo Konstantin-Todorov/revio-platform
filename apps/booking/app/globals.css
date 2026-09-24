@@ -70,7 +70,7 @@
   body {
     background-color: hsl(var(--ground));
     color: hsl(var(--ink));
-    font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+    font-family: "Revio Cyrillic", var(--font-body), ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: "kern", "liga", "calt";
     -webkit-font-smoothing: antialiased;
     /* Removes the 300ms mobile tap delay without disabling pinch-zoom. */
@@ -96,7 +96,7 @@
    * need completely different optical settings to look equally intentional at the same size.
    */
   .display {
-    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+    font-family: "Revio Cyrillic", var(--font-display), ui-sans-serif, system-ui, sans-serif;
     font-weight: var(--display-weight, 800);
     letter-spacing: var(--display-tracking, -0.035em);
     line-height: 1.05;
@@ -110,7 +110,7 @@
    * font gets its name and its headings; the money stays legible.
    */
   .price {
-    font-family: var(--font-ui), ui-sans-serif, system-ui, sans-serif;
+    font-family: "Revio Cyrillic", var(--font-ui), ui-sans-serif, system-ui, sans-serif;
     font-weight: 800;
     letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
