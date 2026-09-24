@@ -6,7 +6,8 @@ import { getMinibarBoard } from "@/lib/pos";
 import { postPosItem } from "@/lib/actions-pos";
 import { voidFolioLine } from "@/lib/actions-folio";
 import { POS_OUTLETS, POS_OUTLET_LABEL } from "@/lib/roles";
-import { money } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { extras } from "@/lib/i18n/extras";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,9 @@ export default async function MinibarStagePage({ params, searchParams }: { param
   const data = await getMinibarBoard(reservationId);
   if (!data) redirect("/minibar");
   const { reservation: r, items, folio, posted, totals } = data!;
+  const { t, money } = await i18n();
+  const x = t(extras);
+  const s = x.stage;
 
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const rooms = r.assignments.map((a) => a.unit.label).join(", ");
@@ -32,7 +36,7 @@ export default async function MinibarStagePage({ params, searchParams }: { param
           <input type="hidden" name="reservationId" value={reservationId} />
           <input type="hidden" name="posItemId" value={i.id} />
           <button type="submit" disabled={closed} className="flex w-full flex-col items-start gap-1 rounded-lg border border-surface-border bg-white p-3 text-left shadow-card transition-colors hover:border-accent-500 hover:bg-accent-50 disabled:cursor-not-allowed disabled:opacity-50">
-            <span className="flex items-center gap-1 text-[10.5px] font-semibold text-accent-600"><Plus className="h-3 w-3" />Add</span>
+            <span className="flex items-center gap-1 text-[10.5px] font-semibold text-accent-600"><Plus className="h-3 w-3" />{s.add}</span>
             <span className="text-[13.5px] font-semibold leading-tight text-ink-900">{i.name}</span>
             <span className="tnum text-[12px] font-bold text-ink-500">{money(i.priceMinor, folio.currency)}</span>
           </button>
@@ -44,29 +48,29 @@ export default async function MinibarStagePage({ params, searchParams }: { param
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/minibar" className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-ink-700">
-        <ArrowLeft className="h-4 w-4" /> Extras &amp; Charges
+        <ArrowLeft className="h-4 w-4" /> {x.title}
       </Link>
       <PageHeader
-        title={`Room ${rooms || "—"}`}
-        subtitle={`${guestName} · tap an item to add it to the folio`}
+        title={s.room(rooms || "—")}
+        subtitle={s.subtitle(guestName)}
         action={
           <Link href={`/folio/${reservationId}`} className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[13px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
-            <Receipt className="h-4 w-4" /> Folio · {money(totals.balance, folio.currency)}
+            <Receipt className="h-4 w-4" /> {s.folio(money(totals.balance, folio.currency))}
           </Link>
         }
       />
 
       {error === "closed" && (
         <div className="mb-4 flex items-start gap-2 rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> This folio is closed — the guest has checked out.
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {s.closedError}
         </div>
       )}
 
       {closed ? (
-        <Card className="p-6 text-center text-[13px] text-ink-500">This guest has checked out — the folio is closed.</Card>
+        <Card className="p-6 text-center text-[13px] text-ink-500">{s.closed}</Card>
       ) : items.length === 0 ? (
         <Card className="p-6 text-center text-[13px] text-ink-500">
-          No catalog items yet. Add some in <Link href="/minibar/catalog" className="font-semibold text-accent-600 underline">Manage catalog</Link>.
+          {s.noItemsBefore} <Link href="/minibar/catalog" className="font-semibold text-accent-600 underline">{x.manageCatalog}</Link>.
         </Card>
       ) : (
         <div className="space-y-5">
@@ -74,7 +78,7 @@ export default async function MinibarStagePage({ params, searchParams }: { param
             const Icon = OUTLET_ICON[outlet] ?? Wine;
             return (
               <section key={outlet}>
-                <h2 className="mb-2 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400"><Icon className="h-3.5 w-3.5" /> {POS_OUTLET_LABEL[outlet]}</h2>
+                <h2 className="mb-2 flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400"><Icon className="h-3.5 w-3.5" /> {x.outlets[outlet] ?? POS_OUTLET_LABEL[outlet]}</h2>
                 {grid(list)}
               </section>
             );
@@ -86,7 +90,7 @@ export default async function MinibarStagePage({ params, searchParams }: { param
           (→ a credit note once closed, §4.6). */}
       {posted.length > 0 && (
         <Card className="mt-5">
-          <div className="border-b border-surface-border px-4 py-2.5 text-[12px] font-bold uppercase tracking-wide text-ink-400">Posted this stay</div>
+          <div className="border-b border-surface-border px-4 py-2.5 text-[12px] font-bold uppercase tracking-wide text-ink-400">{s.posted}</div>
           <ul className="divide-y divide-surface-border">
             {posted.map((l) => (
               <li key={l.id} className="flex items-center justify-between gap-3 px-4 py-2 text-[12.5px]">
@@ -97,7 +101,7 @@ export default async function MinibarStagePage({ params, searchParams }: { param
                     <form action={voidFolioLine}>
                       <input type="hidden" name="reservationId" value={reservationId} />
                       <input type="hidden" name="lineId" value={l.id} />
-                      <button type="submit" title="Void this charge" className="rounded p-1 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                      <button type="submit" title={s.voidTitle} className="rounded p-1 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600">
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </form>
@@ -106,7 +110,7 @@ export default async function MinibarStagePage({ params, searchParams }: { param
               </li>
             ))}
           </ul>
-          <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">Voiding keeps the line visible on the folio, struck through — nothing is deleted.</p>
+          <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">{s.voidNote}</p>
         </Card>
       )}
     </div>
