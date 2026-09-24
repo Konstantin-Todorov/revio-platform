@@ -64,7 +64,8 @@
     "./i18n-context": "./src/i18n-context.tsx",
     "./auth-strings": "./src/auth-strings.ts",
     "./account-strings": "./src/account-strings.ts",
-    "./shell-strings": "./src/shell-strings.ts"
+    "./shell-strings": "./src/shell-strings.ts",
+    "./welcome-strings": "./src/welcome-strings.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

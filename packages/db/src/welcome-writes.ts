@@ -28,7 +28,15 @@ import { withTenantTransaction } from "./rls.js";
  * a failed plan link would leave exactly the unsellable room this module exists to prevent.
  */
 
-export type WelcomeWrite = { error?: string };
+/**
+ * Which check refused the write — stable, so a screen in another language says it in its own words.
+ * `error` stays the English sentence for every existing caller.
+ */
+export type WelcomeWriteCode =
+  | "property_name" | "contact_email" | "roomtype_name" | "roomtype_count" | "roomtype_guests"
+  | "price_amount" | "price_no_roomtype" | "price_no_plan" | "price_exists" | "vat_range" | "city_tax";
+
+export type WelcomeWrite = { error?: string; code?: WelcomeWriteCode };
 
 interface Scope {
   tenantId: string;
@@ -49,9 +57,9 @@ export interface PropertyDetailsInput {
 /** Step 1 — who and where they are. The address and contact email print on every guest document. */
 export async function writeWelcomeProperty(scope: Scope, input: PropertyDetailsInput): Promise<WelcomeWrite> {
   const name = input.name.trim();
-  if (!name) return { error: "Your property needs a name." };
+  if (!name) return { code: "property_name", error: "Your property needs a name." };
   const contactEmail = input.contactEmail.trim();
-  if (contactEmail && !contactEmail.includes("@")) return { error: "That contact email doesn't look right." };
+  if (contactEmail && !contactEmail.includes("@")) return { code: "contact_email", error: "That contact email doesn't look right." };
 
   await withTenantTransaction(scope.tenantId, (tx) =>
     tx.property.update({
@@ -84,9 +92,9 @@ export async function writeWelcomeRoomType(
   const name = input.name.trim();
   const rooms = Number.parseInt(input.totalRooms, 10);
   const guests = Number.parseInt(input.maxGuests, 10);
-  if (!name) return { error: "Give the room type a name — “Double Room” is fine." };
-  if (!Number.isFinite(rooms) || rooms < 1) return { error: "How many of these rooms do you have?" };
-  if (!Number.isFinite(guests) || guests < 1) return { error: "How many guests fit in one?" };
+  if (!name) return { code: "roomtype_name", error: "Give the room type a name — “Double Room” is fine." };
+  if (!Number.isFinite(rooms) || rooms < 1) return { code: "roomtype_count", error: "How many of these rooms do you have?" };
+  if (!Number.isFinite(guests) || guests < 1) return { code: "roomtype_guests", error: "How many guests fit in one?" };
 
   await withTenantTransaction(scope.tenantId, async (tx) => {
     // A code is what OTAs key on. Derived rather than asked — nobody buying hotel software wants to
@@ -133,7 +141,7 @@ export async function writeWelcomePrice(
   input: { price: string; rateScreen: string },
 ): Promise<WelcomeWrite> {
   const major = Number.parseFloat(input.price.replace(",", "."));
-  if (!Number.isFinite(major) || major <= 0) return { error: "Enter a nightly price." };
+  if (!Number.isFinite(major) || major <= 0) return { code: "price_amount", error: "Enter a nightly price." };
   const priceMinor = Math.round(major * 100);
 
   // 180 days is a season, not the full 500-day horizon: sellable today, and a number typed in thirty
@@ -150,9 +158,9 @@ export async function writeWelcomePrice(
     const roomTypes = await tx.roomType.findMany({ where: { propertyId: scope.propertyId }, select: { id: true, maxGuests: true } });
     // Two causes, two messages: "add a room type" in front of somebody with three room types and no
     // active plan sends them to the wrong screen.
-    if (roomTypes.length === 0) return { error: "Add a room type first — a price belongs to a room." };
+    if (roomTypes.length === 0) return { code: "price_no_roomtype", error: "Add a room type first — a price belongs to a room." };
     if (plans.length === 0) {
-      return { error: `There is no active rate plan to price. Add one in ${input.rateScreen}, then come back — a price has to live on a plan.` };
+      return { code: "price_no_plan", error: `There is no active rate plan to price. Add one in ${input.rateScreen}, then come back — a price has to live on a plan.` };
     }
 
     const rows = plans.flatMap((plan) =>
@@ -169,7 +177,7 @@ export async function writeWelcomePrice(
     if (written.count === 0) {
       // Checked BEFORE the plan defaults move: both copies updated the defaults and then said
       // "nothing was changed".
-      return { error: "Those dates already have prices, so nothing was changed. Edit them on the calendar or in Bulk update." };
+      return { code: "price_exists", error: "Those dates already have prices, so nothing was changed. Edit them on the calendar or in Bulk update." };
     }
 
     // Each plan's own default, so a date beyond the season still resolves to a number.
@@ -203,14 +211,14 @@ export async function writeWelcomeTaxes(
 ): Promise<WelcomeWrite> {
   const standard = Number.parseInt(input.vatStandardPct, 10);
   const reduced = Number.parseInt(input.vatReducedPct, 10);
-  if (!Number.isFinite(standard) || standard < 0 || standard > 100) return { error: "VAT must be between 0 and 100." };
-  if (!Number.isFinite(reduced) || reduced < 0 || reduced > 100) return { error: "VAT must be between 0 and 100." };
+  if (!Number.isFinite(standard) || standard < 0 || standard > 100) return { code: "vat_range", error: "VAT must be between 0 and 100." };
+  if (!Number.isFinite(reduced) || reduced < 0 || reduced > 100) return { code: "vat_range", error: "VAT must be between 0 and 100." };
 
   const cityTaxRaw = input.cityTax.trim().replace(",", ".");
   let cityTaxMinor: number | null = null;
   if (cityTaxRaw) {
     const major = Number.parseFloat(cityTaxRaw);
-    if (!Number.isFinite(major) || major < 0) return { error: "City tax must be a number, or left empty." };
+    if (!Number.isFinite(major) || major < 0) return { code: "city_tax", error: "City tax must be a number, or left empty." };
     cityTaxMinor = Math.round(major * 100);
   }
 

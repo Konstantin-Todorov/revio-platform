@@ -11,6 +11,22 @@ import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
 import { markBillable, writeWelcomeProperty, writeWelcomeRoomType, writeWelcomeTaxes } from "@revio/db";
 import { flashError } from "@revio/ui/flash";
+import { translate } from "@revio/ui/i18n";
+import { welcomeStrings } from "@revio/ui/welcome-strings";
+import type { WelcomeWrite } from "@revio/db";
+import { getLocale } from "./locale";
+import { welcome as welcomeDict } from "./i18n/welcome";
+
+/** What these actions refuse with, in the reader's language. */
+async function say() {
+  return translate(welcomeDict, await getLocale()).errors;
+}
+
+/** A shared write's refusal, said by its code — the English sentence only when there is none. */
+async function refusal(res: WelcomeWrite): Promise<WelcomeResult> {
+  const t = translate(welcomeStrings, await getLocale()).errors;
+  return { error: (res.code && t[res.code]) || res.error };
+}
 
 /**
  * RevioPMS's first-run writes.
@@ -34,7 +50,10 @@ const PRODUCT = "RevioPMS";
  * invoice, or generate rooms, with one crafted request. That is the same hole as the folio one
  * found earlier, in the one flow where the property's identity and tax settings are decided.
  */
-const NOT_A_MANAGER: WelcomeResult = { error: "Only an Owner, Admin or Manager can complete setup." };
+/** Refused before anything is read. Said in the reader's language, like every other refusal here. */
+async function notAManager(): Promise<WelcomeResult> {
+  return { error: (await say()).notManager };
+}
 
 async function requireManager() {
   const s = await getSession();
@@ -50,7 +69,7 @@ async function advance(from: string): Promise<never> {
 
 /** Step 1 — who and where they are. Address and contact details print on every document. */
 export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
-  if (!(await requireManager())) return NOT_A_MANAGER;
+  if (!(await requireManager())) return notAManager();
   const { session, property } = await activeProperty();
 
   const res = await writeWelcomeProperty({ tenantId: session.tenantId, propertyId: property.id }, {
@@ -58,13 +77,13 @@ export async function saveWelcomeProperty(_prev: WelcomeResult | null, fd: FormD
     phone: str(fd, "phone"), timezone: str(fd, "timezone"), baseCurrency: str(fd, "baseCurrency"),
     checkInTime: str(fd, "checkInTime"), checkOutTime: str(fd, "checkOutTime"),
   });
-  if (res.error) return res;
+  if (res.error) return refusal(res);
   return advance("property");
 }
 
 /** Step 2 — room types, when nothing else on the platform has created them yet. */
 export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
-  if (!(await requireManager())) return NOT_A_MANAGER;
+  if (!(await requireManager())) return notAManager();
   const { session, property } = await activeProperty();
 
   // Shared with RevioLink and RevioCRS — and so, since 2026-09-23, linked to every rate plan like
@@ -73,13 +92,13 @@ export async function addWelcomeRoomType(_prev: WelcomeResult | null, fd: FormDa
     { tenantId: session.tenantId, propertyId: property.id },
     { name: str(fd, "name"), totalRooms: str(fd, "totalRooms"), maxGuests: str(fd, "maxGuests") },
   );
-  if (res.error) return res;
+  if (res.error) return refusal(res);
   revalidatePath("/welcome/rooms");
   return {};
 }
 
 export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
-  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
+  if (!(await requireManager())) return flashError((await say()).noPermission);
   const { property } = await activeProperty();
   const rt = await prisma.roomType.findUnique({ where: { id: str(fd, "id") } });
   if (!rt || rt.propertyId !== property.id) return;
@@ -88,7 +107,7 @@ export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
 }
 
 export async function finishWelcomeRooms(): Promise<void> {
-  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
+  if (!(await requireManager())) return flashError((await say()).noPermission);
   const { property } = await activeProperty();
   const count = await prisma.roomType.count({ where: { propertyId: property.id } });
   if (count === 0) return;
@@ -103,7 +122,7 @@ export async function finishWelcomeRooms(): Promise<void> {
  * are skipped rather than duplicated, which makes running it twice safe.
  */
 export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
-  if (!(await requireManager())) return NOT_A_MANAGER;
+  if (!(await requireManager())) return notAManager();
   const { session, property } = await activeProperty();
 
   const roomTypeId = str(fd, "roomTypeId");
@@ -112,10 +131,10 @@ export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData)
   const floor = str(fd, "floor").trim();
 
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId } });
-  if (!roomType || roomType.propertyId !== property.id) return { error: "Choose a room type." };
-  if (!Number.isFinite(from) || from < 0) return { error: "Where do the numbers start? For example 101." };
+  if (!roomType || roomType.propertyId !== property.id) return { error: (await say()).chooseRoomType };
+  if (!Number.isFinite(from) || from < 0) return { error: (await say()).startAt };
   if (!Number.isFinite(count) || count < 1 || count > 200) {
-    return { error: "How many rooms? Up to 200 at a time." };
+    return { error: (await say()).howMany };
   }
 
   const existing = await prisma.unit.findMany({ where: { propertyId: property.id }, select: { label: true } });
@@ -135,7 +154,7 @@ export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData)
       sortOrder: sortStart + i,
     });
   }
-  if (rows.length === 0) return { error: "Those room numbers already exist." };
+  if (rows.length === 0) return { error: (await say()).exist };
   await prisma.unit.createMany({ data: rows });
 
   revalidatePath("/welcome/units");
@@ -143,7 +162,7 @@ export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData)
 }
 
 export async function removeWelcomeUnit(fd: FormData): Promise<void> {
-  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
+  if (!(await requireManager())) return flashError((await say()).noPermission);
   const { property } = await activeProperty();
   const unit = await prisma.unit.findUnique({ where: { id: str(fd, "id") } });
   if (!unit || unit.propertyId !== property.id) return;
@@ -152,7 +171,7 @@ export async function removeWelcomeUnit(fd: FormData): Promise<void> {
 }
 
 export async function finishWelcomeUnits(): Promise<void> {
-  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
+  if (!(await requireManager())) return flashError((await say()).noPermission);
   const { property } = await activeProperty();
   const count = await prisma.unit.count({ where: { propertyId: property.id } });
   if (count === 0) return;
@@ -166,27 +185,27 @@ export async function finishWelcomeUnits(): Promise<void> {
  * `invoiceIssuerName` / `invoiceVatId` / `invoiceAddress` were asked on no screen in any product.
  */
 export async function saveWelcomeTaxes(_prev: WelcomeResult | null, fd: FormData): Promise<WelcomeResult> {
-  if (!(await requireManager())) return NOT_A_MANAGER;
+  if (!(await requireManager())) return notAManager();
   const { session, property } = await activeProperty();
 
   const res = await writeWelcomeTaxes({ tenantId: session.tenantId, propertyId: property.id }, {
     vatStandardPct: str(fd, "vatStandardPct"), vatReducedPct: str(fd, "vatReducedPct"), cityTax: str(fd, "cityTax"),
     invoiceIssuerName: str(fd, "invoiceIssuerName"), invoiceVatId: str(fd, "invoiceVatId"), invoiceAddress: str(fd, "invoiceAddress"),
   });
-  if (res.error) return res;
+  if (res.error) return refusal(res);
   revalidatePath("/configuration");
   return advance("taxes");
 }
 
 /** Leave a step for later. It stays on the dashboard checklist, which is the point of allowing it. */
 export async function skipWelcomeStep(fd: FormData): Promise<void> {
-  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
+  if (!(await requireManager())) return flashError((await say()).noPermission);
   await advance(str(fd, "from"));
 }
 
 /** The last screen. Records that first-run is over so the flow never reappears. */
 export async function finishWelcome(): Promise<void> {
-  if (!(await requireManager())) return flashError("You don’t have permission to do that. Setting the property up is a manager’s job.");
+  if (!(await requireManager())) return flashError((await say()).noPermission);
   const { property } = await activeProperty();
   if (!hasFinishedSetup(property.setupCompleted, PRODUCT)) {
     await prisma.property.updateMany({

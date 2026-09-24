@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { fill, translate, type Locale } from "./i18n";
+import { welcomeStrings } from "./welcome-strings";
 
 /**
  * The chrome around a first-run screen: progress, heading, one decision, a way forward.
@@ -41,6 +43,8 @@ export interface WelcomeShellProps {
   children: ReactNode;
   /** Optional aside rendered under the form — reassurance, or what happens next. */
   footnote?: ReactNode;
+  /** A server component, so the language arrives as a prop. English by default. */
+  locale?: Locale;
 }
 
 export function WelcomeShell({
@@ -53,7 +57,9 @@ export function WelcomeShell({
   skipHref,
   children,
   footnote,
+  locale = "en",
 }: WelcomeShellProps) {
+  const t = translate(welcomeStrings, locale).shell;
   const current = Math.max(0, steps.findIndex((s) => s.key === currentKey));
   const isLast = current === steps.length - 1;
 
@@ -64,9 +70,9 @@ export function WelcomeShell({
       <div className="border-b border-surface-border bg-white">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-6 py-4">
           <span className="shrink-0 text-[12.5px] font-bold text-ink-900">{productName}</span>
-          <span className="shrink-0 text-[12px] text-ink-400">setup</span>
+          <span className="shrink-0 text-[12px] text-ink-400">{t.setup}</span>
 
-          <ol className="ml-auto flex items-center gap-1.5" aria-label={`Step ${current + 1} of ${steps.length}`}>
+          <ol className="ml-auto flex items-center gap-1.5" aria-label={fill(t.stepAria, { n: current + 1, total: steps.length })}>
             {steps.map((s, i) => (
               <li
                 key={s.key}
@@ -83,7 +89,7 @@ export function WelcomeShell({
             ))}
           </ol>
           <span className="tnum shrink-0 text-[12px] font-semibold text-ink-500">
-            {current + 1} of {steps.length}
+            {fill(t.stepOf, { n: current + 1, total: steps.length })}
           </span>
         </div>
       </div>
@@ -96,7 +102,7 @@ export function WelcomeShell({
             href={backHref}
             className="mb-4 inline-flex items-center gap-1.5 text-[13px] font-semibold text-ink-500 transition-colors hover:text-ink-800"
           >
-            <span aria-hidden="true">&larr;</span> Back
+            <span aria-hidden="true">&larr;</span> {t.back}
           </a>
         )}
 
@@ -117,9 +123,9 @@ export function WelcomeShell({
               href={skipHref}
               className="text-[13px] font-semibold text-ink-500 underline-offset-2 hover:text-ink-700 hover:underline"
             >
-              I&rsquo;ll do this later
+              {t.later}
             </a>
-            <span className="ml-2 text-[12.5px] text-ink-400">— it stays on your checklist.</span>
+            <span className="ml-2 text-[12.5px] text-ink-400">{t.laterNote}</span>
           </div>
         )}
       </main>
@@ -137,9 +143,12 @@ export function WelcomeShell({
  */
 export function SharedSummary({
   items,
+  locale = "en",
 }: {
   items: { key: string; title: string; sharedWith: string[] }[];
+  locale?: Locale;
 }) {
+  const t = translate(welcomeStrings, locale).shell;
   return (
     <ul className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-white">
       {items.map((item) => (
@@ -153,7 +162,7 @@ export function SharedSummary({
           <span className="flex-1">
             <span className="block text-[13.5px] font-semibold text-ink-900">{item.title}</span>
             <span className="block text-[12.5px] text-ink-500">
-              Already set up — shared with {item.sharedWith.join(" and ")}.
+              {fill(t.sharedWith, { products: item.sharedWith.join(` ${t.and} `) })}
             </span>
           </span>
         </li>
@@ -171,9 +180,12 @@ export function WelcomeContinue({
   label,
   pending,
   tone = "brand",
+  savingLabel = "Saving…",
 }: {
   label: string;
   pending?: boolean;
+  /** What it says while it works — passed in, because this renders on either side of the boundary. */
+  savingLabel?: string;
   /** `go` is reserved for the one irreversible action: putting rooms on sale. */
   tone?: "brand" | "go";
 }) {
@@ -185,7 +197,7 @@ export function WelcomeContinue({
         tone === "go" ? "bg-success-600 hover:bg-success-700" : "bg-brand-800 hover:bg-brand-700"
       }`}
     >
-      {pending ? "Saving…" : label}
+      {pending ? savingLabel : label}
     </button>
   );
 }

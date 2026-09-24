@@ -51,6 +51,7 @@ export {
   writeWelcomePrice,
   writeWelcomeTaxes,
   type WelcomeWrite,
+  type WelcomeWriteCode,
 } from "./welcome-writes.js";
 export { recordUsage } from "./usage.js";
 export {

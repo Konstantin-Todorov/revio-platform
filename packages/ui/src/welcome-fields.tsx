@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { fill, translate } from "./i18n";
+import { useLocale } from "./i18n-context";
+import { welcomeStrings } from "./welcome-strings";
 
 /**
  * The field groups shared by the three products' first-run screens.
@@ -56,62 +59,63 @@ export interface PropertyFieldValues {
  * OTA, and a wrong timezone moves every arrival date by a day.
  */
 export function PropertyFields({ values }: { values: PropertyFieldValues }) {
+  const t = translate(welcomeStrings, useLocale()).property;
   return (
     <div className="space-y-6">
-      <WelcomeSection title="Your hotel">
+      <WelcomeSection title={t.yourHotel}>
         <label className="block">
-          <span className={welcomeLabel}>Property name</span>
+          <span className={welcomeLabel}>{t.name}</span>
           <input name="name" defaultValue={values.name} required className={welcomeInput} />
         </label>
 
         <label className="block">
-          <span className={welcomeLabel}>Address</span>
+          <span className={welcomeLabel}>{t.address}</span>
           <input
             name="address"
             defaultValue={values.address ?? ""}
             className={welcomeInput}
-            placeholder="ul. Vitosha 12, Sofia 1000, Bulgaria"
+            placeholder={t.addressPlaceholder}
           />
-          <span className={hint}>Shown on booking confirmations.</span>
+          <span className={hint}>{t.addressHint}</span>
         </label>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className={welcomeLabel}>Contact email</span>
+            <span className={welcomeLabel}>{t.email}</span>
             <input
               name="contactEmail"
               type="email"
               defaultValue={values.contactEmail ?? ""}
               className={welcomeInput}
-              placeholder="reception@yourhotel.com"
+              placeholder={t.emailPlaceholder}
             />
-            <span className={hint}>Where guests reply.</span>
+            <span className={hint}>{t.emailHint}</span>
           </label>
           <label className="block">
-            <span className={welcomeLabel}>Phone</span>
+            <span className={welcomeLabel}>{t.phone}</span>
             <input
               name="phone"
               defaultValue={values.phone ?? ""}
               className={welcomeInput}
-              placeholder="+359 2 000 0000"
+              placeholder={t.phonePlaceholder}
             />
           </label>
         </div>
       </WelcomeSection>
 
-      <WelcomeSection title="How you operate">
+      <WelcomeSection title={t.operate}>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className={welcomeLabel}>Currency</span>
+            <span className={welcomeLabel}>{t.currency}</span>
             <select name="baseCurrency" defaultValue={values.baseCurrency} className={welcomeInput}>
-              <option value="EUR">EUR — Euro</option>
-              <option value="USD">USD — US dollar</option>
-              <option value="GBP">GBP — Pound sterling</option>
-              <option value="RON">RON — Romanian leu</option>
+              <option value="EUR">{t.currencies.EUR}</option>
+              <option value="USD">{t.currencies.USD}</option>
+              <option value="GBP">{t.currencies.GBP}</option>
+              <option value="RON">{t.currencies.RON}</option>
             </select>
           </label>
           <label className="block">
-            <span className={welcomeLabel}>Time zone</span>
+            <span className={welcomeLabel}>{t.timezone}</span>
             <select name="timezone" defaultValue={values.timezone} className={welcomeInput}>
               <option value="Europe/Sofia">Europe/Sofia</option>
               <option value="Europe/Berlin">Europe/Berlin</option>
@@ -125,11 +129,11 @@ export function PropertyFields({ values }: { values: PropertyFieldValues }) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className={welcomeLabel}>Check-in from</span>
+            <span className={welcomeLabel}>{t.checkIn}</span>
             <input name="checkInTime" type="time" defaultValue={values.checkInTime} className={welcomeInput} />
           </label>
           <label className="block">
-            <span className={welcomeLabel}>Check-out by</span>
+            <span className={welcomeLabel}>{t.checkOut}</span>
             <input name="checkOutTime" type="time" defaultValue={values.checkOutTime} className={welcomeInput} />
           </label>
         </div>
@@ -158,12 +162,13 @@ export interface TaxFieldValues {
  * than assumed: they are a money field, and a default nobody reads is money decided by us.
  */
 export function TaxFields({ values }: { values: TaxFieldValues }) {
+  const t = translate(welcomeStrings, useLocale()).tax;
   return (
     <div className="space-y-6">
-      <WelcomeSection title="VAT" note="Bulgarian defaults shown — change them if your rates differ.">
+      <WelcomeSection title={t.vat} note={t.vatNote}>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className={welcomeLabel}>Standard rate (%)</span>
+            <span className={welcomeLabel}>{t.standard}</span>
             <input
               name="vatStandardPct"
               type="number"
@@ -172,10 +177,10 @@ export function TaxFields({ values }: { values: TaxFieldValues }) {
               defaultValue={values.vatStandardPct}
               className={welcomeInput}
             />
-            <span className={hint}>Extras, minibar, restaurant.</span>
+            <span className={hint}>{t.standardHint}</span>
           </label>
           <label className="block">
-            <span className={welcomeLabel}>Accommodation rate (%)</span>
+            <span className={welcomeLabel}>{t.accommodation}</span>
             <input
               name="vatReducedPct"
               type="number"
@@ -184,40 +189,40 @@ export function TaxFields({ values }: { values: TaxFieldValues }) {
               defaultValue={values.vatReducedPct}
               className={welcomeInput}
             />
-            <span className={hint}>The reduced rate on the room itself.</span>
+            <span className={hint}>{t.accommodationHint}</span>
           </label>
         </div>
       </WelcomeSection>
 
-      <WelcomeSection title="City tax" note="Charged per person per night. Leave empty if your city has none.">
+      <WelcomeSection title={t.cityTax} note={t.cityTaxNote}>
         <label className="block sm:max-w-[16rem]">
-          <span className={welcomeLabel}>Amount ({values.currency})</span>
+          <span className={welcomeLabel}>{fill(t.amount, { currency: values.currency })}</span>
           <input
             name="cityTax"
             inputMode="decimal"
             defaultValue={values.cityTax}
             className={welcomeInput}
-            placeholder="1.50"
+            placeholder={t.cityTaxPlaceholder}
           />
         </label>
       </WelcomeSection>
 
       <WelcomeSection
-        title="Who issues the invoice"
-        note="The legal details printed on every invoice. Usually your company, not the hotel's trading name."
+        title={t.issuer}
+        note={t.issuerNote}
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
-            <span className={welcomeLabel}>Company name</span>
+            <span className={welcomeLabel}>{t.company}</span>
             <input
               name="invoiceIssuerName"
               defaultValue={values.invoiceIssuerName ?? ""}
               className={welcomeInput}
-              placeholder="Hotel Sofia EOOD"
+              placeholder={t.companyPlaceholder}
             />
           </label>
           <label className="block">
-            <span className={welcomeLabel}>VAT number</span>
+            <span className={welcomeLabel}>{t.vatNumber}</span>
             <input
               name="invoiceVatId"
               defaultValue={values.invoiceVatId ?? ""}
@@ -227,12 +232,12 @@ export function TaxFields({ values }: { values: TaxFieldValues }) {
           </label>
         </div>
         <label className="block">
-          <span className={welcomeLabel}>Registered address</span>
+          <span className={welcomeLabel}>{t.registeredAddress}</span>
           <input
             name="invoiceAddress"
             defaultValue={values.invoiceAddress ?? ""}
             className={welcomeInput}
-            placeholder="ul. Vitosha 12, Sofia 1000"
+            placeholder={t.registeredAddressPlaceholder}
           />
         </label>
       </WelcomeSection>
@@ -259,6 +264,7 @@ export function BrandFields({
   brandColor: string | null;
   logoUrl: string | null;
 }) {
+  const t = translate(welcomeStrings, useLocale()).brand;
   const [colour, setColour] = useState(brandColor ?? "#0E7C86");
   const [name, setName] = useState(senderName ?? propertyName);
 
@@ -266,7 +272,7 @@ export function BrandFields({
     <div className="space-y-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className={welcomeLabel}>Sender name</span>
+          <span className={welcomeLabel}>{t.sender}</span>
           <input
             name="emailSenderName"
             value={name}
@@ -274,18 +280,18 @@ export function BrandFields({
             className={welcomeInput}
             placeholder={propertyName}
           />
-          <span className={hint}>Who guest emails appear to come from.</span>
+          <span className={hint}>{t.senderHint}</span>
         </label>
 
         <label className="block">
-          <span className={welcomeLabel}>Your colour</span>
+          <span className={welcomeLabel}>{t.colour}</span>
           <span className="flex items-center gap-2">
             <input
               type="color"
               value={colour}
               onChange={(e) => setColour(e.target.value)}
               className="h-10 w-14 cursor-pointer rounded-md border border-surface-border bg-white p-1"
-              aria-label="Brand colour"
+              aria-label={t.colourAria}
             />
             <input
               name="emailBrandColor"
@@ -298,31 +304,31 @@ export function BrandFields({
       </div>
 
       <label className="block">
-        <span className={welcomeLabel}>Logo link (optional)</span>
+        <span className={welcomeLabel}>{t.logo}</span>
         <input name="emailLogoUrl" defaultValue={logoUrl ?? ""} className={welcomeInput} placeholder="https://…" />
         <span className={hint}>
-          You can upload one later in Settings — a link is quicker if you already have it online.
+          {t.logoHint}
         </span>
       </label>
 
       {/* What they are actually buying with this screen. */}
       <div className="overflow-hidden rounded-lg border border-surface-border bg-white">
         <div className="border-b border-surface-border px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wider text-ink-400">
-          Preview
+          {t.preview}
         </div>
         <div className="p-5">
           <div className="text-[13px] font-bold" style={{ color: colour }}>
             {name || propertyName}
           </div>
-          <p className="mt-2 text-[13px] text-ink-700">Dear Elena, your booking is confirmed.</p>
+          <p className="mt-2 text-[13px] text-ink-700">{t.dear}</p>
           <span
             className="mt-3 inline-block rounded-md px-3.5 py-2 text-[12.5px] font-semibold text-white"
             style={{ backgroundColor: colour }}
           >
-            View your booking
+            {t.viewBooking}
           </span>
           <p className="mt-4 text-[11.5px] text-ink-400">
-            The same colour is used on your own booking page unless you change it there.
+            {t.sameColour}
           </p>
         </div>
       </div>

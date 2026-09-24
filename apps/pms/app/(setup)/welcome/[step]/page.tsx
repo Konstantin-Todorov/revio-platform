@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { inheritedSteps, previousStep, skippedForSize, welcomeFlow } from "@revio/core";
 import { SharedSummary, WelcomeContinue, WelcomeShell } from "@revio/ui/welcome-shell";
+import { translate } from "@revio/ui/i18n";
+import { welcomeStepText, welcomeStrings } from "@revio/ui/welcome-strings";
+import { i18n } from "@/lib/i18n/server";
+import { welcome, type WelcomePageStrings } from "@/lib/i18n/welcome";
 import { prisma } from "@/lib/db";
 import { activeProperty } from "@/lib/data";
 import { getWelcomeFactsForProperty } from "@/lib/welcome";
@@ -16,7 +20,9 @@ import {
 } from "@/lib/actions-welcome";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Set up RevioPMS" };
+export async function generateMetadata() {
+  return { title: (await i18n()).t(welcome).meta };
+}
 
 const PRODUCT = "RevioPMS";
 
@@ -47,14 +53,19 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
   if (!steps.some((s) => s.key === step)) redirect(`/welcome/${steps[0]!.key}`);
   const current = steps.find((s) => s.key === step)!;
   const back = previousStep(steps, step);
+  const { t: tr, locale } = await i18n();
+  const t = tr(welcome);
+  const shell = translate(welcomeStrings, locale).shell;
+  const text = (s: { key: string; title: string; lead: string }) => welcomeStepText(s.key, PRODUCT, locale, s);
 
   return (
     <WelcomeShell
       productName={PRODUCT}
-      steps={steps.map((s) => ({ key: s.key, title: s.title }))}
+      steps={steps.map((s) => ({ key: s.key, title: text(s).title }))}
       currentKey={current.key}
-      title={current.title}
-      lead={current.lead}
+      title={text(current).title}
+      lead={text(current).lead}
+      locale={locale}
       {...(back ? { backHref: `/welcome/${back.key}` } : {})}
       footnote={
         current.skippable ? (
@@ -64,19 +75,19 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
               type="submit"
               className="text-[13px] font-semibold text-ink-500 underline-offset-2 hover:text-ink-700 hover:underline"
             >
-              I&rsquo;ll do this later
+              {shell.later}
             </button>
-            <span className="ml-2 text-[12.5px] text-ink-400">— it stays on your checklist.</span>
+            <span className="ml-2 text-[12.5px] text-ink-400">{shell.laterNote}</span>
           </form>
         ) : undefined
       }
     >
       {step === "shared" && (
         <div className="space-y-5">
-          <SharedSummary items={inheritedSteps(PRODUCT, facts)} />
+          <SharedSummary items={inheritedSteps(PRODUCT, facts).map((i) => ({ ...i, title: welcomeStepText(i.key, PRODUCT, locale, { title: i.title, lead: "" }).doneTitle }))} locale={locale} />
           <form action={skipWelcomeStep}>
             <input type="hidden" name="from" value="shared" />
-            <WelcomeContinue label="Continue" />
+            <WelcomeContinue label={shell.continue} savingLabel={shell.saving} />
           </form>
         </div>
       )}
@@ -104,12 +115,12 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
                 <li key={rt.id} className="flex items-center gap-3 px-4 py-3">
                   <span className="flex-1 text-[13.5px] font-semibold text-ink-900">{rt.name}</span>
                   <span className="tnum text-[12.5px] text-ink-500">
-                    {rt.totalRooms} room{rt.totalRooms === 1 ? "" : "s"} · sleeps {rt.maxGuests}
+                    {t.roomsLine(rt.totalRooms, rt.maxGuests)}
                   </span>
                   <form action={removeWelcomeRoomType}>
                     <input type="hidden" name="id" value={rt.id} />
                     <button type="submit" className="text-[12.5px] font-semibold text-ink-400 hover:text-danger-600">
-                      Remove
+                      {t.remove}
                     </button>
                   </form>
                 </li>
@@ -121,7 +132,7 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
 
           {roomTypes.length > 0 && (
             <form action={finishWelcomeRooms} className="pt-1">
-              <WelcomeContinue label="Continue" />
+              <WelcomeContinue label={shell.continue} savingLabel={shell.saving} />
             </form>
           )}
         </div>
@@ -136,12 +147,12 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
                   <span className="w-16 shrink-0 text-[13.5px] font-bold text-ink-900">{u.label}</span>
                   <span className="flex-1 text-[12.5px] text-ink-500">
                     {u.roomType.name}
-                    {u.floor ? ` · floor ${u.floor}` : ""}
+                    {u.floor ? (/^\d+$/.test(u.floor) ? t.floor(u.floor) : ` · ${u.floor}`) : ""}
                   </span>
                   <form action={removeWelcomeUnit}>
                     <input type="hidden" name="id" value={u.id} />
                     <button type="submit" className="text-[12.5px] font-semibold text-ink-400 hover:text-danger-600">
-                      Remove
+                      {t.remove}
                     </button>
                   </form>
                 </li>
@@ -153,16 +164,16 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
             <UnitsForm roomTypes={roomTypes.map((rt) => ({ id: rt.id, name: rt.name }))} />
           ) : (
             <p className="rounded-md border border-surface-border bg-surface-muted px-4 py-3 text-[13px] text-ink-600">
-              Add a room type first — every room belongs to one.
+              {t.roomTypeFirst}
             </p>
           )}
 
           {units.length > 0 && (
             <form action={finishWelcomeUnits} className="pt-1">
               <p className="mb-3 text-[12.5px] text-ink-500">
-                {units.length} room{units.length === 1 ? "" : "s"} ready for housekeeping.
+                {t.roomsReady(units.length)}
               </p>
-              <WelcomeContinue label="Continue" />
+              <WelcomeContinue label={shell.continue} savingLabel={shell.saving} />
             </form>
           )}
         </div>
@@ -185,14 +196,13 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
       {step === "team" && (
         <div className="space-y-4">
           <p className="text-[14px] text-ink-700">
-            Reception, housekeeping and maintenance each see only the screens they need. Everyone gets
-            their own login and sets their own password from an invitation.
+            {t.teamBody}
           </p>
           <Link
             href="/users"
             className="inline-flex h-11 items-center rounded-md bg-brand-800 px-5 text-[14.5px] font-semibold text-white transition-colors hover:bg-brand-700"
           >
-            Add your team
+            {t.addTeam}
           </Link>
         </div>
       )}
@@ -203,6 +213,8 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
           skipped={skippedForSize(PRODUCT, facts)}
           rooms={facts.rooms}
           property={property}
+          t={t}
+          saving={shell.saving}
         />
       )}
     </WelcomeShell>
@@ -218,19 +230,23 @@ function Ready({
   rooms,
   skipped,
   property,
+  t,
+  saving,
 }: {
   units: number;
   rooms: number;
   skipped: string[];
   property: { timezone: string; checkInTime: string; checkOutTime: string };
+  t: WelcomePageStrings;
+  saving: string;
 }) {
   return (
     <div className="space-y-6">
       <dl className="divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-white text-[13.5px]">
         {[
-          ["Rooms", `${units} physical room${units === 1 ? "" : "s"}`],
-          ["Time zone", property.timezone],
-          ["Check-in / out", `${property.checkInTime} — ${property.checkOutTime}`],
+          [t.ready.rooms, t.ready.roomsValue(units)],
+          [t.ready.timezone, property.timezone],
+          [t.ready.checkInOut, `${property.checkInTime} — ${property.checkOutTime}`],
         ].map(([k, v]) => (
           <div key={k} className="flex items-center gap-4 px-4 py-2.5">
             <dt className="w-32 shrink-0 text-ink-500">{k}</dt>
@@ -241,18 +257,17 @@ function Ready({
 
       {skipped.length > 0 && (
         <p className="rounded-md border border-surface-border bg-surface-muted px-4 py-3 text-[12.5px] leading-relaxed text-ink-600">
-          Because you have {rooms} rooms we kept setup short and didn&rsquo;t ask about{" "}
-          <strong className="text-ink-900">adding your team</strong>. It is on your dashboard checklist
-          whenever you want it.
+          {t.keptShortBefore(rooms)}{" "}
+          <strong className="text-ink-900">{t.addingTeam}</strong>{t.keptShortAfter}
         </p>
       )}
 
       <p className="text-[14px] text-ink-700">
-        Reception can check a guest in, and every room is on the housekeeping board.
+        {t.readyBody}
       </p>
 
       <form action={finishWelcome}>
-        <WelcomeContinue label="Finish setup" tone="go" />
+        <WelcomeContinue label={t.finish} savingLabel={saving} tone="go" />
       </form>
     </div>
   );
