@@ -2,7 +2,13 @@
 
 **Status:** review written 2026-09-25 for the founder's question *"мейлите към клиентите на хотелите на
 какъв език ще отиват… основно за CRS и за букинг енджина… и структурата на мейлите в CRS"*.
-**Nothing below is built yet** — it needs the founder's yes on the four decisions at the end.
+**Built 2026-09-25** after the founder's answers (*emails in every product, editable, in Bulgarian; CRS
+confirmations by default; the language easy to find*): one shared Guest emails screen in RevioLink,
+RevioCRS and RevioPMS (Settings → Guest emails) with the guest language first; RevioCRS sends
+confirmation / change / cancellation; RevioPMS emails the bill at check-out; the stay block is written
+in the email's language; the From name is the hotel's. **Still open:** pre-arrival and thank-you (need
+the jobs runner), a per-guest language (`Reservation.guestLanguage`), staff mail in the staff member's
+language, and a Bulgarian default for new Bulgarian properties.
 Every claim names the file it was read from.
 
 ## 1. What actually sends today

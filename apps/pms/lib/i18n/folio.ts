@@ -75,6 +75,7 @@ export interface FolioStrings {
     outstandingTail: (folios: number) => string;
     overridePlaceholder: string;
     withBalance: string;
+    emailBill: string;
   };
   charge: {
     title: string;
@@ -250,6 +251,7 @@ export const folio: Translations<FolioStrings> = {
       outstandingTail: (n) => `across ${n} folio${n === 1 ? "" : "s"}. Settle it above, or check out with an override (logged).`,
       overridePlaceholder: "Override reason (e.g. bill to company)",
       withBalance: "Check out with balance",
+      emailBill: "Email the guest their bill",
     },
     charge: {
       title: "Post a charge",
@@ -418,6 +420,7 @@ export const folio: Translations<FolioStrings> = {
       outstandingTail: (n) => `по ${n} ${n === 1 ? "сметка" : "сметки"}. Уредете го по-горе или изпишете госта с изключение (записва се).`,
       overridePlaceholder: "Причина за изключението (напр. фактура към фирма)",
       withBalance: "Напускане с неплатено салдо",
+      emailBill: "Изпрати сметката на госта по имейл",
     },
     charge: {
       title: "Начисляване",

@@ -773,7 +773,7 @@ export const EMAIL_SENT_BY: Record<string, readonly EmailSender[]> = {
   booking_modified: ["crs"],
   booking_cancelled: ["crs"],
   pre_arrival: [],
-  folio_receipt: [],
+  folio_receipt: ["pms"],
   post_stay: [],
   waitlist_joined: ["direct"],
   waitlist_offer: ["direct"],
@@ -847,3 +847,12 @@ export function stayDetails(args: {
 
 /** "Total to pay at the hotel" — the booking page's own wording for the total, per language. */
 export const PAY_AT_HOTEL_LABEL: Record<string, string> = { en: "Total to pay at the hotel", bg: "Общо за плащане в хотела" };
+
+/**
+ * A booking's reference — short, human, sayable over the phone, derived from the id so it needs no
+ * column or sequence. One definition for every product's mail and screens (`@revio/booking`
+ * re-exports it), so a guest's confirmation and their bill carry the same reference.
+ */
+export function bookingReference(reservationId: string): string {
+  return `RV-${reservationId.slice(-6).toUpperCase()}`;
+}

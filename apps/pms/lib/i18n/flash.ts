@@ -55,6 +55,7 @@ export interface FlashStrings {
     nameTheFloor: string;
   };
   pos: { itemGone: string };
+  checkout: { receiptSent: string; noAddress: string; switchedOff: string; failed: string; done: string };
   emails: { denied: string; gone: string; notALanguage: string; savedLook: string };
   workforce: { delegatorsOnly: string; inactive: (name: string) => string; thatPerson: string };
   support: { expired: string; unknownRequest: string };
@@ -112,6 +113,13 @@ export const flash: Translations<FlashStrings> = {
       pickRooms: "Tick the rooms that are on this floor.",
       floorGone: "That floor no longer has any rooms — somebody changed it while this page was open. Reload the page.",
       nameTheFloor: "Give the floor a name — a number like 3, or a word like Annex.",
+    },
+    checkout: {
+      done: "Checked out.",
+      receiptSent: "Checked out. The guest has been emailed their bill.",
+      noAddress: "Checked out. No bill was emailed — this guest has no email address on file.",
+      switchedOff: "Checked out. No bill was emailed — that email is switched off in Settings → Guest emails.",
+      failed: "Checked out. The bill could not be emailed — the check-out itself is complete.",
     },
     emails: {
       denied: "Only a manager, owner or admin can change guest emails. Ask one of them.",
@@ -186,6 +194,13 @@ export const flash: Translations<FlashStrings> = {
       pickRooms: "Отметнете стаите, които са на този етаж.",
       floorGone: "Този етаж вече няма стаи — някой го е променил, докато страницата е била отворена. Презаредете страницата.",
       nameTheFloor: "Дайте име на етажа — число като 3 или дума като Анекс.",
+    },
+    checkout: {
+      done: "Гостът е изписан.",
+      receiptSent: "Гостът е изписан. Сметката му е изпратена по имейл.",
+      noAddress: "Гостът е изписан. Сметката не е изпратена — гостът няма имейл адрес.",
+      switchedOff: "Гостът е изписан. Сметката не е изпратена — този имейл е изключен в Настройки → Имейли към гостите.",
+      failed: "Гостът е изписан. Сметката не можа да се изпрати по имейл — самото напускане е завършено.",
     },
     emails: {
       denied: "Само управител, собственик или администратор може да променя имейлите към гостите. Обърнете се към някой от тях.",

@@ -332,17 +332,23 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
               </p>
             )}
             {settled ? (
-              <form action={checkOut} className="flex items-center gap-3">
+              <form action={checkOut} className="flex flex-wrap items-center gap-3">
                 <input type="hidden" name="reservationId" value={reservationId} />
+                <input type="hidden" name="receiptChoice" value="1" />
                 <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-success-600"><CheckCircle2 className="h-4 w-4" /> {s.checkout.settled}</span>
                 <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel={s.checkout.title + "…"}>
                   <LogOut className="h-4 w-4" /> {s.checkout.title}
                 </SubmitButton>
+                <label className="flex basis-full items-center gap-1.5 text-[12px] text-ink-600">
+                  <input type="checkbox" name="emailReceipt" defaultChecked className="h-3.5 w-3.5 rounded border-surface-border" />
+                  {s.checkout.emailBill}
+                </label>
               </form>
             ) : (
               <form action={checkOut} className="space-y-2.5">
                 <input type="hidden" name="reservationId" value={reservationId} />
                 <input type="hidden" name="override" value="1" />
+                <input type="hidden" name="receiptChoice" value="1" />
                 <p className="text-[12.5px] text-ink-600">
                   {s.checkout.outstandingLead} <span className="font-bold text-danger-600">{money(combined.balance, currency)}</span> {s.checkout.outstandingTail(folios.length)}
                 </p>
@@ -352,6 +358,10 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                     <LogOut className="h-3.5 w-3.5" /> {s.checkout.withBalance}
                   </SubmitButton>
                 </div>
+                <label className="flex items-center gap-1.5 text-[12px] text-ink-600">
+                  <input type="checkbox" name="emailReceipt" defaultChecked className="h-3.5 w-3.5 rounded border-surface-border" />
+                  {s.checkout.emailBill}
+                </label>
               </form>
             )}
           </Card>

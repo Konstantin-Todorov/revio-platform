@@ -974,8 +974,6 @@ export async function publicReleaseHold(db: Db, propertyId: string, holdId: stri
   try { await syncRealChannels(db, propertyId, stayScope([hold])); } catch { /* nothing a guest can see */ }
 }
 
-/** Short, human, sayable-over-the-phone. Derived from the id so it needs no extra column or sequence. */
-export function bookingReference(reservationId: string): string {
-  return `RV-${reservationId.slice(-6).toUpperCase()}`;
-}
+/** Short, human, sayable-over-the-phone — now defined once in `@revio/core`, re-exported here. */
+export { bookingReference } from "@revio/core";
 

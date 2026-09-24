@@ -15,6 +15,10 @@ import { seedRegisterEntries } from "./register";
 import { ensureFolio, reservationBalance } from "./folio";
 import { stayScope } from "@revio/connectivity";
 import { logAudit, recordSync, str, int } from "./mutation-helpers";
+import { emailReceipt } from "./guest-receipt";
+import { setFlash } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { flash as flashDict } from "./i18n/flash";
 import { todayInTz, addDaysYmd, utcDay, ymd } from "./format";
 
 /**
@@ -212,6 +216,23 @@ export async function checkOut(fd: FormData): Promise<void> {
   // (pointless) or, if the audit write itself failed, roll back a good check-out (worse).
   for (const a of audits) {
     await logAudit(session.activePropertyId, session.tenantId, { ...a, userId: session.userId });
+  }
+
+  /*
+   * The bill, emailed — after the commit, and never able to undo it. The folio screen asks with a
+   * tick (`receiptChoice` says the form offered one); the one-click check-out on the front desk sends
+   * it whenever the guest has an address, because that is what a guest leaving expects.
+   */
+  const offered = fd.get("receiptChoice") != null;
+  const send = offered ? fd.get("emailReceipt") != null : true;
+  const say = (await i18n()).t(flashDict).checkout;
+  if (send) {
+    const outcome = await emailReceipt(reservationId);
+    await setFlash(outcome === "failed" ? "error" : outcome === "sent" ? "success" : "info", {
+      sent: say.receiptSent, "no-address": say.noAddress, "switched-off": say.switchedOff, failed: say.failed,
+    }[outcome]);
+  } else {
+    await setFlash("success", say.done);
   }
   refresh();
 }
