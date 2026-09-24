@@ -18,7 +18,7 @@ import { runningTrialFor, openProductAndGreet } from "@revio/db";
 import { publicBaseUrl } from "@revio/email";
 import { trialBanner, isTrialDecider, roleCanOpenProduct } from "@revio/core";
 import { TrialStrip } from "@revio/ui/trial-banner";
-import { translate } from "@revio/ui/i18n";
+import { LOCALE_LABELS, translate } from "@revio/ui/i18n";
 import { LocaleProvider } from "@revio/ui/i18n-context";
 import { shell } from "@/lib/i18n/shell";
 import { getLocale } from "@/lib/locale";
@@ -113,7 +113,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           keepRequested: trial.keepRequestedAt !== null,
         },
         new Date(),
-        (d) => d.toLocaleDateString("en-GB", { day: "numeric", month: "long" }),
+        (d) => d.toLocaleDateString(LOCALE_LABELS[locale].intl, { day: "numeric", month: "long" }),
       )
     : null;
 
@@ -148,6 +148,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             {banner && (
               <TrialStrip
                 banner={banner}
+                locale={locale}
                 {...(isTrialDecider(session.role) ? { keepAction: keepThisTrial } : {})}
               />
             )}

@@ -52,6 +52,10 @@ export interface TrialBanner {
   elapsed: number;
   /** The invitation, or `null` once they have taken it. */
   cta: string | null;
+  /** The facts behind `detail`, so a screen in another language can say the same thing. */
+  keepRequested: boolean;
+  /** The end date as `formatDate` wrote it. */
+  ends: string;
 }
 
 /** Whole days remaining, rounded UP: a trial with four hours left has "1 day", never "0". */
@@ -106,5 +110,7 @@ export function trialBanner(f: TrialBannerFacts, now: Date, formatDate: (d: Date
     daysLeft,
     elapsed,
     cta: f.keepRequested ? null : `Keep ${name}`,
+    keepRequested: f.keepRequested,
+    ends,
   };
 }

@@ -1,5 +1,27 @@
 import type { TrialBanner } from "@revio/core";
 import { SubmitButton } from "./submit-button.js";
+import { fill, translate, type Locale, type Translations } from "./i18n";
+
+/** The strip's words. English is core's own text (`trialBanner`), untouched; this says it in others. */
+export const trialStrings: Translations<{
+  freeTrial: string; sending: string;
+  endsToday: string; lastDay: string; daysLeft: string;
+  keepAsked: string; nothingCharged: string; keep: string;
+}> = {
+  en: {
+    freeTrial: "Free trial", sending: "Sending…",
+    endsToday: "", lastDay: "", daysLeft: "", keepAsked: "", nothingCharged: "", keep: "",
+  },
+  bg: {
+    freeTrial: "Безплатен пробен период", sending: "Изпращане…",
+    endsToday: "Пробният Ви период на {product} приключва днес",
+    lastDay: "Последен ден от пробния Ви период на {product}",
+    daysLeft: "Остават {n} дни от безплатния Ви пробен период на {product}",
+    keepAsked: "Поискахте да запазите {product}. Ще се свържем с Вас, за да го уредим преди {ends} — междувременно нищо не спира.",
+    nothingCharged: "Нищо не се таксува и нищо не се подновява само. Ако не направите нищо, {product} просто се изключва на {ends} и нито една от данните Ви не се изтрива.",
+    keep: "Запази {product}",
+  },
+};
 
 /**
  * The strip a hotel sees at the top of a product they are trying.
@@ -27,13 +49,25 @@ import { SubmitButton } from "./submit-button.js";
  * comes from `@revio/core`.
  */
 export function TrialStrip({
-  banner,
+  banner: b,
   keepAction,
+  locale = "en",
 }: {
   banner: TrialBanner;
   /** Tells us they want to keep it. Omitted where the signed-in person may not ask. */
   keepAction?: (formData: FormData) => void | Promise<void>;
+  /** A server component, so the language arrives as a prop. */
+  locale?: Locale;
 }) {
+  const t = translate(trialStrings, locale);
+  const v = { product: b.productName, n: b.daysLeft, ends: b.ends };
+  // English is exactly what core wrote; another language is said from the same facts.
+  const banner = locale === "en" ? b : {
+    ...b,
+    headline: fill(b.daysLeft === 0 ? t.endsToday : b.daysLeft === 1 ? t.lastDay : t.daysLeft, v),
+    detail: fill(b.keepRequested ? t.keepAsked : t.nothingCharged, v),
+    cta: b.cta === null ? null : fill(t.keep, v),
+  };
   const TONE = {
     calm: {
       wrap: "border-surface-border bg-surface",
@@ -64,7 +98,7 @@ export function TrialStrip({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] ${TONE.pill}`}>
-              Free trial
+              {t.freeTrial}
             </span>
             <span className={`text-[13.5px] font-semibold ${TONE.head}`}>{banner.headline}</span>
           </div>
@@ -74,7 +108,7 @@ export function TrialStrip({
         {banner.cta && keepAction && (
           <form action={keepAction} className="shrink-0">
             <SubmitButton
-              pendingLabel="Sending…"
+              pendingLabel={t.sending}
               className="rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700"
             >
               {banner.cta}
