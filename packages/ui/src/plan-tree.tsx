@@ -9,6 +9,44 @@ import {
 } from "@revio/core";
 
 /**
+ * The words the tree prints. English by default — RevioLink passes nothing and reads exactly what it
+ * always did; RevioCRS passes its Bulgarian. `count` gets the three numbers `selectionCount` counts,
+ * so a translation can decline them rather than re-parse an English sentence.
+ */
+export interface PlanTreeStrings {
+  search: string;
+  selectAll: string;
+  inverse: string;
+  clear: string;
+  nothingMatches: (query: string) => string;
+  expand: (room: string) => string;
+  collapse: (room: string) => string;
+  roomOnlyTitle: string;
+  roomOnlyBadge: string;
+  roomItself: string;
+  follows: (parent: string) => string;
+  itsParent: string;
+  inactive: string;
+  count?: (plans: number, rooms: number, roomOnly: number) => string;
+}
+
+const EN: PlanTreeStrings = {
+  search: "Search a plan or room, by name or code…",
+  selectAll: "Select all",
+  inverse: "Inverse",
+  clear: "Clear",
+  nothingMatches: (q) => `Nothing matches “${q}”.`,
+  expand: (r) => `Expand ${r}`,
+  collapse: (r) => `Collapse ${r}`,
+  roomOnlyTitle: "No rate plan you can edit is linked to this room. Allocation and restrictions still apply to it; a price change does not.",
+  roomOnlyBadge: "allocation & restrictions only",
+  roomItself: "the room itself — allocation & restrictions",
+  follows: (p) => `follows ${p}`,
+  itsParent: "its parent",
+  inactive: "inactive",
+};
+
+/**
  * "Which rate plans would you like to apply these changes to?" — one room-first tree.
  *
  * ## What it replaces, and why the shape was the bug
@@ -38,12 +76,15 @@ export function PlanTree({
   selected,
   onChange,
   accentText = "text-brand-700",
+  strings,
 }: {
   rooms: SelectableRoom[];
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
   accentText?: string;
+  strings?: PlanTreeStrings;
 }) {
+  const t = strings ?? EN;
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -77,24 +118,24 @@ export function PlanTree({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search a plan or room, by name or code…"
+            placeholder={t.search}
             className="h-8 w-full rounded-md border border-surface-border bg-white pl-7 pr-2 text-[12.5px] outline-none focus:border-brand-600"
           />
         </span>
         <button type="button" onClick={() => onChange(selectAll(rooms))} className={`text-[12px] font-semibold ${accentText} hover:underline`}>
-          Select all
+          {t.selectAll}
         </button>
         <button type="button" onClick={() => onChange(invertSelection(rooms, selected))} className={`text-[12px] font-semibold ${accentText} hover:underline`}>
-          Inverse
+          {t.inverse}
         </button>
         <button type="button" onClick={() => onChange(new Set())} className="text-[12px] font-semibold text-ink-500 hover:underline">
-          Clear
+          {t.clear}
         </button>
       </div>
 
       <div className="max-h-[24rem] overflow-y-auto p-2">
         {visible.length === 0 && (
-          <p className="px-2 py-6 text-center text-[12.5px] text-ink-400">Nothing matches “{query}”.</p>
+          <p className="px-2 py-6 text-center text-[12.5px] text-ink-400">{t.nothingMatches(query)}</p>
         )}
 
         {visible.map((room) => {
@@ -113,7 +154,7 @@ export function PlanTree({
                 <button
                   type="button"
                   onClick={() => toggleCollapse(room.id)}
-                  aria-label={isCollapsed ? `Expand ${room.name}` : `Collapse ${room.name}`}
+                  aria-label={isCollapsed ? t.expand(room.name) : t.collapse(room.name)}
                   className="rounded p-0.5 text-ink-400 hover:text-ink-700"
                 >
                   {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -138,10 +179,10 @@ export function PlanTree({
                 <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-ink-800">{room.name}</span>
                 {roomOnly && (
                   <span
-                    title="No rate plan you can edit is linked to this room. Allocation and restrictions still apply to it; a price change does not."
+                    title={t.roomOnlyTitle}
                     className="shrink-0 rounded bg-warning-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning-700"
                   >
-                    allocation &amp; restrictions only
+                    {t.roomOnlyBadge}
                   </span>
                 )}
                 {room.code && <span className="shrink-0 text-[11px] text-ink-400">{room.code}</span>}
@@ -160,6 +201,7 @@ export function PlanTree({
                       plan={p}
                       checked={selected.has(pairKey(room.id, p.id))}
                       onToggle={() => onChange(togglePlan(room, p.id, selected))}
+                      t={t}
                     />
                   ))}
                 </ul>
@@ -176,10 +218,16 @@ export function PlanTree({
       */}
       <div className="border-t border-surface-border px-3 py-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[12px] font-semibold text-ink-700">{selectionCount(groups)}</span>
+          <span className="text-[12px] font-semibold text-ink-700">{t.count
+            ? t.count(
+                groups.reduce((n, g) => n + g.plans.length, 0),
+                groups.filter((g) => g.plans.length > 0).length,
+                groups.filter((g) => g.roomOnly).length,
+              )
+            : selectionCount(groups)}</span>
           {groups.length > 0 && (
             <button type="button" onClick={() => onChange(new Set())} className="text-[12px] font-semibold text-ink-500 hover:underline">
-              Clear
+              {t.clear}
             </button>
           )}
         </div>
@@ -189,7 +237,7 @@ export function PlanTree({
             <div className="mt-0.5 flex flex-wrap gap-1">
               {g.roomOnly && (
                 <span className="rounded-md border border-warning-600/25 bg-warning-50 px-2 py-0.5 text-[11.5px] text-warning-700">
-                  the room itself — allocation &amp; restrictions
+                  {t.roomItself}
                 </span>
               )}
               {g.plans.map((p) => (
@@ -215,8 +263,8 @@ export function PlanTree({
 }
 
 function PlanRow({
-  plan, checked, onToggle,
-}: { plan: SelectablePlan; checked: boolean; onToggle: () => void }) {
+  plan, checked, onToggle, t,
+}: { plan: SelectablePlan; checked: boolean; onToggle: () => void; t: PlanTreeStrings }) {
   const derived = plan.priceLogic === "derived";
   const unavailable = derived || !plan.active;
 
@@ -234,10 +282,10 @@ function PlanRow({
         <span className="ml-auto flex shrink-0 items-center gap-1 text-[10.5px] uppercase tracking-wide">
           {derived ? (
             <>
-              <Link2 className="h-3 w-3" /> follows {plan.parentName ?? "its parent"}
+              <Link2 className="h-3 w-3" /> {t.follows(plan.parentName ?? t.itsParent)}
             </>
           ) : (
-            "inactive"
+            t.inactive
           )}
         </span>
       </li>

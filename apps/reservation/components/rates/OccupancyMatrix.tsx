@@ -1,17 +1,15 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bulk as bulkDict } from "@/lib/i18n/bulk";
+
 import { matrixRows, type BulkTargetRoom, type BulkOp } from "@revio/core";
 
 const inputCls =
   "h-8 w-full rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-900 outline-none focus:border-brand-600";
 
-const OPS: [BulkOp, string, string][] = [
-  ["set", "Set to", "€"],
-  ["inc_pct", "Increase by", "%"],
-  ["dec_pct", "Decrease by", "%"],
-  ["inc_amt", "Increase by", "€"],
-  ["dec_amt", "Decrease by", "€"],
-];
+const OPS: [BulkOp, string][] = [["set", "€"], ["inc_pct", "%"], ["dec_pct", "%"], ["inc_amt", "€"], ["dec_amt", "€"]];
 
 export type MatrixEntry = { op: BulkOp | ""; value: string };
 
@@ -61,23 +59,24 @@ export function OccupancyMatrix({
   onPrimaryValueChange: (v: string) => void;
 }) {
   const rows = matrixRows(rooms);
+  const m = translate(bulkDict, useLocale()).matrix;
   if (rows.length === 0) return null;
 
   return (
     <div className="rounded-lg border border-surface-border bg-surface-muted/30 p-3">
       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[12px] font-semibold text-ink-700">Price per guest count</span>
+        <span className="text-[12px] font-semibold text-ink-700">{m.title}</span>
         <div className="flex rounded-md border border-surface-border bg-white p-0.5 text-[11.5px] font-semibold">
-          {(["offsets", "manual"] as const).map((m) => (
+          {(["offsets", "manual"] as const).map((key) => (
             <button
-              key={m}
+              key={key}
               type="button"
-              onClick={() => onModeChange(m)}
+              onClick={() => onModeChange(key)}
               className={`rounded px-2 py-1 transition-colors ${
-                mode === m ? "bg-brand-800 text-white" : "text-ink-500 hover:text-ink-800"
+                mode === key ? "bg-brand-800 text-white" : "text-ink-500 hover:text-ink-800"
               }`}
             >
-              {m === "offsets" ? "One rule" : "Each one"}
+              {key === "offsets" ? m.oneRule : m.eachOne}
             </button>
           ))}
         </div>
@@ -90,17 +89,17 @@ export function OccupancyMatrix({
               className="text-[12px] text-ink-600"
               {...(primaryOccupancyNote ? { title: primaryOccupancyNote } : {})}
             >
-              {primaryOccupancy} guests
-              {primaryOccupancyNote ? <span className="text-ink-400"> · assumed</span> : null}
+              {m.guests(primaryOccupancy)}
+              {primaryOccupancyNote ? <span className="text-ink-400">{m.assumed}</span> : null}
             </span>
             <input
               type="number" step="0.01" value={primaryValue}
               onChange={(e) => onPrimaryValueChange(e.target.value)}
-              placeholder="Main price (€)" className={inputCls}
+              placeholder={m.mainPrice} className={inputCls}
             />
           </div>
           <div className="grid grid-cols-[auto,7rem,1fr] items-center gap-2">
-            <span className="text-[12px] text-ink-600">each extra guest</span>
+            <span className="text-[12px] text-ink-600">{m.extraGuest}</span>
             <select
               value={offset.direction}
               onChange={(e) => onOffsetChange({ ...offset, direction: e.target.value as "inc_amt" | "inc_pct" })}
@@ -118,22 +117,21 @@ export function OccupancyMatrix({
           <p className="text-[11px] leading-relaxed text-ink-500">
             {/* Says what "each extra" compounds to, because per-step and per-row give different
                 answers for a percentage and the difference is invisible until the OTA shows it. */}
-            Applied once per guest above {primaryOccupancy} — so {primaryOccupancy + 1} guests gets it
-            once and {primaryOccupancy + 2} gets it twice.
+            {m.appliedOnce(primaryOccupancy)}
           </p>
         </div>
       ) : (
         <div className="space-y-1.5">
           {rows.map((r) => {
             const entry = entries[r.occupancy] ?? { op: "", value: "" };
-            const unit = OPS.find(([o]) => o === entry.op)?.[2] ?? "";
+            const unit = OPS.find(([o]) => o === entry.op)?.[1] ?? "";
             return (
               <div key={r.occupancy} className="grid grid-cols-[3.5rem,1fr,6rem] items-center gap-2">
                 <span className="text-[12px] text-ink-600">
-                  {r.occupancy}p
+                  {m.short(r.occupancy)}
                   {r.skippedBy.length > 0 && (
                     <span
-                      title={`Not applied to ${r.skippedBy.join(", ")} — ${r.skippedBy.length === 1 ? "it does" : "they do"} not sleep that many`}
+                      title={m.notApplied(r.skippedBy)}
                       className="ml-0.5 cursor-help text-warning-600"
                     >
                       *
@@ -145,9 +143,9 @@ export function OccupancyMatrix({
                   onChange={(e) => onEntryChange(r.occupancy, { ...entry, op: e.target.value as BulkOp | "" })}
                   className={inputCls}
                 >
-                  <option value="">— no change —</option>
-                  {OPS.map(([o, label, u]) => (
-                    <option key={o} value={o}>{`${label} ${u}`}</option>
+                  <option value="">{m.noChange}</option>
+                  {OPS.map(([o]) => (
+                    <option key={o} value={o}>{m.ops[o as keyof typeof m.ops]}</option>
                   ))}
                 </select>
                 <input
@@ -161,8 +159,7 @@ export function OccupancyMatrix({
           })}
           {rows.some((r) => r.skippedBy.length > 0) && (
             <p className="pt-1 text-[11px] leading-relaxed text-ink-500">
-              * Skipped for rooms that do not sleep that many — never sent as a price they cannot
-              take.
+              {m.skippedNote}
             </p>
           )}
         </div>

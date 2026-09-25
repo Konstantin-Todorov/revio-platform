@@ -1,5 +1,10 @@
 "use client";
 
+import { formatDay, translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bulk as bulkDict } from "@/lib/i18n/bulk";
+import { moneyIn } from "@/lib/i18n/money";
+
 import { useMemo, useState, useTransition } from "react";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { applyCrsBulkUpdateMulti, type CrsBulkPayload, type CrsBulkRateMode, type CrsBulkResult } from "@/lib/actions-rates";
@@ -20,14 +25,11 @@ type PlanOpt = {
   roomTypeIds: string[];
 };
 
-const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
-const RATE_MODES: [CrsBulkRateMode, string][] = [
-  // "on the selected plans" matters: with derived plans in play, "set exact" reads as though it
-  // flattens every plan to one figure. It sets the plans you ticked; the derived ones recompute off
-  // them and keep their own offsets.
-  ["set", "Set exact price (€) on the selected plans"], ["inc_pct", "Increase by %"], ["dec_pct", "Decrease by %"],
-  ["inc_amt", "Increase by amount (€)"], ["dec_amt", "Decrease by amount (€)"],
-];
+const DOW = ["1", "2", "3", "4", "5", "6", "0"] as const;
+// "on the selected plans" matters in the "set" label: with derived plans in play, "set exact" reads
+// as though it flattens every plan to one figure. It sets the plans you ticked; the derived ones
+// recompute off them and keep their own offsets.
+const RATE_MODES: CrsBulkRateMode[] = ["set", "inc_pct", "dec_pct", "inc_amt", "dec_amt"];
 
 /**
  * The CRS bulk editor (CRS-REFINEMENT-R2 §7) — the twin of RevioLink's BulkUpdatePanel: any subset of
@@ -48,6 +50,11 @@ export function CrsBulkPanel({
   compact?: boolean;
   onApplied?: (r: CrsBulkResult) => void;
 }) {
+  const locale = useLocale();
+  const b = translate(bulkDict, locale);
+  const P = b.panel;
+  const S = b.summary;
+  const money = moneyIn(locale);
   // The occupancy matrix replaces the single Price control when plans sell per person.
   const [matrixMode, setMatrixMode] = useState<"offsets" | "manual">("offsets");
   const [entries, setEntries] = useState<Record<number, MatrixEntry>>({});
@@ -175,12 +182,13 @@ export function CrsBulkPanel({
 
   function summarize(p: CrsBulkPayload): string[] {
     const lines: string[] = [];
-    const showNum = (v: number | null | undefined, unit = "") => (v && v > 0 ? `${v}${unit}` : "cleared");
+    const showNum = (v: number | null | undefined) => (v && v > 0 ? String(v) : S.cleared);
+    const showDays = (v: number | null | undefined) => (v && v > 0 ? S.days(v) : S.cleared);
     if (p.rate) {
-      const label = RATE_MODES.find(([m]) => m === p.rate!.mode)?.[1] ?? p.rate.mode;
-      const names = planNames() || "standard plan";
+      const label = P.rateModes[p.rate.mode] ?? p.rate.mode;
+      const names = planNames() || S.standardPlan;
       const unit = p.rate.mode === "inc_pct" || p.rate.mode === "dec_pct" ? "%" : "€";
-      lines.push(`Price — ${label}: ${p.rate.value}${unit} · on ${names}`);
+      lines.push(S.price(label, S.amount(p.rate.value, unit), names));
       /*
        * §5.3 — the blast radius, stated before the commit.
        *
@@ -191,41 +199,41 @@ export function CrsBulkPanel({
        */
       if (derivedPlans.length > 0) {
         const following = derivedPlans.map((d) => d.name).join(", ");
-        lines.push(`…and ${derivedPlans.length} derived plan${derivedPlans.length === 1 ? "" : "s"} recompute off it: ${following}`);
+        lines.push(S.derived(derivedPlans.length, following));
       }
     }
     if (p.occupancyRates?.length) {
-      const names = planNames() || "every manual plan";
+      const names = planNames() || S.everyManualPlan;
       lines.push(
-        `Price per guest count — ${p.occupancyRates.map((o) => `${o.occupancy}p €${o.value}`).join(" · ")} · on ${names}`,
+        S.perGuest(p.occupancyRates.map((o) => S.guestPrice(o.occupancy, money(Math.round(o.value * 100)))).join(" · "), names),
       );
       // Named here as well as in the result: a skip discovered afterwards is a surprise.
       const short = selectedRooms().filter((r) => r.maxOccupancy < Math.max(...p.occupancyRates!.map((o) => o.occupancy)));
       if (short.length > 0) {
-        lines.push(`…skipped where the room sleeps fewer: ${short.map((r) => `${r.roomName} (${r.maxOccupancy})`).join(", ")}`);
+        lines.push(S.skipped(short.map((r) => `${r.roomName} (${r.maxOccupancy})`).join(", ")));
       }
     }
-    if (p.availability !== undefined) lines.push(`Allocation → ${p.availability}`);
-    if (p.minLos !== undefined) lines.push(`Min stay → ${showNum(p.minLos)}`);
-    if (p.maxLos !== undefined) lines.push(`Max stay → ${showNum(p.maxLos)}`);
-    if (p.cta !== undefined) lines.push(`Closed to arrival → ${p.cta ? "on" : "off"}`);
-    if (p.ctd !== undefined) lines.push(`Closed to departure → ${p.ctd ? "on" : "off"}`);
-    if (p.stopSell !== undefined) lines.push(`Stop-sell → ${p.stopSell ? "closed" : "open"}`);
-    if (p.advanceMin !== undefined) lines.push(`Min advance → ${showNum(p.advanceMin, " days")}`);
-    if (p.advanceMax !== undefined) lines.push(`Max advance → ${showNum(p.advanceMax, " days")}`);
+    if (p.availability !== undefined) lines.push(S.allocation(p.availability));
+    if (p.minLos !== undefined) lines.push(S.minStay(showNum(p.minLos)));
+    if (p.maxLos !== undefined) lines.push(S.maxStay(showNum(p.maxLos)));
+    if (p.cta !== undefined) lines.push(S.cta(p.cta));
+    if (p.ctd !== undefined) lines.push(S.ctd(p.ctd));
+    if (p.stopSell !== undefined) lines.push(S.stopSell(p.stopSell));
+    if (p.advanceMin !== undefined) lines.push(S.minAdvance(showDays(p.advanceMin)));
+    if (p.advanceMax !== undefined) lines.push(S.maxAdvance(showDays(p.advanceMax)));
     return lines;
   }
 
   const payload = phase !== "closed" ? buildPayload() : null;
   const summaryLines = payload ? summarize(payload) : [];
   const rtNames = rtIds.map((id) => roomTypes.find((r) => r.id === id)?.name).filter(Boolean);
-  const dowLabel = dows.length ? dows.map((d) => DOW.find(([v]) => v === d)?.[1]).join(", ") : "every day";
+  const dowLabel = dows.length ? DOW.filter((d) => dows.includes(d)).map((d) => P.dow[d]).join(", ") : P.everyDay;
 
   function openPreview() {
     setInlineError(null);
-    if (rtIds.length === 0) return setInlineError("Select at least one room type.");
-    if (dateTo < dateFrom) return setInlineError("End date is before start date.");
-    if (summarize(buildPayload()).length === 0) return setInlineError("Set at least one field to update.");
+    if (rtIds.length === 0) return setInlineError(P.errors.noRoom);
+    if (dateTo < dateFrom) return setInlineError(P.errors.dates);
+    if (summarize(buildPayload()).length === 0) return setInlineError(P.errors.nothing);
     setResult(null);
     setPhase("confirm");
   }
@@ -247,20 +255,20 @@ export function CrsBulkPanel({
       <div className={`grid gap-5 ${cols}`}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="From"><DateField value={dateFrom} min={today} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} /></Field>
-            <Field label="To"><DateField value={dateTo} min={today} onChange={(e) => setDateTo(e.target.value)} className={inputCls} /></Field>
+            <Field label={P.from}><DateField value={dateFrom} min={today} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} /></Field>
+            <Field label={P.to}><DateField value={dateTo} min={today} onChange={(e) => setDateTo(e.target.value)} className={inputCls} /></Field>
           </div>
           <div>
-            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Days of week</span>
+            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">{P.days}</span>
             <div className="flex flex-wrap gap-1.5">
-              {DOW.map(([v, label]) => (
+              {DOW.map((v) => (
                 <label key={v} className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors ${dows.includes(v) ? "border-brand-600 bg-brand-50 text-brand-700" : "border-surface-border text-ink-600 hover:bg-surface-muted"}`}>
                   <input type="checkbox" checked={dows.includes(v)} onChange={() => setDows((a) => toggle(a, v))} className="sr-only" />
-                  {label}
+                  {P.dow[v]}
                 </label>
               ))}
             </div>
-            <span className="mt-1 block text-[11px] text-ink-400">Leave all off to apply to every day.</span>
+            <span className="mt-1 block text-[11px] text-ink-400">{P.everyDayHint}</span>
           </div>
           {/*
             §5.3 wanted the plans beside Price rather than a scroll away from it, and the tree keeps
@@ -270,28 +278,27 @@ export function CrsBulkPanel({
           */}
           <div>
             <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">
-              Which rate plans would you like to apply these changes to?
+              {P.whichPlans}
             </span>
-            <PlanTree rooms={tree} selected={selected} onChange={setSelected} />
+            <PlanTree rooms={tree} selected={selected} onChange={setSelected} strings={b.tree} />
             <span className="mt-1.5 block text-[11px] leading-snug text-ink-400">
-              A price lands on the plans you tick. Allocation and restrictions are written per room type,
-              so they apply to every room with something ticked under it.
+              {P.plansHint}
             </span>
           </div>
         </div>
 
         <div className="space-y-3.5">
           <div className="rounded-md bg-surface-muted px-3 py-2 text-[11.5px] font-medium text-ink-500">
-            Fill only the fields you want to change — the rest stay as they are. At least one is required.
+            {P.fillOnly}
           </div>
 
           {/* Each tab shows a dot when it carries a pending change, so switching away from a tab
               cannot hide an edit that is about to be applied. */}
           <div className="flex gap-1 rounded-md bg-surface-sunken p-1">
             {([
-              ["rates", "Rates", rateMode !== ""],
-              ["availability", "Availability", avail !== ""],
-              ["restrictions", "Restrictions", [minLos, maxLos, advMin, advMax, cta, ctd, stopSell].some((v) => v !== "")],
+              ["rates", P.tabs.rates, rateMode !== ""],
+              ["availability", P.tabs.availability, avail !== ""],
+              ["restrictions", P.tabs.restrictions, [minLos, maxLos, advMin, advMax, cta, ctd, stopSell].some((v) => v !== "")],
             ] as const).map(([key, label, dirty]) => (
               <button
                 key={key}
@@ -321,8 +328,7 @@ export function CrsBulkPanel({
                 <span className="flex items-start gap-1.5 rounded-md bg-brand-50 px-2.5 py-1.5 text-[11.5px] font-medium leading-snug text-brand-800">
                   <span aria-hidden>📎</span>
                   <span>
-                    Derived plans follow the plan they come from — change it and they recompute. You only
-                    ever edit the parent, and the preview names every plan that moves with it.
+                    {P.derivedNote}
                   </span>
                 </span>
               )}
@@ -348,13 +354,13 @@ export function CrsBulkPanel({
                 />
               ) : (
               <div className="grid grid-cols-[1fr,8rem] gap-2">
-                <Field label="Price"><select value={rateMode} onChange={(e) => setRateMode(e.target.value as CrsBulkRateMode | "")} className={inputCls}>
-                  <option value="">— No change —</option>
-                  {RATE_MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+                <Field label={P.price}><select value={rateMode} onChange={(e) => setRateMode(e.target.value as CrsBulkRateMode | "")} className={inputCls}>
+                  <option value="">{P.noChange}</option>
+                  {RATE_MODES.map((m) => <option key={m} value={m}>{P.rateModes[m]}</option>)}
                 </select></Field>
                 {/* §5.3 — the field echoes its own unit. "12" means something different under
                     "Increase by %" and "Increase by amount", and the input gave no clue which. */}
-                <Field label={rateMode === "" ? "Value" : rateUnit === "%" ? "Value (%)" : "Value (€)"}>
+                <Field label={rateMode === "" ? P.value : P.valueIn(rateUnit)}>
                   <div className="relative">
                     <input
                       type="number" step="0.01" value={rateValue}
@@ -376,10 +382,10 @@ export function CrsBulkPanel({
 
           {tab === "availability" && (
             <div className="grid grid-cols-2 gap-2">
-              <Field label="Allocation" hint="The gross number you offer — Bookable subtracts what is sold"><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
+              <Field label={P.allocation} hint={P.allocationHint}><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
               <div />
               <p className="col-span-2 text-[11px] text-ink-400">
-                Sets the number of rooms offered for sale on each selected day, per room type. Leave empty to change nothing.
+                {P.allocationNote}
               </p>
             </div>
           )}
@@ -387,36 +393,36 @@ export function CrsBulkPanel({
           {tab === "restrictions" && (
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Min stay (nights)"><input type="number" min="0" value={minLos} onChange={(e) => setMinLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
-                <Field label="Max stay (nights)"><input type="number" min="0" value={maxLos} onChange={(e) => setMaxLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
-                <Field label="Min advance (days)"><input type="number" min="0" value={advMin} onChange={(e) => setAdvMin(e.target.value)} placeholder="—" className={inputCls} /></Field>
-                <Field label="Max advance (days)"><input type="number" min="0" value={advMax} onChange={(e) => setAdvMax(e.target.value)} placeholder="—" className={inputCls} /></Field>
+                <Field label={P.minStay}><input type="number" min="0" value={minLos} onChange={(e) => setMinLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
+                <Field label={P.maxStay}><input type="number" min="0" value={maxLos} onChange={(e) => setMaxLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
+                <Field label={P.minAdvance}><input type="number" min="0" value={advMin} onChange={(e) => setAdvMin(e.target.value)} placeholder="—" className={inputCls} /></Field>
+                <Field label={P.maxAdvance}><input type="number" min="0" value={advMax} onChange={(e) => setAdvMax(e.target.value)} placeholder="—" className={inputCls} /></Field>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                <Field label="Closed to arrival"><select value={cta} onChange={(e) => setCta(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="on">Closed</option><option value="off">Open</option></select></Field>
-                <Field label="Closed to departure"><select value={ctd} onChange={(e) => setCtd(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="on">Closed</option><option value="off">Open</option></select></Field>
-                <Field label="Rate plan status"><select value={stopSell} onChange={(e) => setStopSell(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">— No change —</option><option value="off">Open (sell)</option><option value="on">Close (stop-sell)</option></select></Field>
+                <Field label={P.cta}><select value={cta} onChange={(e) => setCta(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">{P.noChange}</option><option value="on">{P.closed}</option><option value="off">{P.open}</option></select></Field>
+                <Field label={P.ctd}><select value={ctd} onChange={(e) => setCtd(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">{P.noChange}</option><option value="on">{P.closed}</option><option value="off">{P.open}</option></select></Field>
+                <Field label={P.planStatus}><select value={stopSell} onChange={(e) => setStopSell(e.target.value as "" | "on" | "off")} className={inputCls}><option value="">{P.noChange}</option><option value="off">{P.openSell}</option><option value="on">{P.closeStop}</option></select></Field>
               </div>
-              <p className="text-[11px] text-ink-400">Min/max stay &amp; advance: enter <span className="font-semibold">0</span> to clear an existing value.</p>
+              <p className="text-[11px] text-ink-400">{P.clearHint}</p>
             </div>
           )}
 
           {inlineError && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{inlineError}</p>}
           <button type="button" onClick={openPreview} className="w-full rounded-md bg-brand-800 px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-            Preview &amp; apply
+            {P.preview}
           </button>
         </div>
       </div>
 
-      <Modal open={phase !== "closed"} onClose={() => setPhase("closed")} title={phase === "result" ? "Bulk update" : "Review bulk update"}>
+      <Modal open={phase !== "closed"} onClose={() => setPhase("closed")} title={phase === "result" ? P.resultTitle : P.reviewTitle}>
         {phase === "confirm" && payload && (
           <div className="space-y-4">
             <div className="rounded-md border border-surface-border bg-surface-muted/60 px-3.5 py-3 text-[12.5px] text-ink-600">
-              <div><span className="font-semibold text-ink-800">Room types:</span> {rtNames.join(", ")}</div>
-              <div className="mt-0.5"><span className="font-semibold text-ink-800">Dates:</span> {dateFrom} → {dateTo} · {dowLabel}</div>
+              <div><span className="font-semibold text-ink-800">{P.roomTypes}</span> {rtNames.join(", ")}</div>
+              <div className="mt-0.5"><span className="font-semibold text-ink-800">{P.dates}</span> {formatDay(dateFrom, locale)} → {formatDay(dateTo, locale)} · {dowLabel}</div>
             </div>
             <div>
-              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">Changes to apply</span>
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">{P.changes}</span>
               <ul className="space-y-1.5">
                 {summaryLines.map((l, i) => (
                   <li key={i} className="flex items-start gap-2 text-[13px] text-ink-700"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500" />{l}</li>
@@ -424,8 +430,8 @@ export function CrsBulkPanel({
               </ul>
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={() => setPhase("closed")} className="rounded-md border border-surface-border px-4 py-2 text-[13px] font-semibold text-ink-600 hover:bg-surface-muted">Cancel</button>
-              <button type="button" onClick={apply} disabled={pending} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60">{pending ? "Applying…" : "Apply"}</button>
+              <button type="button" onClick={() => setPhase("closed")} className="rounded-md border border-surface-border px-4 py-2 text-[13px] font-semibold text-ink-600 hover:bg-surface-muted">{P.cancel}</button>
+              <button type="button" onClick={apply} disabled={pending} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60">{pending ? P.applying : P.apply}</button>
             </div>
           </div>
         )}
@@ -434,12 +440,12 @@ export function CrsBulkPanel({
             {result.ok ? (
               <div className="flex items-start gap-2.5 rounded-md bg-success-50 px-3.5 py-3 text-[13.5px] font-semibold text-success-600">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-                <div><div>Successful</div><div className="mt-0.5 text-[12px] font-medium text-success-600/90">Applied to {result.affected} cell{result.affected === 1 ? "" : "s"} and pushed to the connected channel manager.</div></div>
+                <div><div>{P.success}</div><div className="mt-0.5 text-[12px] font-medium text-success-600/90">{P.applied(result.affected ?? 0)}</div></div>
               </div>
             ) : (
               <div className="flex items-start gap-2.5 rounded-md bg-danger-50 px-3.5 py-3 text-[13.5px] font-semibold text-danger-600">
                 <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
-                <div><div>Not successful</div><div className="mt-0.5 text-[12px] font-medium text-danger-600/90">{result.error ?? "The update could not be applied."}</div></div>
+                <div><div>{P.failed}</div><div className="mt-0.5 text-[12px] font-medium text-danger-600/90">{result.error ?? P.failedFallback}</div></div>
               </div>
             )}
             {result.ok && (
@@ -453,7 +459,7 @@ export function CrsBulkPanel({
               <p className="flex items-start gap-2 rounded-md bg-warning-50 px-3 py-2 text-[12px] font-medium text-warning-700"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{result.warning}</p>
             )}
             <div className="flex justify-end pt-1">
-              <button type="button" onClick={() => setPhase("closed")} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700">Done</button>
+              <button type="button" onClick={() => setPhase("closed")} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700">{P.done}</button>
             </div>
           </div>
         )}
