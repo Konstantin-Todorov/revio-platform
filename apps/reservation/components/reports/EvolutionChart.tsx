@@ -1,5 +1,10 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { reports as reportsDict } from "@/lib/i18n/reports";
+import { moneyIn } from "@/lib/i18n/money";
+
 import { useState } from "react";
 import { smoothPath, type Pt } from "@revio/ui/chart-path";
 
@@ -31,7 +36,10 @@ export function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket
     smoothPath(data.map((d, i) => [cx(i), yAdr(pick(d))] as Pt));
   const gridVals = [0, 0.25, 0.5, 0.75, 1];
 
-  const money = (v: number) => `${currency === "EUR" ? "€" : currency === "USD" ? "$" : currency === "GBP" ? "£" : currency + " "}${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const locale = useLocale();
+  const ch = translate(reportsDict, locale).chart;
+  // Whole units, in the reader's notation: "€120" / "120 €".
+  const money = (v: number) => moneyIn(locale)(Math.round(v) * 100, currency);
   const pctDelta = (now: number, then: number) => (then <= 0 ? null : `${now >= then ? "+" : ""}${(((now - then) / then) * 100).toFixed(0)}%`);
   const hd = hover != null ? data[hover] : null;
   // Position the tooltip near the hovered bucket, flipping to the left half when near the right edge.
@@ -41,7 +49,7 @@ export function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket
   return (
     <div className="relative px-4 py-4">
       <div className="mb-1 flex justify-between text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">
-        <span>Room-nights</span><span>ADR ({currency})</span>
+        <span>{ch.roomNights}</span><span>{ch.adr(currency)}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full select-none" style={{ height: "auto" }} preserveAspectRatio="xMidYMid meet">
         <defs>
@@ -90,7 +98,7 @@ export function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket
           <div className="mb-1.5 font-semibold text-ink-900">{hd.label}</div>
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-ink-500"><span className="h-2 w-2 rounded-sm" style={{ background: BLUE }} /> Room-nights</span>
+              <span className="flex items-center gap-1.5 text-ink-500"><span className="h-2 w-2 rounded-sm" style={{ background: BLUE }} /> {ch.roomNights}</span>
               <span className="tnum font-semibold text-ink-900">{hd.rnNow}</span>
             </div>
             <div className="flex items-center justify-between">
@@ -98,7 +106,7 @@ export function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket
               <span className="tnum text-ink-500">{hd.rnThen}{pctDelta(hd.rnNow, hd.rnThen) != null && <span className={hd.rnNow >= hd.rnThen ? "ml-1 text-success-600" : "ml-1 text-danger-600"}>{pctDelta(hd.rnNow, hd.rnThen)}</span>}</span>
             </div>
             <div className="mt-1 flex items-center justify-between border-t border-surface-border/60 pt-1">
-              <span className="flex items-center gap-1.5 text-ink-500"><span className="h-2 w-2 rounded-full" style={{ background: AMBER }} /> ADR</span>
+              <span className="flex items-center gap-1.5 text-ink-500"><span className="h-2 w-2 rounded-full" style={{ background: AMBER }} /> {ch.adrShort}</span>
               <span className="tnum font-semibold text-ink-900">{money(hd.adrNow)}</span>
             </div>
             <div className="flex items-center justify-between">
@@ -110,10 +118,10 @@ export function EvolutionChart({ data, currency, basisLabel }: { data: EvoBucket
       )}
 
       <div className="mt-2 flex flex-wrap items-center justify-center gap-4 text-[11px] text-ink-500">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: BLUE }} /> Room-nights</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TEAL }} /> Room-nights ({basisLabel})</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: AMBER }} /> ADR</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: RED }} /> ADR ({basisLabel})</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: BLUE }} /> {ch.roomNights}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: TEAL }} /> {ch.withBasis(ch.roomNights, basisLabel)}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: AMBER }} /> {ch.adrShort}</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded" style={{ background: RED }} /> {ch.withBasis(ch.adrShort, basisLabel)}</span>
       </div>
     </div>
   );

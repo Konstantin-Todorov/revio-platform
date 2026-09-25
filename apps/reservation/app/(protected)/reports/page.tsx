@@ -7,7 +7,10 @@ import { getProperty, getScope, todayInTz } from "@/lib/data";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { StatCard, type StatTone } from "@revio/ui/stat-card";
 import { EvolutionChart, type EvoBucket } from "@/components/reports/EvolutionChart";
-import { money, FORECAST_DISCLAIMER } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { reports as reportsDict } from "@/lib/i18n/reports";
+import { common } from "@/lib/i18n/common";
+import { rangeLabel } from "@/lib/i18n/range";
 import { isCommissionFreeCategory, availabilityPressure, LOW_AVAILABILITY_SHARE } from "@revio/core";
 import { BarList, Donut, PaceCurve, ForwardCurve } from "@/components/reports/Visuals";
 
@@ -15,22 +18,22 @@ export const dynamic = "force-dynamic";
 
 // Analytics sub-tabs (spec §3.2) — all CRS-native, derived from reservations + inventory.
 // Traffic / conversion / comp-set / review score are deliberately ABSENT (need external data).
-const REPORTS = [
-  { key: "performance", label: "Performance" },
-  { key: "pickup", label: "Pickup & Pace" },
-  { key: "source", label: "Source / Channel mix" },
-  { key: "products", label: "Room-type & Rate-plan" },
-  { key: "cancellation", label: "Cancellations" },
-  { key: "otb", label: "On-the-books" },
-  { key: "availability", label: "Availability" },
-] as const;
+const REPORTS = ["performance", "pickup", "source", "products", "cancellation", "otb", "availability"] as const;
+const RANGES: RangePreset[] = ["l7d", "l28d", "ytd", "n7d", "n28d"];
 
-const RANGES: { key: RangePreset; label: string }[] = [
-  { key: "l7d", label: "L7D" }, { key: "l28d", label: "L28D" }, { key: "ytd", label: "YTD" },
-  { key: "n7d", label: "N7D" }, { key: "n28d", label: "N28D" },
-];
-
-const pct = (v: number) => `${v.toFixed(1)}%`;
+/**
+ * Everything a report needs to speak the reader's language, once per report. `money` shadows the
+ * English formatter on purpose: every figure on this page goes through the reader's notation.
+ */
+async function words() {
+  const { t, locale, money, day } = await i18n();
+  const c = t(common);
+  return {
+    R: t(reportsDict), c, locale, money, day,
+    pct: (v: number) => (locale === "en" ? `${v.toFixed(1)}%` : `${v.toFixed(1).replace(".", ",")}%`),
+    label: (range: { preset: string; start: string; endExcl: string; label: string }) => rangeLabel(range, c, day),
+  };
+}
 
 export default async function ReportsPage({
   searchParams,
@@ -38,7 +41,8 @@ export default async function ReportsPage({
   searchParams: Promise<{ report?: string; range?: string; from?: string; to?: string; lens?: string; g?: string; basis?: string }>;
 }) {
   const sp = await searchParams;
-  const report = REPORTS.some((r) => r.key === sp.report) ? sp.report! : "performance";
+  const report = (REPORTS as readonly string[]).includes(sp.report ?? "") ? sp.report! : "performance";
+  const { R: T, c } = await words();
   const scope = await getScope();
   const property = scope.primary;
   const isGroup = scope.scope === "group";
@@ -59,23 +63,23 @@ export default async function ReportsPage({
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Analytics"
-        subtitle={`${isGroup ? scope.label : property.name} · occupancy, rate and revenue for the period you choose`}
+        title={T.title}
+        subtitle={T.subtitle(isGroup ? scope.label : property.name)}
         action={
           <div className="flex items-center gap-2">
             <a href={`/api/reports/export?${qs}`} className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-              <Download className="h-3.5 w-3.5" /> Export Excel
+              <Download className="h-3.5 w-3.5" /> {T.exportExcel}
             </a>
             {/* CSV kept as the second option: it opens anywhere, and some people genuinely want it. */}
             <a href={`/api/reports/export?${qs}&format=csv`} className="flex h-8 items-center rounded-md border border-surface-border px-2.5 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
-              CSV
+              {T.csv}
             </a>
           </div>
         }
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        {REPORTS.map((r) => (
+        {REPORTS.map((key) => ({ key, label: T.tabs[key] })).map((r) => (
           <Link
             key={r.key}
             href={href({ report: r.key })}
@@ -92,7 +96,7 @@ export default async function ReportsPage({
       {report !== "pickup" && report !== "availability" && report !== "otb" && (
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-surface-border bg-white px-3 py-2">
           <span className="flex items-center gap-1.5">
-            {RANGES.map((r) => (
+            {RANGES.map((key) => ({ key, label: c.presetButtons[key as keyof typeof c.presetButtons] })).map((r) => (
               <Link
                 key={r.key}
                 href={href({ range: r.key })}
@@ -106,22 +110,22 @@ export default async function ReportsPage({
           </span>
           <span className="h-4 w-px bg-surface-border" />
           <span className="flex items-center gap-1 text-[11.5px] font-semibold">
-            <Link href={href({ lens: "stay" })} className={`rounded-md px-2.5 py-1 transition-colors ${lens === "stay" ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}>Stay date</Link>
-            <Link href={href({ lens: "book" })} className={`rounded-md px-2.5 py-1 transition-colors ${lens === "book" ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}>Book date</Link>
-            <span className="ml-1 text-[10.5px] font-normal text-ink-400">{lens === "book" ? "production — when it was booked" : "occupancy — when the stay falls"}</span>
+            <Link href={href({ lens: "stay" })} className={`rounded-md px-2.5 py-1 transition-colors ${lens === "stay" ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}>{T.stayDate}</Link>
+            <Link href={href({ lens: "book" })} className={`rounded-md px-2.5 py-1 transition-colors ${lens === "book" ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}>{T.bookDate}</Link>
+            <span className="ml-1 text-[10.5px] font-normal text-ink-400">{lens === "book" ? T.lensHint.book : T.lensHint.stay}</span>
           </span>
           {report === "performance" && lens === "stay" && (
             <>
               <span className="h-4 w-px bg-surface-border" />
               <span className="flex items-center gap-1 text-[11.5px] font-semibold">
-                {([["d", "Daily"], ["w", "Weekly"], ["m", "Monthly"]] as const).map(([k, l]) => (
+                {([["d", T.gran.d], ["w", T.gran.w], ["m", T.gran.m]] as const).map(([k, l]) => (
                   <Link key={k} href={href({ g: k })} className={`rounded-md px-2.5 py-1 transition-colors ${gran === k ? "bg-brand-50 text-brand-800 ring-1 ring-brand-600/30" : "text-ink-500 hover:bg-surface-muted"}`}>{l}</Link>
                 ))}
               </span>
               <span className="h-4 w-px bg-surface-border" />
               <span className="flex items-center gap-1 text-[11.5px] font-semibold">
-                <span className="text-[10.5px] font-normal text-ink-400">Compared with</span>
-                {([["yoy", "Last year"], ["lw", "Last week"]] as const).map(([k, l]) => (
+                <span className="text-[10.5px] font-normal text-ink-400">{T.comparedWith}</span>
+                {([["yoy", T.lastYear], ["lw", T.lastWeek]] as const).map(([k, l]) => (
                   <Link key={k} href={href({ basis: k })} className={`rounded-md px-2.5 py-1 transition-colors ${basis === k ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}>{l}</Link>
                 ))}
               </span>
@@ -134,8 +138,8 @@ export default async function ReportsPage({
         <div className="flex items-start gap-2 rounded-md border border-brand-600/25 bg-brand-50 px-3.5 py-2.5 text-[12.5px] text-brand-800">
           <Layers className="mt-0.5 h-4 w-4 shrink-0 text-brand-600" />
           <span>
-            <span className="font-semibold">Portfolio totals across {scope.count} properties.</span> Occupancy, ADR and RevPAR are recomputed
-            from combined room-nights and revenue — never averaged.{report === "availability" ? ` The Availability calendar shows ${property.name} only (room types differ per property).` : ""}
+            <span className="font-semibold">{T.portfolio(scope.count)}</span>{T.portfolioTail}
+            {report === "availability" ? T.portfolioAvailability(property.name) : ""}
           </span>
         </div>
       )}
@@ -207,17 +211,28 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
     getRangeMetrics(comparisonRange(range, basis)), // YoY=364d or LW=7d, ratios recomputed Σ/Σ
     getProductPerformance(range, "stay"),
   ]);
+  const { R: T, c, money, pct, label, day, locale } = await words();
+  const P = T.perf;
   const currency = m.property.baseCurrency;
-  const basisLabel = basis === "lw" ? "LW" : "YoY";
+  const basisLabel = basis === "lw" ? c.basis.lw : c.basis.yoy;
   const rows = bucket(m.perDay, gran);
   const cmpRows = bucket(cmp.perDay, gran);
-  const granLabel = gran === "d" ? "daily" : gran === "w" ? "weekly" : "monthly";
-  const cmpName = basis === "lw" ? "Last week" : "Last year";
+  /*
+   * Bucket labels stay the ISO keys ("2026-08-28", "wk 2026-08-25", "2026-08") in English, as before.
+   * In another language the axis gets a short day.month and the table a written date.
+   */
+  const short = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
+  const axisLabel = (l: string) => locale === "en" ? l
+    : gran === "m" ? `${l.slice(5, 7)}.${l.slice(0, 4)}` : short(l.replace("wk ", ""));
+  const rowLabel = (l: string) => locale === "en" ? l
+    : gran === "m" ? `${l.slice(5, 7)}.${l.slice(0, 4)}` : gran === "w" ? T.week(day(l.replace("wk ", ""))) : day(l);
+  const granLabel = T.granAdj[gran];
+  const cmpName = basis === "lw" ? T.lastWeek : T.lastYear;
   // Align this-period and comparison buckets by index (same length + granularity) for the combo chart.
   const chart: EvoBucket[] = rows.map((r, i) => {
     const cr = cmpRows[i];
     return {
-      label: r.label,
+      label: axisLabel(r.label),
       rnNow: r.soldNights,
       rnThen: cr?.soldNights ?? 0,
       adrNow: r.soldNights > 0 ? r.revenueMinor / r.soldNights / 100 : 0,
@@ -226,14 +241,14 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
   });
 
   const relDelta = (now: number, then: number) => (then <= 0 ? null : { text: `${now >= then ? "+" : ""}${(((now - then) / then) * 100).toFixed(0)}% ${basisLabel}`, up: now >= then });
-  const ppDelta = (now: number, then: number) => ({ text: `${now >= then ? "+" : ""}${(now - then).toFixed(1)}pp ${basisLabel}`, up: now >= then });
+  const ppDelta = (now: number, then: number) => ({ text: `${now >= then ? "+" : ""}${pct(now - then).replace("%", "")}${c.pp} ${basisLabel}`, up: now >= then });
 
   const summary = [
-    { tone: "brand" as StatTone, label: "Occupancy", value: pct(m.cards.occupancyPct), delta: ppDelta(m.cards.occupancyPct, cmp.cards.occupancyPct), prior: `${cmp.cards.occupancyPct.toFixed(1)}% prior`, hint: "Room-nights sold ÷ room-nights available, for the period. Δ shown in percentage points vs the comparison basis." },
-    { tone: "success" as StatTone, label: "ADR", value: money(m.cards.adrMinor, currency), delta: relDelta(m.cards.adrMinor, cmp.cards.adrMinor), prior: `${money(cmp.cards.adrMinor, currency)} prior`, hint: "Average Daily Rate = room revenue ÷ room-nights sold. Recomputed Σ/Σ across the period, not an average of daily ADRs." },
-    { tone: "accent" as StatTone, label: "RevPAR", value: money(m.cards.revparMinor, currency), delta: relDelta(m.cards.revparMinor, cmp.cards.revparMinor), prior: `${money(cmp.cards.revparMinor, currency)} prior`, hint: "Revenue Per Available Room = room revenue ÷ room-nights available (= ADR × occupancy). The truest single yield metric." },
-    { tone: "success" as StatTone, label: `Revenue (${m.cards.revenueDisplay})`, value: money(m.cards.revenueMinor, currency), delta: relDelta(m.cards.revenueMinor, cmp.cards.revenueMinor), prior: `${money(cmp.cards.revenueMinor, currency)} prior`, hint: `Room revenue for the period (${m.cards.revenueDisplay}). Gross = as sold; Net subtracts channel commission — toggled in Settings.` },
-    { tone: "neutral" as StatTone, label: "Room-nights", value: String(m.cards.roomsSoldNights), delta: relDelta(m.cards.roomsSoldNights, cmp.cards.roomsSoldNights), prior: `${cmp.cards.roomsSoldNights} prior`, hint: "Total room-nights sold in the period — the volume behind ADR and occupancy." },
+    { tone: "brand" as StatTone, label: P.occupancy, value: pct(m.cards.occupancyPct), delta: ppDelta(m.cards.occupancyPct, cmp.cards.occupancyPct), prior: P.prior(pct(cmp.cards.occupancyPct)), hint: P.occupancyHint },
+    { tone: "success" as StatTone, label: P.adr, value: money(m.cards.adrMinor, currency), delta: relDelta(m.cards.adrMinor, cmp.cards.adrMinor), prior: P.prior(money(cmp.cards.adrMinor, currency)), hint: P.adrHint },
+    { tone: "accent" as StatTone, label: P.revpar, value: money(m.cards.revparMinor, currency), delta: relDelta(m.cards.revparMinor, cmp.cards.revparMinor), prior: P.prior(money(cmp.cards.revparMinor, currency)), hint: P.revparHint },
+    { tone: "success" as StatTone, label: P.revenue(T.revenueDisplay[m.cards.revenueDisplay]), value: money(m.cards.revenueMinor, currency), delta: relDelta(m.cards.revenueMinor, cmp.cards.revenueMinor), prior: P.prior(money(cmp.cards.revenueMinor, currency)), hint: P.revenueHint(T.revenueDisplay[m.cards.revenueDisplay]) },
+    { tone: "neutral" as StatTone, label: P.roomNights, value: String(m.cards.roomsSoldNights), delta: relDelta(m.cards.roomsSoldNights, cmp.cards.roomsSoldNights), prior: P.prior(String(cmp.cards.roomsSoldNights)), hint: P.roomNightsHint },
   ];
 
   return (
@@ -245,9 +260,9 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
 
       {/* Combined bar + line evolution chart at the selected granularity (§2.4, matches the reference). */}
       <Card>
-        <CardHeader title={`Evolution · ${range.label} · ${granLabel}`} subtitle={`Room-nights (bars) and ADR (lines) — this period vs ${cmpName.toLowerCase()}`} />
+        <CardHeader title={P.evolution(label(range), granLabel)} subtitle={P.evolutionSub(cmpName)} />
         {rows.length <= 1 ? (
-          <div className="px-4 py-6 text-[13px] text-ink-500">Pick a multi-day range to see the trend.</div>
+          <div className="px-4 py-6 text-[13px] text-ink-500">{P.multiDay}</div>
         ) : (
           <EvolutionChart data={chart} currency={currency} basisLabel={cmpName} />
         )}
@@ -256,14 +271,14 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
       {/* §2.2 — the room-type table becomes bars: one per type, length = revenue, sorted descending,
           with room-nights and ADR riding as labels so nothing stops being reconcilable. */}
       <Card>
-        <CardHeader title="Performance by room type" subtitle="Revenue per type — room-nights and ADR on each bar" />
+        <CardHeader title={P.byRoomType} subtitle={P.byRoomTypeSub} />
         <BarList
-          emptyMessage="No sold nights in this range."
+          emptyMessage={P.noSold}
           data={prod.roomTypes.map((row) => ({
             label: row.name,
             value: row.revenueMinor,
             valueLabel: money(row.revenueMinor, currency),
-            meta: `${row.nights} nights · ADR ${row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"}`,
+            meta: P.nightsAdr(row.nights, row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"),
           }))}
         />
       </Card>
@@ -271,19 +286,19 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
       {/* Raw day-level data kept as a drill-down / export (§2.6). */}
       <details className="overflow-hidden rounded-lg border border-surface-border bg-white shadow-card">
         <summary className="flex cursor-pointer select-none items-center gap-2 border-b border-surface-border bg-surface-muted/60 px-4 py-2.5 text-[12.5px] font-semibold text-ink-700 [&::-webkit-details-marker]:hidden">
-          Detailed {granLabel} data — the numbers behind the charts
+          {P.detailed(granLabel)}
         </summary>
         <div className="max-h-[420px] overflow-auto">
           <table className="w-full text-[13px]">
             <thead className="sticky top-0 bg-white">
               <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                {[gran === "d" ? "Date" : gran === "w" ? "Week" : "Month", "Available", "Sold", "Occupancy", "Revenue", "ADR", "RevPAR"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
+                {[gran === "d" ? P.cols.date : gran === "w" ? P.cols.week : P.cols.month, P.cols.available, P.cols.sold, P.cols.occupancy, P.cols.revenue, P.cols.adr, P.cols.revpar].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
               </tr>
             </thead>
             <tbody>
               {rows.map((d) => (
                 <tr key={d.label} className="border-b border-surface-border/60 last:border-0">
-                  <td className="tnum px-4 py-2 text-ink-700">{d.label}</td>
+                  <td className="tnum px-4 py-2 text-ink-700">{rowLabel(d.label)}</td>
                   <td className="tnum px-4 py-2 text-ink-600">{d.available}</td>
                   <td className="tnum px-4 py-2 font-semibold text-ink-900">{d.soldNights}</td>
                   <td className="tnum px-4 py-2 text-ink-700">{d.available > 0 ? pct((d.soldNights / d.available) * 100) : "—"}</td>
@@ -303,28 +318,30 @@ async function PerformanceReport({ range, gran, basis }: { range: ReturnType<typ
 /** Book-date lens on Performance: the production curve — what was BOOKED each day. */
 async function ProductionReport({ range }: { range: ReturnType<typeof resolveRange> }) {
   const r = await getProductionByDay(range);
+  const { R: T, money, label, day } = await words();
+  const P = T.production;
   const currency = r.property.baseCurrency;
   return (
     <Card>
-      <CardHeader title={`Production · ${range.label} · ${r.totals.bookings} bookings made · ${r.totals.nights} room-nights · ${money(r.totals.revenueMinor, currency)} booked (${r.totals.cancelled} since cancelled)`} />
+      <CardHeader title={P.title(label(range), r.totals.bookings, r.totals.nights, money(r.totals.revenueMinor, currency), r.totals.cancelled)} />
       <div className="max-h-[520px] overflow-auto">
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-white">
             <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              {["Booked on", "Bookings", "Room-nights", "Revenue booked", "Since cancelled"].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
+              {[P.cols.bookedOn, P.cols.bookings, P.cols.nights, P.cols.revenue, P.cols.cancelled].map((h) => <th key={h} className="px-4 py-2.5">{h}</th>)}
             </tr>
           </thead>
           <tbody>
             {r.rows.map((d) => (
               <tr key={d.date} className="border-b border-surface-border/60 last:border-0">
-                <td className="tnum px-4 py-2 text-ink-700">{d.date}</td>
+                <td className="tnum px-4 py-2 text-ink-700">{day(d.date)}</td>
                 <td className="tnum px-4 py-2 font-semibold text-ink-900">{d.bookings}</td>
                 <td className="tnum px-4 py-2 text-ink-700">{d.nights}</td>
                 <td className="tnum px-4 py-2 text-ink-700">{money(d.revenueMinor, currency)}</td>
                 <td className="tnum px-4 py-2 text-ink-500">{d.cancelled || "—"}</td>
               </tr>
             ))}
-            {r.rows.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-[13px] text-ink-400">Nothing was booked in this range.</td></tr>}
+            {r.rows.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center text-[13px] text-ink-400">{P.empty}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -340,26 +357,27 @@ async function ProductionReport({ range }: { range: ReturnType<typeof resolveRan
  */
 async function ProductsReport({ range, lens }: { range: ReturnType<typeof resolveRange>; lens: "stay" | "book" }) {
   const r = await getProductPerformance(range, lens);
+  const { R: T, money, label } = await words();
   const currency = r.property.baseCurrency;
-  const basis = lens === "book" ? "booked in range" : "stays in range";
+  const basis = lens === "book" ? T.products.basisBook : T.products.basisStay;
 
   const bars = (rows: typeof r.roomTypes) =>
     rows.map((row) => ({
       label: row.name,
       value: row.revenueMinor,
       valueLabel: money(row.revenueMinor, currency),
-      meta: `${row.nights} nights · ADR ${row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"}`,
+      meta: T.perf.nightsAdr(row.nights, row.adrMinor > 0 ? money(row.adrMinor, currency) : "—"),
     }));
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       <Card>
-        <CardHeader title={`By room type · ${range.label}`} subtitle={basis} />
-        <BarList data={bars(r.roomTypes)} emptyMessage="No sold nights in this range." />
+        <CardHeader title={T.products.byRoom(label(range))} subtitle={basis} />
+        <BarList data={bars(r.roomTypes)} emptyMessage={T.perf.noSold} />
       </Card>
       <Card>
-        <CardHeader title={`By rate plan · ${range.label}`} subtitle={basis} />
-        <BarList data={bars(r.ratePlans)} emptyMessage="No sold nights in this range." />
+        <CardHeader title={T.products.byPlan(label(range))} subtitle={basis} />
+        <BarList data={bars(r.ratePlans)} emptyMessage={T.perf.noSold} />
       </Card>
     </div>
   );
@@ -388,6 +406,8 @@ async function OtbReport({ todayIso }: { todayIso: string }) {
   ]);
   const property = await getProperty();
   const currency = property.baseCurrency;
+  const { R: T, money, pct } = await words();
+  const O = T.otb;
 
   // Committed room-nights per day, summed across every room type — the same `confirmed` figure the
   // availability waterfall uses, so this curve and the heatmap cannot disagree.
@@ -399,12 +419,12 @@ async function OtbReport({ todayIso }: { todayIso: string }) {
 
   const block = (f: typeof f7) => (
     <Card className="p-5">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Next {f.days} days — on the books</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{O.next(f.days)}</div>
       <div className="mt-3 grid grid-cols-2 gap-4">
-        <div><div className="tnum text-[24px] font-bold text-ink-900">{pct(f.occupancyPct)}</div><div className="text-[11.5px] text-ink-400">committed occupancy</div></div>
-        <div><div className="tnum text-[24px] font-bold text-ink-900">{money(f.revenueMinor, currency)}</div><div className="text-[11.5px] text-ink-400">revenue on the books</div></div>
-        <div><div className="tnum text-[20px] font-bold text-ink-800">{f.roomsSoldNights}</div><div className="text-[11.5px] text-ink-400">room-nights committed</div></div>
-        <div><div className="tnum text-[20px] font-bold text-ink-800">{f.arrivals} / {f.departures}</div><div className="text-[11.5px] text-ink-400">arrivals / departures</div></div>
+        <div><div className="tnum text-[24px] font-bold text-ink-900">{pct(f.occupancyPct)}</div><div className="text-[11.5px] text-ink-400">{O.occupancy}</div></div>
+        <div><div className="tnum text-[24px] font-bold text-ink-900">{money(f.revenueMinor, currency)}</div><div className="text-[11.5px] text-ink-400">{O.revenue}</div></div>
+        <div><div className="tnum text-[20px] font-bold text-ink-800">{f.roomsSoldNights}</div><div className="text-[11.5px] text-ink-400">{O.nights}</div></div>
+        <div><div className="tnum text-[20px] font-bold text-ink-800">{f.arrivals} / {f.departures}</div><div className="text-[11.5px] text-ink-400">{O.arrivals}</div></div>
       </div>
     </Card>
   );
@@ -413,14 +433,14 @@ async function OtbReport({ todayIso }: { todayIso: string }) {
     <div className="space-y-4">
       <Card>
         <CardHeader
-          title="Committed demand · next 30 days"
+          title={O.title}
           subtitle={
             f7.roomsSoldNights === f30.roomsSoldNights && f30.roomsSoldNights > 0
-              ? `Every committed night falls in the next 7 days — that is why the two cards below match`
-              : `Room-nights already sold, per arrival date · ${clustered} day${clustered === 1 ? "" : "s"} with business`
+              ? O.allInWeek
+              : O.perArrival(clustered)
           }
         />
-        <ForwardCurve points={committed} unitLabel="Room-nights committed" />
+        <ForwardCurve points={committed} unitLabel={O.unit} strings={T.chart} />
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{block(f7)}{block(f30)}</div>
@@ -429,7 +449,7 @@ async function OtbReport({ todayIso }: { todayIso: string }) {
           twice; aligned wording lets a user connect the two views instead of reading them as
           unrelated claims. */}
       <p className="text-[12px] text-ink-400">
-        {FORECAST_DISCLAIMER}
+        {O.disclaimer}
       </p>
     </div>
   );
@@ -448,20 +468,18 @@ async function PickupReport() {
   const r = await getPickupReport();
   const gained = r.rows.filter((x) => x.pickup > 0).length;
   const lost = r.rows.filter((x) => x.pickup < 0).length;
+  const { R: T, day } = await words();
+  const K = T.pickup;
 
   return (
     <Card>
       <CardHeader
-        title="Pickup & Pace · next 30 days"
-        subtitle={
-          r.vsDate
-            ? `Against the ${r.vsDate} snapshot · ${gained} date${gained === 1 ? "" : "s"} gained, ${lost} lost`
-            : "First snapshot recorded today — pace appears as history accumulates"
-        }
+        title={K.title}
+        subtitle={r.vsDate ? K.against(day(r.vsDate), gained, lost) : K.first}
       />
-      <PaceCurve points={r.rows.map((row) => ({ date: row.date, soldNow: row.soldNow, soldThen: row.soldAtSnap }))} />
+      <PaceCurve points={r.rows.map((row) => ({ date: row.date, soldNow: row.soldNow, soldThen: row.soldAtSnap }))} strings={K} />
       <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-        Shaded band is pickup since the snapshot. Day-by-day figures are in the CSV export.
+        {K.footnote}
       </p>
     </Card>
   );
@@ -471,6 +489,8 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
   const m = await getRangeMetrics(range);
   const currency = m.property.baseCurrency;
   const e = m.economics;
+  const { R: T, money, pct, label } = await words();
+  const S = T.source;
 
   return (
     <div className="space-y-4">
@@ -480,10 +500,10 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
           makes booking-engine marketing untrustworthy, and this product's argument is that its
           numbers are real. So the estimate is visually quieter and carries its assumption inline. */}
       <Card>
-        <CardHeader title={`Cost of distribution · ${range.label}`} />
+        <CardHeader title={S.costTitle(label(range))} />
         <div className="grid grid-cols-1 gap-px bg-surface-border sm:grid-cols-3">
           <div className="bg-white px-4 py-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Commission paid</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{S.paid}</div>
             <div className="tnum mt-1 text-[1.6rem] font-bold leading-none text-ink-900">
               {money(e.commissionPaidMinor, currency)}
             </div>
@@ -493,58 +513,55 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
                 directly above a row reading "OTA · €780 · commission not set". */}
             <div className="mt-1.5 text-[12px] text-ink-500">
               {e.otaRevenueMinor === 0 ? (
-                "no OTA revenue in this period"
+                S.noOta
               ) : e.commissionIncomplete ? (
                 <span className="font-medium text-warning-600">
-                  {money(e.unratedOtaRevenueMinor, currency)} OTA revenue · commission rate not set
+                  {S.rateNotSet(money(e.unratedOtaRevenueMinor, currency))}
                 </span>
               ) : (
-                `${pct(e.blendedOtaRatePct!)} of ${money(e.otaRevenueMinor, currency)} OTA revenue`
+                S.ofOta(pct(e.blendedOtaRatePct!), money(e.otaRevenueMinor, currency))
               )}
             </div>
           </div>
 
           <div className="bg-white px-4 py-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">Booked direct</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">{S.direct}</div>
             <div className="tnum mt-1 text-[1.6rem] font-bold leading-none text-ink-900">
               {pct(e.directSharePct)}
             </div>
             <div className="mt-1.5 text-[12px] text-ink-500">
-              {money(e.directRevenueMinor, currency)} of {money(e.totalRevenueMinor, currency)} · no commission
+              {S.directOf(money(e.directRevenueMinor, currency), money(e.totalRevenueMinor, currency))}
             </div>
           </div>
 
           <div className="bg-white px-4 py-4">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              Commission avoided <span className="font-normal normal-case text-ink-400">· estimate</span>
+              {S.avoided} <span className="font-normal normal-case text-ink-400">{S.estimate}</span>
             </div>
             <div className="tnum mt-1 text-[1.6rem] font-bold leading-none text-ink-700">
               {e.commissionAvoidedMinor == null ? "—" : money(e.commissionAvoidedMinor, currency)}
             </div>
             <div className="mt-1.5 text-[12px] text-ink-500">
               {e.commissionAvoidedMinor != null
-                ? `if direct bookings had come through your channels at ${pct(e.blendedOtaRatePct!)}`
+                ? S.ifDirect(pct(e.blendedOtaRatePct!))
                 : e.otaRevenueMinor > 0
-                  ? "set a commission rate on your channels and this becomes computable"
-                  : "needs OTA revenue in the period to have a rate to compare against"}
+                  ? S.setRate
+                  : S.needsOta}
             </div>
           </div>
         </div>
         <div className="border-t border-surface-border bg-surface-muted/40 px-4 py-2.5 text-[12px] text-ink-500">
-          <span className="font-semibold text-ink-600">Commission paid is actual</span> — your channels&rsquo; own
-          rates applied to the revenue they brought. <span className="font-semibold text-ink-600">Commission
-          avoided is an estimate</span>: it assumes those direct guests would otherwise have booked through an
-          OTA, which some would and some would not.{" "}
+          <span className="font-semibold text-ink-600">{S.paidIsActual}</span>{S.paidIsActualTail}
+          <span className="font-semibold text-ink-600">{S.avoidedIsEstimate}</span>{S.avoidedTail}
           {e.commissionIncomplete ? (
             // Suppressed on purpose. With an unset rate this figure silently treats real commission
             // as zero, which reports distribution as free — the one thing this card exists not to do.
             <span className="font-medium text-warning-600">
-              Revenue kept is not shown: {money(e.unratedOtaRevenueMinor, currency)} of OTA revenue has no
-              commission rate configured, so the real cost is unknown.
+              {S.keptHidden(money(e.unratedOtaRevenueMinor, currency))}
             </span>
           ) : (
             <>
-              Revenue kept after real commission:{" "}
+              {S.kept}
               <span className="tnum font-semibold text-ink-700">{money(e.netOfCommissionMinor, currency)}</span>.
             </>
           )}
@@ -553,34 +570,35 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
 
       <Card>
         <CardHeader
-          title={`Source mix · ${range.label}`}
-          subtitle="Where the business comes from, and what each channel actually nets"
+          title={S.mixTitle(label(range))}
+          subtitle={S.mixSub}
         />
         {/* §1.3 / §2.2 — composition, because the question is about shares of a whole. The old table
             of six columns made you compute the story; the donut states it, and the net bar below
             carries the commercial point: direct at ~0% against an OTA at 15–18%. */}
         <Donut
           centreLabel={money(e.totalRevenueMinor, currency)}
-          centreSub="total revenue"
+          centreSub={S.totalRevenue}
+          aria={S.byName(money(e.totalRevenueMinor, currency))}
           slices={e.rows.map((row) => ({
             label: row.sourceName,
             value: row.revenueMinor,
             valueLabel: money(row.revenueMinor, currency),
             note: isCommissionFreeCategory(row.category)
-              ? "no commission"
+              ? S.noCommission
               : row.commissionMinor == null
-                ? "rate not set"
-                : `${row.commissionPct}% commission`,
+                ? S.rateMissing
+                : S.commission(row.commissionPct ?? 0),
             noteTone: !isCommissionFreeCategory(row.category) && row.commissionMinor == null ? "warning" : "muted",
           }))}
         />
 
         <div className="border-t border-surface-border">
           <div className="px-4 pt-3 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-            What you keep, after commission
+            {S.whatYouKeep}
           </div>
           <BarList
-            emptyMessage="No revenue in this period."
+            emptyMessage={S.noRevenue}
             data={e.rows.map((row) => {
               const net = row.revenueMinor - (row.commissionMinor ?? 0);
               const free = isCommissionFreeCategory(row.category);
@@ -592,10 +610,10 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
                 // Unknown commission is never rendered as "you keep all of it" — the whole §2.5 fix,
                 // restated here because this bar is the one a hotelier reads as take-home.
                 meta: unknown
-                  ? "rate not set — real figure is lower"
+                  ? S.realLower
                   : free
-                    ? `${row.roomNights} nights · keeps 100%`
-                    : `${row.roomNights} nights · −${money(row.commissionMinor ?? 0, currency)}`,
+                    ? S.keepsAll(row.roomNights)
+                    : S.minus(row.roomNights, money(row.commissionMinor ?? 0, currency)),
                 colour: free ? "#16a34a" : unknown ? "#98a2b3" : "#f59e0b",
               };
             })}
@@ -620,12 +638,14 @@ async function SourceReport({ range }: { range: ReturnType<typeof resolveRange> 
  */
 async function CancellationReport({ range, lens }: { range: ReturnType<typeof resolveRange>; lens: "stay" | "book" }) {
   const r = await getCancellationReport(range, lens);
+  const { R: T, pct, label } = await words();
+  const C = T.cancel;
 
   // Cancellations by source: the driver worth seeing. An OTA cancelling twice as often as direct is
   // a distribution decision; the same rate everywhere is just seasonality.
   const bySource = new Map<string, number>();
   for (const res of r.cancelled) {
-    const name = res.channel?.name ?? res.bookingSource?.name ?? "Direct";
+    const name = res.channel?.name ?? res.bookingSource?.name ?? C.direct;
     bySource.set(name, (bySource.get(name) ?? 0) + 1);
   }
   const sources = [...bySource.entries()].sort((a, b) => b[1] - a[1]);
@@ -640,8 +660,8 @@ async function CancellationReport({ range, lens }: { range: ReturnType<typeof re
   return (
     <Card>
       <CardHeader
-        title={`Cancellations · ${range.label}`}
-        subtitle={`Counted ${lens === "book" ? "by booking date" : "by stay date"} — ${r.basisLabel}`}
+        title={C.title(label(range))}
+        subtitle={C.counted(lens, C.basis(lens, r.createdCount))}
       />
       <div className="grid grid-cols-1 gap-6 px-4 py-5 md:grid-cols-2">
         {/* Both framings, side by side. The headline rate and the room-night rate answer different
@@ -649,30 +669,30 @@ async function CancellationReport({ range, lens }: { range: ReturnType<typeof re
         <div>
           <div className="flex items-baseline gap-2">
             <span className={`tnum text-[2.4rem] font-bold leading-none ${tone}`}>{pct(r.headlineRatePct)}</span>
-            <span className="text-[12.5px] text-ink-500">of reservations</span>
+            <span className="text-[12.5px] text-ink-500">{C.ofReservations}</span>
           </div>
           <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-sunken" role="img"
-               aria-label={`Cancellation rate ${pct(r.headlineRatePct)} of reservations`}>
+               aria-label={C.gaugeAria(pct(r.headlineRatePct))}>
             <div className={`h-full rounded-full ${bar}`} style={{ width: `${gaugePct}%` }} />
           </div>
           <p className="mt-1.5 text-[11.5px] text-ink-400">
-            {r.cancelled.length} of {r.createdCount} · scale ends at 30%
+            {C.ofScale(r.cancelled.length, r.createdCount)}
           </p>
 
           <div className="mt-4 flex items-baseline gap-2">
             <span className="tnum text-[1.5rem] font-bold leading-none text-ink-900">{pct(r.roomNightRatePct)}</span>
-            <span className="text-[12.5px] text-ink-500">of room-nights</span>
+            <span className="text-[12.5px] text-ink-500">{C.ofRoomNights}</span>
           </div>
           <p className="mt-1 text-[11.5px] text-ink-400">
-            {r.cancelledNights} of {r.grossNights} nights — the number that matters for revenue
+            {C.nightsOf(r.cancelledNights, r.grossNights)}
           </p>
         </div>
 
         {/* Drivers. */}
         <div>
-          <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">By source</h4>
+          <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-400">{C.bySource}</h4>
           {sources.length === 0 ? (
-            <p className="text-[13px] text-ink-500">No cancellations in this period.</p>
+            <p className="text-[13px] text-ink-500">{C.none}</p>
           ) : (
             <ul className="space-y-1.5">
               {sources.map(([name, n]) => (
@@ -686,11 +706,11 @@ async function CancellationReport({ range, lens }: { range: ReturnType<typeof re
           )}
 
           <p className="mt-4 text-[11.5px] leading-relaxed text-ink-400">
-            Which bookings cancelled is a list, so it lives where lists live —{" "}
+            {C.listLead}
             <Link href="/reservations?status=cancelled" className="font-semibold text-brand-700 hover:underline">
-              Reservations, filtered to cancelled
+              {C.listLink}
             </Link>
-            . Export CSV here carries the full detail.
+            {C.listTail}
           </p>
         </div>
       </div>
@@ -719,6 +739,8 @@ async function AvailabilityReport() {
   const first = board.dates[0];
   const last = board.dates[board.dates.length - 1];
   const dayLabel = (iso: string) => Number(iso.slice(8, 10));
+  const { R: T, day } = await words();
+  const A = T.avail;
 
   const TONE: Record<string, string> = {
     overbooked: "bg-danger-500 text-white",
@@ -730,14 +752,14 @@ async function AvailabilityReport() {
   return (
     <Card>
       <CardHeader
-        title={`Availability · ${first} → ${last} · remaining per room type`}
-        subtitle="Shaded by how much of each room type is still sellable — not by an absolute count"
+        title={A.title(first ? day(first) : "", last ? day(last) : "")}
+        subtitle={A.sub}
       />
       <div className="overflow-x-auto">
         <table className="w-full text-[12.5px]">
           <thead>
             <tr className="border-b border-surface-border text-left text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              <th className="sticky left-0 z-10 bg-white px-4 py-2.5">Room type</th>
+              <th className="sticky left-0 z-10 bg-white px-4 py-2.5">{A.roomType}</th>
               {board.dates.map((d) => <th key={d} className="tnum min-w-[34px] px-1 py-2.5 text-center">{dayLabel(d)}</th>)}
             </tr>
           </thead>
@@ -748,7 +770,7 @@ async function AvailabilityReport() {
                 <tr key={s.roomType.id} className="border-b border-surface-border/60 last:border-0">
                   <td className="sticky left-0 z-10 bg-white px-4 py-2 font-semibold text-ink-900">
                     {s.roomType.name}
-                    <span className="ml-1.5 text-[10.5px] font-normal text-ink-400">{capacity} rooms</span>
+                    <span className="ml-1.5 text-[10.5px] font-normal text-ink-400">{A.rooms(capacity)}</span>
                   </td>
                   {s.cells.map((cell, i) => {
                     const pressure = availabilityPressure(cell.remaining, capacity);
@@ -756,7 +778,7 @@ async function AvailabilityReport() {
                       <td key={i} className="px-0.5 py-1 text-center">
                         <span
                           className={`tnum inline-block min-w-[26px] rounded px-1 py-0.5 text-[11.5px] font-semibold ${TONE[pressure]}`}
-                          title={`${board.dates[i]} · ${cell.remaining} of ${capacity} remaining`}
+                          title={A.cellTitle(day(board.dates[i]!), cell.remaining, capacity)}
                         >
                           {cell.remaining}
                         </span>
@@ -770,9 +792,8 @@ async function AvailabilityReport() {
         </table>
       </div>
       <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">
-        <StatusPill tone="danger">overbooked</StatusPill> <StatusPill tone="warning">under {Math.round(LOW_AVAILABILITY_SHARE * 100)}% left</StatusPill>{" "}
-        — relative to each room type, so a small type is not flagged for having two of three free.
-        Day-by-day detail is on the Inventory Calendar.
+        <StatusPill tone="danger">{A.overbooked}</StatusPill> <StatusPill tone="warning">{A.under(Math.round(LOW_AVAILABILITY_SHARE * 100))}</StatusPill>
+        {A.footnote}
       </p>
     </Card>
   );

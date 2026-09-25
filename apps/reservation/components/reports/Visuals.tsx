@@ -165,9 +165,16 @@ export interface PacePoint {
  * Green where positive, red where negative: a stay date that has LOST bookings since the snapshot is
  * the single most actionable cell on the tab and was invisible in the table.
  */
-export function PaceCurve({ points, height = 200 }: { points: PacePoint[]; height?: number }) {
+/** The words the pace curve prints — English unless the page passes the reader's. */
+type PaceStrings = { soldNow: string; atSnapshot: string; pickup: string; needsTwo: string };
+const PACE_EN: PaceStrings = {
+  soldNow: "Sold now", atSnapshot: "At snapshot", pickup: "Pickup",
+  needsTwo: "Pace needs at least two days and one earlier snapshot to compare against.",
+};
+
+export function PaceCurve({ points, height = 200, strings = PACE_EN }: { points: PacePoint[]; height?: number; strings?: PaceStrings }) {
   if (points.length < 2) {
-    return <p className="px-4 py-6 text-[13px] text-ink-500">Pace needs at least two days and one earlier snapshot to compare against.</p>;
+    return <p className="px-4 py-6 text-[13px] text-ink-500">{strings.needsTwo}</p>;
   }
 
   const W = 1000, padL = 34, padR = 12, padT = 12, padB = 26;
@@ -199,11 +206,11 @@ export function PaceCurve({ points, height = 200 }: { points: PacePoint[]; heigh
   return (
     <div className="px-4 py-4">
       <div className="mb-2 flex flex-wrap items-center gap-4 text-[11.5px]">
-        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-[#2563c9]" /> Sold now</span>
-        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 border-t-2 border-dashed border-ink-300" /> At snapshot</span>
+        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 bg-[#2563c9]" /> {strings.soldNow}</span>
+        <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 border-t-2 border-dashed border-ink-300" /> {strings.atSnapshot}</span>
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-4 rounded-sm" style={{ background: bandColour, opacity: 0.18 }} />
-          Pickup{" "}
+          {strings.pickup}{" "}
           <span className="tnum font-semibold" style={{ color: bandColour }}>
             {netPickup >= 0 ? "+" : ""}{netPickup}
           </span>
@@ -255,8 +262,11 @@ export interface ForwardPoint {
  * night falls inside the first week, but reads as a failed recompute. The curve makes the clustering
  * self-evident, so the right numbers stop looking wrong.
  */
-export function ForwardCurve({ points, height = 170, unitLabel }: { points: ForwardPoint[]; height?: number; unitLabel: string }) {
-  if (points.length === 0) return <p className="px-4 py-6 text-[13px] text-ink-500">Nothing on the books yet.</p>;
+export function ForwardCurve({ points, height = 170, unitLabel, strings }: {
+  points: ForwardPoint[]; height?: number; unitLabel: string;
+  strings?: { nothingOnBooks: string; nothingCommitted: string };
+}) {
+  if (points.length === 0) return <p className="px-4 py-6 text-[13px] text-ink-500">{strings?.nothingOnBooks ?? "Nothing on the books yet."}</p>;
 
   const W = 1000, padL = 30, padR = 10, padT = 12, padB = 24;
   const plotW = W - padL - padR, plotH = height - padT - padB;
@@ -298,7 +308,7 @@ export function ForwardCurve({ points, height = 170, unitLabel }: { points: Forw
           </g>
         ))}
       </svg>
-      {!anyValue && <p className="mt-1 text-[11.5px] text-ink-400">Nothing committed in this window yet.</p>}
+      {!anyValue && <p className="mt-1 text-[11.5px] text-ink-400">{strings?.nothingCommitted ?? "Nothing committed in this window yet."}</p>}
     </div>
   );
 }
