@@ -1,5 +1,10 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { inventory as inventoryDict } from "@/lib/i18n/inventory";
+import { moneyIn } from "@/lib/i18n/money";
+
 import { useEffect, useRef, useState, useTransition } from "react";
 import { saveCalendarRate } from "@/lib/actions-rates";
 
@@ -17,6 +22,9 @@ export function RateCell({ roomTypeId, date, value, ratePlanId, note }: {
   note?: string;
 }) {
   const [pending, start] = useTransition();
+  const locale = useLocale();
+  const s = translate(inventoryDict, locale);
+  const money = moneyIn(locale);
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -55,9 +63,9 @@ export function RateCell({ roomTypeId, date, value, ratePlanId, note }: {
       onClick={() => setEditing(true)}
       disabled={pending}
       className={`tnum w-full rounded px-1 py-0.5 text-center text-[12px] transition-colors hover:bg-brand-50 ${note ? "font-normal text-ink-400" : "font-semibold text-ink-700"} ${pending ? "opacity-50" : ""}`}
-      title={note ?? "Click to change this night's price"}
+      title={note ?? s.clickToChange}
     >
-      {value === "—" ? "—" : `€${value}`}
+      {value === "—" ? "—" : money(Number(value) * 100)}
     </button>
   );
 }

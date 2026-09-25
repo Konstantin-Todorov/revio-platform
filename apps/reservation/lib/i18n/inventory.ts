@@ -12,6 +12,8 @@ import type { Translations } from "@revio/ui/i18n";
 export interface InventoryStrings {
   title: string;
   subtitle: (property: string) => string;
+  /** Short month names for the column heads — Intl's `bg` short month is "09", not a word. */
+  monthsShort: string[];
   earlier: string;
   later: string;
   today: string;
@@ -91,6 +93,7 @@ export const inventory: Translations<InventoryStrings> = {
   en: {
     title: "Inventory Calendar",
     subtitle: (p) => `${p} · availability, rates and restrictions`,
+    monthsShort: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
     earlier: "Earlier",
     later: "Later",
     today: "Today",
@@ -169,6 +172,7 @@ export const inventory: Translations<InventoryStrings> = {
   bg: {
     title: "Календар на наличността",
     subtitle: (p) => `${p} · наличност, цени и ограничения`,
+    monthsShort: ["яну", "фев", "мар", "апр", "май", "юни", "юли", "авг", "сеп", "окт", "ное", "дек"],
     earlier: "По-рано",
     later: "По-късно",
     today: "Днес",

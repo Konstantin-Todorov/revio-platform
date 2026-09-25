@@ -32,6 +32,18 @@
       "port": 3002
     },
     {
+      "name": "reviocrs-bg",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "CRS_I18N_PREVIEW=1",
+        "pnpm",
+        "--filter",
+        "@revio/reservation",
+        "dev"
+      ],
+      "port": 3002
+    },
+    {
       "name": "reviopms",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [

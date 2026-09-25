@@ -11,6 +11,9 @@ import { CollapseAll } from "@/components/inventory/CollapseAll";
 import { ParamMultiSelect } from "@/components/inventory/ParamMultiSelect";
 import { CrsCalendarBulkButton } from "@/components/inventory/CrsCalendarBulkButton";
 import { availabilityPressure } from "@revio/core";
+import { LOCALE_LABELS } from "@revio/ui/i18n";
+import { i18n } from "@/lib/i18n/server";
+import { inventory as inventoryDict, type InventoryStrings } from "@/lib/i18n/inventory";
 
 export const dynamic = "force-dynamic";
 
@@ -22,14 +25,7 @@ export const dynamic = "force-dynamic";
  * comparing the screens cannot tell whether they are looking at the same quantity (BUG-017, 13
  * Sept). One name for one fact, in both products.
  */
-const ROWS = [
-  { key: "physical", label: "Physical" },
-  { key: "outOfOrder", label: "Out of order" },
-  { key: "closed", label: "Closed" },
-  { key: "available", label: "Allocation" },
-  { key: "confirmed", label: "Sold" },
-  { key: "remaining", label: "Bookable" },
-] as const;
+const ROWS = ["physical", "outOfOrder", "closed", "available", "confirmed", "remaining"] as const;
 
 /**
  * Shade the Remaining row by pressure (§5.2), using the SAME rule as the Analytics heatmap.
@@ -56,6 +52,9 @@ export default async function InventoryCalendarPage({
   searchParams: Promise<{ start?: string; days?: string; rp?: string; rt?: string }>;
 }) {
   const sp = await searchParams;
+  const { t, locale } = await i18n();
+  const s = t(inventoryDict);
+  const intl = locale === "en" ? "en-GB" : LOCALE_LABELS[locale].intl;
   /*
    * ⚠️ `rp` is passed to the QUERY now.
    *
@@ -110,12 +109,12 @@ export default async function InventoryCalendarPage({
   if (board.sections.length === 0) {
     return (
       <div>
-        <PageHeader title="Inventory Calendar" subtitle={board.property.name} />
+        <PageHeader title={s.title} subtitle={board.property.name} />
         <EmptyState
           icon={<BedDouble className="h-6 w-6" />}
-          title="No room types yet"
-          body="The calendar shows availability and rates for each room type you sell. Add your first room type and it appears here."
-          actionLabel="Go to Rooms & Rates"
+          title={s.emptyTitle}
+          body={s.emptyBody}
+          actionLabel={s.emptyAction}
           actionHref="/rooms-rates"
         />
       </div>
@@ -125,15 +124,15 @@ export default async function InventoryCalendarPage({
   return (
     <div>
       <PageHeader
-        title="Inventory Calendar"
-        subtitle={`${board.property.name} · availability, rates and restrictions`}
+        title={s.title}
+        subtitle={s.subtitle(board.property.name)}
         action={
           <div className="flex items-center gap-2">
-            <Link href={`/inventory?start=${prev}&days=${board.days}`} className={navCls} aria-label="Earlier"><ChevronLeft className="h-4 w-4" /></Link>
-            <Link href="/inventory" className={navCls}>Today</Link>
-            <Link href={`/inventory?start=${next}&days=${board.days}`} className={navCls} aria-label="Later"><ChevronRight className="h-4 w-4" /></Link>
+            <Link href={`/inventory?start=${prev}&days=${board.days}`} className={navCls} aria-label={s.earlier}><ChevronLeft className="h-4 w-4" /></Link>
+            <Link href="/inventory" className={navCls}>{s.today}</Link>
+            <Link href={`/inventory?start=${next}&days=${board.days}`} className={navCls} aria-label={s.later}><ChevronRight className="h-4 w-4" /></Link>
             <Link href="/rooms-rates" className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-              <Wrench className="h-3.5 w-3.5" /> Manage periods
+              <Wrench className="h-3.5 w-3.5" /> {s.managePeriods}
             </Link>
           </div>
         }
@@ -141,12 +140,12 @@ export default async function InventoryCalendarPage({
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <ParamMultiSelect
-          label="Rooms" param="rt" emptyLabel="All"
+          label={s.filterRooms} param="rt" emptyLabel={s.allRooms}
           options={board.sections.map((s) => ({ value: s.roomType.code, label: s.roomType.name }))}
           selected={rt}
         />
         <ParamMultiSelect
-          label="Rates" param="rp" emptyLabel="All rate plans"
+          label={s.filterRates} param="rp" emptyLabel={s.allRatePlans}
           options={board.ratePlanOptions}
           selected={board.selectedRatePlans}
         />
@@ -160,7 +159,7 @@ export default async function InventoryCalendarPage({
               <ChevronDown className="h-4 w-4 -rotate-90 text-ink-400 transition-transform group-open/section:rotate-0" />
               <span className="text-[13.5px] font-bold text-ink-900">{section.roomType.name}</span>
               <span className="text-[11px] font-medium text-ink-400">
-                {section.roomType.code} · {section.roomType.totalRooms} {section.roomType.unitKind === "bed" ? "beds" : "rooms"}
+                {section.roomType.code} · {s.units(section.roomType.totalRooms, section.roomType.unitKind === "bed" ? "bed" : "room")}
               </span>
               {/* Inline per-row bulk (§5.2): opens the bulk tool in a modal OVER the calendar,
                   pre-scoped to this room type — the SAME engine + audit path as the Bulk screen. */}
@@ -184,10 +183,10 @@ export default async function InventoryCalendarPage({
                       return (
                         <th key={d} className={`min-w-[64px] px-2 py-1.5 text-center ${weekend ? "bg-warning-50/40" : ""}`}>
                           <div className={`text-[10px] font-semibold uppercase ${isToday ? "text-brand-700" : "text-ink-400"}`}>
-                            {date.toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" })}
+                            {date.toLocaleDateString(intl, { weekday: "short", timeZone: "UTC" })}
                           </div>
                           <div className={`tnum text-[12px] font-bold ${isToday ? "text-brand-700" : "text-ink-700"}`}>
-                            {Number(d.slice(8, 10))}<span className="ml-0.5 text-[10px] font-medium text-ink-400">{date.toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" })}</span>
+                            {Number(d.slice(8, 10))}<span className="ml-0.5 text-[10px] font-medium text-ink-400">{locale === "en" ? date.toLocaleDateString(intl, { month: "short", timeZone: "UTC" }) : s.monthsShort[date.getUTCMonth()]}</span>
                           </div>
                         </th>
                       );
@@ -195,7 +194,7 @@ export default async function InventoryCalendarPage({
                   </tr>
                 </thead>
                 <tbody>
-                  <SectionRows section={section} dates={board.dates} todayIso={board.todayIso} rateRows={rateRows} />
+                  <SectionRows section={section} dates={board.dates} todayIso={board.todayIso} rateRows={rateRows} s={s} />
                 </tbody>
               </table>
             </div>
@@ -204,12 +203,11 @@ export default async function InventoryCalendarPage({
       </div>
 
       <p className="mt-3 text-[11.5px] text-ink-400">
-        Available = physical − out&nbsp;of&nbsp;order − closed (a <span className="font-semibold text-brand-700">•</span> marks a manual rooms-to-sell
-        override from RevioLink) · Remaining = available − holds − sold. Negative remaining = overbooked. Rate = the
-        standard plan, click to edit. Restrictions resolve date-scoped edit (calendar/bulk, most recent wins)&nbsp;→&nbsp;rule&nbsp;→&nbsp;plan&nbsp;→&nbsp;property default
-        (<span className="inline-block h-2 w-2 rounded-full bg-danger-500 align-middle" /> stop&nbsp;·{" "}
-        <span className="inline-block h-2 w-2 rounded-full bg-brand-600 align-middle" /> CTA&nbsp;·{" "}
-        <span className="inline-block h-2 w-2 rounded-full bg-accent-500 align-middle" /> CTD).
+        {s.legend.waterfall} (<span className="font-semibold text-brand-700">•</span> {s.legend.overrideMark}) · {s.legend.remaining}{" "}
+        {s.legend.rate} {s.legend.restrictions}{" "}
+        (<span className="inline-block h-2 w-2 rounded-full bg-danger-500 align-middle" /> {s.legend.stop}&nbsp;·{" "}
+        <span className="inline-block h-2 w-2 rounded-full bg-brand-600 align-middle" /> {s.legend.cta}&nbsp;·{" "}
+        <span className="inline-block h-2 w-2 rounded-full bg-accent-500 align-middle" /> {s.legend.ctd}).
       </p>
     </div>
   );
@@ -217,16 +215,17 @@ export default async function InventoryCalendarPage({
 
 
 function SectionRows({
-  section, dates, todayIso, rateRows,
+  section, dates, todayIso, rateRows, s,
 }: {
   section: Awaited<ReturnType<typeof getInventoryBoard>>["sections"][number];
   dates: string[];
   todayIso: string;
   rateRows: InventoryRatePlanRow[];
+  s: InventoryStrings;
 }) {
   return (
     <>
-      {ROWS.map((row) => (
+      {ROWS.map((key) => ({ key, label: s.rows[key] })).map((row) => (
         <tr key={row.key} className="border-b border-surface-border/40">
           <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">{row.label}</td>
           {section.cells.map((cell, i) => {
@@ -242,7 +241,7 @@ function SectionRows({
                 <span className={`tnum inline-block min-w-[26px] px-1 text-[12px] ${cls}`}>
                   {value}
                   {row.key === "available" && cell.manualOverride && (
-                    <span title="Manual rooms-to-sell override (set in RevioLink)" className="ml-0.5 align-top text-[10px] font-bold text-brand-700">•</span>
+                    <span title={s.manualOverride} className="ml-0.5 align-top text-[10px] font-bold text-brand-700">•</span>
                   )}
                 </span>
               </td>
@@ -260,7 +259,7 @@ function SectionRows({
         <tr key={pl.id} className="border-b border-surface-border/40">
           <td
             className={`sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium ${pl.editable ? "text-ink-500" : "pl-4 text-ink-400"}`}
-            title={pl.derived ? `Derived from ${pl.derived.parent} · ${pl.derived.offset}` : pl.label}
+            title={pl.derived ? s.derivedFrom(pl.derived.parent, pl.derived.offset) : pl.label}
           >
             {pl.derived && <span className="mr-1 cursor-help select-none">📎</span>}
             {pl.label}
@@ -293,7 +292,7 @@ function SectionRows({
         </tr>
       ))}
       <tr className="border-b border-surface-border/40 last:border-b-surface-border">
-        <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">Restrictions</td>
+        <td className="sticky left-0 z-10 bg-white px-4 py-1.5 text-[11.5px] font-medium text-ink-500">{s.restrictionsRow}</td>
         {section.cells.map((cell, i) => (
           <td key={i} className={`px-1 py-1 text-center ${dates[i] === todayIso ? "bg-brand-50/40" : ""}`}>
             {/* §5.2 — the biggest at-a-glance weakness on this grid.
@@ -301,19 +300,19 @@ function SectionRows({
                 at a time, across a month. A restriction is a word; these are now words. */}
             <span className="inline-flex flex-wrap items-center justify-center gap-0.5">
               {cell.restr.stopSell && (
-                <span title="Stop sell — not bookable" className="rounded bg-danger-500 px-1 text-[9px] font-bold uppercase tracking-wide text-white">closed</span>
+                <span title={s.chips.stopTitle} className="rounded bg-danger-500 px-1 text-[9px] font-bold uppercase tracking-wide text-white">{s.chips.stop}</span>
               )}
               {cell.restr.minLos != null && cell.restr.minLos > 1 && (
-                <span title={`Minimum stay ${cell.restr.minLos} nights`} className="rounded bg-brand-50 px-1 text-[9px] font-bold uppercase tracking-wide text-brand-700">min {cell.restr.minLos}</span>
+                <span title={s.chips.minTitle(cell.restr.minLos)} className="rounded bg-brand-50 px-1 text-[9px] font-bold uppercase tracking-wide text-brand-700">{s.chips.min(cell.restr.minLos)}</span>
               )}
               {cell.restr.cta && (
-                <span title="Closed to arrival — a stay may not begin on this date" className="rounded bg-brand-100 px-1 text-[9px] font-bold uppercase tracking-wide text-brand-700">cta</span>
+                <span title={s.chips.ctaTitle} className="rounded bg-brand-100 px-1 text-[9px] font-bold uppercase tracking-wide text-brand-700">{s.chips.cta}</span>
               )}
               {cell.restr.ctd && (
-                <span title="Closed to departure — a stay may not end on this date" className="rounded bg-accent-100 px-1 text-[9px] font-bold uppercase tracking-wide text-accent-700">ctd</span>
+                <span title={s.chips.ctdTitle} className="rounded bg-accent-100 px-1 text-[9px] font-bold uppercase tracking-wide text-accent-700">{s.chips.ctd}</span>
               )}
               {!cell.restr.stopSell && !cell.restr.cta && !cell.restr.ctd && (cell.restr.minLos ?? 1) <= 1 && (
-                <span className="text-[9px] text-ink-200" title="No restrictions">—</span>
+                <span className="text-[9px] text-ink-200" title={s.chips.noneTitle}>—</span>
               )}
             </span>
           </td>

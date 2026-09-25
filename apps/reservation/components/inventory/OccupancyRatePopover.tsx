@@ -1,5 +1,10 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { inventory as inventoryDict } from "@/lib/i18n/inventory";
+import { moneyIn } from "@/lib/i18n/money";
+
 import { useState } from "react";
 import { Users } from "lucide-react";
 
@@ -25,13 +30,16 @@ import { Users } from "lucide-react";
 export function OccupancyRatePopover({
   rates,
   primaryOccupancy,
-  currency = "€",
+  currency = "EUR",
 }: {
   rates: { occupancy: number; minor: number | null }[];
   primaryOccupancy: number;
   currency?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const locale = useLocale();
+  const s = translate(inventoryDict, locale);
+  const money = moneyIn(locale);
   const priced = rates.filter((r) => r.minor != null);
   // One priced occupancy is not a range — showing a badge would promise variety that is not there.
   if (priced.length < 2) return null;
@@ -43,7 +51,7 @@ export function OccupancyRatePopover({
         onClick={() => setOpen((v) => !v)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
         aria-expanded={open}
-        aria-label={`Prices for ${priced.length} guest counts`}
+        aria-label={s.occupancy.label(priced.length)}
         className="ml-0.5 inline-flex items-center gap-0.5 rounded px-0.5 text-[9.5px] font-bold text-brand-600 transition-colors hover:bg-brand-50"
       >
         <Users className="h-2.5 w-2.5" />
@@ -53,16 +61,15 @@ export function OccupancyRatePopover({
       {open && (
         <span className="absolute bottom-full left-1/2 z-30 mb-1 -translate-x-1/2 whitespace-nowrap rounded-lg border border-surface-border bg-white px-2.5 py-2 shadow-lg">
           <span className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-ink-400">
-            Per guest count
+            {s.occupancy.heading}
           </span>
           {priced.map((r) => (
             <span key={r.occupancy} className="flex items-baseline justify-between gap-3 text-[11.5px] leading-relaxed">
               <span className={r.occupancy === primaryOccupancy ? "font-semibold text-ink-900" : "text-ink-600"}>
-                {r.occupancy}p{r.occupancy === primaryOccupancy ? " ·" : ""}
+                {s.occupancy.guests(r.occupancy)}{r.occupancy === primaryOccupancy ? " ·" : ""}
               </span>
               <span className={`tnum ${r.occupancy === primaryOccupancy ? "font-semibold text-ink-900" : "text-ink-700"}`}>
-                {currency}
-                {Math.round(r.minor! / 100)}
+                {money(Math.round(r.minor! / 100) * 100, currency)}
               </span>
             </span>
           ))}

@@ -104,7 +104,7 @@ export function CardHeader({
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-5 flex items-end justify-between gap-4">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
       <div>
         <h1 className="text-[22px] font-bold tracking-tight text-ink-900">{title}</h1>
         {subtitle && <p className="mt-1 text-[13px] text-ink-500">{subtitle}</p>}

@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { inventory as inventoryDict } from "@/lib/i18n/inventory";
+
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Check } from "lucide-react";
@@ -20,6 +24,7 @@ export function ParamMultiSelect({
   const router = useRouter();
   const search = useSearchParams();
   const [open, setOpen] = useState(false);
+  const s = translate(inventoryDict, useLocale());
   const [picked, setPicked] = useState<Set<string>>(new Set(selected));
   const ref = useRef<HTMLDivElement>(null);
 
@@ -38,7 +43,7 @@ export function ParamMultiSelect({
     setOpen(false);
   }
 
-  const summary = selected.length === 0 || selected.length === options.length ? emptyLabel : `${selected.length} selected`;
+  const summary = selected.length === 0 || selected.length === options.length ? emptyLabel : s.selected(selected.length);
 
   return (
     <div className="relative" ref={ref}>
@@ -75,8 +80,8 @@ export function ParamMultiSelect({
             })}
           </div>
           <div className="flex justify-end gap-2 border-t border-surface-border px-3 py-2">
-            <button type="button" onClick={() => setPicked(new Set())} className="rounded px-2 py-1 text-[12px] font-semibold text-ink-500 hover:bg-surface-muted">Clear</button>
-            <button type="button" onClick={apply} className="rounded-md bg-brand-800 px-3 py-1 text-[12px] font-semibold text-white hover:bg-brand-700">Apply</button>
+            <button type="button" onClick={() => setPicked(new Set())} className="rounded px-2 py-1 text-[12px] font-semibold text-ink-500 hover:bg-surface-muted">{s.clear}</button>
+            <button type="button" onClick={apply} className="rounded-md bg-brand-800 px-3 py-1 text-[12px] font-semibold text-white hover:bg-brand-700">{s.apply}</button>
           </div>
         </div>
       )}

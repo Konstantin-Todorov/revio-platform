@@ -8,12 +8,14 @@ import { reservationSegments, segmentHref } from "./segments";
 import { CAPABILITY_ERROR_CODE, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type SetupFacts, type ProductName, type WaterfallResult,
   matchDuplicates, normalisePhone, type DuplicateCandidate,
   resolveRate, effectiveModel, effectivePrimary, type PriceLookup, type ResolvablePlan,
-  ratePlanRows, displayedRate, rateSourceNote, toResolvablePlan,
+  ratePlanRows, displayedRate, toResolvablePlan,
 } from "@revio/core";
 import { getSession } from "./session";
 import { i18n } from "./i18n/server";
 import { notifications as notificationsDict } from "./i18n/notifications";
 import { reservations as reservationsDict } from "./i18n/reservations";
+import { inventory as inventoryDict } from "./i18n/inventory";
+import { moneyIn } from "./i18n/money";
 
 const DAY = 86_400_000;
 
@@ -187,6 +189,15 @@ const HORIZON_DAYS_MAX = 730;
  * (periods, manual sell limits, holds, confirmed lines); it never re-derives availability.
  */
 export async function getInventoryBoard(q: InventoryQuery = {}) {
+  const { t, locale } = await i18n();
+  const inv = t(inventoryDict);
+  const invMoney = moneyIn(locale);
+  /** `rateSourceNote` in core is English and RevioLink still reads it; RevioCRS words it itself. */
+  const sourceNote = (source: string, plan: string, parent?: string): string | null =>
+    source === "default" ? inv.rateSource.default(plan)
+      : source === "derived" ? inv.rateSource.derived(parent ?? inv.parentFallback)
+        : source === "none" ? inv.rateSource.none(plan)
+          : null;
   const property = await getProperty();
   const propertyId = property.id;
 
@@ -411,7 +422,7 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
             });
             ratesByPlan[pl.id] = shown.minor != null ? String(Math.round(shown.minor / 100)) : "—";
             const rec = planRecordById.get(pl.id);
-            const note = rateSourceNote(shown.source, rec?.name ?? "This plan",
+            const note = sourceNote(shown.source, rec?.name ?? inv.thisPlan,
               rec?.parentRatePlanId ? planRecordById.get(rec.parentRatePlanId)?.name : undefined);
             if (note) rateNotesByPlan[pl.id] = note;
           }
@@ -453,17 +464,21 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
       const offset = rec && rec.priceLogic === "derived"
         ? rec.derivedType === "percent"
           ? `${rec.derivedDirection === "increase" ? "+" : "−"}${rec.derivedValue}%`
-          : `${rec.derivedDirection === "increase" ? "+" : "−"}€${((rec.derivedValue ?? 0) / 100).toLocaleString("en-US")}`
+          : `${rec.derivedDirection === "increase" ? "+" : "−"}${invMoney(rec.derivedValue ?? 0, property.baseCurrency)}`
         : null;
       return {
         id: pl.id,
         code: pl.code,
         label: pl.label,
         editable: pl.priceLogic !== "derived",
-        ...(offset ? { derived: { parent: parent?.name ?? "its parent plan", offset } } : {}),
+        ...(offset ? { derived: { parent: parent?.name ?? inv.parentFallback, offset } } : {}),
       };
     }),
-    ratePlanOptions: planView.options,
+    // Core words a derived plan "(derived)" in English; the reader's language says it here instead.
+    ratePlanOptions: planView.options.map((o) => {
+      const rec = planRecords.find((p) => p.code === o.value);
+      return rec?.priceLogic === "derived" ? { ...o, label: inv.derivedName(rec.name) } : o;
+    }),
     selectedRatePlans: planView.selected,
   };
 }

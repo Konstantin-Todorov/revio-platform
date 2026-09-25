@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { inventory as inventoryDict } from "@/lib/i18n/inventory";
+
 import { useEffect, useState } from "react";
 import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 
@@ -13,6 +17,7 @@ const STORE_KEY = "crs-calendar-collapsed";
 
 export function CollapseAll({ containerId }: { containerId: string }) {
   const [collapsed, setCollapsed] = useState(false);
+  const s = translate(inventoryDict, useLocale());
 
   const apply = (c: boolean) => {
     document.querySelectorAll<HTMLDetailsElement>(`#${containerId} > details`).forEach((d) => {
@@ -42,7 +47,7 @@ export function CollapseAll({ containerId }: { containerId: string }) {
       className="flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted"
     >
       <Icon className="h-3.5 w-3.5" />
-      {collapsed ? "Expand all" : "Collapse all"}
+      {collapsed ? s.expandAll : s.collapseAll}
     </button>
   );
 }
