@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FORECAST_DISCLAIMER } from "../format";
 import { reports } from "./reports";
+import { connectivityModeLabel, createCmConnector } from "@revio/core";
+import { distribution } from "./distribution";
 
 /** Sentences the Analytics screen shares with other English sources, held word for word. */
 describe("Analytics English matches its sources", () => {
@@ -11,5 +13,14 @@ describe("Analytics English matches its sources", () => {
     // lib/metrics.ts builds these inline; the report now words them itself by lens.
     expect(reports.en.cancel.basis("book", 1)).toBe("of 1 reservation created in this period");
     expect(reports.en.cancel.basis("stay", 3)).toBe("of 3 stays falling in this period");
+  });
+});
+
+describe("Distribution English matches core", () => {
+  it("every connectivity mode", () => {
+    for (const [mode, label] of Object.entries(distribution.en.modes)) expect(label).toBe(connectivityModeLabel(mode));
+  });
+  it("the internal connector's name", () => {
+    expect(distribution.en.internalName).toBe(createCmConnector(null).displayName);
   });
 });

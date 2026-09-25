@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
+
 import { useActionState, useState } from "react";
 import { BOOKING_PRESETS, BOOKING_FONTS, BOOKING_COPY_DEFAULTS } from "@revio/core";
 import { AlertCircle, Check, Palette, RotateCcw } from "lucide-react";
@@ -50,6 +54,8 @@ export function AppearanceForm({
   const [subheadline, setSubheadline] = useState(saved.subheadline ?? "");
   const [showTrust, setShowTrust] = useState(saved.showTrust);
   const [state, formAction, pending] = useActionState<LookResult | null, FormData>(action, null);
+  const be = translate(beDict, useLocale());
+  const L = be.look;
 
   // What the guest will actually see: the hotel's own value where set, the inherited one otherwise.
   const effective = {
@@ -61,7 +67,7 @@ export function AppearanceForm({
   return (
     <form action={formAction} className="grid grid-cols-1 gap-5 p-4 lg:grid-cols-[1fr_20rem]">
       <div className="space-y-5">
-        <Field label="Base" hint="Sets the neutrals and the shape. Your colour sits on top of whichever you choose.">
+        <Field label={L.base} hint={L.baseHint}>
           <input type="hidden" name="bookingPreset" value={preset} />
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {BOOKING_PRESETS.map((p) => (
@@ -77,19 +83,19 @@ export function AppearanceForm({
                 }`}
               >
                 <Swatch tokens={p.tokens} accent={effective.color} />
-                <div className="mt-2 text-[12.5px] font-bold text-ink-900">{p.label}</div>
-                <div className="mt-0.5 text-[11px] leading-snug text-ink-500">{p.blurb}</div>
+                <div className="mt-2 text-[12.5px] font-bold text-ink-900">{be.presets[p.key]?.label ?? p.label}</div>
+                <div className="mt-0.5 text-[11px] leading-snug text-ink-500">{be.presets[p.key]?.blurb ?? p.blurb}</div>
               </button>
             ))}
           </div>
         </Field>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Colour" hint="Blank inherits your email brand colour.">
+          <Field label={L.colour} hint={L.colourHint}>
             <div className="flex items-center gap-2">
               <input
                 type="color"
-                aria-label="Pick a colour"
+                aria-label={L.pickColour}
                 value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : effective.color}
                 onChange={(e) => setColor(e.target.value)}
                 className="h-9 w-11 cursor-pointer rounded-md border border-surface-border bg-white p-0.5"
@@ -98,19 +104,19 @@ export function AppearanceForm({
                 name="bookingBrandColor"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
-                placeholder={`${inherited.color} (inherited)`}
+                placeholder={L.inherited(inherited.color)}
                 className={INPUT}
               />
-              {color && <Reset onClick={() => setColor("")} />}
+              {color && <Reset onClick={() => setColor("")} label={L.reset} />}
             </div>
           </Field>
 
-          <Field label="Headings" hint="Body text is always the same sans — prices need its numerals.">
+          <Field label={L.headings} hint={L.headingsHint}>
             <div className="flex items-center gap-2">
               <select name="bookingFont" value={font} onChange={(e) => setFont(e.target.value)} className={INPUT}>
-                <option value="">Inherit from email ({inherited.font})</option>
+                <option value="">{L.inheritFont(be.fonts[inherited.font] ?? inherited.font)}</option>
                 {BOOKING_FONTS.map((f) => (
-                  <option key={f.key} value={f.key}>{f.label}</option>
+                  <option key={f.key} value={f.key}>{be.fonts[f.key] ?? f.label}</option>
                 ))}
               </select>
             </div>
@@ -127,7 +133,7 @@ export function AppearanceForm({
         */}
         <input type="hidden" name="bookingLogoUrl" value={logoUrl} />
 
-        <Field label="Headline" hint="The first thing a guest reads. Blank uses the platform wording.">
+        <Field label={L.headline} hint={L.headlineHint}>
           <input
             name="bookingHeadline"
             value={headline}
@@ -138,7 +144,7 @@ export function AppearanceForm({
           />
         </Field>
 
-        <Field label="Supporting line">
+        <Field label={L.supporting}>
           <textarea
             name="bookingSubheadline"
             value={subheadline}
@@ -160,11 +166,10 @@ export function AppearanceForm({
           />
           <span>
             <span className="block text-[13px] font-semibold text-ink-900">
-              Show the &ldquo;why book direct&rdquo; row
+              {L.trust}
             </span>
             <span className="block text-[11.5px] leading-snug text-ink-500">
-              No booking fees · nothing charged today · live availability. Every claim is one the
-              platform actually keeps, so it is safe to leave on.
+              {L.trustHint}
             </span>
           </span>
         </label>
@@ -182,7 +187,7 @@ export function AppearanceForm({
           )}
           {state?.ok && !pending && (
             <span className="flex items-center gap-1.5 text-[12px] font-semibold text-success-600">
-              <Check className="h-3.5 w-3.5" /> Saved — your booking page is updated
+              <Check className="h-3.5 w-3.5" /> {L.savedLive}
             </span>
           )}
           <button
@@ -190,13 +195,13 @@ export function AppearanceForm({
             className="cursor-pointer rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
           >
             <Palette className="mr-1.5 inline h-3.5 w-3.5" />
-            {pending ? "Saving…" : "Save appearance"}
+            {pending ? L.saving : L.saveAppearance}
           </button>
         </div>
       </div>
 
       <div className="lg:sticky lg:top-4 lg:self-start">
-        <div className="mb-2 text-[11.5px] font-semibold text-ink-500">Live preview</div>
+        <div className="mb-2 text-[11.5px] font-semibold text-ink-500">{L.preview}</div>
         <EnginePreview
           preset={preset}
           color={effective.color}
@@ -209,7 +214,7 @@ export function AppearanceForm({
           hero={hero}
         />
         <p className="mt-2 text-[11px] leading-snug text-ink-400">
-          Updates as you type. Nothing is live until you save.
+          {L.previewHint}
         </p>
       </div>
     </form>
@@ -230,13 +235,13 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
-function Reset({ onClick }: { onClick: () => void }) {
+function Reset({ onClick, label }: { onClick: () => void; label: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      title="Back to inherited"
-      aria-label="Back to inherited"
+      title={label}
+      aria-label={label}
       className="shrink-0 cursor-pointer rounded-md border border-surface-border bg-white p-1.5 text-ink-500 transition-colors hover:text-ink-900"
     >
       <RotateCcw className="h-3.5 w-3.5" />

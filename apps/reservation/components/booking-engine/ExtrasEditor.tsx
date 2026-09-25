@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
+
 import { useActionState, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { saveBookingExtra, retireBookingExtra, type LookResult } from "@/lib/actions-booking-engine";
@@ -27,16 +31,17 @@ export interface EditableExtra {
 export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; currency: string }) {
   const [state, formAction, pending] = useActionState<LookResult | null, FormData>(saveBookingExtra, null);
   const [adding, setAdding] = useState(false);
+  const locale = useLocale();
+  const X = translate(beDict, locale).extras;
 
   const money = (minor: number) =>
-    (minor / 100).toLocaleString(undefined, { style: "currency", currency });
+    (minor / 100).toLocaleString(locale === "en" ? undefined : "bg-BG", { style: "currency", currency });
 
   return (
     <div className="space-y-3">
       {extras.length === 0 && !adding && (
         <p className="text-[12.5px] text-ink-500">
-          Nothing yet. Breakfast, parking, an airport transfer, a late checkout — anything you already
-          charge for is worth offering while a guest is booking.
+          {X.empty}
         </p>
       )}
 
@@ -56,18 +61,18 @@ export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; cu
           <div className="mt-3 flex justify-end gap-2">
             <button type="button" onClick={() => setAdding(false)}
                     className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-600">
-              Cancel
+              {X.cancel}
             </button>
             <button type="submit" disabled={pending}
                     className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-60">
-              {pending ? "Saving…" : "Add extra"}
+              {pending ? X.saving : X.add}
             </button>
           </div>
         </form>
       ) : (
         <button type="button" onClick={() => setAdding(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
-          <Plus className="h-3.5 w-3.5" /> Add an extra
+          <Plus className="h-3.5 w-3.5" /> {X.addOne}
         </button>
       )}
 
@@ -89,6 +94,7 @@ function ExtraRow({
   currency: string;
 }) {
   const [open, setOpen] = useState(false);
+  const X = translate(beDict, useLocale()).extras;
 
   if (open) {
     return (
@@ -98,11 +104,11 @@ function ExtraRow({
         <div className="mt-3 flex justify-end gap-2">
           <button type="button" onClick={() => setOpen(false)}
                   className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-600">
-            Cancel
+            {X.cancel}
           </button>
           <button type="submit" disabled={pending}
                   className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white disabled:opacity-60">
-            Save
+            {X.save}
           </button>
         </div>
       </form>
@@ -115,7 +121,7 @@ function ExtraRow({
         <span className="text-[13px] font-semibold text-ink-900">{extra.name}</span>
         <span className="ml-2 text-[12.5px] text-ink-500">
           {money(extra.priceMinor)}
-          {extra.basis === "per_night" ? " a night" : " per stay"}
+          {extra.basis === "per_night" ? X.aNight : X.perStay}
         </span>
         {extra.description && (
           <span className="mt-0.5 block text-[12px] text-ink-400">{extra.description}</span>
@@ -127,10 +133,10 @@ function ExtraRow({
             extra.directSellable ? "bg-success-50 text-success-600" : "bg-surface-muted text-ink-500"
           }`}
         >
-          {extra.directSellable ? "On your page" : "Staff only"}
+          {extra.directSellable ? X.onPage : X.staffOnly}
         </span>
         <form action={retireBookingExtra.bind(null, extra.id)}>
-          <button type="submit" aria-label={`Retire ${extra.name}`}
+          <button type="submit" aria-label={X.retire(extra.name)}
                   className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-danger-600">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -144,37 +150,38 @@ const INPUT =
   "h-9 w-full rounded-md border border-surface-border bg-white px-3 text-[13px] text-ink-900 outline-none focus:border-brand-600";
 
 function ExtraFields({ currency, extra }: { currency: string; extra?: EditableExtra }) {
+  const X = translate(beDict, useLocale()).extras;
   return (
     <div className="space-y-2.5">
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[1fr_8rem_9rem]">
         <label className="block">
-          <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">Name</span>
-          <input name="name" defaultValue={extra?.name} required placeholder="Breakfast" className={INPUT} />
+          <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">{X.name}</span>
+          <input name="name" defaultValue={extra?.name} required placeholder={X.namePlaceholder} className={INPUT} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">Price ({currency})</span>
+          <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">{X.price(currency)}</span>
           <input name="price" defaultValue={extra ? (extra.priceMinor / 100).toFixed(2) : ""}
                  inputMode="decimal" required placeholder="12.00" className={INPUT} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">Charged</span>
+          <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">{X.charged}</span>
           <select name="basis" defaultValue={extra?.basis ?? "per_stay"} className={INPUT}>
-            <option value="per_stay">Once per stay</option>
-            <option value="per_night">Per night</option>
+            <option value="per_stay">{X.oncePerStay}</option>
+            <option value="per_night">{X.perNight}</option>
           </select>
         </label>
       </div>
       <label className="block">
         <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">
-          One line for guests <span className="font-normal text-ink-400">· optional</span>
+          {X.line}<span className="font-normal text-ink-400">{X.optional}</span>
         </span>
         <input name="description" defaultValue={extra?.description ?? ""}
-               placeholder="Served 7–10:30 in the courtyard" className={INPUT} />
+               placeholder={X.linePlaceholder} className={INPUT} />
       </label>
       <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-medium text-ink-700">
         <input type="checkbox" name="directSellable" defaultChecked={extra?.directSellable ?? false}
                className="h-4 w-4 rounded border-surface-border text-brand-600" />
-        Sell this on my booking page
+        {X.sellIt}
       </label>
     </div>
   );

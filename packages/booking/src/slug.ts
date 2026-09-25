@@ -14,7 +14,8 @@ const RESERVED = new Set([
   "support", "www",
 ]);
 
-const MAX_LEN = 40;
+export const SLUG_MAX_LEN = 40;
+const MAX_LEN = SLUG_MAX_LEN;
 
 /**
  * Turn a property name into a URL-safe slug. Transliterates Cyrillic first — a Bulgarian hotel

@@ -1,5 +1,6 @@
 import type { Translations } from "@revio/ui/i18n";
 import type { OptionProblem } from "@revio/core";
+import type { ImageRejectedCode } from "../images";
 
 /**
  * What the rate, inventory, pricing and photo actions say when they refuse — `actions-rates.ts`,
@@ -241,3 +242,15 @@ export const rateErrors: Translations<RateErrorStrings> = {
     },
   },
 };
+
+/** An `ImageRejected`, by its code, in the reader's language. */
+export function imageRefusal(e: RateErrorStrings, r: ImageRejectedCode): string {
+  switch (r.code) {
+    case "notImage": return e.image.notImage;
+    case "tooLarge": return e.image.tooLarge(r.mb);
+    case "unreadable": return e.image.unreadable;
+    case "tooSmall": return e.image.tooSmall(r.w, r.h);
+    case "heroNarrow": return e.image.heroNarrow(r.w);
+    case "heroPortrait": return e.image.heroPortrait;
+  }
+}

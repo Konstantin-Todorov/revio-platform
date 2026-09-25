@@ -1,3 +1,5 @@
+import { i18n } from "@/lib/i18n/server";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
 import { connectMode } from "@revio/payments";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { PaymentsCard } from "@/components/booking-engine/PaymentsCard";
@@ -8,11 +10,12 @@ export const dynamic = "force-dynamic";
 /** Booking Engine → Taking payment. */
 export default async function BookingEnginePayments() {
   const { property } = await bookingEnginePage();
+  const P = (await i18n()).t(beDict).payments;
   return (
     <Card>
       <CardHeader
-        title="Taking payment"
-        subtitle="Whether a guest gets an instant confirmation, or sends you a request to accept. Either way your page sells."
+        title={P.title}
+        subtitle={P.sub}
       />
       <div className="px-5 py-4">
         <PaymentsCard

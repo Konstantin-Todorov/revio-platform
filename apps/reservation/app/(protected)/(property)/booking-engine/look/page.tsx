@@ -1,3 +1,5 @@
+import { i18n } from "@/lib/i18n/server";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
 import Link from "next/link";
 import { ImageIcon, Palette } from "lucide-react";
 import { BOOKING_COPY_DEFAULTS, heroScrim } from "@revio/core";
@@ -19,6 +21,7 @@ export default async function BookingEngineLook({ searchParams }: { searchParams
   const { tab } = await searchParams;
   const photo = tab === "photo";
   const { property } = await bookingEnginePage();
+  const L = (await i18n()).t(beDict).look;
   const [{ ownLogo, emailLogo }, heroUrl] = await Promise.all([
     bookingLogos(property),
     bookingHeroThumb(property.bookingHeroThumbKey),
@@ -39,15 +42,15 @@ export default async function BookingEngineLook({ searchParams }: { searchParams
   return (
     <>
       <div className="flex items-center gap-1 border-b border-surface-border">
-        {tabLink("page", "Colours, words & logo", Palette)}
-        {tabLink("photo", "Background photo", ImageIcon)}
+        {tabLink("page", L.tabPage, Palette)}
+        {tabLink("photo", L.tabPhoto, ImageIcon)}
       </div>
 
       {photo ? (
         <Card>
           <CardHeader
-            title="Background photo"
-            subtitle="A photo of your hotel behind the headline on your page. Optional — without one, the page uses the colour and shape of the base you picked."
+            title={L.photoTitle}
+            subtitle={L.photoSub}
           />
           <div className="px-5 py-4">
             <HeroPicker
@@ -66,8 +69,8 @@ export default async function BookingEngineLook({ searchParams }: { searchParams
       ) : (
         <Card>
           <CardHeader
-            title="Colours, words & logo"
-            subtitle="Pick a base, then change only what you want. Anything left blank follows your email branding — editing here never changes your emails."
+            title={L.pageTitle}
+            subtitle={L.pageSub}
           />
           <div className="border-b border-surface-border px-5 py-4">
             <LogoPicker current={ownLogo} inherited={emailLogo} />

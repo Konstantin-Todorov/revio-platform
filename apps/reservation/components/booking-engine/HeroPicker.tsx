@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
+
 import { useActionState, useEffect, useRef, useState } from "react";
 import { ImageUp, Info, Trash2, Check, AlertCircle } from "lucide-react";
 import { HERO_OVERLAY_LEVELS, heroScrim, measureHeroLuminance } from "@revio/core";
@@ -48,6 +52,8 @@ export function HeroPicker({
   const [picked, setPicked] = useState<{ url: string; luminance: number | null } | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const be = translate(beDict, useLocale());
+  const H = be.hero;
 
   // The picked file wins while it is on screen: the hotel is looking at what they are about to
   // commit to, not at what is already live.
@@ -72,7 +78,7 @@ export function HeroPicker({
     if (!file) return setPicked(null);
 
     if (file.size > 25 * 1024 * 1024) {
-      setLocalError(`That image is ${(file.size / 1024 / 1024).toFixed(1)} MB — the limit is 25 MB.`);
+      setLocalError(H.tooBig((file.size / 1024 / 1024).toFixed(1)));
       setPicked(null);
       if (inputRef.current) inputRef.current.value = "";
       return;
@@ -81,7 +87,7 @@ export function HeroPicker({
     const url = URL.createObjectURL(file);
     const measured = await inspect(url);
     if (!measured) {
-      setLocalError("We couldn’t read that image. Please try a JPEG, PNG or WebP.");
+      setLocalError(H.unreadable);
       URL.revokeObjectURL(url);
       setPicked(null);
       if (inputRef.current) inputRef.current.value = "";
@@ -92,9 +98,9 @@ export function HeroPicker({
     // two things again — this is so the hotel hears about it immediately, not instead of the real check.
     const problem =
       measured.width < 1200
-        ? `That image is ${measured.width}px wide. A background needs at least 1200px — it spans the whole page.`
+        ? H.narrow(measured.width)
         : measured.width < measured.height
-          ? "That photo is taller than it is wide, so most of it would be cropped away. Please use a landscape one."
+          ? H.portrait
           : null;
     if (problem) {
       setLocalError(problem);
@@ -127,19 +133,18 @@ export function HeroPicker({
                 className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:cursor-default disabled:opacity-50"
               >
                 <ImageUp className="h-3.5 w-3.5" />
-                {uploading ? "Uploading…" : saved.url ? "Replace background" : "Use this background"}
+                {uploading ? H.uploading : saved.url ? H.replace : H.use}
               </button>
               {upload?.ok && !uploading && (
                 <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-success-600">
-                  <Check className="h-3.5 w-3.5" /> Saved — it’s on your page now
+                  <Check className="h-3.5 w-3.5" /> {H.savedLive}
                 </span>
               )}
             </div>
           </form>
 
           <p className="max-w-[46ch] text-[11.5px] leading-snug text-ink-500">
-            A wide photograph of your hotel — the terrace, the pool, the view. JPEG, PNG or WebP, at
-            least 1200px wide. We resize it, so a large photo straight from a camera is fine.
+            {H.help}
           </p>
 
           {(localError || upload?.error) && (
@@ -158,14 +163,13 @@ export function HeroPicker({
               */}
               <div>
                 <label htmlFor="hero-focal" className="block text-[12px] font-semibold text-ink-700">
-                  What to keep in frame
+                  {H.frame}
                 </label>
                 <p className="mb-2 mt-0.5 max-w-[46ch] text-[11px] leading-snug text-ink-400">
-                  A background is a wide band, so something is always cropped. Slide until the part
-                  that matters — the roofline, the horizon — is showing.
+                  {H.frameHint}
                 </p>
                 <div className="flex max-w-[360px] items-center gap-2.5">
-                  <span className="text-[10.5px] font-semibold text-ink-400">Top</span>
+                  <span className="text-[10.5px] font-semibold text-ink-400">{H.top}</span>
                   <input
                     id="hero-focal"
                     type="range"
@@ -177,16 +181,14 @@ export function HeroPicker({
                     onChange={(e) => setFocalY(Number(e.target.value))}
                     className="h-1.5 flex-1 cursor-pointer accent-brand-700"
                   />
-                  <span className="text-[10.5px] font-semibold text-ink-400">Bottom</span>
+                  <span className="text-[10.5px] font-semibold text-ink-400">{H.bottom}</span>
                 </div>
               </div>
 
               <fieldset>
-                <legend className="text-[12px] font-semibold text-ink-700">How dark to shade it</legend>
+                <legend className="text-[12px] font-semibold text-ink-700">{H.shade}</legend>
                 <p className="mb-2 mt-0.5 max-w-[52ch] text-[11px] leading-snug text-ink-400">
-                  Your words sit on top of this photo, so it needs some shading to stay readable. We
-                  measure your picture and apply the least that works — these choices go darker than
-                  that, never lighter.
+                  {H.shadeHint}
                 </p>
                 <div className="grid grid-cols-1 max-w-[520px] gap-1.5 sm:grid-cols-3">
                   {HERO_OVERLAY_LEVELS.map((level) => (
@@ -206,8 +208,8 @@ export function HeroPicker({
                         onChange={() => setOverlay(level.key)}
                         className="sr-only"
                       />
-                      <span className="block text-[12.5px] font-bold text-ink-900">{level.label}</span>
-                      <span className="mt-0.5 block text-[11px] leading-snug text-ink-500">{level.blurb}</span>
+                      <span className="block text-[12.5px] font-bold text-ink-900">{be.overlays[level.key]?.label ?? level.label}</span>
+                      <span className="mt-0.5 block text-[11px] leading-snug text-ink-500">{be.overlays[level.key]?.blurb ?? level.blurb}</span>
                     </label>
                   ))}
                 </div>
@@ -222,10 +224,8 @@ export function HeroPicker({
                 <Info className="mt-px h-3.5 w-3.5 shrink-0" />
                 <span>
                   {scrim.floor === 0
-                    ? "Your photo is dark enough to carry white text on its own, so the minimum adds nothing."
-                    : `Your photo needs at least ${Math.round(scrim.floor * 100)}% shading for the text to stay readable${
-                        scrim.atFloor ? " — that is what you have selected." : `; you have selected ${Math.round(scrim.alpha * 100)}%.`
-                      }`}
+                    ? H.darkEnough
+                    : H.needs(Math.round(scrim.floor * 100), scrim.atFloor, Math.round(scrim.alpha * 100))}
                 </span>
               </p>
 
@@ -234,11 +234,11 @@ export function HeroPicker({
                   disabled={savingSettings}
                   className="cursor-pointer rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
                 >
-                  {savingSettings ? "Saving…" : "Save background settings"}
+                  {savingSettings ? H.saving : H.saveSettings}
                 </button>
                 {settings?.ok && !savingSettings && (
                   <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-success-600">
-                    <Check className="h-3.5 w-3.5" /> Saved
+                    <Check className="h-3.5 w-3.5" /> {H.saved}
                   </span>
                 )}
                 {settings?.error && (
@@ -253,7 +253,7 @@ export function HeroPicker({
 
         <div className="lg:sticky lg:top-4 lg:self-start">
           <div className="mb-2 text-[11.5px] font-semibold text-ink-500">
-            {picked ? "About to be saved" : "On your page"}
+            {picked ? H.aboutToSave : H.onPage}
           </div>
           <HeroPreview
             url={shownUrl}
@@ -261,6 +261,7 @@ export function HeroPicker({
             alpha={scrim.alpha}
             headline={headline}
             propertyName={propertyName}
+            none={H.none}
           />
           {shownUrl && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -272,7 +273,7 @@ export function HeroPicker({
                     type="submit"
                     className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted hover:text-ink-900"
                   >
-                    <Trash2 className="h-3.5 w-3.5" /> Remove background
+                    <Trash2 className="h-3.5 w-3.5" /> {H.remove}
                   </button>
                 </form>
               )}
@@ -282,7 +283,7 @@ export function HeroPicker({
                   onClick={() => void onPick(undefined)}
                   className="cursor-pointer rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted"
                 >
-                  Keep what I had
+                  {H.keep}
                 </button>
               )}
             </div>
@@ -295,18 +296,19 @@ export function HeroPicker({
 
 /** The hero band as a guest will see it: the crop, the shading, and real words on top of both. */
 function HeroPreview({
-  url, focalY, alpha, headline, propertyName,
+  url, focalY, alpha, headline, propertyName, none,
 }: {
   url: string | null;
   focalY: number;
   alpha: number;
   headline: string;
   propertyName: string;
+  none: string;
 }) {
   if (!url) {
     return (
       <div className="flex aspect-[16/9] items-center justify-center rounded-xl border border-dashed border-surface-border bg-surface-muted px-4 text-center text-[11.5px] leading-snug text-ink-400">
-        No background yet. Your page uses the colour and shape from the base you picked below.
+        {none}
       </div>
     );
   }

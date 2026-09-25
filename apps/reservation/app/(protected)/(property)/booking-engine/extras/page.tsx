@@ -1,3 +1,5 @@
+import { i18n } from "@/lib/i18n/server";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { ExtrasEditor, type EditableExtra } from "@/components/booking-engine/ExtrasEditor";
 import { prisma } from "@/lib/db";
@@ -12,6 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function BookingEngineExtras() {
   const { property } = await bookingEnginePage();
+  const X = (await i18n()).t(beDict).extras;
   const extras: EditableExtra[] = await prisma.posItem.findMany({
     where: { propertyId: property.id, category: "extra", active: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -20,8 +23,8 @@ export default async function BookingEngineExtras() {
   return (
     <Card>
       <CardHeader
-        title="Extras you sell"
-        subtitle="Offered after a guest has picked a room, added to the same bill, and posted by your front desk from this same list."
+        title={X.title}
+        subtitle={X.sub}
       />
       <div className="px-5 py-4">
         <ExtrasEditor extras={extras} currency={property.baseCurrency} />

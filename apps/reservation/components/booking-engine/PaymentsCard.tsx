@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
+
 import { useState, useTransition } from "react";
 import { CreditCard, ExternalLink, RefreshCw } from "lucide-react";
 import { startStripeOnboarding, refreshStripeStatus } from "@/lib/actions-booking-engine";
@@ -29,12 +33,14 @@ export function PaymentsCard({
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const locale = useLocale();
+  const P = translate(beDict, locale).payments;
 
   function connect() {
     setError(null);
     start(async () => {
       const res = await startStripeOnboarding();
-      if (!res.ok || !res.url) return setError(res.error ?? "Stripe could not start onboarding.");
+      if (!res.ok || !res.url) return setError(res.error ?? P.failed);
       // Stripe's link is single-use and short-lived, so it is followed immediately rather than
       // rendered as a link somebody might come back to tomorrow.
       window.location.href = res.url;
@@ -48,26 +54,20 @@ export function PaymentsCard({
           <CreditCard className="mt-0.5 h-4 w-4 shrink-0 text-ink-400" />
           <div>
             <div className="text-[13px] font-bold text-ink-900">
-              {chargesEnabled ? "Guests book instantly" : "Guests send requests"}
+              {chargesEnabled ? P.instant : P.requests}
             </div>
             <p className="mt-1 max-w-xl text-[12.5px] leading-relaxed text-ink-500">
               {chargesEnabled ? (
                 <>
-                  Your Stripe account is connected, so a guest&rsquo;s card guarantees the room and the
-                  booking is confirmed on the spot. <strong className="font-semibold text-ink-700">
-                  The money goes straight to you</strong> — it never passes through Revio.
+                  {P.connectedLead}<strong className="font-semibold text-ink-700">{P.connectedBold}</strong>{P.connectedTail}
                 </>
               ) : hasAccount ? (
                 <>
-                  Stripe is still checking your details. Until it finishes, bookings arrive as
-                  requests for you to accept — the room is held for the guest in the meantime, so
-                  nothing is lost.
+                  {P.verifying}
                 </>
               ) : (
                 <>
-                  Connect Stripe and guests get an instant confirmation with a card guarantee, paid
-                  to you directly. Until then your page still sells: bookings arrive as requests you
-                  accept, and the room is held while you decide.
+                  {P.notConnected}
                 </>
               )}
             </p>
@@ -79,7 +79,7 @@ export function PaymentsCard({
             chargesEnabled ? "bg-success-50 text-success-600" : "bg-surface-muted text-ink-500"
           }`}
         >
-          {chargesEnabled ? "Connected" : hasAccount ? "Verifying" : "Not connected"}
+          {chargesEnabled ? P.badge.connected : hasAccount ? P.badge.verifying : P.badge.none}
         </span>
       </div>
 
@@ -92,7 +92,7 @@ export function PaymentsCard({
             className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            {pending ? "Opening Stripe…" : hasAccount ? "Continue on Stripe" : "Connect Stripe"}
+            {pending ? P.opening : hasAccount ? P.continue : P.connect}
           </button>
         )}
         {hasAccount && (
@@ -101,7 +101,7 @@ export function PaymentsCard({
               type="submit"
               className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted"
             >
-              <RefreshCw className="h-3.5 w-3.5" /> Check again
+              <RefreshCw className="h-3.5 w-3.5" /> {P.checkAgain}
             </button>
           </form>
         )}
@@ -111,13 +111,12 @@ export function PaymentsCard({
           is the kind of thing somebody repeats to a client. */}
       {mode === "mock" && (
         <p className="text-[11.5px] text-ink-400">
-          Demo mode — no Stripe key is configured, so connecting is simulated and no real account is
-          created.
+          {P.demo}
         </p>
       )}
       {checkedAt && (
         <p className="text-[11.5px] text-ink-400">
-          Last checked with Stripe {checkedAt.toLocaleString()}.
+          {P.lastChecked(checkedAt.toLocaleString(locale === "en" ? undefined : "bg-BG"))}
         </p>
       )}
       {error && (

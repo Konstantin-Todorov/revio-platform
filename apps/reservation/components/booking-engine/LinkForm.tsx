@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
+
 import { useActionState, useState } from "react";
 import { AlertCircle, Check, CheckCircle2, Copy, Globe, Lock, Pause, Play } from "lucide-react";
 import { saveBookingEngineLink, type LinkResult } from "@/lib/actions-booking-engine";
@@ -39,10 +43,11 @@ export function LinkForm({
     null,
   );
   const [copied, setCopied] = useState(false);
+  const k = translate(beDict, useLocale()).link;
 
   const issued = slug ?? state?.slug ?? null;
   const fullUrl = issued && origin ? `${origin}/${issued}` : null;
-  const prefix = origin ? `${origin.replace(/^https?:\/\//, "")}/` : "your-address/";
+  const prefix = origin ? `${origin.replace(/^https?:\/\//, "")}/` : k.yourAddress;
 
   async function copy() {
     if (!fullUrl) return;
@@ -57,7 +62,7 @@ export function LinkForm({
       <>
         <form action={formAction} className="p-4">
           <label htmlFor="publicSlug" className="block text-[12px] font-semibold text-ink-700">
-            Your address
+            {k.address}
           </label>
           <div className="mt-1.5 flex flex-wrap items-center gap-3">
             <div className="flex min-w-[18rem] flex-1 items-stretch overflow-hidden rounded-md border border-surface-border bg-white focus-within:border-brand-600 focus-within:ring-1 focus-within:ring-brand-600">
@@ -78,15 +83,12 @@ export function LinkForm({
               disabled={pending}
               className="cursor-pointer whitespace-nowrap rounded-md bg-brand-800 px-3.5 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
             >
-              {pending ? "Creating…" : "Create link & start taking bookings"}
+              {pending ? k.creating : k.create}
             </button>
           </div>
           <p className="mt-2 text-[11.5px] leading-relaxed text-ink-500">
-            We built this from your hotel&apos;s name — most hotels keep it. Change it now if you want
-            something shorter or more recognisable, because{" "}
-            <span className="font-semibold text-ink-700">it is set once and then locked</span>: guests, QR
-            codes and printed material depend on it. You can pause bookings at any time without losing the
-            address.
+            {k.builtLead}
+            <span className="font-semibold text-ink-700">{k.locked}</span>{k.builtTail}
           </p>
         </form>
 
@@ -105,7 +107,7 @@ export function LinkForm({
     <>
       <div className="flex flex-wrap items-end gap-3 p-4">
         <div className="min-w-[18rem] flex-1">
-          <span className="block text-[12px] font-semibold text-ink-700">Your address</span>
+          <span className="block text-[12px] font-semibold text-ink-700">{k.address}</span>
           <div className="mt-1.5 flex items-stretch overflow-hidden rounded-md border border-surface-border bg-surface-muted">
             <span className="flex items-center gap-1.5 whitespace-nowrap border-r border-surface-border px-2.5 text-[12.5px] text-ink-500">
               <Lock className="h-3.5 w-3.5" />
@@ -121,13 +123,12 @@ export function LinkForm({
                 className="flex cursor-pointer items-center gap-1.5 border-l border-surface-border px-2.5 text-[12px] font-semibold text-ink-600 transition-colors hover:bg-white hover:text-ink-900"
               >
                 {copied ? <Check className="h-3.5 w-3.5 text-success-600" /> : <Copy className="h-3.5 w-3.5" />}
-                {copied ? "Copied" : "Copy"}
+                {copied ? k.copied : k.copy}
               </button>
             )}
           </div>
           <p className="mt-1 text-[11px] text-ink-400">
-            Permanent. If you truly need it changed, contact us — we redirect the old address rather than
-            break it.
+            {k.permanent}
           </p>
         </div>
 
@@ -148,15 +149,15 @@ export function LinkForm({
             }`}
           >
             {enabled ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            {pending ? "Saving…" : enabled ? "Pause bookings" : "Start taking bookings"}
+            {pending ? k.saving : enabled ? k.pause : k.start}
           </button>
         </form>
       </div>
 
       <div className="border-t border-surface-border/60 px-4 py-2.5 text-[12px] text-ink-500">
         {enabled
-          ? "Guests can book right now."
-          : "Paused — anyone opening your link sees that online booking is closed. The address stays yours."}
+          ? k.live
+          : k.pausedNote}
       </div>
 
       {state?.error && (
@@ -168,7 +169,7 @@ export function LinkForm({
       {state?.ok && (
         <div className="flex items-center gap-2 border-t border-surface-border/60 bg-success-50 px-4 py-2.5 text-[12.5px] text-success-600">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          <span>Saved.</span>
+          <span>{k.saved}</span>
         </div>
       )}
     </>

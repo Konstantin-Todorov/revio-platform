@@ -2,6 +2,7 @@ import { ArrowRight, Clock, Info, TrendingDown } from "lucide-react";
 import { BarList, Donut } from "@/components/reports/Visuals";
 import type { FunnelSession } from "@revio/core";
 import { funnelByRoomType, funnelStayComparison, funnelTotals } from "@revio/core";
+import { bookingEngine, type BookingEngineStrings } from "@/lib/i18n/booking-engine";
 
 /**
  * The hotel's own funnel, on the hotel's own screen.
@@ -27,20 +28,23 @@ export function FunnelPanel({
   sessions,
   roomTypeName,
   inferred,
+  s = bookingEngine.en.funnel,
 }: {
   sessions: FunnelSession[];
   roomTypeName: Map<string, string>;
   /** The range reaches back before the source was recorded — say so rather than imply precision. */
   inferred: boolean;
+  /** The reader's words; English when omitted. A server component, so the page passes them in. */
+  s?: BookingEngineStrings["funnel"];
 }) {
   const t = funnelTotals(sessions);
 
   if (t.started === 0) {
     return (
       <div className="px-4 py-8 text-center">
-        <p className="text-[13px] font-semibold text-ink-700">Nobody has opened a booking form yet</p>
+        <p className="text-[13px] font-semibold text-ink-700">{s.emptyTitle}</p>
         <p className="mt-1 text-[12.5px] text-ink-500">
-          This fills in on its own the first time a guest reaches the booking page. Share your link and it starts counting.
+          {s.emptyBody}
         </p>
       </div>
     );
@@ -56,26 +60,26 @@ export function FunnelPanel({
       <div className="grid gap-3 sm:grid-cols-[minmax(0,200px)_1fr] sm:items-center">
         <Donut
           centreLabel={t.conversionRate === null ? "—" : pct(t.conversionRate)}
-          centreSub={t.conversionRate === null ? "nobody decided yet" : "booked"}
+          centreSub={t.conversionRate === null ? s.nobodyDecided : s.booked}
           slices={[
-            { label: "Booked", value: t.booked, valueLabel: String(t.booked), colour: "var(--success-600, #16a34a)" },
-            { label: "Left", value: t.left, valueLabel: String(t.left), colour: "var(--warning-600, #d97706)" },
-            { label: "Timed out", value: t.stopped, valueLabel: String(t.stopped), colour: "var(--ink-300, #cbd5e1)" },
+            { label: s.booked.charAt(0).toUpperCase() + s.booked.slice(1), value: t.booked, valueLabel: String(t.booked), colour: "var(--success-600, #16a34a)" },
+            { label: s.left, value: t.left, valueLabel: String(t.left), colour: "var(--warning-600, #d97706)" },
+            { label: s.timedOut, value: t.stopped, valueLabel: String(t.stopped), colour: "var(--ink-300, #cbd5e1)" },
           ]}
         />
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Opened a booking" value={t.started} hint="Guests who reached the form" />
-          <Stat label="Booked" value={t.booked} tone="success" />
+          <Stat label={s.opened} value={t.started} hint={s.openedHint} />
+          <Stat label={s.booked.charAt(0).toUpperCase() + s.booked.slice(1)} value={t.booked} tone="success" />
           <Stat
-            label="Left the form"
+            label={s.leftForm}
             value={t.left}
             tone="warning"
-            hint="Saw the total and went back — a price or trust signal"
+            hint={s.leftHint}
           />
           <Stat
-            label="Ran out of time"
+            label={s.ranOut}
             value={t.stopped}
-            hint="Interrupted rather than put off — the ones an email can still win back"
+            hint={s.ranOutHint}
           />
         </dl>
       </div>
@@ -84,31 +88,33 @@ export function FunnelPanel({
         <p className="flex items-center gap-1.5 rounded-md bg-surface-muted px-2.5 py-1.5 text-[12px] text-ink-600">
           <Clock className="h-3.5 w-3.5 shrink-0 text-ink-400" />
           <span className="tnum font-semibold">{t.looking}</span>
-          {t.looking === 1 ? "guest is" : "guests are"} filling in the form right now — not counted either way until they finish.
+          {s.looking(t.looking)}
         </p>
       )}
 
       {/* What the ones who booked wanted, against what the ones who left wanted. */}
       <div className="grid gap-3 sm:grid-cols-2">
         <Compare
-          title="Nights they wanted"
+          title={s.nightsWanted}
           booked={stay.nights.booked}
           abandoned={stay.nights.abandoned}
-          unit="night"
-          why="A longer stay abandoning more often usually means a minimum-stay rule or a price that only bites past a few nights."
+          unit={s.night}
+          why={s.nightsWhy}
+          s={s}
         />
         <Compare
-          title="Days before arrival"
+          title={s.leadDays}
           booked={stay.leadDays.booked}
           abandoned={stay.leadDays.abandoned}
-          unit="day"
-          why="Last-minute lookers abandoning more often points at the deposit or the card step, not the rate."
+          unit={s.day}
+          why={s.leadWhy}
+          s={s}
         />
       </div>
 
       <div>
         <h4 className="px-0 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-          By room — booked out of the guests who opened that room
+          {s.byRoom}
         </h4>
         {/*
           ⚠️ The bar length is the CONVERSION RATE, the same thing the number beside it states — not
@@ -117,25 +123,23 @@ export function FunnelPanel({
           attention, and the raw counts ride along in the meta so a 1-of-1 cannot pass for a trend.
         */}
         <BarList
-          emptyMessage="No rooms opened in this period."
+          emptyMessage={s.noRooms}
           data={rooms.map((r) => ({
-            label: roomTypeName.get(r.roomTypeId) ?? "Room",
+            label: roomTypeName.get(r.roomTypeId) ?? s.room,
             value: r.conversionRate === null ? 0 : r.conversionRate,
             valueLabel: r.conversionRate === null ? "—" : pct(r.conversionRate),
-            meta: `${r.booked} of ${r.sessions}`,
+            meta: s.of(r.booked, r.sessions),
           }))}
         />
         <p className="px-4 pb-1 text-[11.5px] text-ink-400">
-          Each room is measured against its own visitors, not the hotel total — otherwise the room nobody opens always
-          looks like the worst one, when what it has is a visibility problem.
+          {s.byRoomNote}
         </p>
       </div>
 
       {inferred && (
         <p className="flex items-start gap-1.5 rounded-md border border-surface-border bg-surface-muted px-2.5 py-2 text-[11.5px] text-ink-500">
           <Info className="mt-px h-3.5 w-3.5 shrink-0 text-ink-400" />
-          Part of this range predates the day we started recording where a hold came from and which visit it belonged to.
-          Those older figures are inferred rather than measured, and one guest who compared two rooms may count twice in them.
+          {s.inferred}
         </p>
       )}
     </div>
@@ -156,9 +160,9 @@ function Stat({
 }
 
 function Compare({
-  title, booked, abandoned, unit, why,
-}: { title: string; booked: number | null; abandoned: number | null; unit: string; why: string }) {
-  const fmt = (n: number | null) => (n === null ? "—" : `${n} ${unit}${n === 1 ? "" : "s"}`);
+  title, booked, abandoned, unit, why, s,
+}: { title: string; booked: number | null; abandoned: number | null; unit: (n: number) => string; why: string; s: BookingEngineStrings["funnel"] }) {
+  const fmt = (n: number | null) => (n === null ? "—" : unit(n));
   // Only remark on a gap when both sides exist AND it is big enough to act on. A half-night
   // difference is noise, and pointing at it teaches the reader to ignore this box.
   const notable = booked !== null && abandoned !== null && Math.abs(abandoned - booked) >= Math.max(1, booked * 0.5);
@@ -169,16 +173,16 @@ function Compare({
       <div className="mt-1.5 flex items-center gap-3 text-[13px]">
         <span>
           <span className="tnum font-bold text-success-600">{fmt(booked)}</span>
-          <span className="ml-1 text-ink-400">booked</span>
+          <span className="ml-1 text-ink-400">{s.booked}</span>
         </span>
         <ArrowRight className="h-3.5 w-3.5 text-ink-300" />
         <span>
           <span className="tnum font-bold text-warning-700">{fmt(abandoned)}</span>
-          <span className="ml-1 text-ink-400">did not</span>
+          <span className="ml-1 text-ink-400">{s.didNot}</span>
         </span>
       </div>
       {/* Median, not mean — see funnelStayComparison. */}
-      <p className="mt-1 text-[11px] text-ink-400">Typical (middle) value, so one long booking cannot move it.</p>
+      <p className="mt-1 text-[11px] text-ink-400">{s.median}</p>
       {notable && (
         <p className="mt-1.5 flex items-start gap-1.5 text-[11.5px] leading-snug text-ink-600">
           <TrendingDown className="mt-px h-3.5 w-3.5 shrink-0 text-warning-600" />

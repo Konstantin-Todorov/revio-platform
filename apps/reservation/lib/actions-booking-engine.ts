@@ -5,13 +5,21 @@ import { BOOKING_PRESET_BY_KEY, HERO_OVERLAY_LEVELS, heroFocalY } from "@revio/c
 import { getObjectStore, heroImageKey, photoToken } from "@revio/storage";
 import { createConnectAccount, createOnboardingLink, getConnectStatus } from "@revio/payments";
 import { syncRealChannels, stayScope } from "@revio/connectivity";
-import { slugifyPropertyName, slugRejectionReason } from "@revio/booking";
+import { SLUG_MAX_LEN, slugifyPropertyName, slugRejectionReason } from "@revio/booking";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { getSession } from "./session";
 import { logAudit, str } from "./mutation-helpers";
 import { ImageRejected, MAX_UPLOAD_BYTES, processHeroImage } from "./images";
 import { guard, requireCapability } from "./authz";
+import { i18n } from "./i18n/server";
+import { bookingEngine as beDict } from "./i18n/booking-engine";
+import { imageRefusal, rateErrors } from "./i18n/rate-errors";
+
+/** The refusal words, in the reader's language — `lib/i18n/booking-engine.ts`. */
+async function say() {
+  return (await i18n()).t(beDict).errors;
+}
 
 /**
  * Refuse to write while the user is in portfolio scope.
@@ -24,7 +32,7 @@ import { guard, requireCapability } from "./authz";
 async function assertSingleProperty(): Promise<string | null> {
   const session = await getSession();
   if (session?.scope === "group") {
-    return "Choose a hotel first — you are viewing all properties, and this setting belongs to one.";
+    return (await say()).chooseHotel;
   }
   return null;
 }
@@ -136,8 +144,15 @@ export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormDa
 
   // Falls back to the hotel's name so a hotel that just flips the switch still gets a working link.
   const slug = slugifyPropertyName(raw || name);
-  const problem = slugRejectionReason(slug);
-  if (problem) return { ok: false, error: problem };
+  // Core decides whether the address is refused; the reason is said in the reader's words.
+  if (slugRejectionReason(slug)) {
+    const e = (await say()).slug;
+    const error = slug.length < 3 ? e.short
+      : slug.length > SLUG_MAX_LEN ? e.long(SLUG_MAX_LEN)
+        : /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) ? e.reserved
+          : e.chars;
+    return { ok: false, error };
+  }
 
   // Unique across the whole platform — it resolves a property with no tenant context, so a
   // collision would hand one hotel's bookings to another. Checked here for a readable message
@@ -146,7 +161,7 @@ export async function saveBookingEngineLink(_prev: LinkResult | null, fd: FormDa
     where: { publicSlug: slug, NOT: { id: propertyId } },
     select: { id: true },
   });
-  if (taken) return { ok: false, error: `"${slug}" is already taken. Try adding your city or district.` };
+  if (taken) return { ok: false, error: (await say()).slugTaken(slug) };
 
   await prisma.property.update({
     where: { id: propertyId },
@@ -195,14 +210,14 @@ export async function uploadBookingLogo(_prev: LookResult | null, fd: FormData):
   const { id: propertyId, tenantId } = await getProperty();
 
   const file = fd.get("logo");
-  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose an image first." };
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: (await say()).chooseImage };
   if (file.size > MAX_LOGO_BYTES) {
-    return { ok: false, error: `That image is ${Math.round(file.size / 1024)} KB. Please use one under 300 KB.` };
+    return { ok: false, error: (await say()).logoTooBig(Math.round(file.size / 1024)) };
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
   const match = Object.entries(LOGO_TYPES).find(([, sig]) => sig.every((b, i) => bytes[i] === b));
-  if (!match) return { ok: false, error: "That file isn’t a PNG, JPEG, GIF or WebP." };
+  if (!match) return { ok: false, error: (await say()).notLogoType };
   const [mimeType] = match;
 
   await prisma.brandAsset.upsert({
@@ -294,17 +309,17 @@ export async function uploadBookingHero(_prev: LookResult | null, fd: FormData):
   const { id: propertyId, tenantId, bookingHeroKey, bookingHeroThumbKey } = await getProperty();
 
   const file = fd.get("hero");
-  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Choose an image first." };
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: (await say()).chooseImage };
   if (file.size > MAX_UPLOAD_BYTES) {
     const mb = (file.size / 1024 / 1024).toFixed(1);
-    return { ok: false, error: `That image is ${mb} MB — the limit is 25 MB.` };
+    return { ok: false, error: (await say()).heroTooBig(mb) };
   }
 
   let processed;
   try {
     processed = await processHeroImage(file);
   } catch (err) {
-    if (err instanceof ImageRejected) return { ok: false, error: err.message };
+    if (err instanceof ImageRejected) return { ok: false, error: imageRefusal((await i18n()).t(rateErrors), err.reason) };
     throw err;
   }
 
@@ -417,7 +432,7 @@ export async function startStripeOnboarding(): Promise<{ ok: boolean; url?: stri
       country: "BG",
     });
     if (!created.ok || !created.accountId) {
-      return { ok: false, error: created.error ?? "Stripe could not create the account." };
+      return { ok: false, error: created.error ?? (await say()).stripeCreate };
     }
     accountId = created.accountId;
     await prisma.property.update({ where: { id: property.id }, data: { stripeAccountId: accountId } });
@@ -433,7 +448,7 @@ export async function startStripeOnboarding(): Promise<{ ok: boolean; url?: stri
     refreshUrl: `${origin}/booking-engine?stripe=refresh`,
     returnUrl: `${origin}/booking-engine?stripe=done`,
   });
-  if (!link.ok || !link.url) return { ok: false, error: link.error ?? "Stripe could not start onboarding." };
+  if (!link.ok || !link.url) return { ok: false, error: link.error ?? (await say()).stripeStart };
   return { ok: true, url: link.url };
 }
 
@@ -476,7 +491,7 @@ export async function acceptBookingRequest(reservationId: string): Promise<{ ok:
     where: { id: reservationId, propertyId: property.id, status: "requested" },
     data: { status: "confirmed" },
   });
-  if (updated.count === 0) return { ok: false, error: "That request has already been answered." };
+  if (updated.count === 0) return { ok: false, error: (await say()).answered };
 
   await logAudit(property.id, property.tenantId, {
     entity: "Reservation", field: "status", newValue: "confirmed (request accepted)",
@@ -504,7 +519,7 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
     // RevioLink's summary all count by `cancelledAt`, and a declined request is one of them.
     data: { status: "cancelled", cancelledAt: new Date() },
   });
-  if (updated.count === 0) return { ok: false, error: "That request has already been answered." };
+  if (updated.count === 0) return { ok: false, error: (await say()).answered };
 
   await logAudit(property.id, property.tenantId, {
     entity: "Reservation", field: "status", newValue: "cancelled (request declined)",
@@ -538,11 +553,11 @@ export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): 
   const { id: propertyId, tenantId } = await getProperty();
 
   const name = str(fd, "name").trim();
-  if (!name) return { ok: false, error: "Give it a name guests will recognise." };
+  if (!name) return { ok: false, error: (await say()).extraName };
 
   // Money arrives as a decimal string from a human; it is stored in minor units like everything else.
   const price = Number.parseFloat(str(fd, "price").replace(",", "."));
-  if (!Number.isFinite(price) || price < 0) return { ok: false, error: "Enter a price, or 0 if it's free." };
+  if (!Number.isFinite(price) || price < 0) return { ok: false, error: (await say()).extraPrice };
   const priceMinor = Math.round(price * 100);
 
   const basis = str(fd, "basis");
@@ -561,7 +576,7 @@ export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): 
     // Scoped by propertyId as well as id: an id from a form is user input, and this is the line
     // between editing your own catalogue and editing somebody else's.
     const updated = await prisma.posItem.updateMany({ where: { id, propertyId, category: "extra" }, data });
-    if (updated.count === 0) return { ok: false, error: "That extra no longer exists." };
+    if (updated.count === 0) return { ok: false, error: (await say()).extraGone };
   } else {
     await prisma.posItem.create({
       data: { ...data, tenantId, propertyId, category: "extra", outlet: "extra", active: true },

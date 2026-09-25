@@ -1,3 +1,5 @@
+import { i18n } from "@/lib/i18n/server";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
 import { ExternalLink, Power } from "lucide-react";
 import { slugifyPropertyName } from "@revio/booking";
 import { funnelSessions } from "@revio/core";
@@ -26,17 +28,19 @@ export default async function BookingEngineOverview() {
   funnelFrom.setUTCDate(funnelFrom.getUTCDate() - 29);
   const funnel = await getBookingFunnel(funnelFrom.toISOString().slice(0, 10), todayIso);
   const sessions = funnelSessions(funnel.holds);
+  const s = (await i18n()).t(beDict);
+  const o = s.overview;
 
   return (
     <>
       <Card>
         <CardHeader
-          title="Your link"
-          subtitle="Where guests book. Printed on QR codes and pasted into bios, so treat it as permanent once you share it."
+          title={o.linkTitle}
+          subtitle={o.linkSub}
           action={
             <StatusPill tone={accepting ? "success" : "neutral"}>
               <Power className="mr-1 inline h-3 w-3" />
-              {accepting ? "Taking bookings" : property.publicSlug ? "Paused" : "Not set up"}
+              {accepting ? o.taking : property.publicSlug ? o.paused : o.notSetUp}
             </StatusPill>
           }
         />
@@ -48,7 +52,7 @@ export default async function BookingEngineOverview() {
         />
         {accepting && url && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-surface-border/60 px-4 py-2.5 text-[12px] text-ink-500">
-            Guests can book at
+            {o.guestsBookAt}
             <a
               href={url}
               target="_blank"
@@ -62,18 +66,17 @@ export default async function BookingEngineOverview() {
         )}
         {!published && (
           <div className="border-t border-surface-border/60 px-4 py-2.5 text-[12px] text-ink-500">
-            Your booking page isn&apos;t published yet. Choose your address now — we reserve it, and it
-            becomes a working link the moment your page goes live.
+            {o.notPublished}
           </div>
         )}
       </Card>
 
       <Card>
         <CardHeader
-          title="How your booking page is doing"
-          subtitle="The last 30 days — every guest who opened a booking form, and how it ended. No commission was paid on any of these."
+          title={o.funnelTitle}
+          subtitle={o.funnelSub}
         />
-        <FunnelPanel sessions={sessions} roomTypeName={funnel.roomTypeName} inferred={funnel.inferred} />
+        <FunnelPanel sessions={sessions} roomTypeName={funnel.roomTypeName} inferred={funnel.inferred} s={s.funnel} />
       </Card>
     </>
   );

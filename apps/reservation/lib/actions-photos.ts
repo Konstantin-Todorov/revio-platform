@@ -9,22 +9,10 @@ import { ImageRejected, MAX_UPLOAD_BYTES, processRoomPhoto } from "./images";
 import { guard, requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
 import { i18n } from "./i18n/server";
-import { rateErrors, type RateErrorStrings } from "./i18n/rate-errors";
-import type { ImageRejectedCode } from "./images";
+import { imageRefusal, rateErrors } from "./i18n/rate-errors";
 
 async function say() {
   return (await i18n()).t(rateErrors);
-}
-/** An `ImageRejected`, by its code, in the reader's language. */
-function imageRefusal(e: RateErrorStrings, r: ImageRejectedCode): string {
-  switch (r.code) {
-    case "notImage": return e.image.notImage;
-    case "tooLarge": return e.image.tooLarge(r.mb);
-    case "unreadable": return e.image.unreadable;
-    case "tooSmall": return e.image.tooSmall(r.w, r.h);
-    case "heroNarrow": return e.image.heroNarrow(r.w);
-    case "heroPortrait": return e.image.heroPortrait;
-  }
 }
 
 /**

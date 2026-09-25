@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
+
 import { useActionState, useRef, useState } from "react";
 import { ImageUp, Trash2 } from "lucide-react";
 import { uploadBookingLogo, removeBookingLogo, type LookResult } from "@/lib/actions-booking-engine";
@@ -32,6 +36,7 @@ export function LogoPicker({
   const [preview, setPreview] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const G = translate(beDict, useLocale()).logo;
 
   const shown = preview ?? current ?? inherited;
   const showingInherited = !preview && !current && !!inherited;
@@ -42,7 +47,7 @@ export function LogoPicker({
     // Checked again on the server by file signature — this is only so the hotel hears about it
     // before waiting for an upload, not instead of the real check.
     if (file.size > 300 * 1024) {
-      setLocalError(`That image is ${Math.round(file.size / 1024)} KB — please use one under 300 KB.`);
+      setLocalError(G.tooBig(Math.round(file.size / 1024)));
       setPreview(null);
       if (inputRef.current) inputRef.current.value = "";
       return;
@@ -52,15 +57,15 @@ export function LogoPicker({
 
   return (
     <div className="space-y-2.5">
-      <div className="mb-1 text-[12px] font-semibold text-ink-700">Logo</div>
+      <div className="mb-1 text-[12px] font-semibold text-ink-700">{G.title}</div>
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-[68px] w-[150px] items-center justify-center overflow-hidden rounded-md border border-dashed border-surface-border bg-surface-muted">
           {shown ? (
             /* eslint-disable-next-line @next/next/no-img-element -- a hotel-uploaded logo of unknown origin */
-            <img src={shown} alt="Your logo" className="max-h-[60px] max-w-[140px] object-contain" />
+            <img src={shown} alt={G.alt} className="max-h-[60px] max-w-[140px] object-contain" />
           ) : (
-            <span className="px-2 text-center text-[11px] text-ink-400">No logo yet</span>
+            <span className="px-2 text-center text-[11px] text-ink-400">{G.none}</span>
           )}
         </div>
 
@@ -79,7 +84,7 @@ export function LogoPicker({
               disabled={pending || !preview}
               className="inline-flex w-fit items-center gap-1.5 rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-50"
             >
-              <ImageUp className="h-3.5 w-3.5" /> {pending ? "Uploading…" : "Upload logo"}
+              <ImageUp className="h-3.5 w-3.5" /> {pending ? G.uploading : G.upload}
             </button>
           </form>
 
@@ -91,7 +96,7 @@ export function LogoPicker({
                 type="submit"
                 className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted"
               >
-                <Trash2 className="h-3.5 w-3.5" /> Use the email logo instead
+                <Trash2 className="h-3.5 w-3.5" /> {G.useEmail}
               </button>
             </form>
           )}
@@ -100,10 +105,10 @@ export function LogoPicker({
 
       <p className="text-[11.5px] text-ink-500">
         {showingInherited
-          ? "This is your email branding logo. Upload one here to give the booking page its own."
+          ? G.inheritedNote
           : current
-            ? "The booking page uses this. Remove it to go back to your email branding logo."
-            : "PNG, JPEG, GIF or WebP, under 300 KB. Leave it empty and the page shows your hotel’s name."}
+            ? G.ownNote
+            : G.emptyNote}
       </p>
 
       {(localError || state?.error) && (
