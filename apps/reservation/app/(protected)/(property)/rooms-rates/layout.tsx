@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { SettingsNav, type SettingsSection } from "@revio/ui/settings-nav";
 import { PageHeader } from "@/components/ui/primitives";
 import { getProperty } from "@/lib/data";
+import { i18n } from "@/lib/i18n/server";
+import { rates as ratesDict } from "@/lib/i18n/rates";
 
 /**
  * Rooms & Rates — what the property sells, grouped by the thing a hotelier thinks about: "the
@@ -15,28 +17,27 @@ import { getProperty } from "@/lib/data";
  * One-record rule: these are the SAME shared-core rows RevioLink authors — two edit surfaces, never
  * two tables that sync.
  */
-const SECTIONS: SettingsSection[] = [
-  { href: "/rooms-rates/rooms", label: "Room types", blurb: "What you sell, its photos and what a guest reads", prefix: true },
-  { href: "/rooms-rates/plans", label: "Rate plans", blurb: "How each rate prices, and where its price comes from", prefix: true },
-  { href: "/rooms-rates/closures", label: "Closures", blurb: "Rooms closed for sale, and rooms out of order" },
-];
-
-const ELSEWHERE: SettingsSection[] = [
-  { href: "/inventory", label: "Daily prices", blurb: "Prices and availability per date — the Inventory Calendar" },
-  { href: "/bulk", label: "Bulk changes", blurb: "Prices and restrictions across many dates at once" },
-  { href: "/booking-engine", label: "Booking Engine", blurb: "Where guests see these rooms" },
-];
-
 export default async function RoomsRatesLayout({ children }: { children: ReactNode }) {
   const property = await getProperty();
+  const s = (await i18n()).t(ratesDict);
+  const SECTIONS: SettingsSection[] = [
+    { href: "/rooms-rates/rooms", label: s.nav.rooms, blurb: s.nav.roomsBlurb, prefix: true },
+    { href: "/rooms-rates/plans", label: s.nav.plans, blurb: s.nav.plansBlurb, prefix: true },
+    { href: "/rooms-rates/closures", label: s.nav.closures, blurb: s.nav.closuresBlurb },
+  ];
+  const ELSEWHERE: SettingsSection[] = [
+    { href: "/inventory", label: s.nav.daily, blurb: s.nav.dailyBlurb },
+    { href: "/bulk", label: s.nav.bulk, blurb: s.nav.bulkBlurb },
+    { href: "/booking-engine", label: s.nav.engine, blurb: s.nav.engineBlurb },
+  ];
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Rooms & Rates"
-        subtitle={`${property.name} · what you sell — shared with RevioLink, so you set it up once`}
+        title={s.title}
+        subtitle={s.subtitle(property.name)}
       />
       <div className="flex flex-col gap-5 lg:flex-row">
-        <SettingsNav sections={SECTIONS} elsewhere={ELSEWHERE} labels={{ nav: "Rooms & Rates sections", elsewhere: "Elsewhere" }} />
+        <SettingsNav sections={SECTIONS} elsewhere={ELSEWHERE} labels={{ nav: s.nav.label, elsewhere: s.nav.elsewhere }} />
         <div className="min-w-0 flex-1 space-y-5">{children}</div>
       </div>
     </div>

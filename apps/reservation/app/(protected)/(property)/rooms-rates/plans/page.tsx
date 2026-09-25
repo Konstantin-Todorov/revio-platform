@@ -3,8 +3,11 @@ import { ChevronRight, CornerDownRight } from "lucide-react";
 import { getRatesData } from "@/lib/data";
 import { RatePlanDialog } from "@/components/rates/RatePlanDialog";
 import { BlockedNotice } from "@/components/rates/BlockedNotice";
-import { offsetOf, PRICING_MODEL_LABEL } from "@/components/rates/plan-labels";
+import { offsetOf } from "@/components/rates/plan-labels";
+import { moneyIn } from "@/lib/i18n/money";
 import { Card, CardHeader } from "@/components/ui/primitives";
+import { i18n } from "@/lib/i18n/server";
+import { rates as ratesDict } from "@/lib/i18n/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,9 @@ type Plan = Awaited<ReturnType<typeof getRatesData>>["ratePlans"][number];
 export default async function RatePlansPage({ searchParams }: { searchParams: Promise<{ blocked?: string }> }) {
   const { blocked } = await searchParams;
   const { ratePlans, defaults } = await getRatesData();
+  const { t, locale } = await i18n();
+  const s = t(ratesDict);
+  const money = moneyIn(locale);
   const propertyModel = defaults?.pricingModel ?? "per_room";
   const ids = new Set(ratePlans.map((p) => p.id));
   // A derived plan whose parent is gone is still listed — at the top, never lost.
@@ -36,15 +42,15 @@ export default async function RatePlansPage({ searchParams }: { searchParams: Pr
 
   return (
     <>
-      <BlockedNotice name={blocked} />
+      <BlockedNotice name={blocked} text={blocked ? s.blocked(blocked) : undefined} />
       <Card>
         <CardHeader
-          title="Rate plans"
-          subtitle="Plans priced from another one sit under it, with the difference — open a plan for everything about it"
+          title={s.plans.title}
+          subtitle={s.plans.subtitle}
           action={<RatePlanDialog parents={ratePlans.map((p) => ({ id: p.id, name: p.name }))} />}
         />
         {rows.length === 0 ? (
-          <p className="px-5 pb-8 pt-2 text-[13px] text-ink-500">No rate plans yet. Add the rate you sell most — the others can be priced from it.</p>
+          <p className="px-5 pb-8 pt-2 text-[13px] text-ink-500">{s.plans.empty}</p>
         ) : (
           <ul className="divide-y divide-surface-border/70 border-t border-surface-border/70">
             {rows.map(({ plan, depth }) => {
@@ -60,15 +66,15 @@ export default async function RatePlansPage({ searchParams }: { searchParams: Pr
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-1.5">
                         <span className={`truncate text-[13.5px] font-semibold ${plan.active ? "text-ink-900" : "text-ink-400"}`}>{plan.name}</span>
-                        {depth > 0 && <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-semibold text-ink-600">{offsetOf(plan)}</span>}
-                        {!plan.active && <span className="text-[10px] font-bold uppercase text-ink-400">inactive</span>}
+                        {depth > 0 && <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[11px] font-semibold text-ink-600">{offsetOf(plan, money)}</span>}
+                        {!plan.active && <span className="text-[10px] font-bold uppercase text-ink-400">{s.inactive}</span>}
                         {!plan.directChannelEnabled && (
-                          <span title="Not bookable on your own booking page" className="rounded bg-surface-sunken px-1 py-0.5 text-[9.5px] font-bold uppercase text-ink-500">OTA/corporate only</span>
+                          <span title={s.plans.otaOnlyTitle} className="rounded bg-surface-sunken px-1 py-0.5 text-[9.5px] font-bold uppercase text-ink-500">{s.plans.otaOnly}</span>
                         )}
                       </span>
                       <span className="mt-0.5 block truncate text-[11.5px] text-ink-500">
-                        {plan.code} · {PRICING_MODEL_LABEL[model] ?? model} · {plan._count.roomTypeLinks} room type{plan._count.roomTypeLinks === 1 ? "" : "s"}
-                        {plan.priceLogic === "derived" && plan.parent ? ` · from ${plan.parent.name}` : ""}
+                        {plan.code} · {s.pricingModel[model as "per_room"] ?? model} · {s.plans.roomTypes(plan._count.roomTypeLinks)}
+                        {plan.priceLogic === "derived" && plan.parent ? s.plans.from(plan.parent.name) : ""}
                       </span>
                     </span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-ink-300" />
@@ -79,7 +85,7 @@ export default async function RatePlansPage({ searchParams }: { searchParams: Pr
           </ul>
         )}
         <p className="border-t border-surface-border/60 px-5 py-2.5 text-[11.5px] text-ink-400">
-          Daily prices live on the Inventory Calendar or in Bulk Rates &amp; Availability; derived plans follow their parent automatically.
+          {s.plans.footer}
         </p>
       </Card>
     </>

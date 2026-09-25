@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { rates as ratesDict } from "@/lib/i18n/rates";
+
 import { useState, useTransition } from "react";
 import { Link2, Unlink } from "lucide-react";
 import { saveRatePlanLinkage, type ActionResult } from "@/lib/actions-rates";
@@ -36,6 +40,8 @@ export function LinkageEditor({ plan, options, onClose }: { plan: LinkPlan; opti
   const [pending, startTransition] = useTransition();
 
   const parentOpts = options.filter((o) => o.id !== plan.id);
+  const s = translate(ratesDict, useLocale());
+  const l = s.linkage;
 
   function submit() {
     setError(null);
@@ -46,49 +52,48 @@ export function LinkageEditor({ plan, options, onClose }: { plan: LinkPlan; opti
           : { ratePlanId: plan.id, mode: "unlink" },
       );
       if (res.ok) onClose();
-      else setError(res.error ?? "Could not save the linkage.");
+      else setError(res.error ?? l.failed);
     });
   }
 
   return (
-    <Modal open onClose={onClose} title={`Linkage · ${plan.name}`}>
+    <Modal open onClose={onClose} title={l.title(plan.name)}>
       <div className="space-y-3.5">
-        <Field label="Pricing">
+        <Field label={l.pricing}>
           <select value={derived ? "derived" : "manual"} onChange={(e) => setDerived(e.target.value === "derived")} className={inputCls}>
-            <option value="manual">Manual — entered by hand</option>
-            <option value="derived">Derived — computed from a parent</option>
+            <option value="manual">{l.manual}</option>
+            <option value="derived">{l.derived}</option>
           </select>
         </Field>
 
         {derived ? (
           <div className="space-y-3 rounded-md border border-surface-border bg-surface-muted p-3">
-            <Field label="Derived from (parent)">
+            <Field label={l.parent}>
               <select value={parentId} onChange={(e) => setParentId(e.target.value)} className={inputCls}>
-                {parentOpts.map((p) => <option key={p.id} value={p.id}>{p.name}{p.priceLogic === "derived" ? " (derived)" : ""}</option>)}
+                {parentOpts.map((p) => <option key={p.id} value={p.id}>{p.name}{p.priceLogic === "derived" ? l.derivedSuffix : ""}</option>)}
               </select>
             </Field>
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Direction">
-                <select value={direction} onChange={(e) => setDirection(e.target.value)} className={inputCls}><option value="decrease">Decrease</option><option value="increase">Increase</option></select>
+              <Field label={l.direction}>
+                <select value={direction} onChange={(e) => setDirection(e.target.value)} className={inputCls}><option value="decrease">{l.decrease}</option><option value="increase">{l.increase}</option></select>
               </Field>
-              <Field label="By">
-                <select value={type} onChange={(e) => setType(e.target.value)} className={inputCls}><option value="percent">Percent %</option><option value="fixed">Fixed (cents)</option></select>
+              <Field label={l.by}>
+                <select value={type} onChange={(e) => setType(e.target.value)} className={inputCls}><option value="percent">{l.percent}</option><option value="fixed">{l.fixed}</option></select>
               </Field>
-              <Field label="Value"><input type="number" min={0} value={value} onChange={(e) => setValue(e.target.value)} className={inputCls} /></Field>
+              <Field label={l.value}><input type="number" min={0} value={value} onChange={(e) => setValue(e.target.value)} className={inputCls} /></Field>
             </div>
-            <Field label="Rounding">
+            <Field label={l.rounding}>
               <select value={rounding} onChange={(e) => setRounding(e.target.value)} className={inputCls}>
-                <option value="none">None</option><option value="end_99">End in .99</option><option value="nearest_minor_1">Nearest whole</option><option value="nearest_minor_50">Nearest 0.50</option>
+                <option value="none">{l.roundings.none}</option><option value="end_99">{l.roundings.end_99}</option><option value="nearest_minor_1">{l.roundings.nearest_minor_1}</option><option value="nearest_minor_50">{l.roundings.nearest_minor_50}</option>
               </select>
             </Field>
           </div>
         ) : (
-          <p className="rounded-md bg-surface-muted px-3 py-2.5 text-[12px] text-ink-500">This plan will be priced by hand. Any prices you set on the calendar or in bulk apply directly to it.</p>
+          <p className="rounded-md bg-surface-muted px-3 py-2.5 text-[12px] text-ink-500">{l.manualNote}</p>
         )}
 
         <p className="rounded-md border border-surface-border bg-white px-3 py-2 text-[11.5px] text-ink-400">
-          Derived prices are computed live from the parent — a plan’s own manual prices are ignored while it’s derived and used
-          again if you switch it back to manual. Nothing is overwritten.
+          {l.liveNote}
         </p>
 
         {error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{error}</p>}
@@ -96,13 +101,13 @@ export function LinkageEditor({ plan, options, onClose }: { plan: LinkPlan; opti
         <div className="flex items-center justify-between pt-1">
           {plan.priceLogic === "derived" && derived && (
             <button type="button" onClick={() => setDerived(false)} className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-500 hover:text-danger-600">
-              <Unlink className="h-3.5 w-3.5" /> Unlink
+              <Unlink className="h-3.5 w-3.5" /> {l.unlink}
             </button>
           )}
           <div className="ml-auto flex gap-2">
-            <button type="button" onClick={onClose} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 hover:bg-surface-muted">Cancel</button>
+            <button type="button" onClick={onClose} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 hover:bg-surface-muted">{s.save.cancel}</button>
             <button type="button" onClick={submit} disabled={pending} className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60">
-              <Link2 className="h-3.5 w-3.5" /> {pending ? "Saving…" : "Save linkage"}
+              <Link2 className="h-3.5 w-3.5" /> {pending ? s.save.saving : l.saveLinkage}
             </button>
           </div>
         </div>

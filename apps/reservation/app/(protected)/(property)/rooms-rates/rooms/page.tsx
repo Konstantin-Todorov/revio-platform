@@ -5,6 +5,8 @@ import { getSetupData } from "@/lib/data";
 import { RoomTypeDialog } from "@/components/rates/RoomTypeDialog";
 import { BlockedNotice } from "@/components/rates/BlockedNotice";
 import { Card, CardHeader } from "@/components/ui/primitives";
+import { i18n } from "@/lib/i18n/server";
+import { rates as ratesDict } from "@/lib/i18n/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -16,29 +18,29 @@ export const dynamic = "force-dynamic";
 export default async function RoomTypesPage({ searchParams }: { searchParams: Promise<{ blocked?: string }> }) {
   const { blocked } = await searchParams;
   const [{ roomTypes }, store] = await Promise.all([getSetupData(), getObjectStore()]);
+  const s = (await i18n()).t(ratesDict);
 
   return (
     <>
-      <BlockedNotice name={blocked} />
+      <BlockedNotice name={blocked} text={blocked ? s.blocked(blocked) : undefined} />
       <Card>
         <CardHeader
-          title="Room types"
-          subtitle="The rooms you sell and how many of each exist — open one for its photos, description and prices"
+          title={s.rooms.title}
+          subtitle={s.rooms.subtitle}
           action={<RoomTypeDialog />}
         />
         {roomTypes.length === 0 ? (
           <p className="px-5 pb-8 pt-2 text-[13px] text-ink-500">
-            No room types yet. Add the rooms you sell — a Double, a Suite — and how many of each you have.
-            Availability, rates and every quote build on them.
+            {s.rooms.empty}
           </p>
         ) : (
           <ul className="divide-y divide-surface-border/70 border-t border-surface-border/70">
             {roomTypes.map((rt) => {
               const cover = rt.photos[0];
               const missing = [
-                rt.photos.length === 0 ? "no photo" : null,
-                rt.description ? null : "no description",
-              ].filter(Boolean);
+                rt.photos.length === 0 ? ("photo" as const) : null,
+                rt.description ? null : ("description" as const),
+              ].filter((x): x is "photo" | "description" => x != null);
               return (
                 <li key={rt.id}>
                   <Link href={`/rooms-rates/rooms/${rt.id}`} className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-surface-muted">
@@ -53,14 +55,14 @@ export default async function RoomTypesPage({ searchParams }: { searchParams: Pr
                     <span className="min-w-0 flex-1">
                       <span className={`block truncate text-[13.5px] font-semibold ${rt.active ? "text-ink-900" : "text-ink-400"}`}>
                         {rt.name}
-                        {!rt.active && <span className="ml-1.5 text-[10px] font-bold uppercase text-ink-400">inactive</span>}
+                        {!rt.active && <span className="ml-1.5 text-[10px] font-bold uppercase text-ink-400">{s.inactive}</span>}
                       </span>
                       <span className="mt-0.5 block truncate text-[11.5px] text-ink-500">
-                        {rt.code} · {rt.totalRooms} {rt.unitKind === "bed" ? (rt.totalRooms === 1 ? "bed" : "beds") : rt.totalRooms === 1 ? "unit" : "units"} · sleeps {rt.maxGuests}
-                        {rt.photos.length > 0 && ` · ${rt.photos.length} photo${rt.photos.length === 1 ? "" : "s"}`}
+                        {rt.code} · {s.rooms.units(rt.totalRooms, rt.unitKind)} · {s.rooms.sleeps(rt.maxGuests)}
+                        {rt.photos.length > 0 && ` · ${s.rooms.photos(rt.photos.length)}`}
                       </span>
                       {missing.length > 0 && (
-                        <span className="mt-0.5 block text-[11px] font-medium text-warning-700">Guests see {missing.join(" and ")}</span>
+                        <span className="mt-0.5 block text-[11px] font-medium text-warning-700">{s.rooms.guestsSee(missing)}</span>
                       )}
                     </span>
                     <ChevronRight className="h-4 w-4 shrink-0 text-ink-300" />

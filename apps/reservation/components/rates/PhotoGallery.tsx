@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { rates as ratesDict } from "@/lib/i18n/rates";
+
 import { useActionState, useRef } from "react";
 import { AlertCircle, ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
 import { SortableList } from "@revio/ui/sortable";
@@ -39,6 +43,7 @@ export function PhotoGallery({
     null,
   );
   const formRef = useRef<HTMLFormElement>(null);
+  const t = translate(ratesDict, useLocale()).photos;
 
   async function reorder(ids: string[]) {
     const fd = new FormData();
@@ -53,8 +58,8 @@ export function PhotoGallery({
         <p className="flex items-start gap-1.5 text-[12.5px] text-ink-600">
           <Star className="mt-0.5 h-3.5 w-3.5 shrink-0 fill-brand-700 text-brand-700" />
           <span>
-            <span className="font-semibold text-ink-900">The first photo is the cover</span> — the one guests see first, on the room&rsquo;s card.
-            Drag a photo by its <span className="whitespace-nowrap">⠿ handle</span> to change the order, or press <span className="font-semibold">Make cover</span>.
+            <span className="font-semibold text-ink-900">{t.coverLead}</span>{t.coverTail}
+            {t.dragLead}<span className="whitespace-nowrap">{t.handle}</span>{t.dragTail}<span className="font-semibold">{t.makeCover}</span>.
           </span>
         </p>
       )}
@@ -63,7 +68,7 @@ export function PhotoGallery({
           items={photos}
           layout="grid"
           className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-4"
-          handleLabel={(p) => `Drag to reorder ${p.alt || "this photo"}`}
+          handleLabel={(p) => t.dragLabel(p.alt || t.thisPhoto)}
           onReorder={reorder}
           render={(photo, handle, i) => (
               <div className={`relative h-full overflow-hidden rounded-lg bg-white ${i === 0 ? "border-2 border-brand-700" : "border border-surface-border"}`}>
@@ -72,14 +77,14 @@ export function PhotoGallery({
                       optimisation pass would cost CPU to produce the same bytes. */}
                   <img
                     src={photo.thumbUrl}
-                    alt={photo.alt || `${roomTypeName} photo ${i + 1}`}
+                    alt={photo.alt || t.photoAlt(roomTypeName, i + 1)}
                     className="pointer-events-none h-full w-full select-none object-cover"
                     loading="lazy"
                     draggable={false}
                   />
                   {i === 0 && (
                     <span className="absolute inset-x-0 bottom-0 flex items-center gap-1 bg-brand-800/90 px-2 py-1 text-[11px] font-bold text-white">
-                      <Star className="h-3 w-3 fill-current" /> Cover photo
+                      <Star className="h-3 w-3 fill-current" /> {t.cover}
                     </span>
                   )}
                   <span className="absolute right-1.5 top-1.5 rounded bg-white/90 shadow-sm">{handle}</span>
@@ -92,28 +97,28 @@ export function PhotoGallery({
                       name="alt"
                       defaultValue={photo.alt}
                       onBlur={(e) => e.currentTarget.form?.requestSubmit()}
-                      placeholder="Describe this photo"
-                      aria-label={`Alt text for photo ${i + 1}`}
+                      placeholder={t.describe}
+                      aria-label={t.altLabel(i + 1)}
                       maxLength={160}
                       className="w-full rounded border border-surface-border px-1.5 py-1 text-[11.5px] text-ink-700 outline-none focus:border-brand-600"
                     />
                   </form>
                   <div className="flex items-center justify-between gap-1">
                     {i === 0 ? (
-                      <span className="text-[11px] font-semibold text-brand-700">Shown first</span>
+                      <span className="text-[11px] font-semibold text-brand-700">{t.shownFirst}</span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => void reorder([photo.id, ...photos.map((p) => p.id).filter((x) => x !== photo.id)])}
                         className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted hover:text-brand-700"
                       >
-                        <Star className="h-3 w-3" /> Make cover
+                        <Star className="h-3 w-3" /> {t.makeCover}
                       </button>
                     )}
                     <form action={deleteRoomPhoto}>
                       <input type="hidden" name="id" value={photo.id} />
                       <button
-                        aria-label={`Delete photo ${i + 1}`}
+                        aria-label={t.deleteLabel(i + 1)}
                         className="cursor-pointer rounded p-1 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -130,7 +135,7 @@ export function PhotoGallery({
         <input type="hidden" name="roomTypeId" value={roomTypeId} />
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-surface-border bg-surface-muted/50 px-4 py-5 text-[13px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
-          {uploading ? "Uploading…" : photos.length ? "Add more photos" : "Add photos"}
+          {uploading ? t.uploading : photos.length ? t.addMore : t.add}
           <input
             type="file"
             name="photos"
@@ -151,8 +156,7 @@ export function PhotoGallery({
       )}
 
       <p className="text-[11.5px] leading-snug text-ink-400">
-        Large images are resized automatically, so upload straight from your phone. No photos is fine:
-        the room still shows with its name, size and what&rsquo;s included.
+        {t.footnote}
       </p>
     </div>
   );

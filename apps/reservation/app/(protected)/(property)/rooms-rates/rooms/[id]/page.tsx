@@ -10,6 +10,8 @@ import { BackLink } from "@/components/rates/BackLink";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { LinkTabs } from "@revio/ui/link-tabs";
 import { Card, CardHeader } from "@/components/ui/primitives";
+import { i18n } from "@/lib/i18n/server";
+import { rates as ratesDict } from "@/lib/i18n/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -35,29 +37,30 @@ export default async function RoomTypePage({ params, searchParams }: {
   const [{ roomTypes }, { ratePlans }, store] = await Promise.all([getSetupData(), getRatesData(), getObjectStore()]);
   const rt = roomTypes.find((r) => r.id === id);
   if (!rt) notFound();
+  const s = (await i18n()).t(ratesDict);
   const soldOn = ratePlans.filter((rp) => rp.roomTypeLinks.some((l) => l.roomTypeId === rt.id));
   const base = `/rooms-rates/rooms/${rt.id}`;
   const guestGap = !rt.description && !rt.sizeSqm && !rt.bedSetup && rt.amenities.length === 0;
 
   return (
     <>
-      <BackLink href="/rooms-rates/rooms">All room types</BackLink>
-      <BlockedNotice name={blocked} />
+      <BackLink href="/rooms-rates/rooms">{s.rooms.back}</BackLink>
+      <BlockedNotice name={blocked} text={blocked ? s.blocked(blocked) : undefined} />
       <div>
         <h2 className="text-[18px] font-bold tracking-tight text-ink-900">
           {rt.name}
-          {!rt.active && <span className="ml-2 align-middle text-[10.5px] font-bold uppercase text-ink-400">inactive</span>}
+          {!rt.active && <span className="ml-2 align-middle text-[10.5px] font-bold uppercase text-ink-400">{s.inactive}</span>}
         </h2>
-        <p className="text-[12px] text-ink-500">{rt.code} · {rt.totalRooms} physical · sleeps {rt.maxGuests}</p>
+        <p className="text-[12px] text-ink-500">{s.rooms.headerLine(rt.code, rt.totalRooms, rt.maxGuests)}</p>
       </div>
 
       <LinkTabs
-        label={`${rt.name} views`}
+        label={s.rooms.tabsLabel(rt.name)}
         tabs={[
-          { href: base, label: "Basics", active: tab === "basics" },
-          { href: `${base}?tab=guest`, label: "What a guest reads", active: tab === "guest", warn: guestGap },
-          { href: `${base}?tab=photos`, label: "Photos", active: tab === "photos", badge: String(rt.photos.length), warn: rt.photos.length === 0 },
-          { href: `${base}?tab=plans`, label: "Rate plans", active: tab === "plans", badge: String(soldOn.length) },
+          { href: base, label: s.rooms.tabs.basics, active: tab === "basics" },
+          { href: `${base}?tab=guest`, label: s.rooms.tabs.guest, active: tab === "guest", warn: guestGap },
+          { href: `${base}?tab=photos`, label: s.rooms.tabs.photos, active: tab === "photos", badge: String(rt.photos.length), warn: rt.photos.length === 0 },
+          { href: `${base}?tab=plans`, label: s.rooms.tabs.plans, active: tab === "plans", badge: String(soldOn.length) },
         ]}
       />
 
@@ -66,13 +69,13 @@ export default async function RoomTypePage({ params, searchParams }: {
           <RoomTypeSectionForm key={`${rt.id}-basics`} roomType={rt} section="basics" />
           <div className="flex items-center justify-between gap-3 rounded-lg border border-surface-border px-4 py-3">
             <p className="text-[12px] text-ink-500">
-              Delete this room type. One with reservations or physical rooms behind it is deactivated instead, so history stays intact.
+              {s.rooms.deleteText}
             </p>
             <DeleteButton
               action={deleteRoomType}
               id={rt.id}
               label={rt.name}
-              note="Room types with reservations or physical rooms behind them are deactivated instead, so history stays intact."
+              note={s.rooms.deleteNote}
             />
           </div>
         </>
@@ -82,7 +85,7 @@ export default async function RoomTypePage({ params, searchParams }: {
 
       {tab === "photos" && (
         <Card>
-          <CardHeader title="Photos" subtitle="Shown to guests on your booking page, in this order" />
+          <CardHeader title={s.rooms.photosTitle} subtitle={s.rooms.photosSubtitle} />
           <div className="px-5 pb-5">
             <PhotoGallery
               roomTypeId={rt.id}
@@ -98,10 +101,10 @@ export default async function RoomTypePage({ params, searchParams }: {
 
       {tab === "plans" && (
         <Card>
-          <CardHeader title="Rate plans that sell this room" subtitle="Each plan's price applies to this room — open one to see how it prices" />
+          <CardHeader title={s.rooms.plansTitle} subtitle={s.rooms.plansSubtitle} />
           <div className="px-5 pb-5">
             {soldOn.length === 0 ? (
-              <p className="text-[13px] text-ink-500">No rate plan sells this room yet, so no guest can book it.</p>
+              <p className="text-[13px] text-ink-500">{s.rooms.plansEmpty}</p>
             ) : (
               <ul className="flex flex-wrap gap-1.5">
                 {soldOn.map((rp) => (

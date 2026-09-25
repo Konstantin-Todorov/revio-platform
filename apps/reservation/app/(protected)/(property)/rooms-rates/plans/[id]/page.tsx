@@ -6,11 +6,14 @@ import { RatePlanEditor } from "@/components/rates/RatePlanForm";
 import { PlanLinkageCard, PlanPricingCard } from "@/components/rates/PlanSections";
 import { type LinkPlan } from "@/components/rates/LinkageEditor";
 import { offsetOf } from "@/components/rates/plan-labels";
+import { moneyIn } from "@/lib/i18n/money";
 import { BlockedNotice } from "@/components/rates/BlockedNotice";
 import { BackLink } from "@/components/rates/BackLink";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { LinkTabs } from "@revio/ui/link-tabs";
 import { Card, CardHeader } from "@/components/ui/primitives";
+import { i18n } from "@/lib/i18n/server";
+import { rates as ratesDict } from "@/lib/i18n/rates";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +34,9 @@ export default async function RatePlanPage({ params, searchParams }: {
   const [{ ratePlans, defaults }, { roomTypes }] = await Promise.all([getRatesData(), getSetupData()]);
   const rp = ratePlans.find((p) => p.id === id);
   if (!rp) notFound();
+  const { t, locale } = await i18n();
+  const s = t(ratesDict);
+  const money = moneyIn(locale);
 
   const propertyModel = defaults?.pricingModel ?? "per_room";
   const toLink = (p: (typeof ratePlans)[number]): LinkPlan => ({
@@ -41,7 +47,7 @@ export default async function RatePlanPage({ params, searchParams }: {
   });
   const dependents = ratePlans
     .filter((p) => p.priceLogic === "derived" && p.parentRatePlanId === rp.id)
-    .map((p) => ({ id: p.id, name: p.name, offset: offsetOf(p) }));
+    .map((p) => ({ id: p.id, name: p.name, offset: offsetOf(p, money) }));
   const rooms = roomTypes.filter((r) => rp.roomTypeLinks.some((l) => l.roomTypeId === r.id));
   const pricing = {
     id: rp.id, name: rp.name, active: rp.active,
@@ -55,25 +61,25 @@ export default async function RatePlanPage({ params, searchParams }: {
 
   return (
     <>
-      <BackLink href="/rooms-rates/plans">All rate plans</BackLink>
-      <BlockedNotice name={blocked} />
+      <BackLink href="/rooms-rates/plans">{s.plans.back}</BackLink>
+      <BlockedNotice name={blocked} text={blocked ? s.blocked(blocked) : undefined} />
       <div>
         <h2 className="text-[18px] font-bold tracking-tight text-ink-900">
           {rp.name}
-          {!rp.active && <span className="ml-2 align-middle text-[10.5px] font-bold uppercase text-ink-400">inactive</span>}
+          {!rp.active && <span className="ml-2 align-middle text-[10.5px] font-bold uppercase text-ink-400">{s.inactive}</span>}
         </h2>
         <p className="text-[12px] text-ink-500">
-          {rp.code} · {rp.mealPlan?.name ?? "room only"}{rp.cancellationPolicy ? ` · ${rp.cancellationPolicy.name}` : ""}
-          {rp.priceLogic === "derived" && rp.parent ? ` · priced from ${rp.parent.name} ${offsetOf(rp)}` : ""}
+          {rp.code} · {rp.mealPlan?.name ?? s.plans.roomOnly}{rp.cancellationPolicy ? ` · ${rp.cancellationPolicy.name}` : ""}
+          {rp.priceLogic === "derived" && rp.parent ? s.plans.pricedFrom(rp.parent.name, offsetOf(rp, money)) : ""}
         </p>
       </div>
 
       <LinkTabs
-        label={`${rp.name} views`}
+        label={s.plans.tabsLabel(rp.name)}
         tabs={[
-          { href: base, label: "Plan & defaults", active: tab === "plan" },
-          { href: `${base}?tab=price`, label: "Price", active: tab === "price" },
-          { href: `${base}?tab=rooms`, label: "Rooms it sells", active: tab === "rooms", badge: String(rooms.length) },
+          { href: base, label: s.plans.tabs.plan, active: tab === "plan" },
+          { href: `${base}?tab=price`, label: s.plans.tabs.price, active: tab === "price" },
+          { href: `${base}?tab=rooms`, label: s.plans.tabs.rooms, active: tab === "rooms", badge: String(rooms.length) },
         ]}
       />
 
@@ -82,9 +88,9 @@ export default async function RatePlanPage({ params, searchParams }: {
           <RatePlanEditor key={rp.id} ratePlan={rp} />
           <div className="flex items-center justify-between gap-3 rounded-lg border border-surface-border px-4 py-3">
             <p className="text-[12px] text-ink-500">
-              Delete this plan. A plan mapped in RevioLink must be unmapped first; one in use is deactivated instead.
+              {s.plans.deleteText}
             </p>
-            <DeleteButton action={deleteRatePlan} id={rp.id} label={rp.name} note="Mapped plans must be unmapped in RevioLink first; plans in use are deactivated instead." />
+            <DeleteButton action={deleteRatePlan} id={rp.id} label={rp.name} note={s.plans.deleteNote} />
           </div>
         </>
       )}
@@ -98,10 +104,10 @@ export default async function RatePlanPage({ params, searchParams }: {
 
       {tab === "rooms" && (
         <Card>
-          <CardHeader title="Rooms it sells" subtitle="This plan's price applies to each of these rooms" />
+          <CardHeader title={s.plans.roomsTitle} subtitle={s.plans.roomsSubtitle} />
           <div className="px-5 pb-5">
             {rooms.length === 0 ? (
-              <p className="text-[13px] text-ink-500">This plan sells no room yet.</p>
+              <p className="text-[13px] text-ink-500">{s.plans.roomsEmpty}</p>
             ) : (
               <ul className="flex flex-wrap gap-1.5">
                 {rooms.map((r) => (

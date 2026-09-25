@@ -43,6 +43,8 @@ export interface CommonStrings {
   no: string;
   direct: string;
   roomOnly: string;
+  /** The confirm-then-delete dialog every CRS list uses. */
+  deleteDialog: { aria: (label: string) => string; title: (label: string) => string; removes: string };
 }
 
 export const common: Translations<CommonStrings> = {
@@ -83,6 +85,7 @@ export const common: Translations<CommonStrings> = {
     no: "No",
     direct: "Direct",
     roomOnly: "room only",
+    deleteDialog: { aria: (l) => `Delete ${l}`, title: (l) => `Delete ${l}?`, removes: "This removes" },
   },
   bg: {
     statuses: {
@@ -121,5 +124,6 @@ export const common: Translations<CommonStrings> = {
     no: "Не",
     direct: "Директно",
     roomOnly: "само нощувка",
+    deleteDialog: { aria: (l) => `Изтрий ${l}`, title: (l) => `Изтриване на ${l}?`, removes: "Това премахва" },
   },
 };

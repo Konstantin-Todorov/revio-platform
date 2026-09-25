@@ -1,12 +1,17 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { rates as ratesDict } from "@/lib/i18n/rates";
+
 import { useState } from "react";
 import Link from "next/link";
 import { BedDouble, Link2, User } from "lucide-react";
 import { Card, CardHeader } from "@revio/ui/primitives";
 import { PricingEditor, type PricingPlan } from "./PricingEditor";
 import { LinkageEditor, type LinkPlan } from "./LinkageEditor";
-import { offsetOf, PRICING_MODEL_LABEL } from "./plan-labels";
+import { offsetOf } from "./plan-labels";
+import { moneyIn } from "@/lib/i18n/money";
 
 const editBtn =
   "rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted";
@@ -16,22 +21,24 @@ export function PlanPricingCard({ plan, propertyModel }: { plan: PricingPlan; pr
   const [editing, setEditing] = useState(false);
   const effective = plan.pricingModel ?? propertyModel;
   const perPerson = effective === "per_person";
+  const s = translate(ratesDict, useLocale());
+  const p = s.pricing;
   return (
     <Card>
       <CardHeader
-        title="How it prices"
-        subtitle="Per room, or per person — a half-board rate can price per guest beside a room-only rate priced per room"
-        action={<button type="button" onClick={() => setEditing(true)} className={editBtn}>Change</button>}
+        title={p.cardTitle}
+        subtitle={p.cardSubtitle}
+        action={<button type="button" onClick={() => setEditing(true)} className={editBtn}>{s.linkage.change}</button>}
       />
       <div className="flex flex-wrap items-center gap-2 px-5 pb-5">
         <span className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1.5 text-[13px] font-semibold ${perPerson ? "bg-accent-50 text-accent-700" : "bg-surface-sunken text-ink-700"}`}>
           {perPerson ? <User className="h-3.5 w-3.5" /> : <BedDouble className="h-3.5 w-3.5" />}
-          {PRICING_MODEL_LABEL[effective] ?? effective}
-          {perPerson && plan.primaryOccupancy != null && <span className="tnum font-normal text-ink-500">· the price is for {plan.primaryOccupancy}</span>}
+          {s.pricingModel[effective as "per_room"] ?? effective}
+          {perPerson && plan.primaryOccupancy != null && <span className="tnum font-normal text-ink-500">{p.priceIsFor(plan.primaryOccupancy)}</span>}
         </span>
         <span className="text-[12px] text-ink-500">
-          {plan.pricingModel == null ? "Follows the property setting." : "Set for this plan only."}
-          {perPerson && ` Its rooms sleep up to ${plan.ceiling}.`}
+          {plan.pricingModel == null ? p.follows : p.own}
+          {perPerson && p.sleepsUpTo(plan.ceiling)}
         </span>
       </div>
       {editing && <PricingEditor plan={plan} propertyModel={propertyModel} onClose={() => setEditing(false)} />}
@@ -50,31 +57,34 @@ export function PlanLinkageCard({ plan, options, dependents }: {
 }) {
   const [editing, setEditing] = useState(false);
   const derived = plan.priceLogic === "derived";
+  const locale = useLocale();
+  const l = translate(ratesDict, locale).linkage;
+  const money = moneyIn(locale);
   return (
     <Card>
       <CardHeader
-        title="Where its price comes from"
-        subtitle="Its own prices, or another plan's with an offset — a derived price follows its parent on every date"
-        action={<button type="button" onClick={() => setEditing(true)} className={editBtn}>Change</button>}
+        title={l.cardTitle}
+        subtitle={l.cardSubtitle}
+        action={<button type="button" onClick={() => setEditing(true)} className={editBtn}>{l.change}</button>}
       />
       <div className="space-y-3 px-5 pb-5 text-[13px]">
         {derived ? (
           <p className="flex flex-wrap items-center gap-2 text-ink-700">
             <Link2 className="h-4 w-4 text-ink-400" />
-            Priced from
+            {l.pricedFromLabel}
             {plan.parentRatePlanId ? (
-              <Link href={`/rooms-rates/plans/${plan.parentRatePlanId}`} className="font-semibold text-brand-700 hover:underline">{plan.parentName ?? "its parent"}</Link>
-            ) : <span className="font-semibold">{plan.parentName ?? "its parent"}</span>}
-            <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[12px] font-semibold text-ink-700">{offsetOf(plan)}</span>
+              <Link href={`/rooms-rates/plans/${plan.parentRatePlanId}`} className="font-semibold text-brand-700 hover:underline">{plan.parentName ?? l.itsParent}</Link>
+            ) : <span className="font-semibold">{plan.parentName ?? l.itsParent}</span>}
+            <span className="tnum rounded bg-surface-sunken px-1.5 py-0.5 text-[12px] font-semibold text-ink-700">{offsetOf(plan, money)}</span>
           </p>
         ) : (
           <p className="text-ink-700">
-            <span className="font-semibold">Its own prices</span> — set on the Inventory Calendar or in Bulk Rates &amp; Availability.
+            <span className="font-semibold">{l.ownPrices}</span>{l.ownPricesTail}
           </p>
         )}
         {dependents.length > 0 && (
           <div>
-            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink-400">Priced from this plan</div>
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-ink-400">{l.dependents}</div>
             <ul className="flex flex-wrap gap-1.5">
               {dependents.map((c) => (
                 <li key={c.id}>
