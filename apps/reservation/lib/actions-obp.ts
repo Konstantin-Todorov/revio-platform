@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  planPricingModelSwitch, describeSwitch, validateOptions, describeProblem,
+  planPricingModelSwitch, describeSwitch, validateOptions,
   effectiveModel, effectivePrimary, planCeiling,
   type PlanToSwitch, type PricingModel, type SeedMode,
 } from "@revio/core";
@@ -12,6 +12,12 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { guard, requireCapability } from "./authz";
 import { logAudit, str } from "./mutation-helpers";
+import { i18n } from "./i18n/server";
+import { rateErrors } from "./i18n/rate-errors";
+
+async function say() {
+  return (await i18n()).t(rateErrors);
+}
 
 /**
  * Turning occupancy-based pricing on and off — CRS §6.2.
@@ -231,7 +237,7 @@ export async function saveRatePlanOccupancy(fd: FormData): Promise<ObpResult> {
       roomTypeLinks: { include: { roomType: { select: { id: true, maxGuests: true, defaultOccupancy: true } } } },
     },
   });
-  if (!plan) return { ok: false, error: "That rate plan no longer exists." };
+  if (!plan) return { ok: false, error: (await say()).planGone };
 
   const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } });
   const propertyModel = defaults?.pricingModel ?? "per_room";
@@ -266,7 +272,12 @@ export async function saveRatePlanOccupancy(fd: FormData): Promise<ObpResult> {
 
   const next = switched.results[0]!;
   const problems = validateOptions(next.options, resolved, ceiling);
-  if (problems.length > 0) return { ok: false, error: describeProblem(problems[0]!) };
+  if (problems.length > 0) {
+    const first = problems[0]!;
+    // Core's describeProblem is English; the same problem, by kind, in the reader's words.
+    const word = (await say()).problems[first.kind] as (p: typeof first) => string;
+    return { ok: false, error: word(first) };
+  }
 
   await withTenantTransaction(property.tenantId, async (tx) => {
     await tx.ratePlan.update({

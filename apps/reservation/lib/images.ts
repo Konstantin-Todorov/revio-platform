@@ -32,14 +32,26 @@ export interface ProcessedImage {
   height: number;
 }
 
-export class ImageRejected extends Error {}
+/**
+ * An upload we refuse, with a stable `code` so the screen can say it in the reader's language
+ * (`rateErrors.image` in `lib/i18n/rate-errors.ts`). The English message stays for logs and for any
+ * caller that has not been translated yet.
+ */
+export type ImageRejectedCode =
+  | { code: "notImage" } | { code: "tooLarge"; mb: number } | { code: "unreadable" }
+  | { code: "tooSmall"; w: number; h: number } | { code: "heroNarrow"; w: number } | { code: "heroPortrait" };
+export class ImageRejected extends Error {
+  constructor(message: string, readonly reason: ImageRejectedCode) {
+    super(message);
+  }
+}
 
 export async function processRoomPhoto(file: File): Promise<ProcessedImage> {
   if (!ACCEPTED.has(file.type)) {
-    throw new ImageRejected("That file isn't an image we can use. JPEG, PNG, WebP or HEIC please.");
+    throw new ImageRejected("That file isn't an image we can use. JPEG, PNG, WebP or HEIC please.", { code: "notImage" });
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    throw new ImageRejected(`That image is ${Math.round(file.size / 1024 / 1024)} MB. The limit is 25 MB.`);
+    throw new ImageRejected(`That image is ${Math.round(file.size / 1024 / 1024)} MB. The limit is 25 MB.`, { code: "tooLarge", mb: Math.round(file.size / 1024 / 1024) });
   }
 
   const input = Buffer.from(await file.arrayBuffer());
@@ -48,11 +60,11 @@ export async function processRoomPhoto(file: File): Promise<ProcessedImage> {
   // with a message a hotel can act on instead of producing a half-decoded image.
   const pipeline = sharp(input, { failOn: "error" });
   const meta = await pipeline.metadata();
-  if (!meta.width || !meta.height) throw new ImageRejected("We couldn't read that image.");
+  if (!meta.width || !meta.height) throw new ImageRejected("We couldn't read that image.", { code: "unreadable" });
 
   // A single tiny image is almost always a mistake (an icon, a screenshot thumbnail).
   if (meta.width < 400 || meta.height < 300) {
-    throw new ImageRejected(`That image is only ${meta.width}×${meta.height}. Please use at least 400×300.`);
+    throw new ImageRejected(`That image is only ${meta.width}×${meta.height}. Please use at least 400×300.`, { code: "tooSmall", w: meta.width, h: meta.height });
   }
 
   const render = (width: number) =>
@@ -107,15 +119,15 @@ export interface ProcessedHero extends ProcessedImage {
 
 export async function processHeroImage(file: File): Promise<ProcessedHero> {
   if (!ACCEPTED.has(file.type)) {
-    throw new ImageRejected("That file isn't an image we can use. JPEG, PNG, WebP or HEIC please.");
+    throw new ImageRejected("That file isn't an image we can use. JPEG, PNG, WebP or HEIC please.", { code: "notImage" });
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    throw new ImageRejected(`That image is ${Math.round(file.size / 1024 / 1024)} MB. The limit is 25 MB.`);
+    throw new ImageRejected(`That image is ${Math.round(file.size / 1024 / 1024)} MB. The limit is 25 MB.`, { code: "tooLarge", mb: Math.round(file.size / 1024 / 1024) });
   }
 
   const input = Buffer.from(await file.arrayBuffer());
   const meta = await sharp(input, { failOn: "error" }).metadata();
-  if (!meta.width || !meta.height) throw new ImageRejected("We couldn't read that image.");
+  if (!meta.width || !meta.height) throw new ImageRejected("We couldn't read that image.", { code: "unreadable" });
 
   // Stricter than a room photo, and about shape rather than only size. A hero is cropped to a wide
   // band, so a portrait phone snap loses most of itself and a small one is stretched into mush —
@@ -123,11 +135,13 @@ export async function processHeroImage(file: File): Promise<ProcessedHero> {
   if (meta.width < 1200) {
     throw new ImageRejected(
       `That image is ${meta.width}px wide. A background needs at least 1200px — it spans the whole page.`,
+      { code: "heroNarrow", w: meta.width },
     );
   }
   if (meta.width < meta.height) {
     throw new ImageRejected(
       "That photo is taller than it is wide. A background is a wide band, so most of an upright photo gets cropped away — please use a landscape one.",
+      { code: "heroPortrait" },
     );
   }
 

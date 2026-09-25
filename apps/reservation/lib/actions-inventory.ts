@@ -8,6 +8,21 @@ import { pastRangeRefusal, todayInTimeZone } from "@revio/core";
 import { logAudit, recordPush, str, int, utcDay } from "./mutation-helpers";
 import { requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { rateErrors } from "./i18n/rate-errors";
+
+/** The refusal words, in the reader's language — see `lib/i18n/rate-errors.ts`. */
+async function say() {
+  return (await i18n()).t(rateErrors);
+}
+/** Core's `pastRangeRefusal`, worded for the reader: core decides whether, this says what. */
+async function sayPast(from: string, to: string, earliest: string): Promise<string | null> {
+  const { t, day } = await i18n();
+  const e = t(rateErrors);
+  if (from && from < earliest) return e.past(e.startDate, day(from), day(earliest));
+  if (to && to < earliest) return e.past(e.endDate, day(to), day(earliest));
+  return null;
+}
 
 /** An inventory period's `dateTo` is the last CLOSED day; `stayScope` wants a check-out date. */
 function addDay(ymd: string): string {
@@ -45,23 +60,25 @@ export async function addInventoryPeriod(fd: FormData): Promise<void> {
   const dateFrom = str(fd, "dateFrom");
   const dateTo = str(fd, "dateTo");
   const note = str(fd, "note") || null;
-  if (!roomTypeId) return flashError("Pick a room type first.");
+  if (!roomTypeId) return flashError((await say()).period.pickRoom);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateFrom) || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)) {
-    return flashError("Give both a start and an end date.");
+    return flashError((await say()).period.bothDates);
   }
   // Reported separately from a missing date: the dates are both there and both readable, so
   // "give me the dates" would send somebody looking for a field they had already filled in.
-  if (dateTo < dateFrom) return flashError("That period ends before it starts — check the two dates.");
+  if (dateTo < dateFrom) return flashError((await say()).period.endsBeforeStarts);
   /*
    * ⚠️ Taking a room out of order removes availability going forward and pushes that to every
    * mapped channel. Backdating it cannot un-sell the nights it covers — it only tells an OTA a
    * room was closed on a date that has been and gone.
    */
-  const pastPeriod = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(timezone) });
+  const pastPeriod = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(timezone) })
+    ? await sayPast(dateFrom, dateTo, todayInTimeZone(timezone))
+    : null;
   if (pastPeriod) return flashError(pastPeriod);
 
   const roomType = await prisma.roomType.findFirst({ where: { id: roomTypeId, propertyId } });
-  if (!roomType) return flashError("That room type no longer exists — somebody removed it while this page was open. Reload and try again.");
+  if (!roomType) return flashError((await say()).period.roomGone);
   const rooms = Math.min(Math.max(int(fd, "rooms", 1), 1), roomType.totalRooms);
 
   await prisma.roomInventoryPeriod.create({
@@ -89,7 +106,7 @@ export async function deleteInventoryPeriod(fd: FormData): Promise<void> {
     where: { id, propertyId },
     include: { roomType: { select: { name: true } } },
   });
-  if (!period) return flashError("That closure has already been removed — somebody deleted it while this page was open.");
+  if (!period) return flashError((await say()).period.alreadyRemoved);
 
   await prisma.roomInventoryPeriod.delete({ where: { id } });
   await logAudit(propertyId, tenantId, {

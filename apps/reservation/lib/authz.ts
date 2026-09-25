@@ -1,6 +1,8 @@
 import "server-only";
 import { redirect } from "next/navigation";
-import { roleCan, refusalMessage, type Capability } from "@revio/core";
+import { isReadOnly, roleCan, type Capability } from "@revio/core";
+import { i18n } from "./i18n/server";
+import { common } from "./i18n/common";
 import { getSession, type Session } from "./session";
 
 /**
@@ -49,6 +51,12 @@ import { getSession, type Session } from "./session";
  * false, and it is the exact sentence `ProductLocked` was built to stop us saying.
  */
 
+/** Core's `refusalMessage`, in the reader's language — the check stays core's, the words are ours. */
+async function refusal(role: string, cap: Capability): Promise<string> {
+  const a = (await i18n()).t(common).authz;
+  return isReadOnly(role) ? a.readOnly(a.what[cap]) : a.cannot(a.what[cap]);
+}
+
 /**
  * Gate a `Promise<void>` action. Redirects on refusal, which throws, so the caller stops here.
  *
@@ -63,7 +71,7 @@ export async function requireCapability(cap: Capability): Promise<Session> {
   // keep it" — a query-string sentence would be a worse version of a screen that already exists.
   if (!session.entitlements.reservation) redirect("/dashboard");
   if (!roleCan(session.role, cap)) {
-    redirect(`/dashboard?denied=${encodeURIComponent(refusalMessage(session.role, cap))}`);
+    redirect(`/dashboard?denied=${encodeURIComponent(await refusal(session.role, cap))}`);
   }
   return session;
 }
@@ -76,12 +84,12 @@ export async function guard(
   cap: Capability,
 ): Promise<{ ok: true; session: Session } | { ok: false; error: string }> {
   const session = await getSession();
-  if (!session) return { ok: false, error: "Your session has expired. Sign in again." };
+  if (!session) return { ok: false, error: (await i18n()).t(common).authz.expired };
   if (!session.entitlements.reservation) {
-    return { ok: false, error: "RevioCRS is switched off for this hotel, so this change was not saved. Nothing has been deleted — reload to see where it stands." };
+    return { ok: false, error: (await i18n()).t(common).authz.switchedOff };
   }
   if (!roleCan(session.role, cap)) {
-    return { ok: false, error: refusalMessage(session.role, cap) };
+    return { ok: false, error: await refusal(session.role, cap) };
   }
   return { ok: true, session };
 }

@@ -1,8 +1,8 @@
 # Revio — where the project actually is
 
 > ▶️ **Resuming work? Read `docs/SESSION-2026-09-24.md` §5–§6 first.** It says exactly where the work
-> stopped on 2026-09-25 (RevioCRS in Bulgarian: parts 1–2 pushed behind `CRS_TRANSLATED = false`,
-> part 3 surveyed and not started), the founder's agreed order after it, and the standing rules.
+> stands on 2026-09-25 (RevioCRS in Bulgarian: parts 1–3 done behind `CRS_TRANSLATED = false`,
+> part 4 next), the founder's agreed order after it, and the standing rules.
 
 **Updated 2026-09-22**, at commit `9473a49` — which CI passed and `promote.yml` fast-forwarded onto
 `production`, *checked with `git fetch origin production && git log --oneline origin/production -1`;

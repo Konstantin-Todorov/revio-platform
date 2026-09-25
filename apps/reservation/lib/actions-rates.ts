@@ -10,6 +10,21 @@ import { ymd } from "./format";
 import { guard, requireCapability } from "./authz";
 import { occupancyKeyFor, occupancyKeysFor } from "@revio/db";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { rateErrors } from "./i18n/rate-errors";
+
+/** The refusal words, in the reader's language — see `lib/i18n/rate-errors.ts`. */
+async function say() {
+  return (await i18n()).t(rateErrors);
+}
+/** Core's `pastRangeRefusal`, worded for the reader: core decides whether, this says what. */
+async function sayPast(from: string, to: string, earliest: string): Promise<string | null> {
+  const { t, day } = await i18n();
+  const e = t(rateErrors);
+  if (from && from < earliest) return e.past(e.startDate, day(from), day(earliest));
+  if (to && to < earliest) return e.past(e.endDate, day(to), day(earliest));
+  return null;
+}
 
 
 /**
@@ -67,8 +82,8 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
   const name = str(fd, "name");
   const code = str(fd, "code").toUpperCase();
   const rowId = str(fd, "id");
-  if (!name) return { ok: false, error: "Name is required." };
-  if (!code) return { ok: false, error: "Code is required." };
+  if (!name) return { ok: false, error: (await say()).nameRequired };
+  if (!code) return { ok: false, error: (await say()).codeRequired };
 
   const tags = str(fd, "tags").split(",").map((t) => t.trim()).filter(Boolean);
   /*
@@ -95,7 +110,7 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
         }
       : { parentRatePlanId: null, derivedType: null, derivedDirection: null, derivedValue: null, derivedRounding: null };
   if (!keepLinkage && priceLogic === "derived" && !derived.parentRatePlanId) {
-    return { ok: false, error: "A derived rate needs a parent rate plan." };
+    return { ok: false, error: (await say()).derivedNeedsParent };
   }
 
   const optInt = (key: string): number | null => {
@@ -112,7 +127,7 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
   };
 
   const clash = await prisma.ratePlan.findFirst({ where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) } });
-  if (clash) return { ok: false, error: `Code "${code}" is already used by another rate plan.` };
+  if (clash) return { ok: false, error: (await say()).planCodeTaken(code) };
 
   if (rowId) {
     const linkage = keepLinkage ? {} : { priceLogic, ...derived };
@@ -139,9 +154,9 @@ export async function deleteRatePlan(fd: FormData): Promise<void> {
   await requireCapability("manageRates");
   const property = await getProperty();
   const id = str(fd, "id");
-  if (!id) return flashError("Nothing was selected to delete. Reload the page and try again.");
+  if (!id) return flashError((await say()).nothingSelected);
   const rp = await prisma.ratePlan.findUnique({ where: { id }, include: { _count: { select: { children: true, resLines: true } } } });
-  if (!rp) return flashError("That rate plan no longer exists — somebody removed it while this page was open.");
+  if (!rp) return flashError((await say()).planDeleted);
 
   // Deletion guard (spec §3.6): a rate plan mapped to the channel manager cannot be deleted —
   // the CM-side call would fail. Unmap in RevioLink → Mapping first.
@@ -172,11 +187,11 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
   const rowId = str(fd, "id");
   const name = str(fd, "name");
   const type = str(fd, "type");
-  if (!name) return { ok: false, error: "Name is required." };
-  if (!type) return { ok: false, error: "Pick a restriction type." };
+  if (!name) return { ok: false, error: (await say()).nameRequired };
+  if (!type) return { ok: false, error: (await say()).pickType };
   const dateFrom = str(fd, "dateFrom");
   const dateTo = str(fd, "dateTo");
-  if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
+  if (!dateFrom || !dateTo) return { ok: false, error: (await say()).pickRange };
 
   /*
    * ⚠️ Forward inventory only — the same rule, and the same reasoning, as the RevioLink copy in
@@ -191,7 +206,9 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
     todayInTimeZone(timezone),
     existingRule ? existingRule.dateFrom.toISOString().slice(0, 10) : null,
   );
-  const restrictionRefusal = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: restrictionFloor });
+  const restrictionRefusal = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: restrictionFloor })
+    ? await sayPast(dateFrom, dateTo, restrictionFloor)
+    : null;
   if (restrictionRefusal) return { ok: false, error: restrictionRefusal };
 
   const isBool = BOOL_TYPES.has(type);
@@ -225,7 +242,7 @@ export async function deleteRestrictionRule(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
   const rule = await prisma.restrictionRule.findUnique({ where: { id } });
-  if (!rule) return flashError("That restriction rule no longer exists — somebody removed it while this page was open.");
+  if (!rule) return flashError((await say()).ruleDeleted);
   await prisma.restrictionRule.delete({ where: { id } });
   await logAudit(propertyId, tenantId, { entity: `Restriction · ${rule.name}`, field: "delete", source: "rule" });
   await recordPush(propertyId, tenantId, `Restriction rule "${rule.name}" removed`);
@@ -294,13 +311,18 @@ export async function saveCalendarRate(args: {
   await requireCapability("manageRates");
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) return flashError("That date isn’t one we can read. Reload the calendar and try again.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(args.date)) return flashError((await say()).unreadableDate);
 
   /*
    * ⚠️ One night's price. A night that has gone was sold at whatever it was sold at, and repricing
    * it changes no booking — it only sends a channel a rate for a date nobody can book.
    */
-  const pastCell = pastDateRefusal({ iso: args.date, earliest: todayInTimeZone(property.timezone) });
+  const pastCell = pastDateRefusal({ iso: args.date, earliest: todayInTimeZone(property.timezone) })
+    ? await (async () => {
+        const { t, day } = await i18n();
+        return t(rateErrors).past(null, day(args.date), day(todayInTimeZone(property.timezone)));
+      })()
+    : null;
   if (pastCell) return flashError(pastCell);
 
   const roomType = await prisma.roomType.findFirst({ where: { id: args.roomTypeId, propertyId } });
@@ -315,17 +337,17 @@ export async function saveCalendarRate(args: {
   const standard = args.ratePlanId
     ? await prisma.ratePlan.findFirst({ where: { id: args.ratePlanId, propertyId, priceLogic: "manual", active: true } })
     : await prisma.ratePlan.findFirst({ where: { propertyId, priceLogic: "manual", active: true }, orderBy: { sortOrder: "asc" } });
-  if (!roomType) return flashError("That room type no longer exists — somebody may have removed it while this page was open.");
+  if (!roomType) return flashError((await say()).roomGoneMaybe);
   if (!standard) {
     return flashError(
       args.ratePlanId
-        ? "That rate row can no longer hold a price — the plan may have been switched off or made derived while this page was open. Reload the calendar."
-        : "This property has no active manual rate plan yet, so there is nothing to price. Add one in Rooms & Rates.",
+        ? (await say()).rowCannotPrice
+        : (await say()).noManualPlan,
     );
   }
 
   const priceMinor = Math.round(Number(args.value) * 100);
-  if (!Number.isFinite(priceMinor) || priceMinor < 0) return flashError("That price isn’t a number we can use. Enter an amount of zero or more.");
+  if (!Number.isFinite(priceMinor) || priceMinor < 0) return flashError((await say()).badPrice);
   const date = utcDay(args.date);
 
   // "The" price is a real occupancy row since OBP H1 — the primary. Resolved, never assumed, so the
@@ -362,19 +384,21 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
   const { id: propertyId, tenantId } = property;
   const dateFrom = str(fd, "dateFrom");
   const dateTo = str(fd, "dateTo");
-  if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
-  if (dateTo < dateFrom) return { ok: false, error: "End date is before start date." };
+  if (!dateFrom || !dateTo) return { ok: false, error: (await say()).pickRange };
+  if (dateTo < dateFrom) return { ok: false, error: (await say()).endBeforeStart };
   // ⚠️ Forward inventory only — the same guard as applyCrsBulkUpdateMulti below. Both exist, so
   // both are checked: a rule enforced on one of two paths into the same table is not enforced.
-  const pastForm = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(property.timezone) });
+  const pastForm = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(property.timezone) })
+    ? await sayPast(dateFrom, dateTo, todayInTimeZone(property.timezone))
+    : null;
   if (pastForm) return { ok: false, error: pastForm };
   const roomTypeIds = strList(fd, "roomTypeIds");
-  if (roomTypeIds.length === 0) return { ok: false, error: "Select at least one room type." };
+  if (roomTypeIds.length === 0) return { ok: false, error: (await say()).selectRoom };
   const dows = strList(fd, "daysOfWeek").map(Number);
   const updateType = str(fd, "updateType");
   const value = Number(str(fd, "value"));
   const dates = eachDate(dateFrom, dateTo, dows);
-  if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
+  if (dates.length === 0) return { ok: false, error: (await say()).noDatesMatch };
 
   let ratePlanIds: string[] = [];
   if (updateType.startsWith("rate_")) {
@@ -384,8 +408,8 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
       select: { id: true },
     });
     ratePlanIds = manual.map((m) => m.id);
-    if (ratePlanIds.length === 0) return { ok: false, error: "Select at least one manual rate plan (derived plans follow their parent)." };
-    if (!Number.isFinite(value) || value < 0) return { ok: false, error: "Enter a price value." };
+    if (ratePlanIds.length === 0) return { ok: false, error: (await say()).selectManualPlan };
+    if (!Number.isFinite(value) || value < 0) return { ok: false, error: (await say()).enterPrice };
   }
 
   // Once for the whole operation: dates × plans × room types cannot change this value mid-run.
@@ -416,7 +440,7 @@ export async function applyCrsBulkUpdate(_prev: ActionResult | null, fd: FormDat
           : updateType === "open" ? { stopSell: false }
           : updateType === "availability_set" ? { inventory: Math.max(0, Math.trunc(value)) }
           : null;
-        if (!data) return { ok: false, error: "Unknown update type." };
+        if (!data) return { ok: false, error: (await say()).unknownUpdate };
         await upsertRoomCell(tenantId, propertyId, roomTypeId, date, data);
       }
       affected++;
@@ -509,12 +533,14 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   }
   const { id: propertyId, tenantId, timezone } = await getProperty();
   const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
-  if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
-  if (dateTo < dateFrom) return { ok: false, error: "End date is before start date." };
+  if (!dateFrom || !dateTo) return { ok: false, error: (await say()).pickRange };
+  if (dateTo < dateFrom) return { ok: false, error: (await say()).endBeforeStart };
   // ⚠️ Forward inventory only — see the RevioLink twin in `actions-calendar.ts` writeBulk.
-  const pastRange = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(timezone) });
+  const pastRange = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: todayInTimeZone(timezone) })
+    ? await sayPast(dateFrom, dateTo, todayInTimeZone(timezone))
+    : null;
   if (pastRange) return { ok: false, error: pastRange };
-  if (roomTypeIds.length === 0) return { ok: false, error: "Select at least one room type." };
+  if (roomTypeIds.length === 0) return { ok: false, error: (await say()).selectRoom };
 
   const cell: Partial<{ inventory: number; minLos: number | null; maxLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean; advancePurchaseMin: number | null; advancePurchaseMax: number | null }> = {};
   const changed: string[] = [];
@@ -533,10 +559,10 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   // and the two produce different prices. The panel sends one or the other.
   const doOccupancy = (payload.occupancyRates?.length ?? 0) > 0;
   if (doRate || doOccupancy) changed.push("rate");
-  if (changed.length === 0) return { ok: false, error: "Set at least one field to update." };
+  if (changed.length === 0) return { ok: false, error: (await say()).nothingToUpdate };
 
   const dates = eachDate(dateFrom, dateTo, daysOfWeek);
-  if (dates.length === 0) return { ok: false, error: "No dates match those days of week." };
+  if (dates.length === 0) return { ok: false, error: (await say()).noDatesMatch };
 
   let ratePlanIds: string[] = [];
   if (doRate || doOccupancy) {
@@ -546,7 +572,7 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
       select: { id: true }, orderBy: { sortOrder: "asc" },
     });
     ratePlanIds = manual.map((m) => m.id);
-    if (ratePlanIds.length === 0) return { ok: false, error: "Select at least one manual rate plan for the price change (derived plans follow their parent)." };
+    if (ratePlanIds.length === 0) return { ok: false, error: (await say()).selectManualPlanForPrice };
   }
 
   /*
@@ -573,7 +599,7 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   if (payload.availability !== undefined) {
     const v = Math.max(0, Math.trunc(payload.availability));
     const over = await prisma.roomType.findMany({ where: { id: { in: roomTypeIds }, totalRooms: { lt: v } }, select: { name: true, totalRooms: true } });
-    if (over.length > 0) warning = `${v} to sell exceeds the physical count for ${over.map((r) => `${r.name} (${r.totalRooms})`).join(", ")} — saved anyway, double-check the number.`;
+    if (over.length > 0) warning = (await say()).overPhysical(v, over.map((r) => `${r.name} (${r.totalRooms})`).join(", "));
   }
 
   const hasCell = Object.keys(cell).length > 0;
@@ -673,6 +699,7 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
    * rooms quietly do not. So the skips and the unpriced dates join the warning line.
    */
   const notes: string[] = warning ? [warning] : [];
+  const e = await say();
   const mergedSkips = new Map<string, Set<number>>();
   for (const s of skippedOccupancies) {
     const set = mergedSkips.get(s.roomName) ?? new Set<number>();
@@ -681,10 +708,10 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
   }
   for (const [roomName, occs] of mergedSkips) {
     const list = [...occs].sort((a, b) => a - b);
-    notes.push(`${roomName} does not sleep ${list.join(" or ")} — ${list.length === 1 ? "that guest count was" : "those guest counts were"} skipped for it.`);
+    notes.push(e.skippedOccupancy(roomName, list));
   }
   if (unpricedCount > 0) {
-    notes.push(`${unpricedCount} price${unpricedCount === 1 ? "" : "s"} had nothing to work from — a percentage needs an existing price. Set one first.`);
+    notes.push(e.unpriced(unpricedCount));
   }
   /*
    * ⚠️ Narrowing to real pairs must not turn a wrong write into a silent no-write.
@@ -694,7 +721,7 @@ export async function applyCrsBulkUpdateMulti(payload: CrsBulkPayload): Promise<
    */
   if (roomsWithNoPlan.length > 0) {
     const names = roomsWithNoPlan.map((id) => roomsById.get(id)?.name ?? id).join(", ");
-    notes.push(`No price was written for ${names} — no rate plan you selected is linked to ${roomsWithNoPlan.length === 1 ? "that room" : "those rooms"}.`);
+    notes.push(e.noPlanLinked(names, roomsWithNoPlan.length));
   }
 
   return { ok: true, affected, ...(notes.length > 0 ? { warning: notes.join(" ") } : {}) };
@@ -722,7 +749,7 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   if (!_g.ok) return { ok: false, error: _g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const plan = await prisma.ratePlan.findFirst({ where: { id: payload.ratePlanId, propertyId } });
-  if (!plan) return { ok: false, error: "Rate plan not found." };
+  if (!plan) return { ok: false, error: (await say()).planNotFound };
 
   if (payload.mode === "unlink") {
     await prisma.ratePlan.update({
@@ -736,27 +763,27 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   }
 
   const parentId = payload.parentRatePlanId;
-  if (!parentId) return { ok: false, error: "Choose a parent rate plan." };
-  if (parentId === plan.id) return { ok: false, error: "A rate plan can’t derive from itself." };
+  if (!parentId) return { ok: false, error: (await say()).chooseParent };
+  if (parentId === plan.id) return { ok: false, error: (await say()).selfParent };
 
   const all = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true, name: true, priceLogic: true, parentRatePlanId: true } });
   const byId = new Map(all.map((p) => [p.id, p]));
   const parent = byId.get(parentId);
-  if (!parent) return { ok: false, error: "Parent rate plan not found." };
+  if (!parent) return { ok: false, error: (await say()).parentNotFound };
 
   let cursor: (typeof all)[number] | undefined = parent;
   let depth = 1;
   const seen = new Set<string>();
   while (cursor) {
-    if (cursor.id === plan.id) return { ok: false, error: "That would create a loop — a rate can’t derive from one of its own descendants." };
+    if (cursor.id === plan.id) return { ok: false, error: (await say()).loop };
     if (seen.has(cursor.id)) break;
     seen.add(cursor.id);
     if (cursor.priceLogic === "manual" || !cursor.parentRatePlanId) break;
     depth++;
-    if (depth > MAX_LINKAGE_DEPTH) return { ok: false, error: `Derivation chains are limited to ${MAX_LINKAGE_DEPTH} levels — link to a plan closer to the base rate.` };
+    if (depth > MAX_LINKAGE_DEPTH) return { ok: false, error: (await say()).tooDeep(MAX_LINKAGE_DEPTH) };
     cursor = byId.get(cursor.parentRatePlanId) ?? undefined;
   }
-  if (!cursor || cursor.priceLogic !== "manual") return { ok: false, error: "A derived rate must ultimately trace back to a manual base rate." };
+  if (!cursor || cursor.priceLogic !== "manual") return { ok: false, error: (await say()).mustTraceToManual };
 
   await prisma.ratePlan.update({
     where: { id: plan.id },
@@ -797,8 +824,8 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   const section = rowId ? str(fd, "section") : "";
   const withBasics = section !== "content";
   const withContent = section !== "basics";
-  if (withBasics && !name) return { ok: false, error: "Name is required." };
-  if (withBasics && !code) return { ok: false, error: "Code is required." };
+  if (withBasics && !name) return { ok: false, error: (await say()).nameRequired };
+  if (withBasics && !code) return { ok: false, error: (await say()).codeRequired };
 
   const totalRooms = Math.max(0, int(fd, "totalRooms"));
   const maxGuests = Math.max(1, int(fd, "maxGuests", 1));
@@ -833,12 +860,12 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
     const clash = await prisma.roomType.findFirst({
       where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) },
     });
-    if (clash) return { ok: false, error: `Code "${code}" is already used by another room type.` };
+    if (clash) return { ok: false, error: (await say()).roomCodeTaken(code) };
   }
 
   if (rowId) {
     const before = await prisma.roomType.findUnique({ where: { id: rowId } });
-    if (!before || before.propertyId !== propertyId) return { ok: false, error: "Room type not found." };
+    if (!before || before.propertyId !== propertyId) return { ok: false, error: (await say()).roomNotFound };
     await prisma.roomType.update({
       where: { id: rowId },
       data: {
@@ -886,7 +913,7 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
    * property.
    */
   if (!rt || rt.propertyId !== property.id) {
-    return flashError("That room type no longer exists — somebody removed it while this page was open.");
+    return flashError((await say()).roomGone);
   }
 
   // Same deletion guard as the rate plans: a room type mapped to the channel manager can't go —

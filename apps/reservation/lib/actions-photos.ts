@@ -8,6 +8,24 @@ import { logAudit, str } from "./mutation-helpers";
 import { ImageRejected, MAX_UPLOAD_BYTES, processRoomPhoto } from "./images";
 import { guard, requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { rateErrors, type RateErrorStrings } from "./i18n/rate-errors";
+import type { ImageRejectedCode } from "./images";
+
+async function say() {
+  return (await i18n()).t(rateErrors);
+}
+/** An `ImageRejected`, by its code, in the reader's language. */
+function imageRefusal(e: RateErrorStrings, r: ImageRejectedCode): string {
+  switch (r.code) {
+    case "notImage": return e.image.notImage;
+    case "tooLarge": return e.image.tooLarge(r.mb);
+    case "unreadable": return e.image.unreadable;
+    case "tooSmall": return e.image.tooSmall(r.w, r.h);
+    case "heroNarrow": return e.image.heroNarrow(r.w);
+    case "heroPortrait": return e.image.heroPortrait;
+  }
+}
 
 /**
  * Room photographs.
@@ -49,18 +67,18 @@ export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData):
   const _g = await guard("manageSettings");
   if (!_g.ok) return { ok: false, error: _g.error };
   const owned = await ownedRoomType(str(fd, "roomTypeId"));
-  if (!owned) return { ok: false, error: "That room type no longer exists." };
+  if (!owned) return { ok: false, error: (await say()).photos.roomGone };
   const { property, roomType } = owned;
 
   const files = fd.getAll("photos").filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length === 0) return { ok: false, error: "Choose at least one image." };
+  if (files.length === 0) return { ok: false, error: (await say()).photos.chooseImage };
 
   const tooBig = files.find((f) => f.size > MAX_UPLOAD_BYTES);
   if (tooBig) {
     const mb = (tooBig.size / 1024 / 1024).toFixed(1);
     return {
       ok: false,
-      error: `“${tooBig.name}” is ${mb} MB — the limit is 25 MB per photo. Most phone photos are well under it.`,
+      error: (await say()).photos.tooBig(tooBig.name, mb),
     };
   }
 
@@ -68,7 +86,7 @@ export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData):
   if (existing + files.length > MAX_PER_ROOM_TYPE) {
     return {
       ok: false,
-      error: `That would be ${existing + files.length} photos. ${MAX_PER_ROOM_TYPE} is the limit for one room type.`,
+      error: (await say()).photos.tooMany(existing + files.length, MAX_PER_ROOM_TYPE),
     };
   }
 
@@ -84,7 +102,7 @@ export async function uploadRoomPhotos(_prev: PhotoResult | null, fd: FormData):
       if (err instanceof ImageRejected) {
         // Stop at the first bad file rather than silently skipping it — a hotel who picked six
         // photos and got five needs to know which one, and why.
-        return { ok: false, ...(uploaded ? { uploaded } : {}), error: `${file.name}: ${err.message}` };
+        return { ok: false, ...(uploaded ? { uploaded } : {}), error: `${file.name}: ${imageRefusal(await say(), err.reason)}` };
       }
       throw err;
     }
@@ -133,7 +151,7 @@ export async function deleteRoomPhoto(fd: FormData): Promise<void> {
     where: { id, propertyId: property.id },
     select: { id: true, fullKey: true, thumbKey: true, roomTypeId: true },
   });
-  if (!photo) return flashError("That photo has already been deleted — somebody removed it while this page was open.");
+  if (!photo) return flashError((await say()).photos.alreadyDeleted);
 
   await prisma.roomTypePhoto.delete({ where: { id: photo.id } });
 
@@ -156,11 +174,11 @@ export async function deleteRoomPhoto(fd: FormData): Promise<void> {
 export async function reorderRoomPhotos(fd: FormData): Promise<void> {
   await requireCapability("manageSettings");
   const owned = await ownedRoomType(str(fd, "roomTypeId"));
-  if (!owned) return flashError("That room type no longer exists — the new photo order was not saved. Reload and try again.");
+  if (!owned) return flashError((await say()).photos.reorderRoomGone);
   const { property, roomType } = owned;
 
   const ids = str(fd, "order").split(",").map((s) => s.trim()).filter(Boolean);
-  if (ids.length === 0) return flashError("Nothing to reorder — the gallery came back empty. Reload the page and try again.");
+  if (ids.length === 0) return flashError((await say()).photos.nothingToReorder);
 
   // Scope the update to this room type's own photos, so an id from another gallery is a no-op
   // rather than a cross-room reshuffle.
@@ -185,7 +203,7 @@ export async function saveRoomPhotoAlt(fd: FormData): Promise<void> {
   const property = await getProperty();
   const id = str(fd, "id");
   const photo = await prisma.roomTypePhoto.findFirst({ where: { id, propertyId: property.id }, select: { id: true } });
-  if (!photo) return flashError("That photo has already been deleted — the description was not saved.");
+  if (!photo) return flashError((await say()).photos.altDeleted);
 
   await prisma.roomTypePhoto.update({
     where: { id: photo.id },

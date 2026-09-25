@@ -45,6 +45,14 @@ export interface CommonStrings {
   roomOnly: string;
   /** The confirm-then-delete dialog every CRS list uses. */
   deleteDialog: { aria: (label: string) => string; title: (label: string) => string; removes: string };
+  /** Why an action refused — `lib/authz.ts`. `what` is keyed by `Capability`; core's English is held to it by a drift test. */
+  authz: {
+    expired: string;
+    switchedOff: string;
+    readOnly: (what: string) => string;
+    cannot: (what: string) => string;
+    what: Record<"manageStaff" | "manageSettings" | "manageRates" | "manageInventory" | "manageDistribution" | "manageReservations" | "manageSubscription", string>;
+  };
 }
 
 export const common: Translations<CommonStrings> = {
@@ -86,6 +94,17 @@ export const common: Translations<CommonStrings> = {
     direct: "Direct",
     roomOnly: "room only",
     deleteDialog: { aria: (l) => `Delete ${l}`, title: (l) => `Delete ${l}?`, removes: "This removes" },
+    authz: {
+      expired: "Your session has expired. Sign in again.",
+      switchedOff: "RevioCRS is switched off for this hotel, so this change was not saved. Nothing has been deleted — reload to see where it stands.",
+      readOnly: (w) => `Your account has read-only access, so it cannot ${w}. Ask an owner or admin at your property to change your role.`,
+      cannot: (w) => `Your account cannot ${w}. Ask an owner or admin at your property if you need to.`,
+      what: {
+        manageStaff: "manage staff accounts", manageSettings: "change property settings", manageRates: "change rates or restrictions",
+        manageInventory: "change availability", manageDistribution: "change channel connections",
+        manageReservations: "create or change reservations", manageSubscription: "start or keep a product on this account",
+      },
+    },
   },
   bg: {
     statuses: {
@@ -125,5 +144,16 @@ export const common: Translations<CommonStrings> = {
     direct: "Директно",
     roomOnly: "само нощувка",
     deleteDialog: { aria: (l) => `Изтрий ${l}`, title: (l) => `Изтриване на ${l}?`, removes: "Това премахва" },
+    authz: {
+      expired: "Сесията Ви е изтекла. Влезте отново.",
+      switchedOff: "RevioCRS е изключен за този хотел, затова промяната не е запазена. Нищо не е изтрито — презаредете, за да видите състоянието.",
+      readOnly: (w) => `Профилът Ви е само за преглед, затова не може да ${w}. Помолете собственик или администратор на обекта да промени ролята Ви.`,
+      cannot: (w) => `Профилът Ви не може да ${w}. Ако Ви трябва, помолете собственик или администратор на обекта.`,
+      what: {
+        manageStaff: "управлява служителски профили", manageSettings: "променя настройките на обекта", manageRates: "променя цени или ограничения",
+        manageInventory: "променя наличността", manageDistribution: "променя връзките с каналите",
+        manageReservations: "създава или променя резервации", manageSubscription: "стартира или запазва продукт в този акаунт",
+      },
+    },
   },
 };
