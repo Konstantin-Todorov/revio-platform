@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { forSystem } from "@revio/db";
+import { forSystem, withSystemTransaction } from "@revio/db";
 import { getOperatorSession } from "./session";
 import { NOTE_KINDS, STAGES, rollRenewal, type NoteKind, type Stage } from "./account";
 
@@ -114,7 +114,9 @@ export async function saveContact(_prev: ActionResult | null, fd: FormData): Pro
   const id = str(fd, "id");
   // Exactly one primary. Demoting the others here rather than trusting the UI keeps the invariant
   // true even when two operators are editing the same client.
-  await prisma.$transaction(async (tx) => {
+  // One real transaction: the extended client's `$transaction(async …)` ran each call on its own
+  // connection, so "exactly one primary" held only if nothing failed in between.
+  await withSystemTransaction(async (tx) => {
     if (data.isPrimary) {
       await tx.clientContact.updateMany({
         where: { tenantId, isPrimary: true, ...(id ? { NOT: { id } } : {}) },

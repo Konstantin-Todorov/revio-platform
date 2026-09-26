@@ -86,6 +86,10 @@ describe("isDeployMismatch", () => {
     ).toBe(true);
   });
 
+  it("catches Next 15's newer browser wording, verbatim from production on 2026-09-25", () => {
+    expect(isDeployMismatch('Server Action "003bcae9ace9ab6e2451de49113c112009c1da4c5b" was not found on the server. \nRead more: https://nextjs.org/docs/messages/failed-to-find-server-action')).toBe(true);
+  });
+
   it("catches the browser-side twin, which has the same cause and arrives by another road", () => {
     // A tab open across a deploy asking for a chunk the new build no longer ships. It reaches us
     // through /api/client-error rather than the server hook, and it is the same non-event.

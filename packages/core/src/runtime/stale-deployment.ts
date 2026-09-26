@@ -25,6 +25,10 @@ const STALE_PATTERNS: readonly RegExp[] = [
   // Next.js: the action id is not in this deployment's manifest.
   /failed to find server action/i,
   /from an older or newer deployment/i,
+  // Next.js 15's newer wording (UnrecognizedActionError), thrown in the BROWSER: 'Server Action
+  // "003bca…" was not found on the server.' Unmatched, a tab left open across the 2026-09-25 deploy
+  // showed the crash screen instead of quietly reloading.
+  /server action "[^"]*" was not found on the server/i,
   // The bundle this tab is running references chunks the new build no longer serves.
   /loading chunk \S+ failed/i,
   /failed to fetch dynamically imported module/i,

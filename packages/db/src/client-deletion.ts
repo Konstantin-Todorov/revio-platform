@@ -1,5 +1,5 @@
-import { forSystem } from "./rls.js";
-import { canDeleteClient, TENANT_TABLES_WITHOUT_CASCADE, type ClientDeletionVerdict } from "@revio/core";
+import { forSystem, withSystemTransaction } from "./rls.js";
+import { canDeleteClient, TENANT_TABLES_DELETED_FIRST, TENANT_TABLES_WITHOUT_CASCADE, type ClientDeletionVerdict } from "@revio/core";
 
 /**
  * Removing a client, completely and on purpose.
@@ -75,7 +75,6 @@ export async function deleteClientCompletely(args: {
   operatorUserId: string;
   operatorName: string;
 }): Promise<DeleteClientResult> {
-  const prisma = forSystem();
   const loaded = await clientDeletionFacts(args.tenantId);
   if (!loaded) return { ok: false, message: "That client no longer exists." };
 
@@ -97,7 +96,17 @@ export async function deleteClientCompletely(args: {
 
   const removed: Record<string, number> = {};
 
-  await prisma.$transaction(async (tx) => {
+  /*
+   * ⚠️ `withSystemTransaction`, not `forSystem().$transaction`.
+   *
+   * The extended client runs every model call through its own `$transaction([...])` so it can set
+   * the RLS setting first — on its own connection. Inside `forSystem().$transaction(async tx => …)`
+   * that meant `tx.tenant.delete()` ran OUTSIDE this transaction: it could not see the rows deleted
+   * a line above, so it tripped on the very reservations just removed, and nothing here was actually
+   * all-or-nothing. `withSystemTransaction` sets the setting as the transaction's first statement
+   * and hands over a plain transaction client, so every step below is one transaction.
+   */
+  await withSystemTransaction(async (tx) => {
     /*
      * The six the cascade cannot reach, deleted explicitly and BEFORE the tenant.
      *
@@ -106,6 +115,16 @@ export async function deleteClientCompletely(args: {
      * quietly leaving rows behind.
      */
     for (const table of TENANT_TABLES_WITHOUT_CASCADE) {
+      const n = await tx.$executeRawUnsafe(`DELETE FROM "${table}" WHERE "tenantId" = $1`, args.tenantId);
+      if (n > 0) removed[table] = n;
+    }
+
+    /*
+     * ⚠️ Bookings before the rooms they were sold on. A reservation line RESTRICTs its room type and
+     * rate plan, and Postgres checks that as soon as the cascade reaches them — so the tenant delete
+     * failed for any hotel that had ever taken a booking. See TENANT_TABLES_DELETED_FIRST.
+     */
+    for (const table of TENANT_TABLES_DELETED_FIRST) {
       const n = await tx.$executeRawUnsafe(`DELETE FROM "${table}" WHERE "tenantId" = $1`, args.tenantId);
       if (n > 0) removed[table] = n;
     }

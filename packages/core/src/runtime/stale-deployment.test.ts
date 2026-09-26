@@ -15,6 +15,11 @@ describe("isStaleDeploymentError — the tab is old, the app is fine", () => {
     expect(isStaleDeploymentError(real)).toBe(true);
   });
 
+  it("recognises Next 15's newer wording, as production's browser reported it on 2026-09-25", () => {
+    const real = new Error('Server Action "003bcae9ace9ab6e2451de49113c112009c1da4c5b" was not found on the server. \nRead more: https://nextjs.org/docs/messages/failed-to-find-server-action');
+    expect(isStaleDeploymentError(real)).toBe(true);
+  });
+
   it("recognises a stale chunk load", () => {
     expect(isStaleDeploymentError(new Error("Loading chunk 4821 failed."))).toBe(true);
     expect(isStaleDeploymentError(new Error("Failed to fetch dynamically imported module: /_next/x.js"))).toBe(true);

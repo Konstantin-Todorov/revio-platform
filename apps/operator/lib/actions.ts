@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { deleteClientCompletely, forSystem, issueToken } from "@revio/db";
+import { deleteClientCompletely, forSystem, issueToken, recordAppError } from "@revio/db";
 import { initialGuestLanguage, inviteEmail, renderSystemEmail, renderSystemEmailText, PRODUCT_BY_KEY } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { originFor, primaryProduct } from "./product-origins";
@@ -320,12 +320,26 @@ export async function deleteClient(fd: FormData): Promise<void> {
   const confirmation = String(fd.get("confirmation") ?? "");
   if (!tenantId) return flashError("No client named.");
 
-  const result = await deleteClientCompletely({
-    tenantId,
-    confirmation,
-    operatorUserId: session.userId,
-    operatorName: session.name,
-  });
+  /*
+   * ⚠️ An unexpected failure is said on THIS page, not by replacing it with a crash screen.
+   *
+   * On 2026-09-26 a database refusal here threw straight out of the action and the operator lost the
+   * whole screen mid-meeting. The deletion is one transaction, so a failure changed nothing — which is
+   * exactly what the operator needs to hear, in a sentence, beside the button they pressed. It is
+   * still filed in the error log, so it is fixed rather than just survived.
+   */
+  let result: Awaited<ReturnType<typeof deleteClientCompletely>>;
+  try {
+    result = await deleteClientCompletely({
+      tenantId,
+      confirmation,
+      operatorUserId: session.userId,
+      operatorName: session.name,
+    });
+  } catch (error) {
+    await recordAppError({ service: "operator", error, route: `/clients/${tenantId} (delete)` });
+    return flashError("The client could not be removed, and nothing was changed — the attempt was rolled back. The failure is in the error log.");
+  }
 
   if (!result.ok) return flashError(result.message ?? "That client could not be removed.");
 

@@ -84,6 +84,8 @@ export function errorSignature(message: string, stack: string | undefined): stri
 const DEPLOY_MISMATCH = [
   // Server side: the tab posted an action id this build was not compiled with.
   /Failed to find Server Action/i,
+  // …and Next 15's newer wording for the same thing, as the browser reports it.
+  /Server Action "[^"]*" was not found on the server/i,
   // Browser side, via /api/client-error: the tab asked for a chunk the new build no longer ships.
   /ChunkLoadError/i,
   /Loading chunk \S+ failed/i,

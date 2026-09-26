@@ -114,7 +114,7 @@ export async function saveStripeKey(_prev: ActionResult | null, fd: FormData): P
     where: { provider_mode: { provider: "stripe", mode } },
     update: {
       // Untouched fields are omitted rather than written back, so a blank box cannot clear one.
-      ...(plan.replaceSecret ? { cipher: encryptSecret(key), hint: checked!.hint } : {}),
+      ...(plan.replaceSecret && checked?.ok ? { cipher: encryptSecret(key), hint: checked.hint } : {}),
       ...(plan.writePublishable ? { publishableKey: publishable.value } : {}),
       ...(plan.writeWebhook ? { webhookCipher: encryptSecret(webhook.value) } : {}),
       lastCheckedAt: check.reachable ? new Date() : null,
@@ -127,7 +127,13 @@ export async function saveStripeKey(_prev: ActionResult | null, fd: FormData): P
       provider: "stripe",
       mode,
       cipher: encryptSecret(key),
-      hint: checked!.hint,
+      /*
+       * ⚠️ Never `checked!.hint`. JavaScript builds this `create` object even when the row exists and
+       * Prisma takes `update` — so editing only the publishable key or the webhook secret (no new
+       * secret, `checked` null) crashed the page on 2026-09-22. A new row always carries a checked
+       * secret (`planKeyEdit` refuses otherwise), so the fallback is never stored.
+       */
+      hint: checked?.ok ? checked.hint : "",
       publishableKey: publishable.value || null,
       ...(plan.writeWebhook ? { webhookCipher: encryptSecret(webhook.value) } : {}),
       lastCheckedAt: check.reachable ? new Date() : null,

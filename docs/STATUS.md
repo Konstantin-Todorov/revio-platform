@@ -131,10 +131,11 @@ real RevioDirect booking page answer `200`.
 
 ⚠️ This table said **eight** services until today. `docs` was added and nothing here noticed.
 
-**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **nineteen separate
-checks** on every change <!-- status: count checks 19 --> — typecheck, lint, and seventeen ratchets that each exist because something
+**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **twenty separate
+checks** on every change <!-- status: count checks 20 --> — typecheck, lint, and eighteen ratchets that each exist because something
 specific went wrong once: copy · terminology · authz · layout-guard · status · silent · money · health · a11y ·
-scroll-lock · jobs · submit · zoom · tokens · perimeter · dates · drift. CI additionally applies every
+scroll-lock · jobs · submit · zoom · tokens · perimeter · txscope · dates · drift. (`txscope`, 2026-09-26: a
+`$transaction(async …)` on an RLS-scoped client is not one transaction — it crashed a real client deletion.) CI additionally applies every
 migration into an empty database and runs the seed.
 
 ⚠️ That paragraph said **1,945 tests and twelve checks**. Both had been true; neither was. The count

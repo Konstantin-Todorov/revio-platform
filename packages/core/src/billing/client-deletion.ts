@@ -137,6 +137,22 @@ export function canDeleteClient(f: ClientDeletionFacts): ClientDeletionVerdict {
  * that set stops matching this list — so a new tenant-scoped table added next month breaks the
  * build rather than quietly leaking rows.
  */
+/**
+ * Tables a client deletion empties FIRST, before the tenant row — because the cascade would trip on
+ * them otherwise.
+ *
+ * `ReservationLine.roomTypeId` and `.ratePlanId` are `ON DELETE RESTRICT`: a room type that has been
+ * sold cannot be deleted from under its bookings. Postgres checks RESTRICT the moment the room type
+ * goes, even when the same cascade would have removed the lines a step later — so deleting a tenant
+ * that had ever taken a booking failed, and showed the operator a crash screen (2026-09-26, on a
+ * real client). Deleting the reservations first takes their lines with them (that FK cascades), and
+ * the room types and plans are then free to go.
+ *
+ * `client-deletion.db.test.ts` recomputes, from the live constraint graph, every RESTRICT foreign key
+ * inside the tenant's cascade and fails if one is not cleared by this list.
+ */
+export const TENANT_TABLES_DELETED_FIRST = ["Reservation"] as const;
+
 export const TENANT_TABLES_WITHOUT_CASCADE = [
   "AuthEvent",
   "ConnectivityCredential",

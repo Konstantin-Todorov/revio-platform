@@ -1,4 +1,4 @@
-import { forSystem } from "./rls.js";
+import { forSystem, withSystemTransaction } from "./rls.js";
 import { issueToken } from "./auth-tokens.js";
 import {
   initialGuestLanguage,
@@ -238,7 +238,9 @@ export async function activatePendingSignup(tenantId: string): Promise<boolean> 
   const endsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
   const already = new Set(tenant.productTrials.map((t) => t.product));
 
-  await prisma.$transaction(async (tx) => {
+  // `withSystemTransaction`: the tenant switch and its trials land together or not at all. The extended
+  // client's `$transaction(async …)` ran each call on its own connection — see client-deletion.ts.
+  await withSystemTransaction(async (tx) => {
     await tx.tenant.update({
       where: { id: tenantId, status: "pending_signup" },
       data: {
