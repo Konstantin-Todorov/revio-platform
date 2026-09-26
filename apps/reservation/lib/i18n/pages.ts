@@ -46,6 +46,9 @@ export interface PagesStrings {
     reload: string;
     pageNotFound: string;
     pageNotFoundBody: string;
+    /** In-shell 404: a record that no longer exists. */
+    recordNotFound: string;
+    recordNotFoundBody: string;
     goToProduct: string;
     pageDidntLoad: string;
   };
@@ -103,6 +106,8 @@ export const pages: Translations<PagesStrings> = {
       reload: "Reload the page",
       pageNotFound: "Page not found",
       pageNotFoundBody: "That address doesn’t exist in RevioCRS. If you followed a link from us, let us know.",
+      recordNotFound: "We couldn’t find that",
+      recordNotFoundBody: "The page or record you’re looking for doesn’t exist, or it may have been removed. Check the link, or start again from the menu.",
       goToProduct: "Go to RevioCRS",
       pageDidntLoad: "This page didn’t load",
     },
@@ -158,6 +163,8 @@ export const pages: Translations<PagesStrings> = {
       reload: "Презареди страницата",
       pageNotFound: "Страницата не е намерена",
       pageNotFoundBody: "Този адрес не съществува в RevioCRS. Ако сте последвали връзка от нас, моля, кажете ни.",
+      recordNotFound: "Не можахме да го намерим",
+      recordNotFoundBody: "Страницата или записът, който търсите, не съществува или е премахнат. Проверете линка или започнете отново от менюто.",
       goToProduct: "Към RevioCRS",
       pageDidntLoad: "Страницата не се зареди",
     },

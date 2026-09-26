@@ -43,6 +43,15 @@ export interface CommonStrings {
   no: string;
   direct: string;
   roomOnly: string;
+  close: string;
+  /** One-line refusals and confirmations from actions that have no dictionary of their own. */
+  flash: {
+    supportExpired: string;
+    requestUnknown: string;
+    unknownProduct: string;
+    noTrial: string;
+    emailLookSaved: string;
+  };
   /** The confirm-then-delete dialog every CRS list uses. */
   deleteDialog: { aria: (label: string) => string; title: (label: string) => string; removes: string };
   /** Why an action refused — `lib/authz.ts`. `what` is keyed by `Capability`; core's English is held to it by a drift test. */
@@ -93,6 +102,14 @@ export const common: Translations<CommonStrings> = {
     no: "No",
     direct: "Direct",
     roomOnly: "room only",
+    close: "Close",
+    flash: {
+      supportExpired: "Your session has expired. Sign in again and send it once more.",
+      requestUnknown: "That request could not be identified. Reload the page.",
+      unknownProduct: "Unknown product.",
+      noTrial: "There is no trial running here to keep. Reload the page — it may have finished already.",
+      emailLookSaved: "Saved — every guest email now carries this look.",
+    },
     deleteDialog: { aria: (l) => `Delete ${l}`, title: (l) => `Delete ${l}?`, removes: "This removes" },
     authz: {
       expired: "Your session has expired. Sign in again.",
@@ -143,6 +160,14 @@ export const common: Translations<CommonStrings> = {
     no: "Не",
     direct: "Директно",
     roomOnly: "само нощувка",
+    close: "Затвори",
+    flash: {
+      supportExpired: "Сесията Ви е изтекла. Влезте отново и изпратете още веднъж.",
+      requestUnknown: "Заявката не можа да бъде разпозната. Презаредете страницата.",
+      unknownProduct: "Непознат продукт.",
+      noTrial: "Тук няма активен пробен период, който да се запази. Презаредете страницата — може вече да е приключил.",
+      emailLookSaved: "Запазено — всеки имейл до гостите вече е с този вид.",
+    },
     deleteDialog: { aria: (l) => `Изтрий ${l}`, title: (l) => `Изтриване на ${l}?`, removes: "Това премахва" },
     authz: {
       expired: "Сесията Ви е изтекла. Влезте отново.",

@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { common } from "@/lib/i18n/common";
+
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { useScrollLock } from "@revio/ui/use-scroll-lock";
@@ -25,6 +29,7 @@ export function Modal({
   // does nothing here — `<main>` is the scroller in this shell, not `<body>`.
   useScrollLock(open, shell);
 
+  const locale = useLocale();
   if (!open) return null;
   return (
     <div ref={shell} className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -32,7 +37,7 @@ export function Modal({
       <div className="relative z-10 w-full max-w-lg animate-rise overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
         <div className="flex items-center justify-between border-b border-surface-border px-5 py-3.5">
           <h2 className="text-[15px] font-bold tracking-tight text-ink-900">{title}</h2>
-          <button onClick={onClose} aria-label="Close" className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-700">
+          <button onClick={onClose} aria-label={translate(common, locale).close} className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-ink-700">
             <X className="h-4 w-4" />
           </button>
         </div>

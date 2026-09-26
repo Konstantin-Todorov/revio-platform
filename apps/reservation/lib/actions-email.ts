@@ -13,6 +13,12 @@ import { getProperty } from "./data";
 import { guard } from "./authz";
 import { i18n } from "./i18n/server";
 import { settings as settingsDict } from "./i18n/settings";
+import { common } from "./i18n/common";
+
+/** This file's one-line refusals, in the reader's language. */
+async function flashSay() {
+  return (await i18n()).t(common).flash;
+}
 
 /** The refusal words, in the reader's language — `lib/i18n/settings.ts` → errors. */
 async function say() {
@@ -80,7 +86,7 @@ export async function saveEmailBranding(fd: FormData): Promise<void> {
   });
   await logAudit(c.propertyId, c.tenantId, { entity: "Email settings", field: "branding", newValue: "updated" });
   refresh();
-  await setFlash("success", "Saved — every guest email now carries this look.");
+  await setFlash("success", (await flashSay()).emailLookSaved);
 }
 
 /**
