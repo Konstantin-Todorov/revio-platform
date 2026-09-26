@@ -120,7 +120,7 @@ export function DashboardView({
             {p.label}
           </Link>
         ))}
-        <form method="GET" className="ml-1 flex items-center gap-1.5">
+        <form method="GET" className="ml-1 flex flex-wrap items-center gap-1.5">
           <input type="hidden" name="range" value="custom" />
           <DateField name="from" defaultValue={customStart} className="rounded-md border border-surface-border bg-white px-2 py-1.5 text-[12px]" />
           <span className="text-[11px] text-ink-400">→</span>

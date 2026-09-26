@@ -13,6 +13,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
  * boundary, which is the difference between a trial that ends and a trial that ends on paper.
  */
 vi.mock("server-only", () => ({}));
+// The refusals are said in the reader's language, so the gate reads the language cookie. This caller
+// has none — the session carries no locale either — so the words are English, as asserted below.
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
 
 const redirected: string[] = [];
 vi.mock("next/navigation", () => ({

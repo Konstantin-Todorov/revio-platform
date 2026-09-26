@@ -8,8 +8,11 @@
  *
  * `CRS_I18N_PREVIEW=1` turns it on for one process — how the translation is looked at on a laptop
  * before it is switched on for everyone.
+ *
+ * **Switched on 2026-09-26** after every dictionary reached `COMPLETE`, route-walk passed on all 24
+ * screens in both languages, and every screen was checked at phone width for horizontal overflow.
  */
-export const CRS_TRANSLATED = false;
+export const CRS_TRANSLATED = true;
 
 export function translationOn(): boolean {
   return CRS_TRANSLATED || process.env.CRS_I18N_PREVIEW === "1";
