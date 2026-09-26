@@ -3,6 +3,8 @@ import { productOrigin } from "@revio/ui/product-links";
 import { RoleLocked } from "@revio/ui/role-locked";
 import { ROLE_LABEL, roleCanOpenProduct } from "@revio/core";
 import { getSession } from "@/lib/session";
+import { i18n } from "@/lib/i18n/server";
+import { shell } from "@/lib/i18n/shell";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +31,13 @@ export default async function NoAccessPage() {
   // Somebody who DOES have access has no business on this screen — send them to the product.
   if (roleCanOpenProduct(session.role, "cm")) redirect("/dashboard");
 
+  const { t, locale } = await i18n();
   return (
     <RoleLocked
       product="cm"
       role={session.role}
-      roleLabel={ROLE_LABEL[session.role] ?? session.role}
+      roleLabel={t(shell).roles[session.role] ?? ROLE_LABEL[session.role] ?? session.role}
+      locale={locale}
       hrefFor={(k) => productOrigin(k)}
     />
   );

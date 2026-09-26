@@ -2,8 +2,13 @@ import { redirect } from "next/navigation";
 import { Logo } from "@/components/shell/Logo";
 import { TwoFactorForm } from "@/components/auth/TwoFactorForm";
 import { readPendingTwoFactor } from "@/lib/auth";
+import { LanguageSwitch } from "@/components/auth/LanguageSwitch";
+import { i18n } from "@/lib/i18n/server";
+import { auth } from "@/lib/i18n/auth";
 
-export const metadata = { title: "Two-factor · RevioLink" };
+export async function generateMetadata() {
+  return { title: (await i18n()).t(auth).twoFactor.meta };
+}
 
 /**
  * Step two of signing in.
@@ -16,6 +21,9 @@ export const metadata = { title: "Two-factor · RevioLink" };
 export default async function TwoFactorPage() {
   const pending = await readPendingTwoFactor();
   if (!pending) redirect("/login");
+  const { t: tr, locale } = await i18n();
+  const a = tr(auth);
+  const t = a.twoFactor;
 
   return (
     <div className="flex min-h-screen items-stretch bg-surface-muted">
@@ -24,25 +32,25 @@ export default async function TwoFactorPage() {
           <Logo className="h-9 w-9" />
           <div className="leading-none">
             <div className="text-[17px] font-bold">Revio<span className="text-product-mark">Link</span></div>
-            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Channel Manager</div>
+            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">{t.tagline}</div>
           </div>
         </div>
         <div>
-          <h1 className="max-w-sm text-[28px] font-bold leading-tight tracking-tight">One more step.</h1>
+          <h1 className="max-w-sm text-[28px] font-bold leading-tight tracking-tight">{t.headline}</h1>
           <p className="mt-3 max-w-sm text-[14px] text-white/60">
-            This account can change your rates and read your guests, so a password on its own is not
-            enough to open it.
+            {t.pitch}
           </p>
         </div>
         <div className="text-[12px] text-white/40">© Revio</div>
       </div>
 
-      <div className="flex w-full items-center justify-center p-6 lg:w-1/2">
+      <div className="relative flex w-full items-center justify-center p-6 lg:w-1/2">
+        <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={a.language} /></div>
         <div className="w-full max-w-sm">
           <div className="mb-6 lg:hidden"><Logo className="h-9 w-9" /></div>
-          <h2 className="text-[20px] font-bold tracking-tight text-ink-900">Two-factor authentication</h2>
-          <p className="mb-6 mt-1 text-[13px] text-ink-500">Your password was accepted.</p>
-          <TwoFactorForm />
+          <h2 className="text-[20px] font-bold tracking-tight text-ink-900">{t.title}</h2>
+          <p className="mb-6 mt-1 text-[13px] text-ink-500">{t.intro}</p>
+          <TwoFactorForm t={a.forms} />
         </div>
       </div>
     </div>

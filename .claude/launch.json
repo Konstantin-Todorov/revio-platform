@@ -12,6 +12,18 @@
       "port": 3000
     },
     {
+      "name": "reviolink-bg",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "CM_I18N_PREVIEW=1",
+        "pnpm",
+        "--filter",
+        "@revio/channel-manager",
+        "dev"
+      ],
+      "port": 3000
+    },
+    {
       "name": "operator",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [

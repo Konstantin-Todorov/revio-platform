@@ -12,6 +12,15 @@ import {
   verifyPassword, signSession, setSessionCookie, clearSessionCookie,
   signPendingTwoFactor, setPendingTwoFactorCookie, readPendingTwoFactor, clearPendingTwoFactorCookie,
 } from "./auth";
+import { i18n } from "./i18n/server";
+import { accountStrings } from "@revio/ui/account-strings";
+import { auth as authDict } from "./i18n/auth";
+
+/** Before sign-in the language is the device's (the cookie from the sign-in screen's switch). */
+async function say() {
+  return (await i18n()).t(authDict).errors;
+}
+
 
 // Login resolves a user by email before any tenant context exists → bypass RLS (app.bypass=on).
 const prisma = forSystem();
@@ -21,7 +30,7 @@ export type LoginResult = { error?: string };
 export async function login(_prev: LoginResult | null, fd: FormData): Promise<LoginResult> {
   const email = String(fd.get("email") ?? "").trim().toLowerCase();
   const password = String(fd.get("password") ?? "");
-  if (!email || !password) return { error: "Enter your email and password." };
+  if (!email || !password) return { error: (await say()).enterBoth };
 
   // Brute-force gate. Checked BEFORE the password, so a locked address never reaches bcrypt — which
   // also sheds the CPU cost an attacker was trying to impose. Counted against the email as typed
@@ -44,10 +53,10 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
       scope: "cm", type: AUTH_EVENT.signInFailed, email,
       userId: user?.id ?? null, tenantId: user?.tenantId ?? null, ...origin,
     });
-    return { error: "Invalid email or password." };
+    return { error: (await say()).invalid };
   }
   await recordLoginSuccess("cm", email);
-  if (user.tenant.status !== "active") return { error: "This account is suspended — contact Revio." };
+  if (user.tenant.status !== "active") return { error: (await say()).suspended };
   /*
    * ⚠️ NOT a login refusal. This is a real user of an active hotel; the product is simply not on
    * their account today, and the screen that explains that is inside the app.
@@ -141,10 +150,10 @@ export async function signOutEverywhere(): Promise<void> {
  */
 export async function verifyTwoFactor(_prev: LoginResult | null, fd: FormData): Promise<LoginResult> {
   const pending = await readPendingTwoFactor();
-  if (!pending) return { error: "That took too long — please sign in again." };
+  if (!pending) return { error: (await say()).tooLong };
 
   const code = String(fd.get("code") ?? "");
-  if (!code.trim()) return { error: "Enter the six-digit code from your app, or a recovery code." };
+  if (!code.trim()) return { error: (await say()).enterCode };
 
   const gate = await checkLoginAllowed("cm", `2fa:${pending.userId}`);
   if (!gate.allowed) return { error: gate.message };
@@ -157,7 +166,7 @@ export async function verifyTwoFactor(_prev: LoginResult | null, fd: FormData): 
       scope: "cm", type: AUTH_EVENT.twoFactorFailed,
       userId: pending.userId, ...origin, detail: result.error,
     });
-    return { error: result.error };
+    return { error: (await i18n()).t(accountStrings).twoFactor.errors[result.code] ?? result.error };
   }
   await recordLoginSuccess("cm", `2fa:${pending.userId}`);
 
@@ -167,7 +176,7 @@ export async function verifyTwoFactor(_prev: LoginResult | null, fd: FormData): 
     // long enough for an account to be deactivated, and the pending token proves a password rather
     // than a still-valid account.
     await clearPendingTwoFactorCookie();
-    return { error: "This account is no longer active — contact your manager." };
+    return { error: (await say()).inactive };
   }
 
   /*

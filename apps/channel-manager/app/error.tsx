@@ -5,6 +5,9 @@ import Link from "next/link";
 import { StatusPage, statusPrimaryCls, statusSecondaryCls } from "@revio/ui/status-page";
 import { useStaleDeployment } from "@revio/ui/stale-deployment-boundary";
 import { reportClientError } from "@revio/ui/report-client-error";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { pages } from "@/lib/i18n/pages";
 
 /**
  * The ROOT error boundary — the gap that let a blank page happen.
@@ -33,6 +36,7 @@ export default function ChannelManagerError({
   reset: () => void;
 }) {
   const stale = useStaleDeployment(error);
+  const t = translate(pages, useLocale()).status;
 
   // Filed so we see it, unless it is a stale deployment — recording those would make every release
   // look like an incident.
@@ -42,10 +46,10 @@ export default function ChannelManagerError({
     return (
       <StatusPage
         tone="updated"
-        title="RevioLink was just updated"
-        body="This page was open while a new version went out. Reloading picks it up — nothing you entered has been lost."
+        title={t.updatedTitle}
+        body={t.updatedBody}
       >
-        <button onClick={stale.reload} className={statusPrimaryCls}>Reload the page</button>
+        <button onClick={stale.reload} className={statusPrimaryCls}>{t.reload}</button>
       </StatusPage>
     );
   }
@@ -53,12 +57,12 @@ export default function ChannelManagerError({
   return (
     <StatusPage
       tone="error"
-      title="This page didn&rsquo;t load"
-      body="Something went wrong on our side. Your data is safe &mdash; nothing was changed. Try again, and if it keeps happening send us the reference below."
+      title={t.pageDidntLoad}
+      body={t.errorBody}
       reference={error.digest}
     >
-      <button onClick={reset} className={statusPrimaryCls}>Try again</button>
-      <Link href="/dashboard" className={statusSecondaryCls}>Back to the dashboard</Link>
+      <button onClick={reset} className={statusPrimaryCls}>{t.tryAgain}</button>
+      <Link href="/dashboard" className={statusSecondaryCls}>{t.backToDashboard}</Link>
     </StatusPage>
   );
 }

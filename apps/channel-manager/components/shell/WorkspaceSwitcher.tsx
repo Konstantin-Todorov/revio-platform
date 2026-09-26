@@ -3,12 +3,16 @@
 import { useState, useRef, useEffect } from "react";
 import { Building2, ChevronDown, Check } from "lucide-react";
 import { setActiveProperty } from "@/lib/actions-session";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { shell } from "@/lib/i18n/shell";
 
 type Item = { id: string; name: string; tenantName: string };
 
 export function WorkspaceSwitcher({ properties, activeId, activeName }: { properties: Item[]; activeId: string; activeName: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const t = translate(shell, useLocale()).switcher;
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
@@ -37,7 +41,7 @@ export function WorkspaceSwitcher({ properties, activeId, activeName }: { proper
       {open && (
         <div className="absolute right-0 z-30 mt-1.5 w-72 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
           <div className="border-b border-surface-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">
-            Your properties
+            {t.yourProperties}
           </div>
           <div className="max-h-80 overflow-y-auto py-1">
             {Object.entries(byTenant).map(([tenant, items]) => (

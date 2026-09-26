@@ -1,7 +1,12 @@
 import { Logo } from "@/components/shell/Logo";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { LanguageSwitch } from "@/components/auth/LanguageSwitch";
+import { i18n } from "@/lib/i18n/server";
+import { auth } from "@/lib/i18n/auth";
 
-export const metadata = { title: "Sign in · RevioLink" };
+export async function generateMetadata() {
+  return { title: (await i18n()).t(auth).login.meta };
+}
 
 /**
  * The first screen anybody sees, and for a hotel deciding whether to trust us with its bookings,
@@ -39,6 +44,9 @@ export default async function LoginPage({
   const sp = await searchParams;
   const justSet = sp.passwordSet === "1";
   const defaultEmail = sp.email;
+  const { t: tr, locale } = await i18n();
+  const a = tr(auth);
+  const t = a.login;
 
   return (
     <div className="flex min-h-screen items-stretch bg-white">
@@ -66,7 +74,7 @@ export default async function LoginPage({
               Revio<span className="text-product-mark">Link</span>
             </div>
             <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">
-              Channel Manager
+              {t.tagline}
             </div>
           </div>
         </div>
@@ -75,21 +83,16 @@ export default async function LoginPage({
             the footnote pinned by `mt-auto` below. */}
         <div className="relative my-auto max-w-md">
           <h1 className="text-[32px] font-bold leading-[1.15] tracking-[-0.02em]">
-            One hub. Every channel.<br />Always in sync.
+            {t.headline}
           </h1>
           <p className="mt-4 text-[14.5px] leading-relaxed text-white/60">
-            Push availability, rates and restrictions to every OTA — and pull every booking back —
-            from a single calendar.
+            {t.pitch}
           </p>
 
           {/* Three facts rather than a testimonial we do not have. Hairlines, not boxes: the panel
               stays quiet and the eye still gets somewhere to land below the headline. */}
           <dl className="mt-10 grid grid-cols-3 gap-px overflow-hidden rounded-lg bg-white/10">
-            {[
-              ["One", "source of truth for availability"],
-              ["Every", "booking pulled back automatically"],
-              ["Zero", "migration to add another product"],
-            ].map(([k, v]) => (
+            {t.facts.map(([k, v]) => (
               <div key={k} className="bg-brand-900/60 px-3.5 py-3 backdrop-blur-sm">
                 <dt className="text-[15px] font-semibold text-product-mark">{k}</dt>
                 <dd className="mt-1 text-[11.5px] leading-snug text-white/50">{v}</dd>
@@ -98,29 +101,30 @@ export default async function LoginPage({
           </dl>
         </div>
 
-        <div className="relative text-[12px] text-white/35">© Revio · hotel distribution</div>
+        <div className="relative text-[12px] text-white/35">{t.footer}</div>
       </div>
 
       {/* ── Form ────────────────────────────────────────────────────────────────────── */}
-      <div className="flex w-full items-center justify-center px-6 py-10 lg:w-1/2">
+      <div className="relative flex w-full items-center justify-center px-6 py-10 lg:w-1/2">
+        <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={a.language} /></div>
         <div className="w-full max-w-[22rem]">
           <div className="mb-7 lg:hidden">
             <Logo className="h-9 w-9" />
           </div>
 
           <h2 className="text-[22px] font-bold leading-tight tracking-[-0.01em] text-ink-900">
-            Sign in to RevioLink
+            {t.title}
           </h2>
-          <p className="mb-7 mt-1.5 text-[13.5px] text-ink-500">Welcome back — manage your distribution.</p>
+          <p className="mb-7 mt-1.5 text-[13.5px] text-ink-500">{t.intro}</p>
 
-          <LoginForm justSet={justSet} {...(defaultEmail ? { defaultEmail } : {})} />
+          <LoginForm justSet={justSet} emailPlaceholder={t.emailPlaceholder} accessNote={t.accessNote} {...(defaultEmail ? { defaultEmail } : {})} />
 
           {/* Opt-in, and off unless SHOW_DEMO_LOGINS=1 is set — a paying hotel must never be shown
               someone else's credentials on the sign-in page. Server-side env (never NEXT_PUBLIC), so
               the credentials are not in the client bundle either. */}
           {process.env.SHOW_DEMO_LOGINS === "1" && (
             <div className="mt-7 rounded-lg border border-surface-border bg-surface-muted px-3.5 py-3 text-[11.5px] leading-relaxed text-ink-500">
-              <span className="font-semibold text-ink-700">Demo logins</span> (password{" "}
+              <span className="font-semibold text-ink-700">{t.demoLogins}</span> ({t.password}{" "}
               <code className="rounded bg-white px-1 py-0.5">revio1234</code>)<br />
               Hotel Sofia → <code className="rounded bg-white px-1 py-0.5">admin@hotelsofia.demo</code>
               <br />

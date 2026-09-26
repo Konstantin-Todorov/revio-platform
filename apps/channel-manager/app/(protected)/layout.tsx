@@ -16,6 +16,9 @@ import { publicBaseUrl } from "@revio/email";
 import { trialBanner, isTrialDecider, roleCanOpenProduct } from "@revio/core";
 import { TrialStrip } from "@revio/ui/trial-banner";
 import { keepThisTrial } from "@/lib/actions-self-trial";
+import { i18n } from "@/lib/i18n/server";
+import { shell } from "@/lib/i18n/shell";
+import { translationOn } from "@/lib/i18n/ready";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -73,6 +76,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const activeTimeZone = allProperties.find((p) => p.id === session.activePropertyId)?.timezone ?? "UTC";
   const feed = await getNotificationFeed();
   const connectivityLabel = await getConnectivityLabel();
+  const t = (await i18n()).t(shell);
 
   /* One login, every product the hotel bought — resolved here because the account menu is a
      client component and only the server can read the sibling hostnames. */
@@ -113,7 +117,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar connectivityLabel={connectivityLabel} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
-          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} feed={feed} timeZone={activeTimeZone} />
+          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} roleLabel={t.roles[session.role] ?? session.role} userName={session.userName} feed={feed} timeZone={activeTimeZone} canSwitchLanguage={translationOn()} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate

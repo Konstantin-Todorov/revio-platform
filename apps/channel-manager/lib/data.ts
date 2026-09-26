@@ -4,6 +4,8 @@ import { prisma } from "./db";
 import { CAPABILITY_ERROR_CODE, dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, displayedRate, rateSourceNote, toResolvablePlan, type PriceLookup, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type SetupFacts, type ProductName } from "@revio/core";
 import { collidingExternalIds, describeStructureGap, mappingRows, ratePlanMappingRows, structureGap } from "@revio/connectivity";
 import { getSession } from "./session";
+import { i18n } from "./i18n/server";
+import { shell as shellDict } from "./i18n/shell";
 
 const DAY = 86_400_000;
 function addDays(d: Date, n: number): Date {
@@ -251,13 +253,14 @@ export async function getConnectivityLabel(): Promise<string> {
     where: { propertyId: property.id, status: { not: "disconnected" } },
     select: { connectivityMode: true },
   });
-  if (channels.length === 0) return "No channels connected";
-  const live = channels.filter((c) => c.connectivityMode === "channex_prod").length;
-  const sandbox = channels.filter((c) => c.connectivityMode === "channex_sandbox").length;
-  if (live === channels.length) return `Live · ${live} channel${live === 1 ? "" : "s"}`;
-  if (live > 0) return `${live} live · ${channels.length - live} in test`;
-  if (sandbox > 0) return "Test connection (sandbox)";
-  return "Test connection · nothing is sent to the OTAs";
+  const c = (await i18n()).t(shellDict).connectivity;
+  if (channels.length === 0) return c.none;
+  const live = channels.filter((ch) => ch.connectivityMode === "channex_prod").length;
+  const sandbox = channels.filter((ch) => ch.connectivityMode === "channex_sandbox").length;
+  if (live === channels.length) return c.live(live);
+  if (live > 0) return c.mixed(live, channels.length - live);
+  if (sandbox > 0) return c.sandbox;
+  return c.mock;
 }
 
 /** First-run facts for the setup checklist — see `reviolinkSetup` in @revio/core. */

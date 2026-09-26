@@ -9,26 +9,29 @@ import {
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 import { NAV_HEADING_CLASS, NAV_ROW_CLASS, NAV_SCROLL_CLASS, navTail } from "@revio/ui/nav-tail";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { shell, type ShellStrings } from "@/lib/i18n/shell";
 
 type Item = { href: string; label: string; icon: typeof LayoutDashboard; badge?: number; tone?: "danger" | "warning" };
 
 // V2 nav (docs/specs/CM-GUIDE-V2.md §2): grouped by mode of use — daily rate work (Revenue
 // Manager), occasional channel configuration (Distribution Manager), operational monitoring, and
 // the bottom-anchored Account group for rarely-touched admin.
-const SECTIONS: { title?: string; items: Item[] }[] = [
+const SECTIONS: { title?: keyof ShellStrings["sections"]; items: Item[] }[] = [
   { items: [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   ] },
-  { title: "Rates & Availability", items: [
+  { title: "rates", items: [
     { href: "/calendar", label: "Calendar", icon: CalendarDays },
     { href: "/bulk-update", label: "Bulk Rates & Restrictions", icon: SlidersHorizontal },
     { href: "/rooms-rates", label: "Rooms & Rates", icon: BedDouble },
   ] },
-  { title: "Channels", items: [
+  { title: "channels", items: [
     { href: "/channels", label: "Channels", icon: Radio },
     { href: "/mapping", label: "Mapping", icon: Link2 },
   ] },
-  { title: "Operations", items: [
+  { title: "operations", items: [
     { href: "/reservations", label: "Reservations", icon: CalendarCheck },
     { href: "/sync", label: "Sync Center", icon: RefreshCw },
   ] },
@@ -64,6 +67,7 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
   const activeHref = bestMatch(pathname);
+  const t = translate(shell, useLocale());
 
   const renderItems = (items: Item[]) =>
     items.map((item) => {
@@ -91,7 +95,7 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
                     }`}
                     strokeWidth={2}
                   />
-          <span className="flex-1">{item.label}</span>
+          <span className="flex-1">{t.nav[item.href as keyof ShellStrings["nav"]] ?? item.label}</span>
           {item.badge ? (
             <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
               item.tone === "danger" ? "bg-danger-500 text-white" : "bg-warning-500 text-brand-900"
@@ -125,13 +129,13 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
             Revio<span className="text-product-mark">Link</span>
           </div>
           <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-white/45">
-            Channel Manager
+            {t.product}
           </div>
         </div>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          aria-label="Close menu"
+          aria-label={t.menu.closeMenu}
           className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
         >
           <X className="h-5 w-5" />
@@ -143,7 +147,7 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
           <div key={i} className="mb-1">
             {section.title && (
               <div className={`${NAV_HEADING_CLASS} text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35`}>
-                {section.title}
+                {t.sections[section.title]}
               </div>
             )}
             {renderItems(section.items)}
