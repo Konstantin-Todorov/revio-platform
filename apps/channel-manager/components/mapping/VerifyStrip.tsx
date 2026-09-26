@@ -3,6 +3,9 @@
 import { useActionState } from "react";
 import { AlertTriangle, CheckCircle2, RefreshCcw, SearchCheck } from "lucide-react";
 import { verifyChannelPublished, type VerifyActionResult } from "@/lib/actions-config";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { mapping as mappingDict } from "@/lib/i18n/mapping";
 
 /**
  * "What is the channel actually publishing?" — the only answer in this product that reads the
@@ -26,7 +29,10 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
     null,
   );
 
-  const money = (m: number | null) => (m == null ? "—" : `€${(m / 100).toLocaleString("en-US")}`);
+  const locale = useLocale();
+  const v = translate(mappingDict, locale).verify;
+  const money = (m: number | null) =>
+    m == null ? "—" : locale === "bg" ? `${(m / 100).toLocaleString("bg-BG")} €` : `€${(m / 100).toLocaleString("en-US")}`;
 
   return (
     <div id="verify" className="mb-3 scroll-mt-4 rounded-md border border-surface-border bg-white px-4 py-3">
@@ -34,15 +40,14 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
         <input type="hidden" name="channelId" value={channelId} />
         <SearchCheck className="h-4 w-4 shrink-0 text-ink-400" />
         <span className="text-[12.5px] text-ink-600">
-          Read back what <strong className="font-semibold text-ink-800">{channelName}</strong> is publishing right now,
-          and compare it with what we hold.
+          {v.lead[0]}<strong className="font-semibold text-ink-800">{channelName}</strong>{v.lead[1]}
         </span>
         <button
           disabled={pending}
           className="ml-auto flex h-8 items-center gap-1.5 rounded-md border border-surface-border px-3 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted disabled:opacity-60"
         >
           <RefreshCcw className={`h-3.5 w-3.5 ${pending ? "animate-spin" : ""}`} />
-          {pending ? "Reading…" : "Verify"}
+          {pending ? v.reading : v.button}
         </button>
       </form>
 
@@ -93,20 +98,19 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
                     {e.roomTypeName
                       ? `${e.roomTypeName} · ${e.ratePlanName}`
                       : e.channelPlanName
-                        ? `${channelName} plan “${e.channelPlanName}”`
-                        : `Channel rate plan ${e.externalRateId.slice(0, 8)}…`}
+                        ? v.plan(channelName, e.channelPlanName)
+                        : v.anonymous(e.externalRateId.slice(0, 8))}
                   </span>{" "}
                   {e.date} —{" "}
                   {e.kind === "missing"
-                    ? `we have ${money(e.ours)}, they have nothing`
+                    ? v.missing(money(e.ours))
                     : e.kind === "unexpected"
-                      ? `they publish ${money(e.theirs)}, and Revio does not manage this plan`
-                      : `we have ${money(e.ours)}, they publish ${money(e.theirs)}`}
+                      ? v.unexpected(money(e.theirs))
+                      : v.mismatch(money(e.ours), money(e.theirs))}
                   {/* The cause, when it is knowable — a derived plan ignores what we send. */}
                   {e.kind === "mismatch" && e.derivedFrom && (
                     <span className="block pl-3 text-ink-500">
-                      {channelName} calculates this plan from {e.derivedFrom} and ignores the price we send. Make it derived in
-                      Rooms &amp; Rates with the same discount, or switch derivation off in {channelName}.
+                      {v.derived(channelName, e.derivedFrom)}
                     </span>
                   )}
                 </li>
@@ -116,8 +120,7 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
           {/* A plan the channel sells that nobody in Revio controls — the price guests see there is not ours to change. */}
           {state.examples?.some((e) => e.kind === "unexpected") && (
             <p className="mt-1.5 pl-6 text-[12px] text-ink-500">
-              Plans Revio does not manage keep whatever price was last set in {channelName}. If one of them is connected to an
-              OTA, it sells at that price — map it here, or close it in {channelName}.
+              {v.unmanaged(channelName)}
             </p>
           )}
 
@@ -137,15 +140,14 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
               ) : (
                 <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
               )}
-              <span>Rooms: {state.rooms.ok ? state.rooms.headline : state.rooms.error}</span>
+              <span>{v.rooms((state.rooms.ok ? state.rooms.headline : state.rooms.error) ?? "")}</span>
             </p>
           )}
           {state.rooms?.examples && state.rooms.examples.length > 0 && (
             <ul className="mt-1.5 space-y-1 pl-6 text-[12px] text-ink-600">
               {state.rooms.examples.map((e, i) => (
                 <li key={`${e.roomTypeName}-${e.date}-${i}`} className="tnum">
-                  <span className="font-semibold text-ink-800">{e.roomTypeName}</span> {e.date} — we send {e.ours}
-                  {e.closedByStopSell ? " (stop-sell on every plan)" : ""}, they offer {e.theirs ?? "nothing"}
+                  <span className="font-semibold text-ink-800">{e.roomTypeName}</span> {e.date} — {v.roomLine(e.ours, e.closedByStopSell, e.theirs)}
                 </li>
               ))}
             </ul>

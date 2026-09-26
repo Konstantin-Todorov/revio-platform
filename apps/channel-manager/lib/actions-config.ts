@@ -14,6 +14,12 @@ import { earliestSelectable, renderSystemEmail, renderSystemEmailText, todayInTi
 import { verifyPublished, verifyPublishedAvailability } from "@revio/connectivity";
 import { i18n } from "./i18n/server";
 import { rateErrors } from "./i18n/rate-errors";
+import { channelErrors } from "./i18n/channel-errors";
+
+/** The refusal words, in the reader's language — see `lib/i18n/channel-errors.ts`. */
+async function sayCh() {
+  return (await i18n()).t(channelErrors);
+}
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -151,10 +157,7 @@ export async function fixMappings(fd: FormData): Promise<void> {
    * come from Channex, so the honest answer is to refuse and say where they come from.
    */
   if (channel.connectivityMode !== "mock") {
-    return flashError(
-      `${channel.name} is a real channel, so its ids have to come from Channex — a made-up one would push to nothing. ` +
-        "Use Re-pull products, then map each room's rate plans from the list.",
-    );
+    return flashError((await sayCh()).realChannelNoAutofix(channel.name));
   }
 
   // Fill any unmapped room types and rate plans with a deterministic mock external id.
@@ -204,16 +207,16 @@ async function createMappingRow(
     roomTypeId?: string | null;
   },
 ): Promise<{ ok: true; channelName: string; productName: string } | { ok: false; error: string }> {
-  if (!args.productId) return { ok: false, error: "That row is not linked to a room type or rate plan. Reload the page." };
+  if (!args.productId) return { ok: false, error: (await sayCh()).mapping.rowNotLinked };
 
   const channel = args.channelId
     ? await prisma.channel.findFirst({ where: { id: args.channelId, propertyId: args.propertyId } })
     : await prisma.channel.findFirst({ where: { propertyId: args.propertyId, status: "connected" }, orderBy: { name: "asc" } });
-  if (!channel) return { ok: false, error: "No connected channel to map against. Connect one first." };
+  if (!channel) return { ok: false, error: (await sayCh()).mapping.noChannel };
 
   if (kind === "room") {
     const rt = await prisma.roomType.findFirst({ where: { id: args.productId, propertyId: args.propertyId } });
-    if (!rt) return { ok: false, error: "That room type no longer exists." };
+    if (!rt) return { ok: false, error: (await sayCh()).mapping.roomGone };
     await prisma.channelRoomTypeMapping.create({
       data: {
         tenantId: args.tenantId, channelId: channel.id, roomTypeId: rt.id,
@@ -224,14 +227,14 @@ async function createMappingRow(
   }
 
   const rp = await prisma.ratePlan.findFirst({ where: { id: args.productId, propertyId: args.propertyId } });
-  if (!rp) return { ok: false, error: "That rate plan no longer exists." };
+  if (!rp) return { ok: false, error: (await sayCh()).mapping.planGone };
 
   // Verified against this property, never trusted from the form — a mapping written against another
   // hotel's room type would be a cross-tenant write.
   let roomTypeId: string | null = null;
   if (args.roomTypeId) {
     const rt = await prisma.roomType.findFirst({ where: { id: args.roomTypeId, propertyId: args.propertyId } });
-    if (!rt) return { ok: false, error: "That room type no longer exists." };
+    if (!rt) return { ok: false, error: (await sayCh()).mapping.roomGone };
     roomTypeId = rt.id;
   }
 
@@ -280,7 +283,7 @@ export async function updateStreamMapping(_prev: ActionResult | null, fd: FormDa
     const m = id
       ? await prisma.channelRoomTypeMapping.findUnique({ where: { id }, include: { channel: true, roomType: true } })
       : null;
-    if (id && (!m || m.tenantId !== tenantId)) return { ok: false, error: "Mapping not found." };
+    if (id && (!m || m.tenantId !== tenantId)) return { ok: false, error: (await sayCh()).mapping.notFound };
 
     if (m) {
       await prisma.channelRoomTypeMapping.update({ where: { id: m.id }, data: { externalRoomId: externalId, status } });
@@ -294,7 +297,7 @@ export async function updateStreamMapping(_prev: ActionResult | null, fd: FormDa
     const m = id
       ? await prisma.channelRatePlanMapping.findUnique({ where: { id }, include: { channel: true, ratePlan: true } })
       : null;
-    if (id && (!m || m.tenantId !== tenantId)) return { ok: false, error: "Mapping not found." };
+    if (id && (!m || m.tenantId !== tenantId)) return { ok: false, error: (await sayCh()).mapping.notFound };
 
     if (m) {
       await prisma.channelRatePlanMapping.update({ where: { id: m.id }, data: { externalRateId: externalId, status } });
@@ -333,7 +336,7 @@ export async function saveChannelSettings(_prev: ActionResult | null, fd: FormDa
   const externalPropertyId = str(fd, "externalPropertyId") || null;
 
   const ch = await prisma.channel.findUnique({ where: { id } });
-  if (!ch) return { ok: false, error: "Unknown channel." };
+  if (!ch) return { ok: false, error: (await sayCh()).unknownChannel };
   await prisma.channel.update({ where: { id }, data: { currency, conversionType, markupPct, commissionPct, rounding, connectivityMode, externalPropertyId } });
   await logAudit(propertyId, tenantId, { entity: `Channel · ${ch.name}`, field: "settings", newValue: `${markupPct}% markup` });
   await recordPush(propertyId, tenantId, `Channel settings updated for ${ch.name}`);
@@ -355,10 +358,10 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
   const name = (KNOWN_OTAS[code] ?? str(fd, "name")) || code;
   const currency = property.baseCurrency; // inherit the property currency
   const externalPropertyId = str(fd, "externalPropertyId") || null;
-  if (!code) return { ok: false, error: "Pick a channel." };
+  if (!code) return { ok: false, error: (await sayCh()).pickChannel };
 
   const exists = await prisma.channel.findFirst({ where: { propertyId, code } });
-  if (exists) return { ok: false, error: `${name} is already connected.` };
+  if (exists) return { ok: false, error: (await sayCh()).alreadyConnected(name) };
 
   const channel = await prisma.channel.create({
     data: {
@@ -444,7 +447,7 @@ export async function pauseChannelAction(fd: FormData): Promise<void> {
   // Said on the screen, not only in the audit log. The channel reads "paused" either way — that is
   // deliberate — so without this a hotel that pressed it during an incident sees the button work
   // while the OTA goes on selling.
-  if (!out.ok) return flashError(out.error ?? "The channel did not confirm the change.");
+  if (!out.ok) return flashError(out.error ?? (await sayCh()).notConfirmed);
 }
 
 export async function resumeChannelAction(fd: FormData): Promise<void> {
@@ -479,7 +482,7 @@ export async function disconnectChannelAction(fd: FormData): Promise<void> {
   // Said on the screen, not only in the audit log. The channel reads "disconnectd" either way — that is
   // deliberate — so without this a hotel that pressed it during an incident sees the button work
   // while the OTA goes on selling.
-  if (!out.ok) return flashError(out.error ?? "The channel did not confirm the change.");
+  if (!out.ok) return flashError(out.error ?? (await sayCh()).notConfirmed);
 }
 
 export async function reconnectChannelAction(fd: FormData): Promise<void> {
@@ -513,7 +516,7 @@ export async function reimportChannelBookings(fd: FormData): Promise<void> {
   await requireCapability("manageDistribution");
   const { id: propertyId, tenantId } = await getProperty();
   const channelId = str(fd, "channelId");
-  if (!channelId) return flashError("Choose a channel to re-import from.");
+  if (!channelId) return flashError((await sayCh()).reimport.choose);
 
   const outcome = await sharedReimport(channelId);
   await logAudit(propertyId, tenantId, {
@@ -526,20 +529,16 @@ export async function reimportChannelBookings(fd: FormData): Promise<void> {
   revalidatePath("/sync");
   revalidatePath("/reservations");
 
+  const ri = (await sayCh()).reimport;
   if (!outcome.ok) {
-    return flashError(`Could not re-import: ${outcome.error ?? "the channel did not answer"}.`);
+    return flashError(ri.failed(outcome.error ?? ri.noAnswer));
   }
   if (outcome.failedImport > 0) {
-    return setFlash(
-      "info",
-      `${outcome.imported + outcome.updated} booking(s) brought in. ${outcome.failedImport} still reference a room or rate that is not mapped — finish those in Mapping and run this again.`,
-    );
+    return setFlash("info", ri.stillUnmapped(outcome.imported + outcome.updated, outcome.failedImport));
   }
   return setFlash(
     "success",
-    outcome.imported + outcome.updated === 0
-      ? "Nothing new to bring in — every booking the channel has is already here."
-      : `${outcome.imported} new and ${outcome.updated} updated booking(s) brought in.`,
+    outcome.imported + outcome.updated === 0 ? ri.nothingNew : ri.brought(outcome.imported, outcome.updated),
   );
 }
 
@@ -754,7 +753,10 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
   const channelId = str(fd, "channelId");
   // Resolved against this property, never trusted from the form.
   const channel = await prisma.channel.findFirst({ where: { id: channelId, propertyId } });
-  if (!channel) return { error: "That channel is not on this property." };
+  const ce = await sayCh();
+  if (!channel) return { error: ce.verify.notHere };
+  // Connectivity refuses a demo channel too, in English; said here first so it is in the reader's words.
+  if (channel.connectivityMode === "mock") return { error: ce.verify.demo(channel.name) };
 
   const [result, rooms] = await Promise.all([
     verifyPublished(prisma, channel.id),
@@ -762,7 +764,7 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
   ]);
   if (!result.ok || !result.summary) {
     // A failure to LOOK is reported as one, never as "nothing wrong".
-    return { error: result.error ?? "Could not read the channel." };
+    return { error: result.error ?? ce.verify.couldNotRead };
   }
 
   /*
@@ -781,9 +783,25 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
   });
   revalidatePath("/channels");
 
+  // The two headlines are connectivity's `summarisePublished` / `verifyPublishedAvailability`, worded
+  // for the reader from the same counts; the Sync Center line above keeps the English record.
+  const vp = ce.verify.prices;
+  const sm = result.summary;
+  const headline = sm.checked === 0
+    ? vp.nothing
+    : sm.mismatched + sm.missing + sm.unexpected === 0
+      ? vp.exact(sm.matched)
+      : [
+          sm.mismatched > 0 ? vp.mismatched(sm.mismatched) : null,
+          sm.missing > 0 ? vp.missing(sm.missing) : null,
+          sm.unexpected > 0 ? vp.unexpected(sm.unexpected) : null,
+        ].filter(Boolean).join(" · ");
+  const vr = ce.verify.rooms;
+  const roomsHeadline = rooms.checked === 0 ? vr.nothing : rooms.mismatched === 0 ? vr.exact(rooms.checked) : vr.off(rooms.mismatched, rooms.checked);
+
   return {
     ok: true,
-    headline: result.summary.headline,
+    headline,
     examples: result.summary.examples.map((e) => {
       const plan = result.channelPlans?.[e.externalRateId];
       return {
@@ -796,7 +814,7 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
     }),
     window: `${result.from} → ${result.to}`,
     rooms: rooms.ok
-      ? { ok: true, headline: rooms.headline, examples: rooms.examples }
-      : { ok: false, error: rooms.error ?? "Could not read room counts." },
+      ? { ok: true, headline: roomsHeadline, examples: rooms.examples }
+      : { ok: false, error: rooms.error ?? ce.verify.couldNotReadRooms },
   };
 }

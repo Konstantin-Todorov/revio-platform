@@ -6,8 +6,15 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { logAudit, recordPush, str, int } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
+import { i18n } from "./i18n/server";
+import { rateErrors } from "./i18n/rate-errors";
 
 export type ActionResult = { ok: boolean; error?: string };
+
+/** The refusal words, in the reader's language — see `lib/i18n/rate-errors.ts`. */
+async function say() {
+  return (await i18n()).t(rateErrors);
+}
 
 // --- Room Types ------------------------------------------------------------
 
@@ -21,8 +28,8 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   const name = str(fd, "name");
   const code = str(fd, "code").toUpperCase();
   const rowId = str(fd, "id");
-  if (!name) return { ok: false, error: "Name is required." };
-  if (!code) return { ok: false, error: "Code is required." };
+  if (!name) return { ok: false, error: (await say()).nameRequired };
+  if (!code) return { ok: false, error: (await say()).codeRequired };
 
   const totalRooms = Math.max(0, int(fd, "totalRooms"));
   const maxGuests = Math.max(1, int(fd, "maxGuests", 1));
@@ -34,7 +41,7 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
   const clash = await prisma.roomType.findFirst({
     where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) },
   });
-  if (clash) return { ok: false, error: `Code "${code}" is already used by another room type.` };
+  if (clash) return { ok: false, error: (await say()).roomCodeTaken(code) };
 
   if (rowId) {
     const before = await prisma.roomType.findUnique({ where: { id: rowId } });
@@ -110,8 +117,8 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
   const name = str(fd, "name");
   const code = str(fd, "code").toUpperCase();
   const rowId = str(fd, "id");
-  if (!name) return { ok: false, error: "Name is required." };
-  if (!code) return { ok: false, error: "Code is required." };
+  if (!name) return { ok: false, error: (await say()).nameRequired };
+  if (!code) return { ok: false, error: (await say()).codeRequired };
 
   const tags = str(fd, "tags").split(",").map((t) => t.trim()).filter(Boolean);
   const priceLogic = str(fd, "priceLogic") || "manual";
@@ -130,7 +137,7 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
       : { parentRatePlanId: null, derivedType: null, derivedDirection: null, derivedValue: null, derivedRounding: null };
 
   if (priceLogic === "derived" && !derived.parentRatePlanId) {
-    return { ok: false, error: "A derived rate needs a parent rate plan." };
+    return { ok: false, error: (await say()).derivedNeedsParent };
   }
 
   // Rate-plan-level restrictions (blank field = no rule → null). Min/Max stay apply to all dates;
@@ -149,7 +156,7 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
   };
 
   const clash = await prisma.ratePlan.findFirst({ where: { propertyId, code, ...(rowId ? { id: { not: rowId } } : {}) } });
-  if (clash) return { ok: false, error: `Code "${code}" is already used by another rate plan.` };
+  if (clash) return { ok: false, error: (await say()).planCodeTaken(code) };
 
   if (rowId) {
     await prisma.ratePlan.update({ where: { id: rowId }, data: { name, code, tags, priceLogic, active, ...derived, ...restrictions } });
@@ -226,7 +233,7 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   if (!g.ok) return { ok: false, error: g.error };
   const { id: propertyId, tenantId } = await getProperty();
   const plan = await prisma.ratePlan.findFirst({ where: { id: payload.ratePlanId, propertyId } });
-  if (!plan) return { ok: false, error: "Rate plan not found." };
+  if (!plan) return { ok: false, error: (await say()).planNotFound };
 
   // Unlink → back to a manual, hand-entered rate.
   if (payload.mode === "unlink") {
@@ -242,13 +249,13 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   }
 
   const parentId = payload.parentRatePlanId;
-  if (!parentId) return { ok: false, error: "Choose a parent rate plan." };
-  if (parentId === plan.id) return { ok: false, error: "A rate plan can’t derive from itself." };
+  if (!parentId) return { ok: false, error: (await say()).chooseParent };
+  if (parentId === plan.id) return { ok: false, error: (await say()).selfParent };
 
   const all = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true, name: true, priceLogic: true, parentRatePlanId: true } });
   const byId = new Map(all.map((p) => [p.id, p]));
   const parent = byId.get(parentId);
-  if (!parent) return { ok: false, error: "Parent rate plan not found." };
+  if (!parent) return { ok: false, error: (await say()).parentNotFound };
 
   // Walk UP from the proposed parent: reject a loop back to this plan, cap the depth, and require the
   // chain to terminate at a MANUAL root.
@@ -256,15 +263,15 @@ export async function saveRatePlanLinkage(payload: LinkagePayload): Promise<Acti
   let depth = 1;
   const seen = new Set<string>();
   while (cursor) {
-    if (cursor.id === plan.id) return { ok: false, error: "That would create a loop — a rate can’t derive from one of its own descendants." };
+    if (cursor.id === plan.id) return { ok: false, error: (await say()).loop };
     if (seen.has(cursor.id)) break;
     seen.add(cursor.id);
     if (cursor.priceLogic === "manual" || !cursor.parentRatePlanId) break; // reached a manual root
     depth++;
-    if (depth > MAX_LINKAGE_DEPTH) return { ok: false, error: `Derivation chains are limited to ${MAX_LINKAGE_DEPTH} levels — link to a plan closer to the base rate.` };
+    if (depth > MAX_LINKAGE_DEPTH) return { ok: false, error: (await say()).tooDeep(MAX_LINKAGE_DEPTH) };
     cursor = byId.get(cursor.parentRatePlanId) ?? undefined;
   }
-  if (!cursor || cursor.priceLogic !== "manual") return { ok: false, error: "A derived rate must ultimately trace back to a manual base rate." };
+  if (!cursor || cursor.priceLogic !== "manual") return { ok: false, error: (await say()).mustTraceToManual };
 
   await prisma.ratePlan.update({
     where: { id: plan.id },

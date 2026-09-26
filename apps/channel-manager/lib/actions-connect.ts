@@ -25,6 +25,13 @@ import { prisma } from "./db";
 import { getProperty } from "./data";
 import { guard } from "./authz";
 import { logAudit } from "./mutation-helpers";
+import { i18n } from "./i18n/server";
+import { channelErrors } from "./i18n/channel-errors";
+
+/** The refusal words, in the reader's language — see `lib/i18n/channel-errors.ts`. */
+async function sayCh() {
+  return (await i18n()).t(channelErrors);
+}
 
 /**
  * Connecting a real OTA, from RevioLink, without anyone opening the Channex dashboard.
@@ -60,14 +67,13 @@ export async function loadChannelForm(code: string): Promise<FormResult> {
   if (!mode) {
     return {
       ok: false,
-      error:
-        "This property is not connected to Channex yet. It needs a Channex property before a channel can be added.",
+      error: (await sayCh()).notOnChannexAddFirst,
     };
   }
 
   const cfg = await channexApiConfig(property.tenantId, mode);
   const descriptor = await fetchChannelAdapter(cfg, code);
-  if (!descriptor) return { ok: false, error: `Channex does not recognise the channel code "${code}".` };
+  if (!descriptor) return { ok: false, error: (await sayCh()).channexUnknownCode(code) };
 
   return {
     ok: true,
@@ -94,23 +100,23 @@ export async function connectChannel(_prev: ConnectResult | null, fd: FormData):
   if (!g.ok) return { ok: false, error: g.error };
 
   const code = String(fd.get("code") ?? "").trim();
-  if (!code) return { ok: false, error: "Pick a channel." };
+  if (!code) return { ok: false, error: (await sayCh()).pickChannel };
   const known = CHANNEL_CODES.find((c) => c.code === code);
-  if (!known) return { ok: false, error: `Unknown channel code "${code}".` };
+  if (!known) return { ok: false, error: (await sayCh()).unknownCode(code) };
 
   const property = await getProperty();
   const mode = await modeFor(property.id);
-  if (!mode) return { ok: false, error: "This property is not connected to Channex yet." };
+  if (!mode) return { ok: false, error: (await sayCh()).notOnChannexYet };
 
   const externalPropertyId = await channexPropertyId(property.id);
-  if (!externalPropertyId) return { ok: false, error: "This property has no Channex property id." };
+  if (!externalPropertyId) return { ok: false, error: (await sayCh()).noChannexPropertyId };
 
   const exists = await prisma.channel.findFirst({ where: { propertyId: property.id, code } });
-  if (exists) return { ok: false, error: `${known.name} is already connected.` };
+  if (exists) return { ok: false, error: (await sayCh()).alreadyConnected(known.name) };
 
   const cfg = await channexApiConfig(property.tenantId, mode);
   const descriptor = await fetchChannelAdapter(cfg, code);
-  if (!descriptor) return { ok: false, error: `Channex does not recognise "${code}".` };
+  if (!descriptor) return { ok: false, error: (await sayCh()).channexUnknownCode(code) };
 
   // Start from the descriptor's own defaults so hidden and unedited fields keep the values Channex
   // expects, then overlay only what the person actually typed.
@@ -130,7 +136,7 @@ export async function connectChannel(_prev: ConnectResult | null, fd: FormData):
   // Respects the conditional rules, so a field Channex would hide is not demanded. Returns the
   // hotel's own labels ("Hotel ID"), which is what the message should say.
   const missing = missingRequired(descriptor, settings);
-  if (missing.length > 0) return { ok: false, error: `Still needed: ${missing.join(", ")}.` };
+  if (missing.length > 0) return { ok: false, error: (await sayCh()).stillNeeded(missing.join(", ")) };
 
   const test = await testChannelConnection(cfg, code, externalPropertyId, settings);
   if (!test.ok) {
@@ -138,9 +144,7 @@ export async function connectChannel(_prev: ConnectResult | null, fd: FormData):
       ok: false,
       // The most likely cause by far, and the one the hotel can act on — so it is said first, before
       // the API's own message.
-      error:
-        `${known.name} did not accept these details. The usual cause is that the hotel has not yet ` +
-        `authorised us in their ${known.name} extranet. — ${test.message}`,
+      error: (await sayCh()).notAccepted(known.name, test.message),
     };
   }
 
@@ -221,15 +225,15 @@ export async function provisionChannex(): Promise<ProvisionOutcome> {
     where: { id: property.tenantId },
     select: { name: true, isDemo: true, hasChannelManager: true },
   });
-  if (!tenant) return { ok: false, error: "Could not read this hotel." };
+  if (!tenant) return { ok: false, error: (await sayCh()).provision.unreadable };
   if (tenant.isDemo) {
     return {
       ok: false,
-      error: "This is a demo hotel. A real Channex property must never point at demo data.",
+      error: (await sayCh()).provision.demo,
     };
   }
   if (!tenant.hasChannelManager) {
-    return { ok: false, error: "RevioLink is not enabled for this hotel." };
+    return { ok: false, error: (await sayCh()).provision.notEnabled };
   }
 
   const already = await prisma.channel.findFirst({
@@ -245,8 +249,7 @@ export async function provisionChannex(): Promise<ProvisionOutcome> {
   if (already) {
     return {
       ok: false,
-      error: "This property is already on Channex. If setup stopped part-way, finish it in Mapping — " +
-        "running setup again would create a second property in Channex that nobody can tell apart.",
+      error: (await sayCh()).provision.already,
     };
   }
 
@@ -363,12 +366,12 @@ async function loadStructureContext() {
     select: { id: true, externalPropertyId: true, connectivityMode: true },
   });
   if (!channel?.externalPropertyId) {
-    return { ok: false as const, error: "This hotel is not on Channex yet — run setup on the Channels screen first." };
+    return { ok: false as const, error: (await sayCh()).send.notSetUp };
   }
   const mode = channel.connectivityMode || (process.env.CHANNEX_MODE === "sandbox" ? "channex_sandbox" : "channex_prod");
   const cfg = await channexApiConfig(property.tenantId, mode);
   if (!cfg.apiKey.trim()) {
-    return { ok: false as const, error: "No Channex API key for this hotel. Add it in the Operator console under Connectivity." };
+    return { ok: false as const, error: (await sayCh()).send.noKey };
   }
 
   const [roomTypes, ratePlans, roomRows, rateRows] = await Promise.all([
@@ -529,9 +532,9 @@ export async function sendProductToChannex(fd: FormData): Promise<CatchupOutcome
   const kind = String(fd.get("kind") ?? "");
   const productId = String(fd.get("productId") ?? "");
   const channelId = String(fd.get("channelId") ?? "");
-  if (kind !== "room" && kind !== "rate") return { ok: false, error: "Say whether this is a room type or a rate plan." };
-  if (!productId) return { ok: false, error: "Nothing was selected to send." };
-  if (!channelId) return { ok: false, error: "No channel was named — reload the page and try again." };
+  if (kind !== "room" && kind !== "rate") return { ok: false, error: (await sayCh()).send.kind };
+  if (!productId) return { ok: false, error: (await sayCh()).send.nothing };
+  if (!channelId) return { ok: false, error: (await sayCh()).send.noChannel };
 
   const property = await getProperty();
   /*
@@ -548,15 +551,15 @@ export async function sendProductToChannex(fd: FormData): Promise<CatchupOutcome
     where: { id: channelId, propertyId: property.id },
     select: { id: true, externalPropertyId: true, connectivityMode: true },
   });
-  if (!channel) return { ok: false, error: "That channel no longer exists — reload the page." };
+  if (!channel) return { ok: false, error: (await sayCh()).send.channelGone };
   if (!channel.externalPropertyId) {
     return {
       ok: false,
-      error: "This property is not on Channex yet — use “Set up on Channex” first, and everything you have now goes in one pass.",
+      error: (await sayCh()).send.setUpFirst,
     };
   }
   if (channel.connectivityMode === "mock") {
-    return { ok: false, error: "This is a demo channel, so there is nothing on the other side to send it to." };
+    return { ok: false, error: (await sayCh()).send.demoChannel };
   }
 
   const [roomTypes, ratePlans, roomMaps] = await Promise.all([
@@ -630,7 +633,16 @@ export async function sendProductToChannex(fd: FormData): Promise<CatchupOutcome
       source: "mapping",
     });
     revalidatePath("/mapping");
-    return { ok: true, message: describeCatchup(result) };
+    const c = (await sayCh()).catchup;
+    // Core's `describeCatchup`, worded for the reader; a skip's reason stays core's.
+    const made = result.steps.filter((st) => !st.adopted).length;
+    const adopted = result.steps.filter((st) => st.adopted).length;
+    const parts = [
+      made > 0 ? c.sent(made) : null,
+      adopted > 0 ? c.adopted(adopted) : null,
+      result.skipped.length > 0 ? c.skipped(result.skipped.length, result.skipped.map((x) => `${x.name}: ${x.why}`).join("; ")) : null,
+    ].filter(Boolean);
+    return { ok: true, message: parts.length > 0 ? `${parts.join(" · ")}.` : c.nothing };
   } catch (e) {
     // Named, never swallowed: this is the screen where a hotel finds out why a room is not on sale.
     return { ok: false, error: e instanceof Error ? e.message : "Channex refused it and gave no reason." };

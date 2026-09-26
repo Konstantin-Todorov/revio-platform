@@ -3,6 +3,9 @@
 import { useState, useTransition } from "react";
 import { Loader2, Radio } from "lucide-react";
 import { provisionChannex } from "@/lib/actions-connect";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { channels as channelsDict } from "@/lib/i18n/channels";
 
 /**
  * "Set this hotel up for channels" — the step that used to be a script only Revio could run.
@@ -16,6 +19,7 @@ import { provisionChannex } from "@/lib/actions-connect";
  * no meter. Saying so is what makes the button safe to press.
  */
 export function ProvisionChannex({ propertyName }: { propertyName: string }) {
+  const t = translate(channelsDict, useLocale()).provision;
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -24,14 +28,12 @@ export function ProvisionChannex({ propertyName }: { propertyName: string }) {
       <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-lg bg-brand-50 text-brand-600">
         <Radio className="h-5 w-5" />
       </div>
-      <h2 className="text-[15px] font-bold text-ink-900">Set {propertyName} up for channels</h2>
+      <h2 className="text-[15px] font-bold text-ink-900">{t.title(propertyName)}</h2>
       <p className="mx-auto mt-1.5 max-w-md text-[13px] leading-relaxed text-ink-500">
-        This registers your rooms and rate plans with our distribution network so they can be sent to
-        the OTAs. It takes about a minute, and you only do it once.
+        {t.body}
       </p>
       <p className="mx-auto mt-2 max-w-md text-[12px] leading-relaxed text-ink-400">
-        Nothing goes on sale and nothing is charged — that happens later, when you connect and
-        activate an actual channel.
+        {t.free}
       </p>
 
       {error && (
@@ -52,7 +54,7 @@ export function ProvisionChannex({ propertyName }: { propertyName: string }) {
         className="mt-5 inline-flex h-10 items-center gap-2 rounded-md bg-brand-800 px-5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
       >
         {pending && <Loader2 className="h-4 w-4 animate-spin" />}
-        {pending ? "Setting up…" : "Set up channels"}
+        {pending ? t.working : t.button}
       </button>
     </div>
   );

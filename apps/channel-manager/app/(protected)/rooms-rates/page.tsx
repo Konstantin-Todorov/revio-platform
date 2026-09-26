@@ -8,24 +8,24 @@ import { RatePlanDialog } from "@/components/rooms/RatePlanDialog";
 import { RatePlanLinkageBoard } from "@/components/rooms/RatePlanLinkageBoard";
 import { CollapseAll } from "@/components/calendar/CollapseAll";
 import { DeleteButton } from "@/components/ui/DeleteButton";
+import { i18n } from "@/lib/i18n/server";
+import { rooms as roomsDict, type CmRoomsStrings } from "@/lib/i18n/rooms";
 
 export const dynamic = "force-dynamic";
 
-const KIND_LABEL: Record<string, string> = { room: "Room", bed: "Bed (hostel)", apartment: "Apartment" };
-
-function derivedLabel(rp: { derivedType: string | null; derivedDirection: string | null; derivedValue: number | null; parent: { name: string } | null }) {
+function derivedLabel(s: CmRoomsStrings, money: (minor: number) => string, rp: { derivedType: string | null; derivedDirection: string | null; derivedValue: number | null; parent: { name: string } | null }) {
   if (!rp.derivedType) return null;
   const sign = rp.derivedDirection === "increase" ? "+" : "−";
-  const amount = rp.derivedType === "percent" ? `${rp.derivedValue}%` : `€${(rp.derivedValue ?? 0) / 100}`;
-  return `${rp.parent?.name ?? "parent"} ${sign}${amount}`;
+  const amount = rp.derivedType === "percent" ? `${rp.derivedValue}%` : money(rp.derivedValue ?? 0);
+  return `${rp.parent?.name ?? s.plans.parent} ${sign}${amount}`;
 }
 
-function restrictionLabel(rp: { defMinLos: number | null; defMaxLos: number | null; defAdvancePurchaseMin: number | null; defAdvancePurchaseMax: number | null }) {
+function restrictionLabel(s: CmRoomsStrings, rp: { defMinLos: number | null; defMaxLos: number | null; defAdvancePurchaseMin: number | null; defAdvancePurchaseMax: number | null }) {
   const parts: string[] = [];
-  if (rp.defMinLos) parts.push(`min ${rp.defMinLos}n`);
-  if (rp.defMaxLos) parts.push(`max ${rp.defMaxLos}n`);
-  if (rp.defAdvancePurchaseMin != null) parts.push(`book ≥${rp.defAdvancePurchaseMin}d ahead`);
-  if (rp.defAdvancePurchaseMax != null) parts.push(`book ≤${rp.defAdvancePurchaseMax}d ahead`);
+  if (rp.defMinLos) parts.push(s.plans.minStay(rp.defMinLos));
+  if (rp.defMaxLos) parts.push(s.plans.maxStay(rp.defMaxLos));
+  if (rp.defAdvancePurchaseMin != null) parts.push(s.plans.bookAtLeast(rp.defAdvancePurchaseMin));
+  if (rp.defAdvancePurchaseMax != null) parts.push(s.plans.bookAtMost(rp.defAdvancePurchaseMax));
   return parts.length ? parts.join(" · ") : null;
 }
 
@@ -46,7 +46,9 @@ function Section({ title, count, children }: { title: string; count: string; chi
 
 export default async function RoomsRatesPage({ searchParams }: { searchParams: Promise<{ blocked?: string; kind?: string }> }) {
   const { blocked, kind } = await searchParams;
-  const { property, roomTypes, ratePlans } = await getRoomsAndRates();
+  const [{ property, roomTypes, ratePlans }, { t, money }] = await Promise.all([getRoomsAndRates(), i18n()]);
+  const s = t(roomsDict);
+  const fmt = (minor: number) => money(minor, property.baseCurrency);
   const parents = ratePlans.map((rp) => ({ id: rp.id, name: rp.name }));
 
   // Which rate plans are assigned to each room type (spec §4.1: expanding a room shows its plans).
@@ -72,27 +74,27 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
   return (
     <div>
       <PageHeader
-        title="Rooms & Rates"
-        subtitle="What you sell — your room types, your rate plans, and how their prices are linked"
+        title={s.title}
+        subtitle={s.subtitle}
         action={<CollapseAll containerId="rr-sections" />}
       />
 
       {blocked && (
         <div className="mb-4 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3 text-[13px] font-medium text-warning-700">
-          “{blocked}” is mapped to a channel and can’t be deleted — remove its {kind === "room" ? "room-type" : "rate-plan"} mapping
-          in <a href="/mapping" className="font-semibold underline">Mapping</a> first, then delete it here.
+          {s.blocked(blocked, kind === "room" ? "room" : "plan")[0]}
+          <a href="/mapping" className="font-semibold underline">{s.blocked(blocked, "room")[1]}</a>{s.blocked(blocked, "room")[2]}
         </div>
       )}
 
       {/* Vertical stack (spec §4.1): Rooms on top, Rate plans below, Linkage last — each collapsible. */}
       <div id="rr-sections" className="space-y-4">
-        <Section title="Room Types" count={`${roomTypes.length} types`}>
+        <Section title={s.rooms.title} count={s.rooms.count(roomTypes.length)}>
           <div className="flex justify-end px-4 py-2.5"><RoomTypeDialog /></div>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                  {["Room Type", "Code", "Kind", "Inv.", "Max", "Rate plans", "Status"].map((h) => <th key={h} className="px-4 py-2 font-semibold">{h}</th>)}
+                  {Object.values(s.rooms.cols).map((h) => <th key={h} className="px-4 py-2 font-semibold">{h}</th>)}
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
@@ -100,8 +102,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
                 {roomTypes.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-4 py-10 text-center text-[13px] text-ink-400">
-                      No room types yet. Add the rooms you sell — a Double, a Suite — and how many of each you have.
-                      Everything else on this screen builds on them.
+                      {s.rooms.empty}
                     </td>
                   </tr>
                 )}
@@ -109,15 +110,15 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
                   <tr key={rt.id} className="group border-b border-surface-border/60 align-top transition-colors last:border-0 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{rt.name}</td>
                     <td className="px-4 py-2.5 text-ink-500">{rt.code}</td>
-                    <td className="px-4 py-2.5 text-ink-600">{KIND_LABEL[rt.unitKind] ?? rt.unitKind}</td>
+                    <td className="px-4 py-2.5 text-ink-600">{s.unitKinds[rt.unitKind as keyof typeof s.unitKinds] ?? rt.unitKind}</td>
                     <td className="tnum px-4 py-2.5 text-ink-700">{rt.totalRooms}</td>
                     <td className="tnum px-4 py-2.5 text-ink-700">{rt.maxGuests}</td>
                     <td className="px-4 py-2.5 text-[11.5px] text-ink-500">{(plansByRoom.get(rt.id) ?? []).join(", ") || "—"}</td>
-                    <td className="px-4 py-2.5"><StatusPill tone={rt.active ? "success" : "neutral"}>{rt.active ? "Active" : "Inactive"}</StatusPill></td>
+                    <td className="px-4 py-2.5"><StatusPill tone={rt.active ? "success" : "neutral"}>{rt.active ? s.active : s.inactivePill}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                         <RoomTypeDialog roomType={rt} />
-                        <DeleteButton action={deleteRoomType} id={rt.id} label={rt.name} note="If it has reservations it is deactivated instead." />
+                        <DeleteButton action={deleteRoomType} id={rt.id} label={rt.name} note={s.rooms.deleteNote} />
                       </div>
                     </td>
                   </tr>
@@ -127,13 +128,13 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
           </div>
         </Section>
 
-        <Section title="Rate Plans" count={`${ratePlans.length} plans`}>
+        <Section title={s.plans.title} count={s.plans.count(ratePlans.length)}>
           <div className="flex justify-end px-4 py-2.5"><RatePlanDialog parents={parents} /></div>
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                  {["Rate Plan", "Type", "Pricing", "Tags"].map((h) => <th key={h} className="px-4 py-2 font-semibold">{h}</th>)}
+                  {Object.values(s.plans.cols).map((h) => <th key={h} className="px-4 py-2 font-semibold">{h}</th>)}
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
@@ -141,13 +142,13 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
                 {ratePlans.map((rp) => (
                   <tr key={rp.id} className="group border-b border-surface-border/60 align-top transition-colors last:border-0 hover:bg-surface-muted">
                     <td className="px-4 py-2.5">
-                      <div className="font-semibold text-ink-900">{rp.priceLogic === "derived" && <span title={`Derived from ${rp.parent?.name ?? "parent"}`} className="mr-1 select-none">📎</span>}{rp.name}{!rp.active && <span className="ml-1.5 text-[10px] font-bold uppercase text-ink-400">inactive</span>}</div>
-                      <div className="text-[11px] text-ink-400">{rp.code} · {rp._count.roomTypeLinks} rooms · {rp.mealPlan?.name ?? "—"}</div>
+                      <div className="font-semibold text-ink-900">{rp.priceLogic === "derived" && <span title={s.plans.derivedFrom(rp.parent?.name ?? s.plans.parent)} className="mr-1 select-none">📎</span>}{rp.name}{!rp.active && <span className="ml-1.5 text-[10px] font-bold uppercase text-ink-400">{s.inactive}</span>}</div>
+                      <div className="text-[11px] text-ink-400">{rp.code} · {s.plans.rooms(rp._count.roomTypeLinks)} · {rp.mealPlan?.name ?? "—"}</div>
                     </td>
-                    <td className="px-4 py-2.5"><StatusPill tone={rp.priceLogic === "derived" ? "info" : "neutral"}>{rp.priceLogic}</StatusPill></td>
+                    <td className="px-4 py-2.5"><StatusPill tone={rp.priceLogic === "derived" ? "info" : "neutral"}>{s.plans.logic[rp.priceLogic as keyof typeof s.plans.logic] ?? rp.priceLogic}</StatusPill></td>
                     <td className="px-4 py-2.5 text-[12px] text-ink-600">
-                      {derivedLabel(rp) ?? "Manual entry"}
-                      {restrictionLabel(rp) && <div className="mt-0.5 text-[10.5px] text-ink-400">{restrictionLabel(rp)}</div>}
+                      {derivedLabel(s, fmt, rp) ?? s.plans.manualEntry}
+                      {restrictionLabel(s, rp) && <div className="mt-0.5 text-[10.5px] text-ink-400">{restrictionLabel(s, rp)}</div>}
                     </td>
                     <td className="px-4 py-2.5">
                       <div className="flex flex-wrap gap-1">
@@ -157,7 +158,7 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
                     <td className="px-2 py-2.5">
                       <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                         <RatePlanDialog ratePlan={rp} parents={parents.filter((p) => p.id !== rp.id)} />
-                        <DeleteButton action={deleteRatePlan} id={rp.id} label={rp.name} note="Parents of derived rates are deactivated instead." />
+                        <DeleteButton action={deleteRatePlan} id={rp.id} label={rp.name} note={s.plans.deleteNote} />
                       </div>
                     </td>
                   </tr>
@@ -168,13 +169,13 @@ export default async function RoomsRatesPage({ searchParams }: { searchParams: P
         </Section>
 
         {/* Editable Rate Plan Linkage (spec §4.2). */}
-        <Section title="Rate Plan Linkage" count="derived-pricing chains">
+        <Section title={s.linkageSection.title} count={s.linkageSection.count}>
           <RatePlanLinkageBoard plans={linkPlans} />
         </Section>
       </div>
 
       <p className="mt-3 text-[12px] text-ink-400">
-        Every change is recorded in the Audit Log and pushed to your connected channels — follow it in the Sync Center.
+        {s.footer}
       </p>
     </div>
   );

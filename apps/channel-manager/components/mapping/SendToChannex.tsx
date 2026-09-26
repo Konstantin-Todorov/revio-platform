@@ -3,6 +3,9 @@
 import { useState, useTransition } from "react";
 import { AlertTriangle, CheckCircle2, Send, XCircle } from "lucide-react";
 import { sendProductToChannex, type CatchupOutcome } from "@/lib/actions-connect";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { mapping as mappingDict } from "@/lib/i18n/mapping";
 
 /**
  * The button beside "never sent".
@@ -25,6 +28,7 @@ export function SendToChannex({
    *  mapping must be written against the row the hotel is looking at, not the first one found. */
   channelId: string;
 }) {
+  const t = translate(mappingDict, useLocale()).send;
   const [result, setResult] = useState<(CatchupOutcome & { name: string }) | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -47,16 +51,14 @@ export function SendToChannex({
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger-600" />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-danger-700">
-            {products.length === 1 ? "One product has" : `${products.length} products have`} never reached your channel
-            manager
+            {t.title(products.length)}
           </p>
           <p className="mt-0.5 text-[12px] leading-snug text-ink-600">
             {/*
               Says WHY rather than just what. "Added after this channel was connected" is the fact
               that makes it nobody's mistake, and it is the fact that stops it happening again.
             */}
-            They were added after this channel was connected, and setup only sends what exists at the time. No OTA can
-            see them until they are sent.
+            {t.why}
           </p>
 
           <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -69,15 +71,15 @@ export function SendToChannex({
                 className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-2.5 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
               >
                 <Send className="h-3.5 w-3.5" />
-                Send {p.name}
+                {t.button(p.name)}
                 <span className="text-[10px] font-medium uppercase tracking-wide text-white/60">
-                  {p.kind === "roomType" ? "room" : "rate"}
+                  {t.kind[p.kind]}
                 </span>
               </button>
             ))}
           </div>
 
-          {pending && <p className="mt-2 text-[12px] text-ink-500">Sending…</p>}
+          {pending && <p className="mt-2 text-[12px] text-ink-500">{t.sending}</p>}
 
           {result && !pending && (
             <p

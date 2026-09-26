@@ -4,6 +4,9 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import { Plus, Loader2, ExternalLink } from "lucide-react";
 import { loadChannelForm, connectChannel, type ConnectResult, type FormResult } from "@/lib/actions-connect";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { channels as channelsDict } from "@/lib/i18n/channels";
 import type { ChannelField, FieldRule } from "@revio/connectivity";
 
 type Option = { code: string; name: string };
@@ -42,6 +45,8 @@ export function ConnectChannelDialog({
   channels: readonly Option[];
   connectedCodes: string[];
 }) {
+  const all = translate(channelsDict, useLocale());
+  const t = all.connect;
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
   const [form, setForm] = useState<FormResult | null>(null);
@@ -82,12 +87,12 @@ export function ConnectChannelDialog({
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700"
       >
-        <Plus className="h-4 w-4" /> Connect channel
+        <Plus className="h-4 w-4" /> {t.button}
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Connect a channel">
+      <Modal open={open} onClose={() => setOpen(false)} title={t.title}>
         <form action={formAction} className="space-y-3.5">
-          <Field label="Channel">
+          <Field label={t.channel}>
             <select
               name="code"
               value={code}
@@ -95,7 +100,7 @@ export function ConnectChannelDialog({
               className={inputCls}
               required
             >
-              <option value="">Choose…</option>
+              <option value="">{t.choose}</option>
               {available.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.name}
@@ -106,7 +111,7 @@ export function ConnectChannelDialog({
 
           {loading && (
             <p className="flex items-center gap-2 text-[12.5px] text-ink-500">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking {available.find((c) => c.code === code)?.name} what it needs…
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> {t.asking(available.find((c) => c.code === code)?.name ?? "")}
             </p>
           )}
 
@@ -118,7 +123,7 @@ export function ConnectChannelDialog({
             <>
               {fields.length === 0 && (
                 <p className="text-[12.5px] text-ink-500">
-                  {form.title} needs nothing from you here — everything is handled on the Channex side.
+                  {t.nothingNeeded(form.title)}
                 </p>
               )}
               {fields.map((f) => (
@@ -163,8 +168,7 @@ export function ConnectChannelDialog({
               <p className="flex gap-2 rounded-md bg-surface-muted px-3 py-2 text-[12px] text-ink-500">
                 <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 <span>
-                  The hotel must also authorise us inside their own {form.title} extranet. We check that
-                  when you connect — if it has not been done yet, this will say so.
+                  {t.authorise(form.title)}
                 </span>
               </p>
             </>
@@ -180,14 +184,14 @@ export function ConnectChannelDialog({
               onClick={() => setOpen(false)}
               className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted"
             >
-              Cancel
+              {all.settings.cancel}
             </button>
             <button
               type="submit"
               disabled={pending || !form?.ok}
               className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
             >
-              {pending ? "Checking…" : "Test & connect"}
+              {pending ? t.checking : t.submit}
             </button>
           </div>
 
@@ -201,8 +205,7 @@ export function ConnectChannelDialog({
             worse than saying nothing, because they go looking.
           */}
           <p className="text-[11.5px] text-ink-400">
-            The channel is created switched off. Nothing goes on sale until we switch it on — tell us
-            when your mapping is finished and you are ready to take bookings.
+            {t.createdOff}
           </p>
         </form>
       </Modal>

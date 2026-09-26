@@ -1,7 +1,7 @@
 import { Fragment } from "react";
 import Link from "next/link";
 import { AlertTriangle, Link2 } from "lucide-react";
-import { crossWiredRatePlans, describeCrossWire } from "@revio/core";
+import { crossWiredRatePlans } from "@revio/core";
 import { mappableRatePlans, ratePlansForRoom, type ChannexRatePlan } from "@revio/connectivity";
 import { getMapping, getUnmappedBookingAlerts } from "@/lib/data";
 import { listChannelProducts } from "@/lib/connectivity";
@@ -11,6 +11,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { MappingEditDialog } from "@/components/mapping/MappingEditDialog";
 import { VerifyStrip } from "@/components/mapping/VerifyStrip";
 import { SendToChannex } from "@/components/mapping/SendToChannex";
+import { i18n } from "@/lib/i18n/server";
+import { mapping as mappingDict } from "@/lib/i18n/mapping";
 
 export const dynamic = "force-dynamic";
 
@@ -20,25 +22,23 @@ const STATUS_TONE: Record<string, Tone> = { complete: "success", incomplete: "wa
  * `never_sent`, and printing that raw would put a column name in front of a hotelier. "Not sent yet"
  * says the same thing and tells them it is a thing to finish rather than a fault they caused.
  */
-const STATUS_LABEL: Record<string, string> = {
-  complete: "mapped",
-  incomplete: "needs an id",
-  never_sent: "not sent yet",
-};
+// The words are `status` in lib/i18n/mapping.ts.
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ ch?: string }> }) {
   const sp = await searchParams;
-  const { channels, channel, roomTypeMappings, ratePlanMappings, neverSent, mappingCollisions } = await getMapping(sp.ch);
+  const [{ channels, channel, roomTypeMappings, ratePlanMappings, neverSent, mappingCollisions }, { t }] = await Promise.all([getMapping(sp.ch), i18n()]);
+  const s = t(mappingDict);
+  const statusLabel = (st: string) => s.status[st as keyof typeof s.status] ?? st;
 
   if (!channel) {
     return (
       <div>
-        <PageHeader title="Mapping" subtitle="Link your room types and rate plans to each channel's own listings" />
+        <PageHeader title={s.title} subtitle={s.empty.subtitle} />
         <EmptyState
           icon={<Link2 className="h-7 w-7" />}
-          title="No channels connected yet"
-          body="Mapping links your room types and rate plans to each channel's own IDs. Connect a channel first, then map them here."
-          actionLabel="Connect a channel"
+          title={s.empty.title}
+          body={s.empty.body}
+          actionLabel={s.empty.action}
           actionHref="/channels"
         />
       </div>
@@ -101,7 +101,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
    */
   const ratesForRoom = (roomTypeId: string): { id: string; name: string }[] => {
     const label = (p: ChannexRatePlan) => ({ id: p.id, name: p.name });
-    const marked = (p: ChannexRatePlan) => ({ id: p.id, name: `${p.name} · derived — the channel computes its rate` });
+    const marked = (p: ChannexRatePlan) => ({ id: p.id, name: s.derivedOption(p.name) });
     if (!scopesByRoom) return [...mappable.map(label), ...derived.map(marked)];
     const ext = channexRoomOf.get(roomTypeId);
     if (!ext) return [];
@@ -145,10 +145,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
 
   return (
     <div>
-      <PageHeader title="Mapping" subtitle="Room types carry how many rooms are free. Rate plans carry prices and restrictions. Both need linking." />
+      <PageHeader title={s.title} subtitle={s.subtitle} />
       {(products.rooms.length > 0 || products.rates.length > 0) && (
         <p className="-mt-3 mb-3 text-[11.5px] text-ink-400">
-          {products.rooms.length + products.rates.length} products pulled from {channel.name} — pick them from the dropdown when mapping.
+          {s.pulled(products.rooms.length + products.rates.length, channel.name)}
         </p>
       )}
 
@@ -179,14 +179,16 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
         <div className="mb-3 rounded-md border border-danger-600/30 bg-danger-50 px-4 py-3">
           <div className="flex items-center gap-2 text-[13px] font-semibold text-danger-700">
             <AlertTriangle className="h-4 w-4" />
-            {crossWires.length === 1 ? "One rate plan is" : `${crossWires.length} rate plans are`} mapped to the wrong room in {channel.name}
+            {s.crossWireTitle(crossWires.length, channel.name)}
           </div>
           <ul className="mt-1.5 space-y-1 pl-6 text-[12.5px] text-danger-700">
             {crossWires.map((f) => (
               <li key={`${f.roomTypeName}-${f.externalRateId}`}>
-                {describeCrossWire(f)}{" "}
+                {f.reason === "wrong_room"
+                  ? s.crossWire.wrongRoom(f.roomTypeName, f.ratePlanName, f.belongsToRoomName ?? null)
+                  : s.crossWire.gone(f.roomTypeName, f.ratePlanName, f.externalRateId)}{" "}
                 <a href={`#map-rate-${ratePlanMappings.find((m) => m.externalRateId === f.externalRateId && m.roomTypeName === f.roomTypeName)?.ratePlanId ?? ""}`} className="font-semibold underline">
-                  fix the row
+                  {s.fixRow}
                 </a>
               </li>
             ))}
@@ -198,19 +200,17 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
         <div className="mb-3 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3">
           <div className="flex items-center gap-2 text-[13px] font-semibold text-warning-700">
             <AlertTriangle className="h-4 w-4" />
-            {derivedTargets.length === 1 ? "One price you set is" : `${derivedTargets.length} prices you set are`} ignored by {channel.name}
+            {s.derivedTitle(derivedTargets.length, channel.name)}
           </div>
           <p className="mt-1 pl-6 text-[12.5px] text-warning-700">
-            {channel.name} calculates these plans itself from another plan, so guests on the OTAs pay its number, not the one in
-            your calendar — and your own booking page still quotes yours. Either make the plan derived in Rooms &amp; Rates with the
-            same discount, so both sides agree, or switch derivation off for it in {channel.name}.
+            {s.derivedBody(channel.name)}
           </p>
           <ul className="mt-1.5 space-y-1 pl-6 text-[12.5px] text-warning-700">
             {derivedTargets.map((d) => (
               <li key={d.key}>
                 <span className="font-semibold">{d.room} · {d.plan}</span> → {d.channelPlan}
-                {d.parent ? `, which ${channel.name} derives from ${d.parent}` : ""}{" "}
-                <a href={`#map-rate-${d.ratePlanId}`} className="font-semibold underline">see the row</a>
+                {d.parent ? s.derivesFrom(channel.name, d.parent) : ""}{" "}
+                <a href={`#map-rate-${d.ratePlanId}`} className="font-semibold underline">{s.seeRow}</a>
               </li>
             ))}
           </ul>
@@ -221,14 +221,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
         <div className="mb-3 rounded-md border border-danger-600/30 bg-danger-50 px-4 py-3">
           <div className="flex items-center gap-2 text-[13px] font-semibold text-danger-700">
             <AlertTriangle className="h-4 w-4" />
-            {mappingCollisions.length === 1 ? "One channel rate plan is" : `${mappingCollisions.length} channel rate plans are`} mapped to more than one room
+            {s.collisionTitle(mappingCollisions.length)}
           </div>
           <ul className="mt-1.5 space-y-1 pl-6 text-[12.5px] text-danger-700">
             {mappingCollisions.map((c) => (
               <li key={c.externalId}>
-                <span className="tnum">{c.externalId.slice(0, 8)}…</span> is used by{" "}
-                {c.rooms.map((r) => `${r.roomTypeName} · ${r.ratePlanName}`).join(" and ")} — whichever pushes last
-                overwrites the other. Give each room its own rate plan.
+                <span className="tnum">{c.externalId.slice(0, 8)}…</span> {s.usedBy}{" "}
+                {c.rooms.map((r) => `${r.roomTypeName} · ${r.ratePlanName}`).join(s.and)} {s.collisionTail}
               </li>
             ))}
           </ul>
@@ -249,14 +248,14 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
       {alerts.length > 0 && (
         <div className="mb-3 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3">
           <div className="flex items-center gap-2 text-[13px] font-semibold text-warning-700">
-            <AlertTriangle className="h-4 w-4" /> {alerts.length} booking{alerts.length > 1 ? "s" : ""} arrived for an unmapped product
+            <AlertTriangle className="h-4 w-4" /> {s.alertsTitle(alerts.length)}
           </div>
           <ul className="mt-1.5 space-y-1 pl-6 text-[12.5px] text-warning-700">
             {alerts.map((a) => (
               <li key={a.id}>
                 {a.message}
                 {a.anchor ? (
-                  <a href={`#${a.anchor}`} className="ml-1.5 font-semibold underline">jump to the row</a>
+                  <a href={`#${a.anchor}`} className="ml-1.5 font-semibold underline">{s.jumpToRow}</a>
                 ) : null}
               </li>
             ))}
@@ -282,7 +281,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
           <form action={fixMappings}>
             <input type="hidden" name="channelId" value={channel.id} />
             <button type="submit" className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-              Auto-fix {incomplete} unmapped
+              {s.autofix(incomplete)}
             </button>
           </form>
         ) : neverSent.length > 0 ? (
@@ -294,26 +293,26 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
           */
           <span title={neverSent.map((p) => p.name).join(", ")}>
             <StatusPill tone="danger">
-              {neverSent.length} never sent
+              {s.neverSent(neverSent.length)}
             </StatusPill>
           </span>
         ) : (
           /* health-lint: proven above — this branch is reached only when BOTH `incomplete` (rows
              not finished) and `neverSent` (products with no row at all) are zero. Those are two
              different questions and the second is the one a row count cannot answer. */
-          <StatusPill tone="success">All mapped</StatusPill>
+          <StatusPill tone="success">{s.allMapped}</StatusPill>
         )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {/* Room Types stream — inventory + open/close */}
         <Card>
-          <CardHeader title={`Room Types · ${channel.name}`} action={<span className="text-[11px] text-ink-400">inventory & open/close</span>} />
+          <CardHeader title={s.roomsTitle(channel.name)} action={<span className="text-[11px] text-ink-400">{s.roomsNote}</span>} />
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                  {["Room Type", "External Room ID", "Status"].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
+                  {[s.cols.room, s.cols.externalRoom, s.cols.status].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
                   <th className="px-4 py-2.5" />
                 </tr>
               </thead>
@@ -322,7 +321,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                   <tr key={m.productId} id={`map-room-${m.productId}`} className="group border-b border-surface-border/60 transition-colors last:border-0 target:bg-warning-50 hover:bg-surface-muted">
                     <td className="px-4 py-2.5 font-semibold text-ink-900">{m.roomType.name}</td>
                     <td className="tnum px-4 py-2.5 text-ink-500">{m.externalRoomId ?? <span className="text-danger-500">—</span>}</td>
-                    <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{STATUS_LABEL[m.status] ?? m.status}</StatusPill></td>
+                    <td className="px-4 py-2.5"><StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{statusLabel(m.status)}</StatusPill></td>
                     <td className="px-2 py-2.5">
                       <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
                         <MappingEditDialog kind="room" id={m.id} productId={m.productId} label={m.roomType.name} externalId={m.externalRoomId} channelName={channel.name} channelId={channel.id} options={products.rooms} />
@@ -337,12 +336,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
 
         {/* Rate Plans stream — rates + restrictions */}
         <Card>
-          <CardHeader title={`Rate Plans · ${channel.name}`} action={<span className="text-[11px] text-ink-400">rates & restrictions</span>} />
+          <CardHeader title={s.ratesTitle(channel.name)} action={<span className="text-[11px] text-ink-400">{s.ratesNote}</span>} />
           <div className="overflow-x-auto">
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                  {["Rate Plan", "External Rate ID", "Status"].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
+                  {[s.cols.plan, s.cols.externalRate, s.cols.status].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
                   <th className="px-4 py-2.5" />
                 </tr>
               </thead>
@@ -372,7 +371,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                         {roomName}
                         {rows.some((r) => r.unmapped) && (
                           <span className="ml-2 font-semibold normal-case text-warning-700">
-                            {rows.filter((r) => r.unmapped).length} to confirm
+                            {s.toConfirm(rows.filter((r) => r.unmapped).length)}
                           </span>
                         )}
                       </td>
@@ -393,12 +392,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                           */}
                           {m.fromCatchAll && m.inheritedExternalId && (
                             <span className="mt-0.5 block text-[10.5px] leading-tight text-warning-700">
-                              currently publishing to {m.inheritedExternalId.slice(0, 8)}… — set for this room
+                              {s.currentlyPublishing(m.inheritedExternalId.slice(0, 8))}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-2.5">
-                          <StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{STATUS_LABEL[m.status] ?? m.status}</StatusPill>
+                          <StatusPill tone={STATUS_TONE[m.status] ?? "neutral"}>{statusLabel(m.status)}</StatusPill>
                         </td>
                         <td className="px-2 py-2.5">
                           <div className="flex justify-end opacity-0 transition-opacity group-hover:opacity-100">
@@ -413,11 +412,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
                                 !scopesByRoom
                                   ? undefined
                                   : !channexRoomOf.has(m.roomTypeId)
-                                    ? `Map the room type "${m.roomTypeName}" first — until it has an id in ${channel.name} we cannot tell which of its rate plans belong to this room, and offering all of them is how one room's prices end up on another.`
+                                    ? s.notes.roomFirst(m.roomTypeName, channel.name)
                                     : ratesForRoom(m.roomTypeId).length === 0
-                                      ? `${channel.name} lists no rate plan under ${m.roomTypeName}. Create one there, or enter its id below if you know it.`
+                                      ? s.notes.noPlans(channel.name, m.roomTypeName)
                                       : excluded.length > 0
-                                        ? `Showing ${channel.name}'s plans for ${m.roomTypeName} only. ${excluded.length} plan${excluded.length > 1 ? "s are" : " is"} left out because ${excluded.length > 1 ? "they belong" : "it belongs"} to one OTA rather than to ${channel.name} — we push to ${channel.name}, and it pushes on.`
+                                        ? s.notes.excluded(channel.name, m.roomTypeName, excluded.length)
                                         : undefined
                               }
                             />
