@@ -8,13 +8,10 @@ import { DeleteButton } from "@/components/ui/DeleteButton";
 import { ymd } from "@/lib/format";
 import { channelSupports, todayInTimeZone } from "@revio/core";
 import { getProperty } from "@/lib/data";
+import { i18n } from "@/lib/i18n/server";
+import { bulk as bulkDict } from "@/lib/i18n/bulk";
 
 export const dynamic = "force-dynamic";
-
-const TYPE_LABEL: Record<string, string> = {
-  min_los: "Min LOS", max_los: "Max LOS", stop_sell: "Stop Sell", cta: "Closed to Arrival",
-  ctd: "Closed to Departure", advance_purchase_min: "Adv. Purchase min", advance_purchase_max: "Adv. Purchase max",
-};
 
 /**
  * V2 IA: Bulk Update and Restrictions are ONE screen — one-off mass edits, and the standing rules.
@@ -24,7 +21,9 @@ const TYPE_LABEL: Record<string, string> = {
 export default async function Page({ searchParams }: { searchParams: Promise<{ rt?: string; tab?: string }> }) {
   const { rt, tab: rawTab } = await searchParams;
   const tab = rawTab === "rules" ? "rules" : "change";
-  const [property, { roomTypes, ratePlans }, { rules, channels }] = await Promise.all([getProperty(), getRoomsAndRates(), getRestrictions()]);
+  const [property, { roomTypes, ratePlans }, { rules, channels }, { t, day }] = await Promise.all([getProperty(), getRoomsAndRates(), getRestrictions(), i18n()]);
+  const s = t(bulkDict);
+  const typeLabel = (type: string) => s.ruleTypes[type as keyof typeof s.ruleTypes] ?? type;
   // Capability flags (spec §3.3 / §5.2): a rule aimed at a channel that can't honour its type is
   // flagged here, not silently created — and it is a limitation, never an error.
   const ignoredBy = (rule: { type: string; channelCodes: string[] }): string[] => {
@@ -45,20 +44,20 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
 
   return (
     <div>
-      <PageHeader title="Bulk Rates & Restrictions" subtitle="Mass edits across dates and rooms, plus the standing restriction rules" />
+      <PageHeader title={s.title} subtitle={s.subtitle} />
       <div className="mb-4">
         <LinkTabs
-          label="Bulk views"
+          label={s.tabsLabel}
           tabs={[
-            { href: "/bulk-update", label: "Change prices & availability", active: tab === "change" },
-            { href: "/bulk-update?tab=rules", label: "Your active restriction rules", active: tab === "rules", badge: String(rules.filter((r) => r.active).length) },
+            { href: "/bulk-update", label: s.tabs.change, active: tab === "change" },
+            { href: "/bulk-update?tab=rules", label: s.tabs.rules, active: tab === "rules", badge: String(rules.filter((r) => r.active).length) },
           ]}
         />
       </div>
       {tab === "change" && (roomTypes.length === 0 ? (
         <Card surface="flat" className="p-8 text-center text-[13px] text-ink-400">
-          A bulk update changes rates and restrictions across your room types — so you need at least one first.{" "}
-          <a href="/rooms-rates" className="font-semibold text-brand-600 hover:underline">Add a room type</a>.
+          {s.noRooms}{" "}
+          <a href="/rooms-rates" className="font-semibold text-brand-600 hover:underline">{s.addRoom}</a>.
         </Card>
       ) : (
       <BulkUpdatePanel
@@ -76,12 +75,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
 
       {tab === "rules" && (<>
       <Card surface="flat">
-        <CardHeader surface="flat" title="Your active restriction rules" action={<RestrictionDialog today={today} roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />} />
+        <CardHeader surface="flat" title={s.rules.title} action={<RestrictionDialog today={today} roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />} />
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                {["Rule", "Type", "Applies to", "Date range", "Channels", "Value", "Status"].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
+                {[s.rules.cols.rule, s.rules.cols.type, s.rules.cols.appliesTo, s.rules.cols.dates, s.rules.cols.channels, s.rules.cols.value, s.rules.cols.status].map((h) => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}
                 <th className="px-4 py-2.5" />
               </tr>
             </thead>
@@ -89,19 +88,19 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
               {rules.map((r) => (
                 <tr key={r.id} className="group border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
                   <td className="px-4 py-2.5 font-semibold text-ink-900">{r.name}</td>
-                  <td className="px-4 py-2.5"><StatusPill tone="info">{TYPE_LABEL[r.type] ?? r.type}</StatusPill></td>
-                  <td className="px-4 py-2.5 text-ink-600">{r.roomTypeName}</td>
-                  <td className="tnum px-4 py-2.5 text-ink-600">{ymd(r.dateFrom)} → {ymd(r.dateTo)}</td>
+                  <td className="px-4 py-2.5"><StatusPill tone="info">{typeLabel(r.type)}</StatusPill></td>
+                  <td className="px-4 py-2.5 text-ink-600">{r.roomTypeId ? r.roomTypeName : s.dialog.allRooms}</td>
+                  <td className="tnum whitespace-nowrap px-4 py-2.5 text-ink-600">{day(ymd(r.dateFrom))} → {day(ymd(r.dateTo))}</td>
                   <td className="px-4 py-2.5 text-ink-500">
-                    {r.channelCodes.length === channels.length ? "All" : r.channelCodes.join(", ")}
+                    {r.channelCodes.length === channels.length ? s.rules.all : r.channelCodes.join(", ")}
                     {ignoredBy(r).length > 0 && (
-                      <span title="These channels don't support this restriction type — the rule is skipped for them (a limitation, not an error)." className="ml-1.5 rounded bg-warning-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-warning-700">
-                        ignored by {ignoredBy(r).join(", ")}
+                      <span title={s.rules.ignoredTitle} className="ml-1.5 rounded bg-warning-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-warning-700">
+                        {s.rules.ignoredBy(ignoredBy(r).join(", "))}
                       </span>
                     )}
                   </td>
                   <td className="tnum px-4 py-2.5 text-ink-700">{r.valueInt ?? "—"}</td>
-                  <td className="px-4 py-2.5"><StatusPill tone={r.active ? "success" : "neutral"}>{r.active ? "Active" : "Inactive"}</StatusPill></td>
+                  <td className="px-4 py-2.5"><StatusPill tone={r.active ? "success" : "neutral"}>{r.active ? s.rules.active : s.rules.inactive}</StatusPill></td>
                   <td className="px-2 py-2.5">
                     <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                       <RestrictionDialog today={today} rule={r} roomTypes={rtOpts} ratePlans={rpOpts} channels={chOpts} />
@@ -111,16 +110,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ r
                 </tr>
               ))}
               {rules.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-8 text-center text-[13px] text-ink-400">No standing rules yet — add one to apply a restriction across a date range and channels.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-[13px] text-ink-400">{s.rules.empty}</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </Card>
-      <p className="mt-3 text-[12px] text-ink-400">
-        Which value wins, in order: a date-scoped edit (calendar or bulk — the most recent one) &gt; a restriction
-        rule &gt; the rate-plan default &gt; the property default.
-      </p>
+      <p className="mt-3 text-[12px] text-ink-400">{s.rules.precedence}</p>
       </>)}
     </div>
   );

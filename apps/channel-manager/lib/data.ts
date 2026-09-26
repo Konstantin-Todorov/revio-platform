@@ -1,11 +1,13 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { CAPABILITY_ERROR_CODE, dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, displayedRate, rateSourceNote, toResolvablePlan, type PriceLookup, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type SetupFacts, type ProductName } from "@revio/core";
+import { CAPABILITY_ERROR_CODE, dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, displayedRate, toResolvablePlan, type PriceLookup, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type SetupFacts, type ProductName } from "@revio/core";
 import { collidingExternalIds, describeStructureGap, mappingRows, ratePlanMappingRows, structureGap } from "@revio/connectivity";
 import { getSession } from "./session";
 import { i18n } from "./i18n/server";
 import { shell as shellDict } from "./i18n/shell";
+import { calendar as calDict } from "./i18n/calendar";
+import { moneyIn } from "./i18n/money";
 
 const DAY = 86_400_000;
 function addDays(d: Date, n: number): Date {
@@ -341,6 +343,15 @@ const HORIZON_DAYS_MAX = 730; // 2-year sync horizon (spec)
  * up to 2 years ahead), with per-room rows chosen via "Customise display".
  */
 export async function getCalendarBoard(q: CalendarQuery) {
+  const { t: tr, locale } = await i18n();
+  const cal = tr(calDict);
+  const calMoney = moneyIn(locale);
+  /** core's `rateSourceNote` is English and the Operator still reads it; RevioLink words it itself. */
+  const sourceNote = (source: string, plan: string, parent?: string): string | null =>
+    source === "default" ? cal.rateSource.default(plan)
+      : source === "derived" ? cal.rateSource.derived(parent ?? cal.parentFallback)
+        : source === "none" ? cal.rateSource.none(plan)
+          : null;
   const property = await getProperty();
   const propertyId = property.id;
   // 7/14/30 from the view toggle; the month view passes the exact month length (28–31).
@@ -526,7 +537,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
       roomDefaultOccupancy: rt.defaultOccupancy, propertyModel, dateKey: k,
     });
     const rec = planById.get(planId);
-    const note = rateSourceNote(shown.source, rec?.name ?? "This plan", rec?.parentRatePlanId ? planById.get(rec.parentRatePlanId)?.name : undefined);
+    const note = sourceNote(shown.source, rec?.name ?? cal.thisPlan, rec?.parentRatePlanId ? planById.get(rec.parentRatePlanId)?.name : undefined);
     return { date: k, value: fmt(shown.minor ?? undefined), ...(note ? { note } : {}) };
   };
   const cellMap = new Map(cells.map((c) => [priceKey(c.roomTypeId, c.date.toISOString().slice(0, 10)), c]));
@@ -560,7 +571,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
   };
   const perPlanNote = (rt: string, k: string) =>
     planScoped.has(priceKey(rt, k))
-      ? "Some rate plans have their own restriction on this date — set in Bulk Update. This row shows the room's."
+      ? cal.warn.perPlan
       : undefined;
 
   const fmt = (m: number | undefined) => (m === undefined ? "—" : (m / 100).toLocaleString("en-US"));
@@ -582,12 +593,12 @@ export async function getCalendarBoard(q: CalendarQuery) {
        * It was not: the net had already gone to the channel. Two words, two different facts, and
        * the grid now names both.
        */
-      key: "inventory", label: "Allocation", kind: "availability", field: "inventory", editable: true,
+      key: "inventory", label: cal.rows.inventory, kind: "availability", field: "inventory", editable: true,
       cells: dateKeys.map((k) => {
         const inv = cellFor(k)?.inventory ?? roomType.totalRooms;
         const { outOfOrder, closed } = periodsByDate.get(k) ?? { outOfOrder: 0, closed: 0 };
         const usable = Math.max(0, roomType.totalRooms - outOfOrder - closed);
-        const unit = roomType.unitKind === "bed" ? "beds" : "rooms";
+        const unit = cal.warn.unit(roomType.unitKind === "bed" ? "bed" : "room");
         /*
          * ⚠️ The warning now says what WILL happen, not just that two numbers differ.
          *
@@ -602,8 +613,8 @@ export async function getCalendarBoard(q: CalendarQuery) {
             ? {
                 warn:
                   outOfOrder + closed > 0
-                    ? `${inv} allocated, but only ${usable} ${unit} are usable on this date (${outOfOrder + closed} out of order or closed) — ${usable} is what the channel is sent`
-                    : `${inv} allocated, but only ${roomType.totalRooms} physical ${unit} exist — ${usable} is what the channel is sent`,
+                    ? cal.warn.overCapOoo(inv, usable, unit, outOfOrder + closed)
+                    : cal.warn.overCapPhysical(inv, roomType.totalRooms, unit, usable),
               }
             : {}),
         };
@@ -611,7 +622,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
     });
     if (visible.has("sold")) {
       rows.push({
-        key: "sold", label: "Rooms sold", kind: "availability", muted: true,
+        key: "sold", label: cal.rows.sold, kind: "availability", muted: true,
         cells: dates.map((d, i) => {
           const sold = resLines.filter((l) => l.roomTypeId === roomType.id && l.checkIn <= d && d < l.checkOut).reduce((s2, l) => s2 + l.quantity, 0);
           return { date: dateKeys[i]!, value: String(sold), muted: true };
@@ -635,7 +646,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
      * producing. One function, one answer.
      */
     rows.push({
-      key: "bookable", label: "Bookable", kind: "availability",
+      key: "bookable", label: cal.rows.bookable, kind: "availability",
       cells: dates.map((d, i) => {
         const k = dateKeys[i]!;
         const sold = resLines.filter((l) => l.roomTypeId === roomType.id && l.checkIn <= d && d < l.checkOut).reduce((s2, l) => s2 + l.quantity, 0);
@@ -651,13 +662,13 @@ export async function getCalendarBoard(q: CalendarQuery) {
         if (closedEverywhere && remaining > 0) {
           return {
             date: k, value: "0",
-            warn: `Stop-sell on every rate plan — the channels are sent 0, although ${remaining} ${remaining === 1 ? "room is" : "rooms are"} free. Lift it in Bulk Update → Stop sell.`,
+            warn: cal.warn.stopEverywhere(remaining),
           };
         }
         return {
           date: k, value: String(bookable),
           // Nothing left is the fact a hotelier scans for. It gets the emphasis, not a muted grey.
-          ...(bookable === 0 ? { warn: "Nothing left to sell on this date — the channel has been told 0" } : {}),
+          ...(bookable === 0 ? { warn: cal.warn.nothingLeft } : {}),
         };
       }),
     });
@@ -683,11 +694,11 @@ export async function getCalendarBoard(q: CalendarQuery) {
       const parent = planById.get(plan.parentRatePlanId);
       const off = rec?.derivedType === "percent"
         ? `${rec?.derivedDirection === "increase" ? "+" : "−"}${rec?.derivedValue}%`
-        : `${rec?.derivedDirection === "increase" ? "+" : "−"}€${((rec?.derivedValue ?? 0) / 100).toLocaleString("en-US")}`;
+        : `${rec?.derivedDirection === "increase" ? "+" : "−"}${calMoney(rec?.derivedValue ?? 0, property.baseCurrency)}`;
       rows.push({
         key: plan.code, label: plan.label, kind: "price", muted: true,
         ratePlanId: plan.id,
-        derived: { parent: parent?.name ?? "its parent plan", offset: off }, // paperclip + hover (spec §2.3)
+        derived: { parent: parent?.name ?? cal.parentFallback, offset: off }, // paperclip + hover (spec §2.3)
         // The same resolver as an own-price row, so a derived plan follows its parent's DEFAULT too
         // — it showed "—" whenever the parent had no stored row for the night.
         cells: dateKeys.map((k) => ({ ...priceCell(plan.id, roomType, k), muted: true })),
@@ -695,7 +706,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
     }
     if (visible.has("minlos")) {
       rows.push({
-        key: "minlos", label: "Min LOS", kind: "restriction", field: "minLos", editable: true,
+        key: "minlos", label: cal.rows.minlos, kind: "restriction", field: "minLos", editable: true,
         cells: dateKeys.map((k) => {
           const los = cellFor(k)?.minLos ?? standard?.defMinLos ?? null;
           const note = perPlanNote(roomType.id, k);
@@ -705,7 +716,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
     }
     if (visible.has("cta")) {
       rows.push({
-        key: "cta", label: "CTA", kind: "flag", field: "cta", editable: true,
+        key: "cta", label: cal.rows.cta, kind: "flag", field: "cta", editable: true,
         cells: dateKeys.map((k) => {
           const on = cellFor(k)?.cta ?? false;
           const note = perPlanNote(roomType.id, k);
@@ -715,7 +726,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
     }
     if (visible.has("ctd")) {
       rows.push({
-        key: "ctd", label: "CTD", kind: "flag", field: "ctd", editable: true,
+        key: "ctd", label: cal.rows.ctd, kind: "flag", field: "ctd", editable: true,
         cells: dateKeys.map((k) => {
           const on = cellFor(k)?.ctd ?? false;
           const note = perPlanNote(roomType.id, k);
@@ -725,7 +736,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
     }
     if (visible.has("stopsell")) {
       rows.push({
-        key: "stopsell", label: "Stop Sell", kind: "flag", field: "stopSell", editable: true,
+        key: "stopsell", label: cal.rows.stopsell, kind: "flag", field: "stopSell", editable: true,
         cells: dateKeys.map((k) => {
           const on = (cellFor(k)?.stopSell ?? false) || isAdvancePurchaseClosed(todayStr, k, apWindow);
           const note = perPlanNote(roomType.id, k);
@@ -746,7 +757,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
   const obpOn = (await prisma.propertyDefaults.findUnique({
     where: { propertyId }, select: { pricingModel: true },
   }))?.pricingModel === "per_person";
-  const CAP_LABEL: Record<string, string> = { cta: "CTA", ctd: "CTD", min_los: "Min LOS", max_los: "Max LOS", advance_purchase_min: "Adv. purchase min", advance_purchase_max: "Adv. purchase max", stop_sell: "Stop sell" };
+  const CAP_LABEL: Record<string, string> = cal.capLabels;
   /*
    * Occupancy rides the existing limitations line (§6.7 / L6), rather than getting a banner of its
    * own. It is the same kind of caveat as "Agoda ignores CTD": a channel that cannot express
@@ -763,7 +774,7 @@ export async function getCalendarBoard(q: CalendarQuery) {
         ...unsupportedRestrictions(c.supportedRestrictions)
           .filter((x) => x !== "channel_allocation")
           .map((x) => CAP_LABEL[x] ?? x),
-        ...(obpOn && !c.supportsOccupancy ? ["per-guest pricing (sells at your main guest count)"] : []),
+        ...(obpOn && !c.supportsOccupancy ? [cal.perGuest] : []),
       ],
     }))
     .filter((c) => c.missing.length > 0);
@@ -773,7 +784,11 @@ export async function getCalendarBoard(q: CalendarQuery) {
     currency: property.baseCurrency,
     // ⚠️ Options, selection and rows all come from ONE reconciliation, so the pill cannot say 3
     // while the list offers 2 and none is ticked. See `ratePlanRows`.
-    ratePlanOptions: planView.options,
+    // Core words a derived plan "(derived)" in English; the reader's language says it here instead.
+    ratePlanOptions: planView.options.map((o) => {
+      const rec = [...planById.values()].find((p) => p.code === o.value);
+      return rec?.priceLogic === "derived" ? { ...o, label: cal.derivedName(rec.name) } : o;
+    }),
     selectedRp: planView.selected,
     capabilityNotes,
   };

@@ -3,14 +3,34 @@
 import { revalidatePath } from "next/cache";
 import { occupancyKeyFor, occupancyKeysFor, releaseRoomsForCancellation, isStayInHouse, quoteStay } from "@revio/db";
 import { prisma } from "./db";
-import { pastDateRefusal, pastRangeRefusal, plansPerRoom, todayInTimeZone, type Capability } from "@revio/core";
+import { plansPerRoom, todayInTimeZone, type Capability } from "@revio/core";
 import { getProperty } from "./data";
 import { logAudit, recordPush, str, int, eachDate, utcDay } from "./mutation-helpers";
 import { pullChannel, type PushField } from "./connectivity";
 import { guard, requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { rateErrors } from "./i18n/rate-errors";
 
 export type ActionResult = { ok: boolean; error?: string; affected?: number; warning?: string };
+
+/** The refusal words, in the reader's language — see `lib/i18n/rate-errors.ts`. */
+async function say() {
+  return (await i18n()).t(rateErrors);
+}
+/** Core's `pastDateRefusal` / `pastRangeRefusal`, worded for the reader: core decides whether, this says what. */
+async function sayPastDay(iso: string, earliest: string): Promise<string | null> {
+  if (!iso || iso >= earliest) return null;
+  const { t, day } = await i18n();
+  return t(rateErrors).past(null, day(iso), day(earliest));
+}
+async function sayPast(from: string, to: string, earliest: string): Promise<string | null> {
+  const { t, day } = await i18n();
+  const e = t(rateErrors);
+  if (from && from < earliest) return e.past(e.startDate, day(from), day(earliest));
+  if (to && to < earliest) return e.past(e.endDate, day(to), day(earliest));
+  return null;
+}
 
 function revalidateCalendar() {
   revalidatePath("/calendar");
@@ -133,7 +153,7 @@ export async function saveCell(input: {
    * but this action is reachable on its own and the grid's idea of "today" used to be the server's
    * UTC day, which for a Bulgarian hotel is yesterday until 03:00 every morning.
    */
-  const pastCell = pastDateRefusal({ iso: input.date, earliest: todayInTimeZone(timezone) });
+  const pastCell = await sayPastDay(input.date, todayInTimeZone(timezone));
   if (pastCell) return flashError(pastCell);
 
   const date = utcDay(input.date);
@@ -155,7 +175,7 @@ export async function saveCell(input: {
      */
     const parsed = parseFloat(input.value);
     if (!Number.isFinite(parsed)) {
-      return flashError("That price isn’t a number we can read. Enter an amount, or clear the cell to leave it unpriced.");
+      return flashError((await say()).cm.priceUnreadable);
     }
     const priceMinor = Math.max(0, Math.round(parsed * 100));
     /*
@@ -168,9 +188,7 @@ export async function saveCell(input: {
      */
     const ratePlanId = await editablePlanId(propertyId, input.ratePlanId);
     if (!ratePlanId) {
-      return flashError(
-        "That price row is not linked to a rate plan that can hold a price. Reload the calendar — if it persists, check the plan is still active in Rooms & Rates.",
-      );
+      return flashError((await say()).cm.rowNotLinked);
     }
     // A calendar cell edits "the" price, which since OBP H1 is a real occupancy row — the primary.
     // Resolved rather than assumed, so this cell cannot disagree with the bulk editor beside it.
@@ -273,8 +291,9 @@ interface WriteOutcome {
 async function writeBulk(propertyId: string, tenantId: string, today: string, payload: BulkPayload): Promise<WriteOutcome> {
   const empty = { changed: [], affected: 0, dates: [], roomTypeIds: [], ratePlanIds: [], cells: [] };
   const { dateFrom, dateTo, daysOfWeek, roomTypeIds } = payload;
-  if (!dateFrom || !dateTo) return { ...empty, error: "Pick a date range." };
-  if (dateTo < dateFrom) return { ...empty, error: "End date is before start date." };
+  const e = await say();
+  if (!dateFrom || !dateTo) return { ...empty, error: e.pickRange };
+  if (dateTo < dateFrom) return { ...empty, error: e.endBeforeStart };
   /*
    * ⚠️ A bulk edit writes FORWARD inventory — rates, availability and restrictions that are then
    * pushed to every mapped channel. Applied to a date that has gone it changes nothing a hotel
@@ -283,9 +302,9 @@ async function writeBulk(propertyId: string, tenantId: string, today: string, pa
    *
    * `today` is the PROPERTY's date, not the server's: see packages/core/src/stays/past-dates.ts.
    */
-  const pastRange = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest: today });
+  const pastRange = await sayPast(dateFrom, dateTo, today);
   if (pastRange) return { ...empty, error: pastRange };
-  if (roomTypeIds.length === 0) return { ...empty, error: "Select at least one room type." };
+  if (roomTypeIds.length === 0) return { ...empty, error: e.selectRoom };
 
   // Assemble the DailyCell patch from whichever restriction fields were supplied.
   const cell: Partial<{ inventory: number; minLos: number | null; maxLos: number | null; cta: boolean; ctd: boolean; stopSell: boolean; advancePurchaseMin: number | null; advancePurchaseMax: number | null }> = {};
@@ -306,10 +325,10 @@ async function writeBulk(propertyId: string, tenantId: string, today: string, pa
   const hasRestrictionFields = Object.keys(cell).some((k) => k !== "inventory");
 
   // ≥1 field required (spec §3.1) — an empty apply is not a valid update.
-  if (changed.length === 0) return { ...empty, error: "Set at least one field to update." };
+  if (changed.length === 0) return { ...empty, error: e.nothingToUpdate };
 
   const dates = eachDate(dateFrom, dateTo, daysOfWeek);
-  if (dates.length === 0) return { ...empty, error: "No dates match those days of week." };
+  if (dates.length === 0) return { ...empty, error: e.noDatesMatch };
 
   // Rate targeting: only MANUAL plans are price-edited (derived plans follow their parent).
   let ratePlanIds: string[] = [];
@@ -343,7 +362,7 @@ async function writeBulk(propertyId: string, tenantId: string, today: string, pa
         });
         droppedPlans = rows.map((r) => ({
           name: r.name,
-          why: !r.active ? "inactive" : r.priceLogic !== "manual" ? "derived — it follows its parent" : "not on this property",
+          why: !r.active ? e.cm.droppedWhy.inactive : r.priceLogic !== "manual" ? e.cm.droppedWhy.derived : e.cm.droppedWhy.elsewhere,
         }));
       }
     }
@@ -351,9 +370,9 @@ async function writeBulk(propertyId: string, tenantId: string, today: string, pa
     if (requested.length === 0) { const std = await editablePlanId(propertyId); ratePlanIds = std ? [std] : []; }
     if (ratePlanIds.length === 0) {
       const because = droppedPlans.length > 0
-        ? ` ${droppedPlans.map((d) => `${d.name} is ${d.why}`).join("; ")}.`
+        ? ` ${droppedPlans.map((d) => e.cm.droppedIs(d.name, d.why)).join("; ")}.`
         : "";
-      return { ...empty, error: `No price was written — none of the selected rate plans can hold one.${because} Pick a manual, active plan (derived plans follow their parent).` };
+      return { ...empty, error: e.cm.noPriceWritten(because) };
     }
   }
 
@@ -362,7 +381,7 @@ async function writeBulk(propertyId: string, tenantId: string, today: string, pa
   if (payload.availability !== undefined) {
     const v = Math.max(0, Math.trunc(payload.availability));
     const over = await prisma.roomType.findMany({ where: { id: { in: roomTypeIds }, totalRooms: { lt: v } }, select: { name: true, totalRooms: true } });
-    if (over.length > 0) warning = `${v} to sell exceeds the physical count for ${over.map((r) => `${r.name} (${r.totalRooms})`).join(", ")} — saved anyway, double-check the number.`;
+    if (over.length > 0) warning = e.overPhysical(v, over.map((r) => `${r.name} (${r.totalRooms})`).join(", "));
   }
 
   // A rate plan belongs to specific room types. Pricing every selected plan against every selected
@@ -483,15 +502,11 @@ async function writeBulk(propertyId: string, tenantId: string, today: string, pa
    */
   const notes: string[] = [];
   if (droppedPlans.length > 0) {
-    notes.push(
-      `No price was written for ${droppedPlans.map((d) => `${d.name} (${d.why})`).join(", ")}.`,
-    );
+    notes.push(e.cm.droppedNote(droppedPlans.map((d) => `${d.name} (${d.why})`).join(", ")));
   }
   if (roomsWithNoPlan.length > 0) {
     const names = await prisma.roomType.findMany({ where: { id: { in: roomsWithNoPlan } }, select: { name: true } });
-    notes.push(
-      `${names.map((n) => n.name).join(", ")} got no price — none of the selected rate plans is sold on ${names.length === 1 ? "it" : "them"}.`,
-    );
+    notes.push(e.cm.noPlanSold(names.map((n) => n.name).join(", "), names.length));
   }
   const fullWarning = [warning, ...notes].filter(Boolean).join(" ") || undefined;
 
@@ -609,14 +624,14 @@ export async function applyBulkUpdateBatch(payloads: BulkPayload[]): Promise<Bul
   }
   const { id: propertyId, tenantId, timezone } = await getProperty();
   const today = todayInTimeZone(timezone);
-  if (payloads.length === 0) return { ok: false, error: "Nothing to apply." };
+  if (payloads.length === 0) return { ok: false, error: (await say()).cm.nothingToApply };
 
   const outcomes: WriteOutcome[] = [];
   for (const [i, payload] of payloads.entries()) {
     const out = await writeBulk(propertyId, tenantId, today, payload);
     // Fail fast and say WHICH change was rejected: silently applying two of three and pushing them
     // would leave the hotel believing all three landed.
-    if (out.error) return { ok: false, error: `Change ${i + 1}: ${out.error}` };
+    if (out.error) return { ok: false, error: (await say()).cm.changeN(i + 1, out.error) };
     outcomes.push(out);
   }
 
@@ -646,8 +661,9 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
   const nights = Math.max(1, int(fd, "nights", 1));
   const quantity = Math.max(1, int(fd, "quantity", 1));
   const guestName = str(fd, "guestName").trim() || "Walk-in Guest";
-  if (!channelId || !roomTypeId || !ratePlanId || !checkIn) return { ok: false, error: "Fill channel, room, rate and date." };
-  const pastRefusal = pastDateRefusal({ iso: checkIn, earliest: todayInTimeZone(property.timezone) });
+  const sim = (await say()).cm.simulate;
+  if (!channelId || !roomTypeId || !ratePlanId || !checkIn) return { ok: false, error: sim.fill };
+  const pastRefusal = await sayPastDay(checkIn, todayInTimeZone(property.timezone));
   if (pastRefusal) return { ok: false, error: pastRefusal };
 
   /*
@@ -665,19 +681,19 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
     prisma.channelRoomTypeMapping.findFirst({ where: { channelId, roomTypeId, externalRoomId: { not: null } } }),
     prisma.channelRatePlanMapping.findMany({ where: { channelId, ratePlanId, externalRateId: { not: null } } }),
   ]);
-  if (!channel || channel.propertyId !== property.id) return { ok: false, error: "That channel is not connected to this property." };
-  if (channel.connectivityMode !== "mock") return { ok: false, error: "Simulated bookings only run on demo channels." };
+  if (!channel || channel.propertyId !== property.id) return { ok: false, error: sim.notConnected };
+  if (channel.connectivityMode !== "mock") return { ok: false, error: sim.demoOnly };
   const rateMap = rateMaps.find((m) => m.roomTypeId === roomTypeId) ?? rateMaps.find((m) => m.roomTypeId == null);
   // An unmapped room or rate cannot be sold on the channel — say so, the way the real import would.
   if (!roomMap?.externalRoomId || !rateMap?.externalRateId) {
-    return { ok: false, error: `That room and rate are not mapped to ${channel.name}, so the channel could not have sold them. Map them in Mapping first.` };
+    return { ok: false, error: sim.notMapped(channel.name) };
   }
 
   const checkOut = new Date(Date.parse(`${checkIn}T00:00:00Z`) + nights * 86_400_000).toISOString().slice(0, 10);
   const room = await prisma.roomType.findUniqueOrThrow({ where: { id: roomTypeId }, select: { name: true, maxGuests: true } });
   const totalMinor = await quoteStay(prisma, { roomTypeId, ratePlanId, checkIn, checkOut, quantity });
   if (totalMinor == null) {
-    return { ok: false, error: "This rate plan has no price for those nights and no default rate, so no channel is selling it." };
+    return { ok: false, error: sim.noPrice };
   }
 
   const outcome = await pullChannel(channelId, {
@@ -690,8 +706,8 @@ export async function simulateBooking(_prev: ActionResult | null, fd: FormData):
       }],
     }],
   });
-  if (!outcome.ok) return { ok: false, error: outcome.error ?? "The booking could not be imported." };
-  if (outcome.failedImport > 0) return { ok: false, error: "The channel sent the booking but it could not be imported — see the Error Center." };
+  if (!outcome.ok) return { ok: false, error: outcome.error ?? sim.notImported };
+  if (outcome.failedImport > 0) return { ok: false, error: sim.failedImport };
 
   await logAudit(property.id, property.tenantId, { entity: `Reservation · ${guestName}`, field: "import", newValue: `${room.name} ×${quantity} · ${nights}n`, source: "api" });
   revalidatePath("/sync");
@@ -704,8 +720,9 @@ export async function cancelReservation(fd: FormData): Promise<void> {
   const { id: propertyId, tenantId } = await getProperty();
   const id = str(fd, "id");
   const res = await prisma.reservation.findUnique({ where: { id }, include: { lines: true, channel: true } });
-  if (!res) return flashError("That reservation no longer exists — somebody may have removed it while this page was open.");
-  if (res.status === "cancelled") return flashError("That reservation is already cancelled.");
+  const rs = (await say()).cm.reservation;
+  if (!res) return flashError(rs.gone);
+  if (res.status === "cancelled") return flashError(rs.alreadyCancelled);
 
   // ⚠️ Refuse if the guest is IN the room. This guard existed only in RevioCRS, and production
   // carries the booking that proves the gap: cancelled on 29 July while checked in. Cancelling an
@@ -713,9 +730,7 @@ export async function cancelReservation(fd: FormData): Promise<void> {
   // platform exists to prevent, reached from the inside — and leaves the bill open on a reservation
   // that officially never happened. Leaving early is a CHECK-OUT, in RevioPMS.
   if (await isStayInHouse(prisma, id)) {
-    return flashError(
-      "This guest has already checked in. Check them out in RevioPMS to end the stay — cancelling would put an occupied room back on sale.",
-    );
+    return flashError(rs.inHouse);
   }
 
   // Cancelling drops the booking out of the "rooms sold" derivation, so availability

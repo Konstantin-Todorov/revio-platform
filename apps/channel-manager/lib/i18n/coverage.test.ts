@@ -5,6 +5,9 @@ import { auth } from "./auth";
 import { pages } from "./pages";
 import { dashboard } from "./dashboard";
 import { reservations } from "./reservations";
+import { calendar } from "./calendar";
+import { bulk } from "./bulk";
+import { rateErrors } from "./rate-errors";
 
 /**
  * Dictionaries that are fully Bulgarian stay fully Bulgarian — the same guard RevioCRS and RevioPMS
@@ -12,7 +15,7 @@ import { reservations } from "./reservations";
  * screen; that is exactly why a gap has to fail somewhere. Every RevioLink dictionary is listed
  * here; `lib/i18n/ready.ts` is switched on only when this passes with all of them.
  */
-const COMPLETE: Record<string, Translations<unknown>> = { shell, auth, pages, dashboard, reservations } as Record<string, Translations<unknown>>;
+const COMPLETE: Record<string, Translations<unknown>> = { shell, auth, pages, dashboard, reservations, calendar, bulk, rateErrors } as Record<string, Translations<unknown>>;
 
 describe("RevioLink dictionaries have every string in Bulgarian", () => {
   for (const [name, dict] of Object.entries(COMPLETE)) {

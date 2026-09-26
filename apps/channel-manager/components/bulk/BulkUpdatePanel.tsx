@@ -7,6 +7,9 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
 import { PlanTree } from "@revio/ui/plan-tree";
 import { buildSelectionTree, roomsInSelection, selectAll, selectedPairs, selectionSummary } from "@revio/core";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { bulk as bulkDict } from "@/lib/i18n/bulk";
 
 type Opt = { id: string; name: string; code: string };
 type PlanOpt = {
@@ -17,11 +20,8 @@ type PlanOpt = {
   roomTypeIds: string[];
 };
 
-const DOW: [string, string][] = [["1", "Mon"], ["2", "Tue"], ["3", "Wed"], ["4", "Thu"], ["5", "Fri"], ["6", "Sat"], ["0", "Sun"]];
-const RATE_MODES: [BulkRateMode, string][] = [
-  ["set", "Set exact price (€)"], ["inc_pct", "Increase by %"], ["dec_pct", "Decrease by %"],
-  ["inc_amt", "Increase by amount (€)"], ["dec_amt", "Decrease by amount (€)"],
-];
+const DOW = ["1", "2", "3", "4", "5", "6", "0"] as const;
+const RATE_MODES: BulkRateMode[] = ["set", "inc_pct", "dec_pct", "inc_amt", "dec_amt"];
 const selCls = inputCls;
 
 /**
@@ -39,6 +39,9 @@ export function BulkUpdatePanel({
   compact?: boolean;
   onApplied?: (r: BulkResult) => void;
 }) {
+  const b = translate(bulkDict, useLocale());
+  const t = b.panel;
+  const sm = b.summary;
   const in30 = useMemo(() => new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10), []);
 
   /*
@@ -125,32 +128,32 @@ export function BulkUpdatePanel({
   function summarize(p: BulkPayload): string[] {
     const lines: string[] = [];
     if (p.rate) {
-      const label = RATE_MODES.find(([m]) => m === p.rate!.mode)?.[1] ?? p.rate.mode;
+      const label = t.rateModes[p.rate.mode] ?? p.rate.mode;
       // Named per room, because the same plan name can be selected on one room and not another.
       const names = groups.filter((g) => g.plans.length > 0)
         .map((g) => `${g.roomTypeName}: ${g.plans.map((pl) => pl.name).join(", ")}`)
-        .join(" · ") || "standard plan";
-      lines.push(`Price — ${label}: ${p.rate.value} · on ${names}`);
+        .join(" · ") || sm.standardPlan;
+      lines.push(sm.price(label, String(p.rate.value), names));
     }
-    const showNum = (v: number | null | undefined, unit = "") => (v && v > 0 ? `${v}${unit}` : "cleared");
-    if (p.availability !== undefined) lines.push(`Allocation → ${p.availability}`);
-    if (p.minLos !== undefined) lines.push(`Min stay → ${showNum(p.minLos)}`);
-    if (p.maxLos !== undefined) lines.push(`Max stay → ${showNum(p.maxLos)}`);
-    if (p.cta !== undefined) lines.push(`Closed to arrival → ${p.cta ? "on" : "off"}`);
-    if (p.ctd !== undefined) lines.push(`Closed to departure → ${p.ctd ? "on" : "off"}`);
-    if (p.stopSell !== undefined) lines.push(`Stop-sell → ${p.stopSell ? "closed" : "open"}`);
-    if (p.advanceMin !== undefined) lines.push(`Min advance → ${showNum(p.advanceMin, " days")}`);
-    if (p.advanceMax !== undefined) lines.push(`Max advance → ${showNum(p.advanceMax, " days")}`);
+    const showNum = (v: number | null | undefined, days = false) => (v && v > 0 ? `${v}${days ? sm.days(v) : ""}` : sm.cleared);
+    if (p.availability !== undefined) lines.push(sm.allocation(p.availability));
+    if (p.minLos !== undefined) lines.push(sm.minStay(showNum(p.minLos)));
+    if (p.maxLos !== undefined) lines.push(sm.maxStay(showNum(p.maxLos)));
+    if (p.cta !== undefined) lines.push(sm.cta(p.cta));
+    if (p.ctd !== undefined) lines.push(sm.ctd(p.ctd));
+    if (p.stopSell !== undefined) lines.push(sm.stopSell(p.stopSell));
+    if (p.advanceMin !== undefined) lines.push(sm.minAdvance(showNum(p.advanceMin, true)));
+    if (p.advanceMax !== undefined) lines.push(sm.maxAdvance(showNum(p.advanceMax, true)));
     return lines;
   }
 
-  const dowLabel = dows.length ? dows.map((d) => DOW.find(([v]) => v === d)?.[1]).join(", ") : "every day";
+  const dowLabel = dows.length ? dows.map((d) => t.dow[d as keyof typeof t.dow]).join(", ") : t.everyDay;
 
   /** null when the form is a valid change, otherwise the reason it is not. */
   function validate(p: BulkPayload): string | null {
-    if (rtIds.length === 0) return "Select at least one room type.";
-    if (dateTo < dateFrom) return "End date is before start date.";
-    if (summarize(p).length === 0) return "Set at least one field to update.";
+    if (rtIds.length === 0) return t.errors.noRoom;
+    if (dateTo < dateFrom) return t.errors.dates;
+    if (summarize(p).length === 0) return t.errors.nothing;
     return null;
   }
 
@@ -178,7 +181,7 @@ export function BulkUpdatePanel({
     const p = buildPayload();
     const err = validate(p);
     // With changes already queued the form may legitimately be empty — the queue IS the update.
-    if (err && !(queue.length > 0 && err === "Set at least one field to update.")) return setInlineError(err);
+    if (err && !(queue.length > 0 && err === t.errors.nothing)) return setInlineError(err);
     setResult(null);
     setPhase("confirm");
   }
@@ -214,29 +217,28 @@ export function BulkUpdatePanel({
         {/* Scope */}
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="From"><DateField value={dateFrom} min={today} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} /></Field>
-            <Field label="To"><DateField value={dateTo} min={today} onChange={(e) => setDateTo(e.target.value)} className={inputCls} /></Field>
+            <Field label={t.from}><DateField value={dateFrom} min={today} onChange={(e) => setDateFrom(e.target.value)} className={inputCls} /></Field>
+            <Field label={t.to}><DateField value={dateTo} min={today} onChange={(e) => setDateTo(e.target.value)} className={inputCls} /></Field>
           </div>
           <div>
-            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">Days of week</span>
+            <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">{t.days}</span>
             <div className="flex flex-wrap gap-1.5">
-              {DOW.map(([v, label]) => (
+              {DOW.map((v) => (
                 <label key={v} className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12px] font-medium transition-colors ${dows.includes(v) ? "border-brand-600 bg-brand-50 text-brand-700" : "border-surface-border text-ink-600 hover:bg-surface-muted"}`}>
                   <input type="checkbox" checked={dows.includes(v)} onChange={() => setDows((a) => toggle(a, v))} className="sr-only" />
-                  {label}
+                  {t.dow[v]}
                 </label>
               ))}
             </div>
-            <span className="mt-1 block text-[11px] text-ink-400">Leave all off to apply to every day.</span>
+            <span className="mt-1 block text-[11px] text-ink-400">{t.everyDayHint}</span>
           </div>
           <div>
             <span className="mb-1.5 block text-[12px] font-semibold text-ink-700">
-              Which rate plans would you like to apply these changes to?
+              {t.whichPlans}
             </span>
-            <PlanTree rooms={tree} selected={selected} onChange={setSelected} />
+            <PlanTree rooms={tree} selected={selected} onChange={setSelected} strings={b.tree} />
             <span className="mt-1.5 block text-[11px] leading-snug text-ink-400">
-              A price lands on the plans you tick. Allocation and restrictions are written per room type,
-              so they apply to every room with something ticked under it — derived plans included.
+              {t.plansHint}
             </span>
           </div>
         </div>
@@ -244,35 +246,35 @@ export function BulkUpdatePanel({
         {/* Attributes — any subset (spec §3.1) */}
         <div className="space-y-3.5">
           <div className="rounded-md bg-surface-muted px-3 py-2 text-[11.5px] font-medium text-ink-500">
-            Fill only the fields you want to change — the rest stay as they are. At least one is required.
+            {t.fillOnly}
           </div>
           <div className="grid grid-cols-[1fr,7rem] gap-2">
-            <Field label="Price"><select value={rateMode} onChange={(e) => setRateMode(e.target.value as BulkRateMode | "")} className={selCls}>
-              <option value="">— No change —</option>
-              {RATE_MODES.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+            <Field label={t.price}><select value={rateMode} onChange={(e) => setRateMode(e.target.value as BulkRateMode | "")} className={selCls}>
+              <option value="">{t.noChange}</option>
+              {RATE_MODES.map((m) => <option key={m} value={m}>{t.rateModes[m]}</option>)}
             </select></Field>
-            <Field label="Value"><input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} disabled={rateMode === ""} placeholder="—" className={`${inputCls} disabled:opacity-50`} /></Field>
+            <Field label={t.value}><input type="number" step="0.01" value={rateValue} onChange={(e) => setRateValue(e.target.value)} disabled={rateMode === ""} placeholder="—" className={`${inputCls} disabled:opacity-50`} /></Field>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Allocation" hint="The gross number you offer — Bookable subtracts what is sold"><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
+            <Field label={t.allocation} hint={t.allocationHint}><input type="number" min="0" value={avail} onChange={(e) => setAvail(e.target.value)} placeholder="—" className={inputCls} /></Field>
             <div />
-            <Field label="Min stay (nights)"><input type="number" min="0" value={minLos} onChange={(e) => setMinLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
-            <Field label="Max stay (nights)"><input type="number" min="0" value={maxLos} onChange={(e) => setMaxLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
-            <Field label="Min advance (days)"><input type="number" min="0" value={advMin} onChange={(e) => setAdvMin(e.target.value)} placeholder="—" className={inputCls} /></Field>
-            <Field label="Max advance (days)"><input type="number" min="0" value={advMax} onChange={(e) => setAdvMax(e.target.value)} placeholder="—" className={inputCls} /></Field>
+            <Field label={t.minStay}><input type="number" min="0" value={minLos} onChange={(e) => setMinLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
+            <Field label={t.maxStay}><input type="number" min="0" value={maxLos} onChange={(e) => setMaxLos(e.target.value)} placeholder="—" className={inputCls} /></Field>
+            <Field label={t.minAdvance}><input type="number" min="0" value={advMin} onChange={(e) => setAdvMin(e.target.value)} placeholder="—" className={inputCls} /></Field>
+            <Field label={t.maxAdvance}><input type="number" min="0" value={advMax} onChange={(e) => setAdvMax(e.target.value)} placeholder="—" className={inputCls} /></Field>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            <Field label="Closed to arrival"><select value={cta} onChange={(e) => setCta(e.target.value as "" | "on" | "off")} className={selCls}><option value="">— No change —</option><option value="on">Closed</option><option value="off">Open</option></select></Field>
-            <Field label="Closed to departure"><select value={ctd} onChange={(e) => setCtd(e.target.value as "" | "on" | "off")} className={selCls}><option value="">— No change —</option><option value="on">Closed</option><option value="off">Open</option></select></Field>
-            <Field label="Rate plan status"><select value={stopSell} onChange={(e) => setStopSell(e.target.value as "" | "on" | "off")} className={selCls}><option value="">— No change —</option><option value="off">Open (sell)</option><option value="on">Close (stop-sell)</option></select></Field>
+            <Field label={t.cta}><select value={cta} onChange={(e) => setCta(e.target.value as "" | "on" | "off")} className={selCls}><option value="">{t.noChange}</option><option value="on">{t.closed}</option><option value="off">{t.open}</option></select></Field>
+            <Field label={t.ctd}><select value={ctd} onChange={(e) => setCtd(e.target.value as "" | "on" | "off")} className={selCls}><option value="">{t.noChange}</option><option value="on">{t.closed}</option><option value="off">{t.open}</option></select></Field>
+            <Field label={t.planStatus}><select value={stopSell} onChange={(e) => setStopSell(e.target.value as "" | "on" | "off")} className={selCls}><option value="">{t.noChange}</option><option value="off">{t.openSell}</option><option value="on">{t.closeStop}</option></select></Field>
           </div>
-          <p className="text-[11px] text-ink-400">Min/max stay & advance: enter <span className="font-semibold">0</span> to clear an existing value.</p>
+          <p className="text-[11px] text-ink-400">{t.clearHint("0")[0]}<span className="font-semibold">0</span>{t.clearHint("0")[1]}</p>
           {inlineError && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{inlineError}</p>}
 
           {queue.length > 0 && (
             <div className="rounded-md border border-brand-200 bg-brand-50/60 p-3">
               <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-brand-700">
-                Queued — {queue.length} change{queue.length === 1 ? "" : "s"}, sent as one update
+                {t.queued(queue.length)}
               </span>
               <ul className="space-y-1.5">
                 {queue.map((c, i) => (
@@ -281,7 +283,7 @@ export function BulkUpdatePanel({
                       <div className="truncate text-[11.5px] font-medium text-ink-500">{c.scope}</div>
                       <div className="text-[12.5px] text-ink-700">{c.lines.join(" · ")}</div>
                     </div>
-                    <button type="button" aria-label={`Remove change ${i + 1}`} onClick={() => setQueue((q) => q.filter((_, j) => j !== i))} className="mt-0.5 shrink-0 rounded p-1 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600">
+                    <button type="button" aria-label={t.removeChange(i + 1)} onClick={() => setQueue((q) => q.filter((_, j) => j !== i))} className="mt-0.5 shrink-0 rounded p-1 text-ink-400 transition-colors hover:bg-danger-50 hover:text-danger-600">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </li>
@@ -291,29 +293,29 @@ export function BulkUpdatePanel({
           )}
 
           <div className="grid grid-cols-[auto,1fr] gap-2">
-            <button type="button" onClick={addToQueue} title="Set different values for other dates or rooms, and send them all in one update" className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3.5 py-2.5 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">
-              <Plus className="h-4 w-4" /> Add another change
+            <button type="button" onClick={addToQueue} title={t.addAnotherTitle} className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3.5 py-2.5 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">
+              <Plus className="h-4 w-4" /> {t.addAnother}
             </button>
             <button type="button" onClick={openPreview} className="rounded-md bg-brand-800 px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700">
-              Preview &amp; apply{queue.length > 0 ? ` (${queue.length + (summarize(buildPayload()).length > 0 ? 1 : 0)})` : ""}
+              {t.preview}{queue.length > 0 ? ` (${queue.length + (summarize(buildPayload()).length > 0 ? 1 : 0)})` : ""}
             </button>
           </div>
         </div>
       </div>
 
       {/* Confirm → result modal (spec §3.2) */}
-      <Modal open={phase !== "closed"} onClose={() => setPhase("closed")} title={phase === "result" ? "Bulk update" : "Review bulk update"}>
+      <Modal open={phase !== "closed"} onClose={() => setPhase("closed")} title={phase === "result" ? t.resultTitle : t.reviewTitle}>
         {phase === "confirm" && batch.length > 0 && (
           <div className="space-y-4">
             <div className="rounded-md border border-surface-border bg-surface-muted/60 px-3.5 py-3 text-[12.5px] text-ink-600">
               {batch.length === 1
-                ? "This will be applied and pushed to your channels."
-                : `${batch.length} changes, applied in order and pushed to your channels as one update.`}
+                ? t.single
+                : t.many(batch.length)}
             </div>
             {batch.map((c, ci) => (
               <div key={ci}>
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                  {batch.length > 1 ? `Change ${ci + 1} — ` : "Changes to apply — "}{c.scope}
+                  {batch.length > 1 ? t.changeN(ci + 1) : t.changes}{c.scope}
                 </span>
                 <ul className="space-y-1.5">
                   {c.lines.map((l, i) => (
@@ -323,8 +325,8 @@ export function BulkUpdatePanel({
               </div>
             ))}
             <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={() => setPhase("closed")} className="rounded-md border border-surface-border px-4 py-2 text-[13px] font-semibold text-ink-600 hover:bg-surface-muted">Cancel</button>
-              <button type="button" onClick={apply} disabled={pending} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60">{pending ? "Applying…" : "Apply"}</button>
+              <button type="button" onClick={() => setPhase("closed")} className="rounded-md border border-surface-border px-4 py-2 text-[13px] font-semibold text-ink-600 hover:bg-surface-muted">{t.cancel}</button>
+              <button type="button" onClick={apply} disabled={pending} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:opacity-60">{pending ? t.applying : t.apply}</button>
             </div>
           </div>
         )}
@@ -333,12 +335,12 @@ export function BulkUpdatePanel({
             {result.ok ? (
               <div className="flex items-start gap-2.5 rounded-md bg-success-50 px-3.5 py-3 text-[13.5px] font-semibold text-success-600">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" />
-                <div><div>Successful</div><div className="mt-0.5 text-[12px] font-medium text-success-600/90">Applied to {result.affected} cell{result.affected === 1 ? "" : "s"} and pushed to channels.</div></div>
+                <div><div>{t.success}</div><div className="mt-0.5 text-[12px] font-medium text-success-600/90">{t.applied(result.affected ?? 0)}</div></div>
               </div>
             ) : (
               <div className="flex items-start gap-2.5 rounded-md bg-danger-50 px-3.5 py-3 text-[13.5px] font-semibold text-danger-600">
                 <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
-                <div><div>Not successful</div><div className="mt-0.5 text-[12px] font-medium text-danger-600/90">{result.error ?? "The update could not be applied."}</div></div>
+                <div><div>{t.failed}</div><div className="mt-0.5 text-[12px] font-medium text-danger-600/90">{result.error ?? t.failedFallback}</div></div>
               </div>
             )}
             {result.ok && (
@@ -352,7 +354,7 @@ export function BulkUpdatePanel({
               <p className="flex items-start gap-2 rounded-md bg-warning-50 px-3 py-2 text-[12px] font-medium text-warning-700"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{result.warning}</p>
             )}
             <div className="flex justify-end pt-1">
-              <button type="button" onClick={() => setPhase("closed")} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700">Done</button>
+              <button type="button" onClick={() => setPhase("closed")} className="rounded-md bg-brand-800 px-4 py-2 text-[13px] font-semibold text-white hover:bg-brand-700">{t.done}</button>
             </div>
           </div>
         )}

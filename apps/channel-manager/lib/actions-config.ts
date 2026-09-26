@@ -10,8 +10,10 @@ import type { PushField, PushScope } from "@revio/connectivity";
 import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 import { flashError, setFlash } from "@revio/ui/flash";
 import { guard, requireCapability } from "./authz";
-import { earliestSelectable, pastRangeRefusal, renderSystemEmail, renderSystemEmailText, todayInTimeZone } from "@revio/core";
+import { earliestSelectable, renderSystemEmail, renderSystemEmailText, todayInTimeZone } from "@revio/core";
 import { verifyPublished, verifyPublishedAvailability } from "@revio/connectivity";
+import { i18n } from "./i18n/server";
+import { rateErrors } from "./i18n/rate-errors";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -54,12 +56,14 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
   const rowId = str(fd, "id");
   const name = str(fd, "name");
   const type = str(fd, "type");
-  if (!name) return { ok: false, error: "Name is required." };
-  if (!type) return { ok: false, error: "Pick a restriction type." };
+  const { t, day } = await i18n();
+  const e = t(rateErrors);
+  if (!name) return { ok: false, error: e.nameRequired };
+  if (!type) return { ok: false, error: e.pickType };
 
   const dateFrom = str(fd, "dateFrom");
   const dateTo = str(fd, "dateTo");
-  if (!dateFrom || !dateTo) return { ok: false, error: "Pick a date range." };
+  if (!dateFrom || !dateTo) return { ok: false, error: e.pickRange };
 
   /*
    * ⚠️ A restriction governs inventory that has NOT happened yet, so it cannot start in the past.
@@ -79,8 +83,9 @@ export async function saveRestrictionRule(_prev: ActionResult | null, fd: FormDa
     todayInTimeZone(timezone),
     existing ? existing.dateFrom.toISOString().slice(0, 10) : null,
   );
-  const refusal = pastRangeRefusal({ from: dateFrom, to: dateTo, earliest });
-  if (refusal) return { ok: false, error: refusal };
+  // Core's `pastRangeRefusal`, worded for the reader.
+  if (dateFrom < earliest) return { ok: false, error: e.past(e.startDate, day(dateFrom), day(earliest)) };
+  if (dateTo < earliest) return { ok: false, error: e.past(e.endDate, day(dateTo), day(earliest)) };
 
   const channelCodes = strList(fd, "channelCodes");
   const roomTypeId = str(fd, "roomTypeId") || null;

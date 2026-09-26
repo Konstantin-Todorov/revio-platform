@@ -10,7 +10,9 @@ import { CollapseAll } from "@/components/calendar/CollapseAll";
 import { ParamMultiSelect } from "@/components/calendar/ParamMultiSelect";
 import { MonthView } from "@/components/calendar/MonthView";
 import { BookingDialog } from "@/components/booking/BookingDialog";
-import { weekday, dayMonth, isWeekend, ymd } from "@/lib/format";
+import { isWeekend, ymd } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { calendar as calDict } from "@/lib/i18n/calendar";
 import { DateField } from "@revio/ui/date-field";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +63,14 @@ export default async function CalendarPage({
 
   // Month view fetches its own window: exactly one month, same Rooms/Display filters as the grid.
   const mw = monthWindow(sp.month);
+  const { t: tr, locale } = await i18n();
+  const t = tr(calDict);
+  // Weekday and "26 Sep" in the reader's language; Monday-first like the month grid.
+  const weekday = (d: Date) => t.weekdays[(d.getUTCDay() + 6) % 7]!;
+  const dayMonth = (d: Date) => `${d.getUTCDate()} ${t.monthsShort[d.getUTCMonth()]}`;
+  // "€120" in English, "120 €" in Bulgarian — the value is already a formatted number.
+  const price = (v: string) => (locale === "en" ? `€${v}` : `${v} €`);
+  const rowGroups = CALENDAR_ROW_GROUPS.map(([value]) => ({ value, label: t.rowGroups[value] }));
   const board =
     view === "month"
       ? await getCalendarBoard({
@@ -82,12 +92,12 @@ export default async function CalendarPage({
   if (allRoomTypes.length === 0) {
     return (
       <div>
-        <PageHeader title="Calendar" subtitle={`${property.name} · availability, rates & restrictions`} />
+        <PageHeader title={t.title} subtitle={t.subtitle(property.name)} />
         <EmptyState
           icon={<BedDouble className="h-7 w-7" />}
-          title="No room types yet"
-          body="The calendar shows availability and rates per room type. Add your first room type to get started."
-          actionLabel="Go to Rooms & Rates"
+          title={t.emptyTitle}
+          body={t.emptyBody}
+          actionLabel={t.emptyAction}
           actionHref="/rooms-rates"
         />
       </div>
@@ -108,8 +118,7 @@ export default async function CalendarPage({
   // ---- MONTH VIEW ----------------------------------------------------------
   if (view === "month") {
     const [my, mm] = mw.iso.split("-").map(Number);
-    const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const monthLabel = `${MONTHS[(mm ?? 1) - 1]} ${my}`;
+    const monthLabel = `${t.months[(mm ?? 1) - 1]} ${my}`;
     // Links preserve the current filters, changing only the month.
     const monthQs = (month: string) => {
       const p = new URLSearchParams({ view: "month", month });
@@ -117,24 +126,23 @@ export default async function CalendarPage({
       if (rows.length > 0) p.set("rows", rows.join(","));
       return `/calendar?${p.toString()}`;
     };
-    const monthGroups = CALENDAR_ROW_GROUPS; // "rates" is no longer a display group (spec §2.2)
     const legend = [
-      { label: "Stop Sell", color: "bg-danger-500" },
-      { label: "CTA", color: "bg-brand-600" },
-      { label: "CTD", color: "bg-accent-500" },
-      { label: "Weekend", color: "bg-warning-500" },
+      { label: t.legend.stop, color: "bg-danger-500" },
+      { label: t.legend.cta, color: "bg-brand-600" },
+      { label: t.legend.ctd, color: "bg-accent-500" },
+      { label: t.legend.weekend, color: "bg-warning-500" },
     ];
 
     return (
       <div>
         <PageHeader
-          title="Calendar"
-          subtitle={`${property.name} · availability, rates & restrictions`}
+          title={t.title}
+          subtitle={t.subtitle(property.name)}
           action={
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
-                <Link href="/calendar" className="rounded px-2.5 py-1 text-[12.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted">Grid</Link>
-                <span className="rounded bg-brand-800 px-2.5 py-1 text-[12.5px] font-semibold text-white">Month</span>
+                <Link href="/calendar" className="rounded px-2.5 py-1 text-[12.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted">{t.grid}</Link>
+                <span className="rounded bg-brand-800 px-2.5 py-1 text-[12.5px] font-semibold text-white">{t.month}</span>
               </div>
               {bookingOptions.demoMode && <BookingDialog options={bookingOptions} today={todayKey} />}
             </div>
@@ -144,13 +152,13 @@ export default async function CalendarPage({
         {/* Month navigation + the SAME filters as the grid */}
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1">
-            <Link href={monthQs(mw.prev)} aria-label="Previous month" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
+            <Link href={monthQs(mw.prev)} aria-label={t.prevMonth} className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
               <ChevronLeft className="h-4 w-4" />
             </Link>
             <Link href={`/calendar?view=month${rt.length > 0 ? `&rt=${rt.join(",")}` : ""}${rows.length > 0 ? `&rows=${rows.join(",")}` : ""}`} className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
-              This month
+              {t.thisMonth}
             </Link>
-            <Link href={monthQs(mw.next)} aria-label="Next month" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
+            <Link href={monthQs(mw.next)} aria-label={t.nextMonth} className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
               <ChevronRight className="h-4 w-4" />
             </Link>
           </div>
@@ -162,17 +170,17 @@ export default async function CalendarPage({
             {rt.length > 0 && <input type="hidden" name="rt" value={rt.join(",")} />}
             {rows.length > 0 && <input type="hidden" name="rows" value={rows.join(",")} />}
             <input type="month" name="month" defaultValue={mw.iso} className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
-            <button type="submit" className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Go</button>
+            <button type="submit" className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{t.go}</button>
           </form>
 
           <ParamMultiSelect
-            label="Rooms" param="rt" emptyLabel="All"
+            label={t.rooms} param="rt" emptyLabel={t.all}
             options={allRoomTypes.map((r) => ({ value: r.code, label: r.name }))}
             selected={rt}
           />
           <ParamMultiSelect
-            label="Display" param="rows" emptyLabel="Default"
-            options={monthGroups.map(([value, label]) => ({ value, label }))}
+            label={t.display} param="rows" emptyLabel={t.displayDefault}
+            options={rowGroups}
             selected={rows}
           />
 
@@ -191,22 +199,21 @@ export default async function CalendarPage({
                 <ChevronDown className="h-4 w-4 -rotate-90 text-ink-400 transition-transform group-open/section:rotate-0" />
                 <span className="text-[13.5px] font-bold text-ink-900">{roomType.name}</span>
                 <span className="text-[11px] font-medium text-ink-400">
-                  {roomType.code} · {roomType.totalRooms} {roomType.unitKind === "bed" ? "beds" : "rooms"} · {property.baseCurrency}
+                  {roomType.code} · {t.units(roomType.totalRooms, roomType.unitKind === "bed" ? "bed" : "room")} · {property.baseCurrency}
                 </span>
               </summary>
-              <MonthView section={{ roomType, rows: sectionRows }} dates={dates} todayKey={todayKey} visible={new Set(visible)} />
+              <MonthView section={{ roomType, rows: sectionRows }} dates={dates} todayKey={todayKey} visible={new Set(visible)} weekdays={t.weekdays} words={t.monthCell} />
             </details>
           ))}
           {sections.length === 0 && (
             <div className="rounded-lg border border-dashed border-surface-border bg-white p-10 text-center text-[13px] text-ink-400">
-              No room types match the filter — clear the Rooms filter above.
+              {t.noMatch}
             </div>
           )}
         </div>
 
         <p className="mt-3 text-[12px] text-ink-400">
-          Same logic as the grid view — edits write the same rooms-to-sell and standard rate, derived rates
-          follow, and changes push to channels on real connectivity. Badge <span className="rounded bg-brand-50 px-1 text-[10px] font-bold text-brand-700">2n</span> = minimum stay.
+          {t.monthFootnote}<span className="rounded bg-brand-50 px-1 text-[10px] font-bold text-brand-700">2n</span>{t.minStayBadge}
         </p>
       </div>
     );
@@ -238,29 +245,29 @@ export default async function CalendarPage({
   };
 
   const legend = [
-    { label: "Stop Sell", color: "bg-danger-500" },
-    { label: "CTA", color: "bg-brand-600" },
-    { label: "CTD", color: "bg-accent-500" },
-    { label: "Weekend", color: "bg-warning-500" },
+    { label: t.legend.stop, color: "bg-danger-500" },
+    { label: t.legend.cta, color: "bg-brand-600" },
+    { label: t.legend.ctd, color: "bg-accent-500" },
+    { label: t.legend.weekend, color: "bg-warning-500" },
   ];
 
   return (
     <div>
       <PageHeader
-        title="Calendar"
-        subtitle={`${property.name} · availability, rates & restrictions`}
+        title={t.title}
+        subtitle={t.subtitle(property.name)}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
-              <span className="rounded bg-brand-800 px-2.5 py-1 text-[12.5px] font-semibold text-white">Grid</span>
+              <span className="rounded bg-brand-800 px-2.5 py-1 text-[12.5px] font-semibold text-white">{t.grid}</span>
               <Link href={`/calendar?view=month${rt.length > 0 ? `&rt=${rt[0]}` : ""}`} className="rounded px-2.5 py-1 text-[12.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted">
-                Month
+                {t.month}
               </Link>
             </div>
             <div className="flex items-center gap-1 rounded-md border border-surface-border bg-white p-0.5">
               {VIEWS.map((v) => (
                 <Link key={v} href={qs({ days: String(v) })} className={`rounded px-2.5 py-1 text-[12.5px] font-semibold transition-colors ${days === v ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}>
-                  {v}d
+                  {t.days(v)}
                 </Link>
               ))}
             </div>
@@ -272,13 +279,13 @@ export default async function CalendarPage({
       {/* Window navigation + filters */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
-          <Link href={qs({ start: shift(start, -days) })} aria-label="Previous window" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
+          <Link href={qs({ start: shift(start, -days) })} aria-label={t.prevWindow} className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
             <ChevronLeft className="h-4 w-4" />
           </Link>
           <Link href={qs({ start: undefined })} className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
-            Today
+            {t.today}
           </Link>
-          <Link href={qs({ start: shift(start, days) })} aria-label="Next window" className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
+          <Link href={qs({ start: shift(start, days) })} aria-label={t.nextWindow} className="flex h-8 w-8 items-center justify-center rounded-md border border-surface-border bg-white text-ink-500 transition-colors hover:bg-surface-muted">
             <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
@@ -293,23 +300,23 @@ export default async function CalendarPage({
               sell is not a date worth offering. */}
           <DateField name="start" min={todayKey} defaultValue={start} className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
           <span className="text-[11px] text-ink-400">→</span>
-          <DateField name="end" min={todayKey} title="Optional end date — the view caps at 30 consecutive days" className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
-          <button type="submit" className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Go</button>
+          <DateField name="end" min={todayKey} title={t.endHint} className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
+          <button type="submit" className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{t.go}</button>
         </form>
 
         <ParamMultiSelect
-          label="Rooms" param="rt" emptyLabel="All"
+          label={t.rooms} param="rt" emptyLabel={t.all}
           options={allRoomTypes.map((r) => ({ value: r.code, label: r.name }))}
           selected={rt}
         />
         <ParamMultiSelect
-          label="Rates" param="rp" emptyLabel="Standard + derived"
+          label={t.rates} param="rp" emptyLabel={t.ratesDefault}
           options={ratePlanOptions}
           selected={rp.length > 0 ? rp : selectedRp}
         />
         <ParamMultiSelect
-          label="Display" param="rows" emptyLabel="Default"
-          options={CALENDAR_ROW_GROUPS.map(([value, label]) => ({ value, label }))}
+          label={t.display} param="rows" emptyLabel={t.displayDefault}
+          options={rowGroups}
           selected={visible}
         />
         <CollapseAll containerId="calendar-sections" />
@@ -323,9 +330,9 @@ export default async function CalendarPage({
 
       {capabilityNotes.length > 0 && (
         <p className="mb-3 text-[11.5px] text-ink-400">
-          Channel limitations (not errors):{" "}
+          {t.limitations}
           {capabilityNotes.map((c, i) => (
-            <span key={c.name}>{i > 0 && " · "}{c.name} ignores {c.missing.join(", ")}</span>
+            <span key={c.name}>{i > 0 && " · "}{t.ignores(c.name, c.missing.join(", "))}</span>
           ))}
         </p>
       )}
@@ -338,7 +345,7 @@ export default async function CalendarPage({
               <ChevronDown className="h-4 w-4 -rotate-90 text-ink-400 transition-transform group-open/section:rotate-0" />
               <span className="text-[13.5px] font-bold text-ink-900">{roomType.name}</span>
               <span className="text-[11px] font-medium text-ink-400">
-                {roomType.code} · {roomType.totalRooms} {roomType.unitKind === "bed" ? "beds" : "rooms"}
+                {roomType.code} · {t.units(roomType.totalRooms, roomType.unitKind === "bed" ? "bed" : "room")}
               </span>
               {/* Inline per-row bulk (spec §2.1): opens the bulk tool in a modal OVER the calendar,
                   pre-scoped to this room type — the SAME engine + audit trail as the Bulk screen. */}
@@ -374,7 +381,7 @@ export default async function CalendarPage({
                     <tr key={row.key}>
                       <td className={`sticky left-0 z-10 border-b border-r border-surface-border bg-white px-4 py-1.5 text-[12px] font-semibold ${row.muted ? "pl-7 font-normal text-ink-400" : "text-ink-700"}`}>
                         {row.derived && (
-                          <span title={`Derived from ${row.derived.parent} · ${row.derived.offset}`} className="mr-1 cursor-help select-none" aria-label={`Derived rate (${row.derived.parent} ${row.derived.offset})`}>📎</span>
+                          <span title={t.derivedFrom(row.derived.parent, row.derived.offset)} className="mr-1 cursor-help select-none" aria-label={t.derivedAria(row.derived.parent, row.derived.offset)}>📎</span>
                         )}
                         {row.label}
                       </td>
@@ -400,7 +407,7 @@ export default async function CalendarPage({
                                 // A gone night reads but does not edit — the server refuses the
                                 // write, so the cell must not offer it. See EditableCell.
                                 past={cell.date < todayKey}
-                                prefix={row.kind === "price" ? "€" : ""}
+                                format={row.kind === "price" ? "price" : "plain"}
                               />
                             </td>
                           );
@@ -413,7 +420,7 @@ export default async function CalendarPage({
                             // never rendered — the one row a hotelier scans for "is anything on sale".
                             className={`${base} px-1.5 py-1.5 ${cell.warn ? "bg-warning-50 font-semibold text-warning-700" : row.muted ? "text-ink-400" : "font-semibold text-ink-900"}`}
                           >
-                            {row.kind === "price" && cell.value !== "—" ? `€${cell.value}` : cell.value}
+                            {row.kind === "price" && cell.value !== "—" ? price(cell.value) : cell.value}
                             {cell.warn && <span aria-hidden className="ml-0.5 text-[10px]">⚠</span>}
                           </td>
                         );
@@ -427,14 +434,13 @@ export default async function CalendarPage({
         ))}
         {sections.length === 0 && (
           <div className="rounded-lg border border-dashed border-surface-border bg-white p-10 text-center text-[13px] text-ink-400">
-            No room types match the filter — clear the Rooms filter above.
+            {t.noMatch}
           </div>
         )}
       </div>
 
       <p className="mt-3 text-[12px] text-ink-400">
-        Rooms sold comes from your confirmed reservations; bookable = rooms to sell − sold. Derived rates follow the
-        standard rate automatically. Every edit is pushed to your connected channels.
+        {t.gridFootnote}
       </p>
     </div>
   );

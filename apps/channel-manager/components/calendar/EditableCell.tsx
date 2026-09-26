@@ -1,12 +1,16 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { calendar as calDict } from "@/lib/i18n/calendar";
+
 import { useEffect, useRef, useState, useTransition } from "react";
 import { saveCell } from "@/lib/actions-calendar";
 
 type Kind = "availability" | "price" | "restriction" | "flag";
 
 export function EditableCell({
-  roomTypeId, date, field, kind, value, flag, prefix = "", warn, note, ratePlanId, past = false,
+  roomTypeId, date, field, kind, value, flag, format = "plain", warn, note, ratePlanId, past = false,
 }: {
   roomTypeId: string;
   date: string;
@@ -16,7 +20,8 @@ export function EditableCell({
   kind: Kind;
   value: string;
   flag?: "stop" | "ctd" | "cta";
-  prefix?: string;
+  /** "price" shows the currency the reader's way round: "€120" / "120 €". */
+  format?: "price" | "plain";
   /** Non-blocking attention note (e.g. allotment above the physical room count). */
   warn?: string;
   /**
@@ -37,6 +42,9 @@ export function EditableCell({
   past?: boolean;
 }) {
   const [pending, start] = useTransition();
+  const locale = useLocale();
+  const c = translate(calDict, locale).cell;
+  const shown = (v: string) => (format !== "price" ? v : locale === "en" ? `€${v}` : `${v} €`);
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -61,17 +69,17 @@ export function EditableCell({
       const on = !!flag;
       const dot = field === "stopSell" ? "bg-danger-500" : field === "ctd" ? "bg-accent-500" : "bg-brand-600";
       return (
-        <span className="flex h-7 w-full items-center justify-center opacity-45" title="This date has passed">
+        <span className="flex h-7 w-full items-center justify-center opacity-45" title={c.pastFlag}>
           {on ? <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} /> : <span className="text-ink-300">·</span>}
         </span>
       );
     }
     return (
       <span
-        title={note ? `${note} This date has passed.` : "This date has passed — rates and availability can only be changed from today onwards"}
+        title={note ? c.pastWithNote(note) : c.past}
         className="flex h-7 w-full items-center justify-center text-ink-400"
       >
-        {value === "—" ? "—" : `${prefix}${value}`}
+        {value === "—" ? "—" : shown(value)}
       </span>
     );
   }
@@ -129,7 +137,7 @@ export function EditableCell({
       title={warn ?? note}
       className={`flex h-7 w-full items-center justify-center gap-0.5 rounded transition-colors hover:bg-brand-50 ${kind === "availability" ? "font-bold" : ""} ${warn ? "bg-warning-50 text-warning-700 ring-1 ring-inset ring-warning-600/40" : tone} ${pending ? "opacity-50" : ""}`}
     >
-      {value === "—" ? "—" : `${prefix}${value}`}
+      {value === "—" ? "—" : shown(value)}
       {warn && <span aria-hidden className="text-[10px] leading-none">⚠</span>}
     </button>
   );

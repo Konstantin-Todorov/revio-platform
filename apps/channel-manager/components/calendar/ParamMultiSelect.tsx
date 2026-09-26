@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronDown, Check } from "lucide-react";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { calendar as calDict } from "@/lib/i18n/calendar";
 
 /**
  * A dropdown of checkboxes bound to ONE CSV search param (e.g. ?rt=DDR,STR or ?rows=sold,minlos).
@@ -17,6 +20,7 @@ export function ParamMultiSelect({
   selected: string[];
   emptyLabel: string; // what an empty selection means, e.g. "All rooms" / "Default rows"
 }) {
+  const s = translate(calDict, useLocale());
   const router = useRouter();
   const search = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -38,7 +42,7 @@ export function ParamMultiSelect({
     setOpen(false);
   }
 
-  const summary = selected.length === 0 || selected.length === options.length ? emptyLabel : `${selected.length} selected`;
+  const summary = selected.length === 0 || selected.length === options.length ? emptyLabel : s.selected(selected.length);
 
   return (
     <div className="relative" ref={ref}>
@@ -75,8 +79,8 @@ export function ParamMultiSelect({
             })}
           </div>
           <div className="flex justify-end gap-2 border-t border-surface-border px-3 py-2">
-            <button type="button" onClick={() => setPicked(new Set())} className="rounded px-2 py-1 text-[12px] font-semibold text-ink-500 hover:bg-surface-muted">Clear</button>
-            <button type="button" onClick={apply} className="rounded-md bg-brand-800 px-3 py-1 text-[12px] font-semibold text-white hover:bg-brand-700">Apply</button>
+            <button type="button" onClick={() => setPicked(new Set())} className="rounded px-2 py-1 text-[12px] font-semibold text-ink-500 hover:bg-surface-muted">{s.clear}</button>
+            <button type="button" onClick={apply} className="rounded-md bg-brand-800 px-3 py-1 text-[12px] font-semibold text-white hover:bg-brand-700">{s.apply}</button>
           </div>
         </div>
       )}

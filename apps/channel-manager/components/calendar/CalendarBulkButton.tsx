@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { calendar as calDict } from "@/lib/i18n/calendar";
+
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { BulkUpdatePanel } from "@/components/bulk/BulkUpdatePanel";
@@ -27,6 +31,7 @@ export function CalendarBulkButton({
   today: string;
 }) {
   const [open, setOpen] = useState(false);
+  const t = translate(calDict, useLocale());
   return (
     <>
       <button
@@ -34,9 +39,9 @@ export function CalendarBulkButton({
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(true); }}
         className="ml-auto rounded-md border border-surface-border bg-white px-2 py-1 text-[11px] font-semibold text-ink-500 transition-colors hover:bg-brand-50 hover:text-brand-700"
       >
-        Bulk edit
+        {t.bulkEdit}
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title={`Bulk edit · ${roomTypeName}`}>
+      <Modal open={open} onClose={() => setOpen(false)} title={t.bulkEditTitle(roomTypeName)}>
         <BulkUpdatePanel compact roomTypes={roomTypes} ratePlans={ratePlans} today={today} preselectRoomTypeIds={[roomTypeId]} />
       </Modal>
     </>

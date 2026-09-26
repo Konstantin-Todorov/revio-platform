@@ -1,7 +1,7 @@
 import { EditableCell } from "./EditableCell";
 import type { CalendarRow } from "@/lib/data";
+import type { CmCalendarStrings } from "@/lib/i18n/calendar";
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export interface MonthSection {
   roomType: { id: string; name: string; code: string; totalRooms: number; unitKind: string };
@@ -15,8 +15,11 @@ export interface MonthSection {
  * selection (`visible`), exactly like the grid's row groups.
  */
 export function MonthView({
-  section, dates, todayKey, visible,
+  section, dates, todayKey, visible, weekdays, words,
 }: {
+  /** Monday first, in the reader's language. */
+  weekdays: string[];
+  words: CmCalendarStrings["monthCell"];
   section: MonthSection;
   dates: string[]; // the month's date keys, in order
   todayKey: string;
@@ -39,7 +42,7 @@ export function MonthView({
     <div>
       {/* Weekday header */}
       <div className="grid grid-cols-7 border-b border-surface-border bg-surface-muted/60">
-        {WEEKDAYS.map((w) => (
+        {weekdays.map((w) => (
           <div key={w} className="px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wide text-ink-400">{w}</div>
         ))}
       </div>
@@ -79,28 +82,28 @@ export function MonthView({
                 <span className={`tnum text-[11.5px] font-bold ${isToday ? "text-brand-700" : "text-ink-700"}`}>{dayNum}</span>
                 <span className="flex items-center gap-1">
                   {minLos && minLos !== "—" && (
-                    <span title={`Min stay ${minLos} nights`} className="rounded bg-brand-50 px-1 text-[9px] font-bold text-brand-700">{minLos}n</span>
+                    <span title={words.minStay(Number(minLos))} className="rounded bg-brand-50 px-1 text-[9px] font-bold text-brand-700">{minLos}{words.nightsShort}</span>
                   )}
-                  {stop && <span title="Stop sell" className="inline-block h-2 w-2 rounded-full bg-danger-500" />}
-                  {cta && <span title="Closed to arrival" className="inline-block h-2 w-2 rounded-full bg-brand-600" />}
-                  {ctd && <span title="Closed to departure" className="inline-block h-2 w-2 rounded-full bg-accent-500" />}
+                  {stop && <span title={words.stop} className="inline-block h-2 w-2 rounded-full bg-danger-500" />}
+                  {cta && <span title={words.cta} className="inline-block h-2 w-2 rounded-full bg-brand-600" />}
+                  {ctd && <span title={words.ctd} className="inline-block h-2 w-2 rounded-full bg-accent-500" />}
                 </span>
               </div>
 
               <div className="flex items-center gap-1 text-[10.5px] text-ink-400">
-                <span className="w-7 shrink-0">Sell</span>
+                <span className="w-7 shrink-0">{words.sell}</span>
                 {inv && <EditableCell roomTypeId={section.roomType.id} date={d} field="inventory" kind="availability" value={inv.value} past={d < todayKey} {...(inv.warn ? { warn: inv.warn } : {})} />}
               </div>
               {visible.has("sold") && sold !== undefined && (
                 <div className="flex items-center gap-1 text-[10.5px] text-ink-400">
-                  <span className="w-7 shrink-0">Sold</span>
+                  <span className="w-7 shrink-0">{words.sold}</span>
                   <span className="tnum px-1 text-[12px] font-semibold text-ink-500">{sold}</span>
                 </div>
               )}
               <div className="flex items-center gap-1 text-[10.5px] text-ink-400">
                 {/* The plan's own name, not the word "Rate" — BUG-001. Truncated because the month
                     cell is narrow; the full name is the title. */}
-                <span className="w-7 shrink-0 truncate" title={priceRow?.label ?? "Rate"}>{priceRow?.label ?? "Rate"}</span>
+                <span className="w-7 shrink-0 truncate" title={priceRow?.label ?? words.rate}>{priceRow?.label ?? words.rate}</span>
                 {price && (
                   <EditableCell
                     roomTypeId={section.roomType.id}
@@ -108,7 +111,7 @@ export function MonthView({
                     field="price"
                     kind="price"
                     value={price.value}
-                    prefix="€"
+                    format="price"
                     past={d < todayKey}
                     {...(price.note ? { note: price.note } : {})}
                     {...(priceRow?.ratePlanId ? { ratePlanId: priceRow.ratePlanId } : {})}
