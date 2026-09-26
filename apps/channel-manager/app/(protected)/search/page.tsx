@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Search, BedDouble, Tags, Radio, CalendarCheck } from "lucide-react";
 import { Card, CardHeader, PageHeader } from "@/components/ui/primitives";
 import { cmSearch } from "@/lib/data";
+import { i18n } from "@/lib/i18n/server";
+import { reservations as resDict } from "@/lib/i18n/reservations";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const term = (q ?? "").trim();
   const { roomTypes, ratePlans, channels, reservations } = await cmSearch(term);
   const total = roomTypes.length + ratePlans.length + channels.length + reservations.length;
+  const r0 = (await i18n()).t(resDict);
+  const s = r0.search;
 
   const section = (title: string, href: string, icon: typeof BedDouble, rows: { key: string; label: string; sub?: string }[]) => {
     if (rows.length === 0) return null;
@@ -34,21 +38,21 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   return (
     <div>
-      <PageHeader title="Search" subtitle={term ? `Results for “${term}”` : "Search rooms, rates, channels and reservations"} />
+      <PageHeader title={s.title} subtitle={term ? s.resultsFor(term) : s.subtitle} />
 
       {!term ? (
         <Card className="p-8 text-center">
           <Search className="mx-auto mb-2 h-6 w-6 text-ink-300" />
-          <p className="text-[13px] text-ink-500">Type in the search bar above to find a room type, rate plan, channel, or reservation.</p>
+          <p className="text-[13px] text-ink-500">{s.prompt}</p>
         </Card>
       ) : total === 0 ? (
-        <Card className="p-8 text-center text-[13px] text-ink-500">Nothing found for “{term}”.</Card>
+        <Card className="p-8 text-center text-[13px] text-ink-500">{s.nothing(term)}</Card>
       ) : (
         <div className="space-y-4">
-          {section("Room types", "/rooms-rates", BedDouble, roomTypes.map((r) => ({ key: r.id, label: r.name, sub: r.code })))}
-          {section("Rate plans", "/rooms-rates", Tags, ratePlans.map((r) => ({ key: r.id, label: r.name, sub: r.code })))}
-          {section("Channels", "/channels", Radio, channels.map((c) => ({ key: c.id, label: c.name, sub: c.status })))}
-          {section("Reservations", "/reservations", CalendarCheck, reservations.map((r) => ({ key: r.id, label: r.guestName, sub: `${r.channel?.name ?? "Direct"} · ${r.status}` })))}
+          {section(s.roomTypes, "/rooms-rates", BedDouble, roomTypes.map((r) => ({ key: r.id, label: r.name, sub: r.code })))}
+          {section(s.ratePlans, "/rooms-rates", Tags, ratePlans.map((r) => ({ key: r.id, label: r.name, sub: r.code })))}
+          {section(s.channels, "/channels", Radio, channels.map((c) => ({ key: c.id, label: c.name, sub: r0.channelStatus[c.status] ?? c.status })))}
+          {section(s.reservations, "/reservations", CalendarCheck, reservations.map((r) => ({ key: r.id, label: r.guestName, sub: `${r.channel?.name ?? r0.direct} · ${r0.statuses[r.status] ?? r.status}` })))}
         </div>
       )}
     </div>

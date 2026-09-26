@@ -1,5 +1,8 @@
 import { redirect } from "next/navigation";
-import { PRODUCT_BY_KEY, TRIAL_DAYS, canSelfStartTrial, selfTrialPromises, type ProductKey } from "@revio/core";
+import { PRODUCT_BY_KEY, TRIAL_DAYS, canSelfStartTrial, type ProductKey } from "@revio/core";
+import { fill } from "@revio/ui/i18n";
+import { productStrings } from "@revio/ui/product-strings";
+import { i18n } from "@/lib/i18n/server";
 import { StartTrialPanel } from "@revio/ui/start-trial-panel";
 import { forSystem } from "@revio/db";
 import { getSession } from "@/lib/session";
@@ -44,13 +47,27 @@ export default async function StartTrialPage({ params }: { params: Promise<{ pro
     role: session.role,
   });
 
+  /*
+   * The promises and the refusal are core's (`selfTrialPromises`, `canSelfStartTrial`), worded in the
+   * reader's language from the same facts — `product-drift.test.ts` holds the English to core's.
+   */
+  const { t, locale } = await i18n();
+  const s = t(productStrings);
+  const vars = { product: info.name, days: TRIAL_DAYS };
+  const p = s.trial.promises;
+  const promises = [
+    p.on, p.noCharge, p.noImport, TRIAL_DAYS > 7 ? p.reminderWeek : p.reminderFew, p.noAuto, p.payFromDecide, p.separate,
+  ].map((line) => fill(line, vars));
+  const refusal = verdict.ok ? null : verdict.reason ? fill(s.trial.refusal[verdict.reason], vars) : verdict.message ?? null;
+
   return (
     <StartTrialPanel
       productName={info.name}
-      tagline={info.tagline}
+      tagline={s.tagline[info.key]}
       days={TRIAL_DAYS}
-      promises={selfTrialPromises(product as ProductKey, TRIAL_DAYS)}
-      refusal={verdict.ok ? null : verdict.message ?? null}
+      promises={promises}
+      refusal={refusal}
+      locale={locale}
       action={beginSelfTrial}
       cancelHref="/dashboard"
     >

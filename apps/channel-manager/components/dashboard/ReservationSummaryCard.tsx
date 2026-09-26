@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { CalendarPlus, CalendarX } from "lucide-react";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { dashboard } from "@/lib/i18n/dashboard";
 
 type Pair = { today: number; yesterday: number };
 
@@ -13,11 +16,12 @@ export function ReservationSummaryCard({ newRes, cancelled }: { newRes: Pair; ca
   const [day, setDay] = useState<"today" | "yesterday">("today");
   const nNew = newRes[day];
   const nCancelled = cancelled[day];
+  const t = translate(dashboard, useLocale()).summary;
 
   return (
     <div className="rounded-lg border border-surface-border bg-white shadow-card">
       <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
-        <h3 className="text-[14px] font-bold tracking-tight text-ink-900">Reservation Summary</h3>
+        <h3 className="text-[14px] font-bold tracking-tight text-ink-900">{t.title}</h3>
         <div className="flex items-center gap-0.5 rounded-md border border-surface-border bg-white p-0.5">
           {(["today", "yesterday"] as const).map((d) => (
             <button
@@ -26,7 +30,7 @@ export function ReservationSummaryCard({ newRes, cancelled }: { newRes: Pair; ca
               onClick={() => setDay(d)}
               className={`rounded px-2.5 py-1 text-[11.5px] font-semibold capitalize transition-colors ${day === d ? "bg-brand-800 text-white" : "text-ink-500 hover:bg-surface-muted"}`}
             >
-              {d}
+              {t[d]}
             </button>
           ))}
         </div>
@@ -35,14 +39,14 @@ export function ReservationSummaryCard({ newRes, cancelled }: { newRes: Pair; ca
         <div className="p-4">
           <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-success-50 text-success-600"><CalendarPlus className="h-[18px] w-[18px]" /></div>
           <div className="tnum text-[26px] font-bold leading-none tracking-tight text-ink-900">{nNew}</div>
-          <div className="mt-1.5 text-[12.5px] font-semibold text-ink-700">New reservations</div>
-          <div className="text-[11px] text-ink-400">Made {day}</div>
+          <div className="mt-1.5 text-[12.5px] font-semibold text-ink-700">{t.newRes}</div>
+          <div className="text-[11px] text-ink-400">{t.madeOn(t[day])}</div>
         </div>
         <div className="p-4">
           <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-md bg-danger-50 text-danger-600"><CalendarX className="h-[18px] w-[18px]" /></div>
           <div className="tnum text-[26px] font-bold leading-none tracking-tight text-ink-900">{nCancelled}</div>
-          <div className="mt-1.5 text-[12.5px] font-semibold text-ink-700">Cancelled</div>
-          <div className="text-[11px] text-ink-400">Cancelled {day}</div>
+          <div className="mt-1.5 text-[12.5px] font-semibold text-ink-700">{t.cancelled}</div>
+          <div className="text-[11px] text-ink-400">{t.cancelledOn(t[day])}</div>
         </div>
       </div>
     </div>

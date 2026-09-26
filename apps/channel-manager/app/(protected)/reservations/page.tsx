@@ -4,7 +4,10 @@ import { getSession } from "@/lib/session";
 import { cancelReservation } from "@/lib/actions-calendar";
 import { Card, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { BookingDialog } from "@/components/booking/BookingDialog";
-import { money, relativeTime, ymd } from "@/lib/format";
+import { ymd } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { reservations as resDict } from "@/lib/i18n/reservations";
+import { relativeTimeIn } from "@/lib/i18n/relative";
 import { DateField } from "@revio/ui/date-field";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +18,7 @@ const STATUS_TONE: Record<string, Tone> = {
 
 const STATUSES = ["confirmed", "modified", "cancelled", "failed_import", "overbooked"];
 
-const DATE_TYPES: { value: ReservationDateType; label: string }[] = [
-  { value: "check_in", label: "Check-in" },
-  { value: "check_out", label: "Check-out" },
-  { value: "created", label: "Reservation made on" },
-  { value: "cancelled", label: "Cancellation date" },
-  { value: "stay", label: "Staying on (in-house)" },
-];
+const DATE_TYPES: ReservationDateType[] = ["check_in", "check_out", "created", "cancelled", "stay"];
 
 export default async function ReservationsPage({
   searchParams,
@@ -30,7 +27,7 @@ export default async function ReservationsPage({
 }) {
   const sp = await searchParams;
   const channels = (sp.channel ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const dateType = (DATE_TYPES.some((d) => d.value === sp.dateType) ? sp.dateType : "check_in") as ReservationDateType;
+  const dateType = ((DATE_TYPES as string[]).includes(sp.dateType ?? "") ? sp.dateType : "check_in") as ReservationDateType;
   const filters = {
     ...(channels.length > 0 ? { channels } : {}),
     ...(sp.status ? { status: sp.status } : {}),
@@ -44,45 +41,46 @@ export default async function ReservationsPage({
   const filtered = Boolean(sp.channel || sp.status || sp.q || sp.from || sp.to);
   // Scope (spec §5.4): with the CRS the canonical list lives THERE — this is the channel monitor.
   const integrated = session?.entitlements.reservation ?? false;
+  const { t: tr, locale, money, day } = await i18n();
+  const t = tr(resDict);
+  const relativeTime = relativeTimeIn(locale);
 
   const fieldCls = "h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600";
 
   return (
     <div>
       <PageHeader
-        title="Reservations"
-        subtitle={integrated
-          ? "Channel-bookings monitor — did each booking land and was it acknowledged? The canonical reservation list lives in RevioCRS."
-          : "Your reservations — channel bookings land here (standalone mode, no CRS connected); cancel to restore availability"}
+        title={t.title}
+        subtitle={integrated ? t.subIntegrated : t.subStandalone}
         action={options.demoMode ? <BookingDialog options={options} today={todayIso} /> : undefined}
       />
 
       {/* Filters — plain GET form, server-rendered results. */}
       <form method="GET" action="/reservations" className="mb-3 flex flex-wrap items-center gap-2">
-        <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder="Guest, or booking #s (comma-separated)" className={`${fieldCls} w-56`} />
+        <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder={t.searchPlaceholder} className={`${fieldCls} w-56`} />
         <select name="channel" defaultValue={sp.channel ?? ""} className={fieldCls}>
-          <option value="">All channels</option>
+          <option value="">{t.allChannels}</option>
           {options.channels.map((c) => <option key={c.id} value={c.code}>{c.name}</option>)}
         </select>
         <select name="status" defaultValue={sp.status ?? ""} className={fieldCls}>
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
+          <option value="">{t.allStatuses}</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{t.statuses[s] ?? s.replace(/_/g, " ")}</option>)}
         </select>
         {/* Date type governs which date the from→to range filters on (spec §3.7). */}
         <select name="dateType" defaultValue={dateType} className={fieldCls}>
-          {DATE_TYPES.map((d) => <option key={d.value} value={d.value}>{d.label}</option>)}
+          {DATE_TYPES.map((d) => <option key={d} value={d}>{t.dateTypes[d]}</option>)}
         </select>
         <label className="flex items-center gap-1 text-[12px] text-ink-500">
-          from <DateField name="from" defaultValue={sp.from ?? ""} className={fieldCls} />
+          {t.from} <DateField name="from" defaultValue={sp.from ?? ""} className={fieldCls} />
         </label>
         <label className="flex items-center gap-1 text-[12px] text-ink-500">
           → <DateField name="to" defaultValue={sp.to ?? ""} className={fieldCls} />
         </label>
-        <button type="submit" className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">Filter</button>
+        <button type="submit" className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">{t.filter}</button>
         {filtered && (
-          <a href="/reservations" className="rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-ink-500 hover:bg-surface-muted">Clear</a>
+          <a href="/reservations" className="rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-ink-500 hover:bg-surface-muted">{t.clear}</a>
         )}
-        <span className="ml-auto text-[12px] text-ink-400">{reservations.length} result{reservations.length === 1 ? "" : "s"}</span>
+        <span className="ml-auto text-[12px] text-ink-400">{t.results(reservations.length)}</span>
       </form>
 
       <Card>
@@ -90,7 +88,7 @@ export default async function ReservationsPage({
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                {["Channel", "Reservation", "Guest", "Room · Rate", "Check-in", "Check-out", "Status", "Ack", "Total", "Imported"].map((h) => (
+                {[t.cols.channel, t.cols.reservation, t.cols.guest, t.cols.roomRate, t.cols.checkIn, t.cols.checkOut, t.cols.status, t.cols.ack, t.cols.total, t.cols.imported].map((h) => (
                   <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>
                 ))}
                 <th className="px-4 py-2.5" />
@@ -101,8 +99,8 @@ export default async function ReservationsPage({
                 <tr>
                   <td colSpan={11} className="px-4 py-10 text-center text-[13px] text-ink-400">
                     {filtered
-                      ? "No bookings match these filters."
-                      : "No channel bookings yet. They land here automatically as soon as a connected channel sells a room."}
+                      ? t.noMatch
+                      : t.none}
                   </td>
                 </tr>
               )}
@@ -110,22 +108,22 @@ export default async function ReservationsPage({
                 const line = r.lines[0];
                 return (
                   <tr key={r.id} className="group border-b border-surface-border/60 transition-colors last:border-0 hover:bg-surface-muted">
-                    <td className="px-4 py-3 font-semibold text-ink-900">{r.channel?.name ?? "Direct"}</td>
+                    <td className="px-4 py-3 font-semibold text-ink-900">{r.channel?.name ?? t.direct}</td>
                     <td className="tnum px-4 py-3 text-ink-500">#{r.externalId ?? r.id.slice(-6)}</td>
                     <td className="px-4 py-3 font-semibold text-ink-900">{r.guestName}</td>
                     <td className="px-4 py-3 text-ink-600">
                       {line ? <>{line.roomType.name}{line.quantity > 1 && <span className="ml-1 font-semibold text-brand-600">×{line.quantity}</span>}<span className="text-ink-400"> · {line.ratePlan.name}</span></> : "—"}
                     </td>
-                    <td className="tnum px-4 py-3 text-ink-600">{line ? ymd(line.checkIn) : "—"}</td>
-                    <td className="tnum px-4 py-3 text-ink-600">{line ? ymd(line.checkOut) : "—"}</td>
-                    <td className="px-4 py-3"><StatusPill tone={STATUS_TONE[r.status] ?? "neutral"}>{r.status}</StatusPill></td>
+                    <td className="tnum px-4 py-3 text-ink-600">{line ? day(ymd(line.checkIn)) : "—"}</td>
+                    <td className="tnum px-4 py-3 text-ink-600">{line ? day(ymd(line.checkOut)) : "—"}</td>
+                    <td className="px-4 py-3"><StatusPill tone={STATUS_TONE[r.status] ?? "neutral"}>{t.statuses[r.status] ?? r.status}</StatusPill></td>
                     <td className="px-4 py-3">
                       {/* Acknowledgement state (spec §5.4): received-but-unacked is an operational risk. */}
                       {r.channelId == null
                         ? <span className="text-[11px] text-ink-300">—</span>
                         : r.syncStatus === "acked"
-                          ? <StatusPill tone="success">acked</StatusPill>
-                          : <StatusPill tone="warning">received</StatusPill>}
+                          ? <StatusPill tone="success">{t.acked}</StatusPill>
+                          : <StatusPill tone="warning">{t.received}</StatusPill>}
                     </td>
                     <td className="tnum px-4 py-3 font-semibold text-ink-900">{money(r.totalMinor, r.currency)}</td>
                     <td className="px-4 py-3 text-[12px] text-ink-400">{relativeTime(r.importedAt)}</td>
@@ -133,7 +131,7 @@ export default async function ReservationsPage({
                       {r.status !== "cancelled" && (
                         <form action={cancelReservation} className="opacity-0 transition-opacity group-hover:opacity-100">
                           <input type="hidden" name="id" value={r.id} />
-                          <button type="submit" className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-500 transition-colors hover:border-danger-500 hover:text-danger-600">Cancel</button>
+                          <button type="submit" className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-500 transition-colors hover:border-danger-500 hover:text-danger-600">{t.cancel}</button>
                         </form>
                       )}
                     </td>

@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { syncRecencyHealth, failureVerdict, pendingSubtitle } from "@revio/core";
+import { syncRecencyHealth, failureVerdict } from "@revio/core";
 import { hasFinishedSetup } from "@revio/core";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
 import { StatCard, type StatTone } from "@revio/ui/stat-card";
@@ -14,11 +14,24 @@ import { prisma } from "@/lib/db";
 import { PauseChannelButton, ResumeChannelButton, DisconnectChannelButton, FullSyncButton } from "@/components/channels/ChannelActions";
 import { ReservationSummaryCard } from "@/components/dashboard/ReservationSummaryCard";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { money, relativeTime } from "@/lib/format";
+import { i18n } from "@/lib/i18n/server";
+import { dashboard as dashDict, type CmDashboardStrings } from "@/lib/i18n/dashboard";
+import { relativeTimeIn } from "@/lib/i18n/relative";
 
 export const dynamic = "force-dynamic";
 
 const CHANNEL_INITIALS: Record<string, string> = { booking: "B", expedia: "E", trip: "T", agoda: "A" };
+
+/** core `describeAge`, in the reader's words — same thresholds. */
+function ageIn(t: CmDashboardStrings, ms: number): string {
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return t.age.justNow;
+  if (min < 60) return t.age.min(min);
+  const h = Math.floor(min / 60);
+  if (h < 24) return t.age.hours(h);
+  const d = Math.floor(h / 24);
+  return d === 1 ? t.age.oneDay : t.age.days(d);
+}
 
 export default async function DashboardPage() {
   const { property, stats, channels, successByChannel, realErrorsByChannel, reservations, syncEvents, errorItems } = await getDashboard();
@@ -47,6 +60,9 @@ export default async function DashboardPage() {
     redirect("/welcome/property");
   }
   const [resSummary, setup] = await Promise.all([getReservationSummary(), getSetup()]);
+  const { t: tr, locale, money } = await i18n();
+  const t = tr(dashDict);
+  const relativeTime = relativeTimeIn(locale);
 
   // Pending age (spec §5.3): ten items two seconds old is healthy; two hours old means stuck.
   const pendingAgeMs = stats.oldestPendingAt ? Date.now() - stats.oldestPendingAt.getTime() : null;
@@ -70,7 +86,18 @@ export default async function DashboardPage() {
   const now = new Date();
   const recency = syncRecencyHealth(stats.lastSync, now);
   const failures = failureVerdict(stats.syncAttempts24h, stats.failedSyncs);
-  const pendingSub = pendingSubtitle(stats.pendingUpdates, stats.oldestPendingAt, now);
+  // core decides the verdicts; the words are the reader's, by health — see lib/i18n/dashboard.ts.
+  const recencyWords = { ...t.recency[recency.health as keyof typeof t.recency] };
+  const failureWords = failures.health === "unknown"
+    ? t.failure.unknown
+    : failures.health === "dead"
+      ? { label: t.failure.dead.label, detail: t.failure.dead.detail(stats.failedSyncs, stats.syncAttempts24h) }
+      : { label: t.failure.healthy.label, detail: t.failure.healthy.detail(stats.syncAttempts24h) };
+  const pendingSub = stats.pendingUpdates <= 0
+    ? t.pendingSub.empty
+    : stats.oldestPendingAt == null
+      ? t.pendingSub.waiting(stats.pendingUpdates)
+      : t.pendingSub.waitingOldest(stats.pendingUpdates, ageIn(t, now.getTime() - stats.oldestPendingAt.getTime()));
 
   /** A health verdict → the pill tone this shell uses. `unknown`/`idle` must never read as success. */
   const HEALTH_TONE = {
@@ -81,43 +108,43 @@ export default async function DashboardPage() {
   const cards = [
     {
       icon: Radio, tone: hasChannels ? "success" : "neutral", href: "/channels",
-      value: `${stats.connectedChannels} / ${stats.totalChannels}`, label: "Connected Channels",
-      sub: !hasChannels ? "No channels connected yet" : allConnected ? "All channels connected" : `${stats.totalChannels - stats.connectedChannels} not connected`,
-      pill: !hasChannels ? { tone: "neutral" as const, text: "None" } : allConnected ? { tone: "success" as const, text: "Healthy" } : { tone: "warning" as const, text: "Partial" },
+      value: `${stats.connectedChannels} / ${stats.totalChannels}`, label: t.cards.connected,
+      sub: !hasChannels ? t.cards.connectedNone : allConnected ? t.cards.connectedAll : t.cards.connectedMissing(stats.totalChannels - stats.connectedChannels),
+      pill: !hasChannels ? { tone: "neutral" as const, text: t.pills.none } : allConnected ? { tone: "success" as const, text: t.pills.healthy } : { tone: "warning" as const, text: t.pills.partial },
     },
     {
       icon: Boxes, tone: stats.activeProducts > 0 ? "info" : "neutral", href: "/rooms-rates",
-      value: String(stats.activeProducts), label: "Active Products",
-      sub: stats.activeProducts > 0 ? "Room types × rate plans" : "Add a room type to start",
-      pill: stats.activeProducts > 0 ? { tone: "info" as const, text: "Sellable" } : { tone: "neutral" as const, text: "None" },
+      value: String(stats.activeProducts), label: t.cards.active,
+      sub: stats.activeProducts > 0 ? t.cards.activeSub : t.cards.activeNone,
+      pill: stats.activeProducts > 0 ? { tone: "info" as const, text: t.pills.sellable } : { tone: "neutral" as const, text: t.pills.none },
     },
     {
       icon: Unlink, tone: stats.unmappedProducts > 0 ? "warning" : "success", href: "/mapping",
-      value: String(stats.unmappedProducts), label: "Unmapped Products",
-      sub: stats.unmappedProducts > 0 ? "Require mapping" : hasChannels ? "Everything is mapped" : "Nothing to map yet",
-      pill: stats.unmappedProducts > 0 ? { tone: "warning" as const, text: "Action" } : { tone: "neutral" as const, text: "Clear" },
+      value: String(stats.unmappedProducts), label: t.cards.unmapped,
+      sub: stats.unmappedProducts > 0 ? t.cards.unmappedSub : hasChannels ? t.cards.unmappedClear : t.cards.unmappedNothing,
+      pill: stats.unmappedProducts > 0 ? { tone: "warning" as const, text: t.pills.action } : { tone: "neutral" as const, text: t.pills.clear },
     },
     {
       icon: ArrowUpDown, tone: pendingStuck ? "danger" : stats.pendingUpdates > 0 ? "info" : "neutral", href: "/sync?tab=activity",
-      value: String(stats.pendingUpdates), label: "Pending Updates", sub: pendingSub,
+      value: String(stats.pendingUpdates), label: t.cards.pending, sub: pendingSub,
       pill: pendingStuck
-        ? { tone: "danger" as const, text: "Stuck?" }
-        : stats.pendingUpdates > 0 ? { tone: "info" as const, text: "Queued" } : { tone: "neutral" as const, text: "Clear" },
+        ? { tone: "danger" as const, text: t.pills.stuck }
+        : stats.pendingUpdates > 0 ? { tone: "info" as const, text: t.pills.queued } : { tone: "neutral" as const, text: t.pills.clear },
     },
     {
       icon: AlertCircle, tone: HEALTH_TONE[failures.health], href: "/sync?tab=errors",
       // "—" rather than "0" when nothing ran: a zero implies something was measured.
-      value: failures.health === "unknown" ? "—" : String(stats.failedSyncs), label: "Failed Syncs",
-      sub: failures.detail ?? "Real failures · 24h (limitations excluded)",
-      pill: { tone: HEALTH_TONE[failures.health], text: failures.label },
+      value: failures.health === "unknown" ? "—" : String(stats.failedSyncs), label: t.cards.failed,
+      sub: failureWords.detail ?? t.cards.failedSub,
+      pill: { tone: HEALTH_TONE[failures.health], text: failureWords.label },
     },
     {
       icon: CheckCircle2, tone: HEALTH_TONE[recency.health], href: "/sync",
-      value: everSynced ? relativeTime(stats.lastSync) : "—", label: "Last Successful Sync",
+      value: everSynced ? relativeTime(stats.lastSync) : "—", label: t.cards.lastSync,
       // This is THE card that must never be green while stale. It is the one number answering
       // "is this thing working", and it used to reassure while saying it had not worked in a month.
-      sub: recency.detail ?? "Across all channels",
-      pill: { tone: HEALTH_TONE[recency.health], text: recency.label },
+      sub: recencyWords.detail || t.cards.lastSyncSub,
+      pill: { tone: HEALTH_TONE[recency.health], text: recencyWords.label },
     },
   ];
 
@@ -132,17 +159,17 @@ export default async function DashboardPage() {
   return (
     <div>
       <PageHeader
-        title="Dashboard"
-        subtitle={`${property.name} · distribution health`}
+        title={t.title}
+        subtitle={t.subtitle(property.name)}
         action={
           allConnected ? (
             <span className="inline-flex items-center gap-2 rounded-md bg-success-50 px-3 py-1.5 text-[12.5px] font-semibold text-success-600">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-success-500" /> Syncing live
+              <span className="h-2 w-2 animate-pulse rounded-full bg-success-500" /> {t.syncingLive}
             </span>
           ) : (
             <span className="inline-flex items-center gap-2 rounded-md bg-surface-sunken px-3 py-1.5 text-[12.5px] font-semibold text-ink-500">
               <span className="h-2 w-2 rounded-full bg-ink-300" />
-              {hasChannels ? "Some channels are not connected" : "No channels connected"}
+              {hasChannels ? t.someNotConnected : t.noneConnected}
             </span>
           )
         }
@@ -152,8 +179,9 @@ export default async function DashboardPage() {
       {setup.show && (
         <SetupChecklist
           productName="RevioLink"
-          promise="Four steps and your rooms are on sale across every channel you connect."
-          steps={setup.steps}
+          promise={t.setupPromise}
+          steps={setup.steps.map((st) => ({ ...st, ...(t.setupSteps[st.key] ?? {}) }))}
+          locale={locale}
           done={setup.done}
           total={setup.total}
         />
@@ -190,16 +218,16 @@ export default async function DashboardPage() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Channel status */}
         <Card className="lg:col-span-2">
-          <CardHeader title="Channel Status" action={<a href="/channels" className="text-[12px] font-semibold text-brand-600 hover:underline">View all</a>} />
+          <CardHeader title={t.channelStatus} action={<a href="/channels" className="text-[12px] font-semibold text-brand-600 hover:underline">{t.viewAll}</a>} />
           <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-surface-border text-left text-[11px] uppercase tracking-wide text-ink-400">
-                <th className="px-4 py-2 font-semibold">Channel</th>
-                <th className="px-4 py-2 font-semibold">Status</th>
-                <th className="px-4 py-2 font-semibold">Last Successful Sync</th>
-                <th className="px-4 py-2 text-right font-semibold">Pending</th>
-                <th className="px-4 py-2 text-right font-semibold">Errors</th>
+                <th className="px-4 py-2 font-semibold">{t.cols.channel}</th>
+                <th className="px-4 py-2 font-semibold">{t.cols.status}</th>
+                <th className="px-4 py-2 font-semibold">{t.cols.lastSync}</th>
+                <th className="px-4 py-2 text-right font-semibold">{t.cols.pending}</th>
+                <th className="px-4 py-2 text-right font-semibold">{t.cols.errors}</th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>
@@ -207,7 +235,7 @@ export default async function DashboardPage() {
               {channels.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-[12.5px] text-ink-400">
-                    No channels yet. <Link href="/channels" className="font-semibold text-brand-600 hover:underline">Connect your first channel</Link> to put your rooms on sale.
+                    {t.noChannelsLead}<Link href="/channels" className="font-semibold text-brand-600 hover:underline">{t.noChannelsLink}</Link>{t.noChannelsTail}
                   </td>
                 </tr>
               )}
@@ -231,7 +259,7 @@ export default async function DashboardPage() {
                       */}
                     <div className="flex flex-wrap items-center gap-1.5">
                       <StatusPill tone={ch.status === "connected" ? "success" : ch.status === "paused" ? "warning" : "neutral"}>
-                        {ch.status === "connected" ? "Connected" : ch.status === "paused" ? "Paused" : ch.status}
+                        {ch.status === "connected" ? t.connected : ch.status === "paused" ? t.paused : ch.status}
                       </StatusPill>
                       {ch.status === "connected" && (() => {
                         /*
@@ -246,8 +274,8 @@ export default async function DashboardPage() {
                          */
                         const h = syncRecencyHealth(successByChannel.get(ch.id) ?? null, now);
                         return h.health === "healthy" ? null : (
-                          <span title={h.detail ?? undefined}>
-                            <StatusPill tone={HEALTH_TONE[h.health]}>{h.label}</StatusPill>
+                          <span title={t.recency[h.health as keyof typeof t.recency]?.detail || undefined}>
+                            <StatusPill tone={HEALTH_TONE[h.health]}>{t.recency[h.health as keyof typeof t.recency]?.label ?? h.label}</StatusPill>
                           </span>
                         );
                       })()}
@@ -255,7 +283,7 @@ export default async function DashboardPage() {
                   </td>
                   {/* Success, to match the column header. An attempt belongs in the Sync Center. */}
                   <td className="px-4 py-2.5 text-ink-500">
-                    {successByChannel.has(ch.id) ? relativeTime(successByChannel.get(ch.id)!) : "Never"}
+                    {successByChannel.has(ch.id) ? relativeTime(successByChannel.get(ch.id)!) : t.never}
                   </td>
                   <td className="tnum px-4 py-2.5 text-right text-ink-700">{ch.pendingCount}</td>
                   <td className="tnum px-4 py-2.5 text-right">
@@ -283,14 +311,14 @@ export default async function DashboardPage() {
 
         {/* Quick actions */}
         <Card>
-          <CardHeader title="Quick Actions" />
+          <CardHeader title={t.quickActions} />
           <div className="grid grid-cols-1 gap-1.5 p-3">
             {[
-              { icon: CalendarPlus, label: "Open Calendar", href: "/calendar" },
-              { icon: Upload, label: "Bulk Rates", href: "/bulk-update" },
-              { icon: Radio, label: "Connect Channel", href: "/channels" },
-              { icon: Wrench, label: "Fix Mapping", href: "/mapping" },
-              { icon: RotateCw, label: "Retry Failed Syncs", href: "/sync" },
+              { icon: CalendarPlus, label: t.actions.calendar, href: "/calendar" },
+              { icon: Upload, label: t.actions.bulk, href: "/bulk-update" },
+              { icon: Radio, label: t.actions.connect, href: "/channels" },
+              { icon: Wrench, label: t.actions.fixMapping, href: "/mapping" },
+              { icon: RotateCw, label: t.actions.retry, href: "/sync" },
             ].map((a) => {
               const Icon = a.icon;
               return (
@@ -309,11 +337,11 @@ export default async function DashboardPage() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Recent activity */}
         <Card className="lg:col-span-2">
-          <CardHeader title="Recent Activity" action={<a href="/sync" className="text-[12px] font-semibold text-brand-600 hover:underline">Sync Center</a>} />
+          <CardHeader title={t.recentActivity} action={<a href="/sync" className="text-[12px] font-semibold text-brand-600 hover:underline">{t.syncCenter}</a>} />
           <ul className="divide-y divide-surface-border/60">
             {syncEvents.length === 0 && (
               <li className="px-4 py-8 text-center text-[12.5px] text-ink-400">
-                Nothing has been pushed or pulled yet. Activity appears here the moment a channel is connected.
+                {t.noActivity}
               </li>
             )}
             {syncEvents.map((e) => (
@@ -332,11 +360,11 @@ export default async function DashboardPage() {
           <ReservationSummaryCard newRes={resSummary.newRes} cancelled={resSummary.cancelled} />
 
           <Card>
-            <CardHeader title="Latest Reservations" action={<a href="/reservations" className="text-[12px] font-semibold text-brand-600 hover:underline">All</a>} />
+            <CardHeader title={t.latest} action={<a href="/reservations" className="text-[12px] font-semibold text-brand-600 hover:underline">{t.all}</a>} />
             <ul className="divide-y divide-surface-border/60">
               {reservations.length === 0 && (
                 <li className="px-4 py-6 text-center text-[12.5px] text-ink-400">
-                  No bookings imported yet.
+                  {t.noBookings}
                 </li>
               )}
               {reservations.slice(0, 5).map((r) => (
@@ -361,25 +389,25 @@ export default async function DashboardPage() {
             <Card className="p-4">
               <CircleSlash className="mb-2 h-5 w-5 text-warning-500" />
               <div className="tnum text-[22px] font-bold text-ink-900">{stats.stopSold}</div>
-              <div className="text-[12px] font-semibold text-ink-700">Stop-Sold</div>
-              <div className="text-[11px] text-ink-400">Products held back</div>
+              <div className="text-[12px] font-semibold text-ink-700">{t.stopSold}</div>
+              <div className="text-[11px] text-ink-400">{t.stopSoldSub}</div>
             </Card>
             <Card className="p-4">
               <Coins className="mb-2 h-5 w-5 text-warning-500" />
               <div className="tnum text-[22px] font-bold text-ink-900">{stats.currencyWarnings}</div>
-              <div className="text-[12px] font-semibold text-ink-700">Currency</div>
-              <div className="text-[11px] text-ink-400">Channels in FX</div>
+              <div className="text-[12px] font-semibold text-ink-700">{t.currency}</div>
+              <div className="text-[11px] text-ink-400">{t.currencySub}</div>
             </Card>
           </div>
 
           {errorItems.length > 0 && (
             <Card className="border-danger-500/30 bg-danger-50/40">
-              <CardHeader title="Needs Attention" action={<a href="/sync?tab=errors" className="text-[12px] font-semibold text-danger-600 hover:underline">Error Center</a>} />
+              <CardHeader title={t.needsAttention} action={<a href="/sync?tab=errors" className="text-[12px] font-semibold text-danger-600 hover:underline">{t.errorCenter}</a>} />
               <ul className="divide-y divide-danger-500/10">
                 {errorItems.slice(0, 3).map((e) => (
                   <li key={e.id} className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
-                      <StatusPill tone={e.severity === "critical" ? "danger" : "warning"}>{e.severity}</StatusPill>
+                      <StatusPill tone={e.severity === "critical" ? "danger" : "warning"}>{t.severity[e.severity] ?? e.severity}</StatusPill>
                       <span className="text-[12.5px] font-semibold text-ink-900">{e.message}</span>
                     </div>
                     {e.recommendedAction && <div className="mt-1 pl-1 text-[11.5px] text-ink-500">{e.recommendedAction}</div>}
