@@ -7,6 +7,13 @@ import { logAudit, str, decimal, money } from "./mutation-helpers";
 import { PERMISSION_GROUPS } from "./permissions";
 import { requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { settings as settingsDict } from "./i18n/settings";
+
+/** The refusal words, in the reader's language — `lib/i18n/settings.ts` → errors. */
+async function say() {
+  return (await i18n()).t(settingsDict).errors;
+}
 
 
 
@@ -40,7 +47,7 @@ export async function savePermissionRole(fd: FormData): Promise<void> {
     await logAudit(property.id, tenantId, { entity: `Permission role · ${role.name}`, field: "access updated" });
   } else {
     const clash = await prisma.permissionRole.findFirst({ where: { tenantId, name } });
-    if (clash) return flashError("A role with that name already exists. Pick a different name.");
+    if (clash) return flashError((await say()).roleExists);
     await prisma.permissionRole.create({
       data: { tenantId, name, builtin: false, access: { create: access.map((a) => ({ tenantId, ...a })) } },
     });
@@ -78,10 +85,10 @@ export async function saveTaxFee(fd: FormData): Promise<void> {
   const pctRaw = str(fd, "pct");
   const amountRaw = str(fd, "amount");
   if (type === "percent" && pctRaw !== "" && !Number.isFinite(Number(pctRaw))) {
-    return flashError("That percentage isn’t a number we can read. Enter a value like 9 or 20.");
+    return flashError((await say()).badPct);
   }
   if (type === "fixed" && amountRaw !== "" && !Number.isFinite(Number(amountRaw))) {
-    return flashError("That amount isn’t a number we can read. Enter a value like 2.50.");
+    return flashError((await say()).badAmount);
   }
 
   const data = {
@@ -96,7 +103,7 @@ export async function saveTaxFee(fd: FormData): Promise<void> {
 
   if (rowId) {
     const existing = await prisma.taxFee.findFirst({ where: { id: rowId, propertyId: property.id } });
-    if (!existing) return flashError("That tax or fee has been removed — somebody deleted it while this page was open. Reload and add it again.");
+    if (!existing) return flashError((await say()).taxGoneEdit);
     await prisma.taxFee.update({ where: { id: rowId }, data });
   } else {
     await prisma.taxFee.create({ data: { tenantId: property.tenantId, propertyId: property.id, ...data } });
@@ -114,7 +121,7 @@ export async function deleteTaxFee(fd: FormData): Promise<void> {
   const property = await getProperty();
   const id = str(fd, "id");
   const tax = await prisma.taxFee.findFirst({ where: { id, propertyId: property.id } });
-  if (!tax) return flashError("That tax or fee has already been removed.");
+  if (!tax) return flashError((await say()).taxGone);
   await prisma.taxFee.delete({ where: { id } });
   await logAudit(property.id, property.tenantId, { entity: `Tax/Fee · ${tax.name}`, field: "deleted" });
   revalidatePath("/settings", "layout");

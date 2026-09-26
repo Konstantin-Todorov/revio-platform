@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import {
-  planPricingModelSwitch, describeSwitch, validateOptions,
+  planPricingModelSwitch, validateOptions,
   effectiveModel, effectivePrimary, planCeiling,
   type PlanToSwitch, type PricingModel, type SeedMode,
 } from "@revio/core";
@@ -14,6 +14,7 @@ import { guard, requireCapability } from "./authz";
 import { logAudit, str } from "./mutation-helpers";
 import { i18n } from "./i18n/server";
 import { rateErrors } from "./i18n/rate-errors";
+import { settings as settingsDict } from "./i18n/settings";
 
 async function say() {
   return (await i18n()).t(rateErrors);
@@ -87,7 +88,12 @@ async function loadPlans(propertyId: string): Promise<PlanToSwitch[]> {
 export interface PricingModelPreview {
   target: PricingModel;
   summary: string;
-  rows: { planName: string; before: number; after: number; changed: boolean; note?: string }[];
+  rows: {
+    planName: string; before: number; after: number; changed: boolean; note?: string;
+    /** Why an unchanged plan is unchanged — a code, so the screen words it. */
+    skip?: "own" | "same";
+    ownModel?: string;
+  }[];
   noop: boolean;
 }
 
@@ -97,16 +103,26 @@ export async function previewPricingModel(target: PricingModel, seed: SeedMode):
   const property = await getProperty();
   const defaults = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } });
 
+  const plans = await loadPlans(property.id);
   const plan = planPricingModelSwitch({
     target,
     propertyModel: (defaults?.pricingModel as PricingModel) ?? "per_room",
-    plans: await loadPlans(property.id),
+    plans,
     seed,
   });
+  // The same facts `describeSwitch` reads, worded in the reader's language.
+  const ownModel = new Map(plans.map((pl) => [pl.ratePlanId, pl.planModel]));
+  const w = (await i18n()).t(settingsDict).switch;
+  const pp = target === "per_person";
+  const ownCount = plan.results.filter((r) => !r.changed && ownModel.get(r.ratePlanId) != null && ownModel.get(r.ratePlanId) !== target).length;
+  const added = plan.results.filter((r) => r.changed).reduce((n, r) => n + r.after - r.before, 0);
+  const summary = plan.noop
+    ? w.noop(pp)
+    : w.head(pp, plan.changedCount, added) + w.safety(pp) + (ownCount > 0 ? w.skipped(ownCount) : "");
 
   return {
     target,
-    summary: describeSwitch(plan, target),
+    summary,
     noop: plan.noop,
     rows: plan.results.map((r) => ({
       planName: r.planName,
@@ -114,6 +130,9 @@ export async function previewPricingModel(target: PricingModel, seed: SeedMode):
       after: r.after,
       changed: r.changed,
       ...(r.skipped ? { note: r.skipped } : {}),
+      ...(r.changed ? {} : ownModel.get(r.ratePlanId) != null && ownModel.get(r.ratePlanId) !== target
+        ? { skip: "own" as const, ownModel: ownModel.get(r.ratePlanId)! }
+        : r.skipped ? { skip: "same" as const } : {}),
     })),
   };
 }

@@ -1,5 +1,9 @@
 "use client";
 
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { settings as settingsDict } from "@/lib/i18n/settings";
+
 import { useState, useTransition } from "react";
 import { Users, Bed, AlertTriangle, Loader2 } from "lucide-react";
 import { previewPricingModel, applyPricingModel, type PricingModelPreview } from "@/lib/actions-obp";
@@ -37,45 +41,45 @@ export function PricingModelCard({
   const [loading, startPreview] = useTransition();
 
   const dirty = target !== current;
+  const p = translate(settingsDict, useLocale()).pricing;
 
   return (
     <div className="space-y-4 p-5">
       <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <legend className="sr-only">Pricing model</legend>
+        <legend className="sr-only">{p.legend}</legend>
         <Choice
           checked={target === "per_room"}
           onSelect={() => { setTarget("per_room"); setPreview(null); }}
           icon={<Bed className="h-4 w-4" />}
-          title="Per room"
-          body="One price for the room, whoever is in it. The simplest model, and what most UK and US hotels use."
+          title={p.perRoom}
+          body={p.perRoomBody}
         />
         <Choice
           checked={target === "per_person"}
           onSelect={() => { setTarget("per_person"); setPreview(null); }}
           icon={<Users className="h-4 w-4" />}
-          title="Per person"
-          body="A price for each number of guests — €80 for one, €100 for two. Standard across most of continental Europe."
+          title={p.perPerson}
+          body={p.perPersonBody}
         />
       </fieldset>
 
       {target === "per_person" && (
         <div className="rounded-lg border border-surface-border bg-surface-muted/40 p-3.5">
           <label className="block text-[12px] font-semibold text-ink-700">
-            Starting prices for the other guest counts
+            {p.seedLabel}
           </label>
           <select
             value={seed}
             onChange={(e) => { setSeed(e.target.value as "copy" | "derive"); setPreview(null); }}
             className={`${inputCls} mt-1.5 max-w-md`}
           >
-            <option value="copy">Use the same price for every guest count (change them afterwards)</option>
-            <option value="derive">Work them out from the main price with a rule</option>
+            <option value="copy">{p.seedCopy}</option>
+            <option value="derive">{p.seedDerive}</option>
           </select>
           <p className="mt-1.5 text-[11.5px] leading-relaxed text-ink-500">
             {/* "Copy" is the honest default: not a clever guess, exactly what they charged yesterday,
                 and visibly theirs to change. */}
-            Either way nothing is guessed for you — the price you charge today stays on your main
-            guest count, and you set the rest.
+            {p.seedNote}
           </p>
         </div>
       )}
@@ -87,11 +91,11 @@ export function PricingModelCard({
           onClick={() => startPreview(async () => setPreview(await previewPricingModel(target, seed)))}
           className="h-9 rounded-md border border-surface-border px-3.5 text-[13px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted disabled:opacity-50"
         >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "See what will change"}
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : p.preview}
         </button>
         {!dirty && (
           <span className="text-[12px] text-ink-400">
-            Currently {current === "per_person" ? "per person" : "per room"}.
+            {p.currently(current === "per_person")}
           </span>
         )}
       </div>
@@ -112,8 +116,10 @@ export function PricingModelCard({
                     </span>
                     <span className="text-[11.5px] text-ink-500">
                       {r.changed
-                        ? `${r.before} price${r.before === 1 ? "" : "s"} → ${r.after}`
-                        : (r.note ?? "no change")}
+                        ? p.prices(r.before, r.after)
+                        : r.skip === "own" ? p.ownSetting(r.ownModel === "per_person")
+                          : r.skip === "same" ? p.alreadyShape
+                            : p.noChange}
                     </span>
                   </li>
                 ))}
@@ -125,13 +131,13 @@ export function PricingModelCard({
                 <span className="flex items-start gap-1.5 text-[11.5px] leading-relaxed text-ink-500">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-600" />
                   {/* Said plainly: this is what reaches the OTAs, and it is reversible. */}
-                  Your channels get the new prices on the next sync. You can switch back at any time.
+                  {p.syncNote}
                 </span>
                 <button
                   type="submit"
                   className="h-9 shrink-0 rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700"
                 >
-                  Apply
+                  {p.apply}
                 </button>
               </form>
             </>

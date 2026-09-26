@@ -1,3 +1,5 @@
+import { i18n } from "@/lib/i18n/server";
+import { settings as settingsDict } from "@/lib/i18n/settings";
 import { getSession } from "@/lib/session";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { TwoFactorSetup } from "@revio/ui/two-factor-setup";
@@ -12,6 +14,8 @@ export const dynamic = "force-dynamic";
 export default async function SettingsAccountPage() {
   const session = await getSession();
   const twoFactorOn = session ? await userRequiresSecondFactor(session.userId) : false;
+  const { t, locale } = await i18n();
+  const a = t(settingsDict).account;
   // Named rather than "everything": a warning nobody can check is a warning nobody reads.
   const productNames = [
     ...(session?.entitlements.channelManager ? ["RevioLink"] : []),
@@ -26,8 +30,8 @@ export default async function SettingsAccountPage() {
           must still have somewhere to enable it. */}
       <Card>
         <CardHeader
-          title="Two-factor authentication"
-          subtitle="Protects this account in every Revio product you use"
+          title={a.twoFactor}
+          subtitle={a.twoFactorSub}
         />
         <div className="p-5">
           <TwoFactorSetup
@@ -41,9 +45,9 @@ export default async function SettingsAccountPage() {
       {/* Recorded on the SHARED identity, so it reaches every product this hotel runs — which is
           exactly why the button cannot live in one product only. Until now it did. */}
       <Card>
-        <CardHeader title="Your sign-in" subtitle="Sessions on this and any other device" />
+        <CardHeader title={a.signIn} subtitle={a.signInSub} />
         <div className="p-5">
-          <SignOutEverywhere action={signOutEverywhere} productNames={productNames} />
+          <SignOutEverywhere action={signOutEverywhere} productNames={productNames} locale={locale} />
         </div>
       </Card>
     </>

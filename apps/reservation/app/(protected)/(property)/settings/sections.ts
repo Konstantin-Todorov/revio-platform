@@ -6,6 +6,7 @@
  * JSX. Every future setting now has an obvious home, which was the point of splitting the page.
  */
 import type { SettingsSection } from "@revio/ui/settings-nav";
+import type { SettingsStrings } from "@/lib/i18n/settings";
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { href: "/settings/property", label: "Property", blurb: "Name, timezone, currency, check-in and check-out" },
@@ -24,6 +25,16 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
  * breaking those to tidy a menu is a poor trade. The nav's job is that somebody looking for a
  * setting finds it — not that every setting is rendered inside this route.
  */
+/** The same two lists, worded in the reader's language — the order and the links stay here. */
+const SECTION_KEYS = ["property", "emails", "policies", "taxes", "users", "billing", "account"] as const;
+const ELSEWHERE_KEYS = ["engine", "rooms", "distribution", "help"] as const;
+export function settingsNav(s: SettingsStrings): { sections: SettingsSection[]; elsewhere: SettingsSection[] } {
+  return {
+    sections: SETTINGS_SECTIONS.map((sec, i) => ({ ...sec, ...s.sections[SECTION_KEYS[i]!] })),
+    elsewhere: SETTINGS_ELSEWHERE.map((sec, i) => ({ ...sec, ...s.elsewhere[ELSEWHERE_KEYS[i]!] })),
+  };
+}
+
 export const SETTINGS_ELSEWHERE: SettingsSection[] = [
   { href: "/booking-engine", label: "Booking engine", blurb: "Branding, hero image and the direct-booking page" },
   { href: "/rooms-rates/rooms", label: "Rooms & Rates", blurb: "Room types, photos, rate plans and closures" },

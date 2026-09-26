@@ -11,6 +11,13 @@ import { prisma } from "./db";
 import { logAudit, str } from "./mutation-helpers";
 import { getProperty } from "./data";
 import { guard } from "./authz";
+import { i18n } from "./i18n/server";
+import { settings as settingsDict } from "./i18n/settings";
+
+/** The refusal words, in the reader's language — `lib/i18n/settings.ts` → errors. */
+async function say() {
+  return (await i18n()).t(settingsDict).errors;
+}
 
 /** Who may change guest emails, and on which property. Null when they may not. */
 async function ctx(cap: "manageSettings"): Promise<{ tenantId: string; propertyId: string; userId: string | null } | null> {
@@ -36,14 +43,14 @@ function refresh() {
 /** Save one email's wording and on/off switch in one language. */
 export async function saveEmailTemplate(fd: FormData): Promise<void> {
   const c = await ctx("manageSettings");
-  if (!c) return flashError("Only an owner or admin can change guest emails. Ask one of them.");
+  if (!c) return flashError((await say()).emailsDenied);
   const key = str(fd, "key");
   const locale = str(fd, "locale") || "en";
   const saved = await saveTemplate(prisma, {
     tenantId: c.tenantId, propertyId: c.propertyId, key, locale,
     subject: str(fd, "subject"), body: str(fd, "body"), enabled: fd.get("enabled") != null, userId: c.userId,
   });
-  if (!saved.ok) return flashError("That email or language no longer exists. Reload the page and try again.");
+  if (!saved.ok) return flashError((await say()).emailGone);
   await logAudit(c.propertyId, c.tenantId, {
     entity: "Email settings", field: `${saved.label} (${locale})`, newValue: saved.enabled ? "saved" : "saved (switched off)",
   });
@@ -53,7 +60,7 @@ export async function saveEmailTemplate(fd: FormData): Promise<void> {
 /** Back to our wording for one email in one language. */
 export async function resetEmailTemplate(fd: FormData): Promise<void> {
   const c = await ctx("manageSettings");
-  if (!c) return flashError("Only an owner or admin can change guest emails. Ask one of them.");
+  if (!c) return flashError((await say()).emailsDenied);
   const key = str(fd, "key");
   const locale = str(fd, "locale") || "en";
   await resetTemplate(prisma, c.propertyId, key, locale);
@@ -66,7 +73,7 @@ export async function resetEmailTemplate(fd: FormData): Promise<void> {
 /** Sender, reply-to, colour, footer, design and typeface — the look every guest email carries. */
 export async function saveEmailBranding(fd: FormData): Promise<void> {
   const c = await ctx("manageSettings");
-  if (!c) return flashError("Only an owner or admin can change guest emails. Ask one of them.");
+  if (!c) return flashError((await say()).emailsDenied);
   await saveBranding(prisma, c.propertyId, {
     senderName: str(fd, "emailSenderName"), replyTo: str(fd, "emailReplyTo"), brandColor: str(fd, "emailBrandColor"),
     footerText: str(fd, "emailFooterText"), theme: str(fd, "emailTheme"), font: str(fd, "emailFont"),
@@ -83,10 +90,10 @@ export async function saveEmailBranding(fd: FormData): Promise<void> {
  */
 export async function setDefaultLanguage(fd: FormData): Promise<void> {
   const c = await ctx("manageSettings");
-  if (!c) return flashError("Only an owner or admin can change guest emails. Ask one of them.");
+  if (!c) return flashError((await say()).emailsDenied);
   const locale = str(fd, "locale");
   if (!(await setGuestLanguage(prisma, c.propertyId, locale))) {
-    return flashError("That isn’t a language we send in. Reload the page and try again.");
+    return flashError((await say()).notALanguage);
   }
   await logAudit(c.propertyId, c.tenantId, { entity: "Email settings", field: "guest language", newValue: locale });
   refresh();
@@ -95,7 +102,7 @@ export async function setDefaultLanguage(fd: FormData): Promise<void> {
 /** Store an uploaded logo — checked by its bytes, not by what the browser says it is. */
 export async function uploadEmailLogo(_prev: UploadResult | null, fd: FormData): Promise<UploadResult> {
   const c = await ctx("manageSettings");
-  if (!c) return { ok: false, error: "Only an owner or admin can change guest emails. Ask one of them." };
+  if (!c) return { ok: false, error: (await say()).emailsDenied };
   const res = await storeEmailLogo(prisma, { tenantId: c.tenantId, propertyId: c.propertyId, file: fd.get("logo") });
   if (!res.ok) return { ok: false, code: res.code, ...(res.kb !== undefined ? { kb: res.kb } : {}) };
   await logAudit(c.propertyId, c.tenantId, { entity: "Email settings", field: "logo", newValue: `uploaded (${res.kb} KB)` });
@@ -106,7 +113,7 @@ export async function uploadEmailLogo(_prev: UploadResult | null, fd: FormData):
 /** Remove the uploaded logo — emails fall back to the hotel's name as a wordmark. */
 export async function removeEmailLogo(): Promise<void> {
   const c = await ctx("manageSettings");
-  if (!c) return flashError("Only an owner or admin can change guest emails. Ask one of them.");
+  if (!c) return flashError((await say()).emailsDenied);
   await removeEmailLogoRow(prisma, c.propertyId);
   await logAudit(c.propertyId, c.tenantId, { entity: "Email settings", field: "logo", newValue: "removed" });
   refresh();

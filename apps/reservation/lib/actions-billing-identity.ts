@@ -38,6 +38,10 @@ export async function saveBillingIdentity(
     return {
       ok: false,
       problems: Object.fromEntries(problems.map((p) => [p.field, p.message])),
+      // Codes so the form says each problem in the reader's language — as RevioPMS does.
+      problemCodes: Object.fromEntries(problems.map((p) => [p.field, p.code])),
+      problemCountry: values.country.toUpperCase(),
+      messageCode: "nothingSaved",
       message: "Nothing was saved — see the fields marked below.",
     };
   }

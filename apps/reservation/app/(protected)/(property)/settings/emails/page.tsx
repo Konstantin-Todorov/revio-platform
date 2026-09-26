@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { saveEmailBranding, setDefaultLanguage, uploadEmailLogo, removeEmailLogo } from "@/lib/actions-email";
 import { getProperty } from "@/lib/data";
+import { getLocale } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function GuestEmailsPage({ searchParams }: { searchParams: 
 
   return (
     <GuestEmails
-      
+      locale={await getLocale()}
       tab={tab === "look" ? "look" : "emails"}
       basePath="/settings/emails"
       editorHref={(key, lang) => `/settings/emails/${key}?lang=${lang}`}
@@ -37,7 +38,7 @@ export default async function GuestEmailsPage({ searchParams }: { searchParams: 
       setLanguageAction={setDefaultLanguage}
       saveLookAction={saveEmailBranding}
       logoSlot={<EmailLogoUpload currentUrl={brand.logoUrl ?? null} uploadAction={uploadEmailLogo} removeAction={removeEmailLogo} />}
-      
+      panelLanguageSwitch
     />
   );
 }

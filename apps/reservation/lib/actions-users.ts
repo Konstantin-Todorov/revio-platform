@@ -12,6 +12,13 @@ import { getSession } from "./session";
 import { str } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
 import { flashError } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { settings as settingsDict } from "./i18n/settings";
+
+/** The refusal words, in the reader's language — `lib/i18n/settings.ts` → errors. */
+async function say() {
+  return (await i18n()).t(settingsDict).errors;
+}
 
 /**
  * CRS Staff — user management on the ONE shared identity (CRS-REFINEMENT-R2 §8.2). Every operation
@@ -40,14 +47,14 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
   const _g = await guard("manageStaff");
   if (!_g.ok) return { ok: false, error: _g.error };
   const s = await requireManager();
-  if (!s) return { ok: false, error: "Only an Owner or Admin can manage staff." };
+  if (!s) return { ok: false, error: (await say()).staffDenied };
 
   const name = str(fd, "name").trim();
   const email = str(fd, "email").toLowerCase().trim();
   const phone = str(fd, "phone").trim() || null;
   const role = str(fd, "role");
-  if (!name || !email) return { ok: false, error: "Name and email are required." };
-  if (!isRole(role)) return { ok: false, error: "Pick a valid role." };
+  if (!name || !email) return { ok: false, error: (await say()).nameEmail };
+  if (!isRole(role)) return { ok: false, error: (await say()).validRole };
 
   // No password. The account is unusable until the invitee sets one from the emailed link.
   try {
@@ -57,7 +64,7 @@ export async function inviteUser(_prev: ActionResult | null, fd: FormData): Prom
     // email is globally unique on the shared identity — RLS hides other tenants' rows, so a cross-tenant
     // collision only shows up here.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return { ok: false, error: "That email is already a Revio login." };
+      return { ok: false, error: (await say()).emailTaken };
     }
     throw e;
   }
@@ -70,21 +77,21 @@ export async function updateUser(_prev: ActionResult | null, fd: FormData): Prom
   const _g = await guard("manageStaff");
   if (!_g.ok) return { ok: false, error: _g.error };
   const s = await requireManager();
-  if (!s) return { ok: false, error: "Only an Owner or Admin can manage staff." };
+  if (!s) return { ok: false, error: (await say()).staffDenied };
 
   const id = str(fd, "id");
   const name = str(fd, "name").trim();
   const email = str(fd, "email").toLowerCase().trim();
   const phone = str(fd, "phone").trim() || null;
   const u = await prisma.user.findUnique({ where: { id } });
-  if (!u || u.tenantId !== s.tenantId) return { ok: false, error: "User not found." };
-  if (!name || !email) return { ok: false, error: "Name and email are required." };
+  if (!u || u.tenantId !== s.tenantId) return { ok: false, error: (await say()).userNotFound };
+  if (!name || !email) return { ok: false, error: (await say()).nameEmail };
 
   try {
     await prisma.user.update({ where: { id }, data: { name, email, phone } });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return { ok: false, error: "That email is already a Revio login." };
+      return { ok: false, error: (await say()).emailTaken };
     }
     throw e;
   }
@@ -99,13 +106,13 @@ export async function updateUserRole(fd: FormData): Promise<void> {
   if (!s) return;
   const id = str(fd, "id");
   const role = str(fd, "role");
-  if (!isRole(role)) return flashError("That isn’t a role this account has. Reload the page and try again.");
+  if (!isRole(role)) return flashError((await say()).notARole);
 
   const u = await prisma.user.findUnique({ where: { id } });
   if (!u || u.tenantId !== s.tenantId) return;
   if (u.role === "owner" && role !== "owner") {
     const owners = await prisma.user.count({ where: { tenantId: s.tenantId, role: "owner", active: true } });
-    if (owners <= 1) return flashError("This is the last owner. Make somebody else an owner first — an account with no owner cannot be managed.");
+    if (owners <= 1) return flashError((await say()).lastOwner);
   }
   await prisma.user.update({ where: { id }, data: { role } });
   revalidatePath("/settings", "layout");
@@ -124,7 +131,7 @@ export async function setUserActive(fd: FormData): Promise<void> {
   if (!active && u.id === s.userId) return; // don't lock yourself out
   if (!active && u.role === "owner") {
     const owners = await prisma.user.count({ where: { tenantId: s.tenantId, role: "owner", active: true } });
-    if (owners <= 1) return flashError("This is the last active owner. Activate or promote somebody else first — an account with no active owner cannot be managed.");
+    if (owners <= 1) return flashError((await say()).lastActiveOwner);
   }
   await prisma.user.update({ where: { id }, data: { active } });
   revalidatePath("/settings", "layout");
