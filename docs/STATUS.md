@@ -2,7 +2,8 @@
 
 > ▶️ **Resuming work? Read `docs/SESSION-2026-09-24.md` §5–§6 first.** It says exactly where the work
 > stands on 2026-09-25 (RevioCRS in Bulgarian: **switched on for everyone 2026-09-26** — `CRS_TRANSLATED = true`;
-> RevioLink in Bulgarian is next; and the 2026-09-26 client-deletion incident, fixed), the founder's agreed order after it, and the standing rules.
+> RevioLink in Bulgarian: **switched on for everyone 2026-09-27** — `CM_TRANSLATED = true`; and the 2026-09-26
+> client-deletion incident, fixed), the founder's agreed order after it, and the standing rules.
 
 **Updated 2026-09-22**, at commit `9473a49` — which CI passed and `promote.yml` fast-forwarded onto
 `production`, *checked with `git fetch origin production && git log --oneline origin/production -1`;
@@ -330,6 +331,12 @@ says who can move it. Details sit where the link points.
    `RegisterProblemCode`) so a screen translates by code, never by matching English. Rule written in
    `packages/ui/CLAUDE.md`.
 3. RevioCRS, then RevioLink. **Operator is not translated** — founder decision 2026-09-24, it is ours.
+   **✅ RevioCRS on 2026-09-26, ✅ RevioLink on 2026-09-27** (`CM_TRANSLATED = true`; parts 1–5 `d9b9d95`…`0c0e30f`).
+   RevioLink checked by route-walk (21/21 screens), by a scan of every screen for leftover English, by an
+   English-locale owner receiving no Cyrillic at all, and at 375px on every screen (no horizontal scroll).
+   **Deliberately still English:** stored log records — sync event summaries, error-item messages, audit
+   lines — kept as written (they carry booking numbers and names; translating them would mean matching
+   English). The forward fix is storing a code + parameters. Channex's own API messages pass through as sent.
    **Built 2026-09-25:** RevioCRS Rooms & Rates regrouped by room and by plan in the Settings shape —
    `docs/PLAN-ROOMS-RATES-CRS.md` (sections Room types · Rate plans · Closures; each room type and each
    plan has one page with everything about it; photos reorder by drag, on a phone too). Checked in the
