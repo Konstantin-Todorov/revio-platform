@@ -1,12 +1,12 @@
 import { orderFloors } from "@/lib/floor-order";
 import { fill } from "@revio/ui/i18n";
 import Link from "next/link";
-import { User, TriangleAlert, ListOrdered, LayoutGrid, Clock, LogIn, LogOut } from "lucide-react";
+import { User, TriangleAlert, ListOrdered, LayoutGrid, Clock, LogIn, LogOut, ChevronRight } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getHousekeepingUnits, statusCounts, type UnitRow } from "@/lib/data";
 import { StatusControl } from "@/components/housekeeping/StatusControl";
 import { RoomActions } from "@/components/housekeeping/RoomActions";
-import { HK_TILE, HK_STATUSES, type HkStatus } from "@/lib/hk-meta";
+import { HK_TILE, HK_STATUSES, settableStatuses, type HkStatus } from "@/lib/hk-meta";
 import { getSession } from "@/lib/session";
 import { getOpenShift, getActiveCleanerCount } from "@/lib/workforce";
 import { clockInSelf, clockOutSelf } from "@/lib/actions-workforce";
@@ -32,7 +32,10 @@ const REASON_TINT: Record<string, string> = {
   "No arrival pressure": "bg-ink-100 text-ink-500",
 };
 
-function RoomTile({ u, t }: { u: UnitRow; t: HousekeepingStrings }) {
+function RoomTile({ u, t, role }: { u: UnitRow; t: HousekeepingStrings; role: string }) {
+  // A status this role may neither leave nor enter is shown, not offered — see `settableStatuses`.
+  const mine = settableStatuses(role);
+  const canSet = mine.includes(u.hkStatus);
   return (
     <div className={`rounded-lg border p-3 ${HK_TILE[u.hkStatus]}`}>
       <div className="flex items-baseline justify-between">
@@ -56,7 +59,7 @@ function RoomTile({ u, t }: { u: UnitRow; t: HousekeepingStrings }) {
         </div>
       )}
       <div className="mt-2">
-        <StatusControl unitId={u.id} status={u.hkStatus} labels={t.statuses} aria={t.actions.statusAria} />
+        <StatusControl unitId={u.id} status={u.hkStatus} labels={t.statuses} aria={t.actions.statusAria} options={mine} readOnly={!canSet} />
       </div>
       <RoomActions unitId={u.id} status={u.hkStatus} t={t.actions} />
     </div>
@@ -78,6 +81,9 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
     getActiveCleanerCount(),
   ]);
   const counts = statusCounts(units);
+  // `Role` in session.ts lists only the commercial roles; the PMS scoped ones arrive here too.
+  const role: string = session?.role ?? "";
+  const isHousekeeper = role === "housekeeper";
   const smart = view !== "floor"; // smart routing is the default
 
   // Floor grouping (units without a floor go under "Unassigned").
@@ -177,14 +183,19 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
                 {queue.length === 0 ? (
                   <Card surface="flat" className="p-5 text-center text-[13px] text-ink-400">{t.queueEmpty}</Card>
                 ) : (
-                  <div className={GRID}>{queue.map((u) => <RoomTile key={u.id} u={u} t={t} />)}</div>
+                  <div className={GRID}>{queue.map((u) => <RoomTile key={u.id} u={u} t={t} role={role} />)}</div>
                 )}
               </section>
               {rest.length > 0 && (
-                <section>
-                  <h2 className="mb-2 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400">{t.restHeading(rest.length)}</h2>
-                  <div className={GRID}>{rest.map((u) => <RoomTile key={u.id} u={u} t={t} />)}</div>
-                </section>
+                /* Folded for a housekeeper: on a phone the thirty rooms that need nothing pushed the ones
+                   that do off the screen. Everyone else keeps the whole board open. */
+                <details open={!isHousekeeper} className="group">
+                  <summary className="mb-2 flex cursor-pointer list-none items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400 [&::-webkit-details-marker]:hidden">
+                    <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
+                    {t.restHeading(rest.length)}
+                  </summary>
+                  <div className={GRID}>{rest.map((u) => <RoomTile key={u.id} u={u} t={t} role={role} />)}</div>
+                </details>
               )}
             </div>
           ) : (
@@ -192,7 +203,7 @@ export default async function HousekeepingPage({ searchParams }: { searchParams:
               {floors.map((floor) => (
                 <section key={floor}>
                   <h2 className="mb-2 text-[12px] font-bold uppercase tracking-[0.1em] text-ink-400">{floor === UNASSIGNED ? t.unassignedFloor : /^\d+$/.test(floor) ? fill(t.numberedFloor, { floor }) : floor}</h2>
-                  <div className={GRID}>{byFloor.get(floor)!.map((u) => <RoomTile key={u.id} u={u} t={t} />)}</div>
+                  <div className={GRID}>{byFloor.get(floor)!.map((u) => <RoomTile key={u.id} u={u} t={t} role={role} />)}</div>
                 </section>
               ))}
             </div>

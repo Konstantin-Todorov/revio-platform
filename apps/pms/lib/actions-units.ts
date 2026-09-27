@@ -12,6 +12,7 @@ import { flashError } from "@revio/ui/flash";
 import { i18n } from "./i18n/server";
 import { flash } from "./i18n/flash";
 import { orderFloors } from "./floor-order";
+import { settableStatuses } from "./hk-meta";
 
 /** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
 async function flashSay() {
@@ -311,6 +312,9 @@ export async function setUnitStatus(fd: FormData): Promise<void> {
   // the row would confirm it exists.
   if (unit.propertyId !== session.activePropertyId) return;
   const prev = unit.hkStatus;
+  // The inspection gate and the off-sale decision are not a housekeeper's — see `settableStatuses`.
+  const mine = settableStatuses(session.role) as readonly string[];
+  if (!mine.includes(status) || !mine.includes(prev)) return flashError((await flashSay()).units.notYourStatus);
   // Not an error: two people pressing "clean" on the same room is ordinary, and the room IS clean.
   if (prev === status) return;
 

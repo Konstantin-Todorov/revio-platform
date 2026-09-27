@@ -113,7 +113,9 @@ export function PlanTree({
   return (
     <div className="rounded-lg border border-surface-border">
       <div className="flex flex-wrap items-center gap-2 border-b border-surface-border px-3 py-2">
-        <span className="relative flex min-w-0 flex-1 items-center">
+        {/* A floor of 12rem: below it the box wraps above the three links instead of shrinking to
+            "Търсе" beside them on a phone. */}
+        <span className="relative flex min-w-[12rem] flex-1 items-center">
           <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-ink-400" />
           <input
             value={query}
@@ -275,9 +277,11 @@ function PlanRow({
      * is why it is not in the count.
      */
     return (
-      <li className="flex items-center gap-2 rounded-md px-1 py-1 text-[12.5px] text-ink-300">
+      /* Wraps rather than truncates: on a phone the "follows …" note took the row and cut every plan's
+         own name to its first word. The name keeps its line; the note drops under it when it must. */
+      <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md px-1 py-1 text-[12.5px] text-ink-300">
         <span aria-hidden className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-dashed border-surface-border" />
-        <span className="min-w-0 truncate">{plan.name}</span>
+        <span className="min-w-0 max-w-full truncate">{plan.name}</span>
         {plan.code && <span className="shrink-0 text-[10.5px]">{plan.code}</span>}
         <span className="ml-auto flex shrink-0 items-center gap-1 text-[10.5px] uppercase tracking-wide">
           {derived ? (

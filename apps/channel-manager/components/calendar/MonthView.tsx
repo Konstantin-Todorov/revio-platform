@@ -47,6 +47,13 @@ export function MonthView({
         ))}
       </div>
 
+      {/*
+        On a phone a day is ~46px wide, and a 28px label in front of every number pushed the numbers
+        into each other. The labels leave the cells there and are said once, here, in the same order.
+      */}
+      <div className="border-b border-surface-border px-2 py-1.5 text-[11px] text-ink-500 sm:hidden">
+        {[words.sell, ...(visible.has("sold") ? [words.sold] : []), priceRow?.label ?? words.rate].join(" · ")}
+      </div>
       {/* Day cells */}
       <div className="grid grid-cols-7">
         {Array.from({ length: leadingBlanks }).map((_, i) => (
@@ -91,19 +98,19 @@ export function MonthView({
               </div>
 
               <div className="flex items-center gap-1 text-[10.5px] text-ink-400">
-                <span className="w-7 shrink-0">{words.sell}</span>
+                <span className="hidden w-7 shrink-0 sm:inline">{words.sell}</span>
                 {inv && <EditableCell roomTypeId={section.roomType.id} date={d} field="inventory" kind="availability" value={inv.value} past={d < todayKey} {...(inv.warn ? { warn: inv.warn } : {})} />}
               </div>
               {visible.has("sold") && sold !== undefined && (
                 <div className="flex items-center gap-1 text-[10.5px] text-ink-400">
-                  <span className="w-7 shrink-0">{words.sold}</span>
+                  <span className="hidden w-7 shrink-0 sm:inline">{words.sold}</span>
                   <span className="tnum px-1 text-[12px] font-semibold text-ink-500">{sold}</span>
                 </div>
               )}
               <div className="flex items-center gap-1 text-[10.5px] text-ink-400">
                 {/* The plan's own name, not the word "Rate" — BUG-001. Truncated because the month
                     cell is narrow; the full name is the title. */}
-                <span className="w-7 shrink-0 truncate" title={priceRow?.label ?? words.rate}>{priceRow?.label ?? words.rate}</span>
+                <span className="hidden w-7 shrink-0 truncate sm:inline" title={priceRow?.label ?? words.rate}>{priceRow?.label ?? words.rate}</span>
                 {price && (
                   <EditableCell
                     roomTypeId={section.roomType.id}

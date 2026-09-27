@@ -161,20 +161,21 @@ export default async function ReservationsPage({
       </nav>
 
       <Card className="p-3">
-        <form method="GET" className="flex flex-wrap items-center gap-2">
-          <input name="q" defaultValue={sp.q ?? ""} placeholder={t.searchPlaceholder} className={`${inputCls} w-56`} />
-          <select name="status" defaultValue={sp.status ?? ""} className={inputCls}>
+        {/* Two columns on a phone: fixed desk widths cut the search box to "…номе" at 375px. */}
+        <form method="GET" className="grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
+          <input name="q" defaultValue={sp.q ?? ""} placeholder={t.searchPlaceholder} className={`${inputCls} col-span-2 w-full sm:w-56`} />
+          <select name="status" defaultValue={sp.status ?? ""} className={`${inputCls} w-full sm:w-auto`}>
             <option value="">{t.anyStatus}</option>
             {STATUSES.map((s) => <option key={s} value={s}>{cm.statuses[s] ?? s.replace("_", " ")}</option>)}
           </select>
           {/* Date type governs which date the from→to range filters on (spec §3.3). */}
-          <select name="dateType" defaultValue={dateType} className={inputCls}>
+          <select name="dateType" defaultValue={dateType} className={`${inputCls} w-full sm:w-auto`}>
             {DATE_TYPES.map((d) => <option key={d} value={d}>{t.dateTypes[d]}</option>)}
           </select>
-          <DateField name="from" defaultValue={sp.from ?? ""} className={inputCls} />
-          <span className="text-[11.5px] text-ink-400">→</span>
-          <DateField name="to" defaultValue={sp.to ?? ""} className={inputCls} />
-          <button className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">{t.filter}</button>
+          <DateField name="from" defaultValue={sp.from ?? ""} className={`${inputCls} w-full sm:w-auto`} />
+          <span className="hidden text-[11.5px] text-ink-400 sm:inline">→</span>
+          <DateField name="to" defaultValue={sp.to ?? ""} className={`${inputCls} w-full sm:w-auto`} />
+          <button className="col-span-2 h-10 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 sm:h-auto sm:py-1.5">{t.filter}</button>
         </form>
 
         {/*

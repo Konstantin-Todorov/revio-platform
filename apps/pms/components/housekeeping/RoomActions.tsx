@@ -16,6 +16,8 @@ const EN: RoomActionStrings = { start: "Start", starting: "Starting…", finish:
 
 export function RoomActions({ unitId, status, t = EN }: { unitId: string; status: HkStatus; t?: RoomActionStrings }) {
   const [reporting, setReporting] = useState(false);
+  // Start or Finish takes the row; the report button then shrinks to its icon beside it.
+  const busy = status === "dirty" || status === "in_progress";
 
   return (
     <div className="mt-1.5 space-y-1.5">
@@ -23,16 +25,16 @@ export function RoomActions({ unitId, status, t = EN }: { unitId: string; status
         {status === "dirty" && (
           <form action={startCleaning} className="flex-1">
             <input type="hidden" name="unitId" value={unitId} />
-            <SubmitButton className="flex w-full items-center justify-center gap-1 rounded-md bg-brand-700 px-2 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-brand-600" pendingLabel={t.starting}>
-              <Play className="h-3 w-3" /> {t.start}
+            <SubmitButton className="flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-brand-700 px-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-600" pendingLabel={t.starting}>
+              <Play className="h-3.5 w-3.5" /> {t.start}
             </SubmitButton>
           </form>
         )}
         {status === "in_progress" && (
           <form action={finishCleaning} className="flex-1">
             <input type="hidden" name="unitId" value={unitId} />
-            <button className="flex w-full items-center justify-center gap-1 rounded-md bg-success-600 px-2 py-1 text-[11.5px] font-semibold text-white transition-colors hover:bg-success-500">
-              <Check className="h-3 w-3" /> {t.finish}
+            <button className="flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-success-600 px-2 text-[13px] font-semibold text-white transition-colors hover:bg-success-500">
+              <Check className="h-3.5 w-3.5" /> {t.finish}
             </button>
           </form>
         )}
@@ -41,9 +43,12 @@ export function RoomActions({ unitId, status, t = EN }: { unitId: string; status
           onClick={() => setReporting((v) => !v)}
           title={t.report}
           aria-label={t.report}
-          className={`flex items-center justify-center rounded-md border px-2 py-1 text-[11.5px] font-semibold transition-colors ${reporting ? "border-danger-500/60 bg-danger-50 text-danger-600" : "border-surface-border text-ink-500 hover:bg-surface-muted"} ${status === "dirty" || status === "in_progress" ? "" : "flex-1"}`}
+          className={`flex h-10 items-center justify-center gap-1.5 rounded-md border bg-white/70 text-[12px] font-semibold transition-colors ${reporting ? "border-danger-500/60 bg-danger-50 text-danger-600" : "border-surface-border text-ink-600 hover:bg-surface-muted"} ${busy ? "w-10 shrink-0" : "flex-1 px-2"}`}
         >
-          {reporting ? <X className="h-3 w-3" /> : <TriangleAlert className="h-3 w-3" />}
+          {reporting ? <X className="h-4 w-4" /> : <TriangleAlert className="h-4 w-4" />}
+          {/* Named whenever there is room: an unlabelled warning triangle reads as "something is wrong
+              with this room", not as a button that reports one. */}
+          {!busy && <span className="truncate">{t.report}</span>}
         </button>
       </div>
       {reporting && (
@@ -54,9 +59,9 @@ export function RoomActions({ unitId, status, t = EN }: { unitId: string; status
             required
             autoFocus
             placeholder={t.describe}
-            className="min-w-0 flex-1 rounded-md border border-surface-border bg-white px-2 py-1 text-[11.5px] outline-none focus:border-danger-500"
+            className="h-10 min-w-0 flex-1 rounded-md border border-surface-border bg-white px-2 text-[16px] outline-none focus:border-danger-500 sm:text-[13px]"
           />
-          <button className="shrink-0 rounded-md bg-danger-600 px-2 py-1 text-[11.5px] font-semibold text-white hover:bg-danger-500">{t.log}</button>
+          <button className="h-10 shrink-0 rounded-md bg-danger-600 px-3 text-[13px] font-semibold text-white hover:bg-danger-500">{t.log}</button>
         </form>
       )}
     </div>

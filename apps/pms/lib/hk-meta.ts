@@ -39,3 +39,17 @@ export const HK_TILE: Record<HkStatus, string> = {
 export function sellableStatuses(inspectionGate: boolean): HkStatus[] {
   return inspectionGate ? ["inspected"] : ["clean", "inspected"];
 }
+
+/**
+ * Which statuses a role may set by hand — from, and to.
+ *
+ * ⚠️ A housekeeper moves a room through their own work (dirty → cleaning → clean) and nothing else.
+ * Approving an inspection is the supervisor's step (PMS-GUIDE §3.4 — "supervisor approves"), and
+ * taking a room out of order closes it on every channel, which is not a call to make from a phone
+ * mid-shift: they report the fault and maintenance decides. Both used to be one tap away in the
+ * status menu on every tile, so the inspection gate could be walked past by the person it gates.
+ * Moving a room OUT of inspected or out-of-order is refused for the same reasons.
+ */
+export function settableStatuses(role: string): readonly HkStatus[] {
+  return role === "housekeeper" ? ["dirty", "in_progress", "clean"] : HK_STATUSES;
+}

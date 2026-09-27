@@ -7,6 +7,16 @@ import { useDismiss } from "@/lib/use-dismiss";
 import { addDays, fmtDay, isValidISO, nightsBetween, todayISO } from "@/lib/dates";
 
 /**
+ * The stay in as few characters as a phone bar can hold — "28–30 Sept", or "28 Sept – 2 Oct" across a
+ * month. The weekday-and-all form truncated mid-date there; the full dates are on the page below.
+ */
+function shortRange(checkIn: string, checkOut: string): string {
+  const noWeekday = (iso: string) => fmtDay(iso).replace(/^\S+\s+/, "");
+  const sameMonth = checkIn.slice(0, 7) === checkOut.slice(0, 7);
+  return sameMonth ? `${Number(checkIn.slice(8, 10))}–${noWeekday(checkOut)}` : `${noWeekday(checkIn)} – ${noWeekday(checkOut)}`;
+}
+
+/**
  * The search bar — dates, guests, go.
  *
  * Still a plain GET form: the result is a shareable, back-button-safe URL that survives a refresh
@@ -91,13 +101,16 @@ export function SearchBar({
         */}
         {compact && (
           <div className="card-raised flex items-stretch gap-1 p-1.5 sm:hidden">
-            <button type="button" onClick={openDates} data-open={panel === "dates"} className="seg min-h-[50px] flex-1">
+            {/* ⚠️ `min-w-0`: a flex item will not shrink below its text without it, so "Mon 28 Sept – Wed 30
+                Sept" pushed the search button off a 375px screen and the page scrolled sideways. The
+                date line truncates instead; the full range is one tap away in the picker. */}
+            <button type="button" onClick={openDates} data-open={panel === "dates"} className="seg min-h-[50px] min-w-0 flex-1">
               <span className="seg-label flex items-center gap-1.5">
                 <CalendarDays size={13} aria-hidden />
                 Dates
               </span>
               <span className="seg-value truncate text-[13.5px]" data-empty={!checkIn || !checkOut ? "true" : undefined}>
-                {checkIn && checkOut ? `${fmtDay(checkIn)} – ${fmtDay(checkOut)}` : "Add dates"}
+                {checkIn && checkOut ? shortRange(checkIn, checkOut) : "Add dates"}
               </span>
             </button>
             <button

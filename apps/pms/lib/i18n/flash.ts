@@ -49,6 +49,7 @@ export interface FlashStrings {
     howMany: string;
     roomGone: string;
     notHkStatus: string;
+    notYourStatus: string;
     sayWhatIsWrong: string;
     pickRooms: string;
     floorGone: string;
@@ -109,6 +110,7 @@ export const flash: Translations<FlashStrings> = {
       howMany: "Say how many rooms to create — a number above zero.",
       roomGone: "That room no longer exists — somebody removed it while this page was open.",
       notHkStatus: "That isn’t a housekeeping status. Reload the page and try again.",
+      notYourStatus: "A supervisor marks rooms inspected or out of order. Use “Report an issue” for a fault, and your supervisor will take it from there.",
       sayWhatIsWrong: "Say what is wrong with the room, so maintenance knows what to bring.",
       pickRooms: "Tick the rooms that are on this floor.",
       floorGone: "That floor no longer has any rooms — somebody changed it while this page was open. Reload the page.",
@@ -190,6 +192,7 @@ export const flash: Translations<FlashStrings> = {
       howMany: "Посочете колко стаи да се създадат — число над нула.",
       roomGone: "Тази стая вече не съществува — някой я е премахнал, докато страницата е била отворена.",
       notHkStatus: "Това не е статус на хаускийпинга. Презаредете страницата и опитайте отново.",
+      notYourStatus: "Стаите като „Проверена“ или „Извън експлоатация“ се отбелязват от супервайзор. За повреда използвайте „Съобщете за проблем“ — супервайзорът ще поеме оттам.",
       sayWhatIsWrong: "Опишете какво не е наред със стаята, за да знае поддръжката какво да носи.",
       pickRooms: "Отметнете стаите, които са на този етаж.",
       floorGone: "Този етаж вече няма стаи — някой го е променил, докато страницата е била отворена. Презаредете страницата.",

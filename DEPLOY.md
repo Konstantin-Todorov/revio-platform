@@ -175,6 +175,13 @@ to swap with four known-good services behind you.
 `packages/db/.env` (owner) is used by `prisma migrate` and `db:seed`. Create the local role once with:
 `psql -d revio_dev -v app_password="'revio_app_dev'" -f packages/db/prisma/rls-role.sql`.
 
+**⚠️ The local database must run in UTC, as production does:** `psql -d revio_dev -c "ALTER DATABASE
+revio_dev SET timezone TO 'UTC';"`. Several writes are raw SQL using `now()` into `timestamp without
+time zone` columns (`claimHold` among them), and Prisma reads those columns back as UTC. A local
+Postgres left on the machine's zone (Europe/Sofia) stores wall-clock time instead, and every such
+row comes back three hours off — found 2026-09-27 as a RevioDirect hold "expiring in 194:54" on a
+30-minute hold. Production (`Etc/UTC`, checked the same day) was never affected.
+
 ### ⚠️ Migrations follow `DIRECT_DATABASE_URL`, not `DATABASE_URL`
 
 `schema.prisma` sets `directUrl = env("DIRECT_DATABASE_URL")`, and **that** is the connection

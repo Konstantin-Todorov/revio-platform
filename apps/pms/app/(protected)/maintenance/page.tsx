@@ -57,35 +57,37 @@ export default async function MaintenancePage({ searchParams }: { searchParams: 
       {/* New task */}
       <Card className="mb-4 p-4">
         <h3 className="mb-3 text-[13px] font-bold text-ink-900">{m.newTask}</h3>
-        <form action={createMaintenanceTask} className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1">
+        {/* Two columns on a phone, one row on a desk: the fixed widths that suit a desk left the fault field
+            narrow and cut "Нормален" to "Нормал" at 375px. */}
+        <form action={createMaintenanceTask} className="grid grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap">
+          <label className="col-span-2 flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-ink-600">{m.whatsWrong}</span>
-            <input name="title" required placeholder={m.whatsWrongPlaceholder} className={`${inputCls} w-52`} />
+            <input name="title" required placeholder={m.whatsWrongPlaceholder} className={`${inputCls} w-full sm:w-52`} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-ink-600">{m.roomOptional}</span>
-            <select name="unitId" defaultValue="" className={`${inputCls} w-32`}>
+            <select name="unitId" defaultValue="" className={`${inputCls} w-full sm:w-32`}>
               <option value="">{m.none}</option>
               {units.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-ink-600">{m.priority}</span>
-            <select name="priority" defaultValue="normal" className={`${inputCls} w-24`}>
+            <select name="priority" defaultValue="normal" className={`${inputCls} w-full sm:w-28`}>
               <option value="low">{m.priorities.low}</option>
               <option value="normal">{m.priorities.normal}</option>
               <option value="high">{m.priorities.high}</option>
             </select>
           </label>
-          <label className="flex flex-col gap-1">
+          <label className="col-span-2 flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-ink-600">{m.assignee}</span>
-            <input name="assignee" placeholder={m.optional} className={`${inputCls} w-28`} />
+            <input name="assignee" placeholder={m.optional} className={`${inputCls} w-full sm:w-28`} />
           </label>
-          <label className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-danger-600">
+          <label className="col-span-2 flex items-center gap-1.5 py-1.5 text-[12px] font-semibold text-danger-600 sm:mb-1.5 sm:py-0">
             <input type="checkbox" name="ooo" className="h-4 w-4 rounded border-surface-border text-danger-600 focus:ring-danger-600" />
             <PowerOff className="h-3.5 w-3.5" /> {m.outOfOrder}
           </label>
-          <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel={m.creating}>
+          <SubmitButton className="col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-accent-600 px-3 sm:h-9 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel={m.creating}>
             <Plus className="h-3.5 w-3.5" /> {m.add}
           </SubmitButton>
         </form>

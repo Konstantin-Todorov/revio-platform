@@ -56,27 +56,28 @@ export default async function ReservationsPage({
       />
 
       {/* Filters — plain GET form, server-rendered results. */}
-      <form method="GET" action="/reservations" className="mb-3 flex flex-wrap items-center gap-2">
-        <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder={t.searchPlaceholder} className={`${fieldCls} w-56`} />
-        <select name="channel" defaultValue={sp.channel ?? ""} className={fieldCls}>
+      {/* Two columns on a phone: fixed desk widths cut the search box short at 375px. */}
+      <form method="GET" action="/reservations" className="mb-3 grid grid-cols-2 items-center gap-2 sm:flex sm:flex-wrap">
+        <input type="text" name="q" defaultValue={sp.q ?? ""} placeholder={t.searchPlaceholder} className={`${fieldCls} col-span-2 w-full sm:w-56`} />
+        <select name="channel" defaultValue={sp.channel ?? ""} className={`${fieldCls} w-full sm:w-auto`}>
           <option value="">{t.allChannels}</option>
           {options.channels.map((c) => <option key={c.id} value={c.code}>{c.name}</option>)}
         </select>
-        <select name="status" defaultValue={sp.status ?? ""} className={fieldCls}>
+        <select name="status" defaultValue={sp.status ?? ""} className={`${fieldCls} w-full sm:w-auto`}>
           <option value="">{t.allStatuses}</option>
           {STATUSES.map((s) => <option key={s} value={s}>{t.statuses[s] ?? s.replace(/_/g, " ")}</option>)}
         </select>
         {/* Date type governs which date the from→to range filters on (spec §3.7). */}
-        <select name="dateType" defaultValue={dateType} className={fieldCls}>
+        <select name="dateType" defaultValue={dateType} className={`${fieldCls} col-span-2 w-full sm:w-auto`}>
           {DATE_TYPES.map((d) => <option key={d} value={d}>{t.dateTypes[d]}</option>)}
         </select>
-        <label className="flex items-center gap-1 text-[12px] text-ink-500">
-          {t.from} <DateField name="from" defaultValue={sp.from ?? ""} className={fieldCls} />
+        <label className="flex min-w-0 items-center gap-1 text-[12px] text-ink-500">
+          {t.from} <DateField name="from" defaultValue={sp.from ?? ""} className={`${fieldCls} w-full min-w-0 sm:w-auto`} />
         </label>
-        <label className="flex items-center gap-1 text-[12px] text-ink-500">
-          → <DateField name="to" defaultValue={sp.to ?? ""} className={fieldCls} />
+        <label className="flex min-w-0 items-center gap-1 text-[12px] text-ink-500">
+          → <DateField name="to" defaultValue={sp.to ?? ""} className={`${fieldCls} w-full min-w-0 sm:w-auto`} />
         </label>
-        <button type="submit" className="rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">{t.filter}</button>
+        <button type="submit" className="h-10 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700 sm:h-auto sm:py-1.5">{t.filter}</button>
         {filtered && (
           <a href="/reservations" className="rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-ink-500 hover:bg-surface-muted">{t.clear}</a>
         )}

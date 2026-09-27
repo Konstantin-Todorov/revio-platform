@@ -127,19 +127,22 @@ export default async function BookPage({
             currency={plan.currency}
           />
 
-          {/* The summary follows on desktop so the total is never off-screen while they type. */}
-          <aside className="card-raised overflow-hidden lg:sticky lg:top-5">
+          {/* The summary follows on desktop so the total is never off-screen while they type. On a
+              phone it came AFTER "Request this room", so a guest committed without having seen the
+              total on screen; there it goes first, and without the photo, which only pushed the form
+              a screen further down. */}
+          <aside className="card-raised order-first overflow-hidden lg:order-none lg:sticky lg:top-5">
             {cover ? (
               <img
                 src={store.publicUrl(cover.thumbKey)}
                 alt={cover.alt || option.name}
                 width={cover.width}
                 height={cover.height}
-                className="aspect-[4/3] w-full object-cover"
+                className="hidden aspect-[4/3] w-full object-cover lg:block"
               />
             ) : (
               <div
-                className="flex aspect-[4/3] w-full items-center justify-center"
+                className="hidden aspect-[4/3] w-full items-center justify-center lg:flex"
                 style={{ background: "linear-gradient(150deg, hsl(var(--brand-wash)), hsl(var(--brand-soft) / 0.65))" }}
                 aria-hidden
               >
