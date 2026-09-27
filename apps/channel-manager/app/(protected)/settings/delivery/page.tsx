@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getSettings } from "@/lib/data";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { DeliverySettingsForm } from "@/components/settings/DeliverySettingsForm";
+import { i18n } from "@/lib/i18n/server";
+import { settings as settingsDict } from "@/lib/i18n/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +16,13 @@ export const dynamic = "force-dynamic";
  */
 export default async function DeliverySettingsPage() {
   const { property } = await getSettings();
+  const s = (await i18n()).t(settingsDict).delivery;
 
   return (
     <Card>
       <CardHeader
-        title="Reservation delivery & notifications"
-        subtitle="Where channel bookings are emailed, plus the daily arrival summaries"
+        title={s.title}
+        subtitle={s.subtitle}
       />
       <div className="p-5">
         <DeliverySettingsForm property={property} emailMode={process.env.RESEND_API_KEY ? "resend" : "mock"} />
@@ -29,9 +32,9 @@ export default async function DeliverySettingsPage() {
         className="flex items-center justify-between gap-3 border-t border-surface-border px-5 py-3.5 transition-colors hover:bg-surface-muted"
       >
         <span>
-          <span className="block text-[13px] font-semibold text-ink-900">Guest emails →</span>
+          <span className="block text-[13px] font-semibold text-ink-900">{s.guestEmails}</span>
           <span className="block text-[11.5px] text-ink-500">
-            Your branding, and the wording of every email your guests receive
+            {s.guestEmailsSub}
           </span>
         </span>
         <span className="text-ink-300">›</span>

@@ -2,8 +2,12 @@ import Link from "next/link";
 import { KeyRound, LifeBuoy, LogIn } from "lucide-react";
 import { Logo } from "@/components/shell/Logo";
 import { productOrigin } from "@revio/ui/product-links";
+import { i18n } from "@/lib/i18n/server";
+import { signup as signupDict } from "@/lib/i18n/signup";
 
-export const metadata = { title: "You already have an account · Revio" };
+export async function generateMetadata() {
+  return { title: (await i18n()).t(signupDict).meta.existing };
+}
 
 /**
  * The end of the road for a second free trial, said kindly.
@@ -33,6 +37,7 @@ export default async function SignupExistingPage({
 }) {
   const { reason } = await searchParams;
   const suspended = reason === "suspended";
+  const x = (await i18n()).t(signupDict).existing;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-muted p-6">
@@ -45,18 +50,16 @@ export default async function SignupExistingPage({
           </div>
 
           <h1 className="mt-4 text-[20px] font-bold tracking-tight text-ink-900">
-            You already have a Revio account
+            {x.title}
           </h1>
 
           {suspended ? (
             <p className="mx-auto mt-2 max-w-sm text-[13.5px] leading-relaxed text-ink-600">
-              That email belongs to an account that is currently paused. Your data is all still
-              there — get in touch and we will switch it back on.
+              {x.suspended}
             </p>
           ) : (
             <p className="mx-auto mt-2 max-w-sm text-[13.5px] leading-relaxed text-ink-600">
-              That email is already set up, so there is nothing to start — just sign in and
-              everything is where you left it.
+              {x.active}
             </p>
           )}
 
@@ -66,12 +69,12 @@ export default async function SignupExistingPage({
                 href="/login"
                 className="mt-5 flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-brand-800 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700"
               >
-                <LogIn className="h-4 w-4" /> Sign in
+                <LogIn className="h-4 w-4" /> {x.signIn}
               </Link>
               <p className="mt-3 text-[12.5px] text-ink-500">
-                Forgotten your password?{" "}
+                {x.forgot}{" "}
                 <Link href="/forgot-password" className="font-semibold text-brand-700 hover:underline">
-                  Reset it
+                  {x.reset}
                 </Link>
               </p>
             </>
@@ -79,7 +82,7 @@ export default async function SignupExistingPage({
 
           <div className="mt-5 border-t border-surface-border pt-4 text-left">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-              Signing in to a different product?
+              {x.other}
             </p>
             {/*
               The chooser, in miniature. Somebody who arrived here was trying to reach SOMETHING,
@@ -89,9 +92,9 @@ export default async function SignupExistingPage({
             */}
             <ul className="mt-2 space-y-1">
               {[
-                { key: "cm" as const, name: "RevioLink", what: "Channels and availability" },
-                { key: "crs" as const, name: "RevioCRS", what: "Reservations and rates" },
-                { key: "pms" as const, name: "RevioPMS", what: "Front desk and housekeeping" },
+                { key: "cm" as const, name: "RevioLink", what: x.products.cm },
+                { key: "crs" as const, name: "RevioCRS", what: x.products.crs },
+                { key: "pms" as const, name: "RevioPMS", what: x.products.pms },
               ].map((p) => (
                 <li key={p.key}>
                   <a
@@ -109,9 +112,9 @@ export default async function SignupExistingPage({
 
         <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[12.5px] text-ink-500">
           <LifeBuoy className="h-3.5 w-3.5 text-ink-400" />
-          Not sure which account this is?{" "}
+          {x.notSure}{" "}
           <a href="mailto:support@reviosoft.app" className="font-semibold text-brand-700 hover:underline">
-            Ask us
+            {x.ask}
           </a>
         </p>
       </div>

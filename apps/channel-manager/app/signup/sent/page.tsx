@@ -2,8 +2,12 @@ import Link from "next/link";
 import { MailCheck } from "lucide-react";
 import { Logo } from "@/components/shell/Logo";
 import { TOKEN_POLICY } from "@revio/core";
+import { i18n } from "@/lib/i18n/server";
+import { signup as signupDict } from "@/lib/i18n/signup";
 
-export const metadata = { title: "Check your email · Revio" };
+export async function generateMetadata() {
+  return { title: (await i18n()).t(signupDict).meta.sent };
+}
 
 /**
  * Two ways to get here, and they must not read the same.
@@ -27,6 +31,9 @@ export default async function SignupSentPage({
 }) {
   const { again } = await searchParams;
   const resent = again === "1";
+  const s = (await i18n()).t(signupDict);
+  const x = s.sent;
+  const ttl = s.days(Math.round(TOKEN_POLICY.invite.ttlMs / 86_400_000));
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-muted p-6">
@@ -36,29 +43,16 @@ export default async function SignupSentPage({
           <MailCheck className="h-6 w-6" />
         </div>
         <h1 className="mt-4 text-[20px] font-bold tracking-tight text-ink-900">
-          {resent ? "We've sent that link again" : "Check your email"}
+          {resent ? x.againTitle : x.title}
         </h1>
         <p className="mx-auto mt-2 max-w-sm text-[13.5px] leading-relaxed text-ink-600">
-          {resent ? (
-            <>
-              You had already started, so we've sent a fresh link to the same address rather than
-              beginning again — your hotel is still there waiting. Open it to choose a password and
-              your trial of all three products starts.
-            </>
-          ) : (
-            <>
-              We've sent you a link. Open it to confirm your address and choose a password — that's
-              the last step, and your trial of all three products starts the moment you do.
-            </>
-          )}
+          {resent ? x.againBody : x.body}
         </p>
         <p className="mx-auto mt-3 max-w-sm text-[12.5px] leading-relaxed text-ink-400">
-          {resent
-            ? `The earlier link no longer works. This one lasts ${TOKEN_POLICY.invite.ttlLabel} and can be used once.`
-            : `Nothing yet? Check the spam folder. The link works once and expires in ${TOKEN_POLICY.invite.ttlLabel}.`}
+          {resent ? x.againNote(ttl) : x.note(ttl)}
         </p>
         <p className="mt-6 text-[12.5px] text-ink-500">
-          <Link href="/login" className="font-semibold text-brand-700 hover:underline">Back to sign in</Link>
+          <Link href="/login" className="font-semibold text-brand-700 hover:underline">{x.back}</Link>
         </p>
       </div>
     </div>

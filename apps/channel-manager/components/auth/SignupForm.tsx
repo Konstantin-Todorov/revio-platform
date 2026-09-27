@@ -4,6 +4,9 @@ import { useActionState, useState } from "react";
 import { TurnstileField } from "@revio/ui/turnstile";
 import { ArrowRight, BedDouble, CalendarCheck, Radio } from "lucide-react";
 import { submitSignup, type SignupResult } from "@/lib/actions-signup";
+import { translate } from "@revio/ui/i18n";
+import { useLocale } from "@revio/ui/i18n-context";
+import { signup as signupDict } from "@/lib/i18n/signup";
 
 /**
  * The one question a hotel is asked before it sees anything.
@@ -20,24 +23,18 @@ const NEEDS = [
   {
     key: "cm",
     icon: Radio,
-    need: "Stop the OTAs double-booking my rooms",
     product: "RevioLink",
-    detail: "Availability, rates and restrictions pushed to every channel, bookings pulled back.",
   },
   {
     key: "crs",
     icon: CalendarCheck,
-    need: "Take bookings direct and keep them in order",
     product: "RevioCRS",
     // ⚠️ Not "commission-free" — see the note on the signup page. We charge 2% on RevioDirect.
-    detail: "Every reservation from every source, plus your own direct booking page.",
   },
   {
     key: "pms",
     icon: BedDouble,
-    need: "Run the front desk and housekeeping",
     product: "RevioPMS",
-    detail: "Check-in and out, room status, folios and the night audit.",
   },
 ] as const;
 
@@ -47,29 +44,30 @@ const inputCls =
 export function SignupForm({ defaultEmail = "", siteKey }: { defaultEmail?: string; siteKey?: string | undefined }) {
   const [state, formAction, pending] = useActionState<SignupResult | null, FormData>(submitSignup, null);
   const [intent, setIntent] = useState<string>("cm");
+  const f = translate(signupDict, useLocale()).form;
 
   return (
     <form action={formAction} className="space-y-4">
       <div className="space-y-3">
         <label className="block">
-          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">Your hotel</span>
-          <input name="hotelName" required autoComplete="organization" placeholder="Hotel Cabacum Beach" className={inputCls} />
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">{f.hotel}</span>
+          <input name="hotelName" required autoComplete="organization" placeholder={f.hotelPlaceholder} className={inputCls} />
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">Your name</span>
-            <input name="ownerName" required autoComplete="name" placeholder="Maria Ivanova" className={inputCls} />
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">{f.name}</span>
+            <input name="ownerName" required autoComplete="name" placeholder={f.namePlaceholder} className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">Work email</span>
-            <input name="email" type="email" required autoComplete="email" defaultValue={defaultEmail} placeholder="you@yourhotel.com" className={inputCls} />
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">{f.email}</span>
+            <input name="email" type="email" required autoComplete="email" defaultValue={defaultEmail} placeholder={f.emailPlaceholder} className={inputCls} />
           </label>
         </div>
       </div>
 
       <fieldset>
         <legend className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-          What do you need most right now?
+          {f.need}
         </legend>
         <input type="hidden" name="intent" value={intent} />
         <div className="space-y-1.5">
@@ -95,10 +93,10 @@ export function SignupForm({ defaultEmail = "", siteKey }: { defaultEmail?: stri
                 </span>
                 <span className="min-w-0">
                   <span className={`block text-[13.5px] font-semibold ${on ? "text-brand-800" : "text-ink-800"}`}>
-                    {n.need}
+                    {f.needs[n.key].need}
                   </span>
                   <span className="mt-0.5 block text-[12px] leading-snug text-ink-500">
-                    {n.detail} <span className="text-ink-400">— {n.product}</span>
+                    {f.needs[n.key].detail} <span className="text-ink-400">— {n.product}</span>
                   </span>
                 </span>
               </button>
@@ -106,10 +104,7 @@ export function SignupForm({ defaultEmail = "", siteKey }: { defaultEmail?: stri
           })}
         </div>
         <p className="mt-2 text-[12px] leading-snug text-ink-500">
-          You get <strong className="font-semibold text-ink-700">all three for 30 days</strong> whichever you pick —
-          this only decides where we open first. They share one login and one set of rooms and rates, so there is
-          nothing to move if you keep more than one. At the end you{"’"}ll keep only the ones you actually used,
-          and pay for those alone.
+          {f.allThreeBefore}<strong className="font-semibold text-ink-700">{f.allThreeStrong}</strong>{f.allThreeAfter}
         </p>
       </fieldset>
 
@@ -126,12 +121,12 @@ export function SignupForm({ defaultEmail = "", siteKey }: { defaultEmail?: stri
         disabled={pending}
         className="flex h-10 w-full items-center justify-center gap-1.5 rounded-md bg-brand-800 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60"
       >
-        {pending ? "Setting things up…" : "Start my free trial"}
+        {pending ? f.working : f.submit}
         {!pending && <ArrowRight className="h-4 w-4" />}
       </button>
 
       <p className="text-center text-[11.5px] leading-snug text-ink-400">
-        No card needed. We'll email you a link to confirm your address and choose a password.
+        {f.noCard}
       </p>
     </form>
   );

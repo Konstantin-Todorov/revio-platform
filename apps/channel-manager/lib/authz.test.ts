@@ -25,6 +25,10 @@ vi.mock("./session", () => ({ getSession: async () => state.value }));
 
 import { guard, requireCapability } from "./authz";
 
+// The refusals are said in the reader's language, so the gate reads the language cookie. This caller
+// has none — the session carries no locale either — so the words are English, as asserted below.
+vi.mock("next/headers", () => ({ cookies: async () => ({ get: () => undefined }) }));
+
 beforeEach(() => { redirected.length = 0; state.value = { ...session, entitlements: { ...session.entitlements } }; });
 
 describe("the RevioLink entitlement gate", () => {

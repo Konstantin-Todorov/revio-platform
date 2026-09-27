@@ -87,7 +87,7 @@ export type SignupVerdict =
   /** A finished account. Send them to sign in; never to a second trial. */
   | { kind: "already-a-customer"; reason: "active" | "suspended" }
   /** Refused before anything is created. */
-  | { kind: "refused"; message: string };
+  | { kind: "refused"; code: "disposable"; message: string };
 
 export interface ExistingAccount {
   /** Whether a password has ever been set — the difference between a real account and an abandoned signup. */
@@ -103,6 +103,7 @@ export function signupVerdict(args: {
   if (isDisposableEmail(args.email)) {
     return {
       kind: "refused",
+      code: "disposable",
       message:
         "That looks like a temporary email address. Use the one you actually run the hotel from — " +
         "it is where your bookings and your invoices will go.",

@@ -3,7 +3,7 @@ import { issueToken } from "./auth-tokens.js";
 import {
   initialGuestLanguage,
   emailIdentityKey, signupSlug, signupVerdict, TRIAL_DAYS, validateSignup,
-  type ProductKey,
+  type ProductKey, type SignupRefusalCode,
 } from "@revio/core";
 
 /**
@@ -49,7 +49,8 @@ export type SignupOutcome =
   | { ok: true; kind: "resent"; token: string; ownerName: string; hotelName: string; email: string; intent: ProductKey }
   /** A finished account. They sign in; no trial is started, ever. */
   | { ok: true; kind: "already-a-customer"; email: string; reason: "active" | "suspended" }
-  | { ok: false; message: string };
+  /** `code` says which refusal it was, so an app can word it; `message` is the English. */
+  | { ok: false; code: SignupRefusalCode | "disposable" | "busy"; message: string };
 
 /** Platform-wide signups allowed per hour. See the note in `createPublicSignup`. */
 export const SIGNUPS_PER_HOUR = 12;
@@ -71,7 +72,7 @@ export async function createPublicSignup(args: {
   // ⚠️ ONE validator, in `@revio/core`, shared with the form's own action. Two copies of "is this a
   // real address" is how a form accepts something the writer then refuses, or the reverse.
   const valid = validateSignup(args);
-  if (!valid.ok) return { ok: false, message: valid.message };
+  if (!valid.ok) return { ok: false, code: valid.code, message: valid.message };
   const { hotelName, ownerName, email, intent } = valid.fields;
   const language = initialGuestLanguage(args.language);
 
@@ -117,6 +118,7 @@ export async function createPublicSignup(args: {
   if (recent >= SIGNUPS_PER_HOUR) {
     return {
       ok: false,
+      code: "busy",
       message: "We're seeing an unusual number of signups right now. Try again in a few minutes, or email us and we'll set you up by hand.",
     };
   }
@@ -151,7 +153,7 @@ export async function createPublicSignup(args: {
       : null,
   });
 
-  if (verdict.kind === "refused") return { ok: false, message: verdict.message };
+  if (verdict.kind === "refused") return { ok: false, code: verdict.code, message: verdict.message };
 
   if (verdict.kind === "already-a-customer") {
     return { ok: true, kind: "already-a-customer", email, reason: verdict.reason };

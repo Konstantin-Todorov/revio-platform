@@ -5,6 +5,8 @@ import { getSession } from "@/lib/session";
 import { signOutEverywhere } from "@/lib/actions-auth";
 import { startTwoFactor, confirmTwoFactor, turnOffTwoFactor } from "@/lib/actions-2fa";
 import { Card, CardHeader } from "@/components/ui/primitives";
+import { i18n } from "@/lib/i18n/server";
+import { settings as settingsDict } from "@/lib/i18n/settings";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,8 @@ export const dynamic = "force-dynamic";
  */
 export default async function AccountSettingsPage() {
   const session = await getSession();
+  const { t, locale } = await i18n();
+  const a = t(settingsDict).account;
   const twoFactorOn = session ? await userRequiresSecondFactor(session.userId) : false;
 
   // Revocation is recorded on the shared identity, so it reaches every product this hotel runs. The
@@ -31,8 +35,8 @@ export default async function AccountSettingsPage() {
     <>
       <Card>
         <CardHeader
-          title="Two-factor authentication"
-          subtitle="Protects this account in every Revio product you use"
+          title={a.twoFactor}
+          subtitle={a.twoFactorSub}
         />
         <div className="p-5">
           <TwoFactorSetup
@@ -44,9 +48,9 @@ export default async function AccountSettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Your sign-in" subtitle="Sessions on this and any other device" />
+        <CardHeader title={a.signIn} subtitle={a.signInSub} />
         <div className="p-5">
-          <SignOutEverywhere action={signOutEverywhere} productNames={productNames} />
+          <SignOutEverywhere action={signOutEverywhere} productNames={productNames} locale={locale} />
         </div>
       </Card>
     </>

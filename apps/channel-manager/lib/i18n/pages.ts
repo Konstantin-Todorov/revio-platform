@@ -1,7 +1,17 @@
 import type { Translations } from "@revio/ui/i18n";
 
-/** RevioLink's status pages — errors, not-found, stale tabs. Other screens have their own dictionaries. */
+/** RevioLink's status pages — errors, not-found, stale tabs — and the ⌘K palette's rows. */
 export interface PagesStrings {
+  palette: {
+    reservation: string;
+    direct: string;
+    arrived: (day: string) => string;
+    rooms: (n: number) => string;
+    ratePlan: string;
+    inactive: string;
+    /** Keyed by route — the titles come from the sidebar's own names (shell.nav). */
+    subs: Record<string, string>;
+  };
   status: {
     errorTitle: string;
     errorBody: string;
@@ -22,6 +32,24 @@ export interface PagesStrings {
 
 export const pages: Translations<PagesStrings> = {
   en: {
+    palette: {
+      reservation: "Reservation",
+      direct: "direct",
+      arrived: (d) => `arrived ${d}`,
+      rooms: (n) => `${n} room${n === 1 ? "" : "s"}`,
+      ratePlan: "rate plan",
+      inactive: "inactive",
+      subs: {
+        "/calendar": "Availability, rates and restrictions",
+        "/bulk-update": "Mass edits across dates and rooms",
+        "/rooms-rates": "Room types, rate plans, linkage",
+        "/channels": "Connected channels and settings",
+        "/mapping": "Match your products to the channel's",
+        "/reservations": "Everything pulled from the channels",
+        "/sync": "Pushes, pulls and what failed",
+        "/settings": "Property, team, billing",
+      },
+    },
     status: {
       errorTitle: "This screen didn’t load",
       errorBody: "Something went wrong on our side. Your data is safe — nothing was changed. Try again, and if it keeps happening send us the reference below.",
@@ -39,6 +67,24 @@ export const pages: Translations<PagesStrings> = {
     },
   },
   bg: {
+    palette: {
+      reservation: "Резервация",
+      direct: "директно",
+      arrived: (d) => `пристигнала ${d}`,
+      rooms: (n) => `${n} ${n === 1 ? "стая" : "стаи"}`,
+      ratePlan: "ценови план",
+      inactive: "неактивен",
+      subs: {
+        "/calendar": "Наличност, цени и ограничения",
+        "/bulk-update": "Масови промени по дати и стаи",
+        "/rooms-rates": "Типове стаи, ценови планове, връзки",
+        "/channels": "Свързани канали и настройки",
+        "/mapping": "Свържете продуктите си с тези на канала",
+        "/reservations": "Всичко, изтеглено от каналите",
+        "/sync": "Изпращания, изтегляния и какво не успя",
+        "/settings": "Обект, екип, плащания",
+      },
+    },
     status: {
       errorTitle: "Този екран не се зареди",
       errorBody: "Нещо се обърка при нас. Данните Ви са в безопасност — нищо не е променено. Опитайте отново, а ако се повтаря, изпратете ни номера по-долу.",

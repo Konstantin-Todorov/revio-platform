@@ -3,6 +3,10 @@
 import { isSearchable, roleCanOpenProduct, type SearchHit } from "@revio/core";
 import { prisma } from "./db";
 import { getSession } from "./session";
+import { i18n } from "./i18n/server";
+import { pages } from "./i18n/pages";
+import { shell } from "./i18n/shell";
+import { reservations as reservationsDict } from "./i18n/reservations";
 
 /**
  * What ⌘K finds in RevioLink.
@@ -91,14 +95,18 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
      what lets the click actually open it, because every screen this links to is scoped to the active
      property. Kept together so a new hit kind cannot pick up one without the other. */
   const ctx = (id: string, name: string) => (multi ? { context: name, propertyId: id } : { propertyId: id });
-  const day = (d: Date) => d.toISOString().slice(0, 10);
+  const { t: tr, day: dayIn } = await i18n();
+  const day = (d: Date) => dayIn(d.toISOString().slice(0, 10));
+  const say = tr(pages).palette;
+  const nav = tr(shell).nav as Record<string, string>;
+  const words = tr(reservationsDict);
 
   return [
     ...reservations.map((r): SearchHit => ({
       id: r.id,
       kind: "reservation",
-      title: r.guestName || r.externalId || "Reservation",
-      subtitle: `${r.channel?.name ?? "direct"} · ${r.status} · arrived ${day(r.importedAt)}`,
+      title: r.guestName || r.externalId || say.reservation,
+      subtitle: `${r.channel?.name ?? say.direct} · ${words.statuses[r.status] ?? r.status} · ${say.arrived(day(r.importedAt))}`,
       href: `/reservations?q=${encodeURIComponent(r.externalId ?? r.guestName ?? "")}`,
       ...ctx(r.propertyId, r.property.name),
     })),
@@ -109,7 +117,7 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       id: r.id,
       kind: "room",
       title: r.name,
-      subtitle: `${r.code} · ${r.totalRooms} room${r.totalRooms === 1 ? "" : "s"}`,
+      subtitle: `${r.code} · ${say.rooms(r.totalRooms)}`,
       href: "/rooms-rates",
       ...ctx(r.propertyId, r.property.name),
     })),
@@ -117,17 +125,17 @@ export async function searchEverything(query: string): Promise<SearchHit[]> {
       id: r.id,
       kind: "rate",
       title: r.name,
-      subtitle: r.active ? (r.code ?? "rate plan") : "inactive",
+      subtitle: r.active ? (r.code ?? say.ratePlan) : say.inactive,
       href: "/rooms-rates",
       ...ctx(r.propertyId, r.property.name),
     })),
     ...channels.map((c): SearchHit => ({
-      id: c.id, kind: "channel", title: c.name, subtitle: c.status, href: "/channels",
+      id: c.id, kind: "channel", title: c.name, subtitle: words.channelStatus[c.status] ?? c.status, href: "/channels",
       ...ctx(c.propertyId, c.property.name),
     })),
     // Screens, so the palette is also how you move around. Filtered by the same ranking as
     // everything else, so typing "map" reaches Mapping without it competing with real data.
-    ...PAGES.map((p): SearchHit => ({ id: p.href, kind: "page", title: p.title, subtitle: p.sub, href: p.href })),
+    ...PAGES.map((p): SearchHit => ({ id: p.href, kind: "page", title: nav[p.href] ?? p.title, subtitle: say.subs[p.href] ?? p.sub, href: p.href })),
   ];
 }
 

@@ -1,6 +1,7 @@
 import { Logo } from "@/components/shell/Logo";
 import { LoginForm } from "@/components/auth/LoginForm";
 import { LanguageSwitch } from "@/components/auth/LanguageSwitch";
+import { translationOn } from "@/lib/i18n/ready";
 import { i18n } from "@/lib/i18n/server";
 import { auth } from "@/lib/i18n/auth";
 
@@ -106,7 +107,8 @@ export default async function LoginPage({
 
       {/* ── Form ────────────────────────────────────────────────────────────────────── */}
       <div className="relative flex w-full items-center justify-center px-6 py-10 lg:w-1/2">
-        <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={a.language} /></div>
+        {/* Hidden until RevioLink is switched on in the reader's language — a switch that changes nothing is worse than none. */}
+        {translationOn() && <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={a.language} /></div>}
         <div className="w-full max-w-[22rem]">
           <div className="mb-7 lg:hidden">
             <Logo className="h-9 w-9" />

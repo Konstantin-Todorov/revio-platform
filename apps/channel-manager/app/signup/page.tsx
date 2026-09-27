@@ -1,8 +1,15 @@
 import Link from "next/link";
 import { Logo } from "@/components/shell/Logo";
 import { SignupForm } from "@/components/auth/SignupForm";
+import { LanguageSwitch } from "@/components/auth/LanguageSwitch";
+import { i18n } from "@/lib/i18n/server";
+import { signup as signupDict } from "@/lib/i18n/signup";
+import { auth } from "@/lib/i18n/auth";
+import { translationOn } from "@/lib/i18n/ready";
 
-export const metadata = { title: "Start your free trial · Revio" };
+export async function generateMetadata() {
+  return { title: (await i18n()).t(signupDict).meta.start };
+}
 
 /**
  * The front door.
@@ -29,6 +36,8 @@ export default async function SignupPage({
    * way to ask us who banks with us.
    */
   const { email } = await searchParams;
+  const { t, locale } = await i18n();
+  const s = t(signupDict);
   return (
     <div className="flex min-h-screen items-stretch bg-surface-muted">
       <div className="relative hidden w-1/2 flex-col justify-between bg-gradient-to-br from-brand-900 to-brand-800 p-12 text-white lg:flex">
@@ -36,26 +45,25 @@ export default async function SignupPage({
           <Logo className="h-9 w-9" />
           <div className="leading-none">
             <div className="text-[17px] font-bold">Revio</div>
-            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Hotel software</div>
+            <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">{s.hero.tagline}</div>
           </div>
         </div>
         <div>
           <h1 className="max-w-sm text-[28px] font-bold leading-tight tracking-tight">
-            Three products. One login. One set of rooms and rates.
+            {s.hero.title}
           </h1>
           <p className="mt-3 max-w-sm text-[14px] text-white/60">
-            Your channel manager, your reservation system and your front desk run on the same inventory — so adding
-            the second one later is a switch, not a migration.
+            {s.hero.body}
           </p>
           <ul className="mt-5 space-y-1.5 text-[13px] text-white/70">
-            <li>· 30 days, all three products, no card</li>
+            <li>{s.hero.points[0]}</li>
             {/*
               ⚠️ "All three" without this line reads as "we are about to charge you for three
               products". The founder's own framing: show them everything, then let them keep what
               they actually used. It is also literally true — trials end per product, and the
               invoice prices only the entitlements that remain.
             */}
-            <li>· Keep only the ones you use — you pay for those alone</li>
+            <li>{s.hero.points[1]}</li>
             {/*
               ⚠️ NOT "commission-free". We charge 2% on RevioDirect bookings
               (`DIRECT_BOOKING_FEE_PCT`), and this is a signup page — the worst possible place for a
@@ -64,20 +72,21 @@ export default async function SignupPage({
               The true sentence is also the stronger one: 2% against the 15–18% an OTA takes.
               Caught by Codex on 13 Sept while reviewing the live site against the pricing model.
             */}
-            <li>· Your own booking page — 2%, against an OTA's 15%</li>
-            <li>· Set up in an afternoon, not a quarter</li>
+            <li>{s.hero.points[2]}</li>
+            <li>{s.hero.points[3]}</li>
           </ul>
         </div>
-        <div className="text-[12px] text-white/40">© Revio · hotel software</div>
+        <div className="text-[12px] text-white/40">{s.hero.footer}</div>
       </div>
 
-      <div className="flex w-full items-center justify-center p-6 lg:w-1/2">
+      <div className="relative flex w-full items-center justify-center p-6 lg:w-1/2">
+        {translationOn() && <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={t(auth).language} /></div>}
         <div className="w-full max-w-md">
           <div className="mb-6 lg:hidden">
             <Logo className="h-9 w-9" />
           </div>
-          <h2 className="text-[20px] font-bold tracking-tight text-ink-900">Start your free trial</h2>
-          <p className="mb-5 mt-1 text-[13px] text-ink-500">Thirty days of all three Revio products. No card, no call.</p>
+          <h2 className="text-[20px] font-bold tracking-tight text-ink-900">{s.title}</h2>
+          <p className="mb-5 mt-1 text-[13px] text-ink-500">{s.lead}</p>
 
           <SignupForm
             defaultEmail={email ?? ""}
@@ -88,8 +97,8 @@ export default async function SignupPage({
           />
 
           <p className="mt-5 text-center text-[12.5px] text-ink-500">
-            Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-brand-700 hover:underline">Sign in</Link>
+            {s.haveAccount}{" "}
+            <Link href="/login" className="font-semibold text-brand-700 hover:underline">{s.signIn}</Link>
           </p>
         </div>
       </div>

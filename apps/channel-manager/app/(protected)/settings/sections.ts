@@ -1,4 +1,5 @@
 import type { SettingsSection } from "@revio/ui/settings-nav";
+import type { CmSettingsStrings } from "@/lib/i18n/settings";
 
 /**
  * The Settings sections, in the order they appear.
@@ -23,3 +24,13 @@ export const SETTINGS_ELSEWHERE: SettingsSection[] = [
   { href: "/rooms-rates", label: "Rooms & rates", blurb: "Room types, rate plans and prices" },
   { href: "/help", label: "Help & support", blurb: "Answers, and every request you have sent us" },
 ];
+
+/** The same two lists, worded in the reader's language — the order and the links stay here. */
+const SECTION_KEYS = ["property", "emails", "delivery", "team", "billing", "account"] as const;
+const ELSEWHERE_KEYS = ["users", "channels", "rooms", "help"] as const;
+export function settingsNav(s: CmSettingsStrings): { sections: SettingsSection[]; elsewhere: SettingsSection[] } {
+  return {
+    sections: SETTINGS_SECTIONS.map((sec, i) => ({ ...sec, ...s.sections[SECTION_KEYS[i]!] })),
+    elsewhere: SETTINGS_ELSEWHERE.map((sec, i) => ({ ...sec, ...s.elsewhere[ELSEWHERE_KEYS[i]!] })),
+  };
+}

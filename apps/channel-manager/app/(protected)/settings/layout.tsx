@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { SettingsNav } from "@revio/ui/settings-nav";
 import { PageHeader } from "@/components/ui/primitives";
 import { getSettings } from "@/lib/data";
-import { SETTINGS_SECTIONS, SETTINGS_ELSEWHERE } from "./sections";
+import { settingsNav } from "./sections";
+import { i18n } from "@/lib/i18n/server";
+import { settings as settingsDict } from "@/lib/i18n/settings";
 
 /**
  * The Settings shell: one header, the section nav, and whichever section is open.
@@ -14,12 +16,14 @@ import { SETTINGS_SECTIONS, SETTINGS_ELSEWHERE } from "./sections";
  */
 export default async function SettingsLayout({ children }: { children: ReactNode }) {
   const { property } = await getSettings();
+  const s = (await i18n()).t(settingsDict);
+  const nav = settingsNav(s);
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Settings" subtitle={property.name} />
+      <PageHeader title={s.title} subtitle={property.name} />
       <div className="flex flex-col gap-5 lg:flex-row">
-        <SettingsNav sections={SETTINGS_SECTIONS} elsewhere={SETTINGS_ELSEWHERE} />
+        <SettingsNav sections={nav.sections} elsewhere={nav.elsewhere} labels={{ nav: s.navLabel, elsewhere: s.elsewhereLabel }} />
         <div className="min-w-0 flex-1 space-y-5">{children}</div>
       </div>
     </div>

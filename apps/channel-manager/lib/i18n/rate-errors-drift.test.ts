@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { describeProblem, pastDateRefusal, type OptionProblem } from "@revio/core";
+import { describeProblem, pastDateRefusal, refusalMessage, type Capability, type OptionProblem } from "@revio/core";
+import { common } from "./common";
 import { rateErrors } from "./rate-errors";
 
 /**
@@ -27,5 +28,14 @@ describe("rate refusals match core, in English", () => {
     for (const p of samples) {
       expect((en.problems[p.kind] as (x: OptionProblem) => string)(p)).toBe(describeProblem(p));
     }
+  });
+
+  it("every capability refusal", () => {
+    const a = common.en.authz;
+    for (const cap of Object.keys(a.what) as Capability[]) {
+      expect(a.readOnly(a.what[cap])).toBe(refusalMessage("read_only", cap));
+    }
+    // A role that can do some things but not this one — revenue managers may not touch channels.
+    expect(a.cannot(a.what.manageDistribution)).toBe(refusalMessage("revenue_manager", "manageDistribution"));
   });
 });

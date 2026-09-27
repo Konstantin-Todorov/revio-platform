@@ -7,6 +7,13 @@ import { PRODUCT_BY_KEY, type ProductKey } from "@revio/core";
 import { guard } from "./authz";
 import { productOrigin } from "@revio/ui/product-links";
 import { flashError, setFlash } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { common } from "./i18n/common";
+
+/** This file's one-line refusals, in the reader's language. */
+async function flashSay() {
+  return (await i18n()).t(common).flash;
+}
 
 /**
  * Start a trial of another product, from inside this one.
@@ -31,7 +38,7 @@ export async function beginSelfTrial(fd: FormData): Promise<void> {
 
   const product = String(fd.get("product") ?? "") as ProductKey;
   const info = PRODUCT_BY_KEY[product];
-  if (!info) return flashError("Unknown product.");
+  if (!info) return flashError((await flashSay()).unknownProduct);
 
   const result = await selfStartTrial({
     tenantId: session.tenantId,
@@ -84,7 +91,7 @@ export async function keepThisTrial(): Promise<void> {
     userId: session.userId,
   });
   if (!result.ok) {
-    return flashError("There is no trial running here to keep. Reload the page — it may have finished already.");
+    return flashError((await flashSay()).noTrial);
   }
 
   await setFlash(

@@ -3,6 +3,7 @@ import { Logo } from "@/components/shell/Logo";
 import { TwoFactorForm } from "@/components/auth/TwoFactorForm";
 import { readPendingTwoFactor } from "@/lib/auth";
 import { LanguageSwitch } from "@/components/auth/LanguageSwitch";
+import { translationOn } from "@/lib/i18n/ready";
 import { i18n } from "@/lib/i18n/server";
 import { auth } from "@/lib/i18n/auth";
 
@@ -45,7 +46,7 @@ export default async function TwoFactorPage() {
       </div>
 
       <div className="relative flex w-full items-center justify-center p-6 lg:w-1/2">
-        <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={a.language} /></div>
+        {translationOn() && <div className="absolute right-4 top-4"><LanguageSwitch locale={locale} label={a.language} /></div>}
         <div className="w-full max-w-sm">
           <div className="mb-6 lg:hidden"><Logo className="h-9 w-9" /></div>
           <h2 className="text-[20px] font-bold tracking-tight text-ink-900">{t.title}</h2>

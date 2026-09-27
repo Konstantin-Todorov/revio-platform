@@ -7,6 +7,8 @@ import { createPublicSignup } from "@revio/db";
 import { initialGuestLanguage, signupEmail, validateSignup, readTurnstileResult, turnstileNotConfigured, type TurnstileVerdict } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { productOrigin } from "@revio/ui/product-links";
+import { i18n } from "./i18n/server";
+import { signup as signupDict } from "./i18n/signup";
 
 export interface SignupResult { ok?: boolean; error?: string }
 
@@ -38,7 +40,9 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
     email: String(fd.get("email") ?? ""),
     intent: String(fd.get("intent") ?? ""),
   });
-  if (!valid.ok) return { error: valid.message };
+  const e = (await i18n()).t(signupDict).errors;
+  // Said by core's code, in the reader's language — never by matching the English.
+  if (!valid.ok) return { error: e[valid.code] };
 
   /*
    * ⚠️ Turnstile runs AFTER validation and BEFORE the write.
@@ -54,7 +58,7 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
   const challenge = await verifySignupChallenge(String(fd.get("cf-turnstile-response") ?? ""));
   if (!challenge.ok) {
     console.warn(`[signup] challenge refused for ${valid.fields.email}: ${challenge.reason}`);
-    return { error: "We could not confirm that was a person. Reload the page and try once more." };
+    return { error: e.robot };
   }
   if (challenge.unverified) {
     console.warn(`[signup] challenge NOT verified (${challenge.reason}) — allowing ${valid.fields.email}`);
@@ -65,7 +69,7 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
   const [jar, h] = await Promise.all([cookies(), headers()]);
   const language = initialGuestLanguage(jar.get(LOCALE_COOKIE)?.value, h.get("accept-language"));
   const outcome = await createPublicSignup({ ...valid.fields, language });
-  if (!outcome.ok) return { error: outcome.message };
+  if (!outcome.ok) return { error: e[outcome.code] ?? outcome.message };
 
   /*
    * Three endings, three different screens. They used to be two, and the two hid a real failure:
@@ -107,9 +111,7 @@ export async function submitSignup(_prev: SignupResult | null, fd: FormData): Pr
   if (!sent.ok) {
     console.error(`[signup] confirmation email failed for ${outcome.hotelName}: ${sent.error ?? "unknown"}`);
     return {
-      error:
-        "Your account is created, but we could not send the confirmation email just now. " +
-        "Press the button again in a moment — we will send a fresh link to the same address.",
+      error: e.mailFailed,
     };
   }
 

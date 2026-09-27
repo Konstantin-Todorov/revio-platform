@@ -15,6 +15,7 @@ import { verifyPublished, verifyPublishedAvailability } from "@revio/connectivit
 import { i18n } from "./i18n/server";
 import { rateErrors } from "./i18n/rate-errors";
 import { channelErrors } from "./i18n/channel-errors";
+import { settings as settingsDict } from "./i18n/settings";
 
 /** The refusal words, in the reader's language — see `lib/i18n/channel-errors.ts`. */
 async function sayCh() {
@@ -582,7 +583,7 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
   const property = await getProperty();
   const { id: propertyId, tenantId } = property;
   const name = str(fd, "name");
-  if (!name) return { ok: false, error: "Property name is required." };
+  if (!name) return { ok: false, error: (await i18n()).t(settingsDict).errors.propertyName };
 
   // Currency is the property's single source of truth; channels inherit it (no per-channel currency).
   const newCurrency = str(fd, "baseCurrency") || "EUR";
@@ -657,11 +658,11 @@ export async function saveDeliverySettings(_prev: ActionResult | null, fd: FormD
   const primary = str(fd, "reservationEmailPrimary").toLowerCase() || null;
   const secondary = str(fd, "reservationEmailSecondary").toLowerCase() || null;
   const emailOk = (v: string | null) => v == null || /.+@.+\..+/.test(v);
-  if (!emailOk(primary) || !emailOk(secondary)) return { ok: false, error: "Enter valid email addresses." };
+  if (!emailOk(primary) || !emailOk(secondary)) return { ok: false, error: (await i18n()).t(settingsDict).errors.validEmails };
   const timeOk = (v: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
   const todayTime = str(fd, "notifyTodayTime") || "07:00";
   const tomorrowTime = str(fd, "notifyTomorrowTime") || "18:00";
-  if (!timeOk(todayTime) || !timeOk(tomorrowTime)) return { ok: false, error: "Send times must be HH:MM." };
+  if (!timeOk(todayTime) || !timeOk(tomorrowTime)) return { ok: false, error: (await i18n()).t(settingsDict).errors.sendTimes };
   const toOk = (v: string) => ["primary", "secondary", "both"].includes(v);
   const todayTo = toOk(str(fd, "notifyTodayTo")) ? str(fd, "notifyTodayTo") : "primary";
   const tomorrowTo = toOk(str(fd, "notifyTomorrowTo")) ? str(fd, "notifyTomorrowTo") : "primary";

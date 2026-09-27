@@ -22,7 +22,10 @@ export interface SignupFields {
   intent: ProductKey;
 }
 
-export type SignupValidation = { ok: true; fields: SignupFields } | { ok: false; message: string };
+/** Which part of the form a refusal is about — so an app can say it in the reader's language. */
+export type SignupRefusalCode = "hotel_missing" | "hotel_long" | "owner_missing" | "email_bad" | "intent_missing";
+
+export type SignupValidation = { ok: true; fields: SignupFields } | { ok: false; code: SignupRefusalCode; message: string };
 
 /**
  * ⚠️ Every message here describes the FORM, never the account behind it.
@@ -36,14 +39,14 @@ export function validateSignup(input: SignupInput): SignupValidation {
   const ownerName = input.ownerName.trim();
   const email = input.email.trim().toLowerCase();
 
-  if (!hotelName) return { ok: false, message: "Tell us the name of your hotel." };
-  if (hotelName.length > 120) return { ok: false, message: "That hotel name is too long — 120 characters at most." };
-  if (!ownerName) return { ok: false, message: "Tell us your name, so we know who to greet." };
+  if (!hotelName) return { ok: false, code: "hotel_missing", message: "Tell us the name of your hotel." };
+  if (hotelName.length > 120) return { ok: false, code: "hotel_long", message: "That hotel name is too long — 120 characters at most." };
+  if (!ownerName) return { ok: false, code: "owner_missing", message: "Tell us your name, so we know who to greet." };
   // Deliberately permissive: a real address we cannot parse is worse than a fake one we accept,
   // because the confirmation link is itself the check that the address works.
-  if (!/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) return { ok: false, message: "That email address doesn't look right." };
+  if (!/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) return { ok: false, code: "email_bad", message: "That email address doesn't look right." };
   if (!PRODUCT_BY_KEY[input.intent as ProductKey]) {
-    return { ok: false, message: "Pick the one thing you need most — you still get all three." };
+    return { ok: false, code: "intent_missing", message: "Pick the one thing you need most — you still get all three." };
   }
 
   return { ok: true, fields: { hotelName, ownerName, email, intent: input.intent as ProductKey } };

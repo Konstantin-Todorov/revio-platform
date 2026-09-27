@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { saveEmailTemplate, resetEmailTemplate } from "@/lib/actions-email";
 import { getProperty } from "@/lib/data";
+import { getLocale } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function EmailEditorPage({
   const rows = await prisma.emailTemplate.findMany({ where: { propertyId: property.id, key } });
   const row = rows.find((r) => r.locale === lang) ?? null;
   const fallback = defaultsFor(def!, lang);
-  const ui = translate(guestEmailsStrings, "en");
+  const ui = translate(guestEmailsStrings, await getLocale());
   const words = ui.templates[key];
   const session = await getSession();
   const status = emailStatus({

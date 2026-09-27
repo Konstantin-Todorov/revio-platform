@@ -1,7 +1,10 @@
 import { hotelBillingAccount, hotelBillingIdentity, hotelInvoices, revioPaymentDetails } from "@revio/db";
 import {
-  PRODUCT_BY_KEY, billableEntitlements, billingIdentityPrompt, priceBreakdown, tierForRooms,
+  PRODUCT_BY_KEY, billableEntitlements, billingIdentityGap, priceBreakdown, tierForRooms,
 } from "@revio/core";
+import { billingStrings } from "@revio/ui/billing-strings";
+import { fill } from "@revio/ui/i18n";
+import { i18n } from "@/lib/i18n/server";
 import { BillingPanel } from "@revio/ui/billing-panel";
 import { BillingIdentityForm } from "@revio/ui/billing-identity-form";
 import { saveBillingIdentity } from "@/lib/actions-billing-identity";
@@ -38,15 +41,14 @@ export default async function BillingSettingsPage() {
   // The layout already redirects a signed-out visitor; this is belt and braces and renders nothing
   // only in a state that cannot be reached through a browser.
   if (!session) return null;
+  const { t, locale } = await i18n();
+  const b = t(billingStrings);
 
   if (!isTrialDecider(session.role)) {
     return (
       <div className="rounded-xl border border-surface-border bg-white p-6">
-        <h1 className="text-[15px] font-semibold text-ink-900">Billing is kept to the account owner</h1>
-        <p className="mt-1.5 max-w-[56ch] text-[13px] leading-relaxed text-ink-600">
-          What this hotel pays, and the invoices behind it, are visible to the owner and to admins.
-          Ask one of them if you need a copy of an invoice.
-        </p>
+        <h1 className="text-[15px] font-semibold text-ink-900">{b.page.keptTitle}</h1>
+        <p className="mt-1.5 max-w-[56ch] text-[13px] leading-relaxed text-ink-600">{b.page.keptBody}</p>
       </div>
     );
   }
@@ -68,11 +70,8 @@ export default async function BillingSettingsPage() {
   if (!account) {
     return (
       <div className="rounded-xl border border-danger-200 bg-danger-50 p-6">
-        <h1 className="text-[15px] font-semibold text-danger-700">We could not load your billing details</h1>
-        <p className="mt-1.5 max-w-[56ch] text-[13px] leading-relaxed text-ink-700">
-          This is our problem, not yours — nothing about your account has changed. Reload the page,
-          and if it happens again reply to any Revio email and we will look at it.
-        </p>
+        <h1 className="text-[15px] font-semibold text-danger-700">{b.page.failedTitle}</h1>
+        <p className="mt-1.5 max-w-[56ch] text-[13px] leading-relaxed text-ink-700">{b.page.failedBody}</p>
       </div>
     );
   }
@@ -88,7 +87,19 @@ export default async function BillingSettingsPage() {
    * `decideVat` blocks rather than guess a country. Showing them a tidy monthly figure above an
    * unanswered form would imply the billing side is finished when it is the one thing that is not.
    */
-  const prompt = billingIdentityPrompt(identity);
+  // Worded here from core's facts (`billingIdentityGap`), so it is said in the reader's language.
+  const gap = billingIdentityGap(identity);
+  const prompt = !gap
+    ? null
+    : gap.code === "missing"
+      ? b.page.promptMissing
+      : fill(b.page.promptIncomplete, {
+          // Lower-cased mid-sentence — but never an abbreviation: "VAT number", "ЕИК".
+          fields: gap.fields
+            .map((f) => b.form.fields[f])
+            .map((w) => (/^\p{Lu}\p{Ll}/u.test(w) ? w[0]!.toLocaleLowerCase(locale) + w.slice(1) : w))
+            .join(", "),
+        });
   const identityValues = {
     legalName: identity?.legalName ?? "",
     country: identity?.country ?? "",
@@ -105,14 +116,13 @@ export default async function BillingSettingsPage() {
     <section
       className={`rounded-xl border p-5 ${prompt ? "border-warning-200 bg-warning-50" : "border-surface-border bg-white"}`}
     >
-      <h2 className="text-[13.5px] font-semibold text-ink-900">Your company details</h2>
+      <h2 className="text-[13.5px] font-semibold text-ink-900">{b.page.companyTitle}</h2>
       {/*
         The sentence that stops the wrong company ending up on a tax document. This product also
         holds the identity a hotel uses to invoice its OWN guests, and the two forms look identical.
       */}
       <p className="mt-1 max-w-[68ch] text-[12.5px] leading-relaxed text-ink-600">
-        These go on the invoices <strong>Revio issues to you</strong> — not on the invoices you issue
-        your guests, which are set up separately under your property.
+        {b.page.companyBefore}<strong>{b.page.companyStrong}</strong>{b.page.companyAfter}
       </p>
       {prompt && (
         <p className="mt-3 rounded-md border border-warning-200 bg-white px-3.5 py-2.5 text-[12.5px] leading-relaxed text-warning-800">
@@ -134,7 +144,7 @@ export default async function BillingSettingsPage() {
       {prompt && identityCard}
       <BillingPanel
       breakdown={breakdown}
-      planLabel={tier.label}
+      planLabel={b.tiers[tier.plan as keyof typeof b.tiers] ?? tier.label}
       rooms={account.rooms}
       trials={account.trials.map((t) => ({
         name: PRODUCT_BY_KEY[t.product as "cm" | "crs" | "pms"]?.name ?? t.product,
@@ -142,6 +152,7 @@ export default async function BillingSettingsPage() {
       }))}
       invoices={invoices}
       payment={payment}
+      locale={locale}
     />
       {/* Complete: it moves below the bill, where it is a record to correct rather than a task. */}
       {!prompt && identityCard}
