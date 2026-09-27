@@ -277,7 +277,6 @@ says who can move it. Details sit where the link points.
 | Cabacum sells nothing on any OTA until 2027-03-31 — a stop-sell on every plan, set 09-13 | the hotel | `ACTION-REQUIRED.md` §4c |
 | Cabacum's BB Non-Refundable: €333 in Revio, €299.70 on OTAs (Channex derives it −10%) | the hotel | §4c |
 | Two open folios on DesManagement test stays (€8.94, €5.67) | the hotel | §4c |
-| Rotate `CRON_SECRET` — its value was printed into a working transcript on 09-22 | founder | Railway, every service + the cron |
 | An accountant signs off the VAT reading (city tax inside the accommodation base) | founder + external | `ACTION-REQUIRED.md` §2 |
 | A guest can pay by card on RevioDirect — `apps/booking` carries no Stripe keys yet | founder decision, then small build | roadmap `live-card-payments` |
 | The two Ethno Villa Cherry duplicate properties, cleared inside Channex | founder | `ACTION-REQUIRED.md` §0 |
@@ -325,8 +324,7 @@ says who can move it. Details sit where the link points.
    on the set-password screens (`authRefusalStrings`, core `AuthRefusalCode`). New codes in core:
    `BillingIdentityProblemCode` + `billingIdentityGap`, `UpsellReasonCode`, `AuthRefusalCode`. English is
    held to core word for word by `apps/pms/lib/i18n/product-drift.test.ts`. Looked at in the browser, desk
-   and phone, Bulgarian and English. **RevioLink and RevioCRS pages still pass no `locale`**, so they are
-   unchanged English until their turn.
+   and phone, Bulgarian and English. (RevioLink and RevioCRS now pass it too — step 3.)
    Messages from `@revio/db`/`@revio/core` now carry codes (`TwoFactorErrorCode`, `WelcomeWriteCode`,
    `RegisterProblemCode`) so a screen translates by code, never by matching English. Rule written in
    `packages/ui/CLAUDE.md`.
