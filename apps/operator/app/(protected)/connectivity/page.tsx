@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getConnectivity } from "@/lib/data";
 import { removeConnectivityKey, testStoredKey, testPlatformKey } from "@/lib/actions-connectivity";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { ProviderLogo } from "@/components/integrations/ProviderLogo";
 import { KeyDialog } from "@/components/connectivity/KeyDialog";
 
 export const dynamic = "force-dynamic";
@@ -121,10 +122,15 @@ export default async function Page() {
         </div>
       </Card>
 
+      <div className="flex items-start gap-3">
+        <div className="mt-1"><ProviderLogo provider="channex" size={40} /></div>
+        <div className="min-w-0 flex-1">
       <PageHeader
         title="Connectivity"
         subtitle="Per-client keys — the EXCEPTION, for a hotel that brings its own Channex account. Leave a client unset and our platform key is used. Tested on save; “Check now” asks Channex again."
       />
+        </div>
+      </div>
       <Card>
         <CardHeader title="Channex API keys" />
         <div className="overflow-x-auto">

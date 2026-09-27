@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, CheckCircle2, CircleDashed, ExternalLink, XCircle } from "lucide-react";
 import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
+import { ProviderLogo } from "@/components/integrations/ProviderLogo";
 import { getStripeConnection, stripeModeStatus, type StripeConnection } from "@/lib/integrations";
 import { getOperatorSession } from "@/lib/session";
 import { StripeModeSwitch } from "@/components/integrations/StripeModeSwitch";
@@ -276,10 +277,15 @@ export default async function StripePage() {
         <ArrowLeft className="h-3.5 w-3.5" /> Integrations
       </Link>
 
+      <div className="flex items-start gap-3">
+        <div className="mt-1"><ProviderLogo provider="stripe" size={40} /></div>
+        <div className="min-w-0 flex-1">
       <PageHeader
         title="Stripe"
         subtitle="Our own Stripe account, so a hotel can pay its subscription by card instead of being chased for a bank transfer."
       />
+        </div>
+      </div>
 
       {/*
         * Whose account this is, said first.

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, CreditCard, Mail, Plug, Radio, ShieldCheck } from "lucide-react";
 import { Card, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getIntegrations, type IntegrationRow, type IntegrationState } from "@/lib/integrations";
+import { ProviderLogo, hasProviderLogo } from "@/components/integrations/ProviderLogo";
 
 export const dynamic = "force-dynamic";
 
@@ -59,9 +60,14 @@ function Row({ row }: { row: IntegrationRow }) {
 
   const body = (
     <div className="flex items-start gap-3.5 px-4 py-3.5">
-      <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-sunken">
-        <Icon className="h-[18px] w-[18px] text-ink-500" />
-      </div>
+      {/* The provider's own mark where we have it — recognised before the name is read. */}
+      {hasProviderLogo(row.key) ? (
+        <div className="mt-0.5"><ProviderLogo provider={row.key} /></div>
+      ) : (
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface-sunken">
+          <Icon className="h-[18px] w-[18px] text-ink-500" />
+        </div>
+      )}
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
