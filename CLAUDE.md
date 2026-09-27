@@ -474,8 +474,9 @@ doc. Task phases **G (RevioLink R1)** + **H (RevioCRS R2)** + **J (RevioPMS R1)*
 
 **→ ▶️ IN BUILD — REVIOPMS REFINEMENT ROUND 2 (founder spec 2026-08-23). Tracker:
 [`docs/PMS-ROUND2-STATUS.md`](docs/PMS-ROUND2-STATUS.md) — read it before touching PMS state.**
-§1 (checkout / folio / overstay state machine) is **fixed and live**; its UI is not built. §3 (Close
-Day auto-close) and §2 (reservations calendar + drag-to-move) are open.
+**§1, §2 and §3 are built and live** (checked against the tracker 2026-09-27; this line had said §2/§3
+were open long after they shipped). Left: drag-edge-to-extend (a deliberate fast-follow) and two
+founder decisions on demo-tenant data — the stuck-stays repair script and Ventsi's open folios.
 
 Two things from it that constrain everything after: **(1)** the RLS layer could not do multi-step
 transactions at all — every op through `forTenant()` is its own transaction, so sequential awaits
