@@ -40,7 +40,9 @@ export async function clientDeletionFacts(tenantId: string) {
 
   const [taxInvoices, reservations, properties, users, liveRemoteChannels] = await Promise.all([
     // Sent or paid on OUR tax series. Drafts are numbers nobody has seen; `DEMO-` ones are rehearsals.
-    prisma.invoice.count({ where: { tenantId, status: { in: ["sent", "paid"] }, NOT: { number: { startsWith: "DEMO-" } } } }),
+    prisma.invoice.count({
+      where: { tenantId, status: { in: ["sent", "paid"] }, OR: [{ number: null }, { NOT: { number: { startsWith: "DEMO-" } } }] },
+    }),
     prisma.reservation.count({ where: { tenantId } }),
     prisma.property.count({ where: { tenantId } }),
     prisma.user.count({ where: { tenantId } }),
@@ -123,7 +125,7 @@ export async function deleteClientCompletely(args: {
        */
       const n = table === "Invoice"
         ? await tx.$executeRawUnsafe(
-            `DELETE FROM "Invoice" WHERE "tenantId" = $1 AND ("status" = 'draft' OR "number" IS NULL OR "number" LIKE 'DEMO-%')`,
+            `DELETE FROM "Invoice" WHERE "tenantId" = $1 AND ("status" = 'draft' OR "number" LIKE 'DEMO-%')`,
             args.tenantId,
           )
         : await tx.$executeRawUnsafe(`DELETE FROM "${table}" WHERE "tenantId" = $1`, args.tenantId);

@@ -303,20 +303,16 @@ describeDb("public signup, end to end", () => {
       expect(record!.properties).toBe(1);
     });
 
-    it("⚠️ REFUSES when an invoice has been issued, whatever is typed", async () => {
+    it("⚠️ REFUSES a confirmed client that has been invoiced, and says to close it first", async () => {
       if (!reachable) return;
       await createPublicSignup(NEW);
       const tenant = (await tenantOf(NEW.email))!;
+      await prisma!.tenant.update({ where: { id: tenant.id }, data: { status: "active" } });
       // A REAL issued invoice — `period` and `amountMinor` are the actual column names; getting them
-      // wrong once already made this test pass for the wrong reason.
+      // wrong once already made this test pass for the wrong reason. No number: a sent invoice is a
+      // tax document whether or not the number column was filled, and must still count.
       await prisma!.invoice.create({
-        data: {
-          tenantId: tenant.id,
-          period: "2026-09",
-          amountMinor: 14160,
-          currency: "EUR",
-          status: "sent",
-        },
+        data: { tenantId: tenant.id, period: "2026-09", amountMinor: 14160, currency: "EUR", status: "sent" },
       });
 
       const out = await deleteClientCompletely({
@@ -324,10 +320,27 @@ describeDb("public signup, end to end", () => {
         operatorUserId: "op-1", operatorName: "Konstantin",
       });
       expect(out.ok).toBe(false);
-      expect(out.message).toMatch(/tax document/i);
-      expect(out.message).toMatch(/suspend/i);
-      // And nothing was removed.
+      expect(out.message).toMatch(/close the client/i);
       expect(await prisma!.tenant.count({ where: { id: tenant.id } })).toBe(1);
+    });
+
+    it("⚠️ KEEPS the tax invoices when an account of ours goes, and removes the rehearsals", async () => {
+      if (!reachable) return;
+      await createPublicSignup(NEW);
+      const tenant = (await tenantOf(NEW.email))!;
+      await prisma!.tenant.update({ where: { id: tenant.id }, data: { status: "active", accountType: "test", isDemo: true } });
+      await prisma!.invoice.create({ data: { tenantId: tenant.id, period: "2026-08", amountMinor: 100, status: "paid", number: "0000000042" } });
+      await prisma!.invoice.create({ data: { tenantId: tenant.id, period: "2026-09", amountMinor: 100, status: "paid", number: "DEMO-000042" } });
+
+      const out = await deleteClientCompletely({
+        tenantId: tenant.id, confirmation: tenant.name,
+        operatorUserId: "op-1", operatorName: "Konstantin",
+      });
+      expect(out.ok).toBe(true);
+      expect(await prisma!.tenant.count({ where: { id: tenant.id } })).toBe(0);
+      const left = await prisma!.invoice.findMany({ where: { tenantId: tenant.id }, select: { number: true } });
+      expect(left.map((i) => i.number)).toEqual(["0000000042"]);
+      await prisma!.invoice.deleteMany({ where: { tenantId: tenant.id } });
     });
 
     it("refuses a mistyped confirmation, and deletes nothing", async () => {
