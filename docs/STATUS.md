@@ -361,6 +361,22 @@ page at phone width. Not translated: legal documents, and anything the hotel typ
 **Later, when a hotel asks** — the hotel's own Stripe keys, groups and corporate, the AI assistant. The
 roadmap page holds them.
 
+### Shipped 2026-09-28 — clients as four facts in the Operator; onboarding and room rules
+
+**Operator clients** (`59cbacd`, `4ffa177`; founder: "the whole structure with the clients is confusing").
+Type (live · pilot · demo · test), status (suspend ⇄ reinstate, close → reopen), billing (paying · free
+until · not billed) and computed health, each changed only on the client's page, with a reason, into a
+new operator-only `ClientEvent` history. The list has no controls in rows. Demo and test accounts can be
+deleted at any time; a real client that traded is closed first and kept 90 days; tax invoices are kept.
+The invoice run bills by billing mode only. *Checked:* migration applied in production — the three demo
+tenants read `demo · none` (*by query*); `rls-verify` 131/131 as the restricted role; CI green.
+
+**Onboarding and rooms** (`a78786e`): a trial of another product opens it signed in, on its own first-run
+summary (it used to land on the sign-in page); deleting a room type in RevioLink no longer deletes
+RevioPMS's physical rooms; duplicate room numbers and more doors than rooms are refused; a
+RevioPMS-only hotel can edit its room types. *Real client, reported not touched:* Cabacum has "101"
+four times and 41 doors for 30 rooms.
+
 ### Shipped 2026-09-24 — every notification counts what its screen shows; Bulgarian begins
 
 **Notifications** (`4e7e47d`, reported by the founder: "3 unmapped products", and Mapping said all mapped).
