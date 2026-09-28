@@ -124,7 +124,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             still stays put — but wheel, keyboard, scrollbar and scroll restoration are all native
             browser behaviour instead of something we reimplement. */}
         <div className="min-h-screen">
-        <Sidebar role={session.role} footer={t.businessDate(businessDate)} t={{ sections: t.sections, nav: t.nav, menu: t.menu }} />
+        <Sidebar role={session.role} footer={t.businessDate(businessDate)} t={{ sections: t.sections, nav: t.nav, menu: t.menu, product: t.product }} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
           <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} feed={feed} timeZone={property.timezone} locale={locale} t={{ menu: t.menu, roles: t.roles, search: t.search }} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its

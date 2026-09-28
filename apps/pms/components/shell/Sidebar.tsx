@@ -18,6 +18,7 @@ export type SidebarStrings = {
   sections: Record<SectionKey, string>;
   nav: Partial<Record<string, string>>;
   menu: { closeMenu: string };
+  product?: string;
 };
 
 // Nav regrouped to the roles that use each area (spec §2): Front Office (reception) · Rooms &
@@ -166,7 +167,7 @@ export function Sidebar({ role, footer, t }: { role: string; footer: string; t?:
             Revio<span className="text-product-mark">PMS</span>
           </div>
           <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-white/45">
-            Operations
+            {t?.product ?? "Operations"}
           </div>
         </div>
         <button

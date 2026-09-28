@@ -22,16 +22,25 @@ const STYLE: Record<Flash["kind"], { cls: string; Icon: typeof Info }> = {
  * press the button again.
  */
 export function FlashToast({ flash, cookieName }: { flash: Flash | null; cookieName: string }) {
-  const [shown, setShown] = useState(true);
+  /*
+   * Which message was put away, not a yes/no. A boolean outlived the message it was about: once one
+   * toast was dismissed — or a success had faded — every later refusal on the same page rendered
+   * nothing, because the layout (and this component) never remounts between server actions. Found
+   * 2026-09-28: RevioPMS refused to create rooms, correctly, and said so to nobody.
+   *
+   * Each server render hands over a fresh object, so a new message is never the one put away.
+   */
+  const [putAway, setPutAway] = useState<Flash | null>(null);
 
   useEffect(() => {
+    if (!flash) return;
     document.cookie = `${cookieName}=; path=/; max-age=0`;
-    if (flash?.kind === "error") return;
-    const t = setTimeout(() => setShown(false), 4500);
+    if (flash.kind === "error") return;
+    const t = setTimeout(() => setPutAway(flash), 4500);
     return () => clearTimeout(t);
   }, [flash, cookieName]);
 
-  if (!flash || !shown) return null;
+  if (!flash || flash === putAway) return null;
   const { cls, Icon } = STYLE[flash.kind];
 
   return (
@@ -46,7 +55,7 @@ export function FlashToast({ flash, cookieName }: { flash: Flash | null; cookieN
         <Icon className="mt-0.5 h-4 w-4 shrink-0" />
         <p className="text-[13px] font-medium">{flash.message}</p>
         <button
-          type="button" onClick={() => setShown(false)} aria-label="Dismiss"
+          type="button" onClick={() => setPutAway(flash)} aria-label="Dismiss"
           className="-mr-1 -mt-0.5 shrink-0 rounded p-1 opacity-60 transition-opacity hover:opacity-100"
         >
           <X className="h-3.5 w-3.5" />

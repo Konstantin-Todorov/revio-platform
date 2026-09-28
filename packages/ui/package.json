@@ -59,6 +59,7 @@
     "./billing-identity-form": "./src/billing-identity-form.tsx",
     "./billing-strings": "./src/billing-strings.ts",
     "./product-strings": "./src/product-strings.ts",
+    "./room-rules-strings": "./src/room-rules-strings.ts",
     "./guest-emails": "./src/guest-emails.tsx",
     "./guest-emails-strings": "./src/guest-emails-strings.ts",
     "./email-editor": "./src/email-editor.tsx",

@@ -25,6 +25,7 @@ import {
   trialEndsAt,
   type ProductKey,
   type SelfTrialVerdict,
+  type SelfTrialRefusal,
   trialEndFor,
 } from "@revio/core";
 
@@ -65,6 +66,11 @@ export interface SelfStartResult {
   ok: boolean;
   /** Why not, in words meant for the hotel. Present whenever `ok` is false. */
   message?: string;
+  /**
+   * The same refusal as a code, so each app words it in the reader's language — `message` stays for
+   * callers that have none. `already_running` is the database's own refusal when two presses race.
+   */
+  reason?: SelfTrialRefusal | "already_running";
   trial?: { id: string; endsAt: Date };
 }
 
@@ -98,7 +104,13 @@ export async function selfStartTrial(args: {
     tenantStatus: tenant.status,
     role: args.role,
   });
-  if (!verdict.ok) return { ok: false, ...(verdict.message ? { message: verdict.message } : {}) };
+  if (!verdict.ok) {
+    return {
+      ok: false,
+      ...(verdict.message ? { message: verdict.message } : {}),
+      ...(verdict.reason ? { reason: verdict.reason } : {}),
+    };
+  }
 
   const FIELD: Record<ProductKey, "hasChannelManager" | "hasReservation" | "hasPms"> = {
     cm: "hasChannelManager", crs: "hasReservation", pms: "hasPms",
@@ -133,6 +145,7 @@ export async function selfStartTrial(args: {
      */
     return {
       ok: false,
+      reason: "already_running",
       message: "A trial of this product is already running — reload the page and it will be there.",
     };
   }

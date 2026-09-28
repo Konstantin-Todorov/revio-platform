@@ -20,6 +20,8 @@ export interface ShellStrings {
   menu: { account: string; settings: string; logOut: string; language: string; openMenu: string; closeMenu: string };
   roles: Record<string, string>;
   search: string;
+  /** The line under the wordmark. */
+  product: string;
 }
 
 export const shell: Translations<ShellStrings> = {
@@ -45,6 +47,7 @@ export const shell: Translations<ShellStrings> = {
     businessDate: (date) => `Business date · ${date}`,
     menu: { account: "Account menu", settings: "Settings", logOut: "Log out", language: "Language", openMenu: "Open menu", closeMenu: "Close menu" },
     search: "Search rooms, guests, reservations…",
+    product: "Operations",
     roles: {
       owner: "Owner", admin: "Admin", revenue_manager: "Revenue Mgr", distribution_manager: "Distribution", read_only: "Read-only",
       manager: "Manager", reception: "Reception", housekeeper: "Housekeeper", hk_supervisor: "Housekeeping lead",
@@ -72,6 +75,7 @@ export const shell: Translations<ShellStrings> = {
     },
     businessDate: (date) => `Работна дата · ${date}`,
     search: "Търсене на стаи, гости, резервации…",
+    product: "Операции",
     menu: { account: "Меню на профила", settings: "Настройки", logOut: "Изход", language: "Език", openMenu: "Отваряне на менюто", closeMenu: "Затваряне на менюто" },
     roles: {
       owner: "Собственик", admin: "Администратор", revenue_manager: "Приходи", distribution_manager: "Дистрибуция", read_only: "Само преглед",

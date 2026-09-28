@@ -8,6 +8,10 @@ import { logAudit, recordPush, str, int } from "./mutation-helpers";
 import { guard, requireCapability } from "./authz";
 import { i18n } from "./i18n/server";
 import { rateErrors } from "./i18n/rate-errors";
+import { roomTypeRemoval } from "@revio/core";
+import { fill } from "@revio/ui/i18n";
+import { setFlash } from "@revio/ui/flash";
+import { roomRulesStrings } from "@revio/ui/room-rules-strings";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -84,19 +88,28 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
   const rt = await prisma.roomType.findUnique({ where: { id } });
   if (!rt) return;
 
-  // Guard (spec §3.4): a product mapped to a channel cannot be deleted at the Channex level —
-  // require unmapping first instead of letting the call fail downstream.
-  const mapped = await prisma.channelRoomTypeMapping.count({ where: { roomTypeId: id, externalRoomId: { not: null } } });
-  if (mapped > 0) {
+  /*
+   * One rule for all three products (`roomTypeRemoval`). Until 2026-09-28 this counted reservations
+   * only, so a room type with RevioPMS rooms behind it and no bookings yet was DELETED — and the
+   * cascade took every physical room, its housekeeping state and its maintenance history with it.
+   */
+  const [mapped, reservations, units] = await Promise.all([
+    // Spec §3.4: a product mapped to a channel cannot be deleted at the Channex level.
+    prisma.channelRoomTypeMapping.count({ where: { roomTypeId: id, externalRoomId: { not: null } } }),
+    prisma.reservationLine.count({ where: { roomTypeId: id } }),
+    prisma.unit.count({ where: { roomTypeId: id } }),
+  ]);
+  const verdict = roomTypeRemoval({ mapped, reservations, units });
+  if (verdict === "blocked_mapped") {
     redirect(`/rooms-rates?blocked=${encodeURIComponent(rt.name)}&kind=room`);
   }
 
-  // Guard: never destroy a room type that has real reservations behind it.
-  const resCount = await prisma.reservationLine.count({ where: { roomTypeId: id } });
-  if (resCount > 0) {
-    // Soft-delete: deactivate instead of breaking booking history.
+  if (verdict === "deactivate") {
+    // Soft-delete: deactivate instead of breaking booking history or the housekeeping board — and
+    // say so, because the dialog promised a delete.
     await prisma.roomType.update({ where: { id }, data: { active: false } });
-    await logAudit(property.id, property.tenantId, { entity: `Room Type · ${rt.name}`, field: "deactivate", newValue: "inactive (has reservations)" });
+    await logAudit(property.id, property.tenantId, { entity: `Room Type · ${rt.name}`, field: "deactivate", newValue: "inactive (in use)" });
+    await setFlash("success", fill((await i18n()).t(roomRulesStrings).deactivated, { name: rt.name }));
   } else {
     await prisma.roomType.delete({ where: { id } }); // cascades prices, cells, mappings, links
     await logAudit(property.id, property.tenantId, { entity: `Room Type · ${rt.name}`, field: "delete", oldValue: rt.name });

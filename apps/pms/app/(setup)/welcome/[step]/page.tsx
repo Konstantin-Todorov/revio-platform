@@ -41,7 +41,7 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
     prisma.unit.findMany({
       where: { propertyId: property.id, active: true },
       orderBy: [{ floor: "asc" }, { label: "asc" }],
-      select: { id: true, label: true, floor: true, roomType: { select: { name: true } } },
+      select: { id: true, label: true, floor: true, roomTypeId: true, roomType: { select: { name: true } } },
     }),
     prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
     prisma.taxFee.findFirst({
@@ -210,6 +210,9 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
       {step === "golive" && (
         <Ready
           units={units.length}
+          short={roomTypes
+            .map((rt) => ({ name: rt.name, total: rt.totalRooms, have: units.filter((u) => u.roomTypeId === rt.id).length }))
+            .filter((r) => r.have < r.total)}
           skipped={skippedForSize(PRODUCT, facts)}
           rooms={facts.rooms}
           property={property}
@@ -227,6 +230,7 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
  */
 function Ready({
   units,
+  short,
   rooms,
   skipped,
   property,
@@ -234,6 +238,8 @@ function Ready({
   saving,
 }: {
   units: number;
+  /** Room types sold with more rooms than have doors here — a guest booked into one has nowhere to go. */
+  short: { name: string; total: number; have: number }[];
   rooms: number;
   skipped: string[];
   property: { timezone: string; checkInTime: string; checkOutTime: string };
@@ -254,6 +260,18 @@ function Ready({
           </div>
         ))}
       </dl>
+
+      {short.length > 0 && (
+        <div role="status" className="rounded-md border border-warning-200 bg-warning-50 px-4 py-3 text-[12.5px] leading-relaxed text-warning-800">
+          <p className="font-semibold">{t.ready.shortTitle}</p>
+          <ul className="mt-1 list-disc pl-5">
+            {short.map((r) => <li key={r.name}>{t.ready.shortLine(r.name, r.have, r.total)}</li>)}
+          </ul>
+          <p className="mt-1">
+            {t.ready.shortBody} <Link href="/welcome/units" className="font-semibold underline">{t.ready.shortFix}</Link>
+          </p>
+        </div>
+      )}
 
       {skipped.length > 0 && (
         <p className="rounded-md border border-surface-border bg-surface-muted px-4 py-3 text-[12.5px] leading-relaxed text-ink-600">

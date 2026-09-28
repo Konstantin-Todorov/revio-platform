@@ -2,8 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requestKeepTrial, selfStartTrial } from "@revio/db";
-import { PRODUCT_BY_KEY, type ProductKey } from "@revio/core";
+import { forSystem, issueHandoff, requestKeepTrial, selfStartTrial, type SelfStartResult } from "@revio/db";
+import { PRODUCT_BY_KEY, hasFinishedSetup, type ProductKey, type ProductName } from "@revio/core";
+import { fill } from "@revio/ui/i18n";
+import { productStrings } from "@revio/ui/product-strings";
 import { guard } from "./authz";
 import { productOrigin } from "@revio/ui/product-links";
 import { flashError, setFlash } from "@revio/ui/flash";
@@ -46,22 +48,38 @@ export async function beginSelfTrial(fd: FormData): Promise<void> {
     role: session.role,
     userId: session.userId,
   });
-  if (!result.ok) return flashError(result.message ?? "That trial could not be started.");
+  if (!result.ok) return flashError(await trialRefusal(result, info.name));
 
-  await setFlash(
-    "success",
-    `${info.name} is on until ${result.trial!.endsAt.toLocaleDateString("en-GB")}. We will email you before it ends, and nothing is charged.`,
-  );
   revalidatePath("/", "layout");
   /*
-   * Straight into the product, not back to a confirmation.
+   * Straight into the product, signed in, and onto its own first-run flow.
    *
-   * Its own first-run flow already knows which steps this hotel can skip — the property, rooms,
-   * rates and branding are shared, so a second product opens on two or three screens rather than
-   * six. Landing them anywhere else would waste the one moment the platform's whole claim is most
-   * persuasive.
+   * ⚠️ Through a hand-off, never a bare link to the other origin. Each product has its own session
+   * cookie, so `redirect(productOrigin(product))` — what this did until 2026-09-28 — landed the hotel
+   * on the new product's SIGN-IN page at the one moment the platform's claim ("one login, nothing
+   * to set up twice") is most persuasive. The success sentence was set as a flash on THIS origin, so
+   * it never reached them either; the trial strip on the other side already says what they need.
+   *
+   * `next=welcome` opens the product's first-run flow, which knows what carried over — the property,
+   * rooms, prices and branding are shared, so a second product opens on its summary rather than six
+   * screens or a dashboard of zeros. Skipped when this product was set up here before.
    */
-  redirect(productOrigin(product));
+  const [user, properties] = await Promise.all([
+    forSystem().user.findUnique({ where: { id: session.userId }, select: { email: true } }),
+    forSystem().property.findMany({ where: { tenantId: session.tenantId }, select: { setupCompleted: true } }),
+  ]);
+  if (!user) redirect(productOrigin(product));
+  const setUp = properties.length > 0 && properties.every((p) => hasFinishedSetup(p.setupCompleted, info.name as ProductName));
+  const token = await issueHandoff({ userId: session.userId, email: user.email, product });
+  redirect(`${productOrigin(product)}/handoff?t=${encodeURIComponent(token)}${setUp ? "" : "&next=welcome"}`);
+}
+
+/** A refused trial, worded for the reader from core's code — `message` is the English fallback. */
+async function trialRefusal(result: SelfStartResult, product: string): Promise<string> {
+  const s = (await i18n()).t(productStrings).trial;
+  if (result.reason === "already_running") return s.alreadyRunning;
+  if (result.reason) return fill(s.refusal[result.reason], { product });
+  return result.message ?? s.alreadyRunning;
 }
 
 /**
@@ -97,8 +115,8 @@ export async function keepThisTrial(): Promise<void> {
   await setFlash(
     "success",
     result.alreadyAsked
-      ? "We already have your request and we are on it. Nothing stops in the meantime."
-      : "Thank you — we have it. We will be in touch to sort out keeping it, and nothing stops before then.",
+      ? (await i18n()).t(productStrings).trial.keepAlready
+      : (await i18n()).t(productStrings).trial.keepThanks,
   );
   // "layout", not the default: the strip lives in the layout, so a page-only revalidation would
   // leave it still asking a question the hotel has just answered.

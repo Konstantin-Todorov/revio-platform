@@ -8,7 +8,11 @@ import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { logAudit, str, int } from "./mutation-helpers";
 import { recordOpsEvent } from "./events";
-import { flashError } from "@revio/ui/flash";
+import { flashError, setFlash } from "@revio/ui/flash";
+import { fill } from "@revio/ui/i18n";
+import { roomRulesStrings } from "@revio/ui/room-rules-strings";
+import { sameRoomLabel } from "@revio/core";
+import { planUnitsFor } from "./unit-plan";
 import { i18n } from "./i18n/server";
 import { flash } from "./i18n/flash";
 import { orderFloors } from "./floor-order";
@@ -61,13 +65,17 @@ export async function createUnit(fd: FormData): Promise<void> {
   if (roomType.propertyId !== session.activePropertyId) return; // crafted POST — see above
 
 
+  // Not twice at one property, and not more doors than the type is sold with — `planUnits`.
+  const { refusal } = await planUnitsFor({ propertyId: session.activePropertyId, roomType, wanted: [label], entitlements: session.entitlements });
+  if (refusal) return flashError(refusal);
+
   const count = await prisma.unit.count({ where: { roomTypeId } });
   await prisma.unit.create({
     data: {
       tenantId: session.tenantId,
       propertyId: session.activePropertyId,
       roomTypeId,
-      label,
+      label: label.trim(),
       unitKind: roomType.unitKind,
       floor,
       sortOrder: count,
@@ -93,18 +101,24 @@ export async function generateUnits(fd: FormData): Promise<void> {
   if (roomType.propertyId !== session.activePropertyId) return; // crafted POST — see above
 
 
+  // Numbers that already exist are skipped, and a run over the type's count creates nothing.
+  const wanted = Array.from({ length: n }, (_, i) => `${prefix}${start + i}`);
+  const { plan, refusal, skippedNote } = await planUnitsFor({ propertyId: session.activePropertyId, roomType, wanted, entitlements: session.entitlements });
+  if (!plan.ok) return flashError(refusal!);
+
   const existing = await prisma.unit.count({ where: { roomTypeId } });
-  const data = Array.from({ length: n }, (_, i) => ({
+  const data = plan.create.map((label, i) => ({
     tenantId: session.tenantId,
     propertyId: session.activePropertyId,
     roomTypeId,
-    label: `${prefix}${start + i}`,
+    label,
     unitKind: roomType.unitKind,
     floor,
     sortOrder: existing + i,
   }));
   await prisma.unit.createMany({ data });
-  await logAudit(session.activePropertyId, session.tenantId, { entity: "unit", field: "generate", newValue: `${n} units`, userId: session.userId });
+  await logAudit(session.activePropertyId, session.tenantId, { entity: "unit", field: "generate", newValue: `${data.length} units`, userId: session.userId });
+  if (skippedNote) await setFlash("success", skippedNote);
   refresh();
 }
 
@@ -223,6 +237,15 @@ export async function updateUnit(fd: FormData): Promise<void> {
   // the row would confirm it exists.
   if (unit.propertyId !== session.activePropertyId) return;
 
+  // A new number must not be one another room already answers to.
+  const nextLabel = str(fd, "label").trim() || unit.label;
+  if (!sameRoomLabel(nextLabel, unit.label)) {
+    const others = await prisma.unit.findMany({ where: { propertyId: unit.propertyId, NOT: { id: unitId } }, select: { label: true } });
+    if (others.some((o) => sameRoomLabel(o.label, nextLabel))) {
+      return flashError(fill((await i18n()).t(roomRulesStrings).labelTaken, { label: nextLabel }));
+    }
+  }
+
   const features = fd.getAll("features").map(String).filter((f) => UNIT_FEATURES.includes(f));
   const requested = fd.getAll("connecting").map(String).filter(Boolean);
   // Only allow connecting to real units at the same property (never to self).
@@ -234,7 +257,7 @@ export async function updateUnit(fd: FormData): Promise<void> {
   await prisma.unit.update({
     where: { id: unitId },
     data: {
-      label: str(fd, "label") || unit.label,
+      label: nextLabel,
       floor: floorFrom(fd),
       active: fd.get("active") != null,
       features,

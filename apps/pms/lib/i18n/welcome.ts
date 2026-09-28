@@ -25,7 +25,10 @@ export interface WelcomePageStrings {
   roomsReady: (n: number) => string;
   teamBody: string;
   addTeam: string;
-  ready: { rooms: string; roomsValue: (n: number) => string; timezone: string; checkInOut: string };
+  ready: {
+    rooms: string; roomsValue: (n: number) => string; timezone: string; checkInOut: string;
+    shortTitle: string; shortLine: (type: string, have: number, total: number) => string; shortBody: string; shortFix: string;
+  };
   keptShortBefore: (rooms: number) => string;
   addingTeam: string;
   keptShortAfter: string;
@@ -52,7 +55,12 @@ export const welcome: Translations<WelcomePageStrings> = {
     roomsReady: (n) => `${n} room${n === 1 ? "" : "s"} ready for housekeeping.`,
     teamBody: "Reception, housekeeping and maintenance each see only the screens they need. Everyone gets their own login and sets their own password from an invitation.",
     addTeam: "Add your team",
-    ready: { rooms: "Rooms", roomsValue: (n) => `${n} physical room${n === 1 ? "" : "s"}`, timezone: "Time zone", checkInOut: "Check-in / out" },
+    ready: { rooms: "Rooms", roomsValue: (n) => `${n} physical room${n === 1 ? "" : "s"}`, timezone: "Time zone", checkInOut: "Check-in / out",
+      shortTitle: "Some rooms you sell have no door here yet",
+      shortLine: (type, have, total) => `${type}: ${have} of ${total} created`,
+      shortBody: "A guest booked into one of these cannot be checked in until its room exists. You can finish now and add them later under Rooms.",
+      shortFix: "Add them now",
+    },
     keptShortBefore: (r) => `Because you have ${r} rooms we kept setup short and didn’t ask about`,
     addingTeam: "adding your team",
     keptShortAfter: ". It is on your dashboard checklist whenever you want it.",
@@ -89,7 +97,12 @@ export const welcome: Translations<WelcomePageStrings> = {
     roomsReady: (n) => `${n} ${n === 1 ? "стая е готова" : "стаи са готови"} за хаускийпинга.`,
     teamBody: "Рецепцията, хаускийпингът и поддръжката виждат само екраните, които им трябват. Всеки получава собствен вход и сам избира паролата си от покана.",
     addTeam: "Добавете екипа си",
-    ready: { rooms: "Стаи", roomsValue: (n) => `${n} ${n === 1 ? "физическа стая" : "физически стаи"}`, timezone: "Часова зона", checkInOut: "Настаняване / напускане" },
+    ready: { rooms: "Стаи", roomsValue: (n) => `${n} ${n === 1 ? "физическа стая" : "физически стаи"}`, timezone: "Часова зона", checkInOut: "Настаняване / напускане",
+      shortTitle: "Някои стаи, които продавате, още нямат врата тук",
+      shortLine: (type, have, total) => `${type}: създадени ${have} от ${total}`,
+      shortBody: "Гост, резервирал такава стая, не може да бъде настанен, докато стаята не съществува. Можете да завършите сега и да ги добавите по-късно от „Стаи“.",
+      shortFix: "Добавете ги сега",
+    },
     keptShortBefore: (r) => `Тъй като имате ${r} стаи, направихме настройката кратка и не питахме за`,
     addingTeam: "добавянето на екипа",
     keptShortAfter: ". То е в списъка със задачи на таблото, когато решите.",

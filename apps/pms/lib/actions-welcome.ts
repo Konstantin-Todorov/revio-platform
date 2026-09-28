@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { SETUP_KEY, hasFinishedSetup, nextStep, welcomeFlow } from "@revio/core";
+import { SETUP_KEY, hasFinishedSetup, nextStep, roomTypeRemoval, welcomeFlow } from "@revio/core";
+import { roomRulesStrings } from "@revio/ui/room-rules-strings";
+import { planUnitsFor } from "./unit-plan";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { MANAGER_ROLES } from "./roles";
@@ -11,7 +13,7 @@ import { getWelcomeFactsForProperty } from "./welcome";
 import { str } from "./mutation-helpers";
 import { markBillable, writeWelcomeProperty, writeWelcomeRoomType, writeWelcomeTaxes } from "@revio/db";
 import { flashError } from "@revio/ui/flash";
-import { translate } from "@revio/ui/i18n";
+import { fill, translate } from "@revio/ui/i18n";
 import { welcomeStrings } from "@revio/ui/welcome-strings";
 import type { WelcomeWrite } from "@revio/db";
 import { getLocale } from "./locale";
@@ -102,6 +104,21 @@ export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
   const { property } = await activeProperty();
   const rt = await prisma.roomType.findUnique({ where: { id: str(fd, "id") } });
   if (!rt || rt.propertyId !== property.id) return;
+  /*
+   * The same rule as Rooms & Rates (`roomTypeRemoval`). The welcome can be revisited after bookings
+   * or physical rooms exist, and a bare delete here either failed on the bookings (an error page) or
+   * cascaded the rooms away.
+   */
+  const [mapped, reservations, units] = await Promise.all([
+    prisma.channelRoomTypeMapping.count({ where: { roomTypeId: rt.id, externalRoomId: { not: null } } }),
+    prisma.reservationLine.count({ where: { roomTypeId: rt.id } }),
+    prisma.unit.count({ where: { roomTypeId: rt.id } }),
+  ]);
+  const verdict = roomTypeRemoval({ mapped, reservations, units });
+  if (verdict !== "delete") {
+    const r = translate(roomRulesStrings, await getLocale());
+    return flashError(fill(verdict === "blocked_mapped" ? r.mappedWelcome : r.inUseWelcome, { name: rt.name }));
+  }
   await prisma.roomType.delete({ where: { id: rt.id } });
   revalidatePath("/welcome/rooms");
 }
@@ -137,24 +154,21 @@ export async function addWelcomeUnits(_prev: WelcomeResult | null, fd: FormData)
     return { error: (await say()).howMany };
   }
 
-  const existing = await prisma.unit.findMany({ where: { propertyId: property.id }, select: { label: true } });
-  const taken = new Set(existing.map((u) => u.label));
-  const sortStart = existing.length;
+  // Numbers that already exist are skipped (running it twice is safe), and a run over the room
+  // type's count creates nothing — 50 doors under a type sold as 10 is a hotel that cannot add up.
+  const wanted = Array.from({ length: count }, (_, i) => String(from + i));
+  const { plan, refusal } = await planUnitsFor({ propertyId: property.id, roomType, wanted, entitlements: session.entitlements });
+  if (!plan.ok) return { error: refusal! };
 
-  const rows = [];
-  for (let i = 0; i < count; i++) {
-    const label = String(from + i);
-    if (taken.has(label)) continue; // running it twice must not create "101" twice
-    rows.push({
-      tenantId: session.tenantId,
-      propertyId: property.id,
-      roomTypeId,
-      label,
-      ...(floor ? { floor } : {}),
-      sortOrder: sortStart + i,
-    });
-  }
-  if (rows.length === 0) return { error: (await say()).exist };
+  const sortStart = await prisma.unit.count({ where: { propertyId: property.id } });
+  const rows = plan.create.map((label, i) => ({
+    tenantId: session.tenantId,
+    propertyId: property.id,
+    roomTypeId,
+    label,
+    ...(floor ? { floor } : {}),
+    sortOrder: sortStart + i,
+  }));
   await prisma.unit.createMany({ data: rows });
 
   revalidatePath("/welcome/units");

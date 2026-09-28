@@ -74,6 +74,11 @@ export interface ProductStrings {
       separate: string;
     };
     refusal: Record<SelfTrialRefusal, string>;
+    /** Two presses in the same second — the database refused the second trial. */
+    alreadyRunning: string;
+    /** After "I want to keep it". */
+    keepThanks: string;
+    keepAlready: string;
     /** "{days}" */
     start: string;
     notNow: string;
@@ -148,6 +153,9 @@ export const productStrings: Translations<ProductStrings> = {
         already_trialled:
           "{product} has already been trialled on this account. If you would like another look at it, reply to any Revio email and we will arrange one.",
       },
+      alreadyRunning: "A trial of this product is already running — reload the page and it will be there.",
+      keepThanks: "Thank you — we have it. We will be in touch to sort out keeping it, and nothing stops before then.",
+      keepAlready: "We already have your request and we are on it. Nothing stops in the meantime.",
       start: "Start the {days}-day trial",
       notNow: "Not now",
       footer:
@@ -220,6 +228,9 @@ export const productStrings: Translations<ProductStrings> = {
         already_trialled:
           "{product} вече е изпробван в този профил. Ако искате да го разгледате отново, отговорете на който и да е имейл от Revio и ще го уредим.",
       },
+      alreadyRunning: "Пробен период на този продукт вече тече — презаредете страницата и ще го видите.",
+      keepThanks: "Благодарим — получихме го. Ще се свържем с Вас, за да уговорим запазването, и дотогава нищо не спира.",
+      keepAlready: "Вече имаме заявката Ви и работим по нея. Междувременно нищо не спира.",
       start: "Започни {days}-дневния пробен период",
       notNow: "Не сега",
       footer:

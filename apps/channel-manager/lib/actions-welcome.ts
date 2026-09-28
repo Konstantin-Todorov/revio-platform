@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { SETUP_KEY, hasFinishedSetup, nextStep, welcomeFlow } from "@revio/core";
+import { SETUP_KEY, hasFinishedSetup, nextStep, roomTypeRemoval, welcomeFlow } from "@revio/core";
+import { roomRulesStrings } from "@revio/ui/room-rules-strings";
+import { flashError } from "@revio/ui/flash";
 import { prisma } from "./db";
 import { getSession } from "./session";
 import { getProperty } from "./data";
@@ -110,6 +112,21 @@ export async function removeWelcomeRoomType(fd: FormData): Promise<void> {
   const rt = await prisma.roomType.findUnique({ where: { id } });
   // Scoped check as well as RLS: a stray id from another property must not delete anything.
   if (!rt || rt.propertyId !== property.id) return;
+  /*
+   * The same rule as Rooms & Rates (`roomTypeRemoval`). The welcome can be revisited after bookings
+   * or physical rooms exist, and a bare delete here either failed on the bookings (an error page) or
+   * cascaded the rooms away.
+   */
+  const [mapped, reservations, units] = await Promise.all([
+    prisma.channelRoomTypeMapping.count({ where: { roomTypeId: rt.id, externalRoomId: { not: null } } }),
+    prisma.reservationLine.count({ where: { roomTypeId: rt.id } }),
+    prisma.unit.count({ where: { roomTypeId: rt.id } }),
+  ]);
+  const verdict = roomTypeRemoval({ mapped, reservations, units });
+  if (verdict !== "delete") {
+    const r = translate(roomRulesStrings, await getLocale());
+    return flashError(fill(verdict === "blocked_mapped" ? r.mappedWelcome : r.inUseWelcome, { name: rt.name }));
+  }
   await prisma.roomType.delete({ where: { id } });
   revalidatePath("/welcome/rooms");
 }

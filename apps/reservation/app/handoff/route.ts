@@ -125,7 +125,14 @@ export async function GET(req: NextRequest) {
    * into a fortnight-long session.
    */
   const ttl = 12 * 60 * 60;
-  const res = new NextResponse(null, { status: 307, headers: { Location: relativeLocation("/dashboard") } });
+  /*
+   * `next=welcome` comes from one place: a hotel that has just started a trial of this product from
+   * another one (`beginSelfTrial`). It lands on this product's own first-run flow, which already knows
+   * what carried over — a second product opens on its shared summary rather than a dashboard of zeros.
+   * It is a fixed word, never a path, so the hand-off cannot be turned into an open redirect.
+   */
+  const arrival = req.nextUrl.searchParams.get("next") === "welcome" ? "/welcome/start" : "/dashboard";
+  const res = new NextResponse(null, { status: 307, headers: { Location: relativeLocation(arrival) } });
   await setSessionCookie(await signSession({ kind: "hotel", sub: user.id }, ttl), ttl);
   /*
    * ⚠️ The `Referrer-Policy: no-referrer` for this path is set in `config/security-headers.mjs`,

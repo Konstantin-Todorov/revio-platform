@@ -80,7 +80,7 @@ export const rooms: Translations<CmRoomsStrings> = {
       count: (n) => `${n} types`,
       cols: { name: "Room Type", code: "Code", kind: "Kind", inventory: "Inv.", max: "Max", plans: "Rate plans", status: "Status" },
       empty: "No room types yet. Add the rooms you sell — a Double, a Suite — and how many of each you have. Everything else on this screen builds on them.",
-      deleteNote: "If it has reservations it is deactivated instead.",
+      deleteNote: "If it has reservations or physical rooms behind it, it is deactivated instead.",
     },
     unitKinds: { room: "Room", bed: "Bed (hostel)", apartment: "Apartment" },
     plans: {
@@ -159,7 +159,7 @@ export const rooms: Translations<CmRoomsStrings> = {
       count: (n) => `${n} ${n === 1 ? "тип" : "типа"}`,
       cols: { name: "Тип стая", code: "Код", kind: "Вид", inventory: "Брой", max: "Макс.", plans: "Ценови планове", status: "Статус" },
       empty: "Все още няма типове стаи. Добавете стаите, които продавате — двойна, апартамент — и колко имате от всяка. Всичко останало на този екран се гради върху тях.",
-      deleteNote: "Ако има резервации, вместо това се деактивира.",
+      deleteNote: "Ако има резервации или физически стаи, вместо това се деактивира.",
     },
     unitKinds: { room: "Стая", bed: "Легло (хостел)", apartment: "Апартамент" },
     plans: {

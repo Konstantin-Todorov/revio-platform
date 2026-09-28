@@ -2,14 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BED_SETUPS, earliestSelectable, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, pastDateRefusal, pastRangeRefusal, planBulkOccupancy, plansPerRoom, todayInTimeZone, type Capability } from "@revio/core";
+import { BED_SETUPS, earliestSelectable, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, pastDateRefusal, pastRangeRefusal, planBulkOccupancy, plansPerRoom, roomTypeRemoval, todayInTimeZone, type Capability } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 import { ymd } from "./format";
 import { guard, requireCapability } from "./authz";
 import { occupancyKeyFor, occupancyKeysFor } from "@revio/db";
-import { flashError } from "@revio/ui/flash";
+import { flashError, setFlash } from "@revio/ui/flash";
+import { fill } from "@revio/ui/i18n";
+import { roomRulesStrings } from "@revio/ui/room-rules-strings";
 import { i18n } from "./i18n/server";
 import { rateErrors } from "./i18n/rate-errors";
 
@@ -923,9 +925,11 @@ export async function deleteRoomType(fd: FormData): Promise<void> {
 
   // Anything with history or physical rooms behind it is deactivated, never deleted — deleting
   // would orphan past reservations and the housekeeping board.
-  if (rt._count.resLines > 0 || rt._count.units > 0) {
+  // One rule for all three products — `roomTypeRemoval` in core.
+  if (roomTypeRemoval({ mapped, reservations: rt._count.resLines, units: rt._count.units }) === "deactivate") {
     await prisma.roomType.update({ where: { id }, data: { active: false } });
     await logAudit(property.id, property.tenantId, { entity: `Room Type · ${rt.name}`, field: "deactivate", newValue: "inactive (in use)" });
+    await setFlash("success", fill((await i18n()).t(roomRulesStrings).deactivated, { name: rt.name }));
   } else {
     await prisma.roomType.delete({ where: { id } });
     await logAudit(property.id, property.tenantId, { entity: `Room Type · ${rt.name}`, field: "delete", oldValue: rt.name });

@@ -43,6 +43,7 @@ export * from "./pricing/extras.js";
 export * from "./booking/presets.js";
 export * from "./booking/hero.js";
 export * from "./rooms/amenities.js";
+export * from "./rooms/room-rules.js";
 export * from "./branding/logo.js";
 
 export * from "./onboarding/welcome.js";
