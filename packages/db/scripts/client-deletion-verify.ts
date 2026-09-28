@@ -69,7 +69,7 @@ async function main() {
   const stamp = Date.now();
   const name = `Deletion Verify ${stamp}`;
   const tenantId = await withSystemTransaction(async (tx) => {
-    const tenant = await tx.tenant.create({ data: { name, slug: `deletion-verify-${stamp}`, isDemo: true } });
+    const tenant = await tx.tenant.create({ data: { name, slug: `deletion-verify-${stamp}`, isDemo: true, accountType: "test" } });
     const property = await tx.property.create({ data: { tenantId: tenant.id, name: "Deletion Verify Hotel", timezone: "Europe/Sofia" } });
     const base = { tenantId: tenant.id, propertyId: property.id };
     const room = await tx.roomType.create({ data: { ...base, name: "Double", code: "DBL", totalRooms: 2, maxGuests: 2 } });
