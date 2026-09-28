@@ -79,6 +79,12 @@ describe("clientAttention", () => {
     expect(flags[0]!.title).toBe("Suspended");
   });
 
+  it("reduces a closed client to one quiet line — they left, their usage is not news", () => {
+    const flags = clientAttention(healthy({ status: "closed", openErrors: 9, lastReservationAt: daysAgo(90) }), NOW);
+    expect(flags).toHaveLength(1);
+    expect(flags[0]!).toMatchObject({ title: "Closed", severity: "note" });
+  });
+
   it("escalates a stalled onboarding once the grace period passes", () => {
     const fresh = clientAttention(healthy({ properties: 0, createdAt: daysAgo(3) }), NOW);
     const stale = clientAttention(healthy({ properties: 0, createdAt: daysAgo(40) }), NOW);

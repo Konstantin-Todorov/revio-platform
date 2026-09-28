@@ -26,7 +26,7 @@ const record = (name: string, ok: boolean, detail: string) => {
 /** Models keyed by their own id rather than a tenantId column (the Tenant row IS the tenant). */
 const SELF_KEYED = new Set(["Tenant"]);
 /** Operator-perimeter tables: invisible to a hotel connection by design, so "0 rows" is a pass. */
-const OPERATOR_ONLY = new Set(["ConnectivityCredential", "Invoice", "OperatorUser", "ClientBilling"]);
+const OPERATOR_ONLY = new Set(["ConnectivityCredential", "Invoice", "OperatorUser", "ClientBilling", "ClientAccount", "ClientContact", "ClientNote", "ClientEvent"]);
 
 /**
  * Operator tables with NO `tenantId`, so the tenant sweep below never reaches them.

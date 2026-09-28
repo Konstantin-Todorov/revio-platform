@@ -72,6 +72,21 @@ model Tenant {
   planOverrideReason String?
   planOverrideById   String?
   planOverrideAt     DateTime?
+
+  /// What kind of account this is — live | pilot | demo | test. See `@revio/core` client-lifecycle.
+  /// `isDemo` above is written from this on every change (true for demo AND test: "ours"), so the
+  /// console's many "leave ours out of the numbers" reads keep working.
+  accountType     String    @default("live")
+  /// Whether we invoice — paying | free | none. The ONLY input to the invoice run's who-to-bill.
+  billingMode     String    @default("paying")
+  /// `free` ends here: a period starting on or after it is billed.
+  freeUntil       DateTime?
+  billingNote     String?
+  /// Why the status is what it is, and when it last changed. Every change is also a ClientEvent.
+  statusReason    String?
+  statusChangedAt DateTime?
+  /// Set when closed; the retention window counts from here.
+  closedAt        DateTime?
   createdAt          DateTime  @default(now())
 
   properties Property[]
@@ -82,6 +97,7 @@ model Tenant {
   crmAccount    ClientAccount?
   crmContacts   ClientContact[]
   crmNotes      ClientNote[]
+  crmEvents     ClientEvent[]
   crmBilling    ClientBilling?
   productTrials ProductTrial[]
   featureUsage  FeatureUsage[]
@@ -707,6 +723,27 @@ model ClientContact {
 
 // One entry in the relationship log. `occurredAt` is separate from `createdAt` because a call is
 // logged after it happens — sorting a timeline by row-creation time puts last week's call at the top.
+/// Operator-only: every change we made to a client — type, status, billing, products — with who,
+/// when, from what, to what, and why. The history the console had none of until 2026-09-28, when
+/// nobody could say who had switched a real hotel's three products off.
+model ClientEvent {
+  id        String   @id @default(cuid())
+  tenantId  String
+  /// type | status | billing | product | created
+  kind      String
+  fromValue String?
+  toValue   String?
+  reason    String?
+  actorId   String?
+  /// Snapshot, so the record still reads correctly after that operator leaves.
+  actorName String
+  at        DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, at])
+}
+
 model ClientNote {
   id         String   @id @default(cuid())
   tenantId   String

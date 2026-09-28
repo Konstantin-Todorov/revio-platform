@@ -130,4 +130,5 @@ export {
 } from "./support.js";
 export { createPublicSignup, activatePendingSignup, type SignupOutcome } from "./public-signup.js";
 export { deleteClientCompletely, clientDeletionFacts, type DeleteClientResult } from "./client-deletion.js";
+export { changeClientStatus, changeClientType, changeClientBilling, recordClientEvent, describeBilling, type Actor, type LifecycleResult } from "./client-lifecycle.js";
 export { teamLocale } from "./team-locale.js";

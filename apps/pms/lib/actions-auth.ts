@@ -56,7 +56,7 @@ export async function login(_prev: LoginResult | null, fd: FormData): Promise<Lo
     return { error: (await say()).invalid };
   }
   await recordLoginSuccess("pms", email);
-  if (user.tenant.status !== "active") return { error: (await say()).suspended };
+  if (user.tenant.status !== "active") return { error: user.tenant.status === "closed" ? (await say()).closed : (await say()).suspended };
   /*
    * ⚠️ NOT a login refusal. This is a real user of an active hotel; the product is simply not on
    * their account today, and the screen that explains that is inside the app.

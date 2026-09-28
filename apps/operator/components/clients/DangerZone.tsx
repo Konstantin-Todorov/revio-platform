@@ -22,9 +22,10 @@ import { deleteClient } from "@/lib/actions";
  *
  * ## And when it refuses
  *
- * A client with an issued invoice cannot be deleted at all, and the refusal names suspension
- * instead — because the usual reason somebody reaches for delete is that a hotel stopped paying,
- * and that is precisely the case where the data must be kept. They come back.
+ * A real client who traded is closed first and kept for 90 days, and the refusal says so with the
+ * date — because the usual reason somebody reaches for delete is that a hotel left, and that is
+ * precisely the case where the data must be kept for a while. They come back. Demo and test
+ * accounts go at any time (see `canDeleteClient`).
  */
 export function DangerZone({
   tenantId,
@@ -32,14 +33,17 @@ export function DangerZone({
   counts,
   blocked,
   warning,
+  keepsInvoices,
 }: {
   tenantId: string;
   tenantName: string;
-  counts: { reservations: number; properties: number; users: number; issuedInvoices: number };
+  counts: { reservations: number; properties: number; users: number; taxInvoices: number };
   /** Set when the client may not be deleted at all — the reason, and what to do instead. */
   blocked?: { reason: string; instead: string };
   /** Set when it is allowed but consequential. */
   warning?: string;
+  /** Tax invoices that stay in the archive after the client goes. */
+  keepsInvoices?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
@@ -48,7 +52,7 @@ export function DangerZone({
   const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
   return (
-    <div className="mt-6 rounded-xl border border-danger-600/25 bg-danger-50/30 p-4">
+    <div className="rounded-xl border border-danger-600/25 bg-danger-50/30 p-4">
       <h3 className="flex items-center gap-1.5 text-[13px] font-bold text-danger-700">
         <AlertTriangle className="h-4 w-4" /> Remove this client
       </h3>
@@ -70,6 +74,13 @@ export function DangerZone({
             </strong>
             . There is no undo and no backup to restore from.
           </p>
+
+          {keepsInvoices ? (
+            <p className="mt-2 rounded-md bg-white/70 px-2.5 py-2 text-[12.5px] leading-snug text-ink-700">
+              {plural(keepsInvoices, "issued invoice")} {keepsInvoices === 1 ? "stays" : "stay"} in the invoice archive with the details it was issued with —
+              tax documents are kept whatever happens to the account.
+            </p>
+          ) : null}
 
           {warning && (
             <p className="mt-2 flex items-start gap-1.5 rounded-md bg-white/70 px-2.5 py-2 text-[12.5px] leading-snug text-ink-700">

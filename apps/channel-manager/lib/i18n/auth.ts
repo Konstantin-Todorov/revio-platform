@@ -49,6 +49,8 @@ export interface AuthStrings {
     enterBoth: string;
     invalid: string;
     suspended: string;
+    /** The account was closed by Revio; the data is kept for a while and it can be reopened. */
+    closed: string;
     tooLong: string;
     enterCode: string;
     inactive: string;
@@ -101,6 +103,7 @@ export const auth: Translations<AuthStrings> = {
       enterBoth: "Enter your email and password.",
       invalid: "Invalid email or password.",
       suspended: "This account is suspended — contact Revio.",
+      closed: "This account has been closed. Your data is kept for 90 days — contact Revio to reopen it.",
       tooLong: "That took too long — please sign in again.",
       enterCode: "Enter the six-digit code from your app, or a recovery code.",
       inactive: "This account is no longer active — contact your manager.",
@@ -151,6 +154,7 @@ export const auth: Translations<AuthStrings> = {
       enterBoth: "Въведете имейл и парола.",
       invalid: "Грешен имейл или парола.",
       suspended: "Този профил е спрян — свържете се с Revio.",
+      closed: "Този профил е закрит. Данните Ви се пазят 90 дни — свържете се с Revio, за да го отворим отново.",
       tooLong: "Изминало е твърде много време — влезте отново.",
       enterCode: "Въведете шестцифрения код от приложението или резервен код.",
       inactive: "Този профил вече не е активен — свържете се с управителя си.",

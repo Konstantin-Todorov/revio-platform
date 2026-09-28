@@ -180,7 +180,7 @@ export interface AccountSignals {
 export function accountAttention(a: AccountSignals, now: Date = new Date()): AttentionFlag[] {
   // The same rule `clientAttention` applies to a suspension, restated because it is easy to lose when
   // two flag sources are concatenated: nothing else is worth saying about a locked-out account.
-  if (a.status === "suspended") return [];
+  if (a.status === "suspended" || a.status === "closed") return [];
 
   const flags: AttentionFlag[] = [];
   const age = daysSince(a.createdAt, now);

@@ -191,15 +191,40 @@ imaginary MRR is worse than no MRR figure, because it looks true. So `lib/demo.t
   *real* failing push — catching it early is the whole reason they live in production.
 - **Never hidden, always badged.** Their own detail page works in full, flags and all, which is how
   the flags themselves get tested.
-- **Still invoiced**, deliberately, so the billing flow stays testable end to end. Those invoices
-  simply never reach a total.
+- **Not invoiced by default** since 2026-09-28 (billing mode `none`). Set one to *Paying* on
+  purpose to rehearse the billing flow; its invoices carry the `DEMO-` series and go with it.
 
 ⚠️ With no real customers the Overview is honestly **all zeros** — and "look at the console and see
 nothing" is a poor way to check the console works. `/overview?demo=1` includes them behind a loud
 amber banner. The default stays honest; the toggle is opt-in and never sticky.
 
-One click flips the flag either way. A demo tenant that becomes a paying customer keeps its whole
-history instead of starting again on a fresh tenant, and a real client can be borrowed for a test.
+The flag is now written from the **account type** (see below) — `isDemo` means "ours" (demo or test).
+A demo tenant that becomes a paying customer keeps its whole history: change its type.
+
+## Clients as four facts (2026-09-28) — type · status · billing · health
+
+Founder: *"the whole structure with the clients is confusing and not in order."* The console used one
+`status`, one `isDemo` flag and three one-click product switches in list rows for four different
+questions — and on 2026-09-26 a real hotel lost all three products in two seconds with no record of
+who or why. Borrowed from Stripe, Shopify, Mews, SiteMinder and GitLab; rules in `@revio/core`
+`billing/client-lifecycle.ts`, writes in `@revio/db` `client-lifecycle.ts`.
+
+- **Type** (`Tenant.accountType`): `live` · `pilot` · `demo` · `test`, chosen at creation. `isDemo`
+  is written from it (demo + test = ours). Only a **demo** gets the nightly sample stays and is refused
+  a real Channex property; a test account is neither.
+- **Status** (`Tenant.status`, the gate every app reads): `active` ⇄ `suspended` → `closed` → reopen.
+  Every change asks why and writes a `ClientEvent`. **Suspending never touches products** — reinstate
+  restores exactly what was there. Suspend offers to pause (stop-sell) channels; **close requires
+  disconnecting them** (Channex bills us per live property), ends trials and removes unsent drafts.
+- **Billing** (`billingMode` + `freeUntil`): `paying` · `free` until a date · `none`. `isBillable` is
+  the invoice run's only who-to-bill rule; a draft for a client that stopped being billable is removed.
+- **Delete** (`canDeleteClient`): demo/test any time; a real client that never traded any time; a real
+  client that traded only after closing + `RETENTION_DAYS` (90). Live channels always block. Tax
+  invoices (our ten-digit series) are **kept** in the archive; `DEMO-` ones go with the account.
+- **Screens:** the list is three piles (clients & pilots · closed · demo & test) with **no controls in
+  rows**; the client page has one header (status · products · billing · owes/health) with every change
+  in a dialog, and six tabs (Overview · Setup & trials · Channels · People · Billing · History).
+- `ClientEvent` is `operator_only`; `rls-verify` proves a hotel sees 0 rows of it.
 
 ## The menu: three levels, and the fourth attempt is the one that stuck
 

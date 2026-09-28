@@ -1,4 +1,5 @@
 import "server-only";
+import { isAccountType, isBillable, isBillingMode } from "@revio/core";
 import { forSystem, isBillablePeriod } from "@revio/db";
 import {
   DIRECT_BOOKING_FEE_PCT, billableEntitlements, billedProducts, directBookingFeeMinor,
@@ -62,6 +63,34 @@ export async function runInvoiceGeneration(): Promise<{ period: string; created:
   const tenants = await prisma.tenant.findMany({ where: { status: "active" } });
 
   /*
+   * ⚠️ Who we bill is the client's BILLING MODE, and nothing else (2026-09-28).
+   *
+   * A pilot hotel we are testing with, a demo and a test account all used to get drafts like a paying
+   * client — and a draft is one "send" away from a real invoice. `isBillable` is the rule; a draft
+   * left over from before a client stopped being billable is removed rather than left to be sent.
+   * Sent and paid invoices are never touched.
+   */
+  const { from: periodFrom } = periodRange(period);
+  const billable = tenants.filter((t) =>
+    isBillable(
+      {
+        accountType: isAccountType(t.accountType) ? t.accountType : "live",
+        billingMode: isBillingMode(t.billingMode) ? t.billingMode : "paying",
+        freeUntil: t.freeUntil,
+        status: t.status,
+      },
+      periodFrom,
+    ),
+  );
+  const notBillable = await prisma.tenant.findMany({
+    where: { id: { notIn: billable.map((t) => t.id) } },
+    select: { id: true },
+  });
+  await prisma.invoice.deleteMany({
+    where: { tenantId: { in: notBillable.map((t) => t.id) }, period, status: "draft", number: null },
+  });
+
+  /*
    * What RevioDirect produced this period, for every client at once.
    *
    * The 2% usage fee is the fourth component of the pricing model, and until now it was the only one
@@ -120,7 +149,7 @@ export async function runInvoiceGeneration(): Promise<{ period: string; created:
     if (!seen || (t.endedAt && t.endedAt > seen)) convertedEndByTenant.set(t.tenantId, t.endedAt!);
   }
 
-  for (const t of tenants) {
+  for (const t of billable) {
     /*
      * "Free until your first booking syncs" — honoured here, where the money is.
      *

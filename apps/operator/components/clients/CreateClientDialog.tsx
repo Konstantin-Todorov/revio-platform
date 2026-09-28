@@ -6,9 +6,13 @@ import { Plus } from "lucide-react";
 import { createClient, type ActionResult } from "@/lib/actions";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { ActionForm } from "@revio/ui/action-form";
+import { ACCOUNT_TYPES, todayInTimeZone, type AccountType } from "@revio/core";
+
+const TYPE_HINT: Record<AccountType, string> = Object.fromEntries(ACCOUNT_TYPES.map((t) => [t.key, t.blurb])) as Record<AccountType, string>;
 
 export function CreateClientDialog() {
   const [open, setOpen] = useState(false);
+  const [type, setType] = useState<AccountType>("live");
   const [state, formAction, pending] = useActionState<ActionResult | null, FormData>(createClient, null);
 
   useEffect(() => { if (state?.ok) setOpen(false); }, [state]);
@@ -41,6 +45,17 @@ export function CreateClientDialog() {
               <option value="bg">Български</option>
             </select>
           </Field>
+          {/* What kind of account — decided now, so a test hotel never sits among the business. */}
+          <Field label="Account type" hint={TYPE_HINT[type]}>
+            <select name="accountType" value={type} onChange={(e) => setType(e.target.value as AccountType)} className={inputCls}>
+              {ACCOUNT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+          </Field>
+          {type === "pilot" && (
+            <Field label="Free until" hint="Pilots are not invoiced until this date. Three months if left empty.">
+              <input name="freeUntil" type="date" min={todayInTimeZone("Europe/Sofia")} className={inputCls} />
+            </Field>
+          )}
           <Field label="Plan">
             <select name="plan" defaultValue="starter" className={inputCls}>
               <option value="starter">Starter (0–30 rooms)</option>

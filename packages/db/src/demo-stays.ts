@@ -20,7 +20,7 @@
  *
  * ## What keeps it safe to point at production
  *
- * 1. **`isDemo` is the only selector.** It never reads or writes a tenant without that flag, and it
+ * 1. **`accountType = demo` is the only selector.** It never reads or writes a tenant without that flag, and it
  *    prints the tenants it matched before it changes anything.
  * 2. **It owns only what it made.** Everything it creates carries the `DEMO-STAY-` external id
  *    prefix, and a re-run deletes exactly those rows first — so running it ten times leaves the same
@@ -100,7 +100,7 @@ export async function refreshDemoStays({ apply = false }: { apply?: boolean } = 
   let staysWritten = 0;
 
   const tenants = await prisma.tenant.findMany({
-    where: { isDemo: true },
+    where: { accountType: "demo" },
     select: { id: true, name: true, properties: { select: { id: true, name: true, timezone: true } } },
   });
 
@@ -287,7 +287,7 @@ export async function closeStaleDemoStays({ apply = false }: { apply?: boolean }
   let foliosClosed = 0;
 
   const tenants = await prisma.tenant.findMany({
-    where: { isDemo: true },
+    where: { accountType: "demo" },
     select: { id: true, name: true, properties: { select: { id: true, timezone: true } } },
   });
   if (tenants.length === 0) throw new Error("No demo tenants. Refusing to touch anything.");

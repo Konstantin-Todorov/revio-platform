@@ -7,7 +7,6 @@ import { SetupProgressCard } from "@/components/clients/SetupProgressCard";
 import { ChannelsPanel } from "@/components/clients/ChannelsPanel";
 import { AttentionSections } from "@/components/clients/AttentionSections";
 import { splitByConcern } from "@/lib/attention";
-import { setDemo } from "@/lib/actions";
 import { endTrial, startTrial } from "@/lib/actions-trials";
 import {
   PRODUCT_BY_KEY,
@@ -16,13 +15,14 @@ import {
   daysRemaining,
   trialOutcomeLabel,
 } from "@revio/core";
-import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
-import { EntitlementToggle } from "@/components/clients/EntitlementToggle";
+import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
 import { SubmitButton } from "@revio/ui/submit-button";
 import { AccountPanel } from "@/components/clients/AccountPanel";
-import { DangerZone } from "@/components/clients/DangerZone";
+import { ClientHeader } from "@/components/clients/ClientHeader";
+import { ClientHistory } from "@/components/clients/ClientHistory";
 import { clientDeletionFacts } from "@revio/db";
-import { canDeleteClient } from "@revio/core";
+import { canDeleteClient, isAccountType, nextStatuses, statusView, syncRecencyHealth, type LifecycleAction } from "@revio/core";
+import { describeBilling } from "@revio/db";
 import { ContactsPanel } from "@/components/clients/ContactsPanel";
 import { RelationshipLog } from "@/components/clients/RelationshipLog";
 import { ClientBillingForm } from "@/components/billing/ClientBillingForm";
@@ -62,13 +62,25 @@ const ago = (d: Date | null) => {
  * revalidates `/clients/[id]` — a path that must keep existing. The handoff's own warning: do not
  * break actions or revalidation to tidy a menu.
  */
-type Tab = "overview" | "setup" | "billing";
+type Tab = "overview" | "setup" | "channels" | "people" | "billing" | "history";
 
+/*
+ * Six tabs, one job each (2026-09-28): the renewal-call argument (Overview), how far they have got
+ * (Setup), what is on sale (Channels), who is who (People), money (Billing), and what happened to the
+ * account (History). Connectivity, contacts and the relationship log used to sit inside Overview,
+ * which made it the page where everything was and nothing could be found.
+ */
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
-  { key: "setup", label: "Products & setup" },
+  { key: "setup", label: "Setup & trials" },
+  { key: "channels", label: "Channels" },
+  { key: "people", label: "People" },
   { key: "billing", label: "Billing" },
+  { key: "history", label: "History" },
 ];
+const TAB_KEYS = new Set<string>(TABS.map((t) => t.key));
+
+const ACTION_LABEL: Record<LifecycleAction, string> = { suspend: "Suspend…", reinstate: "Reinstate…", close: "Close…", reopen: "Reopen…" };
 
 export default async function ClientDetailPage({
   params,
@@ -79,7 +91,7 @@ export default async function ClientDetailPage({
 }) {
   const { id } = await params;
   const requested = (await searchParams).tab;
-  const tab: Tab = requested === "setup" || requested === "billing" ? requested : "overview";
+  const tab: Tab = requested && TAB_KEYS.has(requested) ? (requested as Tab) : "overview";
   const c = await getClientDetail(id);
   const [billing, session, deletion] = await Promise.all([
     getClientBilling(id),
@@ -130,32 +142,61 @@ export default async function ClientDetailPage({
 
   const { tenant, economics, direct } = c;
 
+  // What they owe: issued and not paid. A draft is not owed — nobody has seen it.
+  const unpaid = c.billing.invoices.filter((i) => i.status === "sent");
+  const unpaidMinor = unpaid.reduce((sum, i) => sum + (i.grossMinor ?? i.amountMinor), 0);
+  const overdue = unpaid.filter((i) => i.dueDate && i.dueDate < now).length;
+  const owes = unpaid.length === 0
+    ? { label: "Owes nothing", detail: "no unpaid invoices", tone: "success" as const }
+    : { label: `Owes ${money(unpaidMinor)}`, detail: `${unpaid.length} unpaid${overdue ? `, ${overdue} overdue` : ""}`, tone: overdue ? ("danger" as const) : ("warning" as const) };
+  const sync = c.counts.channelsConnected > 0 ? syncRecencyHealth(c.lastSuccessAt, now) : null;
+  const acts = c.attention.filter((a) => a.severity === "act").length;
+  const health = acts > 0
+    ? { label: `${acts} to act on`, detail: "see Needs attention", tone: "danger" as const }
+    : sync && sync.health !== "healthy"
+      ? { label: sync.label, detail: "channel sync", tone: "warning" as const }
+      : c.attention.length > 0
+        ? { label: "Watch", detail: `${c.attention.length} note${c.attention.length === 1 ? "" : "s"} below`, tone: "warning" as const }
+        : { label: "Healthy", detail: sync ? "syncing normally" : "nothing flagged", tone: "success" as const };
+
   return (
     <div className="space-y-5">
-      <PageHeader
-        title={tenant.name}
-        subtitle={`/${tenant.slug} · client since ${tenant.createdAt.toISOString().slice(0, 10)} · ${c.counts.units} rooms across ${tenant.properties.length} propert${tenant.properties.length === 1 ? "y" : "ies"}`}
-        action={<Link href="/clients" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← All clients</Link>}
+      <Link href="/clients" className="text-[12.5px] font-semibold text-brand-700 hover:underline">← All clients</Link>
+      <ClientHeader
+        tenantId={tenant.id}
+        name={tenant.name}
+        subtitle={`${tenant.properties.map((p) => p.name).join(" · ") || "no property"} · ${c.counts.units} rooms · client since ${tenant.createdAt.toISOString().slice(0, 10)}`}
+        accountType={isAccountType(tenant.accountType) ? tenant.accountType : "live"}
+        status={{ value: tenant.status, reason: tenant.statusReason, ...statusView(tenant.status, tenant.closedAt) }}
+        next={nextStatuses(tenant.status).map((n) => ({ action: n.action, label: ACTION_LABEL[n.action] }))}
+        billing={{
+          mode: tenant.billingMode,
+          label: describeBilling(tenant.billingMode, tenant.freeUntil),
+          freeUntil: tenant.freeUntil ? tenant.freeUntil.toISOString().slice(0, 10) : null,
+          note: tenant.billingNote,
+        }}
+        products={([
+          ["channelManager", "cm", "RevioLink"], ["reservation", "crs", "RevioCRS"], ["pms", "pms", "RevioPMS"],
+        ] as const).map(([field, key, name]) => {
+          const t = running.find((r) => r.product === key);
+          const left = t ? Math.max(0, Math.ceil((t.endsAt.getTime() - now.getTime()) / 86_400_000)) : null;
+          return { field, name, on: c.entitlements[field], trial: left === null ? null : `trial, ${left} day${left === 1 ? "" : "s"} left` };
+        })}
+        owes={owes}
+        health={health}
+        channels={{ connected: c.counts.channelsConnected, live: c.channels.filter((ch) => ch.status !== "disconnected").length }}
+        deletion={
+          deletion && deleteVerdict && session?.role === "super_admin"
+            ? {
+                tenantName: deletion.tenant.name,
+                counts: deletion.counts,
+                ...(deleteVerdict.ok
+                  ? { ...(deleteVerdict.warning ? { warning: deleteVerdict.warning } : {}), ...(deleteVerdict.keepsInvoices ? { keepsInvoices: deleteVerdict.keepsInvoices } : {}) }
+                  : { blocked: { reason: deleteVerdict.reason, instead: deleteVerdict.instead } }),
+              }
+            : null
+        }
       />
-
-      {/* Stated before anything else on the page, because every figure below it means something
-          different for a hotel that is ours. */}
-      {tenant.isDemo && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-surface-border bg-surface-sunken px-4 py-2.5">
-          <span className="text-[12.5px] text-ink-600">
-            <span className="mr-2 rounded bg-ink-100 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-ink-500">demo</span>
-            Ours, for testing. Behaves exactly like a real client in all five apps — and is left out of MRR, billed
-            revenue, renewals and the attention feed.
-          </span>
-          <form action={setDemo}>
-            <input type="hidden" name="tenantId" value={tenant.id} />
-            <input type="hidden" name="isDemo" value="false" />
-            <button className="rounded-md border border-surface-border bg-white px-2.5 py-1 text-[11.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">
-              Promote to real client
-            </button>
-          </form>
-        </div>
-      )}
 
       {/* 1. What is wrong. Nothing else on this page matters while something here is red.
           ⚠️ In two halves — see AttentionSections for why a label on each row is not the same thing. */}
@@ -169,7 +210,7 @@ export default async function ClientDetailPage({
       {/* The three parts of the conversation. Attention stays above them on purpose — see the note
           on this component. `?tab=` keeps `/clients/[id]` the only route, so every action's
           revalidation still lands. */}
-      <nav aria-label="Client sections" className="flex gap-1 border-b border-surface-border">
+      <nav aria-label="Client sections" className="flex gap-1 overflow-x-auto border-b border-surface-border [scrollbar-width:none]">
         {TABS.map((t) => {
           const active = tab === t.key;
           return (
@@ -177,7 +218,7 @@ export default async function ClientDetailPage({
               key={t.key}
               href={`/clients/${tenant.id}?tab=${t.key}`}
               aria-current={active ? "page" : undefined}
-              className={`-mb-px border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
+              className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
                 active ? "border-brand-700 text-brand-800" : "border-transparent text-ink-500 hover:text-ink-900"
               }`}
             >
@@ -189,7 +230,7 @@ export default async function ClientDetailPage({
             than rebuilt here, so there is one queue and not two. */}
         <Link
           href={`/support?tab=all&hotel=${tenant.id}`}
-          className="ml-auto self-center text-[12.5px] font-semibold text-brand-700 hover:underline"
+          className="ml-auto shrink-0 self-center whitespace-nowrap pl-3 text-[12.5px] font-semibold text-brand-700 hover:underline"
         >
           Their support history ↗
         </Link>
@@ -214,8 +255,24 @@ export default async function ClientDetailPage({
           operators={c.operators}
           lastContactAt={c.lastContactAt ? c.lastContactAt.toISOString() : null}
         />
-        <ContactsPanel tenantId={tenant.id} contacts={c.contacts} />
+        <Card>
+          <CardHeader title="Who to call" action={<Link href={`/clients/${tenant.id}?tab=people`} className="text-[12px] font-semibold text-brand-700 hover:underline">All people →</Link>} />
+          {c.contacts.length === 0 ? (
+            <p className="px-4 py-4 text-[13px] text-ink-500">No contact recorded. Add the person who decides on the People tab.</p>
+          ) : (
+            <ul className="divide-y divide-surface-border">
+              {c.contacts.slice(0, 3).map((ct) => (
+                <li key={ct.id} className="px-4 py-2.5 text-[13px]">
+                  <span className="font-semibold text-ink-900">{ct.name}</span>
+                  {ct.role && <span className="ml-2 text-[11.5px] text-ink-400">{ct.role}</span>}
+                  <div className="text-[12px] text-ink-500">{[ct.phone, ct.email].filter(Boolean).join(" · ")}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
+
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* 3. What they are worth today. */}
@@ -391,33 +448,6 @@ export default async function ClientDetailPage({
         </Card>
         )}
 
-        {/*
-          ⚠️ FULL WIDTH, and that is not a cosmetic choice.
-          
-          It sat in a third of a row when it was four numbers, which was the right size for four
-          numbers. A channel row carries an identity, three states, four facts and three controls;
-          in a 380px column every one of those wraps onto its own line and the card becomes a stack
-          nobody scans. Same reasoning as "Twelve months" below — content that is read across
-          belongs across.
-        */}
-        <Card className="lg:col-span-3">
-          <CardHeader
-            title="Connectivity"
-            action={
-              <span className="text-[11px] text-ink-400">
-                {c.counts.channelsConnected} / {c.counts.channels} connected · {c.counts.roomTypes} room types
-              </span>
-            }
-          />
-          {/*
-            ⚠️ This card used to be four numbers, and four numbers cannot answer the question it is
-            opened to answer. "1 / 1 connected · last sync today · 0 open errors" is exactly what
-            Chervena Vila showed while its channel pointed at a property Channex had deleted and
-            reported success every five minutes. The counts moved to the header, where a summary
-            belongs; the rows say which channel, what it is doing, and what can be done about it.
-          */}
-          <ChannelsPanel channels={c.channelDetail} suspended={c.tenant.status !== "active"} />
-        </Card>
       </div>
 
       {/* 4. What to sell them, priced from their own data. */}
@@ -464,19 +494,6 @@ export default async function ClientDetailPage({
         )}
       </Card>
 
-      {/* 5. What was said last time — ours, plus the moments the platform already knew about. */}
-      <RelationshipLog
-        tenantId={tenant.id}
-        items={c.timeline.map((i) => ({
-          id: i.id,
-          at: i.at.toISOString(),
-          kind: i.kind,
-          title: i.title,
-          detail: i.detail,
-          author: i.author,
-          pinned: i.pinned,
-        }))}
-      />
         </>
       )}
 
@@ -522,12 +539,8 @@ export default async function ClientDetailPage({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Products — click to grant or revoke" />
-          <div className="flex flex-wrap gap-2 px-4 py-4">
-            {(["channelManager", "reservation", "pms"] as const).map((k) => (
-              <EntitlementToggle key={k} tenantId={tenant.id} product={k} enabled={c.entitlements[k]} />
-            ))}
-          </div>
+          <CardHeader title="Trials" />
+          <p className="px-4 pt-3 text-[12px] text-ink-500">Products are changed from <b>More → Change products</b> at the top of the page, with a reason. Trials are started and ended here.</p>
           {/*
             Trials sit with the products because they are the same decision seen from a different
             angle: what this hotel can open, and until when.
@@ -592,7 +605,9 @@ export default async function ClientDetailPage({
                   );
                 })}
               </ul>
-            ) : null}
+            ) : (
+              <p className="text-[12.5px] text-ink-500">No trial running.</p>
+            )}
 
             {trialable.length > 0 && (
               <form action={startTrial} className="mt-2 flex flex-wrap items-center gap-2">
@@ -619,20 +634,6 @@ export default async function ClientDetailPage({
             )}
           </div>
 
-          {!tenant.isDemo && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-surface-border px-4 py-2.5">
-              <span className="text-[11.5px] text-ink-400">
-                Borrow this client for testing — it keeps working exactly as it does now, but stops counting as business.
-              </span>
-              <form action={setDemo}>
-                <input type="hidden" name="tenantId" value={tenant.id} />
-                <input type="hidden" name="isDemo" value="true" />
-                <button className="rounded-md border border-surface-border px-2.5 py-1 text-[11.5px] font-semibold text-ink-500 transition-colors hover:bg-surface-muted">
-                  Mark as demo
-                </button>
-              </form>
-            </div>
-          )}
         </Card>
 
         <Card>
@@ -659,25 +660,6 @@ export default async function ClientDetailPage({
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
-        <Card>
-          <CardHeader title={`Staff (${tenant.users.length}) — one shared identity across every product`} />
-          <ul className="divide-y divide-surface-border">
-            {tenant.users.map((u) => (
-              <li key={u.id} className="flex items-center justify-between gap-2 px-4 py-2.5 text-[13px]">
-                <span>
-                  <span className="font-semibold text-ink-900">{u.name}</span>
-                  <span className="ml-2 text-[11.5px] text-ink-400">{u.email}</span>
-                </span>
-                <span className="flex items-center gap-2">
-                  <span className="text-[11.5px] text-ink-500">{u.role}</span>
-                  {!u.active && <StatusPill tone="neutral">deactivated</StatusPill>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      </div>
         </>
       )}
 
@@ -766,19 +748,84 @@ export default async function ClientDetailPage({
         </>
       )}
 
-      {/*
-        Last on the page, and only for a super admin. It is the one control here that cannot be
-        undone by anybody, so it sits below everything somebody came to read rather than beside it.
-      */}
-      {deletion && deleteVerdict && session?.role === "super_admin" && (
-        <DangerZone
-          tenantId={id}
-          tenantName={deletion.tenant.name}
-          counts={deletion.counts}
-          {...(deleteVerdict.ok
-            ? (deleteVerdict.warning ? { warning: deleteVerdict.warning } : {})
-            : { blocked: { reason: deleteVerdict.reason, instead: deleteVerdict.instead } })}
-        />
+      {tab === "channels" && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/*
+          ⚠️ FULL WIDTH, and that is not a cosmetic choice.
+          
+          It sat in a third of a row when it was four numbers, which was the right size for four
+          numbers. A channel row carries an identity, three states, four facts and three controls;
+          in a 380px column every one of those wraps onto its own line and the card becomes a stack
+          nobody scans. Same reasoning as "Twelve months" below — content that is read across
+          belongs across.
+        */}
+        <Card className="lg:col-span-3">
+          <CardHeader
+            title="Connectivity"
+            action={
+              <span className="text-[11px] text-ink-400">
+                {c.counts.channelsConnected} / {c.counts.channels} connected · {c.counts.roomTypes} room types
+              </span>
+            }
+          />
+          {/*
+            ⚠️ This card used to be four numbers, and four numbers cannot answer the question it is
+            opened to answer. "1 / 1 connected · last sync today · 0 open errors" is exactly what
+            Chervena Vila showed while its channel pointed at a property Channex had deleted and
+            reported success every five minutes. The counts moved to the header, where a summary
+            belongs; the rows say which channel, what it is doing, and what can be done about it.
+          */}
+          <ChannelsPanel channels={c.channelDetail} suspended={c.tenant.status !== "active"} />
+        </Card>
+        </div>
+      )}
+
+      {tab === "people" && (
+        <>
+          <ContactsPanel tenantId={tenant.id} contacts={c.contacts} />
+      <div className="grid grid-cols-1 gap-4">
+        <Card>
+          <CardHeader title={`Staff (${tenant.users.length}) — one shared identity across every product`} />
+          <ul className="divide-y divide-surface-border">
+            {tenant.users.map((u) => (
+              <li key={u.id} className="flex items-center justify-between gap-2 px-4 py-2.5 text-[13px]">
+                <span>
+                  <span className="font-semibold text-ink-900">{u.name}</span>
+                  <span className="ml-2 text-[11.5px] text-ink-400">{u.email}</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="text-[11.5px] text-ink-500">{u.role}</span>
+                  {!u.active && <StatusPill tone="neutral">deactivated</StatusPill>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+        </>
+      )}
+
+      {tab === "history" && (
+        <>
+          <ClientHistory
+            events={tenant.crmEvents.map((e) => ({
+              id: e.id, at: e.at.toISOString(), kind: e.kind, fromValue: e.fromValue, toValue: e.toValue, reason: e.reason, actorName: e.actorName,
+            }))}
+          />
+      {/* 5. What was said last time — ours, plus the moments the platform already knew about. */}
+      <RelationshipLog
+        tenantId={tenant.id}
+        items={c.timeline.map((i) => ({
+          id: i.id,
+          at: i.at.toISOString(),
+          kind: i.kind,
+          title: i.title,
+          detail: i.detail,
+          author: i.author,
+          pinned: i.pinned,
+        }))}
+      />
+        </>
       )}
     </div>
   );

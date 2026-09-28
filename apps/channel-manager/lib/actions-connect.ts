@@ -223,10 +223,11 @@ export async function provisionChannex(): Promise<ProvisionOutcome> {
 
   const tenant = await prisma.tenant.findUnique({
     where: { id: property.tenantId },
-    select: { name: true, isDemo: true, hasChannelManager: true },
+    select: { name: true, accountType: true, hasChannelManager: true },
   });
   if (!tenant) return { ok: false, error: (await sayCh()).provision.unreadable };
-  if (tenant.isDemo) {
+  // A SALES demo only. A test account may legitimately be pointed at a real (sandbox) Channex.
+  if (tenant.accountType === "demo") {
     return {
       ok: false,
       error: (await sayCh()).provision.demo,

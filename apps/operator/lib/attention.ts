@@ -46,7 +46,7 @@ export interface AttentionFlag {
 }
 
 export interface ClientSignals {
-  status: string; // active | suspended
+  status: string; // active | suspended | closed
   createdAt: Date;
   entitlements: { channelManager: boolean; reservation: boolean; pms: boolean };
   properties: number;
@@ -242,6 +242,17 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
         `mapping is green and every push succeeds. ` +
         `${days === 0 ? "Confirmed with the channel today." : `Last confirmed with the channel ${days} day${days === 1 ? "" : "s"} ago.`}`,
     });
+  }
+
+  // Closed: they left. One quiet line — nothing about their usage or their channels is news now.
+  if (s.status === "closed") {
+    flags.push({
+      severity: "note",
+      concern: "ours",
+      title: "Closed",
+      detail: "Sign-in is blocked and their channels are disconnected. The data is kept for 90 days, and the client can be reopened until then.",
+    });
+    return flags;
   }
 
   if (s.status === "suspended") {

@@ -10,7 +10,7 @@ import { provisioningState, soldButNotProvisioned } from "./provisioning";
 import { clientOpportunities, pipelineMinor } from "./upsell";
 import { tierDrift } from "./pricing";
 import { directUsageByTenant } from "./direct-usage";
-import { CAPABILITY_ERROR_CODE, PRODUCT_BY_KEY, billableEntitlements, channelEconomics, crossWiredFromRecord, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus } from "@revio/core";
+import { CAPABILITY_ERROR_CODE, PRODUCT_BY_KEY, billableEntitlements, channelEconomics, crossWiredFromRecord, SOLD_STATUSES, waitlistMetrics, type WaitlistStatus, isAccountType, type AccountType } from "@revio/core";
 import { bucketForward, monthBuckets } from "./forward";
 import { partitionDemo } from "./demo";
 import {
@@ -380,6 +380,11 @@ export async function getClients() {
         plan: t.plan,
         status: t.status,
         isDemo: t.isDemo,
+        accountType: (isAccountType(t.accountType) ? t.accountType : "live") as AccountType,
+        billingMode: t.billingMode,
+        freeUntil: t.freeUntil,
+        closedAt: t.closedAt,
+        statusReason: t.statusReason,
         productTrials: t.productTrials,
         entitlements,
         /** What they are actually invoiced for: `entitlements` minus anything on a running trial. */
@@ -653,6 +658,8 @@ export async function getClientDetail(id: string) {
       crmAccount: { include: { ownerOperator: { select: { id: true, name: true } } } },
       crmContacts: { orderBy: [{ isPrimary: "desc" }, { name: "asc" }] },
       crmNotes: { orderBy: { occurredAt: "desc" }, take: 100 },
+      // Every change we made to the account — who, when, why. Operator-only.
+      crmEvents: { orderBy: { at: "desc" }, take: 200 },
     },
   });
   if (!tenant) return null;
@@ -959,8 +966,16 @@ export async function getClientDetail(id: string) {
     take: 20,
   });
 
+  // Last SUCCESSFUL push or pull — the same reading the client list's health column uses, never
+  // `Channel.lastSyncAt`, which is stamped before the sync's own result is known.
+  const lastSuccessAt = (await prisma.syncEvent.findFirst({
+    where: { tenantId: id, status: "success", kind: { in: ["push", "pull"] } },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  }))?.createdAt ?? null;
+
   return {
-    tenant, entitlements, attention, opportunities, trials,
+    tenant, entitlements, attention, opportunities, trials, lastSuccessAt,
     setup, ageDays, setupStalled: setupStalled(setup, ageDays),
     provisioning, provisioningAlarm,
     pipelineMinor: pipelineMinor(opportunities),

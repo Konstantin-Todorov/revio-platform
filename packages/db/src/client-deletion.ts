@@ -1,5 +1,5 @@
 import { forSystem, withSystemTransaction } from "./rls.js";
-import { canDeleteClient, TENANT_TABLES_DELETED_FIRST, TENANT_TABLES_WITHOUT_CASCADE, type ClientDeletionVerdict } from "@revio/core";
+import { canDeleteClient, isAccountType, TENANT_TABLES_DELETED_FIRST, TENANT_TABLES_WITHOUT_CASCADE, type ClientDeletionVerdict } from "@revio/core";
 
 /**
  * Removing a client, completely and on purpose.
@@ -34,13 +34,13 @@ export async function clientDeletionFacts(tenantId: string) {
   const prisma = forSystem();
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
-    select: { id: true, name: true, slug: true, status: true, isDemo: true, createdAt: true },
+    select: { id: true, name: true, slug: true, status: true, isDemo: true, accountType: true, closedAt: true, createdAt: true },
   });
   if (!tenant) return null;
 
-  const [issuedInvoices, reservations, properties, users, liveRemoteChannels] = await Promise.all([
-    // Sent or paid only. A draft is a number nobody has seen.
-    prisma.invoice.count({ where: { tenantId, status: { in: ["sent", "paid"] } } }),
+  const [taxInvoices, reservations, properties, users, liveRemoteChannels] = await Promise.all([
+    // Sent or paid on OUR tax series. Drafts are numbers nobody has seen; `DEMO-` ones are rehearsals.
+    prisma.invoice.count({ where: { tenantId, status: { in: ["sent", "paid"] }, NOT: { number: { startsWith: "DEMO-" } } } }),
     prisma.reservation.count({ where: { tenantId } }),
     prisma.property.count({ where: { tenantId } }),
     prisma.user.count({ where: { tenantId } }),
@@ -57,14 +57,15 @@ export async function clientDeletionFacts(tenantId: string) {
   return {
     tenant,
     facts: {
-      issuedInvoices,
+      accountType: isAccountType(tenant.accountType) ? tenant.accountType : ("live" as const),
+      status: tenant.status,
+      closedAt: tenant.closedAt,
+      now: new Date(),
+      taxInvoices,
       reservations,
-      isDemo: tenant.isDemo,
-      isPendingSignup: tenant.status === "pending_signup",
-      isSuspended: tenant.status === "suspended",
       liveRemoteChannels,
     },
-    counts: { reservations, properties, users, issuedInvoices },
+    counts: { reservations, properties, users, taxInvoices },
   };
 }
 
@@ -115,7 +116,17 @@ export async function deleteClientCompletely(args: {
      * quietly leaving rows behind.
      */
     for (const table of TENANT_TABLES_WITHOUT_CASCADE) {
-      const n = await tx.$executeRawUnsafe(`DELETE FROM "${table}" WHERE "tenantId" = $1`, args.tenantId);
+      /*
+       * ⚠️ Except our TAX invoices. A sent or paid invoice on our ten-digit series is an accounting
+       * record we keep whatever happens to the account — archived, with the buyer's details it was
+       * issued with. Drafts and `DEMO-` rehearsals go with the client.
+       */
+      const n = table === "Invoice"
+        ? await tx.$executeRawUnsafe(
+            `DELETE FROM "Invoice" WHERE "tenantId" = $1 AND ("status" = 'draft' OR "number" IS NULL OR "number" LIKE 'DEMO-%')`,
+            args.tenantId,
+          )
+        : await tx.$executeRawUnsafe(`DELETE FROM "${table}" WHERE "tenantId" = $1`, args.tenantId);
       if (n > 0) removed[table] = n;
     }
 

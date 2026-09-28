@@ -1,3 +1,5 @@
+import { RETENTION_DAYS, retentionEndsAt, type AccountType } from "./client-lifecycle.js";
+
 /**
  * Whether a client may be removed, and what to do instead when it may not.
  *
@@ -15,26 +17,29 @@
  * time."* So this refuses anything that looks like a real trading relationship and says which of the
  * two doors to use.
  *
- * ## ⚠️ An invoice that left the building can never be deleted
+ * ## ⚠️ An invoice that left the building is never deleted
  *
- * A `draft` invoice is a number we have not shown anyone; it can go. A `sent` or `paid` one is a tax
- * document that exists in somebody else's accounts too, and in their auditor's. Deleting our copy
- * does not delete theirs — it just means we cannot answer a question about it. There is no override
- * for this, deliberately: an override on a rule about accounting records is a rule that will be
- * overridden.
+ * A `draft` invoice is a number we have not shown anyone; it can go. A `sent` or `paid` one on our
+ * tax series exists in somebody else's accounts too, and in their auditor's. Deleting the CLIENT
+ * does not delete those: they stay, archived with the buyer's details they were issued with, and
+ * no override exists for that.
  */
 
 export interface ClientDeletionFacts {
-  /** Invoices we have actually issued — `sent` or `paid`. Drafts are not counted. */
-  issuedInvoices: number;
+  accountType: AccountType;
+  /** `Tenant.status`. */
+  status: string;
+  /** When it was closed, for the retention window. Null unless `status` is `closed`. */
+  closedAt: Date | null;
+  now: Date;
+  /**
+   * Tax invoices — sent or paid, on OUR ten-digit series. These are KEPT when a client is deleted
+   * (archived with the buyer's details they were issued with), so they never block a deletion.
+   * `DEMO-` invoices are rehearsals and go with the account.
+   */
+  taxInvoices: number;
   /** Reservations of any status. Evidence the hotel really traded. */
   reservations: number;
-  /** A permanently-ours demo tenant. */
-  isDemo: boolean;
-  /** Never confirmed an email — nothing about it is real yet. */
-  isPendingSignup: boolean;
-  /** Currently switched off rather than trading. */
-  isSuspended: boolean;
   /**
    * Channels still switched ON at the channel manager's own end.
    *
@@ -45,9 +50,24 @@ export interface ClientDeletionFacts {
 }
 
 export type ClientDeletionVerdict =
-  | { ok: true; severity: "harmless" | "destructive"; warning?: string }
+  | { ok: true; severity: "harmless" | "destructive"; warning?: string; keepsInvoices?: number }
   | { ok: false; reason: string; instead: string };
 
+/**
+ * ## The rule, by kind of account (2026-09-28)
+ *
+ * The first version refused any client with a sent or paid invoice, with no way forward — so demo
+ * hotels whose rehearsal invoices had been "paid" could never be removed, and nothing told anybody
+ * what to do next. The question it was really asking is *is this a record of something real?*, and
+ * the account type answers that directly:
+ *
+ * - **Demo and test** are ours. They go whenever we like, their `DEMO-` invoices with them.
+ * - **An unconfirmed signup, or a real account that never traded** (no bookings, no tax invoice) is
+ *   a row that should not exist; it may go.
+ * - **A real client that traded** is closed first and kept for `RETENTION_DAYS` — they can come back,
+ *   and the founder's rule is that a client who left is not a deletion. After that it may go, and its
+ *   tax invoices stay in the archive, because those are ours to keep whatever happens to the account.
+ */
 export function canDeleteClient(f: ClientDeletionFacts): ClientDeletionVerdict {
   /*
    * ⚠️ FIRST, and a refusal rather than a warning.
@@ -56,10 +76,6 @@ export function canDeleteClient(f: ClientDeletionFacts): ClientDeletionVerdict {
    * switched on at Channex, still connected to the OTA and still billed to us, every month, with
    * nothing left in the product to attribute the charge to or even to name the hotel. That is not a
    * risk to be accepted with a warning; it is a bill arriving forever for something nobody can find.
-   *
-   * It is also trivially avoidable: disconnecting the channel switches the far end off, and then
-   * this rule stops applying. So the refusal names the one step, and it comes before every other
-   * check because it is the only one that leaves something running after the row is gone.
    */
   if (f.liveRemoteChannels > 0) {
     const n = f.liveRemoteChannels;
@@ -69,57 +85,53 @@ export function canDeleteClient(f: ClientDeletionFacts): ClientDeletionVerdict {
         `${n} of this client's channel${n === 1 ? " is" : "s are"} still switched on at the channel manager. ` +
         `Deleting the client here would not switch ${n === 1 ? "it" : "them"} off: the connection would stay live with the OTA, ` +
         "we would go on being billed for the property, and there would be nothing left in here to say whose it was.",
-      instead: `Disconnect ${n === 1 ? "that channel" : "those channels"} on this page first — that closes the rooms and switches the far end off — then delete.`,
+      instead: `Disconnect ${n === 1 ? "that channel" : "those channels"} on the Channels tab first — that closes the rooms and switches the far end off — then delete.`,
     };
   }
 
-  if (f.issuedInvoices > 0) {
+  const keeps = f.taxInvoices > 0 ? { keepsInvoices: f.taxInvoices } : {};
+
+  if (f.status === "pending_signup") return { ok: true, severity: "harmless", ...keeps };
+
+  if (f.accountType === "test") return { ok: true, severity: "harmless", ...keeps };
+
+  if (f.accountType === "demo") {
+    return {
+      ok: true,
+      severity: "destructive",
+      warning: "This is a sales demo. Its sample stays are refreshed every night so it always looks lived-in — make sure nobody is about to use it in a demo.",
+      ...keeps,
+    };
+  }
+
+  // Live or pilot, and it never traded: a row that should not exist.
+  if (f.reservations === 0 && f.taxInvoices === 0) {
+    return { ok: true, severity: "destructive", warning: "No bookings and no invoices — nothing here is a record of anything real yet." };
+  }
+
+  if (f.status !== "closed" || !f.closedAt) {
     return {
       ok: false,
-      reason:
-        `This client has ${f.issuedInvoices} invoice${f.issuedInvoices === 1 ? "" : "s"} that ${f.issuedInvoices === 1 ? "has" : "have"} been sent or paid. ` +
-        "An issued invoice is a tax document that exists in their accounts too — deleting our copy only means we cannot answer questions about it.",
-      instead: "Suspend the account instead. Their login stops, every record stays, and one click brings them back.",
+      reason: `This client has traded here (${f.reservations} reservation${f.reservations === 1 ? "" : "s"}). A client who leaves can come back, so their data is not deleted straight away.`,
+      instead: `Close the client instead. Sign-in stops, the data is kept for ${RETENTION_DAYS} days and can be reopened in one click; after that it can be deleted.`,
     };
   }
 
-  /*
-   * A signup nobody ever confirmed: no entitlement was granted, no trial clock started, nothing was
-   * ever shown to a human. Removing it is tidying, not deletion.
-   */
-  if (f.isPendingSignup) {
-    return { ok: true, severity: "harmless" };
-  }
-
-  if (f.isDemo) {
+  const until = retentionEndsAt(f.closedAt);
+  if (f.now.getTime() < until.getTime()) {
     return {
-      ok: true,
-      severity: "destructive",
-      warning:
-        "This is a demo tenant. Demo hotels are deliberately kept in production so every rehearsal " +
-        "runs against the real migrations and the real RLS — deleting one removes a thing we use.",
+      ok: false,
+      reason: `Closed on ${f.closedAt.toISOString().slice(0, 10)}. Their data is kept for ${RETENTION_DAYS} days in case they come back.`,
+      instead: `It can be deleted from ${until.toISOString().slice(0, 10)}. Until then it can be reopened in one click.`,
     };
   }
 
-  if (f.reservations > 0) {
-    return {
-      ok: true,
-      severity: "destructive",
-      warning:
-        `This hotel has ${f.reservations} reservation${f.reservations === 1 ? "" : "s"}. Those are real stays by real guests, ` +
-        "and they go with it. If this client has simply stopped paying, suspend them instead — they can come back at any time.",
-    };
-  }
-
-  if (!f.isSuspended) {
-    return {
-      ok: true,
-      severity: "destructive",
-      warning: "This account is still active. If the client has left rather than never existed, suspending keeps their data for their return.",
-    };
-  }
-
-  return { ok: true, severity: "destructive" };
+  return {
+    ok: true,
+    severity: "destructive",
+    warning: `${f.reservations} reservation${f.reservations === 1 ? "" : "s"} and every guest record go with it.`,
+    ...keeps,
+  };
 }
 
 /**

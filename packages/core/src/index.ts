@@ -60,6 +60,7 @@ export * from "./metrics/booking-funnel.js";
 export * from "./onboarding/signup.js";
 export * from "./onboarding/signup-identity.js";
 export * from "./billing/client-deletion.js";
+export * from "./billing/client-lifecycle.js";
 export * from "./trials/product-access.js";
 export * from "./trials/trial-reading.js";
 export * from "./rates/plan-selection.js";

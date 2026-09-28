@@ -154,6 +154,10 @@ describe("accountAttention", () => {
     expect(flags).toEqual([]);
   });
 
+  it("says nothing about renewals or contact for a closed client", () => {
+    expect(accountAttention(account({ status: "closed", renewalDate: daysAhead(3), lastContactAt: daysAgo(400) }), NOW)).toEqual([]);
+  });
+
   it("raises the renewal as it approaches", () => {
     expect(accountAttention(account({ renewalDate: daysAhead(20) }), NOW)[0]!.severity).toBe("act");
     expect(accountAttention(account({ renewalDate: daysAhead(45) }), NOW)[0]!.severity).toBe("soon");
