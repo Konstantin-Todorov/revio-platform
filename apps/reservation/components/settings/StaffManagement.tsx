@@ -10,6 +10,7 @@ import {
   inviteUser, updateUser, updateUserRole, setUserActive, resetUserPassword, type ActionResult,
 } from "@/lib/actions-users";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
+import { ActionForm } from "@revio/ui/action-form";
 
 export type StaffRow = {
   id: string;
@@ -103,7 +104,7 @@ function InviteDialog() {
         <p className="mb-3 text-[12.5px] text-ink-500">
           {t.addLead}<strong>{t.addBold}</strong>{t.addTail}
         </p>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <div className="grid grid-cols-2 gap-3">
             <Field label={t.name}><input name="name" required className={inputCls} placeholder={t.namePlaceholder} /></Field>
             <Field label={t.email}><input name="email" type="email" required className={inputCls} placeholder={t.emailPlaceholder} /></Field>
@@ -121,7 +122,7 @@ function InviteDialog() {
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{t.cancel}</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? t.adding : t.add}</button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );
@@ -134,7 +135,7 @@ function EditDialog({ user, onClose }: { user: StaffRow; onClose: () => void }) 
   return (
     <Modal open onClose={onClose} title={t.editTitle(user.name)}>
       <p className="mb-3 text-[12.5px] text-ink-500">{t.editNote}</p>
-      <form action={formAction} className="space-y-3.5">
+      <ActionForm action={formAction} state={state} className="space-y-3.5">
         <input type="hidden" name="id" value={user.id} />
         <Field label={t.name}><input name="name" required defaultValue={user.name} className={inputCls} /></Field>
         <div className="grid grid-cols-2 gap-3">
@@ -146,7 +147,7 @@ function EditDialog({ user, onClose }: { user: StaffRow; onClose: () => void }) 
           <button type="button" onClick={onClose} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{t.cancel}</button>
           <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? t.saving : t.save}</button>
         </div>
-      </form>
+      </ActionForm>
     </Modal>
   );
 }

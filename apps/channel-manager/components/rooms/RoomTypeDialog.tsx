@@ -7,6 +7,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { rooms as roomsDict } from "@/lib/i18n/rooms";
+import { ActionForm } from "@revio/ui/action-form";
 
 type RoomType = {
   id: string; name: string; code: string; unitKind: string;
@@ -37,7 +38,7 @@ export function RoomTypeDialog({ roomType }: { roomType?: RoomType }) {
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={isEdit ? f.editTitle(roomType!.name) : f.addTitle}>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           {isEdit && <input type="hidden" name="id" value={roomType!.id} />}
           <div className="grid grid-cols-2 gap-3">
             <Field label={f.name}><input name="name" defaultValue={roomType?.name} required className={inputCls} placeholder={f.namePlaceholder} /></Field>
@@ -67,7 +68,7 @@ export function RoomTypeDialog({ roomType }: { roomType?: RoomType }) {
               {pending ? r.save.saving : isEdit ? r.save.saveChanges : f.create}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

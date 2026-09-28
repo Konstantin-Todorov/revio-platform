@@ -7,6 +7,7 @@ import { Field, inputCls } from "@/components/ui/Modal";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { settings as settingsDict } from "@/lib/i18n/settings";
+import { ActionForm } from "@revio/ui/action-form";
 
 type Props = {
   property: {
@@ -46,7 +47,7 @@ export function DeliverySettingsForm({ property, emailMode }: Props) {
   );
 
   return (
-    <form action={formAction} className="space-y-4">
+    <ActionForm action={formAction} state={state} className="space-y-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label={s.primary} hint={s.primaryHint}>
           <input name="reservationEmailPrimary" type="email" defaultValue={property.reservationEmailPrimary ?? ""} placeholder="frontdesk@hotel.com" className={inputCls} />
@@ -90,6 +91,6 @@ export function DeliverySettingsForm({ property, emailMode }: Props) {
           </button>
         </div>
       </div>
-    </form>
+    </ActionForm>
   );
 }

@@ -7,6 +7,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { channels as channelsDict } from "@/lib/i18n/channels";
+import { ActionForm } from "@revio/ui/action-form";
 
 type Channel = {
   id: string; name: string; currency: string; conversionType: string;
@@ -26,7 +27,7 @@ export function ChannelSettingsDialog({ channel }: { channel: Channel }) {
         <Settings2 className="h-4 w-4" />
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={t.title(channel.name)}>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <input type="hidden" name="id" value={channel.id} />
           <div className="grid grid-cols-2 gap-3">
             <Field label={t.currency} hint={t.currencyHint}>
@@ -70,7 +71,7 @@ export function ChannelSettingsDialog({ channel }: { channel: Channel }) {
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{t.cancel}</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? t.saving : t.save}</button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );
@@ -94,7 +95,7 @@ export function AddChannelDialog({ connectedCodes }: { connectedCodes: string[] 
         <Plus className="h-4 w-4" /> {t.button}
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={t.title}>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <Field label={t.channel}>
             <select name="code" className={inputCls} required>
               {all.length === 0 && <option value="">{t.allConnected}</option>}
@@ -109,7 +110,7 @@ export function AddChannelDialog({ connectedCodes }: { connectedCodes: string[] 
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{c.settings.cancel}</button>
             <button type="submit" disabled={pending || all.length === 0} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? t.connecting : t.submit}</button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

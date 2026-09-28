@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Building2, Save } from "lucide-react";
 import { saveCompany, type ActionResult } from "@/lib/actions-company";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * Our own legal identity — the issuer on every invoice we send.
@@ -31,7 +32,7 @@ export function CompanyForm({ values, canEdit }: { values: CompanyValues; canEdi
   const [state, action, pending] = useActionState<ActionResult | null, FormData>(saveCompany, null);
 
   return (
-    <form action={action} className="space-y-4">
+    <ActionForm action={action} state={state} className="space-y-4">
       <fieldset disabled={!canEdit || pending} className="space-y-4 disabled:opacity-60">
         <div>
           <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-ink-400">Who we are</h4>
@@ -177,6 +178,6 @@ export function CompanyForm({ values, canEdit }: { values: CompanyValues; canEdi
           <Building2 className="h-3.5 w-3.5" /> Only a super admin can change these.
         </p>
       )}
-    </form>
+    </ActionForm>
   );
 }

@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef } from "react";
 import { translate } from "./i18n";
 import { useLocale } from "./i18n-context";
 import { helpStrings } from "./help-strings";
+import { ActionForm } from "./action-form";
 
 /**
  * The hotel's half of a support conversation.
@@ -42,7 +43,7 @@ export function SupportReply({
   }, [state]);
 
   return (
-    <form action={formAction} className="mt-2.5">
+    <ActionForm action={formAction} state={state} className="mt-2.5">
       <input type="hidden" name="requestId" value={requestId} />
       <label htmlFor={`reply-${requestId}`} className="sr-only">
         {t.label}
@@ -75,6 +76,6 @@ export function SupportReply({
           </span>
         )}
       </div>
-    </form>
+    </ActionForm>
   );
 }

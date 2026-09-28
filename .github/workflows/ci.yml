@@ -135,6 +135,11 @@ jobs:
       - name: No double submits
         run: pnpm submit:lint
 
+      # A form whose action can refuse must keep what was typed — React 19 resets it otherwise, and a
+      # refusal above an emptied form is how two colleagues gave up adding a client on 2026-09-26.
+      - name: Forms keep input on refusal
+        run: pnpm actionform:lint
+
       # Pinch-zoom must stay unlocked (WCAG 1.4.4) AND form controls must stay 16px on touch — the
       # two halves of one fix. Lock the viewport and you break magnification for everyone; delete the
       # 16px rule and iOS zooms the page on every focus, which is what makes people lock the viewport.

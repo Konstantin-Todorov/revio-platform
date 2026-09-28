@@ -7,6 +7,7 @@ import { Field, inputCls } from "@/components/ui/Modal";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { settings as settingsDict } from "@/lib/i18n/settings";
+import { ActionForm } from "@revio/ui/action-form";
 
 type Property = {
   name: string; timezone: string; baseCurrency: string; syncHorizonDays: number;
@@ -24,7 +25,7 @@ export function PropertySettingsForm({ property }: { property: Property }) {
   const currencyChanged = currency !== property.baseCurrency;
 
   return (
-    <form action={formAction} className="space-y-4">
+    <ActionForm action={formAction} state={state} className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <Field label={s.name}><input name="name" defaultValue={property.name} required className={inputCls} /></Field>
         <Field label={s.timezone}><input name="timezone" defaultValue={property.timezone} className={inputCls} /></Field>
@@ -80,6 +81,6 @@ export function PropertySettingsForm({ property }: { property: Property }) {
       <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-4 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">
         {pending ? s.saving : s.save}
       </button>
-    </form>
+    </ActionForm>
   );
 }

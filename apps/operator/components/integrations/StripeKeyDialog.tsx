@@ -5,6 +5,7 @@ import { KeyRound } from "lucide-react";
 import { saveStripeKey, type ActionResult } from "@/lib/actions-integrations";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import type { StripeMode } from "@/lib/stripe-key";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * Where a Stripe key is pasted — the whole reason this feature exists rather than an env var.
@@ -86,7 +87,7 @@ export function StripeKeyDialog({ mode, hasKey, installed }: { mode: StripeMode;
           </p>
         )}
 
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <input type="hidden" name="mode" value={mode} />
 
           <Field
@@ -168,7 +169,7 @@ export function StripeKeyDialog({ mode, hasKey, installed }: { mode: StripeMode;
               <KeyRound className="h-4 w-4" /> {pending ? "Testing…" : "Test and save"}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

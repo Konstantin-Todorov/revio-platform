@@ -7,6 +7,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { rooms as roomsDict } from "@/lib/i18n/rooms";
+import { ActionForm } from "@revio/ui/action-form";
 
 type RatePlan = {
   id: string; name: string; code: string; tags: string[]; priceLogic: string; active: boolean;
@@ -43,7 +44,7 @@ export function RatePlanDialog({ ratePlan, parents }: { ratePlan?: RatePlan; par
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={isEdit ? f.editTitle(ratePlan!.name) : f.addTitle}>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           {isEdit && <input type="hidden" name="id" value={ratePlan!.id} />}
           <div className="grid grid-cols-2 gap-3">
             <Field label={f.name}><input name="name" defaultValue={ratePlan?.name} required className={inputCls} placeholder={f.namePlaceholder} /></Field>
@@ -126,7 +127,7 @@ export function RatePlanDialog({ ratePlan, parents }: { ratePlan?: RatePlan; par
               {pending ? r.save.saving : isEdit ? r.save.saveChanges : f.create}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

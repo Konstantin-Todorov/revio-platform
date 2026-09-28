@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { KeyRound } from "lucide-react";
 import { setConnectivityKey, type ActionResult } from "@/lib/actions-connectivity";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
+import { ActionForm } from "@revio/ui/action-form";
 
 const MODE_LABEL: Record<string, string> = { channex_sandbox: "Channex · sandbox", channex_prod: "Channex · production" };
 
@@ -26,7 +27,7 @@ export function KeyDialog({ tenantId, tenantName, mode, hasKey }: { tenantId: st
           <span className="font-semibold text-ink-800">encrypted at rest</span> (AES-256-GCM) and used only
           server-side at push/pull time — never shown to the hotel, never echoed back here.
         </p>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <input type="hidden" name="tenantId" value={tenantId} />
           <input type="hidden" name="mode" value={mode} />
           <Field label="API key" hint="Paste the Channex user-api-key">
@@ -50,7 +51,7 @@ export function KeyDialog({ tenantId, tenantName, mode, hasKey }: { tenantId: st
               <KeyRound className="h-4 w-4" /> {pending ? "Saving…" : "Save encrypted"}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

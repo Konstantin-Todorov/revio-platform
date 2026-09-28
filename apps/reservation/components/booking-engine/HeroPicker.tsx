@@ -8,6 +8,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { ImageUp, Info, Trash2, Check, AlertCircle } from "lucide-react";
 import { HERO_OVERLAY_LEVELS, heroScrim, measureHeroLuminance } from "@revio/core";
 import { uploadBookingHero, removeBookingHero, type LookResult } from "@/lib/actions-booking-engine";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * The hotel's own photograph behind the headline on its booking page.
@@ -117,7 +118,7 @@ export function HeroPicker({
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-3">
-          <form action={uploadAction} className="space-y-2">
+          <ActionForm action={uploadAction} state={upload} className="space-y-2">
             <input
               ref={inputRef}
               type="file"
@@ -141,7 +142,7 @@ export function HeroPicker({
                 </span>
               )}
             </div>
-          </form>
+          </ActionForm>
 
           <p className="max-w-[46ch] text-[11.5px] leading-snug text-ink-500">
             {H.help}
@@ -155,7 +156,7 @@ export function HeroPicker({
           )}
 
           {shownUrl && (
-            <form action={settingsAction} className="space-y-4 border-t border-surface-border/60 pt-4">
+            <ActionForm action={settingsAction} state={settings} className="space-y-4 border-t border-surface-border/60 pt-4">
               {/*
                 Both controls post inside THIS form rather than the appearance form below. They are
                 settings about the image and belong next to it — and the preview that makes them
@@ -247,7 +248,7 @@ export function HeroPicker({
                   </span>
                 )}
               </div>
-            </form>
+            </ActionForm>
           )}
         </div>
 

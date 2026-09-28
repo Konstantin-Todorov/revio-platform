@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { joinWaitlist, type JoinResult } from "@/lib/actions-waitlist";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * "Tell me if a room opens."
@@ -50,8 +51,8 @@ export function WaitlistJoin({
   }
 
   return (
-    <form
-      action={action}
+    <ActionForm
+      action={action} state={state}
       className="mt-5 rounded-[var(--r-md)] border p-4"
       style={{ borderColor: "hsl(var(--line))", backgroundColor: "hsl(var(--surface-sunk))" }}
     >
@@ -105,6 +106,6 @@ export function WaitlistJoin({
           {state.error}
         </p>
       )}
-    </form>
+    </ActionForm>
   );
 }

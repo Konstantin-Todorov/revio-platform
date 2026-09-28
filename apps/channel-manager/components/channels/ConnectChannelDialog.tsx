@@ -8,6 +8,7 @@ import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { channels as channelsDict } from "@/lib/i18n/channels";
 import type { ChannelField, FieldRule } from "@revio/connectivity";
+import { ActionForm } from "@revio/ui/action-form";
 
 type Option = { code: string; name: string };
 
@@ -91,7 +92,7 @@ export function ConnectChannelDialog({
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title={t.title}>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <Field label={t.channel}>
             <select
               name="code"
@@ -207,7 +208,7 @@ export function ConnectChannelDialog({
           <p className="text-[11.5px] text-ink-400">
             {t.createdOff}
           </p>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

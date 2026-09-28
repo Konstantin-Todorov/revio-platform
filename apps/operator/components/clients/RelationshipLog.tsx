@@ -7,6 +7,7 @@ import { NOTE_KINDS, NOTE_LABEL, type NoteKind } from "@/lib/account";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
+import { ActionForm } from "@revio/ui/action-form";
 
 export interface LogItem {
   id: string;
@@ -66,7 +67,7 @@ export function RelationshipLog({ tenantId, items }: { tenantId: string; items: 
     <Card>
       <CardHeader title="Relationship log" />
 
-      <form ref={form} action={formAction} className="space-y-2.5 border-b border-surface-border bg-surface-muted/40 px-4 py-3.5">
+      <ActionForm ref={form} action={formAction} state={state} className="space-y-2.5 border-b border-surface-border bg-surface-muted/40 px-4 py-3.5">
         <div className="flex flex-wrap gap-2">
           <select name="kind" defaultValue="call" className={`${inputCls} w-auto min-w-[110px]`}>
             {NOTE_KINDS.map((k) => <option key={k} value={k}>{NOTE_LABEL[k as NoteKind]}</option>)}
@@ -88,7 +89,7 @@ export function RelationshipLog({ tenantId, items }: { tenantId: string; items: 
             {pending ? "Logging…" : "Log it"}
           </button>
         </div>
-      </form>
+      </ActionForm>
 
       {pinned.length > 0 && (
         <div className="border-b border-surface-border bg-warning-50/40">

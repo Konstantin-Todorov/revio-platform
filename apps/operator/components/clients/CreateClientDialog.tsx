@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 import { createClient, type ActionResult } from "@/lib/actions";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
+import { ActionForm } from "@revio/ui/action-form";
 
 export function CreateClientDialog() {
   const [open, setOpen] = useState(false);
@@ -22,7 +24,7 @@ export function CreateClientDialog() {
           Creates the client organization, its first property, and the <span className="font-semibold text-ink-700">Owner</span> login.
           The Owner then adds their own staff inside the product.
         </p>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <div className="grid grid-cols-2 gap-3">
             <Field label="Client / organization"><input name="name" required className={inputCls} placeholder="Grand Marina Hotels" /></Field>
             <Field label="First property"><input name="propertyName" className={inputCls} placeholder="Grand Marina — Sofia" /></Field>
@@ -57,13 +59,22 @@ export function CreateClientDialog() {
             </div>
           </div>
 
-          {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
+          {state?.error && (
+            <div role="alert" className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">
+              {state.error}
+              {state.link && (
+                <Link href={state.link.href} onClick={() => setOpen(false)} className="mt-1.5 block font-semibold text-danger-700 underline underline-offset-2">
+                  {state.link.label} →
+                </Link>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Cancel</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? "Creating…" : "Create client"}</button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

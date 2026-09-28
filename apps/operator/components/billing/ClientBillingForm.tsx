@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { Save, Receipt } from "lucide-react";
 import { saveClientBilling, type ActionResult } from "@/lib/actions-company";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * A client's LEGAL identity, for the invoice we send them.
@@ -36,7 +37,7 @@ export function ClientBillingForm({
   const [state, action, pending] = useActionState<ActionResult | null, FormData>(saveClientBilling, null);
 
   return (
-    <form action={action} className="space-y-3">
+    <ActionForm action={action} state={state} className="space-y-3">
       <input type="hidden" name="tenantId" value={tenantId} />
       <fieldset disabled={!canEdit || pending} className="space-y-3 disabled:opacity-60">
         <div className="grid grid-cols-4 gap-3">
@@ -105,6 +106,6 @@ export function ClientBillingForm({
           <Receipt className="h-3.5 w-3.5" /> Only a super admin can change these.
         </p>
       )}
-    </form>
+    </ActionForm>
   );
 }

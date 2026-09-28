@@ -11,6 +11,7 @@ import { AmenityIcon } from "@revio/ui/amenity-icon";
 import { Card, CardHeader } from "@revio/ui/primitives";
 import { saveRoomType, type ActionResult } from "@/lib/actions-rates";
 import { Field, inputCls } from "@/components/ui/Modal";
+import { ActionForm } from "@revio/ui/action-form";
 
 export type RoomTypeValues = {
   id: string; name: string; code: string; unitKind: string;
@@ -131,7 +132,7 @@ export function RoomTypeSectionForm({ roomType, section }: { roomType: RoomTypeV
   const f = translate(ratesDict, useLocale()).roomForm;
 
   return (
-    <form action={formAction} onChange={() => setSavedAt(null)}>
+    <ActionForm action={formAction} state={state} onChange={() => setSavedAt(null)}>
       <input type="hidden" name="id" value={roomType.id} />
       <input type="hidden" name="section" value={section} />
       <Card>
@@ -144,7 +145,7 @@ export function RoomTypeSectionForm({ roomType, section }: { roomType: RoomTypeV
             reach from anywhere in it, and it stops at the card's end — nothing follows it. */}
         <SaveFooter sticky={!basics} pending={pending} error={state?.error} saved={!!savedAt && !state?.error} />
       </Card>
-    </form>
+    </ActionForm>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { deleteClientCompletely, forSystem, issueToken, recordAppError } from "@revio/db";
+import { deleteClientCompletely, forSystem, issueToken, recordAppError, withSystemTransaction } from "@revio/db";
 import { initialGuestLanguage, inviteEmail, renderSystemEmail, renderSystemEmailText, PRODUCT_BY_KEY } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { originFor, primaryProduct } from "./product-origins";
@@ -13,7 +13,12 @@ import { getOperatorSession } from "./session";
 // Operator provisions clients across all tenants → bypass RLS (app.bypass=on).
 const prisma = forSystem();
 
-export type ActionResult = { ok: boolean; error?: string };
+export type ActionResult = {
+  ok: boolean;
+  error?: string;
+  /** Where the refusal can be resolved — e.g. the client that already owns an email. */
+  link?: { href: string; label: string };
+};
 
 function str(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
@@ -29,7 +34,9 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
   const name = str(fd, "name");
   if (!name) return { ok: false, error: "Client name is required." };
   const ownerName = str(fd, "ownerName") || "Owner";
-  const ownerEmail = str(fd, "ownerEmail");
+  // ⚠️ Lower-cased like every other login path. Sign-in lower-cases what it is typed and looks it up
+  // exactly, so an owner stored as "Ivan@Hotel.bg" could never have signed in.
+  const ownerEmail = str(fd, "ownerEmail").toLowerCase();
   if (!ownerEmail) return { ok: false, error: "Owner email is required." };
   const propertyName = str(fd, "propertyName") || name;
   const plan = str(fd, "plan") || "starter";
@@ -45,8 +52,30 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
     return { ok: false, error: "Enable at least one product." };
   }
 
-  if (await prisma.user.findUnique({ where: { email: ownerEmail } })) {
-    return { ok: false, error: "A user with that email already exists." };
+  /*
+   * ⚠️ Say WHOSE email it is, and where to go.
+   *
+   * This said only "A user with that email already exists." On 2026-09-26 two colleagues tried to
+   * re-add a hotel whose earlier account still existed (suspended, its deletion had failed), got
+   * that sentence above an emptied form, and gave up. Nothing on the screen said the address
+   * belonged to a client they could open, reinstate or delete.
+   */
+  const existing = await prisma.user.findFirst({
+    where: { email: { equals: ownerEmail, mode: "insensitive" } },
+    select: { tenant: { select: { id: true, name: true, status: true, isDemo: true } } },
+  });
+  if (existing) {
+    const t = existing.tenant;
+    const state = t.status === "active" ? "active" : t.status === "suspended" ? "suspended" : t.status.replace(/_/g, " ");
+    return {
+      ok: false,
+      error:
+        `${ownerEmail} is already a login at ${t.name}${t.isDemo ? " (demo)" : ""}, which is ${state}. ` +
+        (t.status === "suspended"
+          ? "If this is the same hotel coming back, reinstate that client instead of creating a new one — or delete it first, then add it again."
+          : "One email can belong to one client. Use a different address for this owner, or open that client."),
+      link: { href: `/clients/${t.id}`, label: `Open ${t.name}` },
+    };
   }
 
   // Ensure a unique slug.
@@ -56,19 +85,25 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
   // The Owner is created with NO password and receives an invitation. This is the first account a
   // new client ever gets, so it is the one that most needs to be theirs alone — nobody at Revio ever
   // knows a customer's password, which was not true while every account shared one hardcoded value.
-  const tenant = await prisma.tenant.create({
-    data: {
-      name, slug, plan, status: "active", ...entitlements,
-      users: { create: [{ name: ownerName, email: ownerEmail, role: "owner", ...(language !== "en" ? { locale: language } : {}) }] },
-      properties: { create: [{ name: propertyName, baseCurrency: "EUR", timezone: "Europe/Sofia", defaultLanguage: language }] },
-    },
-    include: { properties: true },
-  });
-  // Every new hotel starts with a base "Standard Rate" (manual) so the calendar, bulk update and
-  // derived rates have a parent to work from. The Owner adds room types + more rate plans from there.
-  const property = tenant.properties[0]!;
-  await prisma.ratePlan.create({
-    data: { tenantId: tenant.id, propertyId: property.id, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 },
+  /*
+   * One transaction: the client and its base "Standard Rate" (manual — so the calendar, bulk update
+   * and derived rates have a parent to work from) exist together or not at all. They were two
+   * separate writes, and a failure between them left a client with no plan whose owner email then
+   * blocked every retry.
+   */
+  await withSystemTransaction(async (tx) => {
+    const tenant = await tx.tenant.create({
+      data: {
+        name, slug, plan, status: "active", ...entitlements,
+        users: { create: [{ name: ownerName, email: ownerEmail, role: "owner", ...(language !== "en" ? { locale: language } : {}) }] },
+        properties: { create: [{ name: propertyName, baseCurrency: "EUR", timezone: "Europe/Sofia", defaultLanguage: language }] },
+      },
+      include: { properties: true },
+    });
+    const property = tenant.properties[0]!;
+    await tx.ratePlan.create({
+      data: { tenantId: tenant.id, propertyId: property.id, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 },
+    });
   });
 
   // The invitation lands on the product they bought, not on this console — which they can never

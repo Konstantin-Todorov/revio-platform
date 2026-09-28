@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { LoginFields } from "@revio/ui/login-fields";
 import { login, type LoginResult } from "@/lib/actions-auth";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * Sign-in for this product.
@@ -19,7 +20,7 @@ export function LoginForm({
   const [state, formAction, pending] = useActionState<LoginResult | null, FormData>(login, null);
 
   return (
-    <form action={formAction} className="space-y-3.5">
+    <ActionForm action={formAction} state={state} className="space-y-3.5">
       <LoginFields
         submitClassName="h-10 w-full rounded-md bg-brand-800 hover:bg-brand-700 text-[14px] font-semibold text-white transition-colors disabled:opacity-60"
         inputFocusClassName="focus:border-brand-600"
@@ -30,6 +31,6 @@ export function LoginForm({
         justSet={justSet}
         {...(defaultEmail ? { defaultEmail } : {})}
       />
-    </form>
+    </ActionForm>
   );
 }

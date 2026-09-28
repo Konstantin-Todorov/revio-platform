@@ -5,6 +5,7 @@ import { Mail, Pencil, Phone, Plus, Trash2 } from "lucide-react";
 import { saveContact, deleteContact, type ActionResult } from "@/lib/actions-crm";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
+import { ActionForm } from "@revio/ui/action-form";
 
 export interface ContactView {
   id: string;
@@ -95,7 +96,7 @@ export function ContactsPanel({ tenantId, contacts }: { tenantId: string; contac
 
       <Modal open={editing !== null} onClose={() => setEditing(null)} title={editing?.id ? "Edit contact" : "Add contact"}>
         {editing && (
-          <form action={formAction} className="space-y-3.5" key={editing.id || "new"}>
+          <ActionForm action={formAction} state={state} className="space-y-3.5" key={editing.id || "new"}>
             <input type="hidden" name="tenantId" value={tenantId} />
             {editing.id && <input type="hidden" name="id" value={editing.id} />}
             <div className="grid grid-cols-2 gap-3">
@@ -121,7 +122,7 @@ export function ContactsPanel({ tenantId, contacts }: { tenantId: string; contac
               <button type="button" onClick={() => setEditing(null)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Cancel</button>
               <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? "Saving…" : "Save contact"}</button>
             </div>
-          </form>
+          </ActionForm>
         )}
       </Modal>
     </Card>

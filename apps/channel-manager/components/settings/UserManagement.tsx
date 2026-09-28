@@ -7,6 +7,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { settings as settingsDict } from "@/lib/i18n/settings";
+import { ActionForm } from "@revio/ui/action-form";
 
 export const ROLE_OPTIONS = ["owner", "admin", "revenue_manager", "distribution_manager", "read_only"] as const;
 
@@ -45,7 +46,7 @@ export function InviteUserDialog({ canManage }: { canManage: boolean }) {
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={u.inviteTitle}>
         <p className="mb-3 text-[12.5px] text-ink-500">{u.inviteLead}</p>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <div className="grid grid-cols-2 gap-3">
             <Field label={u.name}><input name="name" required className={inputCls} placeholder={u.namePlaceholder} /></Field>
             <Field label={u.email}><input name="email" type="email" required className={inputCls} placeholder={u.emailPlaceholder} /></Field>
@@ -60,7 +61,7 @@ export function InviteUserDialog({ canManage }: { canManage: boolean }) {
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{u.cancel}</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? u.inviting : u.send}</button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );
@@ -80,7 +81,7 @@ export function AddPropertyDialog({ canManage }: { canManage: boolean }) {
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={p.addTitle}>
         <p className="mb-3 text-[12.5px] text-ink-500">{p.addLead}</p>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <Field label={p.name}><input name="name" required className={inputCls} placeholder={p.addNamePlaceholder} /></Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={p.currency}><select name="baseCurrency" defaultValue="EUR" className={inputCls}>{["EUR", "USD", "GBP"].map((c) => <option key={c}>{c}</option>)}</select></Field>
@@ -91,7 +92,7 @@ export function AddPropertyDialog({ canManage }: { canManage: boolean }) {
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{p.cancel}</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? p.adding : p.add}</button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

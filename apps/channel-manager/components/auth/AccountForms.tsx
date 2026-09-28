@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { requestReset, setPassword, type AccountResult } from "@/lib/actions-account";
 import { SetPasswordFields } from "@revio/ui/set-password-fields";
 import type { AuthStrings } from "@/lib/i18n/auth";
+import { ActionForm } from "@revio/ui/action-form";
 
 const inputCls =
   "h-10 w-full rounded-md border border-surface-border bg-white px-3 text-[14px] text-ink-900 outline-none transition-colors placeholder:text-ink-400 focus:border-brand-600";
@@ -26,7 +27,7 @@ export function ForgotPasswordForm({ t }: { t: AuthStrings["forms"] }) {
   }
 
   return (
-    <form action={formAction} className="space-y-3.5">
+    <ActionForm action={formAction} state={state} className="space-y-3.5">
       <label className="block">
         <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">{t.email}</span>
         <input name="email" type="email" required autoComplete="email" className={inputCls} placeholder={t.emailPlaceholder} />
@@ -34,7 +35,7 @@ export function ForgotPasswordForm({ t }: { t: AuthStrings["forms"] }) {
       <button type="submit" disabled={pending} className={btnCls}>
         {pending ? t.sending : t.emailMeLink}
       </button>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -50,7 +51,7 @@ export function SetPasswordForm({
   const [state, formAction, pending] = useActionState<AccountResult | null, FormData>(setPassword, null);
 
   return (
-    <form action={formAction} className="space-y-3.5">
+    <ActionForm action={formAction} state={state} className="space-y-3.5">
       <input type="hidden" name="token" value={token} />
       <input type="hidden" name="purpose" value={purpose} />
       <SetPasswordFields
@@ -61,6 +62,6 @@ export function SetPasswordForm({
         pending={pending}
         {...(state?.error ? { error: state.error } : {})}
       />
-    </form>
+    </ActionForm>
   );
 }

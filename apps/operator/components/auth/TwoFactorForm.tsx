@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { OtpInput } from "@revio/ui/otp-input";
 import { verifyTwoFactor, type LoginResult } from "@/lib/actions-auth";
+import { ActionForm } from "@revio/ui/action-form";
 
 const inputCls =
   "h-12 w-full rounded-md border border-surface-border bg-white px-3 text-center text-[20px] font-semibold tracking-[0.4em] text-ink-900 outline-none transition-colors placeholder:tracking-normal placeholder:text-[14px] placeholder:font-normal placeholder:text-ink-400 focus:border-brand-600";
@@ -11,7 +12,7 @@ export function TwoFactorForm() {
   const [state, formAction, pending] = useActionState<LoginResult | null, FormData>(verifyTwoFactor, null);
 
   return (
-    <form action={formAction} className="space-y-3.5">
+    <ActionForm action={formAction} state={state} className="space-y-3.5">
       <label className="block">
         <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">Authentication code</span>
         {/* Submits itself on the sixth digit — this screen exists to receive a code and nothing
@@ -36,6 +37,6 @@ export function TwoFactorForm() {
       >
         {pending ? "Checking…" : "Verify"}
       </button>
-    </form>
+    </ActionForm>
   );
 }

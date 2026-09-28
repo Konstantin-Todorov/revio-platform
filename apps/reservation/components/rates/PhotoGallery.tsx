@@ -10,6 +10,7 @@ import { SortableList } from "@revio/ui/sortable";
 import {
   deleteRoomPhoto, reorderRoomPhotos, saveRoomPhotoAlt, uploadRoomPhotos, type PhotoResult,
 } from "@/lib/actions-photos";
+import { ActionForm } from "@revio/ui/action-form";
 
 export interface GalleryPhoto {
   id: string;
@@ -131,7 +132,7 @@ export function PhotoGallery({
         />
       )}
 
-      <form ref={formRef} action={uploadAction}>
+      <ActionForm ref={formRef} action={uploadAction} state={state}>
         <input type="hidden" name="roomTypeId" value={roomTypeId} />
         <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-surface-border bg-surface-muted/50 px-4 py-5 text-[13px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
@@ -146,7 +147,7 @@ export function PhotoGallery({
             className="sr-only"
           />
         </label>
-      </form>
+      </ActionForm>
 
       {state?.error && (
         <p className="flex items-start gap-1.5 text-[12px] text-danger-600">

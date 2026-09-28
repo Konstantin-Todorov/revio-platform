@@ -6,6 +6,7 @@ import { fill, translate, type Locale } from "./i18n";
 import { useLocale } from "./i18n-context";
 import { accountStrings, type AccountStrings } from "./account-strings";
 import { OtpInput } from "@revio/ui/otp-input";
+import { ActionForm } from "./action-form";
 
 /**
  * The enrolment flow, shared by the Operator console and all three hotel products.
@@ -142,7 +143,7 @@ export function TwoFactorSetup({
         <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-success-700">
           <ShieldCheck className="h-4 w-4" /> {t.onForYou}
         </p>
-        <form action={offAction} className="mt-3 flex flex-wrap items-end gap-2">
+        <ActionForm action={offAction} state={offState} className="mt-3 flex flex-wrap items-end gap-2">
           <label className="flex-1">
             {/* The password is required for the same reason 2FA exists: an unattended laptop must not
                 be enough to remove the protection against an unattended laptop. */}
@@ -156,7 +157,7 @@ export function TwoFactorSetup({
           >
             <ShieldOff className="h-3.5 w-3.5" /> {t.turnOff}
           </button>
-        </form>
+        </ActionForm>
         {offState?.error && <p role="alert" className="mt-2 text-[12px] font-medium text-danger-600">{offState.error}</p>}
       </div>
     );
@@ -181,7 +182,7 @@ export function TwoFactorSetup({
   }
 
   return (
-    <form action={formAction} className="space-y-3">
+    <ActionForm action={formAction} state={state} className="space-y-3">
       <input type="hidden" name="secret" value={live.secret} />
       <input type="hidden" name="uri" value={live.uri} />
       <p className="text-[12.5px] text-ink-700">
@@ -211,6 +212,6 @@ export function TwoFactorSetup({
       >
         {pending ? t.checking : t.confirm}
       </button>
-    </form>
+    </ActionForm>
   );
 }

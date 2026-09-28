@@ -22,6 +22,7 @@ import {
   saveWelcomeTaxes,
   type WelcomeResult,
 } from "@/lib/actions-welcome";
+import { ActionForm } from "@revio/ui/action-form";
 
 /** The shared frame's words and this product's own, in the reader's language. */
 function useWelcomeText() {
@@ -41,11 +42,11 @@ export function PropertyForm({ values }: { values: PropertyFieldValues }) {
   const { shell } = useWelcomeText();
 
   return (
-    <form action={action} className="space-y-6">
+    <ActionForm action={action} state={state} className="space-y-6">
       <PropertyFields values={values} />
       <WelcomeError message={state?.error} />
       <WelcomeContinue label={shell.saveAndContinue} savingLabel={shell.saving} pending={pending} />
-    </form>
+    </ActionForm>
   );
 }
 
@@ -54,7 +55,7 @@ export function RoomTypeForm() {
   const { t } = useWelcomeText();
 
   return (
-    <form action={action} className="space-y-4 rounded-lg border border-surface-border bg-white p-4">
+    <ActionForm action={action} state={state} className="space-y-4 rounded-lg border border-surface-border bg-white p-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_7rem_7rem]">
         <label className="block">
           <span className={welcomeLabel}>{t.roomType}</span>
@@ -77,7 +78,7 @@ export function RoomTypeForm() {
       >
         {pending ? t.adding : t.addRoomType}
       </button>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -93,7 +94,7 @@ export function UnitsForm({ roomTypes }: { roomTypes: { id: string; name: string
   const { t } = useWelcomeText();
 
   return (
-    <form action={action} className="space-y-4 rounded-lg border border-surface-border bg-white p-4">
+    <ActionForm action={action} state={state} className="space-y-4 rounded-lg border border-surface-border bg-white p-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
           <span className={welcomeLabel}>{t.roomType}</span>
@@ -134,7 +135,7 @@ export function UnitsForm({ roomTypes }: { roomTypes: { id: string; name: string
       >
         {pending ? t.adding : t.addRooms}
       </button>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -144,10 +145,10 @@ export function TaxForm({ values }: { values: TaxFieldValues }) {
   const { shell } = useWelcomeText();
 
   return (
-    <form action={action} className="space-y-6">
+    <ActionForm action={action} state={state} className="space-y-6">
       <TaxFields values={values} />
       <WelcomeError message={state?.error} />
       <WelcomeContinue label={shell.saveAndContinue} savingLabel={shell.saving} pending={pending} />
-    </form>
+    </ActionForm>
   );
 }

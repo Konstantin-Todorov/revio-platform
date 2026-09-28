@@ -7,6 +7,7 @@ import { STAGES, STAGE_LABEL, renewalStatus, type Stage } from "@/lib/account";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
 import { DateField } from "@revio/ui/date-field";
+import { ActionForm } from "@revio/ui/action-form";
 
 const STAGE_TONE: Record<Stage, "success" | "info" | "warning" | "danger" | "neutral"> = {
   prospect: "neutral",
@@ -118,7 +119,7 @@ export function AccountPanel({
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Account record">
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <input type="hidden" name="tenantId" value={tenantId} />
           <div className="grid grid-cols-2 gap-3">
             <Field label="Stage" hint={disagrees ? `Their usage looks ${STAGE_LABEL[observed].toLowerCase()}.` : undefined}>
@@ -157,7 +158,7 @@ export function AccountPanel({
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">Cancel</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? "Saving…" : "Save"}</button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </Card>
   );

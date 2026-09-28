@@ -9,6 +9,7 @@ import { Card, CardHeader } from "@revio/ui/primitives";
 import { saveRatePlan, type ActionResult } from "@/lib/actions-rates";
 import { Field, inputCls } from "@/components/ui/Modal";
 import { SaveFooter } from "./RoomTypeForm";
+import { ActionForm } from "@revio/ui/action-form";
 
 export type RatePlanValues = {
   id: string; name: string; code: string; tags: string[]; active: boolean; directChannelEnabled: boolean;
@@ -90,7 +91,7 @@ export function RatePlanEditor({ ratePlan }: { ratePlan: RatePlanValues }) {
   const f = translate(ratesDict, useLocale()).planForm;
 
   return (
-    <form action={formAction} onChange={() => setSavedAt(null)}>
+    <ActionForm action={formAction} state={state} onChange={() => setSavedAt(null)}>
       <input type="hidden" name="id" value={ratePlan.id} />
       <Card>
         <CardHeader title={f.planTitle} subtitle={f.planSubtitle} />
@@ -102,6 +103,6 @@ export function RatePlanEditor({ ratePlan }: { ratePlan: RatePlanValues }) {
         </div>
         <SaveFooter pending={pending} error={state?.error} saved={!!savedAt && !state?.error} />
       </Card>
-    </form>
+    </ActionForm>
   );
 }

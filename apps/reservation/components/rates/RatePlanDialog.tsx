@@ -10,6 +10,7 @@ import { Plus } from "lucide-react";
 import { saveRatePlan, type ActionResult } from "@/lib/actions-rates";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { RatePlanBasicsFields, RatePlanDefaultsFields } from "./RatePlanForm";
+import { ActionForm } from "@revio/ui/action-form";
 
 type Parent = { id: string; name: string };
 
@@ -39,7 +40,7 @@ export function RatePlanDialog({ parents }: { parents: Parent[] }) {
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title={s.plans.addTitle}>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <RatePlanBasicsFields />
           <Field label={l.pricing}>
             <select name="priceLogic" defaultValue={"manual"} onChange={(e) => setDerived(e.target.value === "derived")} className={inputCls}>
@@ -94,7 +95,7 @@ export function RatePlanDialog({ parents }: { parents: Parent[] }) {
               {pending ? s.save.saving : s.plans.create}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

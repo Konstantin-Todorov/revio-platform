@@ -78,7 +78,8 @@
     "./welcome-strings": "./src/welcome-strings.ts",
     "./activity-strings": "./src/activity-strings.ts",
     "./help-strings": "./src/help-strings.ts",
-    "./help-frame": "./src/help-frame.tsx"
+    "./help-frame": "./src/help-frame.tsx",
+    "./action-form": "./src/action-form.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

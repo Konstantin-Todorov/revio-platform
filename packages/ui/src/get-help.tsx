@@ -8,6 +8,7 @@ import { translate } from "./i18n";
 import { useLocale } from "./i18n-context";
 import { shellStrings } from "./shell-strings";
 import { helpStrings } from "./help-strings";
+import { ActionForm } from "./action-form";
 
 /**
  * "Get help" — one dialog, shared by all three hotel products.
@@ -133,7 +134,7 @@ export function GetHelp({
             </button>
           </>
         ) : (
-          <form action={formAction}>
+          <ActionForm action={formAction} state={state}>
             <h2 className="text-[16px] font-semibold text-ink-900">{t.trigger}</h2>
             <p className="mt-1 text-[12.5px] text-ink-500">
               {t.intro}
@@ -235,7 +236,7 @@ export function GetHelp({
               </button>
               <span className="ml-auto text-[11px] text-ink-400">{productName}</span>
             </div>
-          </form>
+          </ActionForm>
         )}
       </div>
     </div>,

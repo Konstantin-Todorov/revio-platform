@@ -9,6 +9,7 @@ import { earliestSelectable } from "@revio/core";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { bulk as bulkDict } from "@/lib/i18n/bulk";
+import { ActionForm } from "@revio/ui/action-form";
 
 type Rule = {
   id: string; name: string; type: string; roomTypeId: string | null; ratePlanId: string | null;
@@ -55,7 +56,7 @@ export function RestrictionDialog({ rule, today, roomTypes, ratePlans, channels 
       )}
 
       <Modal open={open} onClose={() => setOpen(false)} title={isEdit ? d.editTitle(rule!.name) : d.addTitle}>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           {isEdit && <input type="hidden" name="id" value={rule!.id} />}
           <div className="grid grid-cols-2 gap-3">
             <Field label={d.name}><input name="name" defaultValue={rule?.name} required className={inputCls} placeholder={d.namePlaceholder} /></Field>
@@ -112,7 +113,7 @@ export function RestrictionDialog({ rule, today, roomTypes, ratePlans, channels 
               {pending ? d.saving : isEdit ? d.saveChanges : d.create}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

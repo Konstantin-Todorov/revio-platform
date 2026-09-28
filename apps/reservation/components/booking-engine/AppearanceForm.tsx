@@ -9,6 +9,7 @@ import { BOOKING_PRESETS, BOOKING_FONTS, BOOKING_COPY_DEFAULTS } from "@revio/co
 import { AlertCircle, Check, Palette, RotateCcw } from "lucide-react";
 import { EnginePreview } from "./EnginePreview";
 import type { LookResult } from "@/lib/actions-booking-engine";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * Appearance: pick a base, then edit.
@@ -65,7 +66,7 @@ export function AppearanceForm({
   };
 
   return (
-    <form action={formAction} className="grid grid-cols-1 gap-5 p-4 lg:grid-cols-[1fr_20rem]">
+    <ActionForm action={formAction} state={state} className="grid grid-cols-1 gap-5 p-4 lg:grid-cols-[1fr_20rem]">
       <div className="space-y-5">
         <Field label={L.base} hint={L.baseHint}>
           <input type="hidden" name="bookingPreset" value={preset} />
@@ -217,7 +218,7 @@ export function AppearanceForm({
           {L.previewHint}
         </p>
       </div>
-    </form>
+    </ActionForm>
   );
 }
 

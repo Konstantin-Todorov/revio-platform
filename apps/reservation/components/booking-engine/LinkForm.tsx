@@ -7,6 +7,7 @@ import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
 import { useActionState, useState } from "react";
 import { AlertCircle, Check, CheckCircle2, Copy, Globe, Lock, Pause, Play } from "lucide-react";
 import { saveBookingEngineLink, type LinkResult } from "@/lib/actions-booking-engine";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * The public address and the on/off switch.
@@ -60,7 +61,7 @@ export function LinkForm({
   if (!issued) {
     return (
       <>
-        <form action={formAction} className="p-4">
+        <ActionForm action={formAction} state={state} className="p-4">
           <label htmlFor="publicSlug" className="block text-[12px] font-semibold text-ink-700">
             {k.address}
           </label>
@@ -90,7 +91,7 @@ export function LinkForm({
             {k.builtLead}
             <span className="font-semibold text-ink-700">{k.locked}</span>{k.builtTail}
           </p>
-        </form>
+        </ActionForm>
 
         {state?.error && (
           <div className="flex items-start gap-2 border-t border-surface-border/60 bg-danger-50 px-4 py-2.5 text-[12.5px] text-danger-600">
@@ -138,7 +139,7 @@ export function LinkForm({
           The hidden field carries the state we want AFTER the click, not the one we are in. Sending
           the current state made the button a no-op: pressing "Pause bookings" re-submitted "on".
         */}
-        <form action={formAction} className="pb-5">
+        <ActionForm action={formAction} state={state} className="pb-5">
           {!enabled && <input type="hidden" name="bookingEngineEnabled" value="on" />}
           <button
             disabled={pending}
@@ -151,7 +152,7 @@ export function LinkForm({
             {enabled ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
             {pending ? k.saving : enabled ? k.pause : k.start}
           </button>
-        </form>
+        </ActionForm>
       </div>
 
       <div className="border-t border-surface-border/60 px-4 py-2.5 text-[12px] text-ink-500">

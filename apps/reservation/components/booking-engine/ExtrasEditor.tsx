@@ -7,6 +7,7 @@ import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
 import { useActionState, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { saveBookingExtra, retireBookingExtra, type LookResult } from "@/lib/actions-booking-engine";
+import { ActionForm } from "@revio/ui/action-form";
 
 export interface EditableExtra {
   id: string;
@@ -49,14 +50,14 @@ export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; cu
         <ul className="divide-y divide-surface-border rounded-md border border-surface-border">
           {extras.map((e) => (
             <li key={e.id} className="px-3.5 py-2.5">
-              <ExtraRow extra={e} money={money} formAction={formAction} pending={pending} currency={currency} />
+              <ExtraRow state={state} extra={e} money={money} formAction={formAction} pending={pending} currency={currency} />
             </li>
           ))}
         </ul>
       )}
 
       {adding ? (
-        <form action={formAction} className="rounded-md border border-surface-border bg-surface-muted/40 p-3.5">
+        <ActionForm action={formAction} state={state} className="rounded-md border border-surface-border bg-surface-muted/40 p-3.5">
           <ExtraFields currency={currency} />
           <div className="mt-3 flex justify-end gap-2">
             <button type="button" onClick={() => setAdding(false)}
@@ -68,7 +69,7 @@ export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; cu
               {pending ? X.saving : X.add}
             </button>
           </div>
-        </form>
+        </ActionForm>
       ) : (
         <button type="button" onClick={() => setAdding(true)}
                 className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
@@ -85,9 +86,11 @@ export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; cu
 
 /** One catalogue line: readable at a glance, editable in place. */
 function ExtraRow({
-  extra, money, formAction, pending, currency,
+  extra, money, formAction, state, pending, currency,
 }: {
   extra: EditableExtra;
+  /** The shared action's state, so a refused edit keeps what was typed. */
+  state: unknown;
   money: (m: number) => string;
   formAction: (fd: FormData) => void;
   pending: boolean;
@@ -98,7 +101,7 @@ function ExtraRow({
 
   if (open) {
     return (
-      <form action={formAction}>
+      <ActionForm action={formAction} state={state}>
         <input type="hidden" name="id" value={extra.id} />
         <ExtraFields currency={currency} extra={extra} />
         <div className="mt-3 flex justify-end gap-2">
@@ -111,7 +114,7 @@ function ExtraRow({
             {X.save}
           </button>
         </div>
-      </form>
+      </ActionForm>
     );
   }
 

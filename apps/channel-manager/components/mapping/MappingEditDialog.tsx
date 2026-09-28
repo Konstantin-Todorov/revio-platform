@@ -7,6 +7,7 @@ import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { mapping as mappingDict } from "@/lib/i18n/mapping";
+import { ActionForm } from "@revio/ui/action-form";
 
 export function MappingEditDialog({
   kind, id, productId, label, externalId, channelName, channelId, roomTypeId, options = [], optionsNote,
@@ -56,7 +57,7 @@ export function MappingEditDialog({
           {d.lead[0]}<span className="font-semibold text-ink-800">{label}</span>{d.lead[1]}
           <span className="font-semibold text-ink-800">{channelName}</span>{d.lead[2]}
         </p>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <input type="hidden" name="kind" value={kind} />
           <input type="hidden" name="id" value={id ?? ""} />
           {/* Provisioning is one-shot, so a product added afterwards has no mapping row to update.
@@ -96,7 +97,7 @@ export function MappingEditDialog({
             <button type="button" onClick={() => setOpen(false)} className="rounded-md border border-surface-border px-3.5 py-2 text-[13px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{d.cancel}</button>
             <button type="submit" disabled={pending} className="rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-60">{pending ? d.saving : d.save}</button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

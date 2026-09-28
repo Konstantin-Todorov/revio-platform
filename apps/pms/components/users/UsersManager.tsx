@@ -6,6 +6,7 @@ import { StatusPill } from "@/components/ui/primitives";
 import { inviteStaff, setStaffRole, setStaffActive, type ActionResult } from "@/lib/actions-users";
 import { PMS_ROLES, ROLE_LABEL } from "@/lib/roles";
 import type { UsersManagerStrings } from "@/lib/i18n/users";
+import { ActionForm } from "@revio/ui/action-form";
 
 type StaffUser = { id: string; name: string; email: string; role: string; active: boolean };
 
@@ -46,7 +47,7 @@ export function UsersManager({ users, meId, canManage, t, roles }: {
       {canManage && (
         <div className="rounded-lg border border-surface-border bg-white p-4 shadow-card">
           <h3 className="mb-3 flex items-center gap-1.5 text-[13px] font-bold text-ink-900"><UserPlus className="h-4 w-4 text-accent-600" /> {t.invite}</h3>
-          <form action={action} className="flex flex-wrap items-end gap-2">
+          <ActionForm action={action} state={result} className="flex flex-wrap items-end gap-2">
             <label className="flex flex-col gap-1">
               <span className="text-[11px] font-semibold text-ink-600">{t.name}</span>
               <input name="name" required placeholder={t.namePlaceholder} className={`${inputCls} w-40`} />
@@ -64,7 +65,7 @@ export function UsersManager({ users, meId, canManage, t, roles }: {
             <button disabled={pending} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500 disabled:opacity-60">
               <UserPlus className="h-3.5 w-3.5" /> {pending ? t.inviting : t.inviteButton}
             </button>
-          </form>
+          </ActionForm>
           {result?.error && <p className="mt-2 text-[12px] font-medium text-danger-600">{result.error}</p>}
           {result?.ok && <p className="mt-2 text-[12px] font-medium text-success-600">{t.invited}</p>}
           <p className="mt-2 text-[11px] text-ink-400">{t.identityNote}</p>

@@ -6,6 +6,7 @@ import { extrasTotalMinor, type SellableExtra } from "@revio/core";
 import { confirmBooking, type BookResult } from "@/lib/actions-book";
 import { ExtrasPicker } from "./ExtrasPicker";
 import { setExtrasTotal } from "@/lib/extras-store";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * Step 3 — who you are, and the card that holds the room.
@@ -93,7 +94,7 @@ export function BookingForm({
     });
 
   return (
-    <form action={action} className="space-y-5">
+    <ActionForm action={action} state={state} className="space-y-5">
       {(Object.keys(stay) as (keyof StaySelection)[]).map((k) => (
         <input key={k} type="hidden" name={k} value={String(stay[k])} />
       ))}
@@ -241,7 +242,7 @@ export function BookingForm({
           ? "You’ll get a confirmation by email straight away."
           : "You’ll get an email the moment the hotel confirms."}
       </p>
-    </form>
+    </ActionForm>
   );
 }
 

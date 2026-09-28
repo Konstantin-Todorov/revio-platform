@@ -10,6 +10,7 @@ import { Plus } from "lucide-react";
 import { saveRoomType, type ActionResult } from "@/lib/actions-rates";
 import { Modal } from "@/components/ui/Modal";
 import { RoomTypeBasicsFields } from "./RoomTypeForm";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * Add a room type from the CRS — the same shared record RevioLink edits. A CRS-only hotel has no other
@@ -39,7 +40,7 @@ export function RoomTypeDialog() {
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title={s.rooms.addTitle}>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <RoomTypeBasicsFields />
           <p className="text-[11.5px] text-ink-400">{s.rooms.addNext}</p>
           {state?.error && <p className="rounded-md bg-danger-50 px-3 py-2 text-[12.5px] font-medium text-danger-600">{state.error}</p>}
@@ -49,7 +50,7 @@ export function RoomTypeDialog() {
               {pending ? s.save.saving : s.rooms.create}
             </button>
           </div>
-        </form>
+        </ActionForm>
       </Modal>
     </>
   );

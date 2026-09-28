@@ -6,6 +6,7 @@ import { SubmitButton } from "./submit-button.js";
 import { billingStrings } from "./billing-strings";
 import { LOCALE_LABELS, fill, translate } from "./i18n";
 import { useLocale } from "./i18n-context";
+import { ActionForm } from "./action-form";
 
 /**
  * Where a hotel types its own company details for the invoices we issue it.
@@ -74,7 +75,7 @@ export function BillingIdentityForm({
   const hasProblem = (field: BillingIdentityField) => Boolean(codes[field] ?? state?.problems?.[field]);
 
   return (
-    <form action={formAction} className="space-y-4">
+    <ActionForm action={formAction} state={state} className="space-y-4">
       <div className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
         {FIELDS.map((f) => {
           const problem = hasProblem(f.name) ? say(f.name) : undefined;
@@ -135,6 +136,6 @@ export function BillingIdentityForm({
           </span>
         )}
       </div>
-    </form>
+    </ActionForm>
   );
 }

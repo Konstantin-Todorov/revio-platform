@@ -6,6 +6,7 @@ import { verifyChannelPublished, type VerifyActionResult } from "@/lib/actions-c
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { mapping as mappingDict } from "@/lib/i18n/mapping";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * "What is the channel actually publishing?" — the only answer in this product that reads the
@@ -36,7 +37,7 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
 
   return (
     <div id="verify" className="mb-3 scroll-mt-4 rounded-md border border-surface-border bg-white px-4 py-3">
-      <form action={formAction} className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      <ActionForm action={formAction} state={state} className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <input type="hidden" name="channelId" value={channelId} />
         <SearchCheck className="h-4 w-4 shrink-0 text-ink-400" />
         <span className="text-[12.5px] text-ink-600">
@@ -49,7 +50,7 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
           <RefreshCcw className={`h-3.5 w-3.5 ${pending ? "animate-spin" : ""}`} />
           {pending ? v.reading : v.button}
         </button>
-      </form>
+      </ActionForm>
 
       {/* Could not look. Deliberately not rendered as a clean result. */}
       {state?.error && (

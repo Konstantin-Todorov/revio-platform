@@ -7,6 +7,7 @@ import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
 import { useActionState, useRef, useState } from "react";
 import { ImageUp, Trash2 } from "lucide-react";
 import { uploadBookingLogo, removeBookingLogo, type LookResult } from "@/lib/actions-booking-engine";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * The booking page's logo — inherited, or the hotel's own.
@@ -70,7 +71,7 @@ export function LogoPicker({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <form action={formAction} className="flex flex-col gap-1.5">
+          <ActionForm action={formAction} state={state} className="flex flex-col gap-1.5">
             <input
               ref={inputRef}
               type="file"
@@ -86,7 +87,7 @@ export function LogoPicker({
             >
               <ImageUp className="h-3.5 w-3.5" /> {pending ? G.uploading : G.upload}
             </button>
-          </form>
+          </ActionForm>
 
           {/* Its own form: removing is not part of uploading, and one button per request keeps the
               two failure modes separable. */}

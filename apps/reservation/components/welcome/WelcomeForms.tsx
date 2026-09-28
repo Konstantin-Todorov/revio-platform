@@ -24,6 +24,7 @@ import {
   setWelcomePrice,
   type WelcomeResult,
 } from "@/lib/actions-welcome";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * RevioCRS's first-run forms.
@@ -43,11 +44,11 @@ export function PropertyForm({ values }: { values: PropertyFieldValues }) {
   const { shell } = useWords();
 
   return (
-    <form action={action} className="space-y-6">
+    <ActionForm action={action} state={state} className="space-y-6">
       <PropertyFields values={values} />
       <WelcomeError message={state?.error} />
       <WelcomeContinue label={shell.saveAndContinue} savingLabel={shell.saving} pending={pending} />
-    </form>
+    </ActionForm>
   );
 }
 
@@ -56,7 +57,7 @@ export function RoomTypeForm() {
   const { f } = useWords();
 
   return (
-    <form action={action} className="space-y-4 rounded-lg border border-surface-border bg-white p-4">
+    <ActionForm action={action} state={state} className="space-y-4 rounded-lg border border-surface-border bg-white p-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_7rem_7rem]">
         <label className="block">
           <span className={welcomeLabel}>{f.roomType}</span>
@@ -79,7 +80,7 @@ export function RoomTypeForm() {
       >
         {pending ? f.adding : f.addRoomType}
       </button>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -89,7 +90,7 @@ export function PriceForm({ currency, roomTypeCount }: { currency: string; roomT
   const { shell, f } = useWords();
 
   return (
-    <form action={action} className="space-y-4">
+    <ActionForm action={action} state={state} className="space-y-4">
       <label className="block sm:max-w-[16rem]">
         <span className={welcomeLabel}>{f.nightly(currency)}</span>
         <input name="price" inputMode="decimal" required placeholder={f.nightlyPlaceholder} className={welcomeInput} autoFocus />
@@ -101,7 +102,7 @@ export function PriceForm({ currency, roomTypeCount }: { currency: string; roomT
       <div className="pt-1">
         <WelcomeContinue label={f.setPrice} savingLabel={shell.saving} pending={pending} />
       </div>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -111,11 +112,11 @@ export function TaxForm({ values }: { values: TaxFieldValues }) {
   const { shell } = useWords();
 
   return (
-    <form action={action} className="space-y-6">
+    <ActionForm action={action} state={state} className="space-y-6">
       <TaxFields values={values} />
       <WelcomeError message={state?.error} />
       <WelcomeContinue label={shell.saveAndContinue} savingLabel={shell.saving} pending={pending} />
-    </form>
+    </ActionForm>
   );
 }
 
@@ -129,10 +130,10 @@ export function BrandForm(props: {
   const { shell, f } = useWords();
 
   return (
-    <form action={action} className="space-y-5">
+    <ActionForm action={action} state={state} className="space-y-5">
       <BrandFields {...props} />
       <WelcomeError message={state?.error} />
       <WelcomeContinue label={f.useThis} savingLabel={shell.saving} pending={pending} />
-    </form>
+    </ActionForm>
   );
 }

@@ -5,6 +5,7 @@ import { ImageUp, Trash2 } from "lucide-react";
 import { fill, translate } from "./i18n";
 import { useLocale } from "./i18n-context";
 import { guestEmailsStrings } from "./guest-emails-strings";
+import { ActionForm } from "./action-form";
 
 /** What an upload action returns. `code` is said in the reader's language; `error` is the fallback. */
 export type UploadResult = { ok: boolean; error?: string; code?: "none" | "tooBig" | "notImage"; kb?: number };
@@ -41,7 +42,7 @@ export function EmailLogoUpload({ currentUrl, uploadAction, removeAction }: {
   }
 
   return (
-    <form action={formAction} className="space-y-2.5">
+    <ActionForm action={formAction} state={state} className="space-y-2.5">
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-[68px] w-[150px] items-center justify-center overflow-hidden rounded-md border border-dashed border-surface-border bg-surface-muted">
           {shown ? (
@@ -88,6 +89,6 @@ export function EmailLogoUpload({ currentUrl, uploadAction, removeAction }: {
       <p className="text-[11.5px] text-ink-400">
         {s.hint}
       </p>
-    </form>
+    </ActionForm>
   );
 }

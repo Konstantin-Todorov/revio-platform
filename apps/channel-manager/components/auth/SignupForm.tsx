@@ -7,6 +7,7 @@ import { submitSignup, type SignupResult } from "@/lib/actions-signup";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { signup as signupDict } from "@/lib/i18n/signup";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * The one question a hotel is asked before it sees anything.
@@ -47,7 +48,7 @@ export function SignupForm({ defaultEmail = "", siteKey }: { defaultEmail?: stri
   const f = translate(signupDict, useLocale()).form;
 
   return (
-    <form action={formAction} className="space-y-4">
+    <ActionForm action={formAction} state={state} className="space-y-4">
       <div className="space-y-3">
         <label className="block">
           <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-400">{f.hotel}</span>
@@ -128,6 +129,6 @@ export function SignupForm({ defaultEmail = "", siteKey }: { defaultEmail?: stri
       <p className="text-center text-[11.5px] leading-snug text-ink-400">
         {f.noCard}
       </p>
-    </form>
+    </ActionForm>
   );
 }

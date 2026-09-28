@@ -9,6 +9,7 @@ import { Sparkles } from "lucide-react";
 import { simulateBooking, type ActionResult } from "@/lib/actions-calendar";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { DateField } from "@revio/ui/date-field";
+import { ActionForm } from "@revio/ui/action-form";
 
 type Opt = { id: string; name: string; code?: string };
 type Options = { channels: Opt[]; roomTypes: Opt[]; ratePlans: Opt[] };
@@ -38,7 +39,7 @@ export function BookingDialog({ options, today, defaultRoomTypeId }: { options: 
         <p className="mb-3 text-[12.5px] text-ink-500">
           {b.intro}<span className="font-semibold text-ink-700">{b.loop}</span>.
         </p>
-        <form action={formAction} className="space-y-3.5">
+        <ActionForm action={formAction} state={state} className="space-y-3.5">
           <div className="grid grid-cols-2 gap-3">
             <Field label={b.guest}><input name="guestName" className={inputCls} placeholder={b.guestPlaceholder} /></Field>
             <Field label={b.channel}>
@@ -73,7 +74,7 @@ export function BookingDialog({ options, today, defaultRoomTypeId }: { options: 
               {pending ? b.booking : b.create}
             </button>
           </div>
-        </form>
+        </ActionForm>
         </>
         )}
       </Modal>

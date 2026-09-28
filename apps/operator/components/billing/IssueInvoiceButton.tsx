@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { FileCheck2, Loader2 } from "lucide-react";
 import { issueInvoiceAction, type ActionResult } from "@/lib/actions-company";
+import { ActionForm } from "@revio/ui/action-form";
 
 /**
  * Issue a draft — the moment a billing row becomes a document.
@@ -17,7 +18,7 @@ export function IssueInvoiceButton({ invoiceId }: { invoiceId: string }) {
 
   return (
     <span className="inline-flex flex-col items-start gap-1">
-      <form action={action}>
+      <ActionForm action={action} state={state}>
         <input type="hidden" name="invoiceId" value={invoiceId} />
         <button
           type="submit"
@@ -27,7 +28,7 @@ export function IssueInvoiceButton({ invoiceId }: { invoiceId: string }) {
           {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileCheck2 className="h-3 w-3" />}
           {pending ? "Issuing…" : "Issue"}
         </button>
-      </form>
+      </ActionForm>
       {state?.error && (
         // Wide, wrapping and left-aligned: these messages are sentences, and truncating one into a
         // table cell would hide the half that says how to fix it.
