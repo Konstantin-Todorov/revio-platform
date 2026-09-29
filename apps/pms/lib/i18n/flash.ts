@@ -6,6 +6,27 @@ import type { Translations } from "@revio/ui/i18n";
  * that knows WHY it refused.
  */
 export interface FlashStrings {
+  /** What an action says when it SUCCEEDED — these were English-only literals until 2026-09-29. */
+  done: {
+    posted: (description: string) => string;
+    paymentRecorded: (method: string, amount: string) => string;
+    extraAdded: (name: string, amount: string) => string;
+    extraStopped: (name: string) => string;
+    depositCaptured: (type: string, amount: string, applied: boolean) => string;
+    depositApplied: (amount: string) => string;
+    depositRefunded: (amount: string) => string;
+    splitAdded: (label: string) => string;
+    splitRemoved: (label: string) => string;
+    moveResolved: (resolution: "comp" | "charge" | "refund" | "waive" | "custom", amount: string | null) => string;
+    lineMoved: (description: string) => string;
+    lineVoided: (description: string) => string;
+    propertyChanged: string;
+    dateChanged: string;
+    alreadyIn: (since: string) => string;
+    notIn: string;
+    otherAlreadyIn: (name: string, since: string) => string;
+    otherNotIn: string;
+  };
   folio: {
     noPermission: string;
     chargeFields: string;
@@ -67,6 +88,26 @@ export interface FlashStrings {
 
 export const flash: Translations<FlashStrings> = {
   en: {
+    done: {
+      posted: (d) => `${d} was posted to the folio.`,
+      paymentRecorded: (m, a) => `${m} payment of ${a} was recorded.`,
+      extraAdded: (n, a) => `${n} was added at ${a} per night.`,
+      extraStopped: (n) => `${n} was stopped. Charges already accrued remain on the folio.`,
+      depositCaptured: (t, a, applied) => `${t} deposit of ${a} was ${applied ? "applied to the balance" : "recorded as held"}.`,
+      depositApplied: (a) => `${a} of the held deposit was applied to the balance.`,
+      depositRefunded: (a) => `Deposit refund of ${a} was recorded.`,
+      splitAdded: (l) => `${l} folio was added to the stay.`,
+      splitRemoved: (l) => `${l} folio was removed.`,
+      moveResolved: (r, a) => `The room-move difference was resolved as ${r}${a ? ` for ${a}` : ""}.`,
+      lineMoved: (d) => `${d} was moved to the selected folio.`,
+      lineVoided: (d) => `${d} was voided. It remains visible in the audit trail.`,
+      propertyChanged: "The active property changed. Review Close Day before closing it.",
+      dateChanged: "The business date changed since this page was opened. No additional day was closed. Review the current date before continuing.",
+      alreadyIn: (s) => `You are already clocked in — since ${s}.`,
+      notIn: "You are not clocked in, so there is no shift to end.",
+      otherAlreadyIn: (n, s) => `${n} is already clocked in — since ${s}.`,
+      otherNotIn: "They are not clocked in, so there is no shift to end.",
+    },
     folio: {
       noPermission: "You don’t have permission to change this folio. Ask a manager or reception colleague.",
       chargeFields: "Add a description and an amount above zero before posting the charge.",
@@ -149,6 +190,26 @@ export const flash: Translations<FlashStrings> = {
     },
   },
   bg: {
+    done: {
+      posted: (d) => `„${d}“ е начислено по сметката.`,
+      paymentRecorded: (_m, a) => `Плащането от ${a} е записано.`,
+      extraAdded: (n, a) => `„${n}“ е добавено — ${a} на нощувка.`,
+      extraStopped: (n) => `„${n}“ е спряно. Вече начислените суми остават по сметката.`,
+      depositCaptured: (t, a, applied) => `Депозитът „${t}“ от ${a} е ${applied ? "приспаднат от сметката" : "записан като задържан"}.`,
+      depositApplied: (a) => `${a} от задържания депозит са приспаднати от сметката.`,
+      depositRefunded: (a) => `Връщането на депозит от ${a} е записано.`,
+      splitAdded: (l) => `Сметка „${l}“ е добавена към престоя.`,
+      splitRemoved: (l) => `Сметка „${l}“ е премахната.`,
+      moveResolved: (r, a) => `Разликата от преместването е уредена: ${({ comp: "подарена", charge: "начислена", refund: "върната", waive: "опростена", custom: "по избрана сума" })[r]}${a ? ` — ${a}` : ""}.`,
+      lineMoved: (d) => `„${d}“ е преместено в избраната сметка.`,
+      lineVoided: (d) => `„${d}“ е анулирано. Остава видимо в историята.`,
+      propertyChanged: "Активният обект е сменен. Прегледайте затварянето на деня, преди да го затворите.",
+      dateChanged: "Работната дата се е сменила, откакто страницата е отворена. Не е затворен допълнителен ден. Прегледайте текущата дата, преди да продължите.",
+      alreadyIn: (s) => `Вече сте на смяна — от ${s}.`,
+      notIn: "Не сте на смяна, така че няма смяна за приключване.",
+      otherAlreadyIn: (n, s) => `${n} вече е на смяна — от ${s}.`,
+      otherNotIn: "Служителят не е на смяна, така че няма смяна за приключване.",
+    },
     folio: {
       noPermission: "Нямате права да променяте тази сметка. Помолете управител или колега от рецепцията.",
       chargeFields: "Добавете описание и сума над нула, преди да начислите.",

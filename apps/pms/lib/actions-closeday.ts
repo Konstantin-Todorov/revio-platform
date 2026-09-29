@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { setFlash } from "@revio/ui/flash";
+import { i18n } from "./i18n/server";
+import { flash } from "./i18n/flash";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./session";
@@ -50,7 +52,7 @@ export async function closeDay(fd: FormData): Promise<void> {
   const session = await ctx("manage");
   // A stale tab can also belong to a property the user has since switched away from.
   if (str(fd, "propertyId") !== session.activePropertyId) {
-    await setFlash("info", "The active property changed. Review Close Day before closing it.");
+    await setFlash("info", (await i18n()).t(flash).done.propertyChanged);
     redirect("/closeday");
   }
 
@@ -69,7 +71,7 @@ export async function closeDay(fd: FormData): Promise<void> {
      * that is to click again. The person needs to know the work happened, just not by them.
      */
     if (err instanceof DayAlreadyClosedError) {
-      await setFlash("info", "The business date changed since this page was opened. No additional day was closed. Review the current date before continuing.");
+      await setFlash("info", (await i18n()).t(flash).done.dateChanged);
       revalidatePath("/closeday");
       redirect("/closeday");
     }

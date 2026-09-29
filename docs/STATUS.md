@@ -132,10 +132,10 @@ real RevioDirect booking page answer `200`.
 
 ⚠️ This table said **eight** services until today. `docs` was added and nothing here noticed.
 
-**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **twenty-two separate
-checks** on every change <!-- status: count checks 22 --> — typecheck, lint, and twenty ratchets that each exist because something
+**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **twenty-three separate
+checks** on every change <!-- status: count checks 23 --> — typecheck, lint, and twenty-one ratchets that each exist because something
 specific went wrong once: copy · terminology · authz · layout-guard · status · silent · money · health · a11y ·
-scroll-lock · jobs · submit · actionform · zoom · tokens · perimeter · txscope · atomic · dates · drift. (`txscope`, 2026-09-26: a
+scroll-lock · jobs · submit · actionform · zoom · tokens · perimeter · txscope · atomic · flash · dates · drift. (`txscope`, 2026-09-26: a
 `$transaction(async …)` on an RLS-scoped client is not one transaction — it crashed a real client deletion.
 `actionform`, 2026-09-28: React 19 empties a form after a refusal, and two colleagues gave up adding a client.) CI additionally applies every
 migration into an empty database and runs the seed.

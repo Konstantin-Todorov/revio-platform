@@ -17,6 +17,17 @@ import { resolutionConfirmation } from "./folio-outcomes";
 import { i18n } from "./i18n/server";
 import { flash } from "./i18n/flash";
 
+/**
+ * The stay's own currency, and an amount in it written for the reader. A payment is charged and a
+ * sum is said in the currency the booking is in — these said "€" and charged "EUR" whatever it was.
+ */
+async function stayMoney(reservationId: string): Promise<{ currency: string; say: (minor: number) => string }> {
+  const r = await prisma.reservation.findUnique({ where: { id: reservationId }, select: { currency: true } });
+  const currency = r?.currency || "EUR";
+  const { money } = await i18n();
+  return { currency, say: (minor) => money(minor, currency) };
+}
+
 /** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
 async function flashSay() {
   return (await i18n()).t(flash);
@@ -82,7 +93,7 @@ export async function postCharge(fd: FormData): Promise<void> {
   // Route through the single charge-posting service so the line is tagged (outlet + tax category).
   await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind, description, amountMinor, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_charge", field: description, newValue: `${kind} +${amountMinor}`, userId: session.userId });
-  await setFlash("success", `${description} was posted to the folio.`);
+  await setFlash("success", (await flashSay()).done.posted(description));
   refresh(reservationId);
 }
 
@@ -107,14 +118,14 @@ export async function postPayment(fd: FormData): Promise<void> {
   let description = PAY_METHODS[method]!;
   let gwRef = ref;
   if (method === "card") {
-    const g = await chargeCard(amountMinor, "EUR", `Folio ${reservationId.slice(-6)}`);
+    const g = await chargeCard(amountMinor, (await stayMoney(reservationId)).currency, `Folio ${reservationId.slice(-6)}`);
     if (!g.ok) return flashError((await flashSay()).folio.cardDeclined);
     gwRef = g.ref;
     description = g.mode === "stripe_test" ? `Card •••• ${g.last4 ?? "4242"} (test)` : "Card (mock gateway)";
   }
   await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind: "payment", description, amountMinor, method, ref: gwRef, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_payment", field: PAY_METHODS[method], newValue: `-${amountMinor}${gwRef ? ` · ${gwRef}` : ""}`, userId: session.userId });
-  await setFlash("success", `${PAY_METHODS[method]} payment of €${(amountMinor / 100).toFixed(2)} was recorded.`);
+  await setFlash("success", (await flashSay()).done.paymentRecorded(PAY_METHODS[method]!, (await stayMoney(reservationId)).say(amountMinor)));
   refresh(reservationId);
 }
 
@@ -139,7 +150,7 @@ export async function addStayExtra(fd: FormData): Promise<void> {
     data: { tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId, name, priceMinor, active: true },
   });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "stay_extra", field: name, newValue: `${priceMinor}/night`, userId: session.userId });
-  await setFlash("success", `${name} was added at €${(priceMinor / 100).toFixed(2)} per night.`);
+  await setFlash("success", (await flashSay()).done.extraAdded(name, (await stayMoney(reservationId)).say(priceMinor)));
   refresh(reservationId);
 }
 
@@ -152,7 +163,7 @@ export async function removeStayExtra(fd: FormData): Promise<void> {
   if (!extra) return flashError((await flashSay()).folio.extraGone);
   await prisma.stayExtra.delete({ where: { id } });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "stay_extra", field: extra!.name, newValue: "stopped", userId: session.userId });
-  await setFlash("success", `${extra!.name} was stopped. Charges already accrued remain on the folio.`);
+  await setFlash("success", (await flashSay()).done.extraStopped(extra!.name));
   refresh(reservationId);
 }
 
@@ -181,7 +192,7 @@ export async function captureDeposit(fd: FormData): Promise<void> {
   // Card deposits are gateway transactions against the token; cash is a drawer entry (spec §4.5).
   let depositRef: string | null = null;
   if (method === "card") {
-    const g = await chargeCard(amountMinor, "EUR", `${type!.name} deposit ${reservationId.slice(-6)}`);
+    const g = await chargeCard(amountMinor, (await stayMoney(reservationId)).currency, `${type!.name} deposit ${reservationId.slice(-6)}`);
     if (!g.ok) return flashError((await flashSay()).folio.depositDeclined);
     depositRef = g.ref;
   }
@@ -196,7 +207,7 @@ export async function captureDeposit(fd: FormData): Promise<void> {
     postedById: session.userId,
   });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "deposit_capture", field: type!.name, newValue: `${applied ? "applied" : "held"} ${amountMinor}`, userId: session.userId });
-  await setFlash("success", `${type!.name} deposit of €${(amountMinor / 100).toFixed(2)} was ${applied ? "applied to the balance" : "recorded as held"}.`);
+  await setFlash("success", (await flashSay()).done.depositCaptured(type!.name, (await stayMoney(reservationId)).say(amountMinor), applied));
   refresh(reservationId);
 }
 
@@ -223,7 +234,7 @@ export async function useDeposit(fd: FormData): Promise<void> {
     taxCategory: "standard", postedById: session.userId,
   });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "deposit_use", field: "applied to balance", newValue: String(amountMinor), userId: session.userId });
-  await setFlash("success", `€${(amountMinor / 100).toFixed(2)} of the held deposit was applied to the balance.`);
+  await setFlash("success", (await flashSay()).done.depositApplied((await stayMoney(reservationId)).say(amountMinor)));
   refresh(reservationId);
 }
 
@@ -257,7 +268,7 @@ export async function refundDeposit(fd: FormData): Promise<void> {
     method, ref: refundRef, taxCategory: null, postedById: session.userId,
   });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "deposit_refund", field: "returned to guest", newValue: String(amountMinor), userId: session.userId });
-  await setFlash("success", `Deposit refund of €${(amountMinor / 100).toFixed(2)} was recorded.`);
+  await setFlash("success", (await flashSay()).done.depositRefunded((await stayMoney(reservationId)).say(amountMinor)));
   refresh(reservationId);
 }
 
@@ -270,7 +281,7 @@ export async function createFolio(fd: FormData): Promise<void> {
   if (await pressedTwice(fd, session.tenantId, "createFolio")) { refresh(reservationId); return; }
   await createSplitFolio(session.tenantId, session.activePropertyId, reservationId, label);
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_split", field: label, newValue: "added", userId: session.userId });
-  await setFlash("success", `${label} folio was added to the stay.`);
+  await setFlash("success", (await flashSay()).done.splitAdded(label));
   refresh(reservationId);
 }
 
@@ -315,7 +326,7 @@ export async function removeFolio(fd: FormData): Promise<void> {
   await logAudit(session.activePropertyId, session.tenantId, {
     entity: "folio_split_removed", field: folio!.label, oldValue: `folio ${folioId.slice(-6)}`, newValue: "removed", userId: session.userId,
   });
-  await setFlash("success", `${folio!.label} folio was removed.`);
+  await setFlash("success", (await flashSay()).done.splitRemoved(folio!.label));
   refresh(reservationId);
 }
 
@@ -500,7 +511,7 @@ export async function resolveMoveDifference(fd: FormData): Promise<void> {
     newValue: `${resolution}${magnitude ? ` · ${magnitude}` : ""}${note ? ` · ${note}` : ""}`,
     userId: session.userId,
   });
-  await setFlash("success", `The room-move difference was resolved as ${resolution}${magnitude ? ` for €${(magnitude / 100).toFixed(2)}` : ""}.`);
+  await setFlash("success", (await flashSay()).done.moveResolved(resolution as (typeof MOVE_RESOLUTIONS)[number], magnitude ? (await stayMoney(reservationId)).say(magnitude) : null));
   refresh(reservationId);
 }
 
@@ -524,7 +535,7 @@ export async function moveFolioLine(fd: FormData): Promise<void> {
 
   await prisma.folioLine.update({ where: { id: lineId }, data: { folioId: target!.id } });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_move", field: line!.description, newValue: `→ folio ${target!.id.slice(-6)}`, userId: session.userId });
-  await setFlash("success", `${line!.description} was moved to the selected folio.`);
+  await setFlash("success", (await flashSay()).done.lineMoved(line!.description));
   refresh(reservationId);
 }
 
@@ -540,6 +551,6 @@ export async function voidFolioLine(fd: FormData): Promise<void> {
 
   await prisma.folioLine.update({ where: { id: lineId }, data: { voided: true } });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_void", field: line.description, oldValue: String(line.amountMinor), newValue: "voided", userId: session.userId });
-  await setFlash("success", `${line.description} was voided. It remains visible in the audit trail.`);
+  await setFlash("success", (await flashSay()).done.lineVoided(line.description));
   refresh(reservationId);
 }

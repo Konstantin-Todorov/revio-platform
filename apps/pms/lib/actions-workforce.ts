@@ -61,7 +61,7 @@ export async function clockInSelf(): Promise<void> {
     // Not an error and not nothing. A second device, a stale tab, or a colleague clocking them in
     // all land here, and a button that does nothing tells them the app is broken.
     const tz = await propertyTimeZone(s.activePropertyId);
-    return setFlash("info", `You are already clocked in — since ${sinceLabel(open.clockInAt, tz)}.`);
+    return setFlash("info", (await i18n()).t(flash).done.alreadyIn(sinceLabel(open.clockInAt, tz)));
   }
   const shift = await prisma.staffShift.create({
     data: { tenantId: s.tenantId, propertyId: s.activePropertyId, userId: s.userId, role: s.role },
@@ -78,7 +78,7 @@ export async function clockOutSelf(): Promise<void> {
   const s = await getSession();
   if (!s) return; // see clockInSelf
   const open = await prisma.staffShift.findFirst({ where: { propertyId: s.activePropertyId, userId: s.userId, clockOutAt: null } });
-  if (!open) return setFlash("info", "You are not clocked in, so there is no shift to end.");
+  if (!open) return setFlash("info", (await i18n()).t(flash).done.notIn);
   await prisma.staffShift.update({ where: { id: open.id }, data: { clockOutAt: new Date() } });
   await recordOpsEvent({
     propertyId: s.activePropertyId, tenantId: s.tenantId, domain: "workforce",
@@ -104,7 +104,7 @@ export async function clockInUser(fd: FormData): Promise<void> {
   const open = await prisma.staffShift.findFirst({ where: { propertyId: s.activePropertyId, userId, clockOutAt: null } });
   if (open) {
     const tz = await propertyTimeZone(s.activePropertyId);
-    return setFlash("info", `${target.name || "They"} are already clocked in — since ${sinceLabel(open.clockInAt, tz)}.`);
+    return setFlash("info", (await i18n()).t(flash).done.otherAlreadyIn(target.name || "—", sinceLabel(open.clockInAt, tz)));
   }
   const shift = await prisma.staffShift.create({
     data: { tenantId: s.tenantId, propertyId: s.activePropertyId, userId, role: target.role, clockedInById: s.userId },
@@ -122,7 +122,7 @@ export async function clockOutUser(fd: FormData): Promise<void> {
   if (!s || !DELEGATOR_ROLES.has(s.role)) return flashError((await flashSay()).workforce.delegatorsOnly);
   const userId = str(fd, "userId");
   const open = await prisma.staffShift.findFirst({ where: { propertyId: s.activePropertyId, userId, clockOutAt: null } });
-  if (!open) return setFlash("info", "They are not clocked in, so there is no shift to end.");
+  if (!open) return setFlash("info", (await i18n()).t(flash).done.otherNotIn);
   await prisma.staffShift.update({ where: { id: open.id }, data: { clockOutAt: new Date() } });
   await recordOpsEvent({
     propertyId: s.activePropertyId, tenantId: s.tenantId, domain: "workforce",

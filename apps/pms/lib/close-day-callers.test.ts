@@ -6,6 +6,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("./db", () => ({ prisma: {} }));
 vi.mock("./session", () => ({ getSession: io.session }));
 vi.mock("@revio/ui/flash", () => ({ setFlash: io.flash }));
+// The toast is said through the dictionary now; English is what these assertions read.
+vi.mock("./i18n/server", () => ({ i18n: async () => ({ locale: "en", t: <T,>(d: { en: T }) => d.en }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: (path: string) => { throw new Error(`redirect:${path}`); } }));
 vi.mock("./mutation-helpers", () => ({ logAudit: vi.fn(), str: (fd: FormData, name: string) => String(fd.get(name) ?? "").trim() }));
