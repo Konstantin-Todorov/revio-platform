@@ -329,7 +329,7 @@ says who can move it. Details sit where the link points.
    Hotelier, Apaleo, Lighthouse, SynXis, HotelRunner). Today the guarantee confirms Stripe's own test
    card (`pm_card_visa`) — no guest card is ever collected — and `CancellationPolicy` is a name with no
    terms. What the best do, in the order to build it:
-   a. **A payment policy per rate plan** — *card guarantee* (flexible) · *deposit* (% / first night /
+   a. ✅ **2026-09-29** (`9a0cefe`) **A payment policy per rate plan** — *card guarantee* (flexible) · *deposit* (% / first night /
       fixed) · *full prepayment* (non-refundable) — plus real cancellation terms (free until X days /
       then N nights). Lighthouse, Little Hotelier and Apaleo all key it to the rate; Cloudbeds' one
       deposit for everything is the known weakness.
@@ -338,7 +338,9 @@ says who can move it. Details sit where the link points.
       PaymentIntent + `setup_future_usage=off_session` for a deposit — 3-D Secure while the guest is
       present, so later charges go through as merchant-initiated. Apple Pay / Google Pay first on the
       page, but only where money is taken now (every competitor restricts them the same way).
-   c. **The policy beside every price** — "Pay €X now" / "Card guarantee · pay at the hotel" /
+   c. ✅ **2026-09-29** — cancellation terms beside every price and on the details step; the payment half
+      reads "nothing now" until `ONLINE_PAYMENTS_LIVE` (b + d) is built. Still to do: snapshot the terms
+      on the reservation and restate them on the confirmation page and email. **The policy beside every price** — "Pay €X now" / "Card guarantee · pay at the hotel" /
       "Free cancellation until 12 Oct" — and repeated on the confirmation with today's amount and any
       later date.
    d. **Scheduled charges** (balance N days before arrival) and a **no-show charge the front desk
