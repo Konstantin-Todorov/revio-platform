@@ -283,6 +283,8 @@ says who can move it. Details sit where the link points.
 | An accountant signs off the VAT reading (city tax inside the accommodation base) | founder + external | `ACTION-REQUIRED.md` §2 |
 | A guest can pay by card on RevioDirect — `apps/booking` carries no Stripe keys yet | founder decision, then small build | roadmap `live-card-payments` |
 | The two Ethno Villa Cherry duplicate properties, cleared inside Channex | founder | `ACTION-REQUIRED.md` §0 |
+| **Switch our Stripe to live** — confirm the live webhook endpoint `https://operator.reviosoft.app/api/webhooks/stripe` exists in the live dashboard with its 7 events and its signing secret saved; give the restricted `rk_live` key *Checkout Sessions: write*; then Operator → Integrations → Stripe → *Check now* on Live → switch mode | founder (super admin) | this file, *Can we take money?* |
+| Accountant confirms two invoice readings: under чл. 97а we **omit** the VAT line and state the чл. 113, ал. 9 ground (the founder's own sample prints "ДДС 0.00"); and whether a BGN equivalent must be printed | founder + external | `apps/operator/lib/invoice-html.ts` |
 
 **Build next — engineering, in this order**
 
@@ -323,6 +325,30 @@ says who can move it. Details sit where the link points.
    hold-expiry job. Two tabs are still two submissions — on purpose: that is two intents.
 5. **Money reconciled end to end** — one invoice by hand, and an exhaustive test of the all-in promise
    across occupancy, extras, nights and city-tax exemptions. `HANDOFF` §5.
+6. **RevioDirect takes real payments** (research 2026-09-29: Mews, Cloudbeds, SiteMinder/Little
+   Hotelier, Apaleo, Lighthouse, SynXis, HotelRunner). Today the guarantee confirms Stripe's own test
+   card (`pm_card_visa`) — no guest card is ever collected — and `CancellationPolicy` is a name with no
+   terms. What the best do, in the order to build it:
+   a. **A payment policy per rate plan** — *card guarantee* (flexible) · *deposit* (% / first night /
+      fixed) · *full prepayment* (non-refundable) — plus real cancellation terms (free until X days /
+      then N nights). Lighthouse, Little Hotelier and Apaleo all key it to the rate; Cloudbeds' one
+      deposit for everything is the known weakness.
+   b. **Stripe Payment Element on the hotel's own connected account** (direct charges, their merchant
+      name on the statement, our fee as `application_fee`). SetupIntent for a guarantee,
+      PaymentIntent + `setup_future_usage=off_session` for a deposit — 3-D Secure while the guest is
+      present, so later charges go through as merchant-initiated. Apple Pay / Google Pay first on the
+      page, but only where money is taken now (every competitor restricts them the same way).
+   c. **The policy beside every price** — "Pay €X now" / "Card guarantee · pay at the hotel" /
+      "Free cancellation until 12 Oct" — and repeated on the confirmation with today's amount and any
+      later date.
+   d. **Scheduled charges** (balance N days before arrival) and a **no-show charge the front desk
+      presses** — nobody competent charges it automatically on status alone.
+   e. **A payment-request link** for request-to-book and for a failed or re-authenticated charge — the
+      same never-expiring page shape as our invoice `/pay/<token>`.
+   Needs the founder's live-mode decision for guests (a different decision from our own invoicing).
+7. **Invoices, the next small steps** — the paid receipt should fall back to the account owner like
+   the invoice mail does; a SEPA/EPC QR code for the bank transfer on the pay page; a coverage test for
+   RevioDirect's `guest` dictionary.
 
 **Check — each is a question nobody has answered yet**
 
@@ -376,19 +402,41 @@ says who can move it. Details sit where the link points.
    language, since the invitee has none yet), password reset, password changed, trial opened, the sweep's
    trial reminder and trial finished (moved from the operator app into core `trial-emails.ts`), and the
    words around our support reply. The system shell sets `lang` and its footer per language. Mail to US
-   (support, alerts) stays English; invoices stay English (legal). Guest mail was already per-language.
+   (support, alerts) stays English. Invoices: **Bulgarian since 2026-09-29** for a client billed in Cyrillic, see below. Guest mail was already per-language.
    **Guest mail, 2026-09-25:** Settings → Guest emails is one shared screen in RevioLink, RevioCRS and
    RevioPMS <!-- status: built packages/ui/src/guest-emails.tsx#GuestEmails --> with the guests'
    language chosen at the top; RevioCRS emails confirm/change/cancel
    <!-- status: built apps/reservation/lib/guest-mail.ts#emailGuestAbout --> and RevioPMS the bill at
    check-out <!-- status: built apps/pms/lib/guest-receipt.ts#emailReceipt -->. Open: pre-arrival and
    thank-you, per-guest language — `docs/PLAN-GUEST-EMAILS.md`.
-5. RevioDirect's guest page — the GUEST's language, a different choice from staff (browser, then hotel).
+5. ~~RevioDirect's guest page~~ ✅ **2026-09-29** (`bfd5d19`) — the guest's own pick, then the browser, then the
+   hotel's default; every page, error and mail after it, stored on `Reservation.guestLanguage`. Room
+   descriptions stay in the language the hotel typed them in — content per language is not built.
 Rule for every step: `lib/i18n/<screen>.ts`, add it to the completeness test when finished, look at the
 page at phone width. Not translated: legal documents, and anything the hotel typed.
 
 **Later, when a hotel asks** — the hotel's own Stripe keys, groups and corporate, the AI assistant. The
 roadmap page holds them.
+
+### Shipped 2026-09-29 — invoices in Bulgarian, their own pay page, and letters that send themselves
+
+`87d12b2`. The invoice is laid out the way a Bulgarian one is read (the founder's own invoice as the
+reference): Оригинал / Фактура / № / Сума за плащане top right, Получател and Доставчик side by side
+with МОЛ, lines with мярка and количество, Словом, the dates, the place, the VAT basis and the
+signature lines. A client billed in Cyrillic gets the document **and every email about it** in
+Bulgarian; the language is snapshotted at issue. МОЛ is a field on the hotel's own billing screen in
+all three products and on ours.
+
+Every invoice has **its own page, `/pay/<token>`, that never expires** — amount, due date, the card
+button (only when a Stripe key for the active mode is ready), bank details with the invoice number as
+the reference, the document. The email links there, not to a Checkout session that dies in 24 hours.
+With **live** Stripe and *Send invoices automatically* on (Operator → Settings → Company), the monthly
+job issues current drafts, mails them, and chases 3 days before the due date, on it, and 7 days
+after. Our own accounts are never mailed. Checked in the browser, desk and 375px, on a locally issued
+invoice: Bulgarian document, Bulgarian subject line, pay page, download, and a wrong token 404s.
+
+Found on the way: **issuing recomputed the lines without proration, trials or usage** and was refused
+as a mismatch — any first-month client would have hit it. `billingFor` is now the one computation.
 
 ### Shipped 2026-09-28 — clients as four facts in the Operator; onboarding and room rules
 
