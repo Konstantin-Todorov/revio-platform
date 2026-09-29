@@ -34,7 +34,7 @@ export function UserMenu({ userName, roleLabel, products, upsells, locale = "en"
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-label={t.account} className="flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-surface-muted">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label={t.account} className="flex items-center gap-2 rounded-md p-1 transition-colors hover:bg-surface-muted">
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-product-ink text-[12px] font-bold text-white">{initials(userName)}</div>
         <div className="hidden text-left leading-tight sm:block">
           <div className="text-[12.5px] font-semibold text-ink-900">{userName}</div>

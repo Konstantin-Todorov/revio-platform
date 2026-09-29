@@ -119,6 +119,12 @@ Front desks are shared terminals; housekeeping is a phone in one hand. Every scr
 - Real touch targets, wrapping headers, tables that scroll in their own container rather than
   pushing the page sideways.
 - `prefers-reduced-motion` respected.
+- **Nothing off the edge at 375px — pages AND the menus they open.** `pnpm phone:walk` opens every
+  screen of every product (and RevioDirect, and the sign-in pages) at phone width with the local dev
+  servers running, opens every menu on each, and lists anything cut by the screen's edge. A menu is
+  pinned to the screen on a phone (`fixed inset-x-3 … sm:absolute`), never to a button in the middle
+  of the bar — that is how the notification panel and the client menu hung off the edge until
+  2026-09-29. Proven to catch both, and the 403px calendar form it found on its first run.
 
 ## 7 · Look at it
 

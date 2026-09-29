@@ -165,7 +165,7 @@ export default async function CalendarPage({
           <h2 className="text-[15px] font-bold tracking-tight text-ink-900">{monthLabel}</h2>
 
           {/* Jump straight to any month in the 2-year horizon */}
-          <form method="GET" action="/calendar" className="flex items-center gap-1">
+          <form method="GET" action="/calendar" className="flex flex-wrap items-center gap-1">
             <input type="hidden" name="view" value="month" />
             {rt.length > 0 && <input type="hidden" name="rt" value={rt.join(",")} />}
             {rows.length > 0 && <input type="hidden" name="rows" value={rows.join(",")} />}
@@ -291,16 +291,18 @@ export default async function CalendarPage({
         </div>
 
         {/* Jump to any date within the 2-year horizon */}
-        <form method="GET" action="/calendar" className="flex items-center gap-1">
+        {/* On a phone the two dates share the row and the button wraps under them: side by side at
+            fixed widths they were 403px on a 375px screen (phone-walk, 2026-09-29). */}
+        <form method="GET" action="/calendar" className="flex w-full flex-wrap items-center gap-1 sm:w-auto sm:flex-nowrap">
           <input type="hidden" name="days" value={days} />
           {rt.length > 0 && <input type="hidden" name="rt" value={rt.join(",")} />}
           {rows.length > 0 && <input type="hidden" name="rows" value={rows.join(",")} />}
           {rp.length > 0 && <input type="hidden" name="rp" value={rp.join(",")} />}
           {/* BUG-009b: the picker let you navigate to and select past months. A date nobody can
               sell is not a date worth offering. */}
-          <DateField name="start" min={todayKey} defaultValue={start} className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
+          <DateField name="start" min={todayKey} defaultValue={start} className="h-8 min-w-0 flex-1 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600 sm:flex-none" />
           <span className="text-[11px] text-ink-400">→</span>
-          <DateField name="end" min={todayKey} title={t.endHint} className="h-8 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600" />
+          <DateField name="end" min={todayKey} title={t.endHint} className="h-8 min-w-0 flex-1 rounded-md border border-surface-border bg-white px-2 text-[12.5px] text-ink-700 outline-none focus:border-brand-600 sm:flex-none" />
           <button type="submit" className="rounded-md border border-surface-border bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-ink-600 transition-colors hover:bg-surface-muted">{t.go}</button>
         </form>
 

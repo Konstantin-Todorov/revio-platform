@@ -27,6 +27,8 @@ export function WorkspaceSwitcher({ properties, activeId, activeName }: { proper
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className="flex items-center gap-2.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[13px] font-semibold text-ink-900 transition-colors hover:bg-surface-muted"
       >
         <Building2 className="h-4 w-4 text-product-ink" />

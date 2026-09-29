@@ -34,6 +34,7 @@
     "txscope:lint": "node scripts/txscope-lint.mjs",
     "dates:lint": "node scripts/dates-lint.mjs",
     "submit:lint": "node scripts/submit-lint.mjs",
+    "phone:walk": "node scripts/phone-walk.mjs",
     "actionform:lint": "node scripts/actionform-lint.mjs",
     "terminology:lint": "node scripts/terminology-lint.mjs"
   },
