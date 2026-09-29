@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { MappingEditDialog } from "@/components/mapping/MappingEditDialog";
 import { VerifyStrip } from "@/components/mapping/VerifyStrip";
 import { SendToChannex } from "@/components/mapping/SendToChannex";
-import { ChannelPlans } from "@/components/mapping/ChannelPlans";
+import { ChannelPlans } from "@revio/ui/channel-plans";
 import { i18n } from "@/lib/i18n/server";
 import { mapping as mappingDict } from "@/lib/i18n/mapping";
 
@@ -27,7 +27,7 @@ const STATUS_TONE: Record<string, Tone> = { complete: "success", incomplete: "wa
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ ch?: string }> }) {
   const sp = await searchParams;
-  const [{ channels, channel, roomTypeMappings, ratePlanMappings, neverSent, mappingCollisions }, { t }] = await Promise.all([getMapping(sp.ch), i18n()]);
+  const [{ channels, channel, roomTypeMappings, ratePlanMappings, neverSent, mappingCollisions }, { t, locale }] = await Promise.all([getMapping(sp.ch), i18n()]);
   const s = t(mappingDict);
   const statusLabel = (st: string) => s.status[st as keyof typeof s.status] ?? st;
 
@@ -440,7 +440,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
         </Card>
       </div>
 
-      <ChannelPlans rooms={planRooms} channel={channel.name} s={s.plans} />
+      <ChannelPlans rooms={planRooms} channel={channel.name} locale={locale} />
     </div>
   );
 }

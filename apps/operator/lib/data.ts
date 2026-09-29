@@ -1,4 +1,5 @@
 import "server-only";
+import { explainChannelPlans, listChannelProducts, type ChannelPlanRoom } from "@revio/connectivity";
 import { forSystem, decryptSecret, keyHint, AUTH_EVENT } from "@revio/db";
 import {
   BOOKING_ENGINE_SOURCE_NAME, COMBINATIONS, PLAN_BASE_MINOR, PRODUCT_KEYS, ROOM_TIERS,
@@ -1447,4 +1448,40 @@ export async function listLeads(limit = 200): Promise<{ rows: LeadRow[]; openCou
     })),
     openCount: leads.filter((l) => !l.handledAt).length,
   };
+}
+
+/**
+ * Every plan each real channel holds and where its price comes from — the same picture as the
+ * hotel's Mapping screen, so we can see it without signing in as them.
+ *
+ * ⚠️ Asked LIVE, one catalogue request per real channel, which is why it is loaded only when the
+ * Channels tab is open (the rest of this console reads stored facts). Read-only. A channel whose
+ * catalogue cannot be read is left out rather than drawn empty: "no plans" and "could not ask" are
+ * not the same sentence (root CLAUDE.md, the 401 trap).
+ */
+export async function channelPlansFor(tenantId: string): Promise<Record<string, ChannelPlanRoom[]>> {
+  const channels = await prisma.channel.findMany({
+    where: { tenantId, connectivityMode: { not: "mock" }, externalPropertyId: { not: null } },
+    select: { id: true },
+  });
+  const out: Record<string, ChannelPlanRoom[]> = {};
+  await Promise.all(channels.map(async (ch) => {
+    const [products, maps] = await Promise.all([
+      listChannelProducts(prisma, ch.id),
+      prisma.channelRatePlanMapping.findMany({
+        where: { channelId: ch.id, externalRateId: { not: null } },
+        select: { externalRateId: true, ratePlan: { select: { name: true } } },
+      }),
+    ]);
+    if (products.rates.length === 0) return;
+    out[ch.id] = explainChannelPlans(
+      products.rates.map((r) => ({
+        id: r.id, name: r.name, roomTypeId: r.roomTypeId ?? null, kind: r.kind ?? "property",
+        derived: r.derived ?? false, parentId: r.parentId ?? null, ...(r.channel ? { channel: r.channel } : {}),
+      })),
+      maps.map((m) => ({ externalRateId: m.externalRateId!, ratePlanName: m.ratePlan.name })),
+      products.rooms,
+    );
+  }));
+  return out;
 }

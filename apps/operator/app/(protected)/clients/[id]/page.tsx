@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getClientDetail } from "@/lib/data";
+import { channelPlansFor, getClientDetail } from "@/lib/data";
 import { alignSeries, billedSeries, bookingSeries, hasHistory, monthKeys, mrrMovement } from "@/lib/client-trend";
 import { TrendChart } from "@/components/overview/TrendChart";
 import { SetupProgressCard } from "@/components/clients/SetupProgressCard";
@@ -783,7 +783,7 @@ export default async function ClientDetailPage({
             reported success every five minutes. The counts moved to the header, where a summary
             belongs; the rows say which channel, what it is doing, and what can be done about it.
           */}
-          <ChannelsPanel channels={c.channelDetail} suspended={c.tenant.status !== "active"} />
+          <ChannelsPanel channels={c.channelDetail} suspended={c.tenant.status !== "active"} plans={await channelPlansFor(c.tenant.id)} />
         </Card>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { StatusPill, type Tone } from "@/components/ui/primitives";
 import { SubmitButton } from "@revio/ui/submit-button";
+import { ChannelPlans, type ChannelPlanRoomView } from "@revio/ui/channel-plans";
 import {
   operatorPauseChannel, operatorResumeChannel, operatorDisconnectChannel,
   operatorReconnectChannel, operatorDeleteChannel, operatorActivateChannel,
@@ -86,7 +87,12 @@ export interface ChannelRow {
   crossWired: { roomTypeName: string; ratePlanName: string; externalRateId: string; checkedAt: Date }[];
 }
 
-export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[]; suspended: boolean }) {
+export function ChannelsPanel({ channels, suspended, plans }: {
+  channels: ChannelRow[];
+  suspended: boolean;
+  /** Per channel id: every plan the channel holds, read live — only when the Channels tab is open. */
+  plans?: Record<string, ChannelPlanRoomView[]>;
+}) {
   const multiProperty = new Set(channels.map((c) => c.propertyName)).size > 1;
   if (channels.length === 0) {
     return <p className="px-4 py-4 text-[12.5px] text-ink-400">No channels yet. Nothing is being distributed for this client.</p>;
@@ -306,6 +312,7 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
                 </div>
               )}
             </dl>
+            {plans?.[ch.id] && <ChannelPlans rooms={plans[ch.id]!} channel={ch.name} locale="en" />}
           </div>
         );
       })}
