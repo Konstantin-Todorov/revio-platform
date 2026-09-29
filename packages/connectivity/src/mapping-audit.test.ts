@@ -66,6 +66,54 @@ describe("auditChannelMapping", () => {
   });
 });
 
+describe("closing what is no longer true", () => {
+  /*
+   * DesManagement, 2026-09-29: the wrong id was removed on 22 Sept and the entry saying prices were
+   * going to the wrong room stayed open a week, read as a live fault. An audit that has just read the
+   * catalogue and found no cross-wire must close it — and must leave a still-true one open.
+   */
+  it("closes a cross-wire entry once the channel no longer shows it, and keeps one that is still true", async () => {
+    vi.mocked(sync.verifyChannelProperty).mockResolvedValue({ ok: true, status: 200 });
+    vi.mocked(sync.listChannelProducts).mockResolvedValue({
+      rooms: [{ id: "R1", name: "One bed" }, { id: "R2", name: "Two bed" }],
+      rates: [{ id: "P1", name: "Flex 1", roomTypeId: "R1" }, { id: "P2", name: "Flex 2", roomTypeId: "R1" }],
+    } as never);
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const r = await auditChannelMapping(
+      db({
+        channelRatePlanMapping: {
+          findMany: vi.fn(async () => [
+            // Right: two-bed Flex was the fault, and is now correct…
+            { id: "m1", externalRateId: "P1", roomTypeId: "rt1", roomType: { name: "Apartment 1" }, ratePlan: { name: "Flex" } },
+            // …while this one still publishes a one-bed plan under the two-bed room.
+            { id: "m2", externalRateId: "P2", roomTypeId: "rt2", roomType: { name: "Apartment 2" }, ratePlan: { name: "Flex" } },
+          ]),
+          update: vi.fn(async () => ({})),
+        },
+        channelRoomTypeMapping: {
+          findMany: vi.fn(async () => [
+            { roomTypeId: "rt1", externalRoomId: "R1", roomType: { name: "Apartment 1" } },
+            { roomTypeId: "rt2", externalRoomId: "R2", roomType: { name: "Apartment 2" } },
+          ]),
+        },
+        errorItem: {
+          findFirst: vi.fn(async () => ({ id: "open-still-true" })),
+          create: vi.fn(async () => ({})),
+          findMany: vi.fn(async () => [
+            { id: "stale", productLabel: "Apartment 2 · Standard Rate" },
+            { id: "open-still-true", productLabel: "Apartment 2 · Flex" },
+          ]),
+          updateMany,
+        },
+      }),
+      "ch1",
+    );
+    expect(r.crossWired.map((f) => `${f.roomTypeName} · ${f.ratePlanName}`)).toEqual(["Apartment 2 · Flex"]);
+    expect(r.cleared).toBe(1);
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: { in: ["stale"] } }, data: { resolved: true } });
+  });
+});
+
 describe("keeping the webhook alive", () => {
   /*
    * ⚠️ Registered once and never checked is the defect shape this codebase keeps producing. A

@@ -48,6 +48,8 @@ export interface MappingAuditResult {
   crossWired: CrossWired[];
   /** Error Center entries created — one per fault that did not already have an open one. */
   raised: number;
+  /** Open cross-wire entries closed because the channel no longer shows that fault. */
+  cleared?: number;
   /**
    * Why nothing was recorded, when nothing was. Present means the run is inconclusive, NOT clean —
    * the difference this whole module is careful about.
@@ -224,7 +226,26 @@ export async function auditChannelMapping(
     });
   }
 
-  return { ...base, checked, crossWired, raised, ...(webhook ? { webhook } : {}) };
+  /*
+   * ⚠️ And close the ones that are no longer true.
+   *
+   * This only ever opened entries. DesManagement's "Apartment, 2 Bedrooms · Standard Rate is
+   * publishing to the wrong room" was fixed on 22 Sept (the wrong id was removed) and was still
+   * open a week later, counted as "1 to act on" — read, reasonably, as a live fault. We have just
+   * read the channel's catalogue, so an entry for a product that is not in today's list is answered:
+   * it is either mapped right now or not mapped at all, and neither publishes to the wrong room.
+   */
+  const stillWrong = new Set(crossWired.map((f) => `${f.roomTypeName} · ${f.ratePlanName}`));
+  const stale = await prisma.errorItem.findMany({
+    where: { channelId: channel.id, code: "mapping_cross_wired", resolved: false },
+    select: { id: true, productLabel: true },
+  });
+  const cleared = stale.filter((e) => !stillWrong.has(e.productLabel ?? ""));
+  if (cleared.length) {
+    await prisma.errorItem.updateMany({ where: { id: { in: cleared.map((e) => e.id) } }, data: { resolved: true } });
+  }
+
+  return { ...base, checked, crossWired, raised, cleared: cleared.length, ...(webhook ? { webhook } : {}) };
 }
 
 /**
