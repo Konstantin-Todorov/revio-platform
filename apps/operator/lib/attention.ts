@@ -446,3 +446,31 @@ export function splitByConcern(flags: AttentionFlag[]): { theirs: AttentionFlag[
 export function worstForThem(flags: AttentionFlag[]): Severity | null {
   return worstSeverity(flags.filter((f) => f.concern === "theirs"));
 }
+
+/** The client page's tabs, as their `?tab=` keys. */
+export type ClientTab = "overview" | "setup" | "channels" | "people" | "billing" | "history";
+
+/**
+ * Where on the client's page each flag is fixed — so the flag can take you there instead of leaving
+ * you to hunt for the right tab (founder, 2026-09-28: "when a notice appears, let it take you where
+ * it says").
+ *
+ * Matched on the title, which is the one part of a flag both modules already treat as its identity
+ * (React keys it by title). `attention.test.ts` walks every flag either module can raise and fails if
+ * one has no destination, so a new flag cannot quietly ship without a way to act on it.
+ * `null` means the thing is fixed from the header (a status), not from a tab.
+ */
+const FIX_TAB: [RegExp, ClientTab | null][] = [
+  [/^(Suspended|Closed)$/, null],
+  [/temporary email|sign-in address|No one to call/i, "people"],
+  [/booking.*never reached|publishing to the wrong room|No channel connected|open sync error|^No sync for/i, "channels"],
+  [/unpaid invoice/i, "billing"],
+  [/want to keep|No property yet|No room types|RevioPMS unused|Booking engine live but unused/i, "setup"],
+  [/Never contacted|No contact in/i, "history"],
+  [/Quiet for|Expansion candidate|Marked |Renew|renew/i, "overview"],
+];
+
+export function fixTab(title: string): ClientTab | null {
+  for (const [re, tab] of FIX_TAB) if (re.test(title)) return tab;
+  return "overview";
+}

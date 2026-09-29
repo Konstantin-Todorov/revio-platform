@@ -208,7 +208,7 @@ export default async function ClientDetailPage({
       {c.attention.length > 0 && (
         <Card>
           <CardHeader title={`Needs attention (${c.attention.length})`} />
-          <AttentionSections {...splitByConcern(c.attention)} />
+          <AttentionSections {...splitByConcern(c.attention)} tenantId={tenant.id} />
         </Card>
       )}
 
@@ -222,6 +222,9 @@ export default async function ClientDetailPage({
             <Link
               key={t.key}
               href={`/clients/${tenant.id}?tab=${t.key}`}
+              // Stay where you are: a tab changes what is below it, it is not a new page. It scrolled
+              // to the top, and the reader lost the place they were in (founder, 2026-09-28).
+              scroll={false}
               aria-current={active ? "page" : undefined}
               className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors ${
                 active ? "border-brand-700 text-brand-800" : "border-transparent text-ink-500 hover:text-ink-900"
@@ -261,7 +264,7 @@ export default async function ClientDetailPage({
           lastContactAt={c.lastContactAt ? c.lastContactAt.toISOString() : null}
         />
         <Card>
-          <CardHeader title="Who to call" action={<Link href={`/clients/${tenant.id}?tab=people`} className="text-[12px] font-semibold text-brand-700 hover:underline">All people →</Link>} />
+          <CardHeader title="Who to call" action={<Link href={`/clients/${tenant.id}?tab=people`} scroll={false} className="text-[12px] font-semibold text-brand-700 hover:underline">All people →</Link>} />
           {c.contacts.length === 0 ? (
             <p className="px-4 py-4 text-[13px] text-ink-500">No contact recorded. Add the person who decides on the People tab.</p>
           ) : (

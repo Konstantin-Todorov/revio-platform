@@ -177,9 +177,9 @@ export async function changeProductsAction(_prev: LifecycleFormResult | null, fd
  * it could not run is how a dead key read "0 revisions · success" 411 times.
  */
 export async function checkClientNowAction(
-  _prev: { ok: boolean; message?: string; error?: string } | null,
+  _prev: { ok: boolean; message?: string; error?: string; goto?: "channels" } | null,
   fd: FormData,
-): Promise<{ ok: boolean; message?: string; error?: string }> {
+): Promise<{ ok: boolean; message?: string; error?: string; goto?: "channels" }> {
   const session = await getOperatorSession();
   if (!session) return { ok: false, error: "Your session has expired. Sign in again, then repeat this." };
   const tenantId = String(fd.get("tenantId") ?? "");
@@ -209,7 +209,7 @@ export async function checkClientNowAction(
   for (const m of missing) problems.push(`${m.property.name} · ${m.name}: the property no longer exists at the channel manager`);
 
   const at = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Sofia", hour: "2-digit", minute: "2-digit" }).format(new Date());
-  if (problems.length) return { ok: false, error: `Checked at ${at}. ${problems.join(" · ")}. Details are on the Channels tab.` };
-  if (couldNot.length) return { ok: false, error: `Checked at ${at}, but could not ask about ${couldNot.join(", ")}. That is not the same as healthy — try again in a minute.` };
+  if (problems.length) return { ok: false, error: `Checked at ${at}. ${problems.join(" · ")}.`, goto: "channels" };
+  if (couldNot.length) return { ok: false, error: `Checked at ${at}, but could not ask about ${couldNot.join(", ")}. That is not the same as healthy — try again in a minute.`, goto: "channels" };
   return { ok: true, message: `Checked at ${at}: ${channels.length} channel${channels.length === 1 ? "" : "s"} answered, mapping as expected.` };
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { MoreHorizontal, RefreshCw } from "lucide-react";
 import {
   ACCOUNT_TYPES, CLOSE_REASONS, SUSPEND_REASONS, TRIAL_DAYS, earliestSelectable, todayInTimeZone, type AccountType, type LifecycleAction,
@@ -437,7 +438,7 @@ function MoreMenu({ items, onPick }: { items: { k: MenuKey; label: string; hint:
  * which is a different answer from "nothing wrong".
  */
 function CheckNow({ tenantId, channels }: { tenantId: string; channels: number }) {
-  const [state, action, pending] = useActionState<{ ok: boolean; message?: string; error?: string } | null, FormData>(checkClientNowAction, null);
+  const [state, action, pending] = useActionState<{ ok: boolean; message?: string; error?: string; goto?: "channels" } | null, FormData>(checkClientNowAction, null);
   return (
     <ActionForm action={action} state={state} className="flex flex-col gap-1">
       <input type="hidden" name="tenantId" value={tenantId} />
@@ -452,6 +453,11 @@ function CheckNow({ tenantId, channels }: { tenantId: string; channels: number }
       </Tip>
       {state?.message && <small role="status">{state.message}</small>}
       {state?.error && <small role="alert" className="!text-danger-700">{state.error}</small>}
+      {state?.goto && (
+        <Link href={`/clients/${tenantId}?tab=${state.goto}`} scroll={false} className="text-[12px] font-semibold text-brand-700 hover:underline">
+          Open the Channels tab →
+        </Link>
+      )}
     </ActionForm>
   );
 }

@@ -1,4 +1,9 @@
-import type { AttentionFlag } from "@/lib/attention";
+import Link from "next/link";
+import { fixTab, type AttentionFlag, type ClientTab } from "@/lib/attention";
+
+const TAB_NAME: Record<ClientTab, string> = {
+  overview: "Overview", setup: "Setup & trials", channels: "Channels", people: "People", billing: "Billing", history: "History",
+};
 
 /**
  * The attention feed in its two halves.
@@ -33,11 +38,14 @@ function Section({
   hint,
   empty,
   flags,
+  tenantId,
 }: {
   title: string;
   hint: string;
   empty: string;
   flags: AttentionFlag[];
+  /** When given, each flag links to the tab where it is fixed. */
+  tenantId?: string;
 }) {
   return (
     <div>
@@ -58,6 +66,18 @@ function Section({
                   {f.title}
                 </span>
                 <span className="mt-0.5 block text-[12.5px] text-ink-500">{f.detail}</span>
+                {(() => {
+                  const tab = tenantId ? fixTab(f.title) : null;
+                  return tab ? (
+                    <Link
+                      href={`/clients/${tenantId}?tab=${tab}`}
+                      scroll={false}
+                      className="mt-1 inline-block text-[12px] font-semibold text-brand-700 hover:underline"
+                    >
+                      Open {TAB_NAME[tab]} →
+                    </Link>
+                  ) : null;
+                })()}
               </span>
             </li>
           ))}
@@ -67,7 +87,7 @@ function Section({
   );
 }
 
-export function AttentionSections({ theirs, ours }: { theirs: AttentionFlag[]; ours: AttentionFlag[] }) {
+export function AttentionSections({ theirs, ours, tenantId }: { theirs: AttentionFlag[]; ours: AttentionFlag[]; tenantId?: string }) {
   return (
     <div>
       <Section
@@ -75,12 +95,14 @@ export function AttentionSections({ theirs, ours }: { theirs: AttentionFlag[]; o
         hint="the software is not doing its job"
         empty="Nothing is broken for them right now."
         flags={theirs}
+        {...(tenantId ? { tenantId } : {})}
       />
       <Section
         title="Our account with them"
         hint="money, renewal, usage"
         empty="Nothing outstanding on our side."
         flags={ours}
+        {...(tenantId ? { tenantId } : {})}
       />
     </div>
   );

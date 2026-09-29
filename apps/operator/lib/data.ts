@@ -33,7 +33,10 @@ const prisma = forSystem();
 async function channelsFor(tenantId: string) {
   const rows = await prisma.channel.findMany({
     where: { tenantId },
-    orderBy: [{ property: { name: "asc" } }, { name: "asc" }],
+    // Newest first — the channel just connected is the one somebody is looking for (founder,
+    // 2026-09-28). `Channel` has no createdAt; a cuid begins with its creation time, so the id sorts
+    // by age.
+    orderBy: [{ id: "desc" }],
     select: {
       id: true, name: true, code: true, status: true, connectivityMode: true,
       externalPropertyId: true, lastSyncAt: true, errorCount: true,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clientAttention, sortBySeverity, splitByConcern, worstForThem, worstSeverity,
   type AttentionFlag, type ClientSignals,
+  fixTab,
 } from "./attention.js";
 
 const NOW = new Date("2026-08-05T12:00:00Z");
@@ -389,5 +390,36 @@ describe("the two halves of the feed", () => {
   it("reads the row's colour from their software alone", () => {
     expect(worstForThem(flags)).toBe("act");
     expect(worstForThem([{ severity: "act", concern: "ours", title: "Suspended", detail: "" }])).toBeNull();
+  });
+});
+
+describe("fixTab — every flag says where it is fixed", () => {
+  it("sends each flag either module can raise to a real tab (or to the header, for a status)", () => {
+    const expectations: [string, ReturnType<typeof fixTab>][] = [
+      ["Signed up with a temporary email", "people"],
+      ["Shares a sign-in address with 1 other client", "people"],
+      ["A booking never reached the calendar", "channels"],
+      ["3 bookings never reached the calendar", "channels"],
+      ["A rate plan is publishing to the wrong room", "channels"],
+      ["Closed", null],
+      ["Suspended", null],
+      ["They want to keep RevioPMS", "setup"],
+      ["2 unpaid invoices", "billing"],
+      ["No property yet", "setup"],
+      ["No room types", "setup"],
+      ["RevioPMS unused", "setup"],
+      ["No channel connected", "channels"],
+      ["4 open sync errors", "channels"],
+      ["No sync for 5 days", "channels"],
+      ["Quiet for 40 days", "overview"],
+      ["Booking engine live but unused", "setup"],
+      ["Expansion candidate", "overview"],
+      ["Renews in 8 days", "overview"],
+      ["Marked live, behaving at risk", "overview"],
+      ["No one to call", "people"],
+      ["Never contacted", "history"],
+      ["No contact in 142 days", "history"],
+    ];
+    for (const [title, tab] of expectations) expect(fixTab(title), title).toBe(tab);
   });
 });
