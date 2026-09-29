@@ -67,7 +67,7 @@ export async function sendInvoiceMail(invoiceId: string, kind: MailKind): Promis
   const to = billing?.billingEmail?.trim() || owner?.email?.trim();
   if (!to) return { ok: false, code: "no_email", error: `No billing email and no active owner for ${tenant?.name ?? "this client"}. Add one on their client page, under Billing.` };
 
-  const lang = invoice.language === "bg" ? "bg" : "en";
+  const lang = invoice.language === "en" ? "en" : "bg";
   const token = await ensurePayToken(invoice.id);
   const owed = invoice.grossMinor ?? invoice.amountMinor;
   const date = (d: Date | null) =>

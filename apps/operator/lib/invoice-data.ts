@@ -26,7 +26,7 @@ export function invoiceDocData(
      * A paid invoice is a different document to file, and it is the one an accountant wants.
      */
     status?: string; paidAt?: Date | null; paidVia?: string | null; paidReference?: string | null;
-    language?: string | null; issuerRepresentative?: string | null; buyerRepresentative?: string | null; issuePlace?: string | null;
+    language?: string | null; issuerRepresentative?: string | null; buyerRepresentative?: string | null; issuePlace?: string | null; footerNote?: string | null;
   },
   ctx: {
     tenantName: string | null;
@@ -55,7 +55,7 @@ export function invoiceDocData(
 
   // A DRAFT has no snapshot, so the preview picks the rendering the same way issuing will — the
   // preview must show the document that would actually be produced, not a different one.
-  const previewIssuer = ctx.company ? chooseIdentity(ctx.company, ctx.billing?.country) : null;
+  const previewIssuer = ctx.company ? chooseIdentity(ctx.company, ctx.company.country) : null;
 
   return {
     number: invoice.number,
@@ -90,12 +90,10 @@ export function invoiceDocData(
     vatRatePct: invoice.vatRatePct ?? 0,
     vatTreatment: invoice.vatTreatment,
     vatNote: invoice.vatNote,
-    footerNote: ctx.company?.footerNote ?? null,
-    // Issued: what was frozen. A draft: what issuing would freeze now — Bulgarian for a buyer we
-    // write to in Cyrillic, English otherwise (the same rule as the issuer identity above).
-    language: (invoice.language === "bg" || invoice.language === "en")
-      ? invoice.language
-      : previewIssuer?.script === "cyrillic" ? "bg" : "en",
+    footerNote: invoice.footerNote ?? ctx.company?.footerNote ?? null,
+    // Issued: what was frozen. Anything else — a draft, or an invoice issued before the language was
+    // recorded — reads as Bulgarian, which is what every invoice we issue now is.
+    language: invoice.language === "en" ? "en" : "bg",
     issuerRepresentative: invoice.issuerRepresentative ?? ctx.company?.representative ?? null,
     buyerRepresentative: invoice.buyerRepresentative ?? ctx.billing?.representative ?? null,
     issuePlace: invoice.issuePlace ?? previewIssuer?.city ?? null,

@@ -13,6 +13,7 @@ const base: InvoiceDocData = {
   lines: [{ description: "RevioLink", netMinor: 4900 }, { description: "Bundle discount — 20%", netMinor: -3540 }],
   netMinor: 14160, taxMinor: 2832, grossMinor: 16992,
   vatRatePct: 20, vatTreatment: "domestic", vatNote: null, footerNote: "Thank you.",
+  language: "en",
 };
 
 describe("esc", () => {
@@ -47,7 +48,7 @@ describe("invoiceBodyHtml", () => {
       vatTreatment: "eu_reverse_charge", vatNote: "Reverse charge — Art. 196.",
     });
     // The rate column says 0%; the ground for it is stated beside the dates, as the law requires.
-    expect(html).toMatch(/VAT basis:<\/dt><dd>Reverse charge — Art\. 196\./);
+    expect(html).toMatch(/VAT basis:<\/strong> Reverse charge — Art\. 196\./);
   });
 
   it("shows a negative line as a negative, not as a stray minus", () => {
@@ -69,6 +70,40 @@ describe("invoiceBodyHtml", () => {
 
   it("labels an unissued draft rather than showing a blank number", () => {
     expect(invoiceBodyHtml({ ...base, number: null })).toContain("not issued");
+  });
+});
+
+describe("the language every invoice is issued in", () => {
+  it("is Bulgarian when an invoice carries no language — which is every one issued before it was recorded", () => {
+    const { language: _l, ...unrecorded } = base;
+    const html = invoiceBodyHtml(unrecorded);
+    expect(html).toContain('lang="bg"');
+    expect(html).toContain("Фактура");
+    expect(html).toContain("Словом");
+    expect(html).not.toContain("Total due");
+  });
+
+  it("carries every requisite a Bulgarian accountant looks for", () => {
+    const html = invoiceBodyHtml({ ...base, language: "bg", issuerRepresentative: "Иван Иванов", buyerRepresentative: "Мария Петрова", issuePlace: "Русе" });
+    for (const w of ["ЕИК", "ДДС №", "МОЛ", "Дата на издаване", "Дата на данъчно събитие", "Срок за плащане", "Място на сделката", "К-во", "Данъчна основа", "Сума за плащане", "Иван Иванов", "Мария Петрова"]) {
+      expect(html).toContain(w);
+    }
+  });
+
+  it("prints the stamp-and-signature sentence once — from the company's footer, never hard-coded beside it", () => {
+    const footerNote = "Съгласно чл.6, ал 1 от Закона за счетоводството печатът и подписът не са задължителни реквизити на фактурата.";
+    const html = invoiceBodyHtml({ ...base, language: "bg", footerNote });
+    expect(html.split("печатът и подписът").length - 1).toBe(1);
+  });
+
+  it("states the чл. 113, ал. 9 ground instead of a VAT line under a чл. 97а registration", () => {
+    const html = invoiceBodyHtml({
+      ...base, language: "bg", vatTreatment: "art97a_domestic", taxMinor: 0, grossMinor: 14160,
+      vatNote: "ДДС не се начислява на основание чл. 113, ал. 9 ЗДДС. · No VAT is charged under Art. 113(9).",
+    });
+    expect(html).toContain("чл. 113, ал. 9");
+    expect(html).not.toContain("No VAT is charged");
+    expect(html).not.toMatch(/ДДС 20%/);
   });
 });
 

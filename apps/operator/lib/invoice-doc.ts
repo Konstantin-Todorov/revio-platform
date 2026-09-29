@@ -2,6 +2,7 @@ import "server-only";
 import { forSystem, withSystemTransaction } from "@revio/db";
 import { decideVat, applyVat, registrationOf } from "./vat";
 import { formatAddress, formatInvoiceNumber, formatDemoNumber, chooseIdentity } from "./invoice-lines";
+import { INVOICE_LANGUAGE } from "./invoice-html";
 import { billingFor } from "./invoice-run";
 
 export { invoiceLines, formatAddress, vatLabel, formatInvoiceNumber, chooseIdentity, type InvoiceLine } from "./invoice-lines";
@@ -80,9 +81,11 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
     return { ok: false, error: `VAT treatment needs a decision: ${vat.note ?? "the customer's country is missing."}` };
   }
 
-  // The document's language follows the identity we write to this buyer in: Cyrillic → Bulgarian.
-  const issuerFor = chooseIdentity(company, billing.country);
-  const language = issuerFor.script === "cyrillic" ? "bg" : "en";
+  // Every invoice we issue is Bulgarian, in our Cyrillic identity (founder, 2026-09-29: "for our
+  // accounting they must be 100% Bulgarian"). The English rendering stays in the renderer for the day
+  // a foreign client needs it; nothing chooses it today.
+  const issuerFor = chooseIdentity(company, company.country);
+  const language = INVOICE_LANGUAGE;
   // The SAME computation the draft was priced with — proration, trials and direct-booking fee
   // included — so an honest draft always issues. See `billingFor`.
   const { lines } = await billingFor(tenant, invoice.period, language);
@@ -175,6 +178,7 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
         issuerRepresentative: company.representative ?? null,
         buyerRepresentative: billing.representative ?? null,
         issuePlace: issuer.city,
+        footerNote: company.footerNote ?? null,
       },
     });
 

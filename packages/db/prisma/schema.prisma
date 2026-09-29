@@ -508,6 +508,9 @@ model Invoice {
   buyerRepresentative  String?
   /// Where the supply is made ("Място на сделката") — our city at issue.
   issuePlace           String?
+  /// The company's footer sentence (the чл. 6 ЗСч stamp-and-signature note) as it read at issue —
+  /// a document must not change after it is issued, and this is part of it.
+  footerNote           String?
   /// The address of the invoice's own page (`/pay/<token>`): the document, the card button and our
   /// bank details, reachable without a login. It never expires — a Stripe Checkout link lives 24
   /// hours, and a link in an email that dies overnight is a customer who concludes we are broken.

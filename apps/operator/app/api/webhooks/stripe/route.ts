@@ -300,7 +300,7 @@ async function sendPaidReceipt(invoiceId: string): Promise<void> {
 
   const owed = invoice.grossMinor ?? invoice.amountMinor;
   // In the invoice's own language, like the request and the reminders before it.
-  const lang = invoice.language === "bg" ? "bg" : "en";
+  const lang = invoice.language === "en" ? "en" : "bg";
   const mail = invoicePaidEmail({
     number: invoice.number,
     amount: docMoney(owed, invoice.currency, lang),

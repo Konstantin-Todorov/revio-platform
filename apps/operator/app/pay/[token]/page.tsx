@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
   const invoice = await invoiceByPayToken((await params).token);
   if (!invoice) return { robots: { index: false } };
-  const w = PAY_WORDS[invoice.language === "bg" ? "bg" : "en"];
+  const w = PAY_WORDS[invoice.language === "en" ? "en" : "bg"];
   return { title: `${w.title(invoice.number!)} · ${invoice.issuerName ?? "Revio"}`, robots: { index: false } };
 }
 
@@ -44,7 +44,7 @@ export default async function PayPage({ params, searchParams }: {
   if (!invoice) notFound();
 
   const company = await forSystem().operatorCompany.findUnique({ where: { id: "singleton" } });
-  const lang = invoice.language === "bg" ? "bg" : "en";
+  const lang = invoice.language === "en" ? "en" : "bg";
   const w = PAY_WORDS[lang];
   const owed = invoice.grossMinor ?? invoice.amountMinor;
   const day = (d: Date) => d.toLocaleDateString(lang === "bg" ? "bg-BG" : "en-GB", { timeZone: "UTC", day: "numeric", month: "long", year: "numeric" });
