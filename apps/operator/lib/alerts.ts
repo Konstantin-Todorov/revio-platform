@@ -220,5 +220,30 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
     });
   }
 
+  /*
+   * 5. A fault in our own code, open in the error log.
+   *
+   * The log at /errors only helps if somebody opens it, and nothing told anyone to: two of its
+   * entries sat unresolved for days after they were fixed, and a genuinely new one would have waited
+   * just as long (founder, 2026-09-29: "how do we make sure we look at them"). Now each open entry
+   * goes out with the morning alerts; it stops being mentioned the moment somebody marks it resolved,
+   * and a resolved entry that happens again reopens itself (`recordAppError`) — so it comes back here.
+   * Build mismatches from an old browser tab are never filed at all (`isDeployMismatch`).
+   */
+  const PRODUCT: Record<string, string> = { cm: "RevioLink", crs: "RevioCRS", pms: "RevioPMS", operator: "Operator", booking: "RevioDirect" };
+  const appErrors = await prisma.appError.findMany({
+    where: { resolvedAt: null },
+    select: { id: true, service: true, message: true, route: true, count: true },
+  });
+  for (const e of appErrors) {
+    out.push({
+      key: `app_error:${e.id}`,
+      clientName: `Revio · ${PRODUCT[e.service] ?? e.service}`,
+      summary: `Error in our code${e.route ? ` on ${e.route}` : ""}: ${e.message.split("\n")[0]!.trim().slice(0, 140)}${e.count > 1 ? ` (${e.count}×)` : ""}`,
+      action: "Open Error log in the Operator, find the cause, fix it, then mark it resolved. If it happens again it reopens by itself.",
+      severity: "soon",
+    });
+  }
+
   return out;
 }

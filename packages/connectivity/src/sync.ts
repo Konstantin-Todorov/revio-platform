@@ -218,6 +218,18 @@ async function suspendedReason(prisma: Db, tenantId: string): Promise<string | n
 }
 
 /**
+ * The nights a push covers: the edit's own (deduplicated, sorted, and never before the hotel's
+ * today — a past night cannot be sold and the channel refuses it), or the rolling horizon from today.
+ */
+export function datesToPush(todayIso: string, horizonDays: number, scopeDates?: readonly string[]): Date[] {
+  if (scopeDates) {
+    return [...new Set(scopeDates)].filter((d) => d >= todayIso).sort().map((d) => new Date(`${d}T00:00:00Z`));
+  }
+  const start = new Date(`${todayIso}T00:00:00Z`);
+  return Array.from({ length: horizonDays }, (_, i) => new Date(start.getTime() + i * DAY_MS));
+}
+
+/**
  * Build the next HORIZON_DAYS of ARI for a channel from its two-stream mappings + the live inventory/
  * rates/restrictions, and push it through the resolved adapter (mock or Channex). Records a SyncEvent
  * and an ErrorItem per rejected update.
@@ -305,13 +317,20 @@ export async function syncChannel(
   /** (room · plan) pairs with no mapped target — named in the summary rather than dropped in silence. */
   const skippedUnmapped = new Set<string>();
 
-  const todayIso = ymd(new Date());
+  /*
+   * ⚠️ Today AT THE HOTEL, and nothing before it.
+   *
+   * This was `ymd(new Date())` — the server's UTC day, a day behind a Bulgarian hotel until 03:00 —
+   * and a scoped push sent every night of the stay it came from, including nights already over. The
+   * channel manager refuses a past date ("Past date is not allowed"), which left a warning open on a
+   * real hotel for twelve days (DesManagement, 2026-09-17: a modified booking whose stay had begun on
+   * the 15th). A night that has passed cannot be sold, so there is nothing to send for it.
+   */
+  const todayIso = todayInTimeZone(property.timezone);
   const start = new Date(`${todayIso}T00:00:00Z`);
   // Scoped dates are the edit's own; unscoped is the rolling horizon. Sorted so `end` is the real
   // upper bound for the range queries below.
-  const dates = scope?.dates
-    ? [...new Set(scope.dates)].sort().map((d) => new Date(`${d}T00:00:00Z`))
-    : Array.from({ length: horizonDays }, (_, i) => new Date(start.getTime() + i * DAY_MS));
+  const dates = datesToPush(todayIso, horizonDays, scope?.dates);
   if (dates.length === 0 || roomMaps.length === 0 || rateMaps.length === 0) {
     return { ok: true, pushed: 0, rejected: 0, mode: channel.connectivityMode };
   }
@@ -1663,6 +1682,17 @@ export async function disconnectChannel(prisma: Db, channelId: string): Promise<
    * because a far end still switched on is still billing us and still holding the OTA connection.
    */
   await prisma.channel.update({ where: { id: channelId }, data: { status: "disconnected" } });
+  /*
+   * A disconnected channel's faults about the far end are answered: nothing flows through it, so
+   * "the property is gone" or "this plan publishes to the wrong room" no longer describes anything
+   * that is happening. Left open they read as live faults — Ventsi Group's "property missing" sat
+   * open for twelve days after its channel was disconnected. Reconnecting walks the channel again,
+   * and the audit reopens whatever is still true.
+   */
+  await prisma.errorItem.updateMany({
+    where: { channelId, resolved: false, code: { in: ["channel_property_missing", "mapping_cross_wired"] } },
+    data: { resolved: true },
+  });
   await prisma.syncEvent.create({
     data: {
       tenantId: channel.tenantId, propertyId: channel.propertyId, channelId, kind: "push",

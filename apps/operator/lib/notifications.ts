@@ -94,14 +94,18 @@ export async function getNotificationFeed(): Promise<NotificationFeed> {
   const tenants = tenantIds.length
     ? await prisma.tenant.findMany({
         where: { id: { in: tenantIds } },
-        select: { id: true, name: true, isDemo: true },
+        select: { id: true, name: true, isDemo: true, accountType: true },
       })
     : [];
   const byId = new Map(tenants.map((t) => [t.id, t]));
   const who = (id: string) => byId.get(id);
   /* The chip says "not a real hotel" — the one fact an operator must never miss while reading a
      figure. Which client they are is in the subtitle, where every row already names exactly one. */
-  const demo = (id: string) => (who(id)?.isDemo ? { context: "Demo" } : {});
+  // The account's own type — a test account is not a sales demo, and was labelled one.
+  const demo = (id: string) => {
+    const t = who(id);
+    return t?.isDemo ? { context: t.accountType === "test" ? "Test" : "Demo" } : {};
+  };
   const money = (minor: number, currency: string) =>
     new Intl.NumberFormat("en-IE", { style: "currency", currency }).format(minor / 100);
   const PRODUCT: Record<string, string> = { cm: "RevioLink", crs: "RevioCRS", pms: "RevioPMS" };

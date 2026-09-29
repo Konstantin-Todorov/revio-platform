@@ -153,7 +153,7 @@ export function DashboardView({
             <Settings2 className="h-3.5 w-3.5" /> {t.customize}
           </button>
           {open && (
-            <div className="absolute right-0 z-30 mt-1 w-64 rounded-lg border border-surface-border bg-white p-3 shadow-lg">
+            <div className="fixed inset-x-3 z-30 mt-1 sm:absolute sm:inset-x-auto sm:right-0 sm:w-64 rounded-lg border border-surface-border bg-white p-3 shadow-lg">
               <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-ink-400">{t.periodPresets}</div>
               <div className="mb-2 grid grid-cols-2 gap-1">
                 {presets.map((p) => (

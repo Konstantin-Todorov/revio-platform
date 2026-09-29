@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { PushScope } from "./sync.js";
+import { datesToPush } from "./sync.js";
 
 /**
  * The cell filter inside `syncChannel`, isolated.
@@ -107,5 +108,29 @@ describe("availability fallback", () => {
 
   it("stays silent on a push that is not carrying availability at all", () => {
     expect(wouldEmitFallback({ inScopeHere: true, priced: false, wantsAvailability: false })).toBe(false);
+  });
+});
+
+describe("datesToPush", () => {
+  const iso = (ds: Date[]) => ds.map((d) => d.toISOString().slice(0, 10));
+
+  it("never sends a night that has already passed at the hotel — the channel refuses it", () => {
+    // DesManagement, 2026-09-17: a modified booking whose stay began on the 15th.
+    expect(iso(datesToPush("2026-09-17", 14, ["2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18"]))).toEqual([
+      "2026-09-17", "2026-09-18",
+    ]);
+  });
+
+  it("sends nothing for an edit that lies entirely in the past", () => {
+    expect(datesToPush("2026-09-17", 14, ["2026-09-01"])).toEqual([]);
+  });
+
+  it("deduplicates and sorts a scoped edit", () => {
+    expect(iso(datesToPush("2026-09-17", 14, ["2026-09-20", "2026-09-18", "2026-09-20"]))).toEqual(["2026-09-18", "2026-09-20"]);
+  });
+
+  it("runs the rolling horizon from the hotel's today", () => {
+    const d = iso(datesToPush("2026-09-29", 3));
+    expect(d).toEqual(["2026-09-29", "2026-09-30", "2026-10-01"]);
   });
 });

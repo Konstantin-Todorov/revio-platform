@@ -413,7 +413,9 @@ function MoreMenu({ items, onPick }: { items: { k: MenuKey; label: string; hint:
         <MoreHorizontal className="h-4 w-4" /> More
       </button>
       {open && (
-        <div role="menu" className="absolute right-0 z-30 mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-border bg-white py-1.5 shadow-pop">
+        // On a phone pinned to the screen's width (it hung off the left edge, anchored to a button in
+        // the middle); from `sm` a normal dropdown under the button.
+        <div role="menu" className="fixed inset-x-3 z-30 mt-1 rounded-lg border border-surface-border bg-white py-1.5 shadow-pop sm:absolute sm:inset-x-auto sm:right-0 sm:w-80">
           {items.map((m) => (
             <button
               key={m.k}

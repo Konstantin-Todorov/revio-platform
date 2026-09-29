@@ -167,7 +167,14 @@ export function NotificationCenter({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-1.5 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
+        /*
+         * ⚠️ On a phone, pinned to the SCREEN, not to the bell. The bell is not at the right edge
+         * there (the account avatar is), so a panel anchored to the bell's right hung off the left
+         * of the screen (founder, 2026-09-29). `fixed` with no `top` keeps its place just under the
+         * bell; `inset-x-3` gives it the screen's width less a 12px gutter. From `sm` it is the
+         * usual dropdown under the bell.
+         */
+        <div className="fixed inset-x-3 z-30 mt-1.5 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop sm:absolute sm:inset-x-auto sm:right-0 sm:w-[360px]">
           <div className="flex items-center justify-between gap-2 border-b border-surface-border px-3 py-2">
             <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">{t.title}</span>
             {feed.unread > 0 && (

@@ -76,6 +76,7 @@ export interface ChannelRow {
 }
 
 export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[]; suspended: boolean }) {
+  const multiProperty = new Set(channels.map((c) => c.propertyName)).size > 1;
   if (channels.length === 0) {
     return <p className="px-4 py-4 text-[12.5px] text-ink-400">No channels yet. Nothing is being distributed for this client.</p>;
   }
@@ -96,7 +97,22 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
         </div>
       )}
 
-      {channels.map((ch) => {
+      {/*
+        Grouped by HOTEL when a client has several (founder, 2026-09-29: "for a client with several
+        hotels, separate them — now it is confusing"). The order inside each group, and of the groups,
+        is the list's own: newest channel first.
+      */}
+      {groupByProperty(channels).map(([property, list]) => (
+        <section key={property} aria-label={property} className="divide-y divide-surface-border/60">
+          {multiProperty && (
+            <h3 className="flex items-baseline justify-between bg-surface-muted/70 px-4 py-2 text-[12px] font-bold uppercase tracking-wide text-ink-600">
+              {property}
+              <span className="text-[11px] font-semibold normal-case tracking-normal text-ink-400">
+                {list.length} channel{list.length === 1 ? "" : "s"}
+              </span>
+            </h3>
+          )}
+      {list.map((ch) => {
         const cat = ch.catalogueStatus ? CATALOGUE[ch.catalogueStatus] : null;
         /*
           ⚠️ The "cannot be removed" sentence is shown only when somebody would be reaching for
@@ -262,6 +278,15 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
           </div>
         );
       })}
+        </section>
+      ))}
     </div>
   );
+}
+
+/** Channels grouped by property, keeping the incoming order within and between groups. */
+function groupByProperty(channels: ChannelRow[]): [string, ChannelRow[]][] {
+  const groups = new Map<string, ChannelRow[]>();
+  for (const ch of channels) groups.set(ch.propertyName, [...(groups.get(ch.propertyName) ?? []), ch]);
+  return [...groups.entries()];
 }

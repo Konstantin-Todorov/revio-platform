@@ -178,3 +178,25 @@ describe("a channel that is set up but not switched on", () => {
     expect(html([row({ status: "disconnected" })])).not.toMatch(/Go live/);
   });
 });
+
+describe("a client with several hotels", () => {
+  it("groups the channels under each hotel's name, keeping the list's own order", () => {
+    const out = html([
+      row({ id: "a", name: "Trip.com", propertyName: "Hotel Sofia — Plovdiv" }),
+      row({ id: "b", name: "Booking.com", propertyName: "Hotel Sofia" }),
+      row({ id: "c", name: "Agoda", propertyName: "Hotel Sofia — Plovdiv" }),
+    ]);
+    expect(out).toMatch(/<section aria-label="Hotel Sofia — Plovdiv"/);
+    expect(out).toMatch(/<section aria-label="Hotel Sofia"/);
+    // Plovdiv first (its channel is newest), and both of its channels inside its own section.
+    expect(out.indexOf('aria-label="Hotel Sofia — Plovdiv"')).toBeLessThan(out.indexOf('aria-label="Hotel Sofia"'));
+    const plovdiv = out.slice(out.indexOf('aria-label="Hotel Sofia — Plovdiv"'), out.indexOf('aria-label="Hotel Sofia"'));
+    expect(plovdiv).toMatch(/Trip\.com/);
+    expect(plovdiv).toMatch(/Agoda/);
+    expect(out).toMatch(/2 channels/);
+  });
+
+  it("adds no heading for a client with one hotel", () => {
+    expect(html([row(), row({ id: "x", name: "Agoda" })])).not.toMatch(/<h3/);
+  });
+});

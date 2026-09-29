@@ -49,7 +49,7 @@ export function WorkspaceSwitcher({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-1.5 w-72 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
+        <div className="fixed inset-x-3 z-30 mt-1.5 sm:absolute sm:inset-x-auto sm:right-0 sm:w-72 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
           <div className="border-b border-surface-border px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-400">
             {t.yourProperties}
           </div>

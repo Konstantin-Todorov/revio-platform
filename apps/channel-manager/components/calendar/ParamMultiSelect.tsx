@@ -55,7 +55,7 @@ export function ParamMultiSelect({
         <ChevronDown className="h-3.5 w-3.5 text-ink-400" />
       </button>
       {open && (
-        <div className="absolute left-0 z-30 mt-1.5 w-60 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
+        <div className="fixed inset-x-3 z-30 mt-1.5 sm:absolute sm:inset-x-auto sm:left-0 sm:w-60 overflow-hidden rounded-lg border border-surface-border bg-white shadow-pop">
           <div className="max-h-64 overflow-y-auto py-1">
             {options.map((o) => {
               const on = picked.has(o.value);
