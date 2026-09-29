@@ -72,9 +72,14 @@ export async function markRenewed(fd: FormData): Promise<void> {
   if (!account?.renewalDate) return;
 
   const next = rollRenewal(account.renewalDate, account.contractTermMonths ?? 12);
-  await prisma.$transaction([
-    prisma.clientAccount.update({ where: { tenantId }, data: { renewalDate: next, stage: "live" } }),
-    prisma.clientNote.create({
+  /*
+   * `withSystemTransaction`, not `prisma.$transaction([...])`. `prisma` here is the RLS-extended
+   * client, which runs EACH model call in its own transaction — so the batch form looked atomic and
+   * was two commits. Same trap as the 2026-09-26 client-deletion crash; now caught by txscope-lint.
+   */
+  await withSystemTransaction(async (tx) => {
+    await tx.clientAccount.update({ where: { tenantId }, data: { renewalDate: next, stage: "live" } });
+    await tx.clientNote.create({
       data: {
         tenantId,
         kind: "note",
@@ -82,8 +87,8 @@ export async function markRenewed(fd: FormData): Promise<void> {
         authorId: session.userId,
         authorName: session.name,
       },
-    }),
-  ]);
+    });
+  });
 
   revalidate(tenantId);
 }

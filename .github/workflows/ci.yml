@@ -164,6 +164,10 @@ jobs:
         # `$transaction(async …)` on forSystem()/forTenant() is not one transaction — each call inside
         # runs on its own connection. It crashed a real client deletion on 2026-09-26.
         run: pnpm txscope:lint
+      - name: Atomic writes lint
+        # A server action that writes twice outside withTenantTransaction commits twice; a failure
+        # between leaves half of it. Each exception is listed with its reason (HANDOFF §2, §10.1).
+        run: pnpm atomic:lint
 
       - name: Schema drift
         run: pnpm --filter @revio/db db:drift

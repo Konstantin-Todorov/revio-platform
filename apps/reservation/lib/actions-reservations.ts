@@ -314,16 +314,22 @@ export async function modifyReservation(fd: FormData): Promise<void> {
     redirect(`/reservations/${id}?error=${encodeURIComponent((await say()).noAvailabilityModify(await sayDay(short[0]!.date)))}`);
   }
 
-  // Sequential, not $transaction — the RLS proxy forwards model ops only (each already runs in its
-  // own tenant-scoped transaction), and the availability validation above is the safety gate.
+  /*
+   * ONE transaction. This said "sequential, not $transaction — the RLS proxy forwards model ops
+   * only", which was true before `withTenantTransaction` existed and has not been since: the line
+   * and the reservation's total are one fact about the booking, and committed apart a failure
+   * between them left new dates carrying the old price (atomic-lint, 2026-09-29).
+   */
   const before = `${line!.checkIn.toISOString().slice(0, 10)} → ${line!.checkOut.toISOString().slice(0, 10)} · ${line!.quantity}×`;
-  await prisma.reservationLine.update({
-    where: { id: line!.id },
-    data: { roomTypeId, checkIn: utcDay(checkIn), checkOut: utcDay(checkOut), quantity, priceMinor },
-  });
-  await prisma.reservation.update({
-    where: { id },
-    data: { status: "modified", totalMinor: priceMinor, propertyTotalMinor: priceMinor },
+  await withTenantTransaction(property.tenantId, async (tx) => {
+    await tx.reservationLine.update({
+      where: { id: line!.id },
+      data: { roomTypeId, checkIn: utcDay(checkIn), checkOut: utcDay(checkOut), quantity, priceMinor },
+    });
+    await tx.reservation.update({
+      where: { id },
+      data: { status: "modified", totalMinor: priceMinor, propertyTotalMinor: priceMinor },
+    });
   });
 
   await logAudit(property.id, property.tenantId, {
@@ -377,28 +383,35 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
     );
   }
 
-  await prisma.reservation.update({ where: { id }, data: { status: "cancelled", cancelledAt: new Date() } });
+  /*
+   * ONE transaction: the cancellation, the room given back and the empty folio closed are one event.
+   * Committed apart, a failure after the first left a cancelled booking still holding its room in
+   * RevioPMS — the room off sale and nobody coming (atomic-lint, 2026-09-29).
+   */
+  await withTenantTransaction(property.tenantId, async (tx) => {
+    await tx.reservation.update({ where: { id }, data: { status: "cancelled", cancelledAt: new Date() } });
 
-  // Give the physical room back, not just the availability. Without this the assignment stays
-  // `active` and every occupancy check in RevioPMS keeps counting it — the room is re-sold on the
-  // OTAs and the front desk cannot check anyone into it. See `releaseRoomsForCancellation`.
-  await releaseRoomsForCancellation(prisma, id);
+    // Give the physical room back, not just the availability. Without this the assignment stays
+    // `active` and every occupancy check in RevioPMS keeps counting it — the room is re-sold on the
+    // OTAs and the front desk cannot check anyone into it. See `releaseRoomsForCancellation`.
+    await releaseRoomsForCancellation(tx, id);
 
-  // A cancelled booking that never arrived has a folio only because one is opened eagerly. An empty
-  // one is noise on every "unsettled" count and every close-day readiness check, so it closes with
-  // the stay. A folio carrying real lines (a cancellation fee) is left alone — that is money to
-  // settle, and closing it would hide it.
-  const folios = await prisma.folio.findMany({
-    where: { reservationId: id, status: "open" },
-    include: { lines: { select: { id: true, voided: true } } },
-  });
-  for (const f of folios) {
-    if (f.lines.some((l) => !l.voided)) continue;
-    await prisma.folio.update({
-      where: { id: f.id },
-      data: { status: "closed", closedAt: new Date(), outcome: "settled" },
+    // A cancelled booking that never arrived has a folio only because one is opened eagerly. An empty
+    // one is noise on every "unsettled" count and every close-day readiness check, so it closes with
+    // the stay. A folio carrying real lines (a cancellation fee) is left alone — that is money to
+    // settle, and closing it would hide it.
+    const folios = await tx.folio.findMany({
+      where: { reservationId: id, status: "open" },
+      include: { lines: { select: { id: true, voided: true } } },
     });
-  }
+    for (const f of folios) {
+      if (f.lines.some((l) => !l.voided)) continue;
+      await tx.folio.update({
+        where: { id: f.id },
+        data: { status: "closed", closedAt: new Date(), outcome: "settled" },
+      });
+    }
+  });
   await logAudit(property.id, property.tenantId, {
     entity: tag(id, reservation!.guestName),
     field: "cancelled",
@@ -501,18 +514,22 @@ export async function setGuestRecognitionOptOut(fd: FormData): Promise<void> {
   const guest = await prisma.guest.findFirst({ where: { id: guestId, propertyId: property.id } });
   if (!guest) redirect("/guests");
 
-  await prisma.guest.update({ where: { id: guestId }, data: { recognitionOptOut: optOut } });
-  await prisma.auditEntry.create({
-    data: {
-      tenantId: guest.tenantId,
-      propertyId: property.id,
-      userId: session.userId,
-      entity: `Guest · ${guest.firstName} ${guest.lastName}`,
-      field: "recognitionOptOut",
-      oldValue: String(guest.recognitionOptOut),
-      newValue: String(optOut),
-      source: "ui",
-    },
+  // One transaction: a privacy choice and the record of who made it are one thing. The audit entry
+  // here is not a log line — it is the evidence the guest's choice was honoured (atomic-lint).
+  await withTenantTransaction(guest!.tenantId, async (tx) => {
+    await tx.guest.update({ where: { id: guestId }, data: { recognitionOptOut: optOut } });
+    await tx.auditEntry.create({
+      data: {
+        tenantId: guest!.tenantId,
+        propertyId: property.id,
+        userId: session!.userId,
+        entity: `Guest · ${guest!.firstName} ${guest!.lastName}`,
+        field: "recognitionOptOut",
+        oldValue: String(guest!.recognitionOptOut),
+        newValue: String(optOut),
+        source: "ui",
+      },
+    });
   });
   revalidatePath(`/guests/${guestId}`);
   redirect(`/guests/${guestId}?tab=privacy`);

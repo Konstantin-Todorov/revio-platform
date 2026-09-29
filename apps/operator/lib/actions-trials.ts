@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { recordClientEvent, forSystem } from "@revio/db";
+import { recordClientEvent, forSystem, withSystemTransaction } from "@revio/db";
 import { flashError, setFlash } from "@revio/ui/flash";
 import {
   PRODUCT_BY_KEY,
@@ -76,10 +76,14 @@ export async function startTrial(fd: FormData): Promise<void> {
    * starting it again. The other order would switch a product on with nothing to ever turn it off,
    * which is a free product nobody notices.
    */
-  await db.productTrial.create({
-    data: { tenantId, product, startedAt: now, endsAt, grantedById: session.userId },
+  // One transaction: a trial row without the product switched on reads "already trialling" to the
+  // next attempt while the hotel has nothing to try (atomic-lint, 2026-09-29).
+  await withSystemTransaction(async (tx) => {
+    await tx.productTrial.create({
+      data: { tenantId, product, startedAt: now, endsAt, grantedById: session.userId },
+    });
+    await tx.tenant.update({ where: { id: tenantId }, data: { [FIELD[product]]: true } });
   });
-  await db.tenant.update({ where: { id: tenantId }, data: { [FIELD[product]]: true } });
 
   /*
    * ⚠️ Everything past this point runs AFTER the trial is granted and committed, so nothing here
@@ -189,18 +193,22 @@ export async function endTrial(fd: FormData): Promise<void> {
   if (!trial) return flashError("That trial no longer exists.");
   if (trial.endedAt) return flashError("That trial has already finished.");
 
-  await db.productTrial.update({
-    where: { id },
-    data: { endedAt: new Date(), outcome },
-  });
-
-  // Converted keeps the entitlement exactly as it is — it is already on. Cancelled takes it away.
-  if (outcome === "cancelled") {
-    await db.tenant.update({
-      where: { id: trial.tenantId },
-      data: { [FIELD[trial.product as ProductKey]]: false },
+  // One transaction: a trial marked stopped with the product still on is a product given away for
+  // good — the sweep only ever looks at trials that have not ended (atomic-lint, 2026-09-29).
+  await withSystemTransaction(async (tx) => {
+    await tx.productTrial.update({
+      where: { id },
+      data: { endedAt: new Date(), outcome },
     });
-  }
+
+    // Converted keeps the entitlement exactly as it is — it is already on. Cancelled takes it away.
+    if (outcome === "cancelled") {
+      await tx.tenant.update({
+        where: { id: trial.tenantId },
+        data: { [FIELD[trial.product as ProductKey]]: false },
+      });
+    }
+  });
 
   /*
    * ⚠️ `"layout"`, not the default `"page"`, and that is load-bearing rather than tidy.

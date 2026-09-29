@@ -1,4 +1,5 @@
 "use server";
+import { withTenantTransaction } from "@revio/db";
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
@@ -364,23 +365,26 @@ export async function addChannel(_prev: ActionResult | null, fd: FormData): Prom
   const exists = await prisma.channel.findFirst({ where: { propertyId, code } });
   if (exists) return { ok: false, error: (await sayCh()).alreadyConnected(name) };
 
-  const channel = await prisma.channel.create({
-    data: {
-      tenantId, propertyId, code, name, status: "connected", currency, externalPropertyId,
-      supportedRestrictions: ["stop_sell", "min_los", "max_los", "cta", "advance_purchase_min"],
-      lastSyncAt: new Date(), errorCount: 0, pendingCount: 0,
-    },
-  });
   // Map every room type and rate plan to the new channel (two streams) so it's immediately sellable.
   const [roomTypes, ratePlans] = await Promise.all([
     prisma.roomType.findMany({ where: { propertyId } }),
     prisma.ratePlan.findMany({ where: { propertyId } }),
   ]);
-  await prisma.channelRoomTypeMapping.createMany({
-    data: roomTypes.map((rt) => ({ tenantId, channelId: channel.id, roomTypeId: rt.id, externalRoomId: `${code}-r-${rt.code}`, status: "complete" })),
-  });
-  await prisma.channelRatePlanMapping.createMany({
-    data: ratePlans.map((rp) => ({ tenantId, channelId: channel.id, ratePlanId: rp.id, externalRateId: `${code}-rp-${rp.code}`, status: "complete" })),
+  // One transaction: a channel committed without its mappings reads "connected" and sells nothing.
+  await withTenantTransaction(tenantId, async (tx) => {
+    const channel = await tx.channel.create({
+      data: {
+        tenantId, propertyId, code, name, status: "connected", currency, externalPropertyId,
+        supportedRestrictions: ["stop_sell", "min_los", "max_los", "cta", "advance_purchase_min"],
+        lastSyncAt: new Date(), errorCount: 0, pendingCount: 0,
+      },
+    });
+    await tx.channelRoomTypeMapping.createMany({
+      data: roomTypes.map((rt) => ({ tenantId, channelId: channel.id, roomTypeId: rt.id, externalRoomId: `${code}-r-${rt.code}`, status: "complete" })),
+    });
+    await tx.channelRatePlanMapping.createMany({
+      data: ratePlans.map((rp) => ({ tenantId, channelId: channel.id, ratePlanId: rp.id, externalRateId: `${code}-rp-${rp.code}`, status: "complete" })),
+    });
   });
   await logAudit(propertyId, tenantId, { entity: `Channel · ${name}`, field: "connect", newValue: `${roomTypes.length} rooms + ${ratePlans.length} rates mapped` });
   await recordPush(propertyId, tenantId, `Connected ${name} and pushed all products`);
@@ -591,30 +595,39 @@ export async function savePropertySettings(_prev: ActionResult | null, fd: FormD
   const convertRates = str(fd, "convertRates") === "true";
   const conversionRate = Number(str(fd, "conversionRate"));
 
-  await prisma.property.update({
-    where: { id: propertyId },
-    data: {
-      name,
-      timezone: str(fd, "timezone") || "Europe/Sofia",
-      baseCurrency: newCurrency,
-      syncHorizonDays: Math.max(1, int(fd, "syncHorizonDays", 365)),
-      checkInTime: str(fd, "checkInTime") || "14:00",
-      checkOutTime: str(fd, "checkOutTime") || "12:00",
-      contactEmail: str(fd, "contactEmail") || null,
-      phone: str(fd, "phone") || null,
-    },
-  });
-
-  let converted = 0;
-  if (currencyChanged) {
+  /*
+   * ⚠️ ONE transaction, and here it matters more than anywhere in RevioLink.
+   *
+   * A currency change moves the property's currency, every channel's, and — optionally — multiplies
+   * every stored price by the rate. Committed apart, a failure after the first left prices in the
+   * old currency under the new symbol; and because the conversion is a MULTIPLY, pressing Save again
+   * to "finish" it would have converted the prices that did convert a second time (atomic-lint,
+   * 2026-09-29). All of it lands, or none of it does.
+   */
+  const converted = await withTenantTransaction(tenantId, async (tx) => {
+    await tx.property.update({
+      where: { id: propertyId },
+      data: {
+        name,
+        timezone: str(fd, "timezone") || "Europe/Sofia",
+        baseCurrency: newCurrency,
+        syncHorizonDays: Math.max(1, int(fd, "syncHorizonDays", 365)),
+        checkInTime: str(fd, "checkInTime") || "14:00",
+        checkOutTime: str(fd, "checkOutTime") || "12:00",
+        contactEmail: str(fd, "contactEmail") || null,
+        phone: str(fd, "phone") || null,
+      },
+    });
+    if (!currencyChanged) return 0;
     // Every channel inherits the property currency.
-    await prisma.channel.updateMany({ where: { propertyId }, data: { currency: newCurrency } });
+    await tx.channel.updateMany({ where: { propertyId }, data: { currency: newCurrency } });
     // Optionally convert every stored rate (Postgres rounds the product back to integer minor units).
     if (convertRates && Number.isFinite(conversionRate) && conversionRate > 0) {
-      const res = await prisma.ratePrice.updateMany({ where: { propertyId }, data: { priceMinor: { multiply: conversionRate }, source: "bulk", updatedAt: new Date() } });
-      converted = res.count;
+      const res = await tx.ratePrice.updateMany({ where: { propertyId }, data: { priceMinor: { multiply: conversionRate }, source: "bulk", updatedAt: new Date() } });
+      return res.count;
     }
-  }
+    return 0;
+  }, { timeout: 60_000 });
 
   await logAudit(propertyId, tenantId, {
     entity: `Property · ${name}`, field: "settings",

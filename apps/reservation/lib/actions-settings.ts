@@ -1,4 +1,5 @@
 "use server";
+import { withTenantTransaction } from "@revio/db";
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
@@ -36,14 +37,18 @@ export async function savePermissionRole(fd: FormData): Promise<void> {
   if (rowId) {
     const role = await prisma.permissionRole.findFirst({ where: { id: rowId, tenantId } });
     if (!role) return;
-    await prisma.permissionRole.update({ where: { id: rowId }, data: { name: role.builtin ? role.name : name } });
-    for (const a of access) {
-      await prisma.roleAccess.upsert({
-        where: { roleId_group: { roleId: rowId, group: a.group } },
-        create: { tenantId, roleId: rowId, group: a.group, level: a.level },
-        update: { level: a.level },
-      });
-    }
+    // One transaction: a role's access is one decision. Written group by group and interrupted, it
+    // left a role with half its new permissions — a security setting nobody chose (atomic-lint).
+    await withTenantTransaction(tenantId, async (tx) => {
+      await tx.permissionRole.update({ where: { id: rowId }, data: { name: role.builtin ? role.name : name } });
+      for (const a of access) {
+        await tx.roleAccess.upsert({
+          where: { roleId_group: { roleId: rowId, group: a.group } },
+          create: { tenantId, roleId: rowId, group: a.group, level: a.level },
+          update: { level: a.level },
+        });
+      }
+    });
     await logAudit(property.id, tenantId, { entity: `Permission role · ${role.name}`, field: "access updated" });
   } else {
     const clash = await prisma.permissionRole.findFirst({ where: { tenantId, name } });

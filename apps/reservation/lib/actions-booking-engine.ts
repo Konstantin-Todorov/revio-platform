@@ -1,4 +1,5 @@
 "use server";
+import { withTenantTransaction } from "@revio/db";
 
 import { revalidatePath } from "next/cache";
 import { BOOKING_PRESET_BY_KEY, HERO_OVERLAY_LEVELS, heroFocalY } from "@revio/core";
@@ -220,14 +221,17 @@ export async function uploadBookingLogo(_prev: LookResult | null, fd: FormData):
   if (!match) return { ok: false, error: (await say()).notLogoType };
   const [mimeType] = match;
 
-  await prisma.brandAsset.upsert({
-    where: { propertyId_kind: { propertyId, kind: "booking_logo" } },
-    create: { tenantId, propertyId, kind: "booking_logo", mimeType, bytes, byteSize: bytes.length },
-    update: { mimeType, bytes, byteSize: bytes.length },
-  });
   // An uploaded file and a pasted URL are two answers to one question. Clearing the URL means the
-  // hotel never ends up with a stale link quietly winning over the file they just chose.
-  await prisma.property.update({ where: { id: propertyId }, data: { bookingLogoUrl: null } });
+  // hotel never ends up with a stale link quietly winning over the file they just chose — so the two
+  // writes are one transaction, or the stale link could win after all.
+  await withTenantTransaction(tenantId, async (tx) => {
+    await tx.brandAsset.upsert({
+      where: { propertyId_kind: { propertyId, kind: "booking_logo" } },
+      create: { tenantId, propertyId, kind: "booking_logo", mimeType, bytes, byteSize: bytes.length },
+      update: { mimeType, bytes, byteSize: bytes.length },
+    });
+    await tx.property.update({ where: { id: propertyId }, data: { bookingLogoUrl: null } });
+  });
 
   await logAudit(propertyId, tenantId, {
     entity: "Booking engine", field: "logo", newValue: `uploaded (${Math.round(bytes.length / 1024)} KB)`,
@@ -241,8 +245,11 @@ export async function removeBookingLogo(): Promise<void> {
   await requireCapability("manageSettings");
   if (await assertSingleProperty()) return;
   const { id: propertyId, tenantId } = await getProperty();
-  await prisma.brandAsset.deleteMany({ where: { propertyId, kind: "booking_logo" } });
-  await prisma.property.update({ where: { id: propertyId }, data: { bookingLogoUrl: null } });
+  // Both halves of "no logo", together — either one alone still shows a logo.
+  await withTenantTransaction(tenantId, async (tx) => {
+    await tx.brandAsset.deleteMany({ where: { propertyId, kind: "booking_logo" } });
+    await tx.property.update({ where: { id: propertyId }, data: { bookingLogoUrl: null } });
+  });
   await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "logo", newValue: "removed" });
   revalidatePath("/booking-engine", "layout");
 }

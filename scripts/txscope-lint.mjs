@@ -12,7 +12,8 @@
  * Use `withSystemTransaction` / `withTenantTransaction` from `@revio/db`, which set the RLS setting as
  * the transaction's first statement and hand over a plain transaction client.
  *
- * Rule: a file that imports `forSystem` or `forTenant` may not contain `$transaction(async`.
+ * Rule: a file that imports `forSystem` or `forTenant` may not contain `$transaction(async` or
+ * `$transaction([`.
  * `packages/db/src/rls.ts` (where the safe versions are built) is exempt. A line that must say it
  * anyway carries `txscope:allow`.
  *
@@ -44,7 +45,10 @@ for (const root of ["apps", "packages"]) {
     text.split("\n").forEach((line, i) => {
       if (line.includes("txscope:allow")) return;
       if (/^\s*(\*|\/\/)/.test(line)) return; // prose about the pattern is not the pattern
-      if (/\$transaction\(\s*async/.test(line)) hits.push(`${file}:${i + 1}`);
+      // Both forms. The batch form `$transaction([a, b])` on an extended client is two commits too:
+      // each element was already wrapped in its own transaction by the extension (found 2026-09-29
+      // in the operator's markRenewed).
+      if (/\$transaction\(\s*(async|\[)/.test(line)) hits.push(`${file}:${i + 1}`);
     });
   }
 }

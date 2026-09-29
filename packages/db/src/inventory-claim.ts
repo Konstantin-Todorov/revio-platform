@@ -128,7 +128,7 @@ export async function claimHold(input: ClaimHoldInput): Promise<ClaimResult> {
 
   const occupying = [...ROOM_OCCUPYING_STATUSES];
 
-  const rows = await prisma.$transaction([
+  const rows = await prisma.$transaction([ // txscope:allow — the BASE client (./client.js), not an RLS-extended one; this batch IS one transaction
     prisma.$executeRaw`SELECT set_config('app.tenant_id', ${input.tenantId}, true)`,
     // Serialise every claimant for this room type for the rest of the transaction. Released on
     // commit or rollback — there is no unlock to forget and nothing to leak onto a pooled connection.

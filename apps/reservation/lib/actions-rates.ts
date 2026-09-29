@@ -1,5 +1,6 @@
 "use server";
 
+import { withTenantTransaction } from "@revio/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { BED_SETUPS, earliestSelectable, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, pastDateRefusal, pastRangeRefusal, planBulkOccupancy, plansPerRoom, roomTypeRemoval, todayInTimeZone, type Capability } from "@revio/core";
@@ -137,12 +138,16 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
     await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${name}`, field: "edit", newValue: name });
     await recordPush(propertyId, tenantId, `Rate plan "${name}" updated`);
   } else {
-    const count = await prisma.ratePlan.count({ where: { propertyId } });
-    const rp = await prisma.ratePlan.create({
-      data: { tenantId, propertyId, name, code, tags, priceLogic, active, directChannelEnabled, sortOrder: count, ...derived, ...restrictions },
+    // One transaction: a plan committed without its room links exists and sells in no room.
+    const rp = await withTenantTransaction(tenantId, async (tx) => {
+      const count = await tx.ratePlan.count({ where: { propertyId } });
+      const plan = await tx.ratePlan.create({
+        data: { tenantId, propertyId, name, code, tags, priceLogic, active, directChannelEnabled, sortOrder: count, ...derived, ...restrictions },
+      });
+      const roomTypes = await tx.roomType.findMany({ where: { propertyId } });
+      await tx.ratePlanRoomType.createMany({ data: roomTypes.map((rt) => ({ ratePlanId: plan.id, roomTypeId: rt.id })) });
+      return plan;
     });
-    const roomTypes = await prisma.roomType.findMany({ where: { propertyId } });
-    await prisma.ratePlanRoomType.createMany({ data: roomTypes.map((rt) => ({ ratePlanId: rp.id, roomTypeId: rt.id })) });
     await logAudit(propertyId, tenantId, { entity: `Rate Plan · ${name}`, field: "create", newValue: name });
     await recordPush(propertyId, tenantId, `Rate plan "${name}" created`);
     revalidateRates();
@@ -881,15 +886,19 @@ export async function saveRoomType(_prev: ActionResult | null, fd: FormData): Pr
       : { entity: `Room Type · ${label}`, field: "guest content", newValue: "description, size, beds, amenities" });
     await recordPush(propertyId, tenantId, `Room type "${label}" updated`);
   } else {
-    const count = await prisma.roomType.count({ where: { propertyId } });
-    const created = await prisma.roomType.create({
-      data: { tenantId, propertyId, name, code, unitKind, totalRooms, maxGuests, defaultOccupancy, description, active, sizeSqm, bedSetup, amenities, sortOrder: count },
+    // One transaction: a room type committed without its plan links exists and cannot be sold.
+    const created = await withTenantTransaction(tenantId, async (tx) => {
+      const count = await tx.roomType.count({ where: { propertyId } });
+      const room = await tx.roomType.create({
+        data: { tenantId, propertyId, name, code, unitKind, totalRooms, maxGuests, defaultOccupancy, description, active, sizeSqm, bedSetup, amenities, sortOrder: count },
+      });
+      // A new room type becomes sellable under every existing rate plan (room × rate = product).
+      const plans = await tx.ratePlan.findMany({ where: { propertyId }, select: { id: true } });
+      if (plans.length) {
+        await tx.ratePlanRoomType.createMany({ data: plans.map((p) => ({ ratePlanId: p.id, roomTypeId: room.id })) });
+      }
+      return room;
     });
-    // A new room type becomes sellable under every existing rate plan (room × rate = product).
-    const plans = await prisma.ratePlan.findMany({ where: { propertyId }, select: { id: true } });
-    if (plans.length) {
-      await prisma.ratePlanRoomType.createMany({ data: plans.map((p) => ({ ratePlanId: p.id, roomTypeId: created.id })) });
-    }
     await logAudit(propertyId, tenantId, { entity: `Room Type · ${name}`, field: "create", newValue: `${name} · ${totalRooms} units` });
     await recordPush(propertyId, tenantId, `Room type "${name}" created`);
     revalidateRates();

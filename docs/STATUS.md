@@ -132,10 +132,10 @@ real RevioDirect booking page answer `200`.
 
 ⚠️ This table said **eight** services until today. `docs` was added and nothing here noticed.
 
-**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **twenty-one separate
-checks** on every change <!-- status: count checks 21 --> — typecheck, lint, and nineteen ratchets that each exist because something
+**2,926 automated tests pass** (`pnpm verify`, twelve packages and apps), plus **twenty-two separate
+checks** on every change <!-- status: count checks 22 --> — typecheck, lint, and twenty ratchets that each exist because something
 specific went wrong once: copy · terminology · authz · layout-guard · status · silent · money · health · a11y ·
-scroll-lock · jobs · submit · actionform · zoom · tokens · perimeter · txscope · dates · drift. (`txscope`, 2026-09-26: a
+scroll-lock · jobs · submit · actionform · zoom · tokens · perimeter · txscope · atomic · dates · drift. (`txscope`, 2026-09-26: a
 `$transaction(async …)` on an RLS-scoped client is not one transaction — it crashed a real client deletion.
 `actionform`, 2026-09-28: React 19 empties a form after a refusal, and two colleagues gave up adding a client.) CI additionally applies every
 migration into an empty database and runs the seed.
@@ -304,8 +304,15 @@ says who can move it. Details sit where the link points.
    plan sold in N rooms (Cabacum: 3×); fixed, a full sandbox year went 1460 → 730 updates, all accepted.
    **Still not read back:** per-occupancy prices (a per-person plan's array). A suspended account's
    restrictions cannot be compared — nothing is sent to it, so there is nothing to compare with.
-3. **A lint for multi-write server actions not inside `withTenantTransaction`** — a rough scan on 09-23 found ~44 candidates, counted and
-   not read. The primitive is proven; its use is not. `HANDOFF` §2, §10.1.
+3. ~~**A lint for multi-write server actions not inside `withTenantTransaction`**~~ ✅ **2026-09-29** —
+   `atomic:lint` <!-- status: built scripts/atomic-lint.mjs -->. 332 actions scanned; every candidate READ.
+   Fixed (one transaction now): modify and cancel a CRS reservation, create a rate plan / room type with
+   its links, add a channel with its mappings, the currency change + price conversion (a retry used to
+   multiply prices twice), start and end a trial, edit and delete a room's two-sided connections, a
+   role's permissions, a guest's privacy choice with its record, the booking logo. Found on the way: the
+   Operator's `markRenewed` used `$transaction([...])` on the RLS client — two commits — and
+   `txscope:lint` now bans the batch form too. 17 remain, each with its reason in the lint (if/else
+   branches, retry-safe bulk sets, Channex write-as-you-go). Not seen by it: writes inside helpers.
 4. **An idempotency key on "create" actions** — a double submit is blocked in the browser
    (`submit:lint`), not on the server.
 5. **Money reconciled end to end** — one invoice by hand, and an exhaustive test of the all-in promise

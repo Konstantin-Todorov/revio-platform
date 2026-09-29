@@ -1,4 +1,5 @@
 "use server";
+import { withTenantTransaction } from "@revio/db";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -254,32 +255,36 @@ export async function updateUnit(fd: FormData): Promise<void> {
     : [];
   const nextConnecting = valid.map((u) => u.id);
 
-  await prisma.unit.update({
-    where: { id: unitId },
-    data: {
-      label: nextLabel,
-      floor: floorFrom(fd),
-      active: fd.get("active") != null,
-      features,
-      connectingUnitIds: nextConnecting,
-    },
-  });
-
   // Maintain symmetry: add this unit to newly-linked partners, remove from dropped ones.
   const before = new Set(unit.connectingUnitIds);
   const after = new Set(nextConnecting);
   const added = nextConnecting.filter((id) => !before.has(id));
   const removed = unit.connectingUnitIds.filter((id) => !after.has(id));
-  for (const id of added) {
-    const partner = await prisma.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
-    if (partner && !partner.connectingUnitIds.includes(unitId)) {
-      await prisma.unit.update({ where: { id }, data: { connectingUnitIds: [...partner.connectingUnitIds, unitId] } });
+
+  // One transaction: "connecting" is a two-sided fact. Committed apart, a failure left room A
+  // saying it connects to B while B had never heard of A (atomic-lint, 2026-09-29).
+  await withTenantTransaction(session.tenantId, async (tx) => {
+    await tx.unit.update({
+      where: { id: unitId },
+      data: {
+        label: nextLabel,
+        floor: floorFrom(fd),
+        active: fd.get("active") != null,
+        features,
+        connectingUnitIds: nextConnecting,
+      },
+    });
+    for (const id of added) {
+      const partner = await tx.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
+      if (partner && !partner.connectingUnitIds.includes(unitId)) {
+        await tx.unit.update({ where: { id }, data: { connectingUnitIds: [...partner.connectingUnitIds, unitId] } });
+      }
     }
-  }
-  for (const id of removed) {
-    const partner = await prisma.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
-    if (partner) await prisma.unit.update({ where: { id }, data: { connectingUnitIds: partner.connectingUnitIds.filter((x) => x !== unitId) } });
-  }
+    for (const id of removed) {
+      const partner = await tx.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
+      if (partner) await tx.unit.update({ where: { id }, data: { connectingUnitIds: partner.connectingUnitIds.filter((x) => x !== unitId) } });
+    }
+  });
 
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit", field: "edit", newValue: str(fd, "label"), userId: session.userId });
   refresh();
@@ -307,12 +312,15 @@ export async function deleteUnit(fd: FormData): Promise<void> {
     redirect(`/rooms?blocked=${encodeURIComponent(unit.label)}`);
   }
 
-  // Clean up symmetric connecting links pointing back at this unit before deleting.
-  for (const id of unit.connectingUnitIds) {
-    const partner = await prisma.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
-    if (partner) await prisma.unit.update({ where: { id }, data: { connectingUnitIds: partner.connectingUnitIds.filter((x) => x !== unitId) } });
-  }
-  await prisma.unit.delete({ where: { id: unitId } });
+  // Clean up symmetric connecting links pointing back at this unit, and delete it — together, so a
+  // failure cannot leave partners pointing at a room that no longer exists, or the reverse.
+  await withTenantTransaction(session.tenantId, async (tx) => {
+    for (const id of unit.connectingUnitIds) {
+      const partner = await tx.unit.findUnique({ where: { id }, select: { connectingUnitIds: true } });
+      if (partner) await tx.unit.update({ where: { id }, data: { connectingUnitIds: partner.connectingUnitIds.filter((x) => x !== unitId) } });
+    }
+    await tx.unit.delete({ where: { id: unitId } });
+  });
   await logAudit(unit.propertyId, session.tenantId, { entity: "unit", field: "delete", oldValue: unit.label, userId: session.userId });
   refresh();
 }
