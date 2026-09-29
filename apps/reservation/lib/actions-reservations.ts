@@ -1,5 +1,6 @@
 "use server";
 
+import { pressedTwice } from "./submit-once";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
@@ -76,6 +77,8 @@ export async function placeHold(fd: FormData): Promise<void> {
   if (!roomTypeId || !DATE_RE.test(checkIn) || !DATE_RE.test(checkOut) || checkOut <= checkIn) {
     redirect(`${back}&error=${encodeURIComponent((await say()).pickDates)}`);
   }
+  // A second hold for the same press takes a second room off sale until it expires.
+  if (await pressedTwice(fd, property.tenantId, "placeHold")) redirect(back);
 
   const roomType = await prisma.roomType.findFirst({ where: { id: roomTypeId, propertyId: property.id } });
   if (!roomType) redirect(back);
@@ -165,6 +168,9 @@ export async function confirmReservation(fd: FormData): Promise<void> {
   await releaseExpiredHolds();
 
   const holdId = str(fd, "holdId");
+  // The hold already refuses a second confirm, but with "the hold expired" — read after a double press
+  // as a failure while the booking in fact exists. Said as what it is instead.
+  if (await pressedTwice(fd, property.tenantId, "confirmReservation")) redirect("/reservations");
   const hold = await prisma.hold.findFirst({
     where: { id: holdId, propertyId: property.id, status: "active", expiresAt: { gt: new Date() } },
     include: { roomType: true },

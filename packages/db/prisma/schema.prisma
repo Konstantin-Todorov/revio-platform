@@ -101,6 +101,7 @@ model Tenant {
   crmBilling    ClientBilling?
   productTrials ProductTrial[]
   featureUsage  FeatureUsage[]
+  submitTokens  SubmitToken[]
   activeDays    ActiveUserDay[]
 }
 
@@ -2932,4 +2933,27 @@ model DeletedClient {
   deletedAt     DateTime @default(now())
 
   @@index([deletedAt])
+}
+
+/// One row per form submission that CREATED something — the server half of "press once".
+///
+/// ⚠️ The primary key IS the rule. Every create form carries a token minted when it was rendered
+/// (`@revio/ui/submit-token`); the action inserts it first, `ON CONFLICT DO NOTHING`, and a second
+/// arrival of the same token creates nothing. The browser already disables a pressed button; this
+/// closes what that cannot: a press before the page has hydrated, and a request the network retried
+/// — measured on 2026-09-23 as two walk-ins, two folios, one guest (HANDOFF-2026-09-22 §2).
+///
+/// `tenantId` is null for an operator action that creates the tenant itself; only the operator
+/// perimeter (bypass) can see those rows. Rows older than two days are pruned by the hold-expiry job:
+/// a retry arrives within seconds, and nothing reads this table but the insert.
+model SubmitToken {
+  id        String   @id
+  tenantId  String?
+  /// Which action consumed it — for a person reading the table, never for the rule.
+  action    String
+  createdAt DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }

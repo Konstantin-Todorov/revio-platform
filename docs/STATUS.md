@@ -313,8 +313,14 @@ says who can move it. Details sit where the link points.
    Operator's `markRenewed` used `$transaction([...])` on the RLS client — two commits — and
    `txscope:lint` now bans the batch form too. 17 remain, each with its reason in the lint (if/else
    branches, retry-safe bulk sets, Channex write-as-you-go). Not seen by it: writes inside helpers.
-4. **An idempotency key on "create" actions** — a double submit is blocked in the browser
-   (`submit:lint`), not on the server.
+4. ~~**An idempotency key on "create" actions**~~ ✅ **2026-09-29** — every `SubmitButton` carries a
+   one-time token minted at render (`@revio/ui/submit-token`), kept through hydration and renewed when a
+   submission finishes; the server accepts it once (`SubmitToken`, primary key, `ON CONFLICT DO NOTHING`)
+   <!-- status: built packages/db/src/submit-token.ts#claimSubmitToken -->. Guarded, before anything with a
+   consequence: PMS charge, payment, deposit capture/apply/refund, split folio, tax document, walk-in;
+   CRS hold and confirm; Operator new client. **Proven by two raw requests carrying one token against a
+   real folio: 2 lines without the guard, 1 with it.** Tokens older than two days are pruned by the
+   hold-expiry job. Two tabs are still two submissions — on purpose: that is two intents.
 5. **Money reconciled end to end** — one invoice by hand, and an exhaustive test of the all-in promise
    across occupancy, extras, nights and city-tax exemptions. `HANDOFF` §5.
 

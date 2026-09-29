@@ -2,6 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import type { ReactNode } from "react";
+import { SubmitTokenField } from "./submit-token";
 
 /**
  * A submit button that admits it is working.
@@ -63,6 +64,9 @@ export function SubmitButton({
   const isThis = pending && (name === undefined || data?.get(name) === value);
 
   return (
+    <>
+    {/* The server half of "press once" — see ./submit-token. */}
+    <SubmitTokenField />
     <button
       type="submit"
       disabled={pending || disabled}
@@ -81,5 +85,6 @@ export function SubmitButton({
     >
       {isThis && pendingLabel ? pendingLabel : children}
     </button>
+    </>
   );
 }

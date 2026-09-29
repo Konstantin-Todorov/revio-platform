@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireCapability } from "./authz";
 import { generateInvoice, type DocType } from "./invoice";
 import { str } from "./mutation-helpers";
+import { pressedTwice } from "./submit-once";
 
 const DOC_TYPES = ["invoice", "proforma", "credit_note"];
 
@@ -18,6 +19,8 @@ export async function issueInvoice(fd: FormData): Promise<void> {
   const docType = (DOC_TYPES.includes(str(fd, "docType")) ? str(fd, "docType") : "invoice") as DocType;
   const buyerName = str(fd, "buyerName");
   if (!buyerName) redirect(`/folio/${reservationId}?error=buyer`);
+  // A tax document pressed twice is two numbers from a series that may have no gaps and no spares.
+  if (await pressedTwice(fd, session.tenantId, "issueInvoice")) redirect(`/folio/${reservationId}`);
 
   const id = await generateInvoice({
     reservationId,

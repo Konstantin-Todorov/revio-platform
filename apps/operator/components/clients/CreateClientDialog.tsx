@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { createClient, type ActionResult } from "@/lib/actions";
 import { Modal, Field, inputCls } from "@/components/ui/Modal";
 import { ActionForm } from "@revio/ui/action-form";
+import { SubmitTokenField } from "@revio/ui/submit-token";
 import { ACCOUNT_TYPES, todayInTimeZone, type AccountType } from "@revio/core";
 
 const TYPE_HINT: Record<AccountType, string> = Object.fromEntries(ACCOUNT_TYPES.map((t) => [t.key, t.blurb])) as Record<AccountType, string>;
@@ -29,6 +30,8 @@ export function CreateClientDialog() {
           The Owner then adds their own staff inside the product.
         </p>
         <ActionForm action={formAction} state={state} className="space-y-3.5">
+          {/* Its own button, so the one-time token is added here rather than by SubmitButton. */}
+          <SubmitTokenField />
           <div className="grid grid-cols-2 gap-3">
             <Field label="Client / organization"><input name="name" required className={inputCls} placeholder="Grand Marina Hotels" /></Field>
             <Field label="First property"><input name="propertyName" className={inputCls} placeholder="Grand Marina — Sofia" /></Field>

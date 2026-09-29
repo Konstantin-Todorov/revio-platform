@@ -134,3 +134,4 @@ export { createPublicSignup, activatePendingSignup, type SignupOutcome } from ".
 export { deleteClientCompletely, clientDeletionFacts, type DeleteClientResult } from "./client-deletion.js";
 export { changeClientStatus, changeClientType, changeClientBilling, recordClientEvent, describeBilling, type Actor, type LifecycleResult } from "./client-lifecycle.js";
 export { teamLocale } from "./team-locale.js";
+export { claimSubmitToken, SUBMIT_TOKEN_FIELD, DUPLICATE_SUBMIT_MESSAGE, type SubmitTokenDb } from "./submit-token.js";

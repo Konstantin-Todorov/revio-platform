@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { withTenantTransaction } from "@revio/db";
 import { describeAccommodation, resolveRate } from "@revio/core";
 import { prisma } from "./db";
+import { pressedTwice } from "./submit-once";
 import { getSession } from "./session";
 import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { availableUnitsFor } from "./data";
@@ -544,6 +545,10 @@ export async function walkIn(fd: FormData): Promise<void> {
   if (quotedNights.length > 0 && quotedNights.length < nights) {
     priceMinor = Math.round((priceMinor / quotedNights.length) * nights);
   }
+
+  // Measured 2026-09-23: two walk-ins through a press before hydration — one guest, two rooms, two
+  // folios. The browser cannot stop that press; the server refuses the second copy of it.
+  if (await pressedTwice(fd, session.tenantId, "walkIn")) redirect("/dashboard");
 
   /*
    * Guest, reservation and room in ONE transaction, the room through `claimUnitForStay`.

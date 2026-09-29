@@ -29,6 +29,7 @@
     "./activity-table": "./src/activity-table.tsx",
     "./primitives": "./src/primitives.tsx",
     "./channel-plans": "./src/channel-plans.tsx",
+    "./submit-token": "./src/submit-token.tsx",
     "./stat-card": "./src/stat-card.tsx",
     "./sparkline": "./src/sparkline.tsx",
     "./motion": "./src/motion.ts",

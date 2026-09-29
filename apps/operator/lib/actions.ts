@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { deleteClientCompletely, describeBilling, forSystem, issueToken, recordAppError, withSystemTransaction } from "@revio/db";
+import { claimSubmitToken, deleteClientCompletely, describeBilling, forSystem, issueToken, recordAppError, withSystemTransaction } from "@revio/db";
 import { ACCOUNT_TYPE_BY_KEY, defaultBillingFor, initialGuestLanguage, inviteEmail, isAccountType, isOurs, statusView, type AccountType } from "@revio/core";
 import { sendEmail } from "@revio/email";
 import { primaryProduct } from "./product-origins";
@@ -101,6 +101,10 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
    * separate writes, and a failure between them left a client with no plan whose owner email then
    * blocked every retry.
    */
+  // A second press of the same form is not a second client. Without this it reached the owner's
+  // unique email and came back as "that email is taken" — read as a failure while the client existed.
+  if (!(await claimSubmitToken(forSystem(), fd, null, "createClient"))) return { ok: true };
+
   await withSystemTransaction(async (tx) => {
     const tenant = await tx.tenant.create({
       data: {

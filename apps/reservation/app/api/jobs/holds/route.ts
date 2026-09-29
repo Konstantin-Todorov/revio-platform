@@ -46,7 +46,12 @@ export async function POST(req: NextRequest) {
   try {
     const lease = await withJobLease(JOB.holdExpiry, 5 * 60_000, async () => {
       const released = await releaseExpiredHolds(forSystem());
-      return { ok: true, released };
+      // One-time form tokens (`SubmitToken`) only matter for the seconds a retry takes to arrive.
+      // Two days is generous; nothing else reads the table, so it is kept small here.
+      const { count: tokensPruned } = await forSystem().submitToken.deleteMany({
+        where: { createdAt: { lt: new Date(Date.now() - 2 * 86_400_000) } },
+      });
+      return { ok: true, released, tokensPruned };
     });
     if (!lease.ran) {
       return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });

@@ -1,5 +1,6 @@
 "use server";
 
+import { pressedTwice } from "./submit-once";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { withTenantTransaction } from "@revio/db";
@@ -76,6 +77,8 @@ export async function postCharge(fd: FormData): Promise<void> {
 
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) return flashError((await flashSay()).folio.closedCharge);
+  // Before anything with a consequence — a card charged twice is not undone by a unique index.
+  if (await pressedTwice(fd, session.tenantId, "postCharge")) { refresh(reservationId); return; }
   // Route through the single charge-posting service so the line is tagged (outlet + tax category).
   await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind, description, amountMinor, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_charge", field: description, newValue: `${kind} +${amountMinor}`, userId: session.userId });
@@ -96,6 +99,8 @@ export async function postPayment(fd: FormData): Promise<void> {
 
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) return flashError((await flashSay()).folio.closedPayment);
+  // Before anything with a consequence — a card charged twice is not undone by a unique index.
+  if (await pressedTwice(fd, session.tenantId, "postPayment")) { refresh(reservationId); return; }
 
   // Card payments flow through the gateway boundary (spec §4.5) — we store only the token + result,
   // never a card number. Cash / company / bank are drawer/manual entries and skip the gateway.
@@ -170,6 +175,8 @@ export async function captureDeposit(fd: FormData): Promise<void> {
   if (!type) return flashError((await flashSay()).folio.depositType);
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) return flashError((await flashSay()).folio.closedDeposit);
+  // Before anything with a consequence — a card charged twice is not undone by a unique index.
+  if (await pressedTwice(fd, session.tenantId, "captureDeposit")) { refresh(reservationId); return; }
 
   // Card deposits are gateway transactions against the token; cash is a drawer entry (spec §4.5).
   let depositRef: string | null = null;
@@ -200,6 +207,8 @@ export async function useDeposit(fd: FormData): Promise<void> {
   const reservationId = str(fd, "reservationId");
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) return flashError((await flashSay()).folio.closedApply);
+  // Before anything with a consequence — a card charged twice is not undone by a unique index.
+  if (await pressedTwice(fd, session.tenantId, "useDeposit")) { refresh(reservationId); return; }
 
   const lines = await prisma.folioLine.findMany({ where: { folioId: folioId! }, select: { kind: true, amountMinor: true, voided: true } });
   const { depositsHeld, balance } = folioBalance(lines);
@@ -224,6 +233,8 @@ export async function refundDeposit(fd: FormData): Promise<void> {
   const reservationId = str(fd, "reservationId");
   const folioId = await openFolioId(session, reservationId);
   if (!folioId) return flashError((await flashSay()).folio.closedRefund);
+  // Before anything with a consequence — a card charged twice is not undone by a unique index.
+  if (await pressedTwice(fd, session.tenantId, "refundDeposit")) { refresh(reservationId); return; }
 
   const lines = await prisma.folioLine.findMany({ where: { folioId: folioId! }, select: { kind: true, amountMinor: true, voided: true } });
   const { depositsHeld } = folioBalance(lines);
@@ -255,6 +266,8 @@ export async function createFolio(fd: FormData): Promise<void> {
   const session = await ctx("frontDesk");
   const reservationId = str(fd, "reservationId");
   const label = str(fd, "label") || "Company";
+  // Two empty "Company" splits that no screen could delete are in production because of exactly this.
+  if (await pressedTwice(fd, session.tenantId, "createFolio")) { refresh(reservationId); return; }
   await createSplitFolio(session.tenantId, session.activePropertyId, reservationId, label);
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_split", field: label, newValue: "added", userId: session.userId });
   await setFlash("success", `${label} folio was added to the stay.`);
