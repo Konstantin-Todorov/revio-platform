@@ -39,7 +39,7 @@ export async function applyEntitlement(args: {
   tenantId: string;
   product: ProductField;
   enabled: boolean;
-  reason: string;
+  reason?: string;
   session: { userId: string; name: string };
 }): Promise<"changed" | "unchanged" | "gone"> {
   const { tenantId, product, enabled, session } = args;
@@ -114,7 +114,7 @@ export async function applyEntitlement(args: {
   // Ours too: who, when and why — the hotel's audit line above says what, this says why.
   await recordClientEvent({
     tenantId, kind: "product", fromValue: `${info.name} ${enabled ? "off" : "on"}`, toValue: `${info.name} ${enabled ? "on" : "off"}`,
-    reason: args.reason, actor: { id: session.userId, name: session.name },
+    reason: args.reason || null, actor: { id: session.userId, name: session.name },
   });
   return "changed";
 }

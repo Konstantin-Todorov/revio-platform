@@ -40,6 +40,10 @@ export interface ChannelErrorStrings {
     demo: string;
     notEnabled: string;
     already: string;
+    /** Setup worked; the first send of the calendar did not. */
+    pushFailed: (why: string) => string;
+    /** Keyed by `ProvisionRefusal` in @revio/connectivity. */
+    refusal: Record<"no_key" | "no_rooms" | "no_rates" | "all_derived" | "duplicate" | "refused", string>;
   };
   send: {
     kind: string;
@@ -111,6 +115,15 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
       demo: "This is a demo hotel. A real Channex property must never point at demo data.",
       notEnabled: "RevioLink is not enabled for this hotel.",
       already: "This property is already on Channex. If setup stopped part-way, finish it in Mapping — running setup again would create a second property in Channex that nobody can tell apart.",
+      pushFailed: (w) => `Your rooms and prices are set up on the channel manager, but the first send of your calendar did not go through (${w}). Nothing is on sale yet. It is sent again with your next change — or see why under Sync Center.`,
+      refusal: {
+        no_key: "Channel connections are not switched on for your account yet. That is on our side, not yours — we have been told, and you can also write to support@reviosoft.app. Nothing has been sent anywhere.",
+        no_rooms: "Add your room types first (Rooms & Rates) — the channels need them before anything else.",
+        no_rates: "Add at least one rate plan first (Rooms & Rates) — without one there is no price to sell.",
+        all_derived: "Every rate plan here takes its price from another plan. Give at least one plan its own prices (Rooms & Rates), then try again.",
+        duplicate: "The channel manager already has a property with this hotel's name — probably from an earlier attempt. Please do not press again: that would create a second one. We have been told and will connect the right one; you can also write to support@reviosoft.app.",
+        refused: "The channel manager did not accept the setup. Nothing is on sale and nothing was charged. We have been told and will look at it; you can also write to support@reviosoft.app.",
+      },
     },
     send: {
       kind: "Say whether this is a room type or a rate plan.",
@@ -120,7 +133,7 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
       setUpFirst: "This property is not on Channex yet — use “Set up on Channex” first, and everything you have now goes in one pass.",
       demoChannel: "This is a demo channel, so there is nothing on the other side to send it to.",
       notSetUp: "This hotel is not on Channex yet — run setup on the Channels screen first.",
-      noKey: "No Channex API key for this hotel. Add it in the Operator console under Connectivity.",
+      noKey: "Channel connections are not switched on for your account yet. That is on our side, not yours — write to support@reviosoft.app and we will sort it out. Nothing was sent.",
     },
     catchup: {
       sent: (n) => `${n} sent to your channel manager`,
@@ -180,6 +193,15 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
       demo: "Това е демо хотел. Реален обект в Channex никога не бива да сочи към демо данни.",
       notEnabled: "RevioLink не е включен за този хотел.",
       already: "Този обект вече е в Channex. Ако настройката е спряла по средата, довършете я в „Съответствия“ — повторна настройка би създала втори обект в Channex, който никой не може да различи.",
+      pushFailed: (w) => `Стаите и цените Ви са настроени в каналния мениджър, но първото изпращане на календара не мина (${w}). Още нищо не се продава. Изпраща се отново при следващата Ви промяна — или вижте защо в „Синхронизация“.`,
+      refusal: {
+        no_key: "Връзката с каналите още не е включена за Вашия профил. Това е от наша страна, не от Ваша — уведомени сме, а можете да пишете и на support@reviosoft.app. Нищо не е изпратено никъде.",
+        no_rooms: "Първо добавете типовете стаи („Стаи и цени“) — каналите имат нужда от тях преди всичко друго.",
+        no_rates: "Първо добавете поне един ценови план („Стаи и цени“) — без него няма цена, която да се продава.",
+        all_derived: "Всеки ценови план тук взема цената си от друг план. Дайте поне на един план собствени цени („Стаи и цени“) и опитайте отново.",
+        duplicate: "В каналния мениджър вече има обект с името на този хотел — вероятно от по-ранен опит. Моля, не натискайте отново: това би създало втори. Уведомени сме и ще свържем правилния; можете да пишете и на support@reviosoft.app.",
+        refused: "Каналният мениджър не прие настройката. Нищо не се продава и нищо не е таксувано. Уведомени сме и ще проверим; можете да пишете и на support@reviosoft.app.",
+      },
     },
     send: {
       kind: "Посочете дали е тип стая или ценови план.",
@@ -189,7 +211,7 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
       setUpFirst: "Този обект още не е в Channex — първо използвайте „Настрой каналите“, и всичко, което имате сега, ще отиде наведнъж.",
       demoChannel: "Това е демо канал, така че от другата страна няма къде да се изпрати.",
       notSetUp: "Този хотел още не е в Channex — първо пуснете настройката от екрана „Канали“.",
-      noKey: "Няма API ключ за Channex за този хотел. Добавете го в Operator конзолата, в раздел Connectivity.",
+      noKey: "Връзката с каналите още не е включена за Вашия профил. Това е от наша страна, не от Ваша — пишете на support@reviosoft.app и ще я уредим. Нищо не е изпратено.",
     },
     catchup: {
       sent: (n) => `${n} ${n === 1 ? "изпратен" : "изпратени"} към каналния мениджър`,

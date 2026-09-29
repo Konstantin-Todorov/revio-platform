@@ -180,7 +180,12 @@ export default async function ClientDetailPage({
         ] as const).map(([field, key, name]) => {
           const t = running.find((r) => r.product === key);
           const left = t ? Math.max(0, Math.ceil((t.endsAt.getTime() - now.getTime()) / 86_400_000)) : null;
-          return { field, name, on: c.entitlements[field], trial: left === null ? null : `trial, ${left} day${left === 1 ? "" : "s"} left` };
+          return {
+            field, key, name, on: c.entitlements[field],
+            trial: left === null ? null : `trial, ${left} day${left === 1 ? "" : "s"} left`,
+            // A product is trialled once; the add dialog offers the trial only when it has not been.
+            trialled: c.trials.some((tr) => tr.product === key),
+          };
         })}
         owes={owes}
         health={health}

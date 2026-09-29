@@ -20,7 +20,11 @@ import {
   applyStructurePlan,
   describeStructureOutcome,
   type ChannelField,
+  ChannexProvisionError,
 } from "@revio/connectivity";
+import { recordAppError } from "@revio/db";
+import { setFlash } from "@revio/ui/flash";
+import { fullSyncChannel } from "./connectivity";
 import { prisma } from "./db";
 import { getProperty } from "./data";
 import { guard } from "./authz";
@@ -197,7 +201,9 @@ async function channexPropertyId(propertyId: string): Promise<string | null> {
   return existing?.externalPropertyId ?? null;
 }
 
-export type ProvisionOutcome = { ok: true; rooms: number; rates: number } | { ok: false; error: string };
+export type ProvisionOutcome =
+  | { ok: true; rooms: number; rates: number; /** The calendar did not go out after setup — say so, it is fixable. */ pushError?: string }
+  | { ok: false; error: string };
 
 /**
  * Put this property onto Channex — the step that used to require somebody at Revio running a script.
@@ -334,11 +340,45 @@ export async function provisionChannex(): Promise<ProvisionOutcome> {
       },
     );
 
+    /*
+     * ⚠️ Then send the calendar — prices, availability, restrictions — straight away.
+     *
+     * Provisioning creates the rooms and plans at Channex and nothing else, so until somebody next
+     * edited a price Channex showed its own defaults: found 2026-09-28 walking a new client end to
+     * end, "we have €95, they publish €100" and "we send 2 apartments, they offer 0" on every night.
+     * The moment a channel is switched on it would have sold those. Pushing now costs nothing (no
+     * channel is active, no meter runs) and means the first thing the OTA ever sees is right.
+     */
+    const channex = await prisma.channel.findFirst({ where: { propertyId: property.id, code: "channex" }, select: { id: true } });
+    // The WHOLE horizon, not the routine 14 days: the first send is the one that must cover every
+    // date an OTA can sell — a 14-day first push left day 15 onward on Channex's defaults.
+    const pushed = channex ? await fullSyncChannel(channex.id) : null;
+
     revalidatePath("/channels");
+    revalidatePath("/mapping");
+    if (pushed && !pushed.ok) {
+      // A flash, not a return value: on success this screen re-renders into the channel view and the
+      // component that pressed the button is gone.
+      const why = pushed.error ?? "no answer";
+      await setFlash("error", (await sayCh()).provision.pushFailed(why));
+      return { ok: true, rooms: result.roomMap.length, rates: result.rateMap.length, pushError: why };
+    }
     return { ok: true, rooms: result.roomMap.length, rates: result.rateMap.length };
   } catch (e) {
-    // ChannexProvisionError messages are written for a hotelier and name the fix; anything else is
-    // reported as-is rather than flattened into "something went wrong".
+    /*
+     * A refusal with a code is worded for the hotel, in their language. `no_key` is ours to fix —
+     * a hotel has no Channex account and cannot add a key — so it is also filed in the error log,
+     * where the operator sees it, instead of telling the hotel to open a console it cannot reach
+     * (which is what the English sentence did until 2026-09-28).
+     */
+    if (e instanceof ChannexProvisionError && e.code) {
+      // Ours to fix, not the hotel's: filed where the operator sees it, with the technical detail.
+      if (e.code === "no_key" || e.code === "duplicate" || e.code === "refused") {
+        await recordAppError({ service: "cm", error: e, route: "/channels (Set up on Channex)" });
+      }
+      return { ok: false, error: (await sayCh()).provision.refusal[e.code] };
+    }
+    // Anything else is reported as-is rather than flattened into "something went wrong".
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 }

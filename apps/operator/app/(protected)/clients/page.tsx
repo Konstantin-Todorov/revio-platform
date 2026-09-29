@@ -5,6 +5,7 @@ import { ACCOUNT_TYPE_BY_KEY, PRODUCT_BY_KEY, statusView, syncRecencyHealth, isO
 import { describeBilling } from "@revio/db";
 import { CreateClientDialog } from "@/components/clients/CreateClientDialog";
 import { AccountTypeChip } from "@/components/clients/AccountTypeChip";
+import { RowLink } from "@/components/clients/RowLink";
 import { renewalStatus } from "@/lib/account";
 
 export const dynamic = "force-dynamic";
@@ -90,7 +91,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
                 );
                 const health = c.status === "active" && c.counts.channelsConnected > 0 ? syncRecencyHealth(c.lastSuccessAt, now) : null;
                 return (
-                  <tr key={c.id} className="border-b border-surface-border/60 align-top transition-colors last:border-0 hover:bg-surface-muted/60">
+                  <RowLink key={c.id} href={`/clients/${c.id}`} className="border-b border-surface-border/60 align-top transition-colors last:border-0 hover:bg-surface-muted/60">
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {c.worst && (
@@ -162,7 +163,7 @@ export default async function ClientsPage({ searchParams }: { searchParams: Prom
                         <span className="text-ink-300">—</span>
                       )}
                     </td>
-                  </tr>
+                  </RowLink>
                 );
               })}
             </tbody>

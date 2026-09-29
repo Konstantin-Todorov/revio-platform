@@ -129,7 +129,17 @@ const FALLBACK = {
   address: "—",
 };
 
-export class ChannexProvisionError extends Error {}
+/**
+ * A refusal written for the person who pressed the button. `code` lets each product say it in the
+ * reader's language — the English `message` stays for callers that have no dictionary. `no_key` is
+ * OURS to fix, never the hotel's: a hotel has no Channex account and no way to add a key.
+ */
+export type ProvisionRefusal = "no_key" | "no_rooms" | "no_rates" | "all_derived" | "duplicate" | "refused";
+export class ChannexProvisionError extends Error {
+  constructor(message: string, readonly code?: ProvisionRefusal) {
+    super(message);
+  }
+}
 
 export async function provisionChannexProperty(
   input: ProvisionInput,
@@ -141,24 +151,26 @@ export async function provisionChannexProperty(
   if (!apiKey.trim()) {
     throw new ChannexProvisionError(
       "No Channex API key is configured. Add it in the Operator console under Connectivity.",
+      "no_key",
     );
   }
   if (roomTypes.length === 0) {
-    throw new ChannexProvisionError("Add your room types before connecting a channel — Channex needs them first.");
+    throw new ChannexProvisionError("Add your room types before connecting a channel — Channex needs them first.", "no_rooms");
   }
   if (ratePlans.length === 0) {
-    throw new ChannexProvisionError("Add at least one rate plan before connecting a channel.");
+    throw new ChannexProvisionError("Add at least one rate plan before connecting a channel.", "no_rates");
   }
   if (!ratePlans.some((r) => r.priceLogic === "manual")) {
     // Every plan derived from a parent that does not exist on Channex would create a property with
     // rooms and no sellable rate — a state that looks provisioned and cannot take a booking.
     throw new ChannexProvisionError(
       "Every rate plan here is derived from another. At least one plan must set its own prices before this hotel can be put on Channex.",
+      "all_derived",
     );
   }
 
   const base = HOSTS[mode];
-  if (!base) throw new ChannexProvisionError(`Unknown connectivity mode "${mode}".`);
+  if (!base) throw new ChannexProvisionError(`Unknown connectivity mode "${mode}".`, "refused");
 
   const dry = input.dryRun === true;
 
@@ -185,7 +197,7 @@ export async function provisionChannexProperty(
           : json?.errors?.details
             ? JSON.stringify(json.errors.details)
             : text.slice(0, 300);
-      throw new ChannexProvisionError(`Channex refused ${method} ${path} (${res.status}): ${detail}`);
+      throw new ChannexProvisionError(`Channex refused ${method} ${path} (${res.status}): ${detail}`, "refused");
     }
     return json;
   };
@@ -249,6 +261,7 @@ export async function provisionChannexProperty(
       `Channex already has a property called “${property.name}” (${clash.id}). ` +
       "Provisioning again would create a second one that nobody can tell apart. " +
       "If that property is this hotel, connect it instead; if it is an orphan from a failed run, delete it in Channex first.",
+      "duplicate",
     );
   }
 

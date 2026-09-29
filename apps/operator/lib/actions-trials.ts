@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { forSystem } from "@revio/db";
+import { recordClientEvent, forSystem } from "@revio/db";
 import { flashError, setFlash } from "@revio/ui/flash";
 import {
   PRODUCT_BY_KEY,
@@ -99,6 +99,10 @@ export async function startTrial(fd: FormData): Promise<void> {
   const owner = tenant.users[0];
   const told = await notifyOwner(owner, product, endsAt);
 
+  await recordClientEvent({
+    tenantId, kind: "product", fromValue: `${info.name} off`, toValue: `${info.name} trial until ${endsAt.toISOString().slice(0, 10)}`,
+    actor: { id: session.userId, name: session.name },
+  });
   revalidatePath("/clients", "layout");
   revalidatePath(`/clients/${tenantId}`, "layout");
   return setFlash(
@@ -207,6 +211,12 @@ export async function endTrial(fd: FormData): Promise<void> {
    * the browser on 2026-09-11: page-type revalidation updated the content and showed no toast;
    * layout-type showed it.
    */
+  const endedName = PRODUCT_BY_KEY[trial.product as ProductKey]?.name ?? trial.product;
+  await recordClientEvent({
+    tenantId: trial.tenantId, kind: "product", fromValue: `${endedName} trial`,
+    toValue: outcome === "converted" ? `${endedName} kept (paid)` : `${endedName} off — trial stopped`,
+    actor: { id: session.userId, name: session.name },
+  });
   revalidatePath("/clients", "layout");
   revalidatePath(`/clients/${trial.tenantId}`, "layout");
   return setFlash(

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { changeClientBilling, changeClientStatus, changeClientType, forSystem } from "@revio/db";
-import { disconnectChannel, pauseChannel } from "@revio/connectivity";
+import { auditChannelMapping, disconnectChannel, pauseChannel } from "@revio/connectivity";
 import type { LifecycleAction } from "@revio/core";
 import { setFlash } from "@revio/ui/flash";
 import { getOperatorSession } from "./session";
@@ -145,8 +145,8 @@ export async function changeProductsAction(_prev: LifecycleFormResult | null, fd
   const session = await getOperatorSession();
   if (!session) return { ok: false, error: "Your session has expired. Sign in again, then repeat this." };
   const tenantId = String(fd.get("tenantId") ?? "");
+  // Optional (founder, 2026-09-28: "too demanding"). Written to History when given.
   const reason = String(fd.get("reason") ?? "").trim();
-  if (!reason) return { ok: false, error: "Say why the products are changing — the hotel is emailed, and we will be asked." };
 
   const wanted = PRODUCTS.map((p) => ({ ...p, enabled: fd.get(p.field) != null }));
   if (!wanted.some((p) => p.enabled)) {
@@ -166,4 +166,50 @@ export async function changeProductsAction(_prev: LifecycleFormResult | null, fd
   await setFlash("success", `Products updated: ${changed.join(", ")}. The owner has been emailed.`);
   refresh(tenantId);
   return { ok: true };
+}
+
+/**
+ * "Check now": ask the channel manager about every live channel of this client, immediately — the
+ * same audit the scheduled job runs (property still there? mapping still pointing at the right
+ * room?), so the answer on screen is the answer the job would give in an hour.
+ *
+ * "Could not look" is reported as exactly that, never as healthy: a check that silently passes when
+ * it could not run is how a dead key read "0 revisions · success" 411 times.
+ */
+export async function checkClientNowAction(
+  _prev: { ok: boolean; message?: string; error?: string } | null,
+  fd: FormData,
+): Promise<{ ok: boolean; message?: string; error?: string }> {
+  const session = await getOperatorSession();
+  if (!session) return { ok: false, error: "Your session has expired. Sign in again, then repeat this." };
+  const tenantId = String(fd.get("tenantId") ?? "");
+  const channels = await prisma.channel.findMany({
+    where: { tenantId, status: { in: ["connected", "paused", "pending"] } },
+    select: { id: true, name: true, connectivityMode: true, property: { select: { name: true } } },
+  });
+  refresh(tenantId);
+  if (channels.length === 0) return { ok: true, message: "Re-read just now. No connected channel to ask the channel manager about." };
+
+  const problems: string[] = [];
+  const couldNot: string[] = [];
+  for (const ch of channels) {
+    try {
+      const r = await auditChannelMapping(prisma, ch.id);
+      const label = `${ch.property.name} · ${ch.name}`;
+      if (r.skipped) couldNot.push(`${label} (${r.skipped})`);
+      else if (r.crossWired.length) problems.push(`${label}: ${r.crossWired.length} rate plan${r.crossWired.length === 1 ? "" : "s"} on the wrong room`);
+    } catch (e) {
+      couldNot.push(`${ch.property.name} · ${ch.name} (${e instanceof Error ? e.message : "no answer"})`);
+    }
+  }
+  const missing = await prisma.channel.findMany({
+    where: { tenantId, id: { in: channels.map((c) => c.id) }, catalogueStatus: "property_missing" },
+    select: { name: true, property: { select: { name: true } } },
+  });
+  for (const m of missing) problems.push(`${m.property.name} · ${m.name}: the property no longer exists at the channel manager`);
+
+  const at = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Sofia", hour: "2-digit", minute: "2-digit" }).format(new Date());
+  if (problems.length) return { ok: false, error: `Checked at ${at}. ${problems.join(" · ")}. Details are on the Channels tab.` };
+  if (couldNot.length) return { ok: false, error: `Checked at ${at}, but could not ask about ${couldNot.join(", ")}. That is not the same as healthy — try again in a minute.` };
+  return { ok: true, message: `Checked at ${at}: ${channels.length} channel${channels.length === 1 ? "" : "s"} answered, mapping as expected.` };
 }

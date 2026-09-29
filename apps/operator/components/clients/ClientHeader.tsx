@@ -1,9 +1,9 @@
 "use client";
 
 import { useActionState, useEffect, useState, type ReactNode } from "react";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, RefreshCw } from "lucide-react";
 import {
-  ACCOUNT_TYPES, CLOSE_REASONS, SUSPEND_REASONS, earliestSelectable, todayInTimeZone, type AccountType, type LifecycleAction,
+  ACCOUNT_TYPES, CLOSE_REASONS, SUSPEND_REASONS, TRIAL_DAYS, earliestSelectable, todayInTimeZone, type AccountType, type LifecycleAction,
 } from "@revio/core";
 
 /** A free period is agreed in our office's day, and only ever ends in the future. */
@@ -14,8 +14,9 @@ import { StatusPill } from "@/components/ui/primitives";
 import { AccountTypeChip } from "./AccountTypeChip";
 import { DangerZone } from "./DangerZone";
 import {
-  changeBillingAction, changeProductsAction, changeStatusAction, changeTypeAction, type LifecycleFormResult,
+  changeBillingAction, changeProductsAction, changeStatusAction, changeTypeAction, checkClientNowAction, type LifecycleFormResult,
 } from "@/lib/actions-lifecycle";
+import { startTrial } from "@/lib/actions-trials";
 
 /**
  * The top of a client's page: who they are, what they have, whether they are all right, what they
@@ -33,7 +34,7 @@ export interface ClientHeaderProps {
   status: { value: string; label: string; tone: "success" | "warning" | "danger" | "neutral"; detail?: string; reason: string | null };
   next: { action: LifecycleAction; label: string }[];
   billing: { mode: string; label: string; freeUntil: string | null; note: string | null };
-  products: { field: "channelManager" | "reservation" | "pms"; name: string; on: boolean; trial: string | null }[];
+  products: { field: "channelManager" | "reservation" | "pms"; key: "cm" | "crs" | "pms"; name: string; on: boolean; trial: string | null; trialled: boolean }[];
   owes: { label: string; detail: string; tone: "success" | "warning" | "danger" | "neutral" };
   health: { label: string; detail: string; tone: "success" | "warning" | "danger" | "neutral" };
   channels: { connected: number; live: number };
@@ -46,16 +47,29 @@ export interface ClientHeaderProps {
   };
 }
 
-type Open = null | { kind: "status"; action: LifecycleAction } | { kind: "products" } | { kind: "type" } | { kind: "billing" } | { kind: "delete" };
+type Open =
+  | null
+  | { kind: "status"; action: LifecycleAction }
+  | { kind: "products" } | { kind: "type" } | { kind: "billing" } | { kind: "delete" }
+  | { kind: "add"; product: ClientHeaderProps["products"][number] };
+
+/** What each status button does, said on hover before anybody presses it. */
+const ACTION_TIP: Record<LifecycleAction, string> = {
+  suspend: "Stop them signing in, temporarily. Nothing is deleted and their products stay; Reinstate undoes it in one click.",
+  reinstate: "Let them sign in again, with everything exactly as it was before the suspension.",
+  close: "For a client who has left: sign-in stops and channels are disconnected. Data is kept 90 days and can be reopened.",
+  reopen: "Open the account again. Channels stay disconnected until someone reconnects them.",
+};
 
 export function ClientHeader(p: ClientHeaderProps) {
   const [open, setOpen] = useState<Open>(null);
-  const [menu, setMenu] = useState(false);
   const close = () => setOpen(null);
 
   return (
-    <header className="overflow-hidden rounded-xl border border-surface-border bg-white">
-      <div className="flex flex-wrap items-start justify-between gap-4 bg-brand-900 px-5 py-4">
+    // ⚠️ No `overflow-hidden` here: it clipped the More menu to the header's edge. The rounded corners
+    // come from the two bands themselves instead.
+    <header className="rounded-xl border border-surface-border bg-white">
+      <div className="flex flex-wrap items-start justify-between gap-4 rounded-t-xl bg-brand-900 px-5 py-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-[20px] font-bold tracking-tight text-white">{p.name}</h1>
@@ -65,50 +79,29 @@ export function ClientHeader(p: ClientHeaderProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {p.next.map((n, i) => (
-            <button
-              key={n.action}
-              type="button"
-              onClick={() => setOpen({ kind: "status", action: n.action })}
-              className={
-                i === 0 && (n.action === "reinstate" || n.action === "reopen")
-                  ? "h-9 rounded-md bg-white px-3.5 text-[13px] font-semibold text-brand-900 hover:bg-white/90"
-                  : "h-9 rounded-md border border-white/30 px-3.5 text-[13px] font-semibold text-white hover:bg-white/10"
-              }
-            >
-              {n.label}
-            </button>
+            <Tip key={n.action} text={ACTION_TIP[n.action]}>
+              <button
+                type="button"
+                onClick={() => setOpen({ kind: "status", action: n.action })}
+                className={
+                  i === 0 && (n.action === "reinstate" || n.action === "reopen")
+                    ? "h-9 rounded-md bg-white px-3.5 text-[13px] font-semibold text-brand-900 hover:bg-white/90"
+                    : "h-9 rounded-md border border-white/30 px-3.5 text-[13px] font-semibold text-white hover:bg-white/10"
+                }
+              >
+                {n.label}
+              </button>
+            </Tip>
           ))}
-          <div className="relative">
-            <button
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={menu}
-              onClick={() => setMenu((m) => !m)}
-              className="flex h-9 items-center gap-1.5 rounded-md border border-white/30 px-3 text-[13px] font-semibold text-white hover:bg-white/10"
-            >
-              <MoreHorizontal className="h-4 w-4" /> More
-            </button>
-            {menu && (
-              <div role="menu" className="absolute right-0 z-20 mt-1 w-56 overflow-hidden rounded-md border border-surface-border bg-white py-1 shadow-pop">
-                {[
-                  { k: "products" as const, label: "Change products…" },
-                  { k: "type" as const, label: "Change account type…" },
-                  { k: "billing" as const, label: "Change billing…" },
-                  ...(p.deletion ? [{ k: "delete" as const, label: "Delete client…" }] : []),
-                ].map((m) => (
-                  <button
-                    key={m.k}
-                    role="menuitem"
-                    type="button"
-                    onClick={() => { setMenu(false); setOpen({ kind: m.k }); }}
-                    className={`block w-full px-3.5 py-2 text-left text-[13px] hover:bg-surface-muted ${m.k === "delete" ? "text-danger-700" : "text-ink-800"}`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <MoreMenu
+            items={[
+              { k: "products", label: "Change products…", hint: "Switch RevioLink, RevioCRS or RevioPMS on or off. The owner is emailed." },
+              { k: "type", label: "Change account type…", hint: "Live client, pilot, demo or test — decides whether they are billed and counted." },
+              { k: "billing", label: "Change billing…", hint: "Paying, free until a date, or not billed at all." },
+              ...(p.deletion ? [{ k: "delete" as const, label: "Delete client…", hint: "Permanently remove the client and its data. Says first whether it is allowed.", danger: true }] : []),
+            ]}
+            onPick={(k) => setOpen({ kind: k })}
+          />
         </div>
       </div>
 
@@ -127,6 +120,18 @@ export function ClientHeader(p: ClientHeaderProps) {
                 {x.name}{x.trial && <span className="font-normal text-warning-600"> · {x.trial}</span>}
               </span>
             ))}
+            {/* The products they do NOT have, as the button that adds them — where the eye already is. */}
+            {p.products.filter((x) => !x.on).map((x) => (
+              <Tip key={x.field} text={`Give them ${x.name}: switch it on now, or start a free trial.`}>
+                <button
+                  type="button"
+                  onClick={() => setOpen({ kind: "add", product: x })}
+                  className="rounded border border-dashed border-brand-600/50 px-1.5 py-0.5 text-[12px] font-semibold text-brand-700 hover:bg-brand-50"
+                >
+                  + {x.name}
+                </button>
+              </Tip>
+            ))}
           </span>
           <small>{p.channels.connected} channel{p.channels.connected === 1 ? "" : "s"} connected</small>
         </Fact>
@@ -140,11 +145,13 @@ export function ClientHeader(p: ClientHeaderProps) {
             <StatusPill tone={p.health.tone}>{p.health.label}</StatusPill>
           </span>
           <small>{p.owes.detail} · {p.health.detail}</small>
+          <CheckNow tenantId={p.tenantId} channels={p.channels.connected} />
         </Fact>
       </dl>
 
       {open?.kind === "status" && <StatusDialog {...p} action={open.action} onClose={close} />}
       {open?.kind === "products" && <ProductsDialog {...p} onClose={close} />}
+      {open?.kind === "add" && <AddProductDialog {...p} product={open.product} onClose={close} />}
       {open?.kind === "type" && <TypeDialog {...p} onClose={close} />}
       {open?.kind === "billing" && <BillingDialog {...p} onClose={close} />}
       {open?.kind === "delete" && p.deletion && (
@@ -279,8 +286,8 @@ function ProductsDialog(p: ClientHeaderProps & { onClose: () => void }) {
             </label>
           ))}
         </fieldset>
-        <Field label="Why">
-          <input name="reason" required className={inputCls} placeholder="e.g. Bought RevioPMS on the 3 October call" />
+        <Field label="Note (optional)" hint="Shows in the client's History.">
+          <input name="reason" className={inputCls} placeholder="e.g. Bought RevioPMS on the 3 October call" />
         </Field>
         <Footer state={state} pending={pending} onClose={p.onClose} label="Save products" />
       </ActionForm>
@@ -357,6 +364,141 @@ function BillingDialog(p: ClientHeaderProps & { onClose: () => void }) {
         <p className="text-[12px] text-ink-500">Unsent drafts are removed when a client stops paying. Sent and paid invoices are never changed.</p>
         <Footer state={state} pending={pending} onClose={p.onClose} label="Save billing" />
       </ActionForm>
+    </Modal>
+  );
+}
+
+/**
+ * A tooltip that appears on hover AND on keyboard focus, below the control, immediately.
+ * The browser's own `title` waits a second and never shows on focus, which is how an explanation
+ * nobody sees gets written.
+ */
+function Tip({ text, children }: { text: string; children: ReactNode }) {
+  return (
+    <span className="group/tip relative inline-flex">
+      {children}
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-full z-30 mt-1.5 hidden w-64 -translate-x-1/2 rounded-md bg-ink-900 px-2.5 py-1.5 text-[11.5px] font-normal leading-snug text-white shadow-pop group-focus-within/tip:block group-hover/tip:block"
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
+type MenuKey = "products" | "type" | "billing" | "delete";
+
+/** The less frequent changes, each with the one line that says what it does. Closes on Escape and outside click. */
+function MoreMenu({ items, onPick }: { items: { k: MenuKey; label: string; hint: string; danger?: boolean }[]; onPick: (k: MenuKey) => void }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onDown = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest("[data-more-menu]")) setOpen(false); };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("mousedown", onDown); };
+  }, [open]);
+  return (
+    <div className="relative" data-more-menu>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((m) => !m)}
+        className="flex h-9 items-center gap-1.5 rounded-md border border-white/30 px-3 text-[13px] font-semibold text-white hover:bg-white/10"
+      >
+        <MoreHorizontal className="h-4 w-4" /> More
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 z-30 mt-1 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-surface-border bg-white py-1.5 shadow-pop">
+          {items.map((m) => (
+            <button
+              key={m.k}
+              role="menuitem"
+              type="button"
+              onClick={() => { setOpen(false); onPick(m.k); }}
+              className="block w-full px-3.5 py-2 text-left hover:bg-surface-muted"
+            >
+              <span className={`block text-[13px] font-semibold ${m.danger ? "text-danger-700" : "text-ink-900"}`}>{m.label}</span>
+              <span className="mt-0.5 block text-[11.5px] leading-snug text-ink-500">{m.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Ask the channels now instead of waiting for the next scheduled check.
+ * It runs the same audit the job runs, and says what it found — including "could not look",
+ * which is a different answer from "nothing wrong".
+ */
+function CheckNow({ tenantId, channels }: { tenantId: string; channels: number }) {
+  const [state, action, pending] = useActionState<{ ok: boolean; message?: string; error?: string } | null, FormData>(checkClientNowAction, null);
+  return (
+    <ActionForm action={action} state={state} className="flex flex-col gap-1">
+      <input type="hidden" name="tenantId" value={tenantId} />
+      <Tip text={channels > 0 ? "Asks Channex about every channel of this client right now: is the property there, is the mapping right, did anything fail." : "Re-reads this client's health. They have no connected channel to ask."}>
+        <button
+          type="submit"
+          disabled={pending}
+          className="flex h-7 items-center gap-1.5 self-start rounded-md border border-surface-border px-2 text-[12px] font-semibold text-ink-700 hover:bg-surface-muted disabled:opacity-60"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${pending ? "animate-spin" : ""}`} /> {pending ? "Checking…" : "Check now"}
+        </button>
+      </Tip>
+      {state?.message && <small role="status">{state.message}</small>}
+      {state?.error && <small role="alert" className="!text-danger-700">{state.error}</small>}
+    </ActionForm>
+  );
+}
+
+/** One product, added from where it is missing: switch it on (they bought it) or start a trial. */
+function AddProductDialog(p: ClientHeaderProps & { product: ClientHeaderProps["products"][number]; onClose: () => void }) {
+  const { state, formAction, pending } = useDialog(changeProductsAction, p.onClose);
+  const x = p.product;
+  return (
+    <Modal open onClose={p.onClose} title={`Add ${x.name} for ${p.name}`}>
+      <div className="space-y-4">
+        <form
+          action={async (fd) => { await startTrial(fd); p.onClose(); }}
+          className="rounded-lg border border-surface-border p-3.5"
+        >
+          <input type="hidden" name="tenantId" value={p.tenantId} />
+          <input type="hidden" name="product" value={x.key} />
+          <p className="text-[13.5px] font-semibold text-ink-900">Start a free {TRIAL_DAYS}-day trial</p>
+          <p className="mt-0.5 text-[12.5px] text-ink-500">
+            {x.trialled
+              ? `They have already trialled ${x.name}, and a product is trialled once. Switch it on below instead.`
+              : `Nothing is charged. The owner is emailed, reminded before it ends, and it switches itself off unless they keep it.`}
+          </p>
+          <button
+            type="submit"
+            disabled={x.trialled}
+            className="mt-2.5 h-9 rounded-md bg-brand-800 px-3.5 text-[13px] font-semibold text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Start the trial
+          </button>
+        </form>
+
+        <ActionForm action={formAction} state={state} className="space-y-2.5 rounded-lg border border-surface-border p-3.5">
+          <input type="hidden" name="tenantId" value={p.tenantId} />
+          {p.products.filter((y) => y.on || y.field === x.field).map((y) => (
+            <input key={y.field} type="hidden" name={y.field} value="on" />
+          ))}
+          <p className="text-[13.5px] font-semibold text-ink-900">Switch it on now</p>
+          <p className="text-[12.5px] text-ink-500">
+            They have bought it. It opens immediately on their existing login; {p.billing.mode === "paying" ? "it is added to their monthly invoice." : `billing stays ${p.billing.label.toLowerCase()}.`}
+          </p>
+          <Field label="Note (optional)">
+            <input name="reason" className={inputCls} placeholder="e.g. Agreed on the 3 October call" />
+          </Field>
+          <Footer state={state} pending={pending} onClose={p.onClose} label={`Switch ${x.name} on`} />
+        </ActionForm>
+      </div>
     </Modal>
   );
 }
