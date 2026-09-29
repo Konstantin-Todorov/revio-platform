@@ -11,6 +11,9 @@ import { searchAvailability } from "@/lib/availability";
 import { isValidISO, nightsBetween } from "@/lib/dates";
 import { serverKit } from "@/lib/i18n/server";
 import { termsWords } from "@/lib/i18n/kit";
+import { PaySplitNote } from "@/components/PaySplitNote";
+import { guestPublishableKey } from "@revio/payments";
+import { todayInTimeZone } from "@revio/core";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
@@ -104,6 +107,11 @@ export default async function BookPage({
   const kit = await serverKit(property);
   const { s, fmtDay, money } = kit;
   const termsDetails = plan.terms ? termsWords(kit, plan.terms, plan.currency).details : null;
+  const publishableKey = guestPublishableKey();
+  // The card form only where a card can really be charged — see `paymentReady`.
+  const card = property.paymentReady && publishableKey
+    ? { publishableKey, account: property.paymentAccountId, currency: plan.currency, locale: kit.locale }
+    : null;
 
   return (
     <>
@@ -126,6 +134,9 @@ export default async function BookPage({
             stay={{ slug, checkIn, checkOut, guests, roomTypeId, ratePlanId, holdId: hold.id }}
             cancellationPolicy={plan.cancellationPolicy}
             termsDetails={termsDetails}
+            card={card}
+            termsPolicy={plan.termsPolicy}
+            base={{ totalMinor: plan.totalMinor, firstNightMinor: plan.firstNightMinor, arrival: checkIn, today: todayInTimeZone(property.timezone) }}
             expiresAt={hold.expiresAt.toISOString()}
             paymentReady={property.paymentReady}
             extras={extras}
@@ -176,9 +187,12 @@ export default async function BookPage({
 
               {/* One total, and it follows the extras — see LiveTotal. */}
               <LiveTotal baseTotalMinor={plan.totalMinor} currency={plan.currency} />
-              <p className="mt-1.5 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
-                {s.book.paidAtHotel}
-              </p>
+              <PaySplitNote
+                policy={plan.termsPolicy}
+                base={{ totalMinor: plan.totalMinor, firstNightMinor: plan.firstNightMinor, arrival: checkIn, today: todayInTimeZone(property.timezone) }}
+                currency={plan.currency}
+                paymentReady={!!card}
+              />
             </div>
           </aside>
         </div>

@@ -110,6 +110,9 @@ export interface GuestStrings {
     sleepsUpTo: (n: number) => string;
     extras: string; total: string;
     paidAtHotel: string;
+    paidNow: string;
+    splitHotel: (now: string, hotel: string) => string;
+    splitLater: (now: string, later: string, on: string) => string;
     whoTitle: string;
     firstName: string; lastName: string; email: string; phone: string; optional: string;
     emailHint: string; phoneHint: string;
@@ -117,6 +120,7 @@ export interface GuestStrings {
     extrasTitle: string; extrasLead: string; perNight: (price: string, nights: number) => string; perStay: string; extrasNone: string;
     holdingTitle: string; nextTitle: string;
     guaranteeBold: string; guaranteeBody: string; guaranteeStrong: string; guaranteeTail: string;
+    payNowBold: (amount: string) => string; payNowBody: string; acceptPay: string;
     requestBold: string; requestBody: string;
     cancellation: string;
     terms: string;
@@ -129,7 +133,7 @@ export interface GuestStrings {
   errors: {
     unavailablePage: string;
     name: string; email: string; terms: string;
-    holdGone: string; card: string; guests: string; generic: string;
+    holdGone: string; card: string; priceMoved: string; guests: string; generic: string;
     booking: Record<PublicBookingErrorCode, string>;
     tooMany: string;
     waitlistName: string;
@@ -147,6 +151,7 @@ export interface GuestStrings {
     checkIn: string; checkOut: string; length: string;
     from: (time: string) => string; by: (time: string) => string;
     totalAtHotel: string;
+    total: string; paidOnline: (last4: string) => string; chargedOn: (day: string) => string; atHotel: string;
     nothingCharged: string;
     guaranteeOnly: (last4: string) => string;
     nextTitle: string;
@@ -155,6 +160,7 @@ export interface GuestStrings {
     requestCall: string; requestCallTail: string;
     bookedNext: string;
     bookedArrive: (time: string) => string;
+    bookedArrivePaid: (time: string) => string;
     bookedCall: string; bookedCallTail: string;
     on: string;
   };
@@ -300,6 +306,9 @@ export const guest: Translations<GuestStrings> = {
       sleepsUpTo: (n) => `Sleeps up to ${n}`,
       extras: "Extras", total: "Total",
       paidAtHotel: "Everything included. Paid at the hotel.",
+      paidNow: "Everything included. Paid in full now.",
+      splitHotel: (n, h) => `Everything included. ${n} now, ${h} at the hotel.`,
+      splitLater: (n, l, d) => `Everything included. ${n} now, ${l} on ${d}.`,
       whoTitle: "Who's staying?",
       firstName: "First name", lastName: "Last name", email: "Email", phone: "Phone", optional: "optional",
       emailHint: "Your confirmation goes here.", phoneHint: "Only if the hotel needs to reach you.",
@@ -312,6 +321,9 @@ export const guest: Translations<GuestStrings> = {
       extrasNone: "Nothing selected — your total is unchanged.",
       holdingTitle: "Holding your room", nextTitle: "What happens next",
       guaranteeBold: "Nothing is charged now.",
+      payNowBold: (a) => `${a} is charged now.`,
+      payNowBody: "The payment goes straight to the hotel, under the terms below.",
+      acceptPay: ", and that my card is charged under them",
       guaranteeBody: "Your card guarantees the room and you settle the whole amount at the hotel.",
       guaranteeStrong: "Your card details never reach us",
       guaranteeTail: "— they are held by our payment provider, and this booking page never sees a card number.",
@@ -333,7 +345,8 @@ export const guest: Translations<GuestStrings> = {
       email: "That email address doesn't look right.",
       terms: "Please accept the booking conditions to continue.",
       holdGone: "Your room was only held for a short time and that window has passed. Please search again — it may still be free.",
-      card: "We couldn't confirm your card guarantee. Please try again, or call the hotel.",
+      card: "We couldn't confirm your card. Nothing was charged — please try again, or call the hotel.",
+      priceMoved: "The price changed while you were booking. Nothing was charged — please check the new total and try again.",
       guests: "Tell us how many guests are staying.",
       generic: "We couldn't complete that booking.",
       booking: {
@@ -366,6 +379,10 @@ export const guest: Translations<GuestStrings> = {
       checkIn: "Check in", checkOut: "Check out", length: "Length",
       from: (t) => `from ${t}`, by: (t) => `by ${t}`,
       totalAtHotel: "Total to pay at the hotel",
+      total: "Total",
+      paidOnline: (l) => (l ? `Paid now · card ending ${l}` : "Paid now"),
+      chargedOn: (d) => `Charged automatically on ${d}`,
+      atHotel: "To pay at the hotel",
       nothingCharged: "Nothing has been charged.",
       guaranteeOnly: (l) => `Nothing has been charged — your card ending ${l} is held as a guarantee only.`,
       nextTitle: "What happens now",
@@ -375,6 +392,7 @@ export const guest: Translations<GuestStrings> = {
       requestCallTail: " — you’re dealing with the hotel, not an agency.",
       bookedNext: "Your confirmation email has everything on this page. Keep the reference — it’s all the hotel needs to find you.",
       bookedArrive: (t) => `Arrive any time after ${t}. Nothing to print, nothing to pay in advance.`,
+      bookedArrivePaid: (t) => `Arrive any time after ${t}. Nothing to print — what you paid is already with the hotel.`,
       bookedCall: "Need to change or cancel? Call the hotel directly",
       bookedCallTail: " — you’re booked with them, not through an agency, so they can just do it.",
       on: "on",
@@ -505,6 +523,9 @@ export const guest: Translations<GuestStrings> = {
       sleepsUpTo: (n) => `До ${n} ${n === 1 ? "гост" : "гости"}`,
       extras: "Допълнително", total: "Общо",
       paidAtHotel: "Всичко е включено. Плаща се в хотела.",
+      paidNow: "Всичко е включено. Плаща се изцяло сега.",
+      splitHotel: (n, h) => `Всичко е включено. ${n} сега, ${h} в хотела.`,
+      splitLater: (n, l, d) => `Всичко е включено. ${n} сега, ${l} на ${d}.`,
       whoTitle: "Кой ще отседне?",
       firstName: "Име", lastName: "Фамилия", email: "Имейл", phone: "Телефон", optional: "по желание",
       emailHint: "Потвърждението ще дойде тук.", phoneHint: "Само ако хотелът трябва да се свърже с Вас.",
@@ -517,6 +538,9 @@ export const guest: Translations<GuestStrings> = {
       extrasNone: "Нищо не е избрано — общата сума не се променя.",
       holdingTitle: "Задържаме стаята Ви", nextTitle: "Какво следва",
       guaranteeBold: "Сега нищо не се плаща.",
+      payNowBold: (a) => `Сега се плащат ${a}.`,
+      payNowBody: "Плащането отива директно към хотела, при условията по-долу.",
+      acceptPay: " и картата ми да бъде таксувана според тях",
       guaranteeBody: "Картата Ви гарантира стаята, а цялата сума плащате в хотела.",
       guaranteeStrong: "Данните на картата Ви никога не стигат до нас",
       guaranteeTail: "— пазят се от доставчика на плащания, а тази страница никога не вижда номер на карта.",
@@ -538,7 +562,8 @@ export const guest: Translations<GuestStrings> = {
       email: "Този имейл адрес не изглежда правилен.",
       terms: "Моля, приемете условията за резервация, за да продължите.",
       holdGone: "Стаята беше задържана само за кратко и времето изтече. Моля, потърсете отново — може още да е свободна.",
-      card: "Не успяхме да потвърдим гаранцията с картата. Опитайте отново или се обадете на хотела.",
+      card: "Не успяхме да потвърдим картата Ви. Нищо не е таксувано — опитайте отново или се обадете на хотела.",
+      priceMoved: "Цената се промени, докато резервирахте. Нищо не е таксувано — проверете новата сума и опитайте отново.",
       guests: "Моля, посочете колко гости ще отседнат.",
       generic: "Не успяхме да завършим тази резервация.",
       booking: {
@@ -571,6 +596,10 @@ export const guest: Translations<GuestStrings> = {
       checkIn: "Настаняване", checkOut: "Напускане", length: "Престой",
       from: (t) => `от ${t}`, by: (t) => `до ${t}`,
       totalAtHotel: "Общо за плащане в хотела",
+      total: "Общо",
+      paidOnline: (l) => (l ? `Платено сега · карта, завършваща на ${l}` : "Платено сега"),
+      chargedOn: (d) => `Удържа се автоматично на ${d}`,
+      atHotel: "За плащане в хотела",
       nothingCharged: "Нищо не е платено.",
       guaranteeOnly: (l) => `Нищо не е платено — картата Ви, завършваща на ${l}, служи само като гаранция.`,
       nextTitle: "Какво следва",
@@ -580,6 +609,7 @@ export const guest: Translations<GuestStrings> = {
       requestCallTail: " — работите с хотела, а не с агенция.",
       bookedNext: "Имейлът с потвърждението съдържа всичко от тази страница. Запазете номера — само той трябва на хотела, за да Ви намери.",
       bookedArrive: (t) => `Пристигнете по всяко време след ${t}. Нищо за печатане, нищо за плащане предварително.`,
+      bookedArrivePaid: (t) => `Пристигнете по всяко време след ${t}. Нищо за печатане — платеното вече е при хотела.`,
       bookedCall: "Трябва да промените или анулирате? Обадете се директно на хотела",
       bookedCallTail: " — резервацията е при тях, а не чрез агенция, така че те могат просто да го направят.",
       on: "на",

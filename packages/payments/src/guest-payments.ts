@@ -1,0 +1,156 @@
+/**
+ * A guest paying the HOTEL on RevioDirect — card entered in Stripe's own Payment Element, charged on
+ * the hotel's connected account (`Stripe-Account`), so the money settles to the hotel and never
+ * passes through ours.
+ *
+ * ## Authorise, book, then capture
+ *
+ * A payment is created with `capture_method=manual`: the card is authorised while the guest is on
+ * the page (3-D Secure included), the reservation is written, and only then is the money captured.
+ * If the booking fails — the hold expired, the room went — the authorisation is cancelled and the
+ * guest was never charged. If they close the tab in between, Stripe releases the authorisation by
+ * itself. The alternative order, charge-then-book, has a window in which a guest has paid for a
+ * booking that does not exist, and the only repair is a refund they have to wait days for.
+ *
+ * Every intent saves the card for later off-session use (`setup_future_usage` / SetupIntent
+ * `usage`), because a balance charged before arrival and a no-show fee are both charges made without
+ * the guest present. Authenticating while they ARE present is what lets those go through as
+ * merchant-initiated.
+ *
+ * ## Keys
+ *
+ * Test keys only, like the rest of this package — a live key is refused by construction until the
+ * founder decides guests pay for real. `STRIPE_TEST_CHARGE_PLATFORM=1` (local development only, and
+ * only with a test key) charges the platform's own sandbox when no connected account exists — for
+ * exercising the form before Connect is enabled. It can never apply in live mode.
+ */
+
+export type GuestIntentKind = "payment" | "setup";
+
+function key(): string | null {
+  const k = process.env.STRIPE_SECRET_KEY;
+  return k && k.startsWith("sk_test_") ? k : null;
+}
+
+/** Whether guests can pay online at all from this deployment. */
+export function guestPaymentsConfigured(): boolean {
+  return key() !== null;
+}
+
+/** Local development: charge the platform sandbox when a hotel has no connected account. Test keys only. */
+export function testChargesOnPlatform(): boolean {
+  return key() !== null && process.env.STRIPE_TEST_CHARGE_PLATFORM === "1";
+}
+
+/** The publishable key the browser loads Stripe.js with. */
+export function guestPublishableKey(): string | null {
+  const pk = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? process.env.STRIPE_PUBLISHABLE_KEY;
+  return pk && pk.startsWith("pk_test_") ? pk : null;
+}
+
+/** The fields of a Stripe object this module reads — nothing else is trusted to exist. */
+interface StripeObject {
+  id?: string;
+  client_secret?: string;
+  status?: string;
+  amount?: number;
+  amount_capturable?: number;
+  currency?: string;
+  metadata?: Record<string, string>;
+  payment_method?: string | { id?: string; card?: { brand?: string; last4?: string } } | null;
+  error?: { message?: string };
+}
+
+async function call(
+  method: "GET" | "POST",
+  path: string,
+  account: string | null,
+  body?: Record<string, string>,
+): Promise<{ status: number; json: StripeObject }> {
+  const k = key();
+  if (!k) return { status: 0, json: { error: { message: "Online payments are not configured." } } };
+  const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${k}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      // The hotel's account, so the charge is theirs. Absent only in the local platform-test mode.
+      ...(account ? { "Stripe-Account": account } : {}),
+    },
+    ...(body ? { body: new URLSearchParams(body).toString() } : {}),
+  });
+  return { status: res.status, json: (await res.json()) as StripeObject };
+}
+
+export type CreatedIntent = { ok: true; id: string; clientSecret: string } | { ok: false; error: string };
+
+export async function createGuestIntent(opts: {
+  account: string | null;
+  kind: GuestIntentKind;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  metadata: Record<string, string>;
+}): Promise<CreatedIntent> {
+  const meta = Object.fromEntries(Object.entries(opts.metadata).map(([k, v]) => [`metadata[${k}]`, v]));
+  const body: Record<string, string> =
+    opts.kind === "payment"
+      ? {
+          amount: String(opts.amountMinor),
+          currency: opts.currency.toLowerCase(),
+          capture_method: "manual",
+          setup_future_usage: "off_session",
+          // Cards (Apple Pay and Google Pay are cards) — no method that redirects away mid-booking.
+          "payment_method_types[]": "card",
+          description: opts.description,
+          ...meta,
+        }
+      : { usage: "off_session", "payment_method_types[]": "card", description: opts.description, ...meta };
+  const { status, json } = await call("POST", opts.kind === "payment" ? "payment_intents" : "setup_intents", opts.account, body);
+  // The status code decides, never the shape: an error body is valid JSON too.
+  if (status !== 200 || !json?.id || !json?.client_secret) return { ok: false, error: json?.error?.message ?? `Stripe answered ${status}` };
+  return { ok: true, id: json.id, clientSecret: json.client_secret };
+}
+
+export interface RetrievedIntent {
+  kind: GuestIntentKind;
+  status: string;
+  amountMinor: number;
+  /** For a payment: what is authorised and ready to capture. */
+  capturableMinor: number;
+  currency: string;
+  metadata: Record<string, string>;
+  paymentMethodId: string | null;
+  brand: string | null;
+  last4: string | null;
+}
+
+export async function retrieveGuestIntent(id: string, account: string | null): Promise<RetrievedIntent | null> {
+  const kind: GuestIntentKind = id.startsWith("seti_") ? "setup" : "payment";
+  if (kind === "payment" && !id.startsWith("pi_")) return null;
+  const { status, json } = await call("GET", `${kind === "payment" ? "payment_intents" : "setup_intents"}/${encodeURIComponent(id)}?expand[]=payment_method`, account);
+  if (status !== 200 || !json?.id) return null;
+  const pm = typeof json.payment_method === "object" ? json.payment_method : null;
+  return {
+    kind,
+    status: json.status ?? "",
+    amountMinor: json.amount ?? 0,
+    capturableMinor: json.amount_capturable ?? 0,
+    currency: (json.currency ?? "").toUpperCase(),
+    metadata: json.metadata ?? {},
+    paymentMethodId: pm?.id ?? (typeof json.payment_method === "string" ? json.payment_method : null),
+    brand: pm?.card?.brand ?? null,
+    last4: pm?.card?.last4 ?? null,
+  };
+}
+
+/** Take the authorised money. Called only after the reservation exists. */
+export async function captureGuestIntent(id: string, account: string | null): Promise<{ ok: boolean; error?: string }> {
+  const { status, json } = await call("POST", `payment_intents/${encodeURIComponent(id)}/capture`, account, {});
+  return status === 200 && json?.status === "succeeded" ? { ok: true } : { ok: false, error: json?.error?.message ?? `Stripe answered ${status}` };
+}
+
+/** Release an authorisation the booking could not use. The guest is never charged. */
+export async function cancelGuestIntent(id: string, account: string | null): Promise<void> {
+  if (id.startsWith("pi_")) await call("POST", `payment_intents/${encodeURIComponent(id)}/cancel`, account, {});
+}

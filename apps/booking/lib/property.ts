@@ -1,4 +1,5 @@
 import "server-only";
+import { guestPaymentsConfigured, testChargesOnPlatform } from "@revio/payments";
 import { cache } from "react";
 import { forSystem } from "@revio/db";
 import { heroFocalY, heroScrim, resolveBrandLogo } from "@revio/core";
@@ -72,6 +73,11 @@ export interface PublicProperty {
    * paperwork clears — it just cannot promise an instant confirmation, and the page says so.
    */
   paymentReady: boolean;
+  /**
+   * The hotel's own Stripe account, which a guest's payment is made ON. Null only in the local
+   * platform-test mode (`STRIPE_TEST_CHARGE_PLATFORM`), where the sandbox platform stands in for it.
+   */
+  paymentAccountId: string | null;
 }
 
 /**
@@ -98,6 +104,7 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
       // Which logos exist, and when they last changed — see `logoFor`.
       brandAssets: { select: { kind: true, updatedAt: true } },
       stripeChargesEnabled: true,
+      stripeAccountId: true,
       bookingPreset: true, bookingBrandColor: true, bookingFont: true, bookingLogoUrl: true,
       bookingHeadline: true, bookingSubheadline: true, bookingShowTrust: true,
       bookingHeroKey: true, bookingHeroWidth: true, bookingHeroHeight: true,
@@ -152,7 +159,12 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
           height: property.bookingHeroHeight,
         }
       : null,
-    paymentReady: property.stripeChargesEnabled,
+    // Three things must all be true to take a card: Stripe says the hotel's account accepts charges,
+    // that account exists, and this deployment is configured to take guest payments at all. Any one
+    // missing is request-to-book — never a card form that cannot charge.
+    paymentReady:
+      (property.stripeChargesEnabled && !!property.stripeAccountId && guestPaymentsConfigured()) || testChargesOnPlatform(),
+    paymentAccountId: property.stripeChargesEnabled && property.stripeAccountId ? property.stripeAccountId : null,
   };
 });
 

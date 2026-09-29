@@ -40,18 +40,11 @@ export function termsPolicyOf(row: PolicyTermsRow): StayTermsPolicy {
 }
 
 /**
- * Whether RevioDirect can take money online yet. Until the card step charges (Stripe Payment Element
- * on the hotel's own account — BUILD-PLAN "RevioDirect takes real payments"), a policy that says
- * "deposit" or "pay in full" must not be PRINTED as one: the page would say "pay €90 now" and then
- * take nothing, which is a promise broken at the one moment a guest is reading every word.
- */
-export const ONLINE_PAYMENTS_LIVE = false;
-
-/**
  * The terms the engine may actually state. Cancellation is always the hotel's own rule; the payment
  * part collapses to "a card guarantees it, you pay at the hotel" whenever money cannot be taken —
- * online payments not live yet, or the hotel's Stripe account not accepting charges.
+ * online payments not configured on this deployment, or the hotel's Stripe account not accepting
+ * charges. `canCharge` is the caller's single reading of both (the app's `paymentReady`).
  */
 export function sellableTerms(policy: StayTermsPolicy, canCharge: boolean): StayTermsPolicy {
-  return canCharge && ONLINE_PAYMENTS_LIVE ? policy : { ...policy, payment: "guarantee", depositKind: null, depositValue: null, balanceDaysBefore: null };
+  return canCharge ? policy : { ...policy, payment: "guarantee", depositKind: null, depositValue: null, balanceDaysBefore: null };
 }

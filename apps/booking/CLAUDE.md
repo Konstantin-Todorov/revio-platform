@@ -183,11 +183,16 @@ otherwise the person holding the last room is told there is none.
 and again on submit, so a tab left open for an hour books today's price, and a tampered hidden field
 changes what is booked rather than what is paid.
 
-**No card fields exist.** The guarantee is created through `@revio/payments`, which is mock-first
-and accepts only `sk_test_` keys — a live key is refused by construction. We store a token plus
-brand/last4 (`Reservation.guarantee*`), never a number. Collecting a real card would need Stripe
-Elements and a live-mode decision; both are deliberately out of scope, which is why the page can
-honestly say *your card details never reach us*.
+**The card (2026-09-30).** Where the hotel can take one (`paymentReady`: Stripe says its account
+accepts charges, the account exists, and this deployment has guest-payment keys), the details step
+shows Stripe's Payment Element — Stripe's iframe, so no card number reaches us — charged on the
+HOTEL's account. How much is taken now is the rate's terms (`stayTerms`, set in RevioCRS → Rooms &
+Rates → Payment & cancellation): nothing for a guarantee, a deposit, or the whole stay. Order matters:
+authorise → write the reservation → capture; a failed booking cancels the authorisation. The confirm
+re-derives the amount (`publicQuoteStay`) and refuses an intent that is not THIS hold's, not in the
+expected state, or not for exactly that amount. The terms agreed are frozen on the reservation
+(`stayTerms`, `onlinePaidMinor`, `balanceChargeMinor/On`) and the PMS folio shows the online payment.
+Not built yet: charging the scheduled balance, the no-show button, a pay link for requests.
 
 **The countdown is real.** The room genuinely is held and genuinely is released at zero. Everything
 else on this site is honest, so a fake timer here would cost all of it.

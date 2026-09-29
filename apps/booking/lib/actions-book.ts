@@ -2,10 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { forTenant } from "@revio/db";
-import { bookingReference, publicCreateReservation, publicGetHold, publicReleaseHold } from "@revio/booking";
-import { createCardGuarantee } from "@revio/payments";
+import { bookingReference, publicCreateReservation, publicGetHold, publicQuoteStay, publicReleaseHold } from "@revio/booking";
+import { cancelGuestIntent, captureGuestIntent, createGuestIntent, retrieveGuestIntent } from "@revio/payments";
 import { sendTemplatedEmail } from "@revio/email";
-import { PAY_AT_HOTEL_LABEL, stayDetails } from "@revio/core";
+import { PAY_AT_HOTEL_LABEL, stayDetails, type StayTerms } from "@revio/core";
 import { claimSubmitToken, forSystem } from "@revio/db";
 import { serverKit } from "./i18n/server";
 import { getPublicProperty } from "./property";
@@ -26,6 +26,61 @@ export interface BookResult {
 }
 
 const str = (fd: FormData, k: string) => (typeof fd.get(k) === "string" ? (fd.get(k) as string) : "").trim();
+
+export type StartPaymentResult =
+  | { ok: true; clientSecret: string; kind: "payment" | "setup" }
+  | { ok: false; error: string };
+
+/**
+ * Step one of paying: ask Stripe, on the HOTEL's account, for an intent to confirm in the browser.
+ *
+ * The amount is re-derived here — the quote with the chosen extras, and the rate's terms on it —
+ * never taken from the page. A payment intent only authorises (`capture_method=manual`); nothing is
+ * taken until `confirmBooking` has written the reservation. Everything the guest typed is checked
+ * FIRST, so a missing email is said before a card is authorised rather than after.
+ */
+export async function startCardPayment(fd: FormData): Promise<StartPaymentResult> {
+  const property = await getPublicProperty(str(fd, "slug"));
+  if (!property || !property.paymentReady) return { ok: false, error: "This booking page isn't available." };
+  const { s } = await serverKit(property);
+  const e = s.errors;
+  if (!str(fd, "firstName") || !str(fd, "lastName")) return { ok: false, error: e.name };
+  if (!/.+@.+\..+/.test(str(fd, "email"))) return { ok: false, error: e.email };
+  if (fd.get("acceptTerms") == null) return { ok: false, error: e.terms };
+
+  const db = forTenant(property.tenantId);
+  const holdId = str(fd, "holdId");
+  if (!holdId || !(await publicGetHold(db, property.id, holdId))) return { ok: false, error: e.holdGone };
+
+  const quote = await publicQuoteStay(db, { ...property, id: property.id }, stayOf(fd));
+  if (!quote) return { ok: false, error: e.generic };
+  const payNow = quote.terms?.payNowMinor ?? 0;
+  const intent = await createGuestIntent({
+    account: property.paymentAccountId,
+    kind: payNow > 0 ? "payment" : "setup",
+    amountMinor: payNow,
+    currency: quote.currency,
+    description: `${property.name} · ${str(fd, "checkIn")} → ${str(fd, "checkOut")}`,
+    // What the confirm step checks the intent against — it must be THIS hold's payment.
+    metadata: { holdId, propertyId: property.id, ratePlanId: str(fd, "ratePlanId"), source: "reviodirect" },
+  });
+  if (!intent.ok) return { ok: false, error: e.card };
+  return { ok: true, clientSecret: intent.clientSecret, kind: payNow > 0 ? "payment" : "setup" };
+}
+
+/** The stay a form describes — identifiers only; every amount is derived from them. */
+function stayOf(fd: FormData) {
+  const guests = Number.parseInt(str(fd, "guests") || "2", 10);
+  return {
+    checkIn: str(fd, "checkIn"),
+    checkOut: str(fd, "checkOut"),
+    guests: Number.isFinite(guests) ? guests : 0,
+    roomTypeId: str(fd, "roomTypeId"),
+    ratePlanId: str(fd, "ratePlanId"),
+    holdId: str(fd, "holdId"),
+    extraIds: fd.getAll("extraIds").filter((v): v is string => typeof v === "string"),
+  };
+}
 
 export async function confirmBooking(_prev: BookResult | null, fd: FormData): Promise<BookResult> {
   const slug = str(fd, "slug");
@@ -84,14 +139,33 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
     redirect(`/${property.slug}`);
   }
 
-  const guarantee = requestOnly
-    ? null
-    : await createCardGuarantee(
-        property.baseCurrency,
-        `Guarantee · ${property.name} · ${str(fd, "checkIn")}`,
-      );
-  if (guarantee && !guarantee.ok) {
-    return { ok: false, error: e.card };
+  /*
+   * The card, verified with Stripe — never with the page. The browser confirmed an intent that
+   * `startCardPayment` created; here we fetch it back from the hotel's account and check it is THIS
+   * hold's, in the state that step leaves it, for exactly what the stay costs now. Anything else is
+   * refused and the authorisation released, so the guest is never charged for a booking that did
+   * not happen.
+   */
+  let guarantee: { ref: string; brand?: string; last4?: string } | null = null;
+  let payment: { intentId: string; paidMinor: number; accountId: string | null } | null = null;
+  let terms: StayTerms | null = null;
+  if (!requestOnly) {
+    const intentId = str(fd, "intentId");
+    const quote = await publicQuoteStay(db, scoped, stayOf(fd));
+    const intent = intentId ? await retrieveGuestIntent(intentId, property.paymentAccountId) : null;
+    const payNow = quote?.terms?.payNowMinor ?? 0;
+    const ok =
+      !!quote && !!intent && intent.metadata.holdId === holdId && intent.metadata.propertyId === property.id &&
+      (intent.kind === "setup"
+        ? intent.status === "succeeded" && payNow === 0
+        : intent.status === "requires_capture" && intent.capturableMinor === payNow && intent.currency === quote.currency);
+    if (!ok) {
+      if (intent?.kind === "payment") await cancelGuestIntent(intentId, property.paymentAccountId);
+      return { ok: false, error: quote && intent && intent.kind === "payment" && intent.capturableMinor !== payNow ? e.priceMoved : e.card };
+    }
+    guarantee = { ref: intent!.paymentMethodId ?? intentId, ...(intent!.brand ? { brand: intent!.brand } : {}), ...(intent!.last4 ? { last4: intent!.last4 } : {}) };
+    if (intent!.kind === "payment") payment = { intentId, paidMinor: payNow, accountId: property.paymentAccountId };
+    terms = quote!.terms;
   }
 
   /*
@@ -116,7 +190,9 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
     ratePlanId: str(fd, "ratePlanId"),
     guest: { firstName, lastName, email, ...(phone ? { phone } : {}) },
     ...(holdId ? { holdId } : {}),
-    ...(guarantee ? { guarantee: { ref: guarantee.ref, brand: guarantee.brand, last4: guarantee.last4 } } : {}),
+    ...(guarantee ? { guarantee } : {}),
+    ...(payment ? { payment } : {}),
+    ...(terms ? { terms } : {}),
     requestOnly,
     // Ids only. Everything about what they cost is re-derived server-side from the hotel's
     // catalogue, so a tampered checkbox changes what is booked, never what is paid.
@@ -127,11 +203,25 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
   });
 
   if (result.error || !result.reservationId) {
+    // Nothing was booked, so nothing may be taken: release the authorisation before saying so.
+    if (payment) await cancelGuestIntent(payment.intentId, payment.accountId);
     // By code, never by the engine's English sentence.
     return { ok: false, error: result.code ? e.booking[result.code] : e.generic };
   }
 
   const reference = bookingReference(result.reservationId);
+
+  /*
+   * The reservation exists — now take the money. If Stripe refuses the capture (vanishingly rare
+   * after a successful authorisation) the booking stands and the hotel sees no online payment on it,
+   * because a stay the guest was told is booked must not silently disappear.
+   */
+  if (payment) {
+    const captured = await captureGuestIntent(payment.intentId, payment.accountId);
+    if (!captured.ok) {
+      await db.reservation.update({ where: { id: result.reservationId }, data: { onlinePaidMinor: 0 } });
+    }
+  }
 
   /**
    * The confirmation. Uses the hotel's OWN template and branding — the same engine RevioLink sends
@@ -171,7 +261,12 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
         guests: guestCount,
         totalMinor: result.totalMinor ?? 0,
         currency: result.currency ?? property.baseCurrency,
-        totalLabel: PAY_AT_HOTEL_LABEL[locale] ?? PAY_AT_HOTEL_LABEL.en!,
+        // "Pay at the hotel" is only true when nothing was taken online.
+        totalLabel: payment
+          ? (locale === "bg"
+              ? `Общо · платено сега ${formatMoney(payment.paidMinor, property.baseCurrency, locale)}`
+              : `Total · paid now ${formatMoney(payment.paidMinor, property.baseCurrency, locale)}`)
+          : PAY_AT_HOTEL_LABEL[locale] ?? PAY_AT_HOTEL_LABEL.en!,
       }),
     });
   } catch {

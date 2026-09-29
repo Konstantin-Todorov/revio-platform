@@ -119,7 +119,7 @@ export const terms: Translations<TermsStrings> = {
     planNone: "No terms",
     planNoneHint: "Card guarantee only, no stated cancellation rules.",
     manage: "Manage terms",
-    notLive: "Online payment on your booking page is not switched on yet. Until it is, the page takes a card only as a guarantee and says the stay is paid at the hotel — your cancellation terms already apply.",
+    notLive: "Your booking page cannot take payments until your Stripe account is connected (Direct bookings → Taking payment). Until then it takes the booking as a request, says the stay is paid at the hotel — and your cancellation terms already apply.",
   },
   bg: {
     nav: "Плащане и анулиране",
@@ -181,6 +181,6 @@ export const terms: Translations<TermsStrings> = {
     planNone: "Без условия",
     planNoneHint: "Само гаранция с карта, без посочени правила за анулиране.",
     manage: "Управление на условията",
-    notLive: "Онлайн плащането на страницата Ви за резервации още не е включено. Дотогава страницата взема карта само като гаранция и посочва, че престоят се плаща в хотела — условията Ви за анулиране вече важат.",
+    notLive: "Страницата Ви за резервации не може да приема плащания, докато не свържете своя Stripe акаунт (Директни резервации → Плащане). Дотогава приема резервациите като заявки и посочва, че престоят се плаща в хотела — условията Ви за анулиране вече важат.",
   },
 };

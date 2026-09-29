@@ -208,6 +208,19 @@ async function seedPrimaryFolio(client: TenantTx, tenantId: string, propertyId: 
     const charges = (await db.folioLine.findMany({ where: { folioId, voided: false, kind: { not: "payment" } }, select: { amountMinor: true } })).reduce((s, l) => s + l.amountMinor, 0);
     if (charges > 0) await postFolioLineWith(client, { ...base, kind: "payment", description: "Prepaid via OTA", amountMinor: charges, method: "prepaid_ota" });
   }
+
+  /*
+   * Paid online on RevioDirect. That money is already in the hotel's Stripe balance, so the folio
+   * must show it as paid — otherwise the desk sees the whole stay outstanding and charges the guest
+   * a second time for the part they paid when they booked. The intent id is the ref, so the line
+   * reconciles against the hotel's own Stripe dashboard.
+   */
+  if ((reservation.onlinePaidMinor ?? 0) > 0) {
+    await postFolioLineWith(client, {
+      ...base, kind: "payment", description: "Paid online (RevioDirect)",
+      amountMinor: reservation.onlinePaidMinor!, method: "card", ref: reservation.onlinePaymentRef ?? null,
+    });
+  }
   return folioId;
 }
 

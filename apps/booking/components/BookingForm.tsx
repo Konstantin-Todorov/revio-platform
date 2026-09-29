@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { AlertCircle, Lock, ShieldCheck } from "lucide-react";
-import { extrasTotalMinor, type SellableExtra } from "@revio/core";
+import { extrasTotalMinor, stayTerms, type SellableExtra, type StayTermsPolicy } from "@revio/core";
+import { CardPayment, type CardConfig, type Pay } from "./CardPayment";
 import { confirmBooking, type BookResult } from "@/lib/actions-book";
 import { ExtrasPicker } from "./ExtrasPicker";
 import { setExtrasTotal } from "@/lib/extras-store";
@@ -41,6 +42,9 @@ export function BookingForm({
   extras,
   nights,
   currency,
+  card = null,
+  termsPolicy = null,
+  base,
 }: {
   stay: StaySelection;
   cancellationPolicy: string | null;
@@ -62,10 +66,24 @@ export function BookingForm({
   nights: number;
   /** Currency code, passed down to the picker. Never a formatter — see ExtrasPicker. */
   currency: string;
+  /** The card form, when the hotel can take one. Null = request-to-book. */
+  card?: CardConfig | null;
+  /** The rate's rule and the stay's facts, so "pay now" follows the extras the guest ticks. */
+  termsPolicy?: StayTermsPolicy | null;
+  base?: { totalMinor: number; firstNightMinor: number; arrival: string; today: string };
 }) {
-  const [state, action, pending] = useActionState<BookResult | null, FormData>(confirmBooking, null);
-  const { s: t } = useGuestKit();
+  const { s: t, money } = useGuestKit();
   const s = t.book;
+  const payRef = useRef<Pay | null>(null);
+  // The card is confirmed with Stripe BEFORE the booking is sent; the booking then verifies it.
+  const [state, action, pending] = useActionState<BookResult | null, FormData>(async (prev, fd) => {
+    if (card) {
+      const paid = payRef.current ? await payRef.current(fd) : { ok: false as const, error: t.errors.card };
+      if (!paid.ok) return { ok: false, error: paid.error };
+      fd.set("intentId", paid.intentId);
+    }
+    return confirmBooking(prev, fd);
+  }, null);
 
   /*
    * The guest's own words are held in React state, not left to the DOM.
@@ -90,6 +108,11 @@ export function BookingForm({
    * preview of the truth, never the source of it, which is why the form posts ids.
    */
   const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const extrasMinor = extrasTotalMinor(extras.filter((e) => chosen.has(e.id)), nights);
+  // What leaves the card today — the same function the server charges by, on the same total.
+  const payNowMinor = termsPolicy && base
+    ? stayTerms(termsPolicy, { ...base, totalMinor: base.totalMinor + extrasMinor }).payNowMinor
+    : 0;
   const toggleExtra = (id: string) =>
     setChosen((prev) => {
       const next = new Set(prev);
@@ -170,7 +193,15 @@ export function BookingForm({
         >
           <Lock size={17} aria-hidden className="mt-0.5 shrink-0" style={{ color: "hsl(var(--brand-text))" }} />
           <div className="text-[13.5px] leading-relaxed">
-            {paymentReady ? (
+            {paymentReady && payNowMinor > 0 ? (
+              <>
+                <p className="font-bold">{s.payNowBold(money(payNowMinor, currency))}</p>
+                <p className="mt-1" style={{ color: "hsl(var(--ink-soft))" }}>
+                  {s.payNowBody}{" "}
+                  <strong className="font-semibold">{s.guaranteeStrong}</strong> {s.guaranteeTail}
+                </p>
+              </>
+            ) : paymentReady ? (
               <>
                 <p className="font-bold">{s.guaranteeBold}</p>
                 <p className="mt-1" style={{ color: "hsl(var(--ink-soft))" }}>
@@ -191,6 +222,12 @@ export function BookingForm({
             )}
           </div>
         </div>
+
+        {card && (
+          <div className="mt-4">
+            <CardPayment config={card} amountMinor={payNowMinor} payRef={payRef} notReady={t.errors.card} />
+          </div>
+        )}
 
         {termsDetails ? (
           <div className="mt-3 flex items-start gap-2 text-[13px]" style={{ color: "hsl(var(--ink-soft))" }}>
@@ -232,7 +269,7 @@ export function BookingForm({
           />
           <span className="text-[13px] leading-relaxed">
             {s.accept}
-            {paymentReady ? s.acceptCard : ""}.
+            {paymentReady ? (payNowMinor > 0 ? s.acceptPay : s.acceptCard) : ""}.
           </span>
         </label>
       </section>

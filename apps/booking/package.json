@@ -18,6 +18,8 @@
     "@revio/payments": "workspace:*",
     "@revio/storage": "workspace:*",
     "@revio/ui": "workspace:*",
+    "@stripe/react-stripe-js": "^6.12.0",
+    "@stripe/stripe-js": "^9.17.0",
     "lucide-react": "^0.460.0",
     "next": "^15.1.3",
     "react": "^19.0.0",

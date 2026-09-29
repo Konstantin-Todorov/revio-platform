@@ -25,8 +25,15 @@ or expiry date must never reach our servers or our database.** RevioDirect's che
 fields at all for this reason — which is why the page can say *your card details never reach us* as a
 statement of fact.
 
-Collecting a real card would need Stripe Elements (the number goes browser → Stripe, never through
-us) plus a live-mode decision. Both are deliberately unbuilt.
+**Since 2026-09-30 RevioDirect collects a real card — in Stripe's Payment Element**, an iframe served
+by Stripe, so the number goes browser → Stripe and still never through us (`guest-payments.ts`). It is
+charged on the **hotel's connected account** (`Stripe-Account` header), authorised first
+(`capture_method=manual`), captured only after the reservation exists, and cancelled if the booking
+fails — so a guest is never charged for a booking that did not happen. The same `sk_test_`-only rule
+applies: going live for guests is still a founder decision, separate from our own invoicing.
+
+⚠️ `chargeCard`/`refundCard` (RevioPMS at the desk) do **not** send `Stripe-Account` — in live mode
+they would charge OUR account for a hotel's guest. Fix before any live guest payment.
 
 ## Mock behaviour worth knowing
 

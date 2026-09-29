@@ -1,3 +1,5 @@
+import type { StayTerms } from "@revio/core";
+import { termsWords } from "@/lib/i18n/kit";
 import { notFound } from "next/navigation";
 import { CalendarCheck, Check, Clock, MapPin, Phone } from "lucide-react";
 import { forTenant } from "@revio/db";
@@ -90,6 +92,13 @@ export default async function ConfirmationPage({
     fees: fees as never,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
   });
+
+  // The terms as agreed at booking, and what was taken — frozen facts, never today's policy.
+  const agreedTerms = (reservation.stayTerms ?? null) as StayTerms | null;
+  const paidMinor = reservation.onlinePaidMinor ?? 0;
+  const atHotelMinor = agreedTerms
+    ? agreedTerms.atHotelMinor
+    : Math.max(0, charged.totalMinor - paidMinor - (reservation.balanceChargeMinor ?? 0));
 
   const kit = await serverKit(property);
   const { s: t, fmtDay, money } = kit;
@@ -184,18 +193,38 @@ export default async function ConfirmationPage({
               ))}
             </dl>
             <div className="mt-3 flex items-baseline justify-between border-t pt-3" style={{ borderColor: "hsl(var(--line))" }}>
-              <span className="text-[13.5px] font-semibold">{s.totalAtHotel}</span>
+              <span className="text-[13.5px] font-semibold">{paidMinor > 0 ? s.total : s.totalAtHotel}</span>
               <span className="price text-[1.5rem]">{money(charged.totalMinor, reservation.currency)}</span>
             </div>
-            {!cancelled && (
+            {/* What was taken, what will be, and what is left for the hotel — from what was
+                actually recorded at booking, never recomputed from today's policy. */}
+            {!cancelled && paidMinor > 0 && (
+              <dl className="mt-2 space-y-1 text-[13px]">
+                <Row label={s.paidOnline(reservation.guaranteeLast4 ?? "")} value={money(paidMinor, reservation.currency)} />
+                {reservation.balanceChargeMinor && reservation.balanceChargeOn ? (
+                  <Row label={s.chargedOn(fmtDay(reservation.balanceChargeOn.toISOString().slice(0, 10)))}
+                       value={money(reservation.balanceChargeMinor, reservation.currency)} />
+                ) : null}
+                {atHotelMinor > 0 && <Row label={s.atHotel} value={money(atHotelMinor, reservation.currency)} />}
+              </dl>
+            )}
+            {!cancelled && paidMinor === 0 && (
               <p className="mt-2 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
                 {reservation.guaranteeLast4 ? s.guaranteeOnly(reservation.guaranteeLast4) : s.nothingCharged}
               </p>
             )}
+            {!cancelled && agreedTerms && (
+              <div className="mt-4 border-t pt-3 text-[12.5px]" style={{ borderColor: "hsl(var(--line))", color: "hsl(var(--ink-soft))" }}>
+                <p className="font-semibold" style={{ color: "hsl(var(--ink))" }}>{kit.s.book.terms}</p>
+                <ul className="mt-1 space-y-0.5">
+                  {termsWords(kit, agreedTerms, reservation.currency).details.slice(1).map((l) => <li key={l}>{l}</li>)}
+                </ul>
+              </div>
+            )}
           </div>
         </section>
 
-        {!cancelled && <WhatNext property={property} requested={requested} kit={kit} />}
+        {!cancelled && <WhatNext property={property} requested={requested} paid={paidMinor > 0} kit={kit} />}
       </main>
 
       <PropertyFooter property={property} />
@@ -204,7 +233,7 @@ export default async function ConfirmationPage({
 }
 
 /** The questions a guest actually has once the booking is done — or once they have asked for it. */
-function WhatNext({ property, requested, kit }: { property: PublicProperty; requested: boolean; kit: GuestKit }) {
+function WhatNext({ property, requested, paid, kit }: { property: PublicProperty; requested: boolean; paid: boolean; kit: GuestKit }) {
   const s = kit.s.done;
   const phone = property.phone ? <> {s.on} <strong className="font-semibold">{property.phone}</strong></> : null;
   return (
@@ -230,7 +259,7 @@ function WhatNext({ property, requested, kit }: { property: PublicProperty; requ
         ) : (
           <>
             <Next>{s.bookedNext}</Next>
-            <Next>{s.bookedArrive(property.checkInTime)}</Next>
+            <Next>{paid ? s.bookedArrivePaid(property.checkInTime) : s.bookedArrive(property.checkInTime)}</Next>
             <Next>
               {s.bookedCall}
               {phone}

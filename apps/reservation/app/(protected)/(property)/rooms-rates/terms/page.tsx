@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
 import { addDays, stayTerms, stayTermsWords } from "@revio/core";
-import { ONLINE_PAYMENTS_LIVE, termsPolicyOf } from "@revio/booking";
+import { termsPolicyOf } from "@revio/booking";
 import { getStayPolicies } from "@/lib/data";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { i18n } from "@/lib/i18n/server";
@@ -33,7 +33,7 @@ export default async function TermsPage() {
           </Link>
         }
       />
-      {!ONLINE_PAYMENTS_LIVE && (
+      {!property.stripeChargesEnabled && (
         <p className="mx-4 mb-3 rounded-lg border border-warning-600/30 bg-warning-50 px-3 py-2 text-[12.5px] font-medium text-warning-700">{s.notLive}</p>
       )}
       {policies.length === 0 ? (

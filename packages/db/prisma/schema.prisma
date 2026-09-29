@@ -1601,6 +1601,16 @@ model Reservation {
   guaranteeRef       String?
   guaranteeBrand     String?
   guaranteeLast4     String?
+  // RevioDirect online payment. Money taken at booking settles to the hotel's OWN Stripe account
+  // (`paymentAccountId`); we keep the intent id and the amount, never card data. `stayTerms` is the
+  // terms the guest agreed to, frozen — a hotel editing its policy later must not rewrite a
+  // booking already made. The balance fields are what the pre-arrival charge will take, and when.
+  onlinePaidMinor    Int?
+  onlinePaymentRef   String?
+  paymentAccountId   String?
+  stayTerms          Json?
+  balanceChargeMinor Int?
+  balanceChargeOn    DateTime? @db.Date
   notes              String?
   cancelledAt        DateTime?
   // The stay ended. A PMS-owned OPERATIONAL fact, deliberately not a `status` value: `status` is the
