@@ -95,6 +95,8 @@ export {
   isChannelPullLock,
   CHANNEL_PULL_LOCK_PREFIX,
   JOB,
+  JOB_INTERVAL_MS,
+  lastJobRunAt,
   type LeaseResult,
 } from "./job-lease.js";
 export {

@@ -21,6 +21,7 @@ const row = (over: Partial<ChannelRow> = {}): ChannelRow => ({
   externalPropertyId: "d06f812c-fdfd-40ec-b20a-55967b9059ed",
   lastSyncAt: new Date(), errorCount: 0,
   catalogueCheckedAt: new Date(), catalogueStatus: "ok",
+  readBackAt: null, readBackStatus: null, readBackSummary: null,
   propertyName: "Chervena Vila", reservations: 0, crossWired: [],
   ...over,
 });
@@ -87,6 +88,18 @@ describe("what it surfaces without being asked", () => {
     const out = html([row({ catalogueStatus: "unreadable" })]);
     expect(out).toMatch(/could not be read/);
     expect(out).toMatch(/not the same as having none/);
+  });
+
+  it("says in red when a channel is still selling something else after a re-send", () => {
+    const out = html([row({ status: "connected", readBackStatus: "differs", readBackSummary: "3 room-nights published differently from what we send" })]);
+    expect(out).toMatch(/Not selling what we send, even after a full re-send: 3 room-nights/);
+  });
+
+  it("keeps a healed or clean read-back to one quiet line", () => {
+    const healed = html([row({ status: "connected", readBackStatus: "healed", readBackAt: new Date() })]);
+    expect(healed).toMatch(/yes, after a re-send/);
+    expect(healed).not.toMatch(/Not selling what we send/);
+    expect(html([row({ readBackStatus: null })])).toMatch(/not checked yet/);
   });
 
   it("names a cross-wired plan and why nobody has noticed it", () => {

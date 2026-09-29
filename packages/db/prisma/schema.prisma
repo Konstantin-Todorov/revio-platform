@@ -1296,6 +1296,16 @@ model Channel {
   /// Channex keeps a task per change we send, with `success` and `errors[]`, and nothing had ever
   /// read it. Written by the nightly audit alongside `catalogueCheckedAt`.
   pushFailures          Int       @default(0)
+  /// When the nightly `channel-read-back` last read what the channel is PUBLISHING. Null = never.
+  readBackAt            DateTime?
+  /// What it found: `ok` · `healed` (differed, re-sent, then matched) · `differs` · `unreadable`.
+  /// A fact on the channel for the same reason as `catalogueStatus`: a hotel can Resolve an Error
+  /// Center entry, and the Operator must read something they cannot tidy away.
+  readBackStatus        String?
+  /// Room-nights or priced nights still published differently after the re-send. 0 unless `differs`.
+  readBackFaults        Int       @default(0)
+  /// One line a person can act on — the headline and the first few examples. English (Operator).
+  readBackSummary       String?
   /// What that answer was: `ok` · `property_missing` · `unreadable`.
   ///
   /// ⚠️ Stored on the channel rather than left as an Error Center entry, for the same reason failed

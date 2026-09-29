@@ -33,6 +33,14 @@ const STATUS_TONE: Record<string, Tone> = {
 const STATUS_LABEL: Record<string, string> = { pending: "not live yet" };
 
 /** The channel's own words for what the last audit found — never a column name. */
+/** The daily read-back's answer, in the words a person reads before telephoning the hotel. */
+const READ_BACK: Record<string, { label: string; cls: string }> = {
+  ok: { label: "yes", cls: "text-success-700" },
+  healed: { label: "yes, after a re-send", cls: "text-warning-700" },
+  differs: { label: "no", cls: "text-danger-600" },
+  unreadable: { label: "could not read", cls: "text-warning-700" },
+};
+
 const CATALOGUE: Record<string, { tone: Tone; label: string; detail: string }> = {
   ok: { tone: "success", label: "listings confirmed", detail: "The channel answered and its room types and rate plans were read." },
   property_missing: {
@@ -70,6 +78,9 @@ export interface ChannelRow {
   errorCount: number;
   catalogueCheckedAt: Date | null;
   catalogueStatus: string | null;
+  readBackAt: Date | null;
+  readBackStatus: string | null;
+  readBackSummary: string | null;
   propertyName: string;
   reservations: number;
   crossWired: { roomTypeName: string; ratePlanName: string; externalRateId: string; checkedAt: Date }[];
@@ -252,6 +263,17 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
               </p>
             )}
 
+            {/*
+              What the channel is SELLING, read daily from the destination. Only a difference that
+              survived a full re-send is red — one the re-send fixed is history, said quietly.
+            */}
+            {ch.status === "connected" && ch.readBackStatus === "differs" && (
+              <p className="mt-1.5 flex gap-1.5 text-[12.5px] leading-snug text-danger-700">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>Not selling what we send, even after a full re-send: {ch.readBackSummary}</span>
+              </p>
+            )}
+
             <dl className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11.5px] text-ink-500">
               <div><dt className="inline text-ink-400">Last sync </dt><dd className="inline font-semibold text-ink-700">{when(ch.lastSyncAt)}</dd></div>
               {/*
@@ -262,6 +284,15 @@ export function ChannelsPanel({ channels, suspended }: { channels: ChannelRow[];
               */}
               {ch.mode !== "mock" && (
                 <div><dt className="inline text-ink-400">Listings checked </dt><dd className="inline font-semibold text-ink-700">{when(ch.catalogueCheckedAt)}</dd></div>
+              )}
+              {ch.mode !== "mock" && (
+                <div title={ch.readBackSummary ?? "Read daily: the prices and room counts the channel is selling, against what we send."}>
+                  <dt className="inline text-ink-400">Selling what we send </dt>
+                  <dd className={`inline font-semibold ${READ_BACK[ch.readBackStatus ?? ""]?.cls ?? "text-ink-700"}`}>
+                    {READ_BACK[ch.readBackStatus ?? ""]?.label ?? "not checked yet"}
+                    {ch.readBackAt && <span className="font-normal text-ink-400"> · {when(ch.readBackAt)}</span>}
+                  </dd>
+                </div>
               )}
               <div><dt className="inline text-ink-400">Bookings taken </dt><dd className="tnum inline font-semibold text-ink-700">{ch.reservations}</dd></div>
               {ch.errorCount > 0 && (

@@ -18,7 +18,7 @@ import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } fr
 import { sendEmail, publicBaseUrl } from "@revio/email";
 import { decidePull, type Stay } from "./pull-merge.js";
 import { indexRateMappings, resolveExternalRateId, stopSellPairs } from "./rate-mapping.js";
-import { comparePublished, summarisePublished, type ExpectedRate, type PublishedSummary } from "./published-check.js";
+import { comparePublished, summarisePublished, type ExpectedRate, type PublishedComparison, type PublishedSummary } from "./published-check.js";
 
 /** The tenant-scoped Prisma proxy each app already builds (`@revio/db` `forTenant`). */
 type Db = ReturnType<typeof forTenant>;
@@ -210,7 +210,7 @@ export function stayScope(stays: ScopedStay[]): PushScope {
  *
  * Returns the reason when refused, `null` when the account may sync.
  */
-async function suspendedReason(prisma: Db, tenantId: string): Promise<string | null> {
+export async function suspendedReason(prisma: Db, tenantId: string): Promise<string | null> {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { status: true } });
   // Unknown is not suspended. A read that fails must not silently stop a paying hotel's distribution.
   if (!tenant || tenant.status === "active") return null;
@@ -1853,6 +1853,8 @@ export interface VerifyResult {
    * price we send. Absent when the catalogue could not be read.
    */
   channelPlans?: Record<string, { name: string; derivedFrom?: string }>;
+  /** Every finding that is not a match — the summary keeps five, the nightly read-back needs all. */
+  problems?: PublishedComparison[];
 }
 
 /**
@@ -1966,8 +1968,10 @@ export async function verifyPublished(
     }
   } catch { /* names are an explanation, not the check — the comparison above stands without them */ }
 
+  const compared = comparePublished(expected, read.rates);
   return {
-    ok: true, summary: summarisePublished(comparePublished(expected, read.rates)), from: todayIso, to,
+    ok: true, summary: summarisePublished(compared), from: todayIso, to,
+    problems: compared.filter((r) => r.kind !== "match"),
     ...(channelPlans ? { channelPlans } : {}),
   };
 }

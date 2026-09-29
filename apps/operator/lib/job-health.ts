@@ -1,4 +1,4 @@
-import { JOB, isChannelPullLock } from "@revio/db";
+import { JOB, JOB_INTERVAL_MS, isChannelPullLock } from "@revio/db";
 
 /**
  * What the scheduled jobs are doing — derived from what the code DECLARES, not from what has
@@ -70,8 +70,11 @@ export function jobHealth(
   const jobs: JobHealthRow[] = names.map((name) => {
     const lastRunAt = byName.get(name)?.lastRunAt ?? null;
     const ageSeconds = lastRunAt ? Math.round((now.getTime() - lastRunAt.getTime()) / 1000) : null;
+    // A job that runs daily is not stale at 31 minutes: its own interval plus six hours of margin.
+    const interval = (JOB_INTERVAL_MS as Record<string, number | undefined>)[name];
+    const limit = interval ? interval / 1000 + 6 * 3600 : staleAfterSeconds;
     const state: JobHealthRow["state"] =
-      ageSeconds === null ? "never" : ageSeconds > staleAfterSeconds ? "stale" : "ok";
+      ageSeconds === null ? "never" : ageSeconds > limit ? "stale" : "ok";
     return { name, ageSeconds, state, declared: declared.has(name) };
   });
 

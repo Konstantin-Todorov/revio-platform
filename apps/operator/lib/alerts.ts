@@ -167,6 +167,35 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
   }
 
   /*
+   * 4b. A channel selling something other than what we send, after a full re-send.
+   *
+   * Written daily by `channel-read-back`, which reads the destination itself. A difference it could
+   * heal by re-sending never gets here; this is what survived that, so it is a person's job.
+   * Connected channels only: a paused or disconnected one keeps its last reading, which is history.
+   */
+  const differs = await prisma.channel.findMany({
+    where: { status: "connected", readBackStatus: { in: ["differs", "unreadable"] } },
+    select: {
+      id: true, name: true, readBackStatus: true, readBackFaults: true, readBackSummary: true,
+      property: { select: { name: true, tenant: { select: { name: true } } } },
+    },
+  });
+  for (const ch of differs) {
+    const unreadable = ch.readBackStatus === "unreadable";
+    out.push({
+      key: `read_back:${ch.id}:${ch.readBackStatus}`,
+      clientName: ch.property.tenant.name,
+      summary: unreadable
+        ? `${ch.property.name} · ${ch.name} could not be read back last night`
+        : `${ch.property.name} · ${ch.name} is selling ${ch.readBackFaults} night${ch.readBackFaults === 1 ? "" : "s"} differently from what we send`,
+      action: unreadable
+        ? `We could not see what the channel is selling, so we cannot say it is right. ${ch.readBackSummary ?? ""}`.trim()
+        : `A full re-send did not fix it. ${ch.readBackSummary ?? ""} Check the mapping and anything set directly in the channel's extranet.`.trim(),
+      severity: unreadable ? "soon" : "act",
+    });
+  }
+
+  /*
    * 5. A mapping that belongs to a rate plan the hotel has switched OFF.
    *
    * ⚠️ The push now skips these, so nothing is being published — but the row is still there, still

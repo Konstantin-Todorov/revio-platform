@@ -393,6 +393,20 @@ describe("the two halves of the feed", () => {
   });
 });
 
+describe("clientAttention — the daily read-back", () => {
+  it("acts on a channel still selling something else after a re-send, and says how old the reading is", () => {
+    const flags = clientAttention(healthy({ readBackDiffers: { channels: 1, nights: 3, checkedAt: NOW } }), NOW);
+    const f = flags.find((x) => /not selling what we send/.test(x.title));
+    expect(f?.severity).toBe("act");
+    expect(f?.detail).toMatch(/on 3 nights .*Read today\./);
+  });
+
+  it("says nothing when every channel matches", () => {
+    const flags = clientAttention(healthy({ readBackDiffers: { channels: 0, nights: 0, checkedAt: NOW } }), NOW);
+    expect(flags.some((x) => /not selling/.test(x.title))).toBe(false);
+  });
+});
+
 describe("fixTab — every flag says where it is fixed", () => {
   it("sends each flag either module can raise to a real tab (or to the header, for a status)", () => {
     const expectations: [string, ReturnType<typeof fixTab>][] = [
@@ -401,6 +415,8 @@ describe("fixTab — every flag says where it is fixed", () => {
       ["A booking never reached the calendar", "channels"],
       ["3 bookings never reached the calendar", "channels"],
       ["A rate plan is publishing to the wrong room", "channels"],
+      ["A channel is not selling what we send", "channels"],
+      ["2 channels are not selling what we send", "channels"],
       ["Closed", null],
       ["Suspended", null],
       ["They want to keep RevioPMS", "setup"],

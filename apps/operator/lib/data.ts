@@ -41,6 +41,7 @@ async function channelsFor(tenantId: string) {
       id: true, name: true, code: true, status: true, connectivityMode: true,
       externalPropertyId: true, lastSyncAt: true, errorCount: true,
       catalogueCheckedAt: true, catalogueStatus: true,
+      readBackAt: true, readBackStatus: true, readBackSummary: true,
       property: { select: { id: true, name: true } },
       _count: { select: { reservations: true } },
     },
@@ -89,6 +90,9 @@ async function channelsFor(tenantId: string) {
       errorCount: ch.errorCount,
       catalogueCheckedAt: ch.catalogueCheckedAt,
       catalogueStatus: ch.catalogueStatus,
+      readBackAt: ch.readBackAt,
+      readBackStatus: ch.readBackStatus,
+      readBackSummary: ch.readBackSummary,
       propertyName: ch.property.name,
       reservations: ch._count.reservations,
       crossWired,
@@ -108,6 +112,23 @@ async function channelsFor(tenantId: string) {
  * room is one id on Booking.com and another on Expedia. Comparing across channels would invent a
  * mismatch on every client with two channels connected.
  */
+/**
+ * Connected channels the daily read-back left at `differs` — still selling something else after a
+ * full re-send. From the channel rows the job writes, never the Error Center.
+ */
+async function readBackFor(tenantId: string): Promise<{ channels: number; nights: number; checkedAt: Date } | undefined> {
+  const rows = await prisma.channel.findMany({
+    where: { tenantId, status: "connected", readBackStatus: "differs" },
+    select: { readBackFaults: true, readBackAt: true },
+  });
+  if (rows.length === 0) return undefined;
+  return {
+    channels: rows.length,
+    nights: rows.reduce((n, r) => n + r.readBackFaults, 0),
+    checkedAt: rows.reduce((d, r) => (r.readBackAt && r.readBackAt < d ? r.readBackAt : d), new Date()),
+  };
+}
+
 async function crossWiredFor(tenantId: string): Promise<{ count: number; checkedAt: Date } | undefined> {
   const [rateMaps, roomMaps] = await Promise.all([
     prisma.channelRatePlanMapping.findMany({
@@ -318,6 +339,7 @@ export async function getClients() {
       // Two cheap indexed reads off columns the nightly audit already wrote. Nothing is asked of
       // Channex here — see `crossWiredFor`.
       const crossWiredMappings = await crossWiredFor(t.id);
+      const readBackDiffers = await readBackFor(t.id);
 
       const entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
       /*
@@ -359,6 +381,7 @@ export async function getClients() {
           monthlyPriceMinor: monthly,
           ...(failedImports ? { failedImports } : {}),
           ...(crossWiredMappings ? { crossWiredMappings } : {}),
+          ...(readBackDiffers ? { readBackDiffers } : {}),
           keepRequests: keepRequestsOf(t.productTrials),
         }),
         ...accountAttention({
@@ -829,6 +852,7 @@ export async function getClientDetail(id: string) {
   // The same read as the list. This page is what somebody looks at before picking up the phone, and
   // "one of your rooms is on sale at another room's price" is the first thing they need to know.
   const detailCrossWired = await crossWiredFor(id);
+  const detailReadBack = await readBackFor(id);
 
   // Every channel with the facts somebody needs before touching one — including whether it can be
   // deleted at all, which depends on whether it ever produced a booking.
@@ -854,6 +878,7 @@ export async function getClientDetail(id: string) {
       sharedSignInWith: sharedIps,
       ...(detailFailedImports ? { failedImports: detailFailedImports } : {}),
       ...(detailCrossWired ? { crossWiredMappings: detailCrossWired } : {}),
+      ...(detailReadBack ? { readBackDiffers: detailReadBack } : {}),
     }),
     ...accountAttention({
       status: tenant.status, createdAt: tenant.createdAt,

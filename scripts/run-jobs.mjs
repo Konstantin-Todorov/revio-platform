@@ -64,6 +64,9 @@ const JOBS = [
   // Nightly is plenty: a mapping only changes when a person changes it. What it catches does
   // not announce itself — a row pointing at another room pushes successfully forever.
   { name: "mapping-audit", url: CM && `${CM}/api/jobs/mapping-audit` },
+  // Once a day (the route decides): is each OTA selling what we send? Re-sends what differs and
+  // raises what still differs. After the audit, so a mapping it just flagged is already on record.
+  { name: "channel-read-back", url: CM && `${CM}/api/jobs/read-back` },
   // Hourly, and it sends nothing when there is nothing — see the route. It is what makes every
   // other check on this list reach a person instead of a screen nobody has open.
   { name: "operator-alerts", url: OPERATOR && `${OPERATOR}/api/jobs/alerts` },

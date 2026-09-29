@@ -255,7 +255,7 @@ export async function auditChannelMapping(
  * it comes back on the next run, because the condition is still true. That is the lesson of
  * 15 September, where resolving an error dismissed the reminder and imported nothing.
  */
-async function raiseOnce(
+export async function raiseOnce(
   prisma: Db,
   channel: { id: string; tenantId: string; propertyId: string },
   e: { code: string; productLabel: string; message: string; recommendedAction: string },

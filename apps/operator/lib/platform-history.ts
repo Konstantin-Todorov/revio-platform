@@ -312,7 +312,7 @@ export const PLATFORM_ROADMAP = [
     owner: "Engineering",
     title: "Every live channel is read back every night",
     outcome: "What each OTA is actually offering — prices, room counts, then restrictions — is compared with what Revio sends, and a difference reaches a person before a guest books at it.",
-    dependency: "The check exists (Verify and channex:readback, read-only). What is missing is running it on a schedule and routing a mismatch to an alert",
+    dependency: "Prices and room counts are read back daily since 2026-09-29 (channel-read-back: re-sends a difference once, alerts on what survives). Restrictions — min stay, CTA/CTD, stop-sell — are not read back yet",
   },
   {
     id: "incident-operations",

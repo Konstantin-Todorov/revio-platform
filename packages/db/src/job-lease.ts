@@ -220,7 +220,33 @@ export const JOB = {
    * create the same `tenantId + period` row.
    */
   invoiceRun: "invoice-run",
+  /**
+   * Reads what every live channel is publishing and compares it with what we send.
+   *
+   * Once a day, not every tick: the fault it catches (a push that succeeded and did not land) is
+   * rare, the read is two requests per channel against a partner's rate limit, and a difference
+   * that survives the re-send is a person's job, not the next tick's.
+   */
+  channelReadBack: "channel-read-back",
 } as const;
+
+/**
+ * Jobs that do real work less often than every tick. The route returns early until this much time
+ * has passed since its last SUCCESSFUL run, and the dead-man's switch allows this plus a margin
+ * before calling it stale — one number, so the two cannot drift apart.
+ */
+export const JOB_INTERVAL_MS: Readonly<Partial<Record<(typeof JOB)[keyof typeof JOB], number>>> = {
+  "channel-read-back": 20 * 60 * 60_000,
+};
+
+/**
+ * When `name` last ran successfully, read WITHOUT taking the lease — so a job that is not due can
+ * answer "not yet" without stamping `lastRunAt` and pushing its own next run away forever.
+ */
+export async function lastJobRunAt(name: string): Promise<Date | null> {
+  const row = await forSystem().jobLease.findUnique({ where: { name }, select: { lastRunAt: true } });
+  return row?.lastRunAt ?? null;
+}
 
 /**
  * One pull per channel at a time — a lock, not a job.

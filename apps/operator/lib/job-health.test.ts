@@ -159,3 +159,13 @@ describe("jobHealth — per-channel pull locks share the table and are not jobs"
     expect(report.state).not.toBe("degraded");
   });
 });
+
+describe("jobHealth — a job with its own interval", () => {
+  it("does not call the daily read-back stale at 31 minutes, and does at a day and a half", () => {
+    const at = (s: number) => allFresh().map((l) => (l.name === JOB.channelReadBack ? { ...l, lastRunAt: agoSeconds(s) } : l));
+    const state = (s: number) => jobHealth(at(s), NOW).jobs.find((j) => j.name === JOB.channelReadBack)?.state;
+    expect(state(STALE_AFTER_SECONDS + 60)).toBe("ok");
+    expect(state(25 * 3600)).toBe("ok");
+    expect(state(36 * 3600)).toBe("stale");
+  });
+});

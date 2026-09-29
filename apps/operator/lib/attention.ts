@@ -113,6 +113,12 @@ export interface ClientSignals {
    * moment. A fault last confirmed a week ago is worth saying so.
    */
   crossWiredMappings?: { count: number; checkedAt: Date };
+  /**
+   * Connected channels the daily read-back found selling something other than what we send, AFTER
+   * a full re-send. Read from the channel rows (`readBackStatus`), never the Error Center — same
+   * reason as the two above.
+   */
+  readBackDiffers?: { channels: number; nights: number; checkedAt: Date };
 }
 
 const DAY = 86_400_000;
@@ -241,6 +247,20 @@ export function clientAttention(s: ClientSignals, now: Date = new Date()): Atten
         `prices and that availability are going onto the wrong room. Everything looks finished — the ` +
         `mapping is green and every push succeeds. ` +
         `${days === 0 ? "Confirmed with the channel today." : `Last confirmed with the channel ${days} day${days === 1 ? "" : "s"} ago.`}`,
+    });
+  }
+
+  const differs = s.readBackDiffers;
+  if (differs && differs.channels > 0) {
+    const days = daysSince(differs.checkedAt, now);
+    flags.push({
+      severity: "act",
+      concern: "theirs",
+      title: differs.channels === 1 ? "A channel is not selling what we send" : `${differs.channels} channels are not selling what we send`,
+      detail:
+        `We read what the channel is selling and it differs from what we send on ${differs.nights} ` +
+        `night${differs.nights === 1 ? "" : "s"} — and a full re-send did not fix it, so guests are booking at the ` +
+        `channel's numbers. ${days === 0 ? "Read today." : `Last read ${days} day${days === 1 ? "" : "s"} ago.`}`,
     });
   }
 
@@ -463,7 +483,7 @@ export type ClientTab = "overview" | "setup" | "channels" | "people" | "billing"
 const FIX_TAB: [RegExp, ClientTab | null][] = [
   [/^(Suspended|Closed)$/, null],
   [/temporary email|sign-in address|No one to call/i, "people"],
-  [/booking.*never reached|publishing to the wrong room|No channel connected|open sync error|^No sync for/i, "channels"],
+  [/booking.*never reached|publishing to the wrong room|not selling what we send|No channel connected|open sync error|^No sync for/i, "channels"],
   [/unpaid invoice/i, "billing"],
   [/want to keep|No property yet|No room types|RevioPMS unused|Booking engine live but unused/i, "setup"],
   [/Never contacted|No contact in/i, "history"],

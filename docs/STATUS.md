@@ -171,12 +171,14 @@ least 20 September**: Ventsi Group's reads `catalogueStatus = property_missing` 
 property Channex has deleted. The other, DesManagement 2015's, reads `ok` and last synced today.
 Hotel Sofia Group's is `channex_sandbox`, a different account, and is not billed.
 
-**FOURTEEN scheduled jobs.** <!-- status: count jobs 14 --> *Thirteen checked at `/api/health/jobs` on 2026-09-22, every one `ok`
+**FIFTEEN scheduled jobs.** <!-- status: count jobs 15 --> *Thirteen checked at `/api/health/jobs` on 2026-09-22, every one `ok`
 and between 201 and 717 seconds old:* `hold-expiry` · `pickup-snapshot` · `channex-pull` ·
 `arrivals-digest` · `auto-assign` · `auto-close-day` · `waitlist-sweep` · `trial-sweep` ·
 `support-inbox` · `mapping-audit` · `invoice-run` · `operator-alerts` · `demo-refresh`. The fourteenth,
 `guest-mail` (2026-09-25 — "Before arrival" / "After departure", for hotels that switch them on), is
-**not yet seen running in production**; check it at the same endpoint after the deploy.
+**not yet seen running in production**; check it at the same endpoint after the deploy. The fifteenth,
+`channel-read-back` (2026-09-29), runs **once a day** — the route answers "not due" on the other
+ticks, and `/api/health/jobs` allows it its interval plus six hours before calling it stale.
 
 ⚠️ This said **nine**, then **ten**. Four jobs were added and the number was never moved. It is now
 the same number `jobs-lint` asserts, so the two cannot drift apart again without CI failing.
@@ -284,8 +286,15 @@ says who can move it. Details sit where the link points.
 
 **Build next — engineering, in this order**
 
-1. **Read every live channel back every night** and alert on a difference. The check exists (Verify,
-   `channex:readback`); nobody runs it unless they remember to. Roadmap `nightly-read-back`.
+1. ~~**Read every live channel back every night**~~ ✅ **2026-09-29** — `channel-read-back`, daily
+   <!-- status: built packages/connectivity/src/read-back.ts#readBackChannel -->. Reads prices and room
+   counts 60 days ahead for every connected real channel of an **active** account; a difference is
+   re-sent once and read again, and only what survives reaches a person — `Channel.readBack*`, the
+   Operator's Needs attention + alert mail, and the hotel's Error Center (closed by itself once it
+   matches). A plan Channex derives, and a plan we do not send to, are named, never counted: the first
+   production read found 93 + 186 "differences" and not one was a push fault. Proven in the sandbox on
+   all three paths (clean · differs · healed). **Production today reads nothing**: its one real
+   channel is DesManagement's, and that account is suspended.
 2. **Verify covers the headline price and room counts only.** Per-occupancy prices (a per-person plan's
    array) and restrictions (min stay, CTA/CTD, stop-sell) are not read back yet.
 3. **A lint for multi-write server actions not inside `withTenantTransaction`** — a rough scan on 09-23 found ~44 candidates, counted and
