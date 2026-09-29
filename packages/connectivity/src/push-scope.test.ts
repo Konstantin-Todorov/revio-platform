@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { PushScope } from "./sync.js";
-import { datesToPush } from "./sync.js";
+import { datesToPush, stopSellUpdates } from "./sync.js";
+import { unsupportedReason } from "./channex-mappers.js";
 
 /**
  * The cell filter inside `syncChannel`, isolated.
@@ -132,5 +133,24 @@ describe("datesToPush", () => {
   it("runs the rolling horizon from the hotel's today", () => {
     const d = iso(datesToPush("2026-09-29", 3));
     expect(d).toEqual(["2026-09-29", "2026-09-30", "2026-10-01"]);
+  });
+});
+
+describe("stopSellUpdates — what Pause and Disconnect send", () => {
+  it("closes every pair for a year from the hotel's today, with NO price — a zero rate is refused", () => {
+    const u = stopSellUpdates([{ externalRoomId: "R1", externalRateId: "P1" }], "2026-09-29");
+    expect(u).toHaveLength(365);
+    expect(u[0]!.date).toBe("2026-09-29");
+    expect(u[364]!.date).toBe("2027-09-28");
+    for (const x of u) {
+      expect(x.priceMinor).toBeUndefined();
+      expect(x.bookable).toBe(0);
+      expect(x.restrictions?.stopSell).toBe(true);
+    }
+  });
+
+  it("passes the mapper's own checks, so it actually leaves for the channel", () => {
+    const [first] = stopSellUpdates([{ externalRoomId: "R1", externalRateId: "P1" }], "2026-09-29");
+    expect(unsupportedReason(first!)).toBeNull();
   });
 });

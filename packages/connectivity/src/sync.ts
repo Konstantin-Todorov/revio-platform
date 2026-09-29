@@ -1503,6 +1503,30 @@ export interface StopSellOutcome {
   error: string | null;
 }
 
+/**
+ * The closures a Pause or Disconnect sends: every paired (room, rate) for a year from the hotel's
+ * today, "nothing bookable, stop selling" — and deliberately NO price.
+ *
+ * ⚠️ It carried `priceMinor: 0`, and since 2026-08-26 the mapper refuses a zero rate before it
+ * leaves (Channex rejects one anyway), so every Pause and every Disconnect was refused in full —
+ * found 2026-09-29 disconnecting a dead demo channel: 1460 of 1460 closures. Before 2026-09-23 the
+ * refusal was also swallowed and reported as "all dates closed". A closure has no rate to state.
+ */
+export function stopSellUpdates(pairs: { externalRoomId: string; externalRateId: string }[], todayIso: string): AriUpdate[] {
+  const start = new Date(`${todayIso}T00:00:00Z`);
+  const updates: AriUpdate[] = [];
+  for (let i = 0; i < 365; i++) {
+    const k = ymd(new Date(start.getTime() + i * DAY_MS));
+    for (const pair of pairs) {
+      updates.push({
+        externalRoomId: pair.externalRoomId, externalRateId: pair.externalRateId, date: k,
+        bookable: 0, currency: "EUR", restrictions: { stopSell: true },
+      });
+    }
+  }
+  return updates;
+}
+
 async function pushStopSellOverlay(prisma: Db, channelId: string): Promise<StopSellOutcome> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId } });
   // Mock channels: the status flag alone is the whole truth; there is no far end to close.
@@ -1515,17 +1539,8 @@ async function pushStopSellOverlay(prisma: Db, channelId: string): Promise<StopS
   const pairs = stopSellPairs(roomMaps, rateMaps);
   if (pairs.length === 0) return { ok: true, pairs: 0, error: null };
 
-  const start = new Date(`${ymd(new Date())}T00:00:00Z`);
-  const updates: AriUpdate[] = [];
-  for (let i = 0; i < 365; i++) {
-    const k = ymd(new Date(start.getTime() + i * DAY_MS));
-    for (const pair of pairs) {
-      updates.push({
-        externalRoomId: pair.externalRoomId, externalRateId: pair.externalRateId, date: k,
-        bookable: 0, priceMinor: 0, currency: "EUR", restrictions: { stopSell: true },
-      });
-    }
-  }
+  const property = await prisma.property.findUnique({ where: { id: channel.propertyId }, select: { timezone: true } });
+  const updates = stopSellUpdates(pairs, todayInTimeZone(property?.timezone ?? "Europe/Sofia"));
 
   try {
     const mode = adapterMode(channel.connectivityMode);
