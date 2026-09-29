@@ -13,7 +13,8 @@
  * found that Verify had never once completed against a real Channex (400, a missing parameter).
  */
 import { forSystem, decryptSecret } from "@revio/db";
-import { verifyChannelProperty, verifyPublished, verifyPublishedAvailability } from "../src/sync.js";
+import { verifyChannelProperty, verifyPublished, verifyPublishedAvailability, verifyPublishedRestrictions } from "../src/sync.js";
+import { describeRestrictionFinding } from "../src/published-check.js";
 import { createChannelAdapter } from "../src/factory.js";
 
 const db = forSystem();
@@ -63,6 +64,19 @@ async function main() {
       if (rooms.mismatched > 0) problems++;
       console.log(`  availability: ${rooms.headline}`);
       for (const e of rooms.examples) console.log(`    ${e.roomTypeName} ${e.date}: ours ${e.ours} · theirs ${e.theirs ?? "—"}`);
+    }
+
+    const restr = await verifyPublishedRestrictions(db, ch.id, days);
+    if (!restr.ok) {
+      problems++;
+      console.log(`  restrictions: could not read — ${restr.error}`);
+    } else {
+      if (restr.findings.length > 0) problems++;
+      console.log(`  restrictions: ${restr.findings.length === 0 ? `every one matches, on all ${restr.checked} rate-plan nights checked` : `${restr.findings.length} differ, of ${restr.checked} rate-plan nights`}`);
+      for (const f of restr.findings.slice(0, 6)) {
+        const plan = rates.channelPlans?.[f.externalRateId];
+        console.log(`    ${describeRestrictionFinding(f)}${plan?.derivedFrom ? ` (Channex derives this plan from ${plan.derivedFrom})` : ""}`);
+      }
     }
 
     // The feed: anything received and never acknowledged? Read only — nothing is acked here.

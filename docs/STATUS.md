@@ -295,8 +295,15 @@ says who can move it. Details sit where the link points.
    production read found 93 + 186 "differences" and not one was a push fault. Proven in the sandbox on
    all three paths (clean · differs · healed). **Production today reads nothing**: its one real
    channel is DesManagement's, and that account is suspended.
-2. **Verify covers the headline price and room counts only.** Per-occupancy prices (a per-person plan's
-   array) and restrictions (min stay, CTA/CTD, stop-sell) are not read back yet.
+2. ~~**Restrictions are not read back**~~ ✅ **2026-09-29** — minimum/maximum stay, CTA, CTD and
+   stop-sell are part of the daily read-back and `channex:readback`
+   <!-- status: built packages/connectivity/src/sync.ts#verifyPublishedRestrictions -->. "What we send" is
+   `syncChannel` itself run as a `dryRun`, so the check cannot drift from the push. Proven in the sandbox
+   both ways: a min stay set in Revio and never sent, and a stop-sell + CTA set directly in Channex — each
+   caught, each healed by the re-send. The first run found the push sending every update N times for a
+   plan sold in N rooms (Cabacum: 3×); fixed, a full sandbox year went 1460 → 730 updates, all accepted.
+   **Still not read back:** per-occupancy prices (a per-person plan's array). A suspended account's
+   restrictions cannot be compared — nothing is sent to it, so there is nothing to compare with.
 3. **A lint for multi-write server actions not inside `withTenantTransaction`** — a rough scan on 09-23 found ~44 candidates, counted and
    not read. The primitive is proven; its use is not. `HANDOFF` §2, §10.1.
 4. **An idempotency key on "create" actions** — a double submit is blocked in the browser

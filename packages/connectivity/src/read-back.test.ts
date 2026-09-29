@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { judgeReadBack } from "./read-back.js";
-import type { PublishedComparison } from "./published-check.js";
+import type { PublishedComparison, RestrictionFinding } from "./published-check.js";
 
 const noRooms = { mismatched: 0, examples: [] };
 const row = (p: Partial<PublishedComparison> & Pick<PublishedComparison, "kind" | "externalRateId">): PublishedComparison => ({
@@ -78,3 +78,30 @@ describe("judgeReadBack — faults", () => {
     expect(j).toMatchObject({ priceFaults: 0, roomFaults: 0, derivedPlans: [], examples: [], headline: "Publishing exactly what we send" });
   });
 });
+
+describe("judgeReadBack — restrictions", () => {
+  const f = (over: Partial<RestrictionFinding> = {}): RestrictionFinding => ({
+    externalRateId: "bar", date: "2026-10-05", label: "Studio · BAR", field: "minStay", ours: 3, theirs: 1, ...over,
+  });
+
+  it("counts one fault per rate-plan night, however many of its fields differ", () => {
+    const j = judgeReadBack({
+      priceProblems: [], mappedRateIds: new Set(["bar"]), rooms: noRooms,
+      restrictions: [f(), f({ field: "cta", ours: true, theirs: false }), f({ date: "2026-10-06" })],
+    });
+    expect(j.restrictionFaults).toBe(2);
+    expect(j.headline).toBe("2 nights of restrictions published differently from what we send");
+    expect(j.examples[0]).toBe("Studio · BAR 2026-10-05: minimum stay — we send 3 nights, the channel has none");
+  });
+
+  it("names a derived plan's restrictions instead of counting them", () => {
+    const j = judgeReadBack({
+      priceProblems: [], mappedRateIds: new Set(["nr"]), rooms: noRooms,
+      channelPlans: { nr: { name: "BB NR", derivedFrom: "BB BAR" } },
+      restrictions: [f({ externalRateId: "nr" })],
+    });
+    expect(j.restrictionFaults).toBe(0);
+    expect(j.derivedPlans).toEqual(["BB NR (from BB BAR)"]);
+  });
+});
+

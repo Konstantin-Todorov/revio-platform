@@ -10,6 +10,7 @@
  * Auth: header `user-api-key: <key>`. Sandbox base: https://staging.channex.io/api/v1.
  */
 
+import type { PublishedRestrictions } from "./published-check.js";
 import { classifyChannexRatePlan, type ChannexRatePlan } from "./channex-products.js";
 import type { AriUpdate, ChannelAdapter, PushResult, RawReservation, RawRevision } from "@revio/core";
 import {
@@ -375,6 +376,44 @@ export class ChannexChannelAdapter implements ChannelAdapter {
       }
     }
     return { ok: true, rates };
+  }
+
+  /**
+   * The restrictions Channex is publishing, per rate plan and date — the half of what a guest sees
+   * that is not a price: minimum and maximum stay, closed to arrival or departure, stop-sell.
+   *
+   * Same endpoint and same rule as `readPublishedRates`: `filter[restrictions]` is REQUIRED (400
+   * without it), and a failed read is an error, never an empty list. Channex answers
+   * `{ data: { "<rate_plan_id>": { "2026-10-01": { min_stay_arrival: 1, max_stay: 0, stop_sell: false, … } } } }`
+   * — read live from the sandbox 2026-09-29. `max_stay: 0` is Channex for "no maximum".
+   */
+  async readPublishedRestrictions(
+    dateFrom: string,
+    dateTo: string,
+  ): Promise<{ ok: true; rows: PublishedRestrictions[] } | { ok: false; error: string }> {
+    const res = await this.get(
+      `/restrictions?filter[property_id]=${this.propertyId}` +
+        `&filter[date][gte]=${dateFrom}&filter[date][lte]=${dateTo}` +
+        `&filter[restrictions]=min_stay_arrival,max_stay,closed_to_arrival,closed_to_departure,stop_sell`,
+    );
+    if (!res.ok) return { ok: false, error: `Channex ${res.status ?? "?"} reading published restrictions` };
+    const data = (res.body as { data?: Record<string, Record<string, Record<string, unknown>>> } | null)?.data;
+    if (!data || typeof data !== "object") return { ok: true, rows: [] };
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    const bool = (v: unknown) => (typeof v === "boolean" ? v : null);
+    const rows: PublishedRestrictions[] = [];
+    for (const [externalRateId, byDate] of Object.entries(data)) {
+      if (!byDate || typeof byDate !== "object") continue;
+      for (const [date, c] of Object.entries(byDate)) {
+        if (!c || typeof c !== "object") continue;
+        rows.push({
+          externalRateId, date,
+          minStay: num(c.min_stay_arrival), maxStay: num(c.max_stay),
+          cta: bool(c.closed_to_arrival), ctd: bool(c.closed_to_departure), stopSell: bool(c.stop_sell),
+        });
+      }
+    }
+    return { ok: true, rows };
   }
 
   /**

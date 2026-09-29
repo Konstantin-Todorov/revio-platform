@@ -140,3 +140,84 @@ export function summarisePublished(rows: readonly PublishedComparison[]): Publis
     headline,
   };
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Restrictions — the half of what a guest sees that is not a price
+ * ───────────────────────────────────────────────────────────────────────────*/
+
+/** What a channel holds for one rate plan and date. Null = the channel did not say. */
+export interface PublishedRestrictions {
+  externalRateId: string;
+  date: string;
+  minStay: number | null;
+  /** 0 is Channex for "no maximum". */
+  maxStay: number | null;
+  cta: boolean | null;
+  ctd: boolean | null;
+  stopSell: boolean | null;
+}
+
+export type RestrictionField = "minStay" | "maxStay" | "cta" | "ctd" | "stopSell";
+
+/** One update's restrictions as the push sends them — only the fields it actually sends. */
+export interface ExpectedRestrictions {
+  externalRateId: string;
+  date: string;
+  label: string;
+  sent: { minLos?: number; maxLos?: number; cta?: boolean; ctd?: boolean; stopSell?: boolean };
+}
+
+export interface RestrictionFinding {
+  externalRateId: string;
+  date: string;
+  label: string;
+  field: RestrictionField;
+  ours: number | boolean;
+  theirs: number | boolean | null;
+}
+
+/**
+ * Compare the restrictions we send with the ones the channel publishes.
+ *
+ * ⚠️ **Only what we send is judged.** A field the push leaves out (a channel that cannot take CTA,
+ * a scoped edit) says nothing about what the channel should hold, so it is never compared.
+ *
+ * ⚠️ **"No restriction" has two spellings on each side**, and they are the same fact: a minimum stay
+ * of 0 or 1 is no minimum, and a maximum of 0 is no maximum. Comparing raw numbers would report
+ * every unrestricted night on a channel that spells it differently.
+ *
+ * A rate/date the channel holds no row for is skipped here: the price comparison already reports
+ * it as "never arrived", and saying so twice would double the count of one fault.
+ */
+export function compareRestrictions(
+  expected: readonly ExpectedRestrictions[],
+  published: readonly PublishedRestrictions[],
+): RestrictionFinding[] {
+  const theirs = new Map(published.map((p) => [`${p.externalRateId}|${p.date}`, p]));
+  const minStay = (v: number | null) => (v == null ? null : Math.max(1, v));
+  const out: RestrictionFinding[] = [];
+  for (const e of expected) {
+    const p = theirs.get(`${e.externalRateId}|${e.date}`);
+    if (!p) continue;
+    const push = (field: RestrictionField, ours: number | boolean, got: number | boolean | null) => {
+      if (ours !== got) out.push({ externalRateId: e.externalRateId, date: e.date, label: e.label, field, ours, theirs: got });
+    };
+    if (e.sent.minLos != null) push("minStay", minStay(e.sent.minLos)!, minStay(p.minStay));
+    if (e.sent.maxLos != null) push("maxStay", e.sent.maxLos, p.maxStay);
+    if (e.sent.cta != null) push("cta", e.sent.cta, p.cta);
+    if (e.sent.ctd != null) push("ctd", e.sent.ctd, p.ctd);
+    if (e.sent.stopSell != null) push("stopSell", e.sent.stopSell, p.stopSell);
+  }
+  return out;
+}
+
+const FIELD_WORDS: Record<RestrictionField, string> = {
+  minStay: "minimum stay", maxStay: "maximum stay", cta: "closed to arrival", ctd: "closed to departure", stopSell: "stop-sell",
+};
+
+/** One finding as a sentence a person can act on. */
+export function describeRestrictionFinding(f: RestrictionFinding): string {
+  const show = (v: number | boolean | null, field: RestrictionField) =>
+    v == null ? "nothing" : typeof v === "boolean" ? (v ? "on" : "off") : field === "maxStay" && v === 0 ? "none" : field === "minStay" && v <= 1 ? "none" : `${v} nights`;
+  return `${f.label} ${f.date}: ${FIELD_WORDS[f.field]} — we send ${show(f.ours, f.field)}, the channel has ${show(f.theirs, f.field)}`;
+}

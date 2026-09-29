@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { comparePublished, summarisePublished, type ExpectedRate, type PublishedRate } from "./published-check.js";
+import { comparePublished, compareRestrictions, describeRestrictionFinding, summarisePublished, type ExpectedRate, type PublishedRate, type PublishedRestrictions } from "./published-check.js";
 
 const ours = (over: Partial<ExpectedRate> = {}): ExpectedRate => ({
   externalRateId: "ae6b1ed1", date: "2026-09-20", priceMinor: 66600,
@@ -92,5 +92,36 @@ describe("summarisePublished", () => {
     const s = summarisePublished(comparePublished(many, []));
     expect(s.missing).toBe(9);
     expect(s.examples).toHaveLength(5);
+  });
+});
+
+describe("compareRestrictions", () => {
+  const base = { externalRateId: "r1", date: "2026-10-05", label: "Studio · BAR" };
+  const pub = (over: Partial<PublishedRestrictions> = {}): PublishedRestrictions => ({
+    externalRateId: "r1", date: "2026-10-05", minStay: 1, maxStay: 0, cta: false, ctd: false, stopSell: false, ...over,
+  });
+
+  it("finds a minimum stay the channel does not have, and names it in words", () => {
+    const [f, ...rest] = compareRestrictions([{ ...base, sent: { minLos: 3 } }], [pub()]);
+    expect(rest).toEqual([]);
+    expect(f).toMatchObject({ field: "minStay", ours: 3, theirs: 1 });
+    expect(describeRestrictionFinding(f!)).toBe("Studio · BAR 2026-10-05: minimum stay — we send 3 nights, the channel has none");
+  });
+
+  it("treats 0 and 1 as the same 'no minimum', and 0 as 'no maximum'", () => {
+    expect(compareRestrictions([{ ...base, sent: { minLos: 1, maxLos: 0 } }], [pub({ minStay: 0 })])).toEqual([]);
+  });
+
+  it("finds a stop-sell or CTA the channel is still holding after we lifted it", () => {
+    const out = compareRestrictions([{ ...base, sent: { stopSell: false, cta: false } }], [pub({ stopSell: true, cta: true })]);
+    expect(out.map((f) => f.field).sort()).toEqual(["cta", "stopSell"]);
+  });
+
+  it("never judges a field we did not send", () => {
+    expect(compareRestrictions([{ ...base, sent: {} }], [pub({ minStay: 7, stopSell: true, ctd: true })])).toEqual([]);
+  });
+
+  it("leaves a rate/date with no row to the price check, which already calls it 'never arrived'", () => {
+    expect(compareRestrictions([{ ...base, sent: { minLos: 3 } }], [])).toEqual([]);
   });
 });

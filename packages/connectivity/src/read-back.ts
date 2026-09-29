@@ -22,7 +22,9 @@
  *   A price on a plan we DO map, on a night we sent nothing for, still counts: that is the shape a
  *   mis-mapping leaves on the room it wrongly wrote to.
  *
- * What remains — a wrong price, a price that never arrived, a room count that differs — is a fault.
+ * What remains — a wrong price, a price that never arrived, a room count that differs, or a minimum
+ * stay, maximum stay, CTA, CTD or stop-sell other than the one we send — is a fault. Restrictions
+ * were added the same day (2026-09-29): "what we send" for them is `syncChannel` itself, dry-run.
  *
  * ## Re-send first, then alert
  *
@@ -40,16 +42,16 @@
  */
 
 import { forTenant } from "@revio/db";
-import type { PublishedComparison } from "./published-check.js";
+import { describeRestrictionFinding, type PublishedComparison, type RestrictionFinding } from "./published-check.js";
 import {
-  suspendedReason, syncChannel, verifyPublished, verifyPublishedAvailability,
+  suspendedReason, syncChannel, verifyPublished, verifyPublishedAvailability, verifyPublishedRestrictions,
   type AvailabilityCheck,
 } from "./sync.js";
 import { raiseOnce } from "./mapping-audit.js";
 
 type Db = ReturnType<typeof forTenant>;
 
-/** How far ahead to read. Both reads are one request each whatever the range. */
+/** How far ahead to read. Each of the three reads is one request whatever the range. */
 export const READ_BACK_DAYS = 60;
 
 export const READ_BACK_ERROR_CODE = "channel_publishes_differently";
@@ -59,6 +61,8 @@ export interface ReadBackJudgement {
   priceFaults: number;
   /** Room-nights offered at a different count. */
   roomFaults: number;
+  /** Rate-plan nights whose minimum/maximum stay, CTA, CTD or stop-sell differ from what we send. */
+  restrictionFaults: number;
   /** Plans whose difference is Channex computing them itself. Names, for the summary. */
   derivedPlans: string[];
   /** A few lines somebody can act on without opening anything. */
@@ -78,6 +82,7 @@ export function judgeReadBack(input: {
   channelPlans?: Record<string, { name: string; derivedFrom?: string }> | undefined;
   mappedRateIds: ReadonlySet<string>;
   rooms: Pick<AvailabilityCheck, "mismatched" | "examples">;
+  restrictions?: readonly RestrictionFinding[];
 }): ReadBackJudgement {
   const derived = new Set<string>();
   const faults: PublishedComparison[] = [];
@@ -102,22 +107,42 @@ export function judgeReadBack(input: {
           : `${what} ${f.date}: we send ${money(f.ours)}, the channel sells at ${money(f.theirs)}`,
     );
   }
+  /*
+   * Restrictions: one fault per rate-plan NIGHT, however many of its fields differ — "3 nights have
+   * the wrong minimum stay" is the unit a person acts on. A plan Channex derives is named, never
+   * counted, for the same reason as its price: it may take its restrictions from its parent.
+   */
+  const restrictionNights = new Set<string>();
+  const restrictionExamples: string[] = [];
+  for (const f of input.restrictions ?? []) {
+    const plan = input.channelPlans?.[f.externalRateId];
+    if (plan?.derivedFrom) {
+      derived.add(`${plan.name} (from ${plan.derivedFrom})`);
+      continue;
+    }
+    restrictionNights.add(`${f.externalRateId}|${f.date}`);
+    if (restrictionExamples.length < 3) restrictionExamples.push(describeRestrictionFinding(f));
+  }
+  examples.push(...restrictionExamples);
+
   for (const r of input.rooms.examples.slice(0, 3)) {
     examples.push(`${r.roomTypeName} ${r.date}: we send ${r.ours} room${r.ours === 1 ? "" : "s"}, the channel offers ${r.theirs ?? "none"}`);
   }
 
   const priceFaults = faults.length;
   const roomFaults = input.rooms.mismatched;
+  const restrictionFaults = restrictionNights.size;
   const parts = [
     priceFaults ? `${priceFaults} priced night${priceFaults === 1 ? "" : "s"}` : null,
     roomFaults ? `${roomFaults} room-night${roomFaults === 1 ? "" : "s"}` : null,
+    restrictionFaults ? `${restrictionFaults} night${restrictionFaults === 1 ? "" : "s"} of restrictions` : null,
   ].filter(Boolean);
   const derivedPlans = [...derived].sort();
   const headline =
     (parts.length ? `${parts.join(" and ")} published differently from what we send` : "Publishing exactly what we send") +
-    (derivedPlans.length ? `. Channex computes ${derivedPlans.join(", ")} itself and ignores our price for it` : "");
+    (derivedPlans.length ? `. Channex computes ${derivedPlans.join(", ")} itself and ignores what we send for it` : "");
 
-  return { priceFaults, roomFaults, derivedPlans, examples, headline };
+  return { priceFaults, roomFaults, restrictionFaults, derivedPlans, examples, headline };
 }
 
 export interface ReadBackResult {
@@ -161,13 +186,18 @@ export async function readBackChannel(
   const mappedRateIds = new Set(mapped.map((m) => m.externalRateId!));
 
   const read = async (): Promise<{ ok: true; j: ReadBackJudgement } | { ok: false; error: string }> => {
-    const [rates, rooms] = await Promise.all([
+    const [rates, rooms, restrictions] = await Promise.all([
       verifyPublished(prisma, channelId, days),
       verifyPublishedAvailability(prisma, channelId, days),
+      verifyPublishedRestrictions(prisma, channelId, days),
     ]);
     if (!rates.ok) return { ok: false, error: `prices: ${rates.error ?? "could not read"}` };
     if (!rooms.ok) return { ok: false, error: `rooms: ${rooms.error ?? "could not read"}` };
-    return { ok: true, j: judgeReadBack({ priceProblems: rates.problems ?? [], channelPlans: rates.channelPlans, mappedRateIds, rooms }) };
+    if (!restrictions.ok) return { ok: false, error: `restrictions: ${restrictions.error ?? "could not read"}` };
+    return {
+      ok: true,
+      j: judgeReadBack({ priceProblems: rates.problems ?? [], channelPlans: rates.channelPlans, mappedRateIds, rooms, restrictions: restrictions.findings }),
+    };
   };
 
   const first = await read();
@@ -181,7 +211,8 @@ export async function readBackChannel(
 
   let final = first.j;
   let resent = false;
-  const firstFaults = first.j.priceFaults + first.j.roomFaults;
+  const faultsOf = (j: ReadBackJudgement) => j.priceFaults + j.roomFaults + j.restrictionFaults;
+  const firstFaults = faultsOf(first.j);
   if (firstFaults > 0 && opts.heal !== false) {
     const outcome = await syncChannel(prisma, channelId, { horizonDays: days + 1 });
     resent = outcome.ok;
@@ -190,7 +221,7 @@ export async function readBackChannel(
     // A second read that fails is not a clean bill of health: keep what the first read found.
     if (again.ok) final = again.j;
   }
-  const faults = final.priceFaults + final.roomFaults;
+  const faults = faultsOf(final);
   const status: ReadBackResult["status"] = faults > 0 ? "differs" : resent ? "healed" : "ok";
   const summary = [final.headline, ...final.examples].join(" · ");
 

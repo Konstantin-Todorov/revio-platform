@@ -1302,7 +1302,7 @@ model Channel {
   /// A fact on the channel for the same reason as `catalogueStatus`: a hotel can Resolve an Error
   /// Center entry, and the Operator must read something they cannot tidy away.
   readBackStatus        String?
-  /// Room-nights or priced nights still published differently after the re-send. 0 unless `differs`.
+  /// Nights (priced, room-count or restriction) still published differently after the re-send. 0 unless `differs`.
   readBackFaults        Int       @default(0)
   /// One line a person can act on — the headline and the first few examples. English (Operator).
   readBackSummary       String?

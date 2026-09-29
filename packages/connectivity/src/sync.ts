@@ -18,7 +18,10 @@ import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } fr
 import { sendEmail, publicBaseUrl } from "@revio/email";
 import { decidePull, type Stay } from "./pull-merge.js";
 import { indexRateMappings, resolveExternalRateId, stopSellPairs } from "./rate-mapping.js";
-import { comparePublished, summarisePublished, type ExpectedRate, type PublishedComparison, type PublishedSummary } from "./published-check.js";
+import {
+  comparePublished, compareRestrictions, summarisePublished,
+  type ExpectedRate, type ExpectedRestrictions, type PublishedComparison, type PublishedRestrictions, type PublishedSummary, type RestrictionFinding,
+} from "./published-check.js";
 
 /** The tenant-scoped Prisma proxy each app already builds (`@revio/db` `forTenant`). */
 type Db = ReturnType<typeof forTenant>;
@@ -110,6 +113,8 @@ export interface SyncOutcome {
   rejected: number;
   mode: string;
   error?: string;
+  /** Only on a `dryRun`: exactly what the push would have sent, and nothing was sent. */
+  updates?: AriUpdate[];
 }
 
 /** The ARI fields an edit can touch. Anything not named is not sent. */
@@ -237,7 +242,13 @@ export function datesToPush(todayIso: string, horizonDays: number, scopeDates?: 
 export async function syncChannel(
   prisma: Db,
   channelId: string,
-  opts?: { horizonDays?: number; scope?: PushScope },
+  /**
+   * `dryRun`: build every update and return it without pushing or recording anything. It exists so
+   * the daily read-back compares the channel with what THIS function sends, rather than with a
+   * second implementation of it — two copies of "what we send" is how a check drifts from the
+   * thing it checks.
+   */
+  opts?: { horizonDays?: number; scope?: PushScope; dryRun?: boolean },
 ): Promise<SyncOutcome> {
   const channel = await prisma.channel.findUnique({ where: { id: channelId }, include: { bookingSource: true } });
   if (!channel) return { ok: false, pushed: 0, rejected: 0, mode: "mock", error: "Unknown channel." };
@@ -332,7 +343,7 @@ export async function syncChannel(
   // upper bound for the range queries below.
   const dates = datesToPush(todayIso, horizonDays, scope?.dates);
   if (dates.length === 0 || roomMaps.length === 0 || rateMaps.length === 0) {
-    return { ok: true, pushed: 0, rejected: 0, mode: channel.connectivityMode };
+    return { ok: true, pushed: 0, rejected: 0, mode: channel.connectivityMode, ...(opts?.dryRun ? { updates: [] } : {}) };
   }
   const end = dates[dates.length - 1]!;
   // The window the supporting queries must cover. A scoped edit can sit far in the future (the
@@ -461,6 +472,18 @@ export async function syncChannel(
     });
   }
 
+  /*
+   * ⚠️ One entry per rate PLAN, not per mapping row.
+   *
+   * A room-scoped mapping has one row per (room, plan), so a plan sold in three rooms has three
+   * rows — and the room loop below used to walk all three for every room, resolve the same channel
+   * rate plan each time, and send every update three times. Harmless to the values (identical), but
+   * a hotel with a plan in N rooms sent N times the traffic, and a read-back of what we send counted
+   * each difference N times. Found by the daily read-back's first sandbox run, 2026-09-29. Which
+   * channel plan each (room, plan) pair goes to is `resolveExternalRateId`'s job, not this list's.
+   */
+  const planMaps = [...new Map(rateMaps.map((m) => [m.ratePlanId, m] as const)).values()];
+
   const updates: AriUpdate[] = [];
   const dateKeys = dates.map(ymd);
   for (const rm of roomMaps) {
@@ -485,7 +508,7 @@ export async function syncChannel(
       // Did the scope admit this (room, date) at all? Distinct from `emitted`, which also requires a
       // price — and the difference is what the fallback below must key on.
       let inScopeHere = false;
-      for (const pm of rateMaps) {
+      for (const pm of planMaps) {
         const rp = pm.ratePlan;
         if (!sells.has(`${rt.id}|${rp.id}`)) continue;
         if (!inScope(rt.id, rp.id, k)) continue;
@@ -626,6 +649,8 @@ export async function syncChannel(
       }
     }
   }
+
+  if (opts?.dryRun) return { ok: true, pushed: 0, rejected: 0, mode: channel.connectivityMode, updates };
 
   const adapter = await adapterFor(prisma, channel, "push");
   if (!adapter) {
@@ -2065,4 +2090,60 @@ export async function verifyPublishedAvailability(prisma: Db, channelId: string,
       ? `Every room count matches, on all ${checked} room-nights checked.`
       : `${mismatched} of ${checked} room-nights offered at a different count than we send.`;
   return { ok: true, checked, mismatched, examples, headline };
+}
+
+export interface RestrictionCheck {
+  ok: boolean;
+  error?: string;
+  /** Rate-plan nights whose restrictions were compared. */
+  checked: number;
+  findings: RestrictionFinding[];
+}
+
+/**
+ * The restrictions half of Verify: minimum and maximum stay, CTA/CTD and stop-sell, as the channel
+ * publishes them, against what we send.
+ *
+ * ⚠️ "What we send" is `syncChannel` itself, run as a `dryRun` — the same resolution through cells,
+ * rules, plan and property defaults, the same capability map and the same mappings. The price and
+ * room-count checks above each re-derive their side, which is why each has needed fixing to agree
+ * with the push; this one cannot disagree with it, because it is it.
+ */
+export async function verifyPublishedRestrictions(prisma: Db, channelId: string, days = 14): Promise<RestrictionCheck> {
+  const none = { checked: 0, findings: [] };
+  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (!channel) return { ok: false, error: "That channel no longer exists.", ...none };
+  if (channel.connectivityMode === "mock") return { ok: false, error: "Demo channels cannot be read back.", ...none };
+  const adapter = await adapterFor(prisma, channel, "push");
+  const reader = adapter as unknown as { readPublishedRestrictions?: (a: string, b: string) => Promise<
+    { ok: true; rows: PublishedRestrictions[] } | { ok: false; error: string }> };
+  if (!reader?.readPublishedRestrictions) return { ok: false, error: `${channel.name} cannot be read back.`, ...none };
+
+  const built = await syncChannel(prisma, channelId, { horizonDays: days + 1, dryRun: true });
+  if (!built.updates) return { ok: false, error: built.error ?? "Could not work out what we send.", ...none };
+
+  const maps = await prisma.channelRatePlanMapping.findMany({
+    where: { channelId, externalRateId: { not: null } },
+    select: { externalRateId: true, ratePlan: { select: { name: true } }, roomType: { select: { name: true } } },
+  });
+  const label = new Map(maps.map((m) => [m.externalRateId!, `${m.roomType?.name ?? "?"} · ${m.ratePlan.name}`]));
+
+  const expected: ExpectedRestrictions[] = [];
+  for (const u of built.updates) {
+    const r = u.restrictions;
+    const sent: ExpectedRestrictions["sent"] = {};
+    if (r.minLos != null) sent.minLos = r.minLos;
+    if (r.maxLos != null) sent.maxLos = r.maxLos;
+    if (r.cta != null) sent.cta = r.cta;
+    if (r.ctd != null) sent.ctd = r.ctd;
+    if (r.stopSell != null) sent.stopSell = r.stopSell;
+    if (Object.keys(sent).length === 0) continue;
+    expected.push({ externalRateId: u.externalRateId, date: u.date, label: label.get(u.externalRateId) ?? u.externalRateId, sent });
+  }
+  if (expected.length === 0) return { ok: true, ...none };
+
+  const dates = expected.map((e) => e.date).sort();
+  const read = await reader.readPublishedRestrictions(dates[0]!, dates[dates.length - 1]!);
+  if (!read.ok) return { ok: false, error: read.error, ...none };
+  return { ok: true, checked: expected.length, findings: compareRestrictions(expected, read.rows) };
 }
