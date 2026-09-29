@@ -72,12 +72,22 @@ export interface ChannelErrorStrings {
       mismatched: (n: number) => string;
       missing: (n: number) => string;
       unexpected: (n: number) => string;
+      /** Prices on a plan we map to that the channel calculates itself — sent, and thrown away. */
+      ignored: (n: number) => string;
     };
     rooms: {
       nothing: string;
       exact: (checked: number) => string;
       off: (mismatched: number, checked: number) => string;
     };
+    couldNotReadRestrictions: string;
+    restrictions: {
+      nothing: string;
+      exact: (checked: number) => string;
+      off: (nights: number, checked: number) => string;
+    };
+    /** Prices on plans the channel calculates itself — seen, and deliberately not counted. */
+    followers: (n: number, channel: string) => string;
   };
 }
 
@@ -152,12 +162,20 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
         mismatched: (n) => `${n} published at a different price`,
         missing: (n) => `${n} never arrived`,
         unexpected: (n) => `${n} published that we did not send`,
+        ignored: (n) => `${n} ignored by the channel, which calculates that plan itself`,
       },
       rooms: {
         nothing: "No mapped rooms to check.",
         exact: (c) => `Every room count matches, on all ${c} room-nights checked.`,
         off: (m, c) => `${m} of ${c} room-nights offered at a different count than we send.`,
       },
+      couldNotReadRestrictions: "Could not read restrictions.",
+      restrictions: {
+        nothing: "No restrictions to check.",
+        exact: (c) => `Every restriction matches — minimum and maximum stay, closed to arrival and departure, stop-sell — on all ${c} rate-plan nights checked.`,
+        off: (n, c) => `${n} of ${c} rate-plan nights have restrictions different from what we send.`,
+      },
+      followers: (n, c) => `${n} price${n === 1 ? "" : "s"} on plans ${c} calculates from another plan were not counted — they follow that plan by themselves. The list at the bottom of this page shows where each plan's price comes from.`,
     },
   },
   bg: {
@@ -230,12 +248,20 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
         mismatched: (n) => `${n} публикувани на различна цена`,
         missing: (n) => `${n} не са пристигнали`,
         unexpected: (n) => `${n} публикувани, без да сме ги изпратили`,
+        ignored: (n) => `${n} се пренебрегват от канала, защото той сам изчислява плана`,
       },
       rooms: {
         nothing: "Няма стаи със съответствие за проверка.",
         exact: (c) => `Броят стаи съвпада навсякъде — проверени нощувки: ${c}.`,
         off: (m, c) => `${m} от ${c} нощувки се предлагат с различен брой от този, който изпращаме.`,
       },
+      couldNotReadRestrictions: "Ограниченията не можаха да бъдат прочетени.",
+      restrictions: {
+        nothing: "Няма ограничения за проверка.",
+        exact: (c) => `Всички ограничения съвпадат — минимален и максимален престой, затворено за пристигане и заминаване, стоп продажби — проверени нощувки по планове: ${c}.`,
+        off: (n, c) => `${n} от ${c} нощувки по планове имат ограничения, различни от изпратените.`,
+      },
+      followers: (n, c) => `${n} ${n === 1 ? "цена" : "цени"} по планове, които ${c} изчислява от друг план, не са броени — те следват този план сами. Списъкът в края на страницата показва откъде идва цената на всеки план.`,
     },
   },
 };

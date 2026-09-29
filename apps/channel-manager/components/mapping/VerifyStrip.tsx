@@ -106,10 +106,13 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
                   {e.kind === "missing"
                     ? v.missing(money(e.ours))
                     : e.kind === "unexpected"
-                      ? v.unexpected(money(e.theirs))
+                      // On a plan we DO send to, a price we did not send is a mis-mapping's footprint, not an unmanaged plan.
+                      ? e.unmanaged ? v.unexpected(money(e.theirs)) : v.mismatch("—", money(e.theirs))
                       : v.mismatch(money(e.ours), money(e.theirs))}
                   {/* The cause, when it is knowable — a derived plan ignores what we send. */}
-                  {e.kind === "mismatch" && e.derivedFrom && (
+                  {/* Once per plan: the same paragraph under every night of it reads as a wall. */}
+                  {e.kind === "mismatch" && e.derivedFrom &&
+                    state.examples!.findIndex((x) => x.kind === "mismatch" && x.derivedFrom && x.externalRateId === e.externalRateId) === i && (
                     <span className="block pl-3 text-ink-500">
                       {v.derived(channelName, e.derivedFrom)}
                     </span>
@@ -119,11 +122,15 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
             </ul>
           )}
           {/* A plan the channel sells that nobody in Revio controls — the price guests see there is not ours to change. */}
-          {state.examples?.some((e) => e.kind === "unexpected") && (
+          {state.examples?.some((e) => e.unmanaged) && (
             <p className="mt-1.5 pl-6 text-[12px] text-ink-500">
               {v.unmanaged(channelName)}
             </p>
           )}
+          {/* Seen and not counted: the channel's own calculated plans and OTA copies follow by themselves. */}
+          {state.followers ? (
+            <p className="mt-1.5 pl-6 text-[12px] text-ink-500">{state.followersText}</p>
+          ) : null}
 
           {/* The room counts — what a guest on an OTA sees first: is there a room at all? */}
           {state.rooms && (
@@ -149,6 +156,35 @@ export function VerifyStrip({ channelId, channelName }: { channelId: string; cha
               {state.rooms.examples.map((e, i) => (
                 <li key={`${e.roomTypeName}-${e.date}-${i}`} className="tnum">
                   <span className="font-semibold text-ink-800">{e.roomTypeName}</span> {e.date} — {v.roomLine(e.ours, e.closedByStopSell, e.theirs)}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Restrictions — minimum/maximum stay, CTA, CTD, stop-sell. */}
+          {state.restrictions && (
+            <p
+              className={`mt-2 flex items-start gap-1.5 rounded-md px-2.5 py-2 text-[12.5px] ${
+                !state.restrictions.ok
+                  ? "bg-danger-50 text-danger-700"
+                  : state.restrictions.examples && state.restrictions.examples.length > 0
+                    ? "bg-warning-50 text-warning-800"
+                    : "bg-success-50 text-success-700"
+              }`}
+            >
+              {state.restrictions.ok && !(state.restrictions.examples && state.restrictions.examples.length > 0) ? (
+                <CheckCircle2 className="mt-px h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+              )}
+              <span>{v.restrictions((state.restrictions.ok ? state.restrictions.headline : state.restrictions.error) ?? "")}</span>
+            </p>
+          )}
+          {state.restrictions?.examples && state.restrictions.examples.length > 0 && (
+            <ul className="mt-1.5 space-y-1 pl-6 text-[12px] text-ink-600">
+              {state.restrictions.examples.map((e, i) => (
+                <li key={`${e.label}-${e.date}-${e.field}-${i}`} className="tnum">
+                  <span className="font-semibold text-ink-800">{e.label}</span> {e.date} — {v.restrictionLine(e.field, e.ours, e.theirs)}
                 </li>
               ))}
             </ul>

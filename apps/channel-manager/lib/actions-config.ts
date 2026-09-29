@@ -11,7 +11,7 @@ import { logAudit, recordPush, str, int, strList, utcDay } from "./mutation-help
 import { flashError, setFlash } from "@revio/ui/flash";
 import { guard, requireCapability } from "./authz";
 import { earliestSelectable, renderSystemEmail, renderSystemEmailText, todayInTimeZone } from "@revio/core";
-import { verifyPublished, verifyPublishedAvailability } from "@revio/connectivity";
+import { sortPriceFindings, verifyPublished, verifyPublishedAvailability, verifyPublishedRestrictions } from "@revio/connectivity";
 import { i18n } from "./i18n/server";
 import { rateErrors } from "./i18n/rate-errors";
 import { channelErrors } from "./i18n/channel-errors";
@@ -729,6 +729,8 @@ export interface VerifyActionResult {
     channelPlanName?: string;
     /** Set when the channel computes this plan from another — then it ignores the price we send. */
     derivedFrom?: string;
+    /** A price on a plan nothing in Revio feeds — not ours, but possibly on sale at a stale number. */
+    unmanaged?: boolean;
   }[];
   window?: string;
   /** The room-count half: how many rooms the channel offers against what we send. */
@@ -736,6 +738,15 @@ export interface VerifyActionResult {
     ok: boolean; headline?: string; error?: string;
     examples?: { roomTypeName: string; date: string; ours: number; theirs: number | null; closedByStopSell: boolean }[];
   };
+  /** Minimum/maximum stay, CTA, CTD, stop-sell — as the channel publishes them, against the push. */
+  restrictions?: {
+    ok: boolean; headline?: string; error?: string;
+    examples?: { label: string; date: string; field: "minStay" | "maxStay" | "cta" | "ctd" | "stopSell"; ours: number | boolean; theirs: number | boolean | null }[];
+  };
+  /** Prices on plans the channel calculates from another, which it does not count — see `sortPriceFindings`. */
+  followers?: number;
+  /** The sentence for them, in the reader's language. */
+  followersText?: string;
 }
 
 /**
@@ -759,9 +770,14 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
   // Connectivity refuses a demo channel too, in English; said here first so it is in the reader's words.
   if (channel.connectivityMode === "mock") return { error: ce.verify.demo(channel.name) };
 
-  const [result, rooms] = await Promise.all([
+  const [result, rooms, restr, mapped] = await Promise.all([
     verifyPublished(prisma, channel.id),
     verifyPublishedAvailability(prisma, channel.id),
+    verifyPublishedRestrictions(prisma, channel.id),
+    prisma.channelRatePlanMapping.findMany({
+      where: { channelId: channel.id, status: "complete", externalRateId: { not: null }, ratePlan: { active: true } },
+      select: { externalRateId: true },
+    }),
   ]);
   if (!result.ok || !result.summary) {
     // A failure to LOOK is reported as one, never as "nothing wrong".
@@ -769,41 +785,63 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
   }
 
   /*
+   * ⚠️ The SAME rule as the daily read-back (`sortPriceFindings`), not this button's own.
+   *
+   * This used to count every difference, including prices on Channex's own copies of a plan for
+   * each OTA ("BB BAR - BookingCom …") — 186 of them on Cabacum — and then advise mapping them,
+   * which is exactly wrong: they follow their parent by themselves. The founder could not tell from
+   * this screen which of the channel's plans were meant to be mapped (2026-09-29). Now a price on a
+   * plan the channel calculates is not counted; the ones WE map to are still shown, because there
+   * our price is being thrown away, and the rest are one sentence pointing at the plan list.
+   */
+  const mappedIds = new Set(mapped.map((m) => m.externalRateId!));
+  const sorted = sortPriceFindings(result.problems ?? [], result.channelPlans, mappedIds);
+  const derivedMapped = sorted.derived.filter((p) => mappedIds.has(p.externalRateId));
+  const followers = sorted.derived.length - derivedMapped.length;
+  const count = (k: string) => sorted.counted.filter((p) => p.kind === k).length;
+  const sm = { mismatched: count("mismatch"), missing: count("missing"), unexpected: count("unexpected"), matched: result.summary.matched, checked: result.summary.checked };
+  const restrictionFindings = restr.ok ? restr.findings.filter((f) => !result.channelPlans?.[f.externalRateId]?.derivedFrom) : [];
+  const restrictionNights = new Set(restrictionFindings.map((f) => `${f.externalRateId}|${f.date}`)).size;
+
+  /*
    * Remembered, so the channel card can say "checked, and it matched" rather than asking again.
-   * `success` only when BOTH halves match exactly; otherwise `warning` — a read that found
+   * `success` only when all three halves match; otherwise `warning` — a read that found
    * differences is not a verified channel. A failed read is not recorded: it proved nothing.
    */
-  const clean = result.summary.mismatched + result.summary.missing + result.summary.unexpected === 0
-    && rooms.ok && rooms.mismatched === 0;
+  const clean = sorted.counted.length === 0 && rooms.ok && rooms.mismatched === 0 && restr.ok && restrictionNights === 0;
   await prisma.syncEvent.create({
     data: {
       tenantId: channel.tenantId, propertyId, channelId: channel.id, kind: "verify",
       status: clean ? "success" : "warning",
-      summary: `Verified ${channel.name}: ${result.summary.headline}${rooms.ok ? ` · Rooms: ${rooms.headline}` : ""}`,
+      summary: `Verified ${channel.name}: ${result.summary.headline}${rooms.ok ? ` · Rooms: ${rooms.headline}` : ""}` +
+        (restr.ok ? ` · Restrictions: ${restrictionNights} of ${restr.checked} rate-plan nights differ` : ""),
     },
   });
   revalidatePath("/channels");
 
-  // The two headlines are connectivity's `summarisePublished` / `verifyPublishedAvailability`, worded
-  // for the reader from the same counts; the Sync Center line above keeps the English record.
   const vp = ce.verify.prices;
-  const sm = result.summary;
+  // A price we send to a plan the channel calculates is thrown away — never "exactly what we sent".
+  const ignored = derivedMapped.filter((p) => p.kind === "mismatch").length;
   const headline = sm.checked === 0
     ? vp.nothing
-    : sm.mismatched + sm.missing + sm.unexpected === 0
+    : sm.mismatched + sm.missing + sm.unexpected + ignored === 0
       ? vp.exact(sm.matched)
       : [
           sm.mismatched > 0 ? vp.mismatched(sm.mismatched) : null,
           sm.missing > 0 ? vp.missing(sm.missing) : null,
           sm.unexpected > 0 ? vp.unexpected(sm.unexpected) : null,
+          ignored > 0 ? vp.ignored(ignored) : null,
         ].filter(Boolean).join(" · ");
   const vr = ce.verify.rooms;
   const roomsHeadline = rooms.checked === 0 ? vr.nothing : rooms.mismatched === 0 ? vr.exact(rooms.checked) : vr.off(rooms.mismatched, rooms.checked);
+  const vx = ce.verify.restrictions;
 
+  const unmanagedSet = new Set(sorted.unmanaged);
+  const shown = [...sorted.counted.slice(0, 5), ...derivedMapped.slice(0, 3), ...sorted.unmanaged.slice(0, 2)];
   return {
     ok: true,
     headline,
-    examples: result.summary.examples.map((e) => {
+    examples: shown.map((e) => {
       const plan = result.channelPlans?.[e.externalRateId];
       return {
         kind: e.kind, date: e.date, ours: e.ours, theirs: e.theirs, externalRateId: e.externalRateId,
@@ -811,9 +849,18 @@ export async function verifyChannelPublished(_prev: VerifyActionResult | null, f
         ...(e.ratePlanName ? { ratePlanName: e.ratePlanName } : {}),
         ...(plan ? { channelPlanName: plan.name } : {}),
         ...(plan?.derivedFrom ? { derivedFrom: plan.derivedFrom } : {}),
+        ...(unmanagedSet.has(e) ? { unmanaged: true } : {}),
       };
     }),
+    ...(followers > 0 ? { followers, followersText: ce.verify.followers(followers, channel.name) } : {}),
     window: `${result.from} → ${result.to}`,
+    restrictions: restr.ok
+      ? {
+          ok: true,
+          headline: restr.checked === 0 ? vx.nothing : restrictionNights === 0 ? vx.exact(restr.checked) : vx.off(restrictionNights, restr.checked),
+          examples: restrictionFindings.slice(0, 5).map((f) => ({ label: f.label, date: f.date, field: f.field, ours: f.ours, theirs: f.theirs })),
+        }
+      : { ok: false, error: restr.error ?? ce.verify.couldNotReadRestrictions },
     rooms: rooms.ok
       ? { ok: true, headline: roomsHeadline, examples: rooms.examples }
       : { ok: false, error: rooms.error ?? ce.verify.couldNotReadRooms },

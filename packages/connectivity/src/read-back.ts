@@ -73,6 +73,32 @@ export interface ReadBackJudgement {
 const money = (minor: number | null) => (minor == null ? "nothing" : (minor / 100).toFixed(2));
 
 /**
+ * Which price differences are ours to answer for — the ONE rule, used by the daily read-back and by
+ * the Verify button alike, so the two can never disagree about the same channel.
+ *
+ * - `counted`   a fault: a wrong price, one that never arrived, or a price on a plan we send to on a
+ *               night we sent nothing
+ * - `derived`   on a plan the channel computes from another (incl. its OTA copies) — not a push
+ *               fault; the Mapping screen's plan list says where each one comes from
+ * - `unmanaged` on a plan nothing feeds — not ours, but it may be on sale at a stale price
+ */
+export function sortPriceFindings(
+  problems: readonly PublishedComparison[],
+  channelPlans: Record<string, { name: string; derivedFrom?: string }> | undefined,
+  mappedRateIds: ReadonlySet<string>,
+): { counted: PublishedComparison[]; derived: PublishedComparison[]; unmanaged: PublishedComparison[] } {
+  const counted: PublishedComparison[] = [];
+  const derived: PublishedComparison[] = [];
+  const unmanaged: PublishedComparison[] = [];
+  for (const p of problems) {
+    if (channelPlans?.[p.externalRateId]?.derivedFrom) derived.push(p);
+    else if (p.kind === "unexpected" && !mappedRateIds.has(p.externalRateId)) unmanaged.push(p);
+    else counted.push(p);
+  }
+  return { counted, derived, unmanaged };
+}
+
+/**
  * Decide which differences are faults. Pure: the reads happen elsewhere.
  *
  * `mappedRateIds` is the channel's plan ids we actively send to — the same set the push uses.
@@ -85,16 +111,15 @@ export function judgeReadBack(input: {
   restrictions?: readonly RestrictionFinding[];
 }): ReadBackJudgement {
   const derived = new Set<string>();
-  const faults: PublishedComparison[] = [];
-  for (const p of input.priceProblems) {
-    const plan = input.channelPlans?.[p.externalRateId];
-    if (plan?.derivedFrom) {
-      derived.add(`${plan.name} (from ${plan.derivedFrom})`);
-      continue;
-    }
-    if (p.kind === "unexpected" && !input.mappedRateIds.has(p.externalRateId)) continue;
-    faults.push(p);
-  }
+  const sorted = sortPriceFindings(input.priceProblems, input.channelPlans, input.mappedRateIds);
+  const faults = sorted.counted;
+  // Named only when WE map to it — that is when our price is thrown away. The channel's own copies
+  // for each OTA are derived too, and correct by design; listing them buried the one that matters.
+  const nameDerived = (id: string) => {
+    const plan = input.channelPlans?.[id];
+    if (plan?.derivedFrom && input.mappedRateIds.has(id)) derived.add(`${plan.name} (from ${plan.derivedFrom})`);
+  };
+  for (const p of sorted.derived) nameDerived(p.externalRateId);
 
   const examples: string[] = [];
   for (const f of faults.slice(0, 3)) {
@@ -117,7 +142,7 @@ export function judgeReadBack(input: {
   for (const f of input.restrictions ?? []) {
     const plan = input.channelPlans?.[f.externalRateId];
     if (plan?.derivedFrom) {
-      derived.add(`${plan.name} (from ${plan.derivedFrom})`);
+      nameDerived(f.externalRateId);
       continue;
     }
     restrictionNights.add(`${f.externalRateId}|${f.date}`);

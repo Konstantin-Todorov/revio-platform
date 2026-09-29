@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import Link from "next/link";
 import { AlertTriangle, Link2 } from "lucide-react";
 import { crossWiredRatePlans } from "@revio/core";
-import { mappableRatePlans, ratePlansForRoom, type ChannexRatePlan } from "@revio/connectivity";
+import { explainChannelPlans, mappableRatePlans, ratePlansForRoom, type ChannexRatePlan } from "@revio/connectivity";
 import { getMapping, getUnmappedBookingAlerts } from "@/lib/data";
 import { listChannelProducts } from "@/lib/connectivity";
 import { fixMappings } from "@/lib/actions-config";
@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { MappingEditDialog } from "@/components/mapping/MappingEditDialog";
 import { VerifyStrip } from "@/components/mapping/VerifyStrip";
 import { SendToChannex } from "@/components/mapping/SendToChannex";
+import { ChannelPlans } from "@/components/mapping/ChannelPlans";
 import { i18n } from "@/lib/i18n/server";
 import { mapping as mappingDict } from "@/lib/i18n/mapping";
 
@@ -131,6 +132,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
     const parent = target.parentId ? rateById.get(target.parentId)?.name : undefined;
     return [{ key: `${m.ratePlanId}-${m.roomTypeName}`, ratePlanId: m.ratePlanId, room: m.roomTypeName, plan: m.ratePlan.name, channelPlan: target.name, parent }];
   });
+
+  // Every plan the channel holds, and where its price comes from — not only the ones we map to.
+  const planRooms = explainChannelPlans(
+    catalogue.map((c) => ({ ...c, parentId: rateById.get(c.id)?.parentId ?? null })),
+    ratePlanMappings.flatMap((m) => (m.externalRateId ? [{ externalRateId: m.externalRateId, ratePlanName: m.ratePlan.name }] : [])),
+    products.rooms,
+  );
 
   const crossWires = crossWiredRatePlans(
     ratePlanMappings.flatMap((m) =>
@@ -431,6 +439,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ c
           </div>
         </Card>
       </div>
+
+      <ChannelPlans rooms={planRooms} channel={channel.name} s={s.plans} />
     </div>
   );
 }

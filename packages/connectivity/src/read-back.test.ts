@@ -21,6 +21,16 @@ describe("judgeReadBack — what the first production read taught (2026-09-29)",
     expect(j.headline).toMatch(/^Publishing exactly what we send\. Channex computes BB Non-Refundable/);
   });
 
+  it("does not name the channel's own OTA copies — correct by design, and they buried the one that matters", () => {
+    const j = judgeReadBack({
+      priceProblems: [row({ kind: "unexpected", externalRateId: "barB", ours: null })],
+      channelPlans: { barB: { name: "BB BAR - BookingCom X", derivedFrom: "BB BAR" } },
+      mappedRateIds: new Set(["bar"]),
+      rooms: noRooms,
+    });
+    expect(j).toMatchObject({ priceFaults: 0, derivedPlans: [], headline: "Publishing exactly what we send" });
+  });
+
   it("ignores prices on a plan we do not send to at all", () => {
     // 186 "published that we did not send" — every one on plans nobody mapped.
     const j = judgeReadBack({

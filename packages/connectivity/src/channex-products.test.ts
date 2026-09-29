@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyChannexRatePlan, mappableRatePlans, ratePlansForRoom, type ChannexRatePlan } from "./channex-products.js";
+import { classifyChannexRatePlan, explainChannelPlans, mappableRatePlans, ratePlansForRoom, type ChannexRatePlan } from "./channex-products.js";
 
 const plan = (over: Partial<ChannexRatePlan> = {}): ChannexRatePlan => ({
   id: "p1", name: "BB BAR", roomTypeId: "rt1", kind: "property", derived: false, ...over,
@@ -80,5 +80,45 @@ describe("ratePlansForRoom", () => {
   it("never leaks one room's plans into another's list", () => {
     const plans = [plan({ id: "two", roomTypeId: "2br", name: "BB BAR" })];
     expect(ratePlansForRoom(plans, "1br")).toHaveLength(0);
+  });
+});
+
+describe("explainChannelPlans — Cabacum's catalogue, as read on 2026-09-29", () => {
+  const plan = (id: string, name: string, room: string, parentId: string | null = null) => ({
+    id, name, roomTypeId: room, parentId, derived: parentId != null, ...classifyChannexRatePlan(name),
+  });
+  const catalogue = [
+    plan("bar1", "BB BAR", "r1"),
+    plan("nr1", "BB NR", "r1", "bar1"),
+    plan("barB1", "BB BAR - BookingCom Cabacum Beach Residence", "r1", "bar1"),
+    plan("nrB1", "BB NR - BookingCom Cabacum Beach Residence", "r1", "nr1"),
+    plan("old", "Summer Special", "r1"),
+  ];
+  const [room] = explainChannelPlans(
+    catalogue,
+    [{ externalRateId: "bar1", ratePlanName: "BB Flex" }, { externalRateId: "nr1", ratePlanName: "BB Non-Refundable" }],
+    [{ id: "r1", name: "Apartment, 1 Bedroom" }],
+  );
+
+  it("gives every plan in the channel one role, ours first", () => {
+    expect(room!.roomName).toBe("Apartment, 1 Bedroom");
+    expect(room!.plans.map((p) => p.role)).toEqual(["ours", "ours_ignored", "ota_copy", "ota_copy", "unused"]);
+  });
+
+  it("names what each one follows, and which of our plans feeds it", () => {
+    const by = Object.fromEntries(room!.plans.map((p) => [p.id, p]));
+    expect(by.bar1).toMatchObject({ revioPlans: ["BB Flex"], parent: null });
+    expect(by.nr1).toMatchObject({ revioPlans: ["BB Non-Refundable"], parent: "BB BAR" });
+    expect(by.barB1).toMatchObject({ role: "ota_copy", channel: "BookingCom", parent: "BB BAR" });
+    expect(by.nrB1).toMatchObject({ role: "ota_copy", parent: "BB NR" });
+  });
+
+  it("flags a mapping to an OTA copy, and a derived plan nobody maps as nothing to do", () => {
+    const [r] = explainChannelPlans(
+      [plan("bar", "BB BAR", "r1"), plan("barB", "BB BAR - BookingCom X", "r1", "bar"), plan("nr", "BB NR", "r1", "bar")],
+      [{ externalRateId: "barB", ratePlanName: "BB Flex" }],
+      [{ id: "r1", name: "Studio" }],
+    );
+    expect(Object.fromEntries(r!.plans.map((p) => [p.id, p.role]))).toEqual({ bar: "unused", barB: "ota_mapped", nr: "derived" });
   });
 });

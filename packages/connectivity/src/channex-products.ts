@@ -87,3 +87,81 @@ export function ratePlansForRoom(plans: readonly ChannexRatePlan[], channexRoomT
    */
   return plans.filter((p) => p.roomTypeId === channexRoomTypeId);
 }
+
+/**
+ * Where each plan in the channel gets its price — the whole catalogue, not only what we mapped.
+ *
+ * ## Why this exists (founder, 2026-09-29)
+ *
+ * The first production read-back reported 186 prices "we did not send" on Cabacum, and it took
+ * reading the raw catalogue to see they were all Channex's own Booking.com copies — correct, and not
+ * ours to map. The founder asked the obvious question: shouldn't we be mapping those? Nobody could
+ * answer it from the Mapping screen, because the screen only showed the plans we map TO. A hotel
+ * looking at twelve plans in Channex and six rows in Revio has the same question and no answer.
+ *
+ * So every plan gets one role, read from what the channel says about it:
+ *
+ * - `ours`         mapped, and the channel takes our price — the normal case
+ * - `ours_ignored` mapped, but the channel computes it from a parent — our price is thrown away
+ * - `ota_mapped`   mapped to a channel's own OTA copy — skips a hop; should point at the plan above it
+ * - `derived`      not mapped, computed from a parent — follows it by itself, nothing to do
+ * - `ota_copy`     not mapped, the channel's copy for one OTA — follows its parent, nothing to do
+ * - `unused`       not mapped, and nothing feeds it — no price from Revio reaches it
+ */
+export type ChannelPlanRole = "ours" | "ours_ignored" | "ota_mapped" | "derived" | "ota_copy" | "unused";
+
+export interface ChannelPlanLine {
+  id: string;
+  name: string;
+  role: ChannelPlanRole;
+  /** Our plan(s) mapped to it, for `ours*` / `ota_mapped`. */
+  revioPlans: string[];
+  /** The plan it is computed from or copies, when the channel said. */
+  parent: string | null;
+  /** Which OTA, for the OTA copies. */
+  channel?: string;
+}
+
+export interface ChannelPlanRoom {
+  /** The channel's room id; null for plans it did not place in a room. */
+  roomId: string | null;
+  roomName: string | null;
+  plans: ChannelPlanLine[];
+}
+
+const ROLE_ORDER: Record<ChannelPlanRole, number> = { ours: 0, ours_ignored: 1, ota_mapped: 2, derived: 3, ota_copy: 4, unused: 5 };
+
+export function explainChannelPlans(
+  plans: readonly (ChannexRatePlan & { parentId?: string | null })[],
+  mapped: readonly { externalRateId: string; ratePlanName: string }[],
+  rooms: readonly { id: string; name: string }[],
+): ChannelPlanRoom[] {
+  const nameOf = new Map(plans.map((p) => [p.id, p.name] as const));
+  const ours = new Map<string, string[]>();
+  for (const m of mapped) {
+    const list = ours.get(m.externalRateId) ?? [];
+    if (!list.includes(m.ratePlanName)) list.push(m.ratePlanName);
+    ours.set(m.externalRateId, list);
+  }
+  const lines = plans.map((p): ChannelPlanLine & { roomId: string | null } => {
+    const revioPlans = ours.get(p.id) ?? [];
+    const parent = p.parentId ? nameOf.get(p.parentId) ?? null : null;
+    const isOta = p.kind === "channel_scoped";
+    const role: ChannelPlanRole = revioPlans.length > 0
+      ? isOta ? "ota_mapped" : p.derived ? "ours_ignored" : "ours"
+      : isOta ? "ota_copy" : p.derived ? "derived" : "unused";
+    return { id: p.id, name: p.name, role, revioPlans, parent, ...(p.channel ? { channel: p.channel } : {}), roomId: p.roomTypeId };
+  });
+
+  const roomName = new Map(rooms.map((r) => [r.id, r.name] as const));
+  const groups = new Map<string | null, ChannelPlanLine[]>();
+  for (const { roomId, ...line } of lines) groups.set(roomId, [...(groups.get(roomId) ?? []), line]);
+  return [...groups.entries()]
+    .map(([roomId, list]) => ({
+      roomId,
+      roomName: roomId ? roomName.get(roomId) ?? null : null,
+      plans: list.sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role] || a.name.localeCompare(b.name)),
+    }))
+    // Rooms in the channel's own name order; plans it could not place, last.
+    .sort((a, b) => (a.roomId === null ? 1 : b.roomId === null ? -1 : (a.roomName ?? "").localeCompare(b.roomName ?? "")));
+}

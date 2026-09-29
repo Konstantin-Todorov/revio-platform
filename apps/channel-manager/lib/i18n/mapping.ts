@@ -1,4 +1,5 @@
 import type { Translations } from "@revio/ui/i18n";
+import type { ChannelPlanRole } from "@revio/connectivity";
 
 /**
  * RevioLink's Mapping screen — linking our room types and rate plans to each channel's own ids,
@@ -69,6 +70,20 @@ export interface CmMappingStrings {
     kind: Record<"roomType" | "ratePlan", string>;
     sending: string;
   };
+  /** "Every plan in the channel, and where its price comes from" — see `explainChannelPlans`. */
+  plans: {
+    title: (channel: string) => string;
+    lead: (channel: string) => string;
+    roomless: string;
+    count: (n: number) => string;
+    pill: (role: ChannelPlanRole, channel: string, ota: string) => string;
+    ours: (revio: string) => string;
+    oursIgnored: (revio: string, parent: string | null, channel: string) => string;
+    otaMapped: (revio: string, channel: string, parent: string | null) => string;
+    derived: (parent: string | null, channel: string) => string;
+    otaCopy: (ota: string, parent: string | null, channel: string) => string;
+    unused: (channel: string) => string;
+  };
   verify: {
     lead: [string, string];
     reading: string;
@@ -82,6 +97,8 @@ export interface CmMappingStrings {
     unmanaged: (channel: string) => string;
     rooms: (headline: string) => string;
     roomLine: (ours: number, stopSell: boolean, theirs: number | null) => string;
+    restrictions: (headline: string) => string;
+    restrictionLine: (field: "minStay" | "maxStay" | "cta" | "ctd" | "stopSell", ours: number | boolean, theirs: number | boolean | null) => string;
   };
 }
 
@@ -153,6 +170,19 @@ export const mapping: Translations<CmMappingStrings> = {
       kind: { roomType: "room", ratePlan: "rate" },
       sending: "Sending…",
     },
+    plans: {
+      title: (c) => `Every plan in ${c}, and where its price comes from`,
+      lead: (c) => `${c} usually holds more plans than you map: plans it calculates from another, and its own copy of a plan for each OTA it sends to (named “… - BookingCom …”). Those follow the plan above them by themselves and are not mapped. Only a plan marked “Price from Revio” takes the price you set here.`,
+      roomless: "Plans the channel did not place in a room",
+      count: (n) => `${n} plan${n === 1 ? "" : "s"}`,
+      pill: (r, c, o) => ({ ours: "Price from Revio", ours_ignored: "Revio's price ignored", ota_mapped: "Mapped to the wrong step", derived: `Calculated by ${c}`, ota_copy: `Copy for ${o}`, unused: "Gets nothing" })[r],
+      ours: (r) => `Takes the price of your “${r}”.`,
+      oursIgnored: (r, p, c) => `Mapped to your “${r}”, but ${c} calculates it${p ? ` from ${p}` : ""} and ignores that price — guests on the OTAs pay ${c}'s number, not yours.`,
+      otaMapped: (r, c, p) => `Your “${r}” is mapped to ${c}'s copy for one OTA. Map it to ${p ?? "the plan this copies"} instead — that is the step Revio sends to.`,
+      derived: (p, c) => `${c} calculates it${p ? ` from ${p}` : ""}. It follows by itself — nothing to map.`,
+      otaCopy: (o, p, c) => `What ${c} sends to ${o}${p ? `, copied from ${p}` : ""}. It follows by itself — nothing to map.`,
+      unused: (c) => `Not mapped and not calculated from anything, so no price from Revio reaches it. If an OTA sells it, it sells at whatever was last set in ${c} — map it, or close it in ${c}.`,
+    },
     verify: {
       lead: ["Read back what ", " is publishing right now, and compare it with what we hold."],
       reading: "Reading…",
@@ -166,6 +196,12 @@ export const mapping: Translations<CmMappingStrings> = {
       unmanaged: (c) => `Plans Revio does not manage keep whatever price was last set in ${c}. If one of them is connected to an OTA, it sells at that price — map it here, or close it in ${c}.`,
       rooms: (h) => `Rooms: ${h}`,
       roomLine: (o, s, t) => `we send ${o}${s ? " (stop-sell on every plan)" : ""}, they offer ${t ?? "nothing"}`,
+      restrictions: (h) => `Restrictions: ${h}`,
+      restrictionLine: (f, o, t) => {
+        const show = (v: number | boolean | null) => v == null ? "nothing" : typeof v === "boolean" ? (v ? "on" : "off") : (f === "maxStay" && v === 0) || (f === "minStay" && v <= 1) ? "none" : `${v} nights`;
+        const what = { minStay: "minimum stay", maxStay: "maximum stay", cta: "closed to arrival", ctd: "closed to departure", stopSell: "stop-sell" }[f];
+        return `${what} — we send ${show(o)}, they have ${show(t)}`;
+      },
     },
   },
   bg: {
@@ -235,6 +271,19 @@ export const mapping: Translations<CmMappingStrings> = {
       kind: { roomType: "стая", ratePlan: "цена" },
       sending: "Изпращане…",
     },
+    plans: {
+      title: (c) => `Всички планове в ${c} и откъде идва цената им`,
+      lead: (c) => `В ${c} обикновено има повече планове, отколкото свързвате: планове, които ${c} изчислява от друг, и негово копие на план за всяка OTA, към която изпраща (с име „… - BookingCom …“). Те следват плана над тях сами и не се свързват. Само план с „Цена от Revio“ взима цената, която задавате тук.`,
+      roomless: "Планове, които каналът не е поставил в стая",
+      count: (n) => `${n} ${n === 1 ? "план" : "плана"}`,
+      pill: (r, c, o) => ({ ours: "Цена от Revio", ours_ignored: "Цената от Revio се пренебрегва", ota_mapped: "Свързан към грешна стъпка", derived: `Изчислява се от ${c}`, ota_copy: `Копие за ${o}`, unused: "Не получава нищо" })[r],
+      ours: (r) => `Взима цената на Вашия „${r}“.`,
+      oursIgnored: (r, p, c) => `Свързан с Вашия „${r}“, но ${c} го изчислява${p ? ` от ${p}` : ""} и пренебрегва тази цена — гостите в OTA плащат цената на ${c}, а не Вашата.`,
+      otaMapped: (r, c, p) => `Вашият „${r}“ е свързан с копието на ${c} за една OTA. Свържете го с ${p ?? "плана, който то копира"} — това е стъпката, към която Revio изпраща.`,
+      derived: (p, c) => `${c} го изчислява${p ? ` от ${p}` : ""}. Следва го сам — няма нужда от свързване.`,
+      otaCopy: (o, p, c) => `Това ${c} изпраща към ${o}${p ? `, копие на ${p}` : ""}. Следва го сам — няма нужда от свързване.`,
+      unused: (c) => `Не е свързан и не се изчислява от друг план, затова никаква цена от Revio не стига до него. Ако OTA го продава, продава на последната цена, зададена в ${c} — свържете го или го затворете в ${c}.`,
+    },
     verify: {
       lead: ["Прочетете какво публикува ", " в момента и го сравнете с нашите данни."],
       reading: "Четене…",
@@ -248,6 +297,12 @@ export const mapping: Translations<CmMappingStrings> = {
       unmanaged: (c) => `Плановете, които Revio не управлява, пазят последната цена, зададена в ${c}. Ако някой от тях е свързан с OTA, продава на тази цена — свържете го тук или го затворете в ${c}.`,
       rooms: (h) => `Стаи: ${h}`,
       roomLine: (o, s, t) => `изпращаме ${o}${s ? " (стоп продажби за всички планове)" : ""}, те предлагат ${t ?? "нищо"}`,
+      restrictions: (h) => `Ограничения: ${h}`,
+      restrictionLine: (f, o, t) => {
+        const show = (v: number | boolean | null) => v == null ? "нищо" : typeof v === "boolean" ? (v ? "включено" : "изключено") : (f === "maxStay" && v === 0) || (f === "minStay" && v <= 1) ? "няма" : `${v} нощувки`;
+        const what = { minStay: "минимален престой", maxStay: "максимален престой", cta: "затворено за пристигане", ctd: "затворено за заминаване", stopSell: "стоп продажби" }[f];
+        return `${what} — изпращаме ${show(o)}, при тях ${show(t)}`;
+      },
     },
   },
 };
