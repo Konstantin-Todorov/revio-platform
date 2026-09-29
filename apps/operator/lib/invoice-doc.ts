@@ -1,8 +1,8 @@
 import "server-only";
 import { forSystem, withSystemTransaction } from "@revio/db";
 import { decideVat, applyVat, registrationOf } from "./vat";
-import { type Entitlements } from "./pricing";
-import { invoiceLines, formatAddress, formatInvoiceNumber, formatDemoNumber, chooseIdentity } from "./invoice-lines";
+import { formatAddress, formatInvoiceNumber, formatDemoNumber, chooseIdentity } from "./invoice-lines";
+import { billingFor } from "./invoice-run";
 
 export { invoiceLines, formatAddress, vatLabel, formatInvoiceNumber, chooseIdentity, type InvoiceLine } from "./invoice-lines";
 
@@ -80,12 +80,12 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
     return { ok: false, error: `VAT treatment needs a decision: ${vat.note ?? "the customer's country is missing."}` };
   }
 
-  const ent: Entitlements = {
-    channelManager: tenant.hasChannelManager,
-    reservation: tenant.hasReservation,
-    pms: tenant.hasPms,
-  };
-  const lines = invoiceLines(tenant.plan, ent);
+  // The document's language follows the identity we write to this buyer in: Cyrillic → Bulgarian.
+  const issuerFor = chooseIdentity(company, billing.country);
+  const language = issuerFor.script === "cyrillic" ? "bg" : "en";
+  // The SAME computation the draft was priced with — proration, trials and direct-booking fee
+  // included — so an honest draft always issues. See `billingFor`.
+  const { lines } = await billingFor(tenant, invoice.period, language);
   const netMinor = lines.reduce((s, l) => s + l.netMinor, 0);
 
   // The lines are derived from today's price list, while `amountMinor` was written when the draft
@@ -104,7 +104,7 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
    * Chosen once, here, and snapshotted onto the invoice — so reissuing the document later cannot
    * silently switch scripts on a customer who has already filed it.
    */
-  const issuer = chooseIdentity(company, billing.country);
+  const issuer = issuerFor;
 
   const amounts = applyVat(netMinor, vat.ratePct);
   const issuedAt = new Date();
@@ -171,6 +171,10 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
         vatTreatment: vat.treatment,
         vatNote: vat.note,
         lineSnapshot: lines as unknown as object[],
+        language,
+        issuerRepresentative: company.representative ?? null,
+        buyerRepresentative: billing.representative ?? null,
+        issuePlace: issuer.city,
       },
     });
 

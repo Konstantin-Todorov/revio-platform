@@ -110,6 +110,7 @@ export default async function BillingSettingsPage() {
     postCode: identity?.postCode ?? "",
     billingEmail: identity?.billingEmail ?? "",
     attention: identity?.attention ?? "",
+    representative: identity?.representative ?? "",
   };
 
   const identityCard = (

@@ -47,7 +47,8 @@ const FIELDS: { name: BillingIdentityField; span: 1 | 2; required?: boolean; pla
   { name: "postCode", span: 1 },
   { name: "country", span: 1, required: true, placeholder: "BG" },
   { name: "billingEmail", span: 1 },
-  { name: "attention", span: 2 },
+  { name: "attention", span: 1 },
+  { name: "representative", span: 1 },
 ];
 
 export function BillingIdentityForm({

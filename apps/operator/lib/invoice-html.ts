@@ -22,6 +22,7 @@
 // The one rule this file must not re-derive: whether the law permits a VAT line at all. It lives
 // beside `decideVat` so the document and the decision cannot disagree.
 import { suppressesVatLine } from "./vat";
+import { amountInWords } from "./amount-words";
 
 export function esc(v: unknown): string {
   if (v === null || v === undefined) return "";
@@ -67,6 +68,13 @@ export interface InvoiceDocData {
   footerNote: string | null;
   /** Settlement, when there is one. A paid invoice has to look paid. */
   paid?: { on: string; via: string | null; reference: string | null } | null;
+  /** "bg" for a Bulgarian buyer, "en" otherwise — frozen at issue. Absent = English (older invoices). */
+  language?: "bg" | "en";
+  /** МОЛ on each side — "Получател" and "Съставил" at the foot of a Bulgarian invoice. */
+  issuerRepresentative?: string | null;
+  buyerRepresentative?: string | null;
+  /** "Място на сделката". */
+  issuePlace?: string | null;
 }
 
 export function money(minor: number, currency: string): string {
@@ -88,108 +96,181 @@ export function vatLineLabel(treatment: string | null, ratePct: number): string 
   return `VAT ${ratePct}%`;
 }
 
+/** Every label on the document, in the two languages it is issued in. */
+const DOC_WORDS = {
+  bg: {
+    title: "Фактура", copy: "Оригинал", no: "No", due: "Сума за плащане", paidTotal: "Платена сума",
+    buyer: "Получател", supplier: "Доставчик",
+    company: "Име на фирма", companyId: "ЕИК", vatId: "ДДС No", address: "Адрес", rep: "МОЛ", attention: "На вниманието на",
+    colNo: "No", colItem: "Име на стоката/услугата", colUnit: "Мярка", colQty: "К-во", colPrice: "Ед. цена", colVat: "ДДС (%)", colTotal: "Стойност",
+    unit: "бр.", base: "Данъчна основа", vat: "Начислен ДДС", total: "Сума за плащане",
+    words: "Словом", method: "Начин на плащане", methodBank: "Банков път", methodCard: "Карта",
+    bank: "Банкови реквизити", issued: "Дата на издаване", taxEvent: "Дата на данъчно събитие", place: "Място на сделката",
+    basis: "Основание на сделка по ЗДДС", period: "Период", dueDate: "Срок за плащане",
+    signBuyer: "Получател", signIssuer: "Съставил", signature: "Подпис",
+    paid: "Платена", legal: "Съгласно чл. 6, ал. 1 от Закона за счетоводството, чл. 114 от ЗДДС и чл. 78 от ППЗДДС печатът и подписът не са задължителни реквизити на фактурата.",
+    notIssued: "— неиздадена —",
+  },
+  en: {
+    title: "Invoice", copy: "Original", no: "No", due: "Amount due", paidTotal: "Amount paid",
+    buyer: "Bill to", supplier: "Supplier",
+    company: "Company", companyId: "Company no.", vatId: "VAT no.", address: "Address", rep: "Represented by", attention: "For the attention of",
+    colNo: "No", colItem: "Description", colUnit: "Unit", colQty: "Qty", colPrice: "Unit price", colVat: "VAT (%)", colTotal: "Amount",
+    unit: "pc", base: "Taxable amount", vat: "VAT", total: "Total due",
+    words: "In words", method: "Payment method", methodBank: "Bank transfer", methodCard: "Card",
+    bank: "Bank details", issued: "Issue date", taxEvent: "Date of supply", place: "Place of supply",
+    basis: "VAT basis", period: "Period", dueDate: "Due date",
+    signBuyer: "Received by", signIssuer: "Issued by", signature: "Signature",
+    paid: "Paid", legal: "Stamp and signature are not mandatory requisites of this invoice.",
+    notIssued: "— not issued —",
+  },
+} as const;
+
+/** A money figure as the document's language writes it: "100,00 €" / "€100.00". */
+export function docMoney(minor: number, currency: string, lang: "bg" | "en"): string {
+  // Intl prints a hyphen; a discount line in a column of prices wants a real minus sign, which is
+  // what `money()` always printed and what a reader's eye takes as "subtracted".
+  return new Intl.NumberFormat(lang === "bg" ? "bg-BG" : "en-GB", { style: "currency", currency, minimumFractionDigits: 2 })
+    .format(minor / 100).replace("-", "\u2212");
+}
+function docDay(d: Date | null, lang: "bg" | "en"): string {
+  if (!d) return "—";
+  if (lang === "bg") {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${p(d.getUTCDate())}.${p(d.getUTCMonth() + 1)}.${d.getUTCFullYear()} г.`;
+  }
+  return day(d);
+}
+/** The VAT note is stored bilingual ("… ЗДДС. · No VAT is charged …"); each document prints its half. */
+function noteFor(note: string | null, lang: "bg" | "en"): string | null {
+  if (!note) return null;
+  const [first, second] = note.split(" · ");
+  if (!second) return note;
+  return /[А-Яа-я]/.test(first ?? "") ? (lang === "bg" ? first! : second) : (lang === "bg" ? second : first!);
+}
+
 /**
- * The document body. Plain semantic HTML with its own class names, deliberately independent of
- * Tailwind — the downloaded file has no stylesheet to load and must look identical offline, on a
- * phone, and in a printer, a year from now.
+ * The document body — laid out the way a Bulgarian invoice is read (founder's own invoice, 2026-09-29,
+ * as the reference): the amount due at the top right where a finance person looks first, the two
+ * parties side by side, the lines as a table with unit and quantity, the total in words, the dates,
+ * the payment route and the VAT basis, and the signature line. An English invoice has the same shape.
+ *
+ * Plain semantic HTML with its own class names, deliberately independent of Tailwind — the
+ * downloaded file has no stylesheet to load and must look identical offline, on a phone, and in a
+ * printer, a year from now.
  */
 export function invoiceBodyHtml(d: InvoiceDocData): string {
+  const lang = d.language ?? "en";
+  const w = DOC_WORDS[lang];
   const cur = d.currency;
+  const m = (minor: number) => docMoney(minor, cur, lang);
   const lines = d.lines.length
     ? d.lines
-    : [{ description: "Monthly subscription", netMinor: d.netMinor }];
+    : [{ description: lang === "bg" ? "Месечен абонамент" : "Monthly subscription", netMinor: d.netMinor }];
+  const showVat = !suppressesVatLine(d.vatTreatment);
 
-  const row = (l: InvoiceDocLine) =>
-    `<tr><td>${esc(l.description)}</td><td class="num">${esc(money(l.netMinor, cur))}</td></tr>`;
+  const party = (h: string, rows: [string, string | null | undefined][]) => `<div class="party">
+      <h3>${esc(h)}</h3>
+      <dl>${rows.filter(([, v]) => v).map(([k, v]) => `<dt>${esc(k)}:</dt><dd>${esc(v)}</dd>`).join("")}</dl>
+    </div>`;
 
-  const payment =
-    d.issuerIban || d.issuerBankName
-      ? `<section class="pay">
-      <h3>Payment</h3>
-      <dl>
-        ${d.issuerBankName ? `<dt>Bank</dt><dd>${esc(d.issuerBankName)}</dd>` : ""}
-        ${d.issuerIban ? `<dt>IBAN</dt><dd class="mono">${esc(d.issuerIban)}</dd>` : ""}
-        ${d.issuerBic ? `<dt>BIC</dt><dd class="mono">${esc(d.issuerBic)}</dd>` : ""}
-        ${d.number ? `<dt>Reference</dt><dd class="mono">${esc(d.number)}</dd>` : ""}
-      </dl>
-    </section>`
-      : "";
+  const row = (l: InvoiceDocLine, i: number) =>
+    `<tr><td>${i + 1}</td><td>${esc(l.description)}</td><td>${esc(w.unit)}</td><td class="num">1</td><td class="num">${esc(m(l.netMinor))}</td>${
+      showVat ? `<td class="num">${esc(`${d.vatRatePct}%`)}</td>` : ""
+    }<td class="num">${esc(m(l.netMinor))}</td></tr>`;
 
-  return `<article class="doc">
+  return `<article class="doc" lang="${lang}">
   <header>
     <div class="issuer">
       <div class="name">${esc(d.issuerName ?? "—")}</div>
-      ${d.issuerAddress ? `<div>${esc(d.issuerAddress)}</div>` : ""}
-      ${d.issuerVatId ? `<div>VAT ${esc(d.issuerVatId)}</div>` : ""}
-      ${d.issuerCompanyId ? `<div>Company no. ${esc(d.issuerCompanyId)}</div>` : ""}
-      ${d.issuerEmail ? `<div>${esc(d.issuerEmail)}</div>` : ""}
     </div>
     <div class="meta">
-      <div class="title">Invoice</div>
-      <div class="number mono">${esc(d.number ?? "— not issued —")}</div>
-      <dl>
-        <dt>Issued</dt><dd class="mono">${esc(day(d.issuedAt))}</dd>
-        <dt>Due</dt><dd class="mono">${esc(day(d.dueDate))}</dd>
-        <dt>Period</dt><dd class="mono">${esc(d.period)}</dd>
-      </dl>
+      <div class="copy">${esc(w.copy)}</div>
+      <div class="title">${esc(w.title)}</div>
+      <div class="number mono">${esc(w.no)}: ${esc(d.number ?? w.notIssued)}</div>
+      <div class="due-label">${esc(d.paid ? w.paidTotal : w.due)}:</div>
+      <div class="due mono">${esc(m(d.grossMinor))}</div>
     </div>
   </header>
 
-  <section class="billto">
-    <h3>Bill to</h3>
-    <div class="name">${esc(d.buyerName ?? "—")}</div>
-    ${d.buyerAttention ? `<div>FAO ${esc(d.buyerAttention)}</div>` : ""}
-    ${d.buyerAddress ? `<div>${esc(d.buyerAddress)}</div>` : ""}
-    ${d.buyerVatId ? `<div>VAT ${esc(d.buyerVatId)}</div>` : ""}
-    ${d.buyerCompanyId ? `<div>Company no. ${esc(d.buyerCompanyId)}</div>` : ""}
+  <section class="parties">
+    ${party(w.buyer, [
+      [w.company, d.buyerName], [w.companyId, d.buyerCompanyId], [w.vatId, d.buyerVatId],
+      [w.address, d.buyerAddress], [w.rep, d.buyerRepresentative], [w.attention, d.buyerAttention],
+    ])}
+    ${party(w.supplier, [
+      [w.company, d.issuerName], [w.companyId, d.issuerCompanyId], [w.vatId, d.issuerVatId],
+      [w.address, d.issuerAddress], [w.rep, d.issuerRepresentative],
+    ])}
   </section>
 
   <table class="lines">
-    <thead><tr><th>Description</th><th class="num">Amount</th></tr></thead>
+    <thead><tr><th>${esc(w.colNo)}</th><th>${esc(w.colItem)}</th><th>${esc(w.colUnit)}</th><th class="num">${esc(w.colQty)}</th><th class="num">${esc(w.colPrice)}</th>${
+      showVat ? `<th class="num">${esc(w.colVat)}</th>` : ""
+    }<th class="num">${esc(w.colTotal)}</th></tr></thead>
     <tbody>${lines.map(row).join("")}</tbody>
   </table>
 
   <div class="totals">
     <dl>
-      <dt>Subtotal (excl. VAT)</dt><dd class="num">${esc(money(d.netMinor, cur))}</dd>
+      <dt>${esc(w.base)}</dt><dd class="num">${esc(m(d.netMinor))}</dd>
       ${
         /*
          * A supply on which VAT MAY NOT BE STATED gets no VAT line — not a line reading 0%.
          *
          * Under чл. 113, ал. 9 ЗДДС a person registered only under чл. 97а is prohibited from
-         * stating VAT in an invoice, and "VAT 0.00" states it. The legal ground still prints, as
-         * `d.vatNote`, immediately below the totals — which is what makes the omission correct
-         * rather than an omission.
+         * stating VAT in an invoice, and "VAT 0.00" states it. The legal ground still prints, as the
+         * VAT basis below — which is what makes the omission correct rather than an omission.
          */
-        suppressesVatLine(d.vatTreatment)
-          ? ""
-          : `<dt>${esc(vatLineLabel(d.vatTreatment, d.vatRatePct))}</dt><dd class="num">${esc(money(d.taxMinor, cur))}</dd>`
+        showVat ? `<dt>${esc(`${w.vat} (${d.vatRatePct}%)`)}</dt><dd class="num">${esc(m(d.taxMinor))}</dd>` : ""
       }
-      <dt class="grand">${d.paid ? "Total paid" : "Total due"}</dt><dd class="num grand">${esc(money(d.grossMinor, cur))}</dd>
+      <dt class="grand">${esc(d.paid ? w.paidTotal : w.total)}</dt><dd class="num grand">${esc(m(d.grossMinor))}</dd>
     </dl>
   </div>
 
   ${
     /*
-     * A paid invoice has to LOOK paid.
-     *
-     * Without this the document is byte-identical before and after payment, which made the receipt
-     * email attach the same bill a second time — reading to a customer as "we are asking again".
-     * The reference is what reconciles this document against their card statement, so it is printed
-     * rather than kept on a screen only we can see.
+     * A paid invoice has to LOOK paid. Without this the document is byte-identical before and after
+     * payment, which made the receipt email attach the same bill a second time.
      */
     d.paid
-      ? `<div class="paid"><span class="mark">Paid</span>
+      ? `<div class="paid"><span class="mark">${esc(w.paid)}</span>
 <span>${esc(d.paid.on)}${d.paid.via ? ` · ${esc(d.paid.via)}` : ""}${d.paid.reference ? ` · ${esc(d.paid.reference)}` : ""}</span></div>`
       : ""
   }
 
-  ${d.vatNote ? `<p class="note">${esc(d.vatNote)}</p>` : ""}
-  ${payment}
+  <section class="facts">
+    <dl>
+      <dt>${esc(w.words)}:</dt><dd>${esc(amountInWords(d.grossMinor, cur, lang))}</dd>
+      <dt>${esc(w.method)}:</dt><dd>${esc(d.paid?.via === "Card" ? w.methodCard : w.methodBank)}</dd>
+      ${
+        d.issuerIban || d.issuerBankName
+          ? `<dt>${esc(w.bank)}:</dt><dd>${[
+              d.issuerBankName ? esc(d.issuerBankName) : "",
+              d.issuerBic ? `BIC: <span class="mono">${esc(d.issuerBic)}</span>` : "",
+              d.issuerIban ? `IBAN: <span class="mono">${esc(d.issuerIban)}</span>` : "",
+            ].filter(Boolean).join("<br>")}</dd>`
+          : ""
+      }
+    </dl>
+    <dl>
+      <dt>${esc(w.issued)}:</dt><dd class="mono">${esc(docDay(d.issuedAt, lang))}</dd>
+      <dt>${esc(w.taxEvent)}:</dt><dd class="mono">${esc(docDay(d.issuedAt, lang))}</dd>
+      ${d.dueDate ? `<dt>${esc(w.dueDate)}:</dt><dd class="mono">${esc(docDay(d.dueDate, lang))}</dd>` : ""}
+      ${d.issuePlace ? `<dt>${esc(w.place)}:</dt><dd>${esc(d.issuePlace)}</dd>` : ""}
+      <dt>${esc(w.period)}:</dt><dd class="mono">${esc(d.period)}</dd>
+      ${noteFor(d.vatNote, lang) ? `<dt>${esc(w.basis)}:</dt><dd>${esc(noteFor(d.vatNote, lang))}</dd>` : ""}
+    </dl>
+  </section>
+
+  <section class="sign">
+    <div><span>${esc(w.signBuyer)}:</span><strong>${esc(d.buyerRepresentative ?? "")}</strong><em>${esc(w.signature)}: ..............................</em></div>
+    <div><span>${esc(w.signIssuer)}:</span><strong>${esc(d.issuerRepresentative ?? "")}</strong><em>${esc(w.signature)}: ..............................</em></div>
+  </section>
 
   <footer>
+    <div>${esc(w.legal)}</div>
     ${d.footerNote ? `<div>${esc(d.footerNote)}</div>` : ""}
-    <div>All amounts are exclusive of VAT unless stated otherwise.</div>
   </footer>
 </article>`;
 }
@@ -231,6 +312,25 @@ export const INVOICE_DOC_CSS = `
 .doc .pay dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 16px; margin: 0; font-size: 12px; }
 .doc .pay dt { color: #6b7486; }
 .doc .pay dd { margin: 0; font-weight: 500; }
+.doc header .meta .copy { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8a94a6; }
+.doc header .meta .due-label { margin-top: 14px; font-size: 11.5px; font-weight: 700; color: #414c60; }
+.doc header .meta .due { font-size: 24px; font-weight: 800; color: #1f6fd1; letter-spacing: -.01em; }
+.doc .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; padding: 22px 0; }
+.doc .parties h3 { color: #1f6fd1; font-size: 12px; letter-spacing: .02em; text-transform: none; }
+.doc .parties dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; font-size: 12.5px; }
+.doc .parties dt { color: #6b7486; font-size: 11px; padding-top: 1px; }
+.doc .parties dd { margin: 0; font-weight: 600; color: #1c2434; }
+.doc table.lines th, .doc table.lines td { padding-left: 6px; padding-right: 6px; }
+.doc table.lines thead th { background: #1f6fd1; color: #fff; border: 0; white-space: nowrap; }
+.doc .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 26px; }
+.doc .facts dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: 12.5px; align-content: start; }
+.doc .facts dt { font-weight: 700; color: #1c2434; }
+.doc .facts dd { margin: 0; color: #414c60; }
+.doc .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 30px; font-size: 12px; }
+.doc .sign div { display: flex; flex-direction: column; gap: 2px; }
+.doc .sign span { color: #6b7486; font-size: 11px; }
+.doc .sign em { font-style: normal; color: #8a94a6; font-size: 11px; margin-top: 6px; }
+@media (max-width: 560px) { .doc { padding: 22px; } .doc .parties, .doc .facts, .doc .sign { grid-template-columns: 1fr; } .doc header { flex-direction: column; gap: 14px; } .doc header .meta { text-align: left; } .doc table.lines { font-size: 12px; } }
 .doc footer { margin-top: 26px; border-top: 1px solid #e4e7ec; padding-top: 16px; font-size: 11px; color: #8a94a6; }
 @media print {
   .doc { border: 0; border-radius: 0; padding: 0; max-width: none; }

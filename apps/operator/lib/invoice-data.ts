@@ -26,6 +26,7 @@ export function invoiceDocData(
      * A paid invoice is a different document to file, and it is the one an accountant wants.
      */
     status?: string; paidAt?: Date | null; paidVia?: string | null; paidReference?: string | null;
+    language?: string | null; issuerRepresentative?: string | null; buyerRepresentative?: string | null; issuePlace?: string | null;
   },
   ctx: {
     tenantName: string | null;
@@ -37,10 +38,12 @@ export function invoiceDocData(
       city: string | null; cityLatin: string | null;
       postCode: string | null; country: string;
       iban: string | null; bic: string | null; bankName: string | null; footerNote: string | null;
+      representative?: string | null;
     } | null;
     billing: {
       legalName: string; vatId: string | null; companyId: string | null; attention: string | null;
       addressLine: string | null; city: string | null; postCode: string | null; country: string | null;
+      representative?: string | null;
     } | null;
   },
 ): InvoiceDocData {
@@ -88,6 +91,14 @@ export function invoiceDocData(
     vatTreatment: invoice.vatTreatment,
     vatNote: invoice.vatNote,
     footerNote: ctx.company?.footerNote ?? null,
+    // Issued: what was frozen. A draft: what issuing would freeze now — Bulgarian for a buyer we
+    // write to in Cyrillic, English otherwise (the same rule as the issuer identity above).
+    language: (invoice.language === "bg" || invoice.language === "en")
+      ? invoice.language
+      : previewIssuer?.script === "cyrillic" ? "bg" : "en",
+    issuerRepresentative: invoice.issuerRepresentative ?? ctx.company?.representative ?? null,
+    buyerRepresentative: invoice.buyerRepresentative ?? ctx.billing?.representative ?? null,
+    issuePlace: invoice.issuePlace ?? previewIssuer?.city ?? null,
     paid:
       invoice.status === "paid" && invoice.paidAt
         ? {

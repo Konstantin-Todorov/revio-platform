@@ -20,7 +20,11 @@ export function middleware(req: NextRequest) {
     // hotel owner who has just paid; they have no operator login and never will, so bouncing them
     // to /login after taking their money would read as the payment having gone wrong. The page
     // shows static copy and looks nothing up, so there is nothing on it to protect.
-    pathname === "/paid";
+    pathname === "/paid" ||
+    // An invoice's own page — the link in every invoice email. Reached by an unguessable token and
+    // showing only that one invoice: the customer who received it has no operator login, and the
+    // page is how they pay, download the document, or read our bank details (2026-09-29).
+    pathname.startsWith("/pay/");
   const isLogin = pathname === "/login";
   const hasSession = req.cookies.has(SESSION_COOKIE);
 

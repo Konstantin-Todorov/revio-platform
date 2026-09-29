@@ -6,6 +6,7 @@ import {
   monthlyPriceMinor, priceBreakdown, type Entitlements,
 } from "./pricing";
 import { directUsageByTenant, periodRange } from "./direct-usage";
+import { invoiceLines, type InvoiceLine } from "./invoice-lines";
 import {
   firstBillableDay, proratedMinor, prorationFor, prorationNote, type Proration,
 } from "@revio/core";
@@ -43,6 +44,64 @@ function describe(
     parts.push(`RevioDirect ${DIRECT_BOOKING_FEE_PCT}% on ${usage.bookings} booking${usage.bookings === 1 ? "" : "s"}`);
   }
   return parts.join(" · ");
+}
+
+/**
+ * What one client owes for one period — the amount, the one-line summary, and the invoice lines.
+ *
+ * ⚠️ ONE computation for the draft and for the issued document.
+ *
+ * The draft priced a month with proration, trials excluded and the RevioDirect fee; issuing
+ * re-derived the lines from the bare price list — no proration, no trial exclusion, no usage — and
+ * refused whenever they differed ("the price list has changed since this draft"). So any client in
+ * their first month, mid-trial or with a single direct booking could not be invoiced at all, and
+ * automatic invoicing would have stopped on exactly the clients it exists for (found 2026-09-29).
+ * Now both ask this, and the lines always sum to the amount.
+ */
+export async function billingFor(
+  t: { id: string; plan: string; hasChannelManager: boolean; hasReservation: boolean; hasPms: boolean; billingStartsAt: Date | null },
+  period: string,
+  lang: "bg" | "en" = "en",
+  ctx?: {
+    usage?: { revenueMinor: number; bookings: number } | undefined;
+    trialProducts?: string[];
+    convertedEnd?: Date | null;
+  },
+): Promise<{ amountMinor: number; lineItems: string; lines: InvoiceLine[] }> {
+  const { from, to } = periodRange(period);
+  const trialProducts = ctx?.trialProducts ?? (await prisma.productTrial.findMany({
+    where: { tenantId: t.id, endedAt: null }, select: { product: true },
+  })).map((x) => x.product);
+  const convertedEnd = ctx && "convertedEnd" in ctx ? ctx.convertedEnd ?? null : (await prisma.productTrial.findFirst({
+    where: { tenantId: t.id, outcome: "converted", endedAt: { not: null } }, orderBy: { endedAt: "desc" }, select: { endedAt: true },
+  }))?.endedAt ?? null;
+
+  const held: Entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
+  const ent = billableEntitlements(held, trialProducts);
+  const firstMonth = t.billingStartsAt !== null && t.billingStartsAt.toISOString().slice(0, 7) === period;
+  const joined = firstMonth ? firstBillableDay(t.billingStartsAt, convertedEnd) : null;
+  const proration = prorationFor(period, joined);
+  const usage = ctx && "usage" in ctx && !(proration && joined && joined > from)
+    ? ctx.usage
+    : proration && joined && joined > from
+      ? (await directUsageByTenant(joined, to)).get(t.id)
+      : (await directUsageByTenant(from, to)).get(t.id);
+  const usageFeeMinor = usage ? directBookingFeeMinor(usage.revenueMinor) : 0;
+  const subscriptionMinor = proratedMinor(monthlyPriceMinor(t.plan, ent), proration);
+
+  // Subscription lines scaled to the prorated total, the remainder on the first line so they sum exactly.
+  const base = invoiceLines(t.plan, ent, undefined, lang);
+  const baseSum = base.reduce((a, l) => a + l.netMinor, 0);
+  const scaled = base.map((l) => ({ ...l, netMinor: baseSum ? Math.round((l.netMinor * subscriptionMinor) / baseSum) : 0 }));
+  if (scaled.length) scaled[0]!.netMinor += subscriptionMinor - scaled.reduce((a, l) => a + l.netMinor, 0);
+  const note = proration && proration.billedDays < proration.totalDays && proration.billedDays > 0
+    ? (lang === "bg" ? ` (пропорционално: ${proration.billedDays} от ${proration.totalDays} дни, от ${proration.from.split("-").reverse().join(".")} г.)` : ` (${prorationNote(proration)})`)
+    : "";
+  const lines: InvoiceLine[] = [
+    ...scaled.filter((l) => l.netMinor !== 0).map((l) => ({ ...l, description: l.description + note })),
+    ...(usageFeeMinor > 0 ? invoiceLines(t.plan, ent, usage, lang).slice(base.length) : []),
+  ];
+  return { amountMinor: subscriptionMinor + usageFeeMinor, lineItems: describe(t.plan, ent, usage, proration), lines };
 }
 
 /**
@@ -162,52 +221,19 @@ export async function runInvoiceGeneration(): Promise<{ period: string; created:
      */
     if (!isBillablePeriod(period, t.billingStartsAt)) continue;
 
-    // What they hold, then what they actually pay for. A product mid-trial is the difference.
-    const held: Entitlements = { channelManager: t.hasChannelManager, reservation: t.hasReservation, pms: t.hasPms };
-    const ent = billableEntitlements(held, trialsByTenant.get(t.id) ?? []);
-
-    /*
-     * The joining month is charged pro rata; every month after it is a full month.
-     *
-     * This is the shape SiteMinder and Little Hotelier both use — calendar-month invoicing with the
-     * remainder of the joining month prorated — and it is the only one that keeps "30 days free"
-     * literally true without giving away the rest of the month.
-     */
-    /*
-     * ⚠️ ONLY the tenant's FIRST billable month is prorated. Their first, not each product's.
-     *
-     * `billingStartsAt` falling inside this period is what "this is the month they joined" means.
-     * Without that condition a hotel paying for RevioLink since March, converting a RevioPMS trial
-     * on 20 September, would have its WHOLE September invoice scaled to 11/30 — RevioLink included,
-     * which they have paid full price for all year. Proration is for the month somebody starts
-     * paying us, not for every month a trial happens to end in.
-     *
-     * Adding a product mid-month therefore costs a full month, which is the ordinary SaaS
-     * convention for an upgrade and the direction that does not quietly give away revenue.
-     */
-    const firstMonth = t.billingStartsAt !== null && t.billingStartsAt.toISOString().slice(0, 7) === period;
-    const joined = firstMonth ? firstBillableDay(t.billingStartsAt, convertedEndByTenant.get(t.id) ?? null) : null;
-    const proration = prorationFor(period, joined);
-
-    /*
-     * ⚠️ Usage is narrowed by DATE, never scaled.
-     *
-     * The 2% is on bookings our engine actually produced, so multiplying it by 11/30 would charge a
-     * share of real bookings instead of the real bookings. Bookings taken before they started
-     * paying — during the free trial — are simply not counted.
-     */
-    const usage = proration && joined && joined > from
-      ? (await directUsageByTenant(joined, to)).get(t.id)
-      : usageByTenant.get(t.id);
-    const usageFeeMinor = usage ? directBookingFeeMinor(usage.revenueMinor) : 0;
-    const amountMinor = proratedMinor(monthlyPriceMinor(t.plan, ent), proration) + usageFeeMinor;
+    // The one computation — see `billingFor`. Batch-read context passed in, so the run stays one
+    // query per kind rather than one per tenant.
+    const { amountMinor, lineItems } = await billingFor(t, period, "en", {
+      usage: usageByTenant.get(t.id),
+      trialProducts: trialsByTenant.get(t.id) ?? [],
+      convertedEnd: convertedEndByTenant.get(t.id) ?? null,
+    });
 
     /*
      * `<= 0` and not `=== 0`: a client on no products who nonetheless took direct bookings still
      * owes the usage fee, and the old guard would have skipped them entirely.
      */
     if (amountMinor <= 0) continue;
-    const lineItems = describe(t.plan, ent, usage, proration);
     const exists = await prisma.invoice.findUnique({ where: { tenantId_period: { tenantId: t.id, period } } });
 
     if (!exists) {

@@ -8,10 +8,7 @@ import { getOperatorSession } from "./session";
 import { checkStripeKey } from "./stripe-check";
 import { readStripeSecret, readStripeWebhookSecret, activeStripeMode } from "./integrations";
 import { createCheckoutSession, isLinkLive } from "./stripe-checkout";
-import { sendEmail } from "@revio/email";
-import { invoicePaymentRequestEmail } from "./invoice-emails";
-import { invoiceDocData } from "./invoice-data";
-import { invoiceFileHtml, invoiceFileName } from "./invoice-html";
+import { sendInvoiceMail } from "./invoice-mailer";
 import { isStripeMode, planKeyEdit, validateSecretKey, validatePublishableKey, validateWebhookSecret } from "./stripe-key";
 import { isVatRegistration } from "./vat";
 
@@ -453,57 +450,18 @@ export async function emailInvoiceToCustomer(fd: FormData): Promise<void> {
     return flashError("Issue this invoice first — an email about a draft is an email about a number that can still change.");
   }
 
-  const [tenant, billing, company] = await Promise.all([
-    prisma.tenant.findUnique({ where: { id: invoice.tenantId }, select: { name: true } }),
-    prisma.clientBilling.findUnique({ where: { tenantId: invoice.tenantId } }),
-    prisma.operatorCompany.findUnique({ where: { id: "singleton" } }),
-  ]);
-
-  const to = billing?.billingEmail?.trim();
-  if (!to) {
-    // Naming the screen matters: the alternative is an operator hunting for where a billing email
-    // lives while an invoice sits unsent.
-    return flashError(`No billing email for ${tenant?.name ?? "this client"}. Add one on their client page, under Billing.`);
-  }
-
-  const owed = invoice.grossMinor ?? invoice.amountMinor;
-  const amount = new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.currency }).format(owed / 100);
-  const linkLive = isLinkLive(invoice.stripeCheckoutExpires);
-
-  const mail = invoicePaymentRequestEmail({
-    number: invoice.number,
-    amount,
-    customerName: billing?.legalName ?? tenant?.name ?? "there",
-    dueDate: invoice.dueDate ? invoice.dueDate.toLocaleDateString("en-GB") : null,
-    payUrl: linkLive ? invoice.stripeCheckoutUrl : null,
-    payLinkExpires: linkLive && invoice.stripeCheckoutExpires ? invoice.stripeCheckoutExpires.toLocaleString("en-GB") : null,
-    iban: company?.iban ?? null,
-    bankName: company?.bankName ?? null,
-    sandbox: invoice.stripeMode === "test",
-  });
-
-  const doc = invoiceDocData(invoice, { tenantName: tenant?.name ?? null, company: null, billing });
-  const result = await sendEmail({
-    to: [to],
-    subject: mail.subject,
-    text: mail.text,
-    html: mail.html,
-    attachments: [{ filename: invoiceFileName(doc), content: invoiceFileHtml(doc) }],
-  });
-
+  // One path for this button and the monthly job — see `invoice-mailer`. The letter is in the
+  // invoice's language and links to its own page, which never expires.
+  const result = await sendInvoiceMail(invoice.id, "request");
   if (!result.ok) {
-    // A mail that did not go must never look like one that did — this is the whole reason the
-    // transport returns a result instead of swallowing failures.
-    return flashError(`The email could not be sent: ${result.error ?? "unknown error"}. Nothing has changed on the invoice.`);
+    // A mail that did not go must never look like one that did.
+    return flashError(result.code === "send_failed" ? `The email could not be sent: ${result.error}. Nothing has changed on the invoice.` : result.error);
   }
-
   await setFlash(
     "success",
     result.mode === "mock"
-      ? `Composed for ${to} — but RESEND_API_KEY is not set on this service, so it was written to the log instead of sent.`
-      : linkLive
-        ? `Sent to ${to}, with the invoice attached and a card link${invoice.stripeMode === "test" ? " (sandbox — it charges nothing)" : ""}.`
-        : `Sent to ${to} with the invoice attached. No card link was included — create one first if you want them to be able to pay by card.`,
+      ? `Composed for ${result.to} — but RESEND_API_KEY is not set on this service, so it was written to the log instead of sent.`
+      : `Sent to ${result.to}, with the invoice attached and a link to its own page (card, bank details, download).`,
   );
   revalidatePath(`/invoice/${invoice.id}`);
   revalidatePath("/billing");

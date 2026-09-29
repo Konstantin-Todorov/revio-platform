@@ -126,6 +126,7 @@ export const billingStrings: Translations<BillingStrings> = {
         postCode: "Post code",
         billingEmail: "Billing email",
         attention: "For the attention of",
+        representative: "Represented by (МОЛ)",
       },
       hints: {
         legalName: "As registered, which may differ from the name guests know you by",
@@ -134,6 +135,7 @@ export const billingStrings: Translations<BillingStrings> = {
         country: "Two-letter code — it decides whether VAT applies",
         billingEmail: "Where invoices are sent. Blank sends them to the account owner",
         attention: "Optional — a name or a department, so it reaches the right desk",
+        representative: "Optional — the person who represents the company, printed on the invoice",
       },
       problems: {
         legalNameRequired:
@@ -213,6 +215,7 @@ export const billingStrings: Translations<BillingStrings> = {
         postCode: "Пощенски код",
         billingEmail: "Имейл за фактури",
         attention: "На вниманието на",
+        representative: "МОЛ",
       },
       hints: {
         legalName: "Както е регистрирана — може да се различава от името, с което Ви познават гостите",
@@ -221,6 +224,7 @@ export const billingStrings: Translations<BillingStrings> = {
         country: "Двубуквен код — от него зависи дали се начислява ДДС",
         billingEmail: "Къде се изпращат фактурите. Ако е празно — на собственика на профила",
         attention: "По избор — име или отдел, за да стигне до правилния човек",
+        representative: "По избор — материално отговорното лице, печата се във фактурата",
       },
       problems: {
         legalNameRequired:

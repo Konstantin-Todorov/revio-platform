@@ -65,6 +65,8 @@ export async function saveCompany(_prev: ActionResult | null, fd: FormData): Pro
 
     paymentTermsDays: int(fd, "paymentTermsDays", 14),
     footerNote: opt(fd, "footerNote"),
+    representative: opt(fd, "representative"),
+    autoSendInvoices: fd.get("autoSendInvoices") != null,
   };
 
   /*
@@ -115,6 +117,7 @@ export async function saveClientBilling(_prev: ActionResult | null, fd: FormData
     country: c,
     billingEmail: opt(fd, "billingEmail"),
     attention: opt(fd, "attention"),
+    representative: opt(fd, "representative"),
     notes: opt(fd, "notes"),
   };
 

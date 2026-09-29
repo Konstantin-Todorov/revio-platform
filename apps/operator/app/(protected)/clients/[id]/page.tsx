@@ -725,6 +725,7 @@ export default async function ClientDetailPage({
               country: billing?.country ?? "",
               billingEmail: billing?.billingEmail ?? "",
               attention: billing?.attention ?? "",
+              representative: billing?.representative ?? "",
               notes: billing?.notes ?? "",
             }}
           />

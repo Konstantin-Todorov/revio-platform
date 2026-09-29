@@ -26,6 +26,7 @@ export interface CompanyValues {
   email: string; phone: string; website: string;
   iban: string; bic: string; bankName: string;
   standardVatPct: number; invoiceNumberStart: string; paymentTermsDays: number; footerNote: string;
+  representative: string; autoSendInvoices: boolean;
 }
 
 export function CompanyForm({ values, canEdit }: { values: CompanyValues; canEdit: boolean }) {
@@ -154,10 +155,23 @@ export function CompanyForm({ values, canEdit }: { values: CompanyValues; canEdi
               <label className={label} htmlFor="paymentTermsDays">Payment terms (days)</label>
               <input id="paymentTermsDays" name="paymentTermsDays" type="number" min={0} max={365} defaultValue={values.paymentTermsDays} className={input} />
             </div>
-            <div className="col-span-3">
+            <div>
+              <label className={label} htmlFor="representative">Represented by (МОЛ)</label>
+              <input id="representative" name="representative" defaultValue={values.representative} className={input} placeholder="Константин Тодоров" />
+              <p className={hint}>Printed as &ldquo;Съставил&rdquo; on every invoice.</p>
+            </div>
+            <div className="col-span-2">
               <label className={label} htmlFor="footerNote">Invoice footer</label>
               <input id="footerNote" name="footerNote" defaultValue={values.footerNote} className={input} placeholder="Thank you for your business." />
             </div>
+            <label className="col-span-3 flex items-start gap-2.5 rounded-md border border-surface-border px-3 py-2.5">
+              <input type="checkbox" name="autoSendInvoices" defaultChecked={values.autoSendInvoices} className="mt-0.5 h-4 w-4" />
+              <span className="text-[12.5px] leading-snug text-ink-700">
+                <span className="font-semibold text-ink-900">Send invoices automatically</span> — each month every paying
+                client&rsquo;s invoice is issued and emailed in their language, with a link to pay; reminders follow
+                3 days before the due date, and 1 and 7 days after it. Only while payments are live.
+              </span>
+            </label>
           </div>
         </div>
       </fieldset>

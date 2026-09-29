@@ -185,6 +185,7 @@ export interface HotelBillingIdentity {
   postCode: string;
   billingEmail: string;
   attention: string;
+  representative: string;
   /** When the hotel last saved it themselves. Null when only we have ever touched it. */
   selfServedAt: Date | null;
 }
@@ -194,7 +195,7 @@ export async function hotelBillingIdentity(tenantId: string): Promise<HotelBilli
     where: { tenantId },
     select: {
       legalName: true, country: true, companyId: true, vatId: true,
-      addressLine: true, city: true, postCode: true, billingEmail: true, attention: true,
+      addressLine: true, city: true, postCode: true, billingEmail: true, attention: true, representative: true,
       selfServedAt: true,
     },
   });
@@ -210,6 +211,7 @@ export async function hotelBillingIdentity(tenantId: string): Promise<HotelBilli
     postCode: r.postCode ?? "",
     billingEmail: r.billingEmail ?? "",
     attention: r.attention ?? "",
+    representative: r.representative ?? "",
     selfServedAt: r.selfServedAt,
   };
 }
@@ -240,6 +242,7 @@ export async function saveHotelBillingIdentity(args: {
     postCode: v.postCode.trim() || null,
     billingEmail: v.billingEmail.trim() || null,
     attention: v.attention.trim() || null,
+    representative: (v.representative ?? "").trim() || null,
     // Who last touched it, so the operator can tell the hotel's own answer from our transcription of
     // a phone call — and so a client page can stop asking us to fill in what they have filled in.
     selfServedAt: new Date(),

@@ -4,7 +4,7 @@ import { verifyAgainstModes, readCheckoutCompleted, readRefundOrDispute, matches
 import { sendEmail } from "@revio/email";
 import { invoicePaidEmail } from "@/lib/invoice-emails";
 import { invoiceDocData } from "@/lib/invoice-data";
-import { invoiceFileHtml, invoiceFileName } from "@/lib/invoice-html";
+import { docMoney, invoiceFileHtml, invoiceFileName } from "@/lib/invoice-html";
 
 /**
  * Where Stripe tells us an invoice has been paid.
@@ -299,12 +299,15 @@ async function sendPaidReceipt(invoiceId: string): Promise<void> {
   if (!to) return;
 
   const owed = invoice.grossMinor ?? invoice.amountMinor;
+  // In the invoice's own language, like the request and the reminders before it.
+  const lang = invoice.language === "bg" ? "bg" : "en";
   const mail = invoicePaidEmail({
     number: invoice.number,
-    amount: new Intl.NumberFormat("en-GB", { style: "currency", currency: invoice.currency }).format(owed / 100),
+    amount: docMoney(owed, invoice.currency, lang),
     customerName: billing?.legalName ?? tenant?.name ?? "there",
-    paidOn: (invoice.paidAt ?? new Date()).toLocaleDateString("en-GB"),
+    paidOn: (invoice.paidAt ?? new Date()).toLocaleDateString(lang === "bg" ? "bg-BG" : "en-GB", { timeZone: "UTC" }),
     sandbox: invoice.stripeMode === "test",
+    lang,
   });
 
   const doc = invoiceDocData(invoice, { tenantName: tenant?.name ?? null, company: null, billing });

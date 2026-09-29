@@ -57,6 +57,8 @@ export default async function CompanySettingsPage() {
           invoiceNumberStart: String(company?.invoiceNumberStart ?? 1000000000n),
           paymentTermsDays: company?.paymentTermsDays ?? 14,
           footerNote: company?.footerNote ?? "",
+          representative: company?.representative ?? "",
+          autoSendInvoices: company?.autoSendInvoices ?? true,
         }}
       />
     </Card>

@@ -43,6 +43,8 @@ export interface BillingIdentity {
   billingEmail: string;
   /** "Accounts payable", a finance manager's name. Optional, and it saves a forwarded email. */
   attention: string;
+  /** МОЛ — who represents the company. Optional; a Bulgarian invoice prints it under "Получател". */
+  representative: string;
 }
 
 export type BillingIdentityField = keyof BillingIdentity;
@@ -218,4 +220,5 @@ export const FIELD_LABEL: Record<BillingIdentityField, string> = {
   postCode: "Post code",
   billingEmail: "Billing email",
   attention: "For the attention of",
+  representative: "Represented by (МОЛ)",
 };

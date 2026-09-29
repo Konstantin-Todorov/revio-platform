@@ -15,6 +15,7 @@ import {
  */
 
 const good = (o: Partial<BillingIdentity> = {}): BillingIdentity => ({
+  representative: "",
   legalName: "Кабакум Бийч Резиденс ЕООД",
   country: "BG",
   companyId: "203456789",

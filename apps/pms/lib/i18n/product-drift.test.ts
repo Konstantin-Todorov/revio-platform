@@ -92,7 +92,7 @@ describe("company-details words match core, in English", () => {
 
   it("every problem", () => {
     const blank: BillingIdentity = {
-      legalName: "", country: "", companyId: "", vatId: "", addressLine: "", city: "", postCode: "", billingEmail: "", attention: "",
+      legalName: "", country: "", companyId: "", vatId: "", addressLine: "", city: "", postCode: "", billingEmail: "", attention: "", representative: "",
     };
     const bad: BillingIdentity = { ...blank, legalName: "X", addressLine: "X", city: "X", country: "BG", vatId: "123", billingEmail: "nope" };
     const problems = [

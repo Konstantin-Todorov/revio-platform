@@ -41,13 +41,16 @@ export function invoiceLines(
    * booking page on.
    */
   usage?: { revenueMinor: number; bookings: number },
+  /** The document's language — a Bulgarian invoice describes its lines in Bulgarian. */
+  lang: "bg" | "en" = "en",
 ): InvoiceLine[] {
   const b = priceBreakdown(plan, ent);
   const lines: InvoiceLine[] = [];
-  if (b.platformMinor > 0) lines.push({ description: `Platform fee — ${plan}`, netMinor: b.platformMinor });
-  for (const m of b.modules) lines.push({ description: m.label, netMinor: m.minor });
+  const bg = lang === "bg";
+  if (b.platformMinor > 0) lines.push({ description: bg ? `Абонамент за платформата Revio — план ${plan}` : `Platform fee — ${plan}`, netMinor: b.platformMinor });
+  for (const m of b.modules) lines.push({ description: bg ? `${m.label} — месечен абонамент` : m.label, netMinor: m.minor });
   if (b.discountMinor > 0) {
-    lines.push({ description: `Bundle discount — ${b.discountPct}%`, netMinor: -b.discountMinor });
+    lines.push({ description: bg ? `Отстъпка за пакет — ${b.discountPct}%` : `Bundle discount — ${b.discountPct}%`, netMinor: -b.discountMinor });
   }
 
   /*
@@ -62,9 +65,11 @@ export function invoiceLines(
     const fee = directBookingFeeMinor(usage.revenueMinor);
     if (fee > 0) {
       lines.push({
-        description:
-          `RevioDirect — ${DIRECT_BOOKING_FEE_PCT}% of ${money(usage.revenueMinor)} ` +
-          `across ${usage.bookings} direct booking${usage.bookings === 1 ? "" : "s"}`,
+        description: bg
+          ? `RevioDirect — ${DIRECT_BOOKING_FEE_PCT}% от ${money(usage.revenueMinor)} ` +
+            `за ${usage.bookings} ${usage.bookings === 1 ? "директна резервация" : "директни резервации"}`
+          : `RevioDirect — ${DIRECT_BOOKING_FEE_PCT}% of ${money(usage.revenueMinor)} ` +
+            `across ${usage.bookings} direct booking${usage.bookings === 1 ? "" : "s"}`,
         netMinor: fee,
       });
     }

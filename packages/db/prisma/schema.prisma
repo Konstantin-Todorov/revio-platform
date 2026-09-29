@@ -499,6 +499,26 @@ model Invoice {
   paidById      String?
   paidReference String?
 
+  // --- The letter, and the reminders (2026-09-29) --------------------------
+  /// "bg" | "en" — the language the document and every mail about it are in. Frozen at issue with the
+  /// rest of the snapshot: Bulgarian for a Bulgarian buyer (the Cyrillic identity), English otherwise.
+  language             String?
+  /// МОЛ — the person who represents each company, printed under "Получател" / "Съставил". Snapshots.
+  issuerRepresentative String?
+  buyerRepresentative  String?
+  /// Where the supply is made ("Място на сделката") — our city at issue.
+  issuePlace           String?
+  /// The address of the invoice's own page (`/pay/<token>`): the document, the card button and our
+  /// bank details, reachable without a login. It never expires — a Stripe Checkout link lives 24
+  /// hours, and a link in an email that dies overnight is a customer who concludes we are broken.
+  /// The page makes a fresh Checkout session each time the button is pressed.
+  payToken             String?   @unique
+  /// When the invoice itself was emailed to the customer. Null = never.
+  emailedAt            DateTime?
+  /// Payment reminders sent so far, and when the last went — the schedule reads these.
+  remindersSent        Int       @default(0)
+  lastReminderAt       DateTime?
+
   @@unique([tenantId, period])
   @@index([tenantId])
   /// How a refund finds its invoice: the event names the payment intent, never the session.
@@ -613,6 +633,11 @@ model OperatorCompany {
   /// Free text printed at the foot of every invoice.
   footerNote         String?
   updatedAt          DateTime @updatedAt
+  /// МОЛ — who represents us; printed as "Съставил" on every invoice.
+  representative   String?
+  /// The monthly run issues and emails each paying client's invoice, then reminds before and after
+  /// the due date. Only while payments are LIVE — a test-mode card link must never reach a customer.
+  autoSendInvoices Boolean  @default(true)
 }
 
 /// The invoice counter. One row per independent run of numbers.
@@ -653,6 +678,8 @@ model ClientBilling {
   billingEmail String?
   /// Who the invoice should be addressed to — "Accounts payable", a finance manager's name.
   attention    String?
+  /// МОЛ — the person who represents the company (Bulgarian invoices print it under "Получател").
+  representative String?
   /// ⚠️ OURS, about their finance department. The hotel writes every other field on this row from
   /// its own billing screen; this one is never in that payload. See `saveHotelBillingIdentity`.
   notes        String?

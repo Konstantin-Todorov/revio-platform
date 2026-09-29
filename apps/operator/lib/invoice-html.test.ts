@@ -46,12 +46,13 @@ describe("invoiceBodyHtml", () => {
       ...base, vatRatePct: 0, taxMinor: 0, grossMinor: 14160,
       vatTreatment: "eu_reverse_charge", vatNote: "Reverse charge — Art. 196.",
     });
-    expect(html).toContain("reverse charge");
-    expect(html).toContain("Art. 196");
+    // The rate column says 0%; the ground for it is stated beside the dates, as the law requires.
+    expect(html).toMatch(/VAT basis:<\/dt><dd>Reverse charge — Art\. 196\./);
   });
 
   it("shows a negative line as a negative, not as a stray minus", () => {
     expect(invoiceBodyHtml(base)).toContain("−€35.40");
+    expect(invoiceBodyHtml({ ...base, language: "bg" })).toMatch(/−35,40\s€/);
   });
 
   it("falls back to one line rather than an empty table", () => {
@@ -62,7 +63,8 @@ describe("invoiceBodyHtml", () => {
 
   it("omits the payment block entirely when there are no bank details", () => {
     const html = invoiceBodyHtml({ ...base, issuerIban: null, issuerBic: null, issuerBankName: null });
-    expect(html).not.toContain("Payment");
+    expect(html).not.toContain("Bank details");
+    expect(html).not.toContain("IBAN");
   });
 
   it("labels an unissued draft rather than showing a blank number", () => {

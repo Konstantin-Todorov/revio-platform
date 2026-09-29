@@ -48,6 +48,8 @@ export interface CheckoutInput {
   previousSessionId?: string | null;
   /** Hours the link stays valid. Stripe's own maximum is 24. */
   expiresInHours?: number;
+  /** Where Stripe sends the browser back, under `origin`. Default: the static `/paid` page. */
+  returnPath?: string;
 }
 
 export interface CheckoutSession {
@@ -134,8 +136,10 @@ export async function createCheckoutSession(input: CheckoutInput): Promise<Check
      * URLSearchParams encodes the braces for the request body; Stripe decodes them and stores the
      * placeholder intact, which is the documented behaviour.
      */
-    success_url: `${input.origin}/paid?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${input.origin}/paid?cancelled=1`,
+    success_url: input.returnPath
+      ? `${input.origin}${input.returnPath}?paid=1`
+      : `${input.origin}/paid?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: input.returnPath ? `${input.origin}${input.returnPath}` : `${input.origin}/paid?cancelled=1`,
     expires_at: String(Math.floor(expiresAt.getTime() / 1000)),
   });
   if (input.customerEmail) body.set("customer_email", input.customerEmail);

@@ -22,7 +22,7 @@ const hint = "mt-1 text-[11px] leading-snug text-ink-400";
 export interface ClientBillingValues {
   legalName: string; vatId: string; companyId: string;
   addressLine: string; city: string; postCode: string; country: string;
-  billingEmail: string; attention: string; notes: string;
+  billingEmail: string; attention: string; notes: string; representative: string;
 }
 
 export function ClientBillingForm({
@@ -79,9 +79,13 @@ export function ClientBillingForm({
             <input id="billingEmail" name="billingEmail" type="email" defaultValue={values.billingEmail} className={input} placeholder="accounts@…" />
             <p className={hint}>Where the invoice goes — usually not the owner&rsquo;s personal address.</p>
           </div>
-          <div className="col-span-2">
+          <div>
             <label className={label} htmlFor="attention">For the attention of</label>
             <input id="attention" name="attention" defaultValue={values.attention} className={input} placeholder="Accounts payable" />
+          </div>
+          <div>
+            <label className={label} htmlFor="representative">Represented by (МОЛ)</label>
+            <input id="representative" name="representative" defaultValue={values.representative} className={input} />
           </div>
           <div className="col-span-4">
             <label className={label} htmlFor="notes">Billing notes</label>

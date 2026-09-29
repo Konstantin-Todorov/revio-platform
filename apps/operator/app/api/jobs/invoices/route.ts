@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { JOB, withJobLease } from "@revio/db";
 import { runInvoiceGeneration } from "@/lib/invoice-run";
+import { autoSendInvoices } from "@/lib/invoice-autosend";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,11 @@ export async function POST(req: NextRequest) {
 
   try {
     const lease = await withJobLease(JOB.invoiceRun, 5 * 60_000, async () => {
-      return { ok: true, ...(await runInvoiceGeneration()) };
+      const drafts = await runInvoiceGeneration();
+      // Then the letters — issue, email, remind — only while payments are live. See invoice-autosend.
+      const letters = await autoSendInvoices();
+      for (const s of letters.stuck) console.warn(`[invoice-run] ${s}`);
+      return { ok: true, ...drafts, letters: { state: letters.state, issued: letters.issued, emailed: letters.emailed, reminded: letters.reminded, stuck: letters.stuck.length } };
     });
     if (!lease.ran) {
       return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
