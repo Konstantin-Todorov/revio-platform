@@ -8,6 +8,7 @@ import { createConnectAccount, createOnboardingLink, getConnectStatus } from "@r
 import { syncRealChannels, stayScope } from "@revio/connectivity";
 import { SLUG_MAX_LEN, slugifyPropertyName, slugRejectionReason } from "@revio/booking";
 import { prisma } from "./db";
+import { emailGuestAbout } from "./guest-mail";
 import { getProperty } from "./data";
 import { getSession } from "./session";
 import { logAudit, str } from "./mutation-helpers";
@@ -503,6 +504,9 @@ export async function acceptBookingRequest(reservationId: string): Promise<{ ok:
   await logAudit(property.id, property.tenantId, {
     entity: "Reservation", field: "status", newValue: "confirmed (request accepted)",
   });
+  // The page told the guest "you'll get an email as soon as the hotel confirms" — this is that email.
+  // Never fails the accept: the stay is confirmed either way, and the outcome is in the mail log.
+  await emailGuestAbout(reservationId, "booking_confirmation").catch(() => undefined);
   revalidatePath("/reservations");
   return { ok: true };
 }
@@ -531,6 +535,8 @@ export async function declineBookingRequest(reservationId: string): Promise<{ ok
   await logAudit(property.id, property.tenantId, {
     entity: "Reservation", field: "status", newValue: "cancelled (request declined)",
   });
+  // The guest is waiting on an answer; a decline is one, in writing, in their language.
+  await emailGuestAbout(reservationId, "booking_cancelled").catch(() => undefined);
   // A declined request releases a room that was off sale. Every channel has to hear about that, and
   // hear about it now — a room the hotel just freed is the one most likely to sell tonight.
   try {

@@ -2,7 +2,7 @@ import type { PublicPlanQuote, PublicRoomOption } from "@revio/booking";
 import { BedDouble, ChevronDown, Coffee, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, headlineAmenities } from "@revio/core";
 import { AmenityIcon } from "@revio/ui/amenity-icon";
-import { money } from "@/lib/dates";
+import type { GuestKit } from "@/lib/i18n/kit";
 import { RoomPhoto } from "./RoomPhoto";
 import { RoomDetail, RoomDetailTrigger } from "./RoomDetail";
 
@@ -24,8 +24,10 @@ import { RoomDetail, RoomDetailTrigger } from "./RoomDetail";
  * can go live before its photo shoot and still look finished rather than broken.
  */
 export function RoomOption({
-  option, nights, slug, checkIn, checkOut, guests, mediaUrl,
+  option, nights, slug, checkIn, checkOut, guests, mediaUrl, kit,
 }: {
+  /** The guest's language — words, room-content labels and money. */
+  kit: GuestKit;
   option: PublicRoomOption;
   nights: number;
   slug: string;
@@ -44,6 +46,7 @@ export function RoomOption({
   const cover = option.photos[0];
 
   const headline = headlineAmenities(option.amenities);
+  const { s, room } = kit;
 
   const href = (plan: PublicPlanQuote) =>
     `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
@@ -74,7 +77,7 @@ export function RoomOption({
                 would burn CPU to produce the same bytes. */}
             <RoomPhoto
               src={mediaUrl(cover.thumbKey)}
-              alt={cover.alt || `${option.name} at this hotel`}
+              alt={cover.alt || s.room.photoAlt(option.name)}
             />
             {option.photos.length > 1 && (
               <span
@@ -108,18 +111,18 @@ export function RoomOption({
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span className="chip">
                   <Users size={13} aria-hidden />
-                  Sleeps {option.maxGuests}
+                  {s.room.sleeps(option.maxGuests)}
                 </span>
                 {option.sizeSqm && <span className="chip">{option.sizeSqm} m²</span>}
                 {option.bedSetup && BED_SETUP_BY_KEY[option.bedSetup] && (
                   <span className="chip">
                     <AmenityIcon name={BED_SETUP_ICON_BY_KEY[option.bedSetup]} size={13} />
-                    {BED_SETUP_BY_KEY[option.bedSetup]}
+                    {room.bedSetups[option.bedSetup] ?? BED_SETUP_BY_KEY[option.bedSetup]}
                   </span>
                 )}
                 {rest.length > 0 && (
                   <span className="chip">
-                    {plans.length} rates available
+                    {s.count.rates(plans.length)}
                   </span>
                 )}
               </div>
@@ -140,7 +143,7 @@ export function RoomOption({
                   {headline.map((a) => (
                     <span key={a.key} className="inline-flex items-center gap-1.5">
                       <AmenityIcon name={a.icon} size={14} style={{ color: "hsl(var(--brand-text))" }} />
-                      {a.label}
+                      {room.amenities[a.key] ?? a.label}
                     </span>
                   ))}
                 </div>
@@ -163,7 +166,7 @@ export function RoomOption({
                       alt: p.alt || "",
                     }))}
                   >
-                    <RoomDetailTrigger photoCount={option.photos.length} />
+                    <RoomDetailTrigger label={option.photos.length > 1 ? s.room.detailsWithPhotos(option.photos.length) : s.room.details} />
                   </RoomDetail>
                 </div>
               )}
@@ -175,13 +178,13 @@ export function RoomOption({
                 className="rounded-full px-2.5 py-1 text-[12px] font-bold"
                 style={{ backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}
               >
-                {option.remaining === 1 ? "Last room" : `Only ${option.remaining} left`}
+                {option.remaining === 1 ? s.room.lastRoom : s.room.onlyLeft(option.remaining)}
               </span>
             )}
           </header>
 
           <div className="mt-4">
-            <RateRow plan={best} nights={nights} href={href(best)} highlight={rest.length > 0} />
+            <RateRow plan={best} nights={nights} href={href(best)} highlight={rest.length > 0} kit={kit} />
           </div>
         </div>
       </div>
@@ -207,10 +210,7 @@ export function RoomOption({
             className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-[13px] font-semibold transition-colors hover:bg-[hsl(var(--surface-sunk))] [&::-webkit-details-marker]:hidden"
             style={{ color: "hsl(var(--brand-text))" }}
           >
-            <span>
-              {rest.length} other {rest.length === 1 ? "rate" : "rates"} — breakfast, flexible
-              cancellation
-            </span>
+            <span>{s.room.otherRates(rest.length)}</span>
             <ChevronDown
               size={16}
               aria-hidden
@@ -219,7 +219,7 @@ export function RoomOption({
           </summary>
           {rest.map((plan) => (
             <div key={plan.ratePlanId} className="border-t" style={{ borderColor: "hsl(var(--line))" }}>
-              <RateRow plan={plan} nights={nights} href={href(plan)} />
+              <RateRow plan={plan} nights={nights} href={href(plan)} kit={kit} />
             </div>
           ))}
         </details>
@@ -229,14 +229,16 @@ export function RoomOption({
 }
 
 function RateRow({
-  plan, nights, href, highlight = false,
+  plan, nights, href, highlight = false, kit,
 }: {
+  kit: GuestKit;
   plan: PublicPlanQuote;
   nights: number;
   href: string;
   /** The cheapest rate, when there is something to be cheaper than. */
   highlight?: boolean;
 }) {
+  const { s, money } = kit;
   return (
     <div className="grid grid-cols-1 gap-4 px-5 pb-5 pt-1 sm:grid-cols-[1fr_auto] sm:gap-8">
       <div className="min-w-0">
@@ -245,7 +247,7 @@ function RateRow({
           {highlight && (
             <span className="badge-brand">
               <Sparkles size={11} aria-hidden />
-              Best price
+              {s.room.bestPrice}
             </span>
           )}
         </div>
@@ -275,9 +277,7 @@ function RateRow({
           style={{ backgroundColor: "hsl(var(--surface-sunk))", color: "hsl(var(--ink-soft))" }}
         >
           <div className="flex gap-1.5">
-            <dt>
-              Rooms, {nights} {nights === 1 ? "night" : "nights"}
-            </dt>
+            <dt>{s.room.roomsFor(nights)}</dt>
             <dd className="nums font-semibold">{money(plan.accommodationMinor, plan.currency)}</dd>
           </div>
           {plan.charges.map((c) => (
@@ -293,11 +293,11 @@ function RateRow({
         <div className="text-left sm:text-right">
           <div className="price text-[1.6rem]">{money(plan.totalMinor, plan.currency)}</div>
           <div className="nums mt-1.5 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
-            total · {money(plan.perNightMinor, plan.currency)} a night
+            {s.room.totalPerNight(money(plan.perNightMinor, plan.currency))}
           </div>
         </div>
         <a href={href} className="btn btn-brand shrink-0 sm:w-[9rem]">
-          Select
+          {s.room.select}
         </a>
       </div>
     </div>

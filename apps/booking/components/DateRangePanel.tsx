@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  WEEKDAYS, addDays, fmtDay, fmtDayLong, fmtMonth, monthGrid, nightsBetween, parseISO, todayISO,
-} from "@/lib/dates";
+import { addDays, monthGrid, nightsBetween, parseISO, todayISO } from "@/lib/dates";
+import { useGuestKit } from "@/lib/i18n/use-kit";
 
 /**
  * The date-range calendar.
@@ -34,6 +33,9 @@ export function DateRangePanel({
 }) {
   const today = useMemo(todayISO, []);
   const anchor = checkIn ?? today;
+  const { s: t, fmtDay, fmtMonth } = useGuestKit();
+  const s = t.calendar;
+  const count = t.count;
 
   const [cursor, setCursor] = useState(() => ({
     year: parseISO(anchor).getUTCFullYear(),
@@ -124,7 +126,7 @@ export function DateRangePanel({
           type="button"
           onClick={() => shiftMonths(-1)}
           disabled={!canGoBack}
-          aria-label="Previous month"
+          aria-label={s.prev}
           className="btn btn-ghost h-11 w-11 min-h-0 rounded-full p-0 disabled:opacity-30"
         >
           <ChevronLeft size={18} aria-hidden />
@@ -138,7 +140,7 @@ export function DateRangePanel({
           type="button"
           onClick={() => shiftMonths(1)}
           disabled={!canGoForward}
-          aria-label="Next month"
+          aria-label={s.next}
           className="btn btn-ghost h-11 w-11 min-h-0 rounded-full p-0 disabled:opacity-30"
         >
           <ChevronRight size={18} aria-hidden />
@@ -178,7 +180,7 @@ export function DateRangePanel({
           {checkIn && checkOut ? (
             <>
               <span className="font-semibold" style={{ color: "hsl(var(--ink))" }}>
-                {nights} {nights === 1 ? "night" : "nights"}
+                {count.nights(nights)}
               </span>
               {/* The dates are already on the two filled cells above; repeating them at 375px just
                   wraps the row onto a second line and pushes Done off-centre. */}
@@ -188,15 +190,15 @@ export function DateRangePanel({
               </span>
             </>
           ) : checkIn ? (
-            <>Now choose your check-out</>
+            <>{s.chooseCheckOut}</>
           ) : (
-            <>Choose your check-in date</>
+            <>{s.chooseCheckIn}</>
           )}
         </p>
         <div className="flex items-center gap-1">
           {checkIn && (
             <button type="button" onClick={() => onSelect(null, null)} className="btn btn-ghost px-3 text-[13px]">
-              Clear
+              {s.clear}
             </button>
           )}
           <button
@@ -205,7 +207,7 @@ export function DateRangePanel({
             disabled={!checkIn || !checkOut}
             className="btn btn-brand px-5 text-[13.5px]"
           >
-            Done
+            {s.done}
           </button>
         </div>
       </div>
@@ -232,11 +234,12 @@ function Month({
   const y = year + Math.floor(month / 12);
   const m = ((month % 12) + 12) % 12;
   const cells = monthGrid(y, m);
+  const { weekdays, fmtDayLong } = useGuestKit();
 
   return (
     <div className={className}>
       <div className="grid grid-cols-7 pb-1" aria-hidden>
-        {WEEKDAYS.map((d, i) => (
+        {weekdays.map((d, i) => (
           <span key={i} className="py-1 text-center text-[11px] font-semibold" style={{ color: "hsl(var(--ink-faint))" }}>
             {d}
           </span>

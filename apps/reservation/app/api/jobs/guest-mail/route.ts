@@ -73,7 +73,8 @@ export async function POST(req: NextRequest) {
           const to = r.guest?.email?.trim();
           let outcome: "sent" | "skipped" | "failed" = "skipped";
           if (to) {
-            const locale = property.defaultLanguage || "en";
+            // The guest's own language when they booked direct; the hotel's default otherwise.
+            const locale = r.guestLanguage || property.defaultLanguage || "en";
             const reference = bookingReference(r.id);
             const res = await sendTemplatedEmail(db, {
               propertyId,

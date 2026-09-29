@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { joinWaitlist, type JoinResult } from "@/lib/actions-waitlist";
 import { ActionForm } from "@revio/ui/action-form";
+import { useGuestKit } from "@/lib/i18n/use-kit";
 
 /**
  * "Tell me if a room opens."
@@ -34,6 +35,8 @@ export function WaitlistJoin({
   nights: number;
 }) {
   const [state, action, pending] = useActionState<JoinResult | null, FormData>(joinWaitlist, null);
+  const { s: t } = useGuestKit();
+  const s = t.waitlist;
 
   if (state?.ok) {
     return (
@@ -43,7 +46,7 @@ export function WaitlistJoin({
         role="status"
       >
         <strong className="block text-[14px]" style={{ color: "hsl(var(--brand-text))" }}>
-          You&rsquo;re on the list
+          {s.joinedTitle}
         </strong>
         <span style={{ color: "hsl(var(--ink-soft))" }}>{state.message}</span>
       </div>
@@ -62,25 +65,24 @@ export function WaitlistJoin({
       <input type="hidden" name="guests" value={guests} />
 
       <p className="text-[14px] font-semibold" style={{ color: "hsl(var(--brand-text))" }}>
-        We can tell you if something opens up
+        {s.title}
       </p>
       <p className="mt-0.5 text-[13px]" style={{ color: "hsl(var(--ink-soft))" }}>
-        For {nights === 1 ? "that night" : `those ${nights} nights`}. One email, only if a room
-        actually becomes free.
+        {s.body(nights)}
       </p>
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-        <label className="sr-only" htmlFor="wl-name">Your name</label>
+        <label className="sr-only" htmlFor="wl-name">{s.name}</label>
         <input
           id="wl-name"
           name="name"
           required
           autoComplete="name"
-          placeholder="Your name"
+          placeholder={s.name}
           className="h-10 w-full rounded-[var(--r-sm)] border px-3 text-[14px] outline-none transition-colors focus:border-[hsl(var(--brand))]"
           style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
         />
-        <label className="sr-only" htmlFor="wl-email">Email address</label>
+        <label className="sr-only" htmlFor="wl-email">{s.email}</label>
         <input
           id="wl-email"
           name="email"
@@ -97,7 +99,7 @@ export function WaitlistJoin({
           className="h-10 rounded-[var(--r-sm)] px-4 text-[14px] font-semibold text-white transition-colors disabled:opacity-60"
           style={{ backgroundColor: "hsl(var(--brand))" }}
         >
-          {pending ? "Adding…" : "Tell me"}
+          {pending ? s.adding : s.tellMe}
         </button>
       </div>
 

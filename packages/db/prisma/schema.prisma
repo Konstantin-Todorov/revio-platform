@@ -1534,6 +1534,11 @@ model Reservation {
   // ORIGINAL booking values (what the guest was actually charged), captured at booking time.
   totalMinor         Int
   currency           String    @default("EUR")
+  /// The language the GUEST booked in (RevioDirect's page, their pick or their browser). Every later
+  /// mail to them — confirmation, before arrival, after departure — follows it; null means the
+  /// booking came from somewhere that does not know (an OTA, the front desk) and the hotel's default
+  /// applies. Added 2026-09-29 with RevioDirect in Bulgarian.
+  guestLanguage String?
   // CRS-compatible currency snapshot: the same amount converted to the property's base currency, plus
   // the FX rate + timestamp used. Stored at booking time so historical revenue reports stay reproducible
   // when exchange rates move (see docs/CRS-REFERENCE.md "Currency handling"). Null on legacy rows.

@@ -117,6 +117,7 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
     },
     templates: {
       booking_confirmation: { label: "Booking confirmation", when: "When a booking is made on your booking page, or confirmed in RevioCRS" },
+      booking_requested: { label: "Booking request received", when: "When a guest asks for a room on your booking page and you confirm it yourself — the confirmation follows when you accept" },
       booking_modified: { label: "Booking changed", when: "When the dates, room or price of a booking change in RevioCRS" },
       booking_cancelled: { label: "Booking cancelled", when: "When a booking is cancelled in RevioCRS" },
       pre_arrival: { label: "Before arrival", when: "Three days before check-in, in the morning at the hotel" },
@@ -215,6 +216,7 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
     },
     templates: {
       booking_confirmation: { label: "Потвърждение на резервация", when: "При резервация от системата за директни резервации или потвърждение в RevioCRS" },
+      booking_requested: { label: "Получена заявка за резервация", when: "Когато гост поиска стая от системата за директни резервации и Вие я потвърждавате — потвърждението тръгва, когато я приемете" },
       booking_modified: { label: "Променена резервация", when: "Когато датите, стаята или цената на резервация се променят в RevioCRS" },
       booking_cancelled: { label: "Анулирана резервация", when: "Когато резервация се анулира в RevioCRS" },
       pre_arrival: { label: "Преди пристигане", when: "Три дни преди настаняването, сутринта по часа на хотела" },

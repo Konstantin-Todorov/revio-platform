@@ -1,7 +1,7 @@
 "use client";
 
 import { useExtrasTotal } from "@/lib/extras-store";
-import { money } from "@/lib/dates";
+import { useGuestKit } from "@/lib/i18n/use-kit";
 
 /**
  * The summary's total, which has to move when the guest adds an extra.
@@ -24,12 +24,13 @@ export function LiveTotal({
   currency: string;
 }) {
   const extras = useExtrasTotal();
+  const { s, money } = useGuestKit();
 
   return (
     <>
       {extras > 0 && (
         <div className="flex items-baseline justify-between text-[13px]">
-          <span style={{ color: "hsl(var(--ink-soft))" }}>Extras</span>
+          <span style={{ color: "hsl(var(--ink-soft))" }}>{s.book.extras}</span>
           <span className="nums font-semibold">{money(extras, currency)}</span>
         </div>
       )}
@@ -37,7 +38,7 @@ export function LiveTotal({
         className="mt-3 flex items-baseline justify-between border-t pt-3"
         style={{ borderColor: "hsl(var(--line))" }}
       >
-        <span className="text-[13px] font-semibold">Total</span>
+        <span className="text-[13px] font-semibold">{s.book.total}</span>
         <span className="price text-[1.4rem]">{money(baseTotalMinor + extras, currency)}</span>
       </div>
     </>

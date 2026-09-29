@@ -3,9 +3,10 @@
 import { headers } from "next/headers";
 import { forTenant } from "@revio/db";
 import { sendTemplatedEmail } from "@revio/email";
-import { canJoinWaitlist, describeJoin, DEFAULT_OFFER_TTL_MINUTES } from "@revio/core";
+import { canJoinWaitlist, DEFAULT_OFFER_TTL_MINUTES } from "@revio/core";
 import { clientIp, hit, type RateLimitRule } from "@revio/booking";
 import { getPublicProperty } from "./property";
+import { serverKit } from "./i18n/server";
 
 /**
  * Joining the waitlist from a sold-out search.
@@ -44,10 +45,12 @@ export async function joinWaitlist(_prev: JoinResult | null, fd: FormData): Prom
   const property = await getPublicProperty(slug);
   // Never leak whether a hotel exists — the same generic answer as everywhere else on this app.
   if (!property) return { ok: false, error: "This booking page isn't available." };
+  const { s, locale } = await serverKit(property);
+  const e = s.errors;
 
   const ip = clientIp(await headers());
   if (!hit(`wl:${ip}:${property.id}`, RULE).ok) {
-    return { ok: false, error: "Too many requests. Please try again in a few minutes." };
+    return { ok: false, error: e.tooMany };
   }
 
   const name = str(fd, "name");
@@ -63,11 +66,11 @@ export async function joinWaitlist(_prev: JoinResult | null, fd: FormData): Prom
   const guestsRaw = str(fd, "guests");
   const guests = guestsRaw === "" ? 2 : Number(guestsRaw);
   if (!Number.isFinite(guests)) {
-    return { ok: false, error: "Tell us how many guests are staying." };
+    return { ok: false, error: e.guests };
   }
 
-  if (!name) return { ok: false, error: "Please give a name we can use in the email." };
-  if (!/.+@.+\..+/.test(email)) return { ok: false, error: "That email address doesn't look right." };
+  if (!name) return { ok: false, error: e.waitlistName };
+  if (!/.+@.+\..+/.test(email)) return { ok: false, error: e.email };
 
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: property.timezone,
@@ -76,15 +79,8 @@ export async function joinWaitlist(_prev: JoinResult | null, fd: FormData): Prom
 
   const refusal = canJoinWaitlist({ checkIn, checkOut, guests, today });
   if (refusal) {
-    // Say what is wrong in the guest's terms, never the enum.
-    const said: Record<string, string> = {
-      "invalid-dates": "Those dates don't look right.",
-      "departure-before-arrival": "The departure date needs to be after the arrival date.",
-      "in-the-past": "Those dates have already passed.",
-      "no-guests": "Please say how many guests are coming.",
-      "too-many-guests": "That's more guests than this hotel can take in one room.",
-    };
-    return { ok: false, error: said[refusal] ?? "We couldn't add you to the list." };
+    // Say what is wrong in the guest's terms and language, never the enum.
+    return { ok: false, error: (e.waitlist as Record<string, string>)[refusal] ?? e.waitlistGeneric };
   }
 
   const db = forTenant(property.tenantId);
@@ -135,12 +131,13 @@ export async function joinWaitlist(_prev: JoinResult | null, fd: FormData): Prom
     propertyId: property.id,
     key: "waitlist_joined",
     to: [email.toLowerCase()],
+    locale,
     vars: {
       guestName: name,
-      holdWindow: `${Math.round(DEFAULT_OFFER_TTL_MINUTES / 60)} hours`,
+      holdWindow: s.waitlist.holdWindow(Math.round(DEFAULT_OFFER_TTL_MINUTES / 60)),
     },
-    details: [{ label: "Dates", value: `${checkIn} → ${checkOut}`, emphasis: true }],
+    details: [{ label: s.bar.dates, value: `${checkIn} → ${checkOut}`, emphasis: true }],
   }).catch(() => {});
 
-  return { ok: true, message: describeJoin(DEFAULT_OFFER_TTL_MINUTES) };
+  return { ok: true, message: s.waitlist.joined(DEFAULT_OFFER_TTL_MINUTES) };
 }

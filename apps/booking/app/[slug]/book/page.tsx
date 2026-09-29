@@ -8,7 +8,8 @@ import { forTenant } from "@revio/db";
 import { getObjectStore } from "@revio/storage";
 import { getPublicProperty } from "@/lib/property";
 import { searchAvailability } from "@/lib/availability";
-import { fmtDay, isValidISO, money, nightsBetween } from "@/lib/dates";
+import { isValidISO, nightsBetween } from "@/lib/dates";
+import { serverKit } from "@/lib/i18n/server";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
@@ -99,6 +100,7 @@ export default async function BookPage({
   }
 
   const cover = option.photos[0];
+  const { s, fmtDay, money } = await serverKit(property);
 
   return (
     <>
@@ -108,12 +110,12 @@ export default async function BookPage({
         <StepBar
           current="Details"
           backHref={`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`}
+          s={s.steps}
         />
 
-        <h1 className="display mt-6 text-[1.85rem] sm:mt-8 sm:text-[2.4rem]">Almost there</h1>
+        <h1 className="display mt-6 text-[1.85rem] sm:mt-8 sm:text-[2.4rem]">{s.book.title}</h1>
         <p className="mt-2 text-[14px]" style={{ color: "hsl(var(--ink-soft))" }}>
-          {fmtDay(checkIn)} — {fmtDay(checkOut)} · {nights} {nights === 1 ? "night" : "nights"} ·{" "}
-          {guests} {guests === 1 ? "guest" : "guests"}
+          {fmtDay(checkIn)} — {fmtDay(checkOut)} · {s.book.summary(nights, guests)}
         </p>
 
         <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_21rem] lg:items-start">
@@ -157,11 +159,11 @@ export default async function BookPage({
               </p>
               <p className="mt-2 flex items-center gap-1.5 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
                 <Users size={13} aria-hidden />
-                Sleeps up to {option.maxGuests}
+                {s.book.sleepsUpTo(option.maxGuests)}
               </p>
 
               <dl className="mt-4 space-y-1.5 border-t pt-4 text-[13px]" style={{ borderColor: "hsl(var(--line))" }}>
-                <Line label={`Rooms · ${nights} ${nights === 1 ? "night" : "nights"}`}
+                <Line label={s.room.roomsFor(nights)}
                       value={money(plan.accommodationMinor, plan.currency)} />
                 {plan.charges.map((c) => (
                   <Line key={c.name} label={c.name} value={money(c.amountMinor, plan.currency)} />
@@ -171,7 +173,7 @@ export default async function BookPage({
               {/* One total, and it follows the extras — see LiveTotal. */}
               <LiveTotal baseTotalMinor={plan.totalMinor} currency={plan.currency} />
               <p className="mt-1.5 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
-                Everything included. Paid at the hotel.
+                {s.book.paidAtHotel}
               </p>
             </div>
           </aside>

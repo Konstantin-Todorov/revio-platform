@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import { CalendarCheck, Check, Clock, MapPin, Phone } from "lucide-react";
 import { forTenant } from "@revio/db";
-import { computeStayCharges, ordinal, recogniseGuest, SOLD_STATUSES } from "@revio/core";
+import { computeStayCharges, recogniseGuest, SOLD_STATUSES } from "@revio/core";
 import { getPublicProperty, type PublicProperty } from "@/lib/property";
-import { fmtDay, money, nightsBetween } from "@/lib/dates";
+import { nightsBetween } from "@/lib/dates";
+import { serverKit } from "@/lib/i18n/server";
+import type { GuestKit } from "@/lib/i18n/kit";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
@@ -89,6 +91,9 @@ export default async function ConfirmationPage({
     cityTaxIncluded: defaults?.cityTaxMode === "included",
   });
 
+  const kit = await serverKit(property);
+  const { s: t, fmtDay, money } = kit;
+  const s = t.done;
   const cancelled = reservation.status === "cancelled";
   // The hotel has not accepted this yet — it happens when they have not finished connecting Stripe,
   // so no card guarantee could be taken and an instant confirmation would be a promise nobody made.
@@ -99,7 +104,7 @@ export default async function ConfirmationPage({
       <PropertyHeader property={property} />
 
       <main className="mx-auto w-full max-w-[52rem] px-5 pb-20 pt-6 sm:px-8">
-        <StepBar current="Confirm" />
+        <StepBar current="Confirm" s={t.steps} />
 
         <div className="mt-8 text-center">
           <span
@@ -118,27 +123,26 @@ export default async function ConfirmationPage({
             booked" and turns up to nothing has been lied to by a UI copy decision.
           */}
           <h1 className="display mt-5 text-[2rem] sm:text-[2.6rem]">
-            {cancelled ? "This booking was cancelled" : requested ? "Request sent" : "You're booked"}
+            {cancelled ? s.cancelledTitle : requested ? s.requestTitle : s.bookedTitle}
           </h1>
           <p className="mt-3 text-[15px]" style={{ color: "hsl(var(--ink-soft))" }}>
             {cancelled ? (
-              <>Contact the hotel if this wasn&rsquo;t what you intended.</>
+              <>{s.cancelledBody}</>
             ) : requested ? (
               <>
-                {property.name} has your request and will confirm by email to{" "}
-                <strong style={{ color: "hsl(var(--ink))" }}>{reservation.guest?.email}</strong>. The
-                room is held for you in the meantime — nothing has been charged.
+                {s.requestLead(property.name)}{" "}
+                <strong style={{ color: "hsl(var(--ink))" }}>{reservation.guest?.email}</strong>{s.requestTail}
               </>
             ) : (
               <>
-                We&rsquo;ve sent a confirmation to{" "}
+                {s.bookedBody}{" "}
                 <strong style={{ color: "hsl(var(--ink))" }}>{reservation.guest?.email}</strong>.
               </>
             )}
           </p>
           <p className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-2 text-[14px] font-bold"
              style={{ backgroundColor: "hsl(var(--brand-wash))", color: "hsl(var(--brand-text))" }}>
-            Reference {reference.toUpperCase()}
+            {s.reference(reference.toUpperCase())}
           </p>
 
           {/* K6. Computed server-side from the shared guest record, never passed in a query param a
@@ -147,8 +151,7 @@ export default async function ConfirmationPage({
               It says the guest is known; it does not repeat anything about their past stays. */}
           {recognition.isReturning && (
             <p className="mt-3 text-[13.5px]" style={{ color: "hsl(var(--ink-soft))" }}>
-              Welcome back — this is your {ordinal(recognition.priorStayCount + 1)} stay with us.
-              The front desk has your details already.
+              {s.welcomeBack(recognition.priorStayCount + 1)}
             </p>
           )}
         </div>
@@ -163,37 +166,36 @@ export default async function ConfirmationPage({
           </div>
 
           <dl className="grid grid-cols-1 gap-px sm:grid-cols-3" style={{ backgroundColor: "hsl(var(--line))" }}>
-            <Cell icon={<CalendarCheck size={15} aria-hidden />} term="Check in"
-                  value={fmtDay(checkIn)} sub={`from ${property.checkInTime}`} />
-            <Cell icon={<CalendarCheck size={15} aria-hidden />} term="Check out"
-                  value={fmtDay(checkOut)} sub={`by ${property.checkOutTime}`} />
-            <Cell icon={<Clock size={15} aria-hidden />} term="Length"
-                  value={`${nights} ${nights === 1 ? "night" : "nights"}`}
-                  sub={`${line.guestsCount ?? 2} guests`} />
+            <Cell icon={<CalendarCheck size={15} aria-hidden />} term={s.checkIn}
+                  value={fmtDay(checkIn)} sub={s.from(property.checkInTime)} />
+            <Cell icon={<CalendarCheck size={15} aria-hidden />} term={s.checkOut}
+                  value={fmtDay(checkOut)} sub={s.by(property.checkOutTime)} />
+            <Cell icon={<Clock size={15} aria-hidden />} term={s.length}
+                  value={t.count.nights(nights)}
+                  sub={t.count.guests(line.guestsCount ?? 2)} />
           </dl>
 
           <div className="px-5 py-4 sm:px-6">
             <dl className="space-y-1.5 text-[13px]">
-              <Row label={`Rooms · ${nights} ${nights === 1 ? "night" : "nights"}`}
+              <Row label={t.room.roomsFor(nights)}
                    value={money(charged.accommodationMinor, reservation.currency)} />
               {charged.lines.map((l) => (
                 <Row key={l.name} label={l.name} value={money(l.amountMinor, reservation.currency)} />
               ))}
             </dl>
             <div className="mt-3 flex items-baseline justify-between border-t pt-3" style={{ borderColor: "hsl(var(--line))" }}>
-              <span className="text-[13.5px] font-semibold">Total to pay at the hotel</span>
+              <span className="text-[13.5px] font-semibold">{s.totalAtHotel}</span>
               <span className="price text-[1.5rem]">{money(charged.totalMinor, reservation.currency)}</span>
             </div>
             {!cancelled && (
               <p className="mt-2 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-                Nothing has been charged
-                {reservation.guaranteeLast4 ? ` — your card ending ${reservation.guaranteeLast4} is held as a guarantee only.` : "."}
+                {reservation.guaranteeLast4 ? s.guaranteeOnly(reservation.guaranteeLast4) : s.nothingCharged}
               </p>
             )}
           </div>
         </section>
 
-        {!cancelled && <WhatNext property={property} requested={requested} />}
+        {!cancelled && <WhatNext property={property} requested={requested} kit={kit} />}
       </main>
 
       <PropertyFooter property={property} />
@@ -202,10 +204,12 @@ export default async function ConfirmationPage({
 }
 
 /** The questions a guest actually has once the booking is done — or once they have asked for it. */
-function WhatNext({ property, requested }: { property: PublicProperty; requested: boolean }) {
+function WhatNext({ property, requested, kit }: { property: PublicProperty; requested: boolean; kit: GuestKit }) {
+  const s = kit.s.done;
+  const phone = property.phone ? <> {s.on} <strong className="font-semibold">{property.phone}</strong></> : null;
   return (
     <section className="mt-6">
-      <h2 className="display text-[1.2rem]">What happens now</h2>
+      <h2 className="display text-[1.2rem]">{s.nextTitle}</h2>
       {/*
         A request is not a booking, so this list must not read like one. The old copy — "your
         confirmation email", "you're booked with them" — contradicted the "Request sent" headline
@@ -215,32 +219,22 @@ function WhatNext({ property, requested }: { property: PublicProperty; requested
       <ul className="mt-4 space-y-2.5">
         {requested ? (
           <>
+            <Next>{s.requestNext(property.name)}</Next>
+            <Next>{s.requestHeld}</Next>
             <Next>
-              {property.name} will confirm by email, usually within a few hours. Keep the reference —
-              it&rsquo;s all they need to find your request.
-            </Next>
-            <Next>
-              Your room is held until they answer, so nobody else can take it while you wait.
-            </Next>
-            <Next>
-              Changed your mind, or need it sooner? Call them directly
-              {property.phone ? <> on <strong className="font-semibold">{property.phone}</strong></> : null} —
-              you&rsquo;re dealing with the hotel, not an agency.
+              {s.requestCall}
+              {phone}
+              {s.requestCallTail}
             </Next>
           </>
         ) : (
           <>
+            <Next>{s.bookedNext}</Next>
+            <Next>{s.bookedArrive(property.checkInTime)}</Next>
             <Next>
-              Your confirmation email has everything on this page. Keep the reference — it&rsquo;s all the
-              hotel needs to find you.
-            </Next>
-            <Next>
-              Arrive any time after {property.checkInTime}. Nothing to print, nothing to pay in advance.
-            </Next>
-            <Next>
-              Need to change or cancel? Call the hotel directly
-              {property.phone ? <> on <strong className="font-semibold">{property.phone}</strong></> : null} — you&rsquo;re
-              booked with them, not through an agency, so they can just do it.
+              {s.bookedCall}
+              {phone}
+              {s.bookedCallTail}
             </Next>
           </>
         )}

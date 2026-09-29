@@ -109,12 +109,25 @@ export interface PublicRoomOption {
   plans: PublicPlanQuote[];
 }
 
+/**
+ * Why a public booking call refused, as a stable code. The English `error` stays for API callers;
+ * a screen says `code` in the guest's language (RevioDirect's dictionary). Never translate by
+ * matching the English sentence — that is how a reworded message silently becomes untranslated.
+ */
+export type PublicBookingErrorCode =
+  | "invalid_stay" | "too_long" | "guest_details" | "too_many_guests" | "unavailable" | "sold_out";
+
+const TOO_LONG = "Stays longer than 30 nights aren't bookable online.";
+function stayRefusalCode(message: string): PublicBookingErrorCode {
+  return message === TOO_LONG ? "too_long" : "invalid_stay";
+}
+
 function validStay(q: PublicStayQuery): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(q.checkIn) || !/^\d{4}-\d{2}-\d{2}$/.test(q.checkOut)) return "Dates must be YYYY-MM-DD.";
   if (q.checkOut <= q.checkIn) return "Check-out must be after check-in.";
   if (!Number.isInteger(q.guests) || q.guests < 1 || q.guests > 12) return "Guests must be 1-12.";
   const nights = (utcDay(q.checkOut).getTime() - utcDay(q.checkIn).getTime()) / DAY_MS;
-  if (nights > 30) return "Stays longer than 30 nights aren't bookable online.";
+  if (nights > 30) return TOO_LONG;
   return null;
 }
 
@@ -289,9 +302,9 @@ async function loadStayContext(
 }
 
 /** GET /api/public/availability — the widget's search. */
-export async function publicAvailability(db: Db, property: PropertyRow, q: PublicStayQuery): Promise<{ error?: string; options?: PublicRoomOption[] }> {
+export async function publicAvailability(db: Db, property: PropertyRow, q: PublicStayQuery): Promise<{ error?: string; code?: PublicBookingErrorCode; options?: PublicRoomOption[] }> {
   const bad = validStay(q);
-  if (bad) return { error: bad };
+  if (bad) return { error: bad, code: stayRefusalCode(bad) };
   const { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, q);
   const cityTaxIncluded = defaults?.cityTaxMode === "included";
@@ -369,6 +382,8 @@ export interface PublicBookingPayload extends PublicStayQuery {
   requestOnly?: boolean;
   /** Anything the guest typed in "requests". Stored on the reservation, shown to the front desk. */
   guestNote?: string;
+  /** The language the guest booked in — every later mail to them follows it. */
+  guestLanguage?: string;
   /**
    * Extras the guest ticked, as IDs.
    *
@@ -408,6 +423,8 @@ export async function publicCreateReservation(
   db: Db, property: PropertyRow, p: PublicBookingPayload,
 ): Promise<{
   error?: string;
+  /** What went wrong, for a screen to say in the guest's language — never match `error` itself. */
+  code?: PublicBookingErrorCode;
   reservationId?: string;
   status?: string;
   /** Rooms only — what the reservation stores, and what room-revenue metrics are built on. */
@@ -426,20 +443,20 @@ export async function publicCreateReservation(
   currency?: string;
 }> {
   const bad = validStay(p);
-  if (bad) return { error: bad };
+  if (bad) return { error: bad, code: stayRefusalCode(bad) };
   if (!p.guest?.firstName?.trim() || !p.guest?.lastName?.trim() || !/.+@.+\..+/.test(p.guest?.email ?? "")) {
-    return { error: "Guest first name, last name and a valid email are required." };
+    return { error: "Guest first name, last name and a valid email are required.", code: "guest_details" };
   }
   const { nights, roomTypes, plans, priceFor, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, p, p.holdId ? { excludeHoldId: p.holdId } : {});
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
-  if (!rt || !rp) return { error: "Unknown room type or rate plan (or not bookable on the direct channel)." };
-  if (rt.maxGuests < p.guests) return { error: `${rt.name} sleeps at most ${rt.maxGuests} guests.` };
-  if (rp.roomTypeLinks.length > 0 && !rp.roomTypeLinks.some((l) => l.roomTypeId === rt.id)) return { error: "That rate isn't sold on that room." };
+  if (!rt || !rp) return { error: "Unknown room type or rate plan (or not bookable on the direct channel).", code: "unavailable" };
+  if (rt.maxGuests < p.guests) return { error: `${rt.name} sleeps at most ${rt.maxGuests} guests.`, code: "too_many_guests" };
+  if (rp.roomTypeLinks.length > 0 && !rp.roomTypeLinks.some((l) => l.roomTypeId === rt.id)) return { error: "That rate isn't sold on that room.", code: "unavailable" };
   const blocked = stayBlocked(rt.id, rp);
-  if (blocked) return { error: `Not bookable: ${blocked}.` };
-  if (remainingFor(rt.id, rt.totalRooms) < 1) return { error: "No availability left for those dates." };
+  if (blocked) return { error: `Not bookable: ${blocked}.`, code: "unavailable" };
+  if (remainingFor(rt.id, rt.totalRooms) < 1) return { error: "No availability left for those dates.", code: "sold_out" };
 
   /*
    * X1 — make sure a claim on the room actually exists before writing the reservation.
@@ -470,7 +487,7 @@ export async function publicCreateReservation(
       expiresAt: new Date(Date.now() + HOLD_MINUTES * 60_000),
       sellableByNight: sellableByNightFor(rt.id, rt.totalRooms),
     });
-    if (!claim.ok) return { error: "No availability left for those dates." };
+    if (!claim.ok) return { error: "No availability left for those dates.", code: "sold_out" };
     claimedHoldId = claim.holdId;
   }
 
@@ -486,7 +503,7 @@ export async function publicCreateReservation(
   const quotedNights: { date: string; occupancy: number; rateMinor: number }[] = [];
   for (const k of nights) {
     const price = priceFor(rt, rp, k, p.guests);
-    if (price == null) return { error: "This rate isn't fully priced for those dates." };
+    if (price == null) return { error: "This rate isn't fully priced for those dates.", code: "unavailable" };
     accommodationMinor += price;
     quotedNights.push({ date: k, occupancy: p.guests, rateMinor: price });
   }
@@ -632,6 +649,7 @@ export async function publicCreateReservation(
         // the same night stays on sale on an OTA and the hotel accepts a room that is already gone.
         status: p.requestOnly ? "requested" : "confirmed",
         totalMinor, currency: property.baseCurrency,
+        ...(p.guestLanguage ? { guestLanguage: p.guestLanguage } : {}),
         propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
         guestId: guest.id, bookingSourceId: source.id,
         // A LABEL plus a gateway token — never a card number. `card_on_file` is what the front desk
@@ -723,7 +741,7 @@ export async function publicCreateReservation(
    * "something went wrong", which reads as our fault and invites a retry into the same wall.
    */
   if (!written) {
-    return { error: "Sorry — that room was booked moments ago. Nothing has been charged. Please search again." };
+    return { error: "Sorry — that room was booked moments ago. Nothing has been charged. Please search again.", code: "sold_out" };
   }
 
   await db.auditEntry.create({
@@ -900,14 +918,14 @@ export async function publicCreateHold(
    * `bookingFunnel` in `@revio/core`.
    */
   sessionId?: string | null,
-): Promise<{ error?: string; hold?: PublicHold }> {
+): Promise<{ error?: string; code?: PublicBookingErrorCode; hold?: PublicHold }> {
   const bad = validStay(q);
-  if (bad) return { error: bad };
+  if (bad) return { error: bad, code: stayRefusalCode(bad) };
 
   const { roomTypes, remainingFor, sellableByNightFor } = await loadStayContext(db, property, q);
   const rt = roomTypes.find((r) => r.id === q.roomTypeId);
-  if (!rt) return { error: "That room is no longer available." };
-  if (remainingFor(rt.id, rt.totalRooms) < 1) return { error: "That room has just been taken." };
+  if (!rt) return { error: "That room is no longer available.", code: "unavailable" };
+  if (remainingFor(rt.id, rt.totalRooms) < 1) return { error: "That room has just been taken.", code: "sold_out" };
 
   /*
    * X1 — the claim is atomic.
@@ -931,7 +949,7 @@ export async function publicCreateHold(
     source: "booking_engine",
     ...(sessionId ? { sessionId } : {}),
   });
-  if (!claim.ok) return { error: "That room has just been taken." };
+  if (!claim.ok) return { error: "That room has just been taken.", code: "sold_out" };
 
   // The waterfall changed, so every channel's availability changed. Pushing here — rather than only
   // on confirmation — is what stops an OTA selling the room a guest is currently paying for.

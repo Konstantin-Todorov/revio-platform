@@ -4,13 +4,15 @@ import { useCallback, useState } from "react";
 import { CalendarDays, Minus, Plus, Search, Users } from "lucide-react";
 import { DateRangePanel } from "./DateRangePanel";
 import { useDismiss } from "@/lib/use-dismiss";
-import { addDays, fmtDay, isValidISO, nightsBetween, todayISO } from "@/lib/dates";
+import { addDays, isValidISO, nightsBetween, todayISO } from "@/lib/dates";
+import { useGuestKit } from "@/lib/i18n/use-kit";
+import type { GuestKit } from "@/lib/i18n/kit";
 
 /**
  * The stay in as few characters as a phone bar can hold — "28–30 Sept", or "28 Sept – 2 Oct" across a
  * month. The weekday-and-all form truncated mid-date there; the full dates are on the page below.
  */
-function shortRange(checkIn: string, checkOut: string): string {
+function shortRange(fmtDay: GuestKit["fmtDay"], checkIn: string, checkOut: string): string {
   const noWeekday = (iso: string) => fmtDay(iso).replace(/^\S+\s+/, "");
   const sameMonth = checkIn.slice(0, 7) === checkOut.slice(0, 7);
   return sameMonth ? `${Number(checkIn.slice(8, 10))}–${noWeekday(checkOut)}` : `${noWeekday(checkIn)} – ${noWeekday(checkOut)}`;
@@ -68,6 +70,8 @@ export function SearchBar({
   );
   const [guests, setGuests] = useState(defaultGuests);
   const [panel, setPanel] = useState<"dates" | "guests" | null>(null);
+  const { s: t, fmtDay } = useGuestKit();
+  const s = t.bar;
 
   const close = useCallback(() => setPanel(null), []);
   const ref = useDismiss<HTMLDivElement>(panel !== null, close);
@@ -107,10 +111,10 @@ export function SearchBar({
             <button type="button" onClick={openDates} data-open={panel === "dates"} className="seg min-h-[50px] min-w-0 flex-1">
               <span className="seg-label flex items-center gap-1.5">
                 <CalendarDays size={13} aria-hidden />
-                Dates
+                {s.dates}
               </span>
               <span className="seg-value truncate text-[13.5px]" data-empty={!checkIn || !checkOut ? "true" : undefined}>
-                {checkIn && checkOut ? shortRange(checkIn, checkOut) : "Add dates"}
+                {checkIn && checkOut ? shortRange(fmtDay, checkIn, checkOut) : s.addDates}
               </span>
             </button>
             <button
@@ -118,15 +122,15 @@ export function SearchBar({
               onClick={() => setPanel((p) => (p === "guests" ? null : "guests"))}
               data-open={panel === "guests"}
               className="seg min-h-[50px] shrink-0"
-              aria-label={`${guests} guests`}
+              aria-label={s.guestsCount(guests)}
             >
               <span className="seg-label flex items-center gap-1.5">
                 <Users size={13} aria-hidden />
-                Guests
+                {s.guests}
               </span>
               <span className="seg-value">{guests}</span>
             </button>
-            <button type="submit" disabled={!ready} aria-label="Search" className="btn btn-brand shrink-0 px-4">
+            <button type="submit" disabled={!ready} aria-label={s.search} className="btn btn-brand shrink-0 px-4">
               <Search size={17} aria-hidden />
             </button>
           </div>
@@ -138,8 +142,8 @@ export function SearchBar({
           }`}
         >
           <Segment
-            label="Check in"
-            value={checkIn ? fmtDay(checkIn) : "Add date"}
+            label={s.checkIn}
+            value={checkIn ? fmtDay(checkIn) : s.addDate}
             empty={!checkIn}
             open={panel === "dates"}
             icon={<CalendarDays size={15} aria-hidden />}
@@ -154,8 +158,8 @@ export function SearchBar({
               aria-hidden
             />
             <Segment
-              label="Check out"
-              value={checkOut ? fmtDay(checkOut) : "Add date"}
+              label={s.checkOut}
+              value={checkOut ? fmtDay(checkOut) : s.addDate}
               empty={!checkOut}
               open={panel === "dates"}
               icon={<CalendarDays size={15} aria-hidden />}
@@ -170,8 +174,8 @@ export function SearchBar({
               aria-hidden
             />
             <Segment
-              label="Guests"
-              value={`${guests} ${guests === 1 ? "guest" : "guests"}`}
+              label={s.guests}
+              value={s.guestsCount(guests)}
               open={panel === "guests"}
               icon={<Users size={15} aria-hidden />}
               onClick={() => setPanel((p) => (p === "guests" ? null : "guests"))}
@@ -185,7 +189,7 @@ export function SearchBar({
               className="btn btn-brand h-full w-full px-7 sm:min-w-[8.5rem]"
             >
               <Search size={17} aria-hidden />
-              <span>Search</span>
+              <span>{s.search}</span>
             </button>
           </div>
         </div>
@@ -197,11 +201,9 @@ export function SearchBar({
           style={{ color: onDark ? "hsl(var(--brand-ink) / 0.8)" : "hsl(var(--ink-faint))" }}
         >
           {ready ? (
-            <>
-              {nights} {nights === 1 ? "night" : "nights"} · prices shown include every tax and fee
-            </>
+            <>{s.ready(nights)}</>
           ) : (
-            <>Choose your dates to see live availability and the final price.</>
+            <>{s.empty}</>
           )}
         </p>
       )}
@@ -209,14 +211,14 @@ export function SearchBar({
       {panel !== null && <Backdrop onClose={close} />}
 
       {panel === "dates" && (
-        <Sheet title="Your dates" onClose={close}>
+        <Sheet title={s.yourDates} closeLabel={s.close} onClose={close}>
           <DateRangePanel checkIn={checkIn} checkOut={checkOut} onSelect={onSelect} onDone={close} />
         </Sheet>
       )}
 
       {panel === "guests" && (
-        <Sheet title="Guests" onClose={close} align="right">
-          <GuestPanel guests={guests} onChange={setGuests} onDone={close} />
+        <Sheet title={s.guests} closeLabel={s.close} onClose={close} align="right">
+          <GuestPanel guests={guests} onChange={setGuests} onDone={close} s={s} />
         </Sheet>
       )}
     </div>
@@ -260,9 +262,10 @@ function Backdrop({ onClose }: { onClose: () => void }) {
 
 /** One shell, two shapes: a bottom sheet under 640px, a popover above it. */
 function Sheet({
-  title, children, onClose, align = "left",
+  title, closeLabel, children, onClose, align = "left",
 }: {
   title: string;
+  closeLabel: string;
   children: React.ReactNode;
   onClose: () => void;
   align?: "left" | "right";
@@ -280,7 +283,7 @@ function Sheet({
       <div className="flex items-center justify-between px-4 pt-3 sm:hidden">
         <span className="text-[13px] font-bold">{title}</span>
         <button type="button" onClick={onClose} className="btn btn-ghost min-h-[36px] px-3 text-[13px]">
-          Close
+          {closeLabel}
         </button>
       </div>
       {children}
@@ -289,8 +292,9 @@ function Sheet({
 }
 
 function GuestPanel({
-  guests, onChange, onDone,
+  guests, onChange, onDone, s,
 }: {
+  s: GuestKit["s"]["bar"];
   guests: number;
   onChange: (n: number) => void;
   onDone: () => void;
@@ -299,33 +303,32 @@ function GuestPanel({
     <div className="w-full p-4 sm:w-[19rem] sm:p-5">
       <div className="flex items-center justify-between gap-6">
         <div>
-          <p className="text-[14.5px] font-semibold">Guests</p>
+          <p className="text-[14.5px] font-semibold">{s.guests}</p>
           <p className="mt-0.5 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-            Everyone staying in the room
+            {s.guestsHint}
           </p>
         </div>
         {/* A stepper, not a dropdown: adjusting by one is the only thing anyone ever does here, and
             it takes one tap instead of open-scan-select. */}
         <div className="flex items-center gap-1">
-          <StepButton label="One fewer guest" disabled={guests <= 1} onClick={() => onChange(guests - 1)}>
+          <StepButton label={s.fewer} disabled={guests <= 1} onClick={() => onChange(guests - 1)}>
             <Minus size={16} aria-hidden />
           </StepButton>
           <span className="nums w-9 text-center text-[17px] font-bold" aria-live="polite">
             {guests}
           </span>
-          <StepButton label="One more guest" disabled={guests >= MAX_GUESTS} onClick={() => onChange(guests + 1)}>
+          <StepButton label={s.more} disabled={guests >= MAX_GUESTS} onClick={() => onChange(guests + 1)}>
             <Plus size={16} aria-hidden />
           </StepButton>
         </div>
       </div>
 
       <p className="mt-4 text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>
-        We only show rooms that genuinely sleep this many — nothing you would have to argue about at
-        the front desk.
+        {s.guestsNote}
       </p>
 
       <button type="button" onClick={onDone} className="btn btn-brand mt-4 w-full">
-        Done
+        {s.done}
       </button>
     </div>
   );

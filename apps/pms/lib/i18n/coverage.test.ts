@@ -22,6 +22,7 @@ import { auth } from "./auth";
 import { authStrings, authRefusalStrings } from "@revio/ui/auth-strings";
 import { accountStrings } from "@revio/ui/account-strings";
 import { channelPlansStrings } from "@revio/ui/channel-plans";
+import { roomContentStrings } from "@revio/ui/room-content-strings";
 import { shellStrings } from "@revio/ui/shell-strings";
 import { notifications } from "./notifications";
 import { welcome } from "./welcome";
@@ -42,7 +43,7 @@ import { guestEmailsStrings } from "@revio/ui/guest-emails-strings";
  * half-English screen. A new English string in a finished dictionary fails here until its Bulgarian
  * lands in the same change. A dictionary still being translated is simply not listed yet.
  */
-const COMPLETE: Record<string, Translations<unknown>> = { shell, housekeeping, common, frontdesk, stays, reservation, folio, folios, operations, extras, rooms, calendar, guests, register, users, configuration, settings, pages, auth, authStrings, accountStrings, shellStrings, notifications, welcome, welcomeStrings, flash, activityStrings, trialStrings, helpStrings, billingStrings, productStrings, authRefusalStrings, guestEmailsStrings, channelPlansStrings } as Record<string, Translations<unknown>>;
+const COMPLETE: Record<string, Translations<unknown>> = { shell, housekeeping, common, frontdesk, stays, reservation, folio, folios, operations, extras, rooms, calendar, guests, register, users, configuration, settings, pages, auth, authStrings, accountStrings, shellStrings, notifications, welcome, welcomeStrings, flash, activityStrings, trialStrings, helpStrings, billingStrings, productStrings, authRefusalStrings, guestEmailsStrings, channelPlansStrings, roomContentStrings } as Record<string, Translations<unknown>>;
 
 describe("finished dictionaries have every string in Bulgarian", () => {
   for (const [name, dict] of Object.entries(COMPLETE)) {

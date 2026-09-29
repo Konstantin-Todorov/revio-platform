@@ -1,5 +1,5 @@
 import type { Translations } from "@revio/ui/i18n";
-import { BED_SETUPS, ROOM_AMENITIES, ROOM_AMENITY_GROUPS } from "@revio/core";
+import { roomContentStrings } from "@revio/ui/room-content-strings";
 
 /**
  * Rooms & Rates — the room types and rate plans a hotel sells, shared with RevioLink.
@@ -184,9 +184,6 @@ export interface RatesStrings {
   };
 }
 
-const coreLabels = <T extends { key: string; label: string }>(list: readonly T[]) =>
-  Object.fromEntries(list.map((x) => [x.key, x.label])) as Record<string, string>;
-
 export const rates: Translations<RatesStrings> = {
   en: {
     title: "Rooms & Rates",
@@ -245,9 +242,9 @@ export const rates: Translations<RatesStrings> = {
       guestTitle: "What a guest reads",
       guestSubtitle: "Shown on your booking page. All optional — a room with none of this still sells, it just says less",
     },
-    amenities: coreLabels(ROOM_AMENITIES),
-    amenityGroups: coreLabels(ROOM_AMENITY_GROUPS),
-    bedSetups: coreLabels(BED_SETUPS),
+    amenities: roomContentStrings.en.amenities,
+    amenityGroups: roomContentStrings.en.amenityGroups,
+    bedSetups: roomContentStrings.en.bedSetups,
     save: { saved: "Saved", saving: "Saving…", saveChanges: "Save changes", cancel: "Cancel", save: "Save" },
     plans: {
       title: "Rate plans",
@@ -422,30 +419,9 @@ export const rates: Translations<RatesStrings> = {
       guestTitle: "Какво четат гостите",
       guestSubtitle: "Показва се на страницата Ви за резервации. Всичко е по желание — стая без него пак се продава, просто казва по-малко",
     },
-    amenities: {
-      air_conditioning: "Климатик", heating: "Отопление", wifi: "Безплатен WiFi", tv: "Телевизор",
-      safe: "Сейф в стаята", desk: "Бюро", soundproofing: "Шумоизолация", iron: "Ютия и дъска",
-      private_bathroom: "Собствена баня", shower: "Душ", bathtub: "Вана", hairdryer: "Сешоар",
-      toiletries: "Безплатни тоалетни принадлежности", bathrobes: "Халати и чехли",
-      kitchenette: "Кухненски бокс", fridge: "Хладилник", minibar: "Минибар", coffee_tea: "Кафе и чай",
-      microwave: "Микровълнова фурна", dishwasher: "Съдомиялна",
-      balcony: "Балкон", terrace: "Тераса", sea_view: "Изглед към морето", mountain_view: "Изглед към планината",
-      city_view: "Изглед към града", garden_view: "Изглед към градината", private_pool: "Собствен басейн",
-      cot_available: "Бебешка кошара при заявка", extra_bed_available: "Възможно допълнително легло",
-      connecting_rooms: "Възможни свързани стаи", family_friendly: "Подходяща за деца",
-      smoking_allowed: "Пушенето е разрешено", pets_allowed: "Домашни любимци са разрешени",
-      accessible: "Достъп без стъпала", ground_floor: "Партер", lift_access: "Достъп с асансьор",
-    },
-    amenityGroups: {
-      comfort: "Комфорт", bathroom: "Баня", kitchen: "Кухня и хранене", view: "Изглед и пространство",
-      family: "Семейство", policy: "Добре е да знаете",
-    },
-    bedSetups: {
-      single: "1 единично легло", twin: "2 единични легла", double: "1 двойно легло",
-      queen: "1 голямо двойно легло (queen)", king: "1 много голямо двойно легло (king)",
-      double_single: "1 двойно + 1 единично", two_double: "2 двойни легла", sofa_bed: "1 разтегателен диван",
-      bunk: "Двуетажни легла", dorm_bed: "Легло в обща стая",
-    },
+    amenities: roomContentStrings.bg.amenities,
+    amenityGroups: roomContentStrings.bg.amenityGroups,
+    bedSetups: roomContentStrings.bg.bedSetups,
     save: { saved: "Запазено", saving: "Запазване…", saveChanges: "Запази промените", cancel: "Отказ", save: "Запази" },
     plans: {
       title: "Ценови планове",

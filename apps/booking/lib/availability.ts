@@ -2,7 +2,7 @@ import "server-only";
 import { forTenant } from "@revio/db";
 import {
   publicAvailability, publicAlternativeStays, checkSearch,
-  type PublicRoomOption, type AlternativeStay,
+  type PublicRoomOption, type AlternativeStay, type PublicBookingErrorCode,
 } from "@revio/booking";
 import type { PublicProperty } from "./property";
 
@@ -22,6 +22,8 @@ export interface SearchOutcome {
   alternatives?: AlternativeStay[];
   /** Shown to the guest. Never leaks whether the problem was them, the hotel, or us. */
   error?: string;
+  /** Why, for the page to say in the guest's language. */
+  code?: PublicBookingErrorCode;
   rateLimited?: boolean;
 }
 
@@ -37,7 +39,7 @@ export async function searchAvailability(
   const db = forTenant(property.tenantId);
   const scoped = { ...property, id: property.id };
   const result = await publicAvailability(db, scoped, q);
-  if (result.error) return { error: result.error };
+  if (result.error) return { error: result.error, ...(result.code ? { code: result.code } : {}) };
 
   const options = result.options ?? [];
 

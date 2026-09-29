@@ -6,6 +6,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { TrustRow } from "@/components/TrustRow";
+import { serverKit } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
   const { slug } = await params;
   const property = await getPublicProperty(slug);
   if (!property) notFound();
+  const { s } = await serverKit(property);
 
   const photo = property.hero;
   /*
@@ -142,7 +144,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
                       : {}),
                 }}
               >
-                Official booking · {property.name}
+                {s.home.eyebrow(property.name)}
               </p>
               <h1
                 className="display rise mt-4 text-[2.4rem] sm:text-[3.75rem]"
@@ -155,7 +157,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
                       : {}),
                 }}
               >
-                {property.headline}
+                {property.headline ?? s.hero.headline}
               </h1>
               <p
                 className="rise mx-auto mt-5 max-w-[46ch] text-[15.5px] leading-relaxed sm:text-[17px]"
@@ -169,7 +171,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
                   ...(onPhoto ? { textShadow: "0 1px 16px rgba(0,0,0,0.35)" } : {}),
                 }}
               >
-                {property.subheadline}
+                {property.subheadline ?? s.hero.subheadline}
               </p>
             </div>
 
@@ -187,24 +189,24 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
         {property.showTrust && (
           <section className="mx-auto w-full max-w-[72rem] px-5 pt-12 sm:px-8 sm:pt-16">
             <div className="rise" style={{ animationDelay: "300ms" }}>
-              <TrustRow checkInTime={property.checkInTime} checkOutTime={property.checkOutTime} />
+              <TrustRow checkInTime={property.checkInTime} checkOutTime={property.checkOutTime} s={s.trust} />
             </div>
           </section>
         )}
 
         <section className="mx-auto w-full max-w-[72rem] px-5 pb-20 pt-12 sm:px-8 sm:pt-16">
-          <h2 className="display text-[1.5rem]">Good to know</h2>
+          <h2 className="display text-[1.5rem]">{s.home.goodToKnow}</h2>
           <dl className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Fact icon={<Clock size={17} strokeWidth={2} aria-hidden />} term="Check-in & check-out">
-              From {property.checkInTime}, out by {property.checkOutTime}
+            <Fact icon={<Clock size={17} strokeWidth={2} aria-hidden />} term={s.home.times}>
+              {s.home.timesValue(property.checkInTime, property.checkOutTime)}
             </Fact>
             {property.address && (
-              <Fact icon={<MapPin size={17} strokeWidth={2} aria-hidden />} term="Where you'll stay">
+              <Fact icon={<MapPin size={17} strokeWidth={2} aria-hidden />} term={s.home.where}>
                 {property.address}
               </Fact>
             )}
             {property.phone && (
-              <Fact icon={<Phone size={17} strokeWidth={2} aria-hidden />} term="Prefer to talk to someone?">
+              <Fact icon={<Phone size={17} strokeWidth={2} aria-hidden />} term={s.home.talk}>
                 <a href={`tel:${property.phone.replace(/\s+/g, "")}`} className="link-quiet font-semibold">
                   {property.phone}
                 </a>

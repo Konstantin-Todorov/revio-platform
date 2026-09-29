@@ -3,6 +3,7 @@ import { forTenant } from "@revio/db";
 import { publicAvailability, publicGetHold } from "@revio/booking";
 import Link from "next/link";
 import { getPublicProperty } from "@/lib/property";
+import { serverKit } from "@/lib/i18n/server";
 
 /**
  * The link in the offer email.
@@ -36,9 +37,12 @@ export const dynamic = "force-dynamic";
 function Outcome({
   property,
   title,
+  cta,
   children,
 }: {
   property: { name: string; slug: string };
+  /** "Search other dates at …", in the guest's language. */
+  cta: string;
   title: string;
   children: React.ReactNode;
 }) {
@@ -55,7 +59,7 @@ function Outcome({
         className="mt-6 inline-flex h-10 items-center rounded-[var(--r-sm)] px-4 text-[14px] font-semibold text-white"
         style={{ backgroundColor: "hsl(var(--brand))" }}
       >
-        Search other dates at {property.name}
+        {cta}
       </Link>
     </main>
   );
@@ -71,6 +75,9 @@ export default async function ClaimPage({
   if (!property) notFound();
 
   const db = forTenant(property.tenantId);
+  const { s: t } = await serverKit(property);
+  const w = t.waitlist;
+  const cta = w.searchOther(property.name);
 
   const entry = await db.waitlistEntry.findFirst({
     where: { propertyId: property.id, claimToken: token },
@@ -83,27 +90,24 @@ export default async function ClaimPage({
   // Unknown token: the one case that is genuinely a mistake, and still not an error page.
   if (!entry) {
     return (
-      <Outcome property={property} title="This link has expired">
-        We could not find an open offer for this link. If a room opens up again we will email you —
-        you are still on the list unless you asked us to take you off it.
+      <Outcome property={property} title={w.expiredTitle} cta={cta}>
+        {w.expiredBody}
       </Outcome>
     );
   }
 
   if (entry.status !== "offered" || !entry.offerHoldId || !entry.offerExpiresAt) {
     return (
-      <Outcome property={property} title="That offer has already been used">
-        This room has either been booked or the offer was withdrawn. You are still on the list for
-        these dates, and we will email you if something else opens up.
+      <Outcome property={property} title={w.usedTitle} cta={cta}>
+        {w.usedBody}
       </Outcome>
     );
   }
 
   if (entry.offerExpiresAt.getTime() <= Date.now()) {
     return (
-      <Outcome property={property} title="That room has gone">
-        The offer ran out before this link was opened, so the room went to the next guest waiting.
-        You are still on the list — we will email you if another opens up.
+      <Outcome property={property} title={w.goneTitle} cta={cta}>
+        {w.goneBody}
       </Outcome>
     );
   }
@@ -113,9 +117,8 @@ export default async function ClaimPage({
   const hold = await publicGetHold(db, property.id, entry.offerHoldId);
   if (!hold) {
     return (
-      <Outcome property={property} title="That room has just been taken">
-        We are sorry — the room was released before you opened this link. You are still on the list
-        and we will email you if another opens up.
+      <Outcome property={property} title={w.takenTitle} cta={cta}>
+        {w.takenBody}
       </Outcome>
     );
   }
@@ -136,9 +139,8 @@ export default async function ClaimPage({
 
   if (!ratePlanId) {
     return (
-      <Outcome property={property} title="That room has just been taken">
-        We could not price this stay any more, which usually means the room went while this link was
-        open. You are still on the list for these dates.
+      <Outcome property={property} title={w.takenTitle} cta={cta}>
+        {w.unpricedBody}
       </Outcome>
     );
   }

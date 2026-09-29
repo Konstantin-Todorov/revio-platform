@@ -7,6 +7,8 @@ import { confirmBooking, type BookResult } from "@/lib/actions-book";
 import { ExtrasPicker } from "./ExtrasPicker";
 import { setExtrasTotal } from "@/lib/extras-store";
 import { ActionForm } from "@revio/ui/action-form";
+import { SubmitTokenField } from "@revio/ui/submit-token";
+import { useGuestKit } from "@/lib/i18n/use-kit";
 
 /**
  * Step 3 — who you are, and the card that holds the room.
@@ -59,6 +61,8 @@ export function BookingForm({
   currency: string;
 }) {
   const [state, action, pending] = useActionState<BookResult | null, FormData>(confirmBooking, null);
+  const { s: t } = useGuestKit();
+  const s = t.book;
 
   /*
    * The guest's own words are held in React state, not left to the DOM.
@@ -99,26 +103,28 @@ export function BookingForm({
         <input key={k} type="hidden" name={k} value={String(stay[k])} />
       ))}
 
-      <HoldCountdown expiresAt={expiresAt} />
+      {/* One-time token: a double press or a retried request confirms one booking, not two. */}
+      <SubmitTokenField />
+      <HoldCountdown expiresAt={expiresAt} expired={s.holdExpired} holding={s.holding} />
 
       <section className="card-raised p-5 sm:p-6">
-        <h2 className="display text-[1.25rem]">Who's staying?</h2>
+        <h2 className="display text-[1.25rem]">{s.whoTitle}</h2>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="First name" name="firstName" autoComplete="given-name" required
+          <Field label={s.firstName} optionalLabel={s.optional} name="firstName" autoComplete="given-name" required
                  value={guest.firstName} onValue={set("firstName")} />
-          <Field label="Last name" name="lastName" autoComplete="family-name" required
+          <Field label={s.lastName} optionalLabel={s.optional} name="lastName" autoComplete="family-name" required
                  value={guest.lastName} onValue={set("lastName")} />
-          <Field label="Email" name="email" type="email" autoComplete="email" required
+          <Field label={s.email} optionalLabel={s.optional} name="email" type="email" autoComplete="email" required
                  value={guest.email} onValue={set("email")}
-                 hint="Your confirmation goes here." />
-          <Field label="Phone" name="phone" type="tel" autoComplete="tel"
+                 hint={s.emailHint} />
+          <Field label={s.phone} optionalLabel={s.optional} name="phone" type="tel" autoComplete="tel"
                  value={guest.phone} onValue={set("phone")}
-                 hint="Only if the hotel needs to reach you." />
+                 hint={s.phoneHint} />
         </div>
 
         <div className="mt-3">
           <label htmlFor="note" className="mb-1.5 block text-[12.5px] font-semibold">
-            Anything we should know? <span className="font-normal" style={{ color: "hsl(var(--ink-faint))" }}>Optional</span>
+            {s.note} <span className="font-normal" style={{ color: "hsl(var(--ink-faint))" }}>{s.optional}</span>
           </label>
           <textarea
             id="note"
@@ -127,12 +133,12 @@ export function BookingForm({
             maxLength={500}
             value={guest.note}
             onChange={(e) => set("note")(e.target.value)}
-            placeholder="Late arrival, a quiet room, celebrating something…"
+            placeholder={s.notePlaceholder}
             className="w-full rounded-[var(--r-sm)] border px-3 py-2 text-[14px] outline-none"
             style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
           />
           <p className="mt-1 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
-            Requests aren&rsquo;t guaranteed, but the hotel will see this before you arrive.
+            {s.noteHint}
           </p>
         </div>
       </section>
@@ -153,7 +159,7 @@ export function BookingForm({
 
       <section className="card-raised p-5 sm:p-6">
         <h2 className="display text-[1.25rem]">
-          {paymentReady ? "Holding your room" : "What happens next"}
+          {paymentReady ? s.holdingTitle : s.nextTitle}
         </h2>
         <div
           className="mt-4 flex items-start gap-3 rounded-[var(--r-sm)] p-4"
@@ -163,11 +169,10 @@ export function BookingForm({
           <div className="text-[13.5px] leading-relaxed">
             {paymentReady ? (
               <>
-                <p className="font-bold">Nothing is charged now.</p>
+                <p className="font-bold">{s.guaranteeBold}</p>
                 <p className="mt-1" style={{ color: "hsl(var(--ink-soft))" }}>
-                  Your card guarantees the room and you settle the whole amount at the hotel.{" "}
-                  <strong className="font-semibold">Your card details never reach us</strong> — they are
-                  held by our payment provider, and this booking page never sees a card number.
+                  {s.guaranteeBody}{" "}
+                  <strong className="font-semibold">{s.guaranteeStrong}</strong> {s.guaranteeTail}
                 </p>
               </>
             ) : (
@@ -175,11 +180,9 @@ export function BookingForm({
                  instant booking, and pretending otherwise is how a guest arrives at a room nobody
                  kept for them. The room genuinely is held while they decide, so we say that too. */
               <>
-                <p className="font-bold">No card needed — the hotel confirms this one.</p>
+                <p className="font-bold">{s.requestBold}</p>
                 <p className="mt-1" style={{ color: "hsl(var(--ink-soft))" }}>
-                  Your room is held while they check, and you&rsquo;ll get an email as soon as
-                  it&rsquo;s confirmed. Nothing is charged now, and nothing is charged online at all —
-                  you settle the whole amount at the hotel.
+                  {s.requestBody}
                 </p>
               </>
             )}
@@ -190,7 +193,7 @@ export function BookingForm({
           <p className="mt-3 flex items-start gap-2 text-[13px]" style={{ color: "hsl(var(--ink-soft))" }}>
             <ShieldCheck size={15} aria-hidden className="mt-0.5 shrink-0" style={{ color: "hsl(var(--positive))" }} />
             <span>
-              <strong className="font-semibold" style={{ color: "hsl(var(--ink))" }}>Cancellation:</strong>{" "}
+              <strong className="font-semibold" style={{ color: "hsl(var(--ink))" }}>{s.cancellation}</strong>{" "}
               {cancellationPolicy}
             </span>
           </p>
@@ -215,8 +218,8 @@ export function BookingForm({
             style={{ accentColor: "hsl(var(--brand))" }}
           />
           <span className="text-[13px] leading-relaxed">
-            I accept the booking conditions and the cancellation policy above
-            {paymentReady ? ", and I understand my card is used as a guarantee" : ""}.
+            {s.accept}
+            {paymentReady ? s.acceptCard : ""}.
           </span>
         </label>
       </section>
@@ -234,22 +237,21 @@ export function BookingForm({
 
       <button type="submit" disabled={pending} className="btn btn-brand w-full text-[15px]">
         {pending
-          ? paymentReady ? "Confirming…" : "Sending…"
-          : paymentReady ? "Confirm booking" : "Request this room"}
+          ? paymentReady ? s.confirming : s.sending
+          : paymentReady ? s.confirm : s.request}
       </button>
       <p className="text-center text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-        {paymentReady
-          ? "You’ll get a confirmation by email straight away."
-          : "You’ll get an email the moment the hotel confirms."}
+        {paymentReady ? s.confirmHint : s.requestHint}
       </p>
     </ActionForm>
   );
 }
 
 function Field({
-  label, name, type = "text", required, autoComplete, hint, value, onValue,
+  label, optionalLabel, name, type = "text", required, autoComplete, hint, value, onValue,
 }: {
   label: string;
+  optionalLabel: string;
   name: string;
   type?: string;
   required?: boolean;
@@ -264,7 +266,7 @@ function Field({
       <label htmlFor={name} className="mb-1.5 block text-[12.5px] font-semibold">
         {label}
         {!required && (
-          <span className="font-normal" style={{ color: "hsl(var(--ink-faint))" }}> · optional</span>
+          <span className="font-normal" style={{ color: "hsl(var(--ink-faint))" }}> · {optionalLabel}</span>
         )}
       </label>
       <input
@@ -292,7 +294,7 @@ function Field({
  * reaches zero. That is the difference between this and the countdowns that made OTAs distrusted —
  * every other claim on this site is honest, and a fake timer here would cost all of them.
  */
-function HoldCountdown({ expiresAt }: { expiresAt: string }) {
+function HoldCountdown({ expiresAt, expired, holding }: { expiresAt: string; expired: string; holding: string }) {
   const [left, setLeft] = useState<number | null>(null);
 
   useEffect(() => {
@@ -314,7 +316,7 @@ function HoldCountdown({ expiresAt }: { expiresAt: string }) {
         style={{ backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}
         role="status"
       >
-        Your hold has expired. You can still try to confirm — the room may well be free.
+        {expired}
       </p>
     );
   }
@@ -323,7 +325,7 @@ function HoldCountdown({ expiresAt }: { expiresAt: string }) {
   const s = String(left % 60).padStart(2, "0");
   return (
     <p className="text-[13px]" style={{ color: "hsl(var(--ink-soft))" }} role="status">
-      We&rsquo;re holding this room for you for{" "}
+      {holding}{" "}
       <strong className="nums font-bold" style={{ color: "hsl(var(--ink))" }}>{m}:{s}</strong>.
     </p>
   );

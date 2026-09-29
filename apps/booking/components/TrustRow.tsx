@@ -1,4 +1,5 @@
 import { BadgePercent, CreditCard, RadioTower } from "lucide-react";
+import type { GuestStrings } from "@/lib/i18n/guest";
 
 /**
  * Why book here rather than on an OTA.
@@ -12,25 +13,14 @@ import { BadgePercent, CreditCard, RadioTower } from "lucide-react";
  * No countdown timers, no "12 people are viewing". Fake urgency is exactly how OTAs lost trust, and
  * it would undermine the one claim here that is genuinely unusual.
  */
-const POINTS = [
-  {
-    Icon: BadgePercent,
-    title: "No booking fees",
-    body: "You pay the hotel, not a middleman. No commission is added to your rate.",
-  },
-  {
-    Icon: CreditCard,
-    title: "Nothing charged today",
-    body: "Your card guarantees the room. You settle at the hotel.",
-  },
-  {
-    Icon: RadioTower,
-    title: "Live availability",
-    body: "Rooms shown here are genuinely free right now — not a cached copy.",
-  },
-] as const;
 
-export function TrustRow({ checkInTime, checkOutTime }: { checkInTime: string; checkOutTime: string }) {
+
+export function TrustRow({ checkInTime, checkOutTime, s }: { checkInTime: string; checkOutTime: string; s: GuestStrings["trust"] }) {
+  const POINTS = [
+    { Icon: BadgePercent, title: s.feesTitle, body: s.feesBody },
+    { Icon: CreditCard, title: s.chargedTitle, body: s.chargedBody },
+    { Icon: RadioTower, title: s.liveTitle, body: s.liveBody },
+  ] as const;
   return (
     <div>
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -50,7 +40,7 @@ export function TrustRow({ checkInTime, checkOutTime }: { checkInTime: string; c
         ))}
       </ul>
       <p className="mt-4 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-        Check-in from {checkInTime}, check-out by {checkOutTime}.
+        {s.times(checkInTime, checkOutTime)}
       </p>
     </div>
   );

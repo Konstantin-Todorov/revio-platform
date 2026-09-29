@@ -6,7 +6,8 @@ import { bookingReference, publicCreateReservation, publicGetHold, publicRelease
 import { createCardGuarantee } from "@revio/payments";
 import { sendTemplatedEmail } from "@revio/email";
 import { PAY_AT_HOTEL_LABEL, stayDetails } from "@revio/core";
-import { forSystem } from "@revio/db";
+import { claimSubmitToken, forSystem } from "@revio/db";
+import { serverKit } from "./i18n/server";
 import { getPublicProperty } from "./property";
 import { nightsBetween } from "./dates";
 
@@ -32,6 +33,9 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
   // Same generic answer as everywhere else on this app — never leak whether a hotel exists.
   if (!property) return { ok: false, error: "This booking page isn't available." };
 
+  // Everything this action says is in the guest's language — the same one the page was in.
+  const { s, locale } = await serverKit(property);
+  const e = s.errors;
   const db = forTenant(property.tenantId);
   const scoped = { ...property, id: property.id };
 
@@ -41,10 +45,10 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
   const email = str(fd, "email");
   const phone = str(fd, "phone");
 
-  if (!firstName || !lastName) return { ok: false, error: "Please give your first and last name." };
-  if (!/.+@.+\..+/.test(email)) return { ok: false, error: "That email address doesn't look right." };
+  if (!firstName || !lastName) return { ok: false, error: e.name };
+  if (!/.+@.+\..+/.test(email)) return { ok: false, error: e.email };
   if (fd.get("acceptTerms") == null) {
-    return { ok: false, error: "Please accept the booking conditions to continue." };
+    return { ok: false, error: e.terms };
   }
 
   // The hold is the guest's claim on the room. If it expired while they were typing, say so plainly
@@ -52,8 +56,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
   if (holdId && !(await publicGetHold(db, property.id, holdId))) {
     return {
       ok: false,
-      error:
-        "Your room was only held for a short time and that window has passed. Please search again — it may still be free.",
+      error: e.holdGone,
     };
   }
 
@@ -71,6 +74,16 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
    */
   const requestOnly = !property.paymentReady;
 
+  /*
+   * One booking per press. Before the card guarantee on purpose: a second arrival of the same form
+   * (a double tap before the page hydrated, a retried request) must not create a second guarantee
+   * either. The hold already refuses a second booking, but with "the hold expired" — read by the
+   * guest as a failure while their booking in fact exists — so a duplicate goes to the list instead.
+   */
+  if (!(await claimSubmitToken(db, fd, property.tenantId, "confirmBooking"))) {
+    redirect(`/${property.slug}`);
+  }
+
   const guarantee = requestOnly
     ? null
     : await createCardGuarantee(
@@ -78,7 +91,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
         `Guarantee · ${property.name} · ${str(fd, "checkIn")}`,
       );
   if (guarantee && !guarantee.ok) {
-    return { ok: false, error: "We couldn't confirm your card guarantee. Please try again, or call the hotel." };
+    return { ok: false, error: e.card };
   }
 
   /*
@@ -92,7 +105,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
   const guestsRaw = str(fd, "guests");
   const guestCount = guestsRaw === "" ? 2 : Number.parseInt(guestsRaw, 10);
   if (!Number.isFinite(guestCount)) {
-    return { ok: false, error: "Tell us how many guests are staying." };
+    return { ok: false, error: e.guests };
   }
 
   const result = await publicCreateReservation(db, scoped, {
@@ -109,10 +122,13 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
     // catalogue, so a tampered checkbox changes what is booked, never what is paid.
     extraIds: fd.getAll("extraIds").filter((v): v is string => typeof v === "string"),
     guestNote: str(fd, "note"),
+    // Every later mail to this guest follows the language they booked in.
+    guestLanguage: locale,
   });
 
   if (result.error || !result.reservationId) {
-    return { ok: false, error: result.error ?? "We couldn't complete that booking." };
+    // By code, never by the engine's English sentence.
+    return { ok: false, error: result.code ? e.booking[result.code] : e.generic };
   }
 
   const reference = bookingReference(result.reservationId);
@@ -127,9 +143,10 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
   try {
     await sendTemplatedEmail(forSystem(), {
       propertyId: property.id,
-      key: "booking_confirmation",
+      // A request is not a booking: it says so, and the confirmation follows when the hotel accepts.
+      key: requestOnly ? "booking_requested" : "booking_confirmation",
       to: [email],
-      locale: property.defaultLanguage,
+      locale,
       vars: {
         guestName: firstName,
         propertyName: property.name,
@@ -138,13 +155,13 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
         nights: String(nightsBetween(str(fd, "checkIn"), str(fd, "checkOut"))),
         roomType: result.roomTypeName ?? "",
         reference,
-        total: formatMoney(result.totalMinor ?? 0, result.currency ?? property.baseCurrency, property.defaultLanguage),
+        total: formatMoney(result.totalMinor ?? 0, result.currency ?? property.baseCurrency, locale),
       },
       // The stay, itemised the same way the confirmation page shows it — in the email's own language,
       // labels, dates and money included (`stayDetails`). It was hard-coded English, so a Bulgarian
       // confirmation arrived with an English middle.
       details: stayDetails({
-        locale: property.defaultLanguage,
+        locale,
         reference,
         roomType: result.roomTypeName ?? "",
         checkIn: str(fd, "checkIn"),
@@ -154,7 +171,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
         guests: guestCount,
         totalMinor: result.totalMinor ?? 0,
         currency: result.currency ?? property.baseCurrency,
-        totalLabel: PAY_AT_HOTEL_LABEL[property.defaultLanguage] ?? PAY_AT_HOTEL_LABEL.en!,
+        totalLabel: PAY_AT_HOTEL_LABEL[locale] ?? PAY_AT_HOTEL_LABEL.en!,
       }),
     });
   } catch {

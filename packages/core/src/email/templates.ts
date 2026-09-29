@@ -59,6 +59,31 @@ With warm regards,
 {{propertyName}}`,
   },
   {
+    /*
+     * A request-to-book is NOT a booking, and its first email must not say it is. It went out as
+     * "your reservation is confirmed" while the page said "Request sent" — the guest held two
+     * contradictory answers from the same hotel in the same minute (found 2026-09-29). The real
+     * confirmation now goes when the hotel accepts; a decline sends the cancellation.
+     */
+    key: "booking_requested",
+    label: "Booking request received",
+    description: "Sent when a guest asks for a room on your booking page and you confirm it yourself.",
+    audience: "guest",
+    canDisable: false,
+    variables: { ...GUEST_COMMON },
+    defaultSubject: "We have your request — {{propertyName}}, {{reference}}",
+    defaultBody: `Dear {{guestName}},
+
+Thank you for your request. The room is held for you while we check, and we will confirm by email — usually within a few hours. Nothing has been charged.
+
+{{details}}
+
+If you need an answer sooner, simply reply to this message.
+
+With warm regards,
+{{propertyName}}`,
+  },
+  {
     key: "booking_modified",
     label: "Booking changed",
     description: "Sent when dates, room or occupancy change on an existing reservation.",
@@ -613,6 +638,19 @@ export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string
 С уважение,
 {{propertyName}}`,
     },
+    booking_requested: {
+      subject: "Получихме заявката Ви — {{propertyName}}, {{reference}}",
+      body: `Уважаеми {{guestName}},
+
+Благодарим Ви за заявката. Стаята е задържана за Вас, докато проверим, и ще Ви потвърдим по имейл — обикновено до няколко часа. Нищо не е платено.
+
+{{details}}
+
+Ако Ви трябва отговор по-бързо, просто отговорете на това съобщение.
+
+С уважение,
+{{propertyName}}`,
+    },
     booking_modified: {
       subject: "Вашата резервация е обновена — {{reference}}",
       body: `Уважаеми {{guestName}},
@@ -749,6 +787,7 @@ export type EmailStage = (typeof EMAIL_STAGES)[number];
 
 export const EMAIL_STAGE_OF: Record<string, EmailStage> = {
   booking_confirmation: "booking",
+  booking_requested: "booking",
   booking_modified: "booking",
   booking_cancelled: "booking",
   pre_arrival: "before",
@@ -772,6 +811,7 @@ export const EMAIL_STAGE_OF: Record<string, EmailStage> = {
 export type EmailSender = "direct" | "crs" | "pms" | "schedule";
 export const EMAIL_SENT_BY: Record<string, readonly EmailSender[]> = {
   booking_confirmation: ["direct", "crs"],
+  booking_requested: ["direct"],
   booking_modified: ["crs"],
   booking_cancelled: ["crs"],
   pre_arrival: ["schedule"],

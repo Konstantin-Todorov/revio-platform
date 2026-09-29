@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import type { GuestStrings } from "@/lib/i18n/guest";
 
 /**
  * Where the guest is in the booking, and how much is left.
@@ -15,11 +16,12 @@ import { Check } from "lucide-react";
 export const STEPS = ["Dates", "Room", "Details", "Confirm"] as const;
 export type StepName = (typeof STEPS)[number];
 
-export function StepBar({ current, backHref }: { current: StepName; backHref?: string }) {
+/** `current` is the step's internal key; what the guest reads comes from `s` (their language). */
+export function StepBar({ current, backHref, s }: { current: StepName; backHref?: string; s: GuestStrings["steps"] }) {
   const index = STEPS.indexOf(current);
 
   return (
-    <nav aria-label="Booking progress" className="flex items-center gap-2 sm:gap-3">
+    <nav aria-label={s.progress} className="flex items-center gap-2 sm:gap-3">
       <ol className="flex flex-1 items-center gap-2 sm:gap-3">
         {STEPS.map((step, i) => {
           const done = i < index;
@@ -47,7 +49,7 @@ export function StepBar({ current, backHref }: { current: StepName; backHref?: s
                   style={{ color: active ? "hsl(var(--ink))" : "hsl(var(--ink-faint))" }}
                   aria-current={active ? "step" : undefined}
                 >
-                  {step}
+                  {s.names[i]}
                 </span>
               </span>
               {i < STEPS.length - 1 && (
@@ -64,7 +66,7 @@ export function StepBar({ current, backHref }: { current: StepName; backHref?: s
 
       {backHref && (
         <a href={backHref} className="link-quiet shrink-0 text-[13px] font-medium">
-          Back
+          {s.back}
         </a>
       )}
     </nav>

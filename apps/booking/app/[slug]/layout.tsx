@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { bookingPreset } from "@revio/core";
 import { getPublicProperty } from "@/lib/property";
 import { brandTokens, fontVars } from "@/lib/brand";
+import { LocaleProvider } from "@revio/ui/i18n-context";
+import { guestLocale, serverKit } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +19,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const property = await getPublicProperty(slug);
   if (!property) return { title: "Not found" };
+  const { s } = await serverKit(property);
   return {
-    title: `Book ${property.name}`,
-    description: `Book direct at ${property.name}. Best rate, no booking fees.`,
+    title: s.meta.title(property.name),
+    description: s.meta.description(property.name),
     robots: { index: false, follow: false },
     /*
      * The HOTEL's logo in the tab — never Revio's.
@@ -51,9 +54,15 @@ export default async function PropertyLayout({
   // The preset supplies only neutrals and shape; the accent is always the hotel's own colour. That
   // separation is what lets "pick a base, then edit" compose — the two choices cannot fight.
   const { tokens: p } = bookingPreset(property.preset);
+  // The guest's language — their pick, their browser, or the hotel's default. Carried to client
+  // components by the provider, and stated on the page for screen readers and the browser's own
+  // translate prompt (the root <html> cannot know it: it is rendered before a slug resolves).
+  const locale = await guestLocale(property.defaultLanguage);
 
   return (
+    <LocaleProvider locale={locale}>
     <div
+      lang={locale}
       /* Paints the ground itself: <body> resolved --ground from :root before this subtree existed,
          so a preset that only overrides the variable would leave the page behind it unchanged. */
       className="relative min-h-screen bg-[hsl(var(--ground))]"
@@ -84,5 +93,6 @@ export default async function PropertyLayout({
     >
       {children}
     </div>
+    </LocaleProvider>
   );
 }

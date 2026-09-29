@@ -2,7 +2,7 @@
 
 import { extraTotalMinor, type SellableExtra } from "@revio/core";
 import { Plus } from "lucide-react";
-import { money } from "@/lib/dates";
+import { useGuestKit } from "@/lib/i18n/use-kit";
 
 /**
  * Extras the hotel sells, offered AFTER the room is chosen.
@@ -36,13 +36,15 @@ export function ExtrasPicker({
    */
   currency: string;
 }) {
+  const { s: t, money } = useGuestKit();
+  const s = t.book;
   if (extras.length === 0) return null;
 
   return (
     <section className="card-raised p-5 sm:p-6">
-      <h2 className="display text-[1.25rem]">Anything else?</h2>
+      <h2 className="display text-[1.25rem]">{s.extrasTitle}</h2>
       <p className="mt-1 text-[13.5px]" style={{ color: "hsl(var(--ink-soft))" }}>
-        Optional — added to the same bill, and settled at the hotel with everything else.
+        {s.extrasLead}
       </p>
 
       <ul className="mt-4 space-y-2">
@@ -83,8 +85,8 @@ export function ExtrasPicker({
                       guest has to reverse-engineer; "€12 a night × 3 nights" is one they can check. */}
                   <span className="mt-0.5 block text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
                     {e.basis === "per_night"
-                      ? `${money(e.priceMinor, currency)} a night × ${nights} ${nights === 1 ? "night" : "nights"}`
-                      : "once, for the whole stay"}
+                      ? s.perNight(money(e.priceMinor, currency), nights)
+                      : s.perStay}
                   </span>
                 </span>
               </label>
@@ -95,7 +97,7 @@ export function ExtrasPicker({
 
       {chosen.size === 0 && (
         <p className="mt-3 flex items-center gap-1.5 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-          <Plus size={13} aria-hidden /> Nothing selected — your total is unchanged.
+          <Plus size={13} aria-hidden /> {s.extrasNone}
         </p>
       )}
     </section>

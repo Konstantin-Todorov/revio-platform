@@ -1,4 +1,5 @@
 import type { PublicProperty } from "@/lib/property";
+import { serverKit } from "@/lib/i18n/server";
 
 /**
  * The hotel's own details, closing every page.
@@ -7,7 +8,8 @@ import type { PublicProperty } from "@/lib/property";
  * byline at the bottom of it would tell a guest they are transacting with someone other than the
  * hotel — the exact impression the product exists to remove.
  */
-export function PropertyFooter({ property }: { property: PublicProperty }) {
+export async function PropertyFooter({ property }: { property: PublicProperty }) {
+  const { s } = await serverKit(property);
   return (
     <footer className="border-t" style={{ borderColor: "hsl(var(--line))", backgroundColor: "hsl(var(--surface))" }}>
       <div className="mx-auto flex w-full max-w-[72rem] flex-wrap items-start justify-between gap-x-10 gap-y-6 px-5 py-10 sm:px-8">
@@ -33,9 +35,9 @@ export function PropertyFooter({ property }: { property: PublicProperty }) {
         </div>
 
         <p className="text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-faint))" }}>
-          Check-in from {property.checkInTime} · Check-out by {property.checkOutTime}
+          {s.footer.times(property.checkInTime, property.checkOutTime)}
           <br />
-          Prices include all taxes and fees.
+          {s.footer.allIn}
         </p>
       </div>
     </footer>

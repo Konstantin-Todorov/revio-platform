@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Phone, ShieldCheck } from "lucide-react";
 import type { PublicProperty } from "@/lib/property";
+import { serverKit } from "@/lib/i18n/server";
+import { LanguageSwitch } from "./LanguageSwitch";
 
 /**
  * The hotel's mark, pinned to the top of every step.
@@ -13,7 +15,8 @@ import type { PublicProperty } from "@/lib/property";
  * A logo when they have uploaded one, otherwise their name set in the display face — a wordmark
  * rather than a grey placeholder box, so a hotel that uploaded nothing still looks intentional.
  */
-export function PropertyHeader({ property }: { property: PublicProperty }) {
+export async function PropertyHeader({ property }: { property: PublicProperty }) {
+  const { s } = await serverKit(property);
   return (
     <header
       className="sticky top-0 z-30 border-b"
@@ -38,12 +41,13 @@ export function PropertyHeader({ property }: { property: PublicProperty }) {
         </Link>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+          <LanguageSwitch />
           <span
             className="hidden items-center gap-1.5 text-[12.5px] font-semibold sm:flex"
             style={{ color: "hsl(var(--positive))" }}
           >
             <ShieldCheck size={14} aria-hidden />
-            Official site
+            {s.header.official}
           </span>
           {property.phone && (
             <a
@@ -52,7 +56,7 @@ export function PropertyHeader({ property }: { property: PublicProperty }) {
             >
               <Phone size={14} aria-hidden />
               <span className="hidden sm:inline">{property.phone}</span>
-              <span className="sr-only sm:hidden">Call {property.name}</span>
+              <span className="sr-only sm:hidden">{s.header.call(property.name)}</span>
             </a>
           )}
         </div>

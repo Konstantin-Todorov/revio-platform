@@ -30,6 +30,8 @@
     "./primitives": "./src/primitives.tsx",
     "./channel-plans": "./src/channel-plans.tsx",
     "./submit-token": "./src/submit-token.tsx",
+    "./date-words": "./src/date-words.ts",
+    "./room-content-strings": "./src/room-content-strings.ts",
     "./stat-card": "./src/stat-card.tsx",
     "./sparkline": "./src/sparkline.tsx",
     "./motion": "./src/motion.ts",

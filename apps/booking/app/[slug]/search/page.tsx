@@ -6,7 +6,9 @@ import { clientIp, type AlternativeStay } from "@revio/booking";
 import { getObjectStore } from "@revio/storage";
 import { getPublicProperty, type PublicProperty } from "@/lib/property";
 import { searchAvailability } from "@/lib/availability";
-import { fmtDay, isValidISO, money, nightsBetween } from "@/lib/dates";
+import { isValidISO, nightsBetween } from "@/lib/dates";
+import { serverKit } from "@/lib/i18n/server";
+import type { GuestKit } from "@/lib/i18n/kit";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { RoomOption } from "@/components/RoomOption";
@@ -48,6 +50,8 @@ export default async function SearchPage({
   if (!property) notFound();
 
   const q = parseQuery(sp);
+  const kit = await serverKit(property);
+  const { s, fmtDay } = kit;
   const nights = q.checkIn && q.checkOut ? nightsBetween(q.checkIn, q.checkOut) : 0;
   const valid = !!q.checkIn && !!q.checkOut && nights > 0;
 
@@ -76,7 +80,7 @@ export default async function SearchPage({
       </div>
 
       <main className="mx-auto w-full max-w-[72rem] px-5 pb-20 pt-6 sm:px-8">
-        <StepBar current="Room" backHref={`/${property.slug}`} />
+        <StepBar current="Room" backHref={`/${property.slug}`} s={s.steps} />
 
         <div className="mt-6 sm:mt-8">
           {valid ? (
@@ -85,15 +89,14 @@ export default async function SearchPage({
                 {fmtDay(q.checkIn!)} — {fmtDay(q.checkOut!)}
               </h1>
               <p className="nums mt-2 text-[14px]" style={{ color: "hsl(var(--ink-soft))" }}>
-                {nights} {nights === 1 ? "night" : "nights"} · {q.guests}{" "}
-                {q.guests === 1 ? "guest" : "guests"} · every price includes taxes and fees
+                {s.search.summary(nights, q.guests)}
               </p>
             </>
           ) : (
             <>
-              <h1 className="display text-[1.85rem] sm:text-[2.4rem]">Choose your dates</h1>
+              <h1 className="display text-[1.85rem] sm:text-[2.4rem]">{s.search.chooseTitle}</h1>
               <p className="mt-2 text-[14px]" style={{ color: "hsl(var(--ink-soft))" }}>
-                Pick a check-in and a check-out above to see what's free and what it costs.
+                {s.search.chooseBody}
               </p>
             </>
           )}
@@ -103,11 +106,12 @@ export default async function SearchPage({
           {valid ? (
             // Keyed on the query so changing dates shows the skeleton again rather than leaving the
             // previous stay's prices on screen while the new ones are fetched.
-            <Suspense key={`${q.checkIn}-${q.checkOut}-${q.guests}`} fallback={<ResultsSkeleton />}>
+            <Suspense key={`${q.checkIn}-${q.checkOut}-${q.guests}`} fallback={<ResultsSkeleton label={s.search.checking} />}>
               <Results
                 property={property}
                 q={{ checkIn: q.checkIn!, checkOut: q.checkOut!, guests: q.guests }}
                 nights={nights}
+                kit={kit}
               />
             </Suspense>
           ) : null}
@@ -123,11 +127,14 @@ async function Results({
   property,
   q,
   nights,
+  kit,
 }: {
   property: PublicProperty;
   q: { checkIn: string; checkOut: string; guests: number };
   nights: number;
+  kit: GuestKit;
 }) {
+  const { s } = kit;
   const [outcome, store] = await Promise.all([
     searchAvailability(property, clientIp(await headers()), q),
     getObjectStore(),
@@ -135,26 +142,27 @@ async function Results({
   const options = outcome.options ?? [];
   const mediaUrl = (key: string) => store.publicUrl(key);
 
-  if (outcome.error) return <Notice property={property}>{outcome.error}</Notice>;
+  // Said in the guest's language, by what went wrong — never the engine's English sentence.
+  if (outcome.error) {
+    return <Notice property={property} callLabel={s.search.callHotel}>{outcome.rateLimited ? s.search.rateLimited : outcome.code ? s.errors.booking[outcome.code] : s.errors.generic}</Notice>;
+  }
 
   if (options.length === 0) {
     const alternatives = outcome.alternatives ?? [];
     return (
       <Notice
         property={property}
-        title={alternatives.length ? "Those dates are full — but these are free" : "No rooms free for those dates"}
+        callLabel={s.search.callHotel}
+        title={alternatives.length ? s.search.altTitle : s.search.noneTitle}
       >
         {alternatives.length ? (
           <>
-            Same {nights === 1 ? "night" : `${nights} nights`}, moved a little. We checked each one —
-            these have rooms right now.
-            <AlternativeDates slug={property.slug} guests={q.guests} alternatives={alternatives} />
+            {s.search.altBody(nights)}
+            <AlternativeDates slug={property.slug} guests={q.guests} alternatives={alternatives} kit={kit} />
           </>
         ) : (
           <>
-            We also checked the week either side and could not find {nights}{" "}
-            {nights === 1 ? "night" : "nights"} anywhere near these dates. The hotel may be full, or
-            those nights may not be open for booking yet.
+            {s.search.noneBody(nights)}
           </>
         )}
         {/*
@@ -175,7 +183,7 @@ async function Results({
   return (
     <>
       <p className="mb-4 text-[13px] font-semibold" style={{ color: "hsl(var(--ink-soft))" }}>
-        {options.length} {options.length === 1 ? "room type" : "room types"} available
+        {s.search.available(options.length)}
       </p>
       <div className="space-y-4">
         {options.map((option) => (
@@ -188,12 +196,12 @@ async function Results({
             checkOut={q.checkOut}
             guests={q.guests}
             mediaUrl={mediaUrl}
+            kit={kit}
           />
         ))}
       </div>
       <p className="mt-8 text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-faint))" }}>
-        Prices are for the whole stay and include all taxes and fees. Nothing is charged when you
-        book — your card only guarantees the room.
+        {property.paymentReady ? s.search.footnote : s.search.footnoteRequest}
       </p>
     </>
   );
@@ -213,11 +221,14 @@ function AlternativeDates({
   slug,
   guests,
   alternatives,
+  kit,
 }: {
   slug: string;
   guests: number;
   alternatives: AlternativeStay[];
+  kit: GuestKit;
 }) {
+  const { s, fmtDay, money } = kit;
   return (
     <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-2">
       {alternatives.map((alt) => (
@@ -231,13 +242,13 @@ function AlternativeDates({
               {fmtDay(alt.checkIn)} — {fmtDay(alt.checkOut)}
             </span>
             <span className="block text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
-              {shiftLabel(alt.offsetDays)}
+              {alt.offsetDays < 0 ? s.search.earlier(-alt.offsetDays) : s.search.later(alt.offsetDays)}
             </span>
           </span>
           <span className="shrink-0 text-right">
             <span className="price block text-[15px]">{money(alt.fromMinor, alt.currency)}</span>
             <span className="block text-[11px]" style={{ color: "hsl(var(--ink-faint))" }}>
-              total
+              {s.search.total}
             </span>
           </span>
         </a>
@@ -246,20 +257,15 @@ function AlternativeDates({
   );
 }
 
-/** "2 days earlier" reads faster than a second date range the guest has to diff themselves. */
-function shiftLabel(offsetDays: number): string {
-  const n = Math.abs(offsetDays);
-  const unit = n === 1 ? "day" : "days";
-  return offsetDays < 0 ? `${n} ${unit} earlier` : `${n} ${unit} later`;
-}
-
 function Notice({
   property,
   title,
+  callLabel,
   children,
 }: {
   property: PublicProperty;
   title?: string;
+  callLabel: (phone: string) => string;
   children: React.ReactNode;
 }) {
   return (
@@ -284,7 +290,7 @@ function Notice({
           style={{ color: "hsl(var(--brand-text))" }}
         >
           <Phone size={15} aria-hidden />
-          Call the hotel — {property.phone}
+          {callLabel(property.phone)}
         </a>
       )}
     </div>
@@ -292,9 +298,9 @@ function Notice({
 }
 
 /** Holds the exact shape of a result card, so nothing on the page moves when prices arrive. */
-function ResultsSkeleton() {
+function ResultsSkeleton({ label }: { label: string }) {
   return (
-    <div className="space-y-4" aria-busy="true" aria-label="Checking availability">
+    <div className="space-y-4" aria-busy="true" aria-label={label}>
       {[0, 1].map((i) => (
         <div key={i} className="card-raised overflow-hidden">
           <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,13.5rem)_1fr]">

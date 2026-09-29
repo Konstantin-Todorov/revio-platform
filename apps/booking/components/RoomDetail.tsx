@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Maximize2, Ruler, Users, X } from "lucide-re
 import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, groupAmenities } from "@revio/core";
 import { AmenityIcon } from "@revio/ui/amenity-icon";
 import type { PublicRoomOption } from "@revio/booking";
+import { useGuestKit } from "@/lib/i18n/use-kit";
 
 /**
  * Everything a guest wants to know before choosing this room, in one place.
@@ -42,8 +43,10 @@ export function RoomDetail({
 }) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
+  const { s: t, room } = useGuestKit();
+  const s = t.room;
   const groups = groupAmenities(option.amenities);
-  const bed = option.bedSetup ? BED_SETUP_BY_KEY[option.bedSetup] : null;
+  const bed = option.bedSetup ? room.bedSetups[option.bedSetup] ?? BED_SETUP_BY_KEY[option.bedSetup] : null;
 
   // Escape closes, and the page behind must not scroll under an open dialog.
   useEffect(() => {
@@ -101,7 +104,7 @@ export function RoomDetail({
                 <h2 className="display text-[1.35rem] leading-tight">{option.name}</h2>
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]" style={{ color: "hsl(var(--ink-soft))" }}>
                   <span className="inline-flex items-center gap-1.5">
-                    <Users size={13} aria-hidden /> Sleeps {option.maxGuests}
+                    <Users size={13} aria-hidden /> {s.sleeps(option.maxGuests)}
                   </span>
                   {option.sizeSqm && (
                     <span className="inline-flex items-center gap-1.5">
@@ -119,7 +122,7 @@ export function RoomDetail({
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                aria-label="Close"
+                aria-label={s.close}
                 className="btn btn-ghost -mr-1 min-h-[36px] px-2"
               >
                 <X size={18} />
@@ -143,13 +146,13 @@ export function RoomDetail({
                   <div className="relative aspect-[16/9] w-full" style={{ backgroundColor: "hsl(var(--ink) / 0.06)" }}>
                     <img
                       src={current.full}
-                      alt={current.alt || `${option.name} — photo ${index + 1}`}
+                      alt={current.alt || s.photoN(option.name, index + 1)}
                       className="absolute inset-0 h-full w-full object-contain"
                     />
                     {photos.length > 1 && (
                       <>
-                        <GalleryNav side="left" onClick={() => setIndex((i) => (i - 1 + photos.length) % photos.length)} />
-                        <GalleryNav side="right" onClick={() => setIndex((i) => (i + 1) % photos.length)} />
+                        <GalleryNav side="left" label={s.prevPhoto} onClick={() => setIndex((i) => (i - 1 + photos.length) % photos.length)} />
+                        <GalleryNav side="right" label={s.nextPhoto} onClick={() => setIndex((i) => (i + 1) % photos.length)} />
                         <span
                           className="absolute bottom-2 right-2 rounded-full px-2 py-1 text-[11px] font-semibold"
                           style={{ backgroundColor: "hsl(var(--ink) / 0.62)", color: "#fff" }}
@@ -167,7 +170,7 @@ export function RoomDetail({
                           key={p.thumb}
                           type="button"
                           onClick={() => setIndex(i)}
-                          aria-label={`Photo ${i + 1}`}
+                          aria-label={s.photo(i + 1)}
                           aria-current={i === index}
                           className="relative h-14 w-20 shrink-0 overflow-hidden rounded-[var(--r-sm)]"
                           style={{ outline: i === index ? "2px solid hsl(var(--brand))" : "none", outlineOffset: "1px" }}
@@ -189,7 +192,7 @@ export function RoomDetail({
                   <div className="space-y-3.5">
                     {groups.map((g) => (
                       <div key={g.group}>
-                        <div className="eyebrow mb-1.5">{g.label}</div>
+                        <div className="eyebrow mb-1.5">{room.amenityGroups[g.group] ?? g.label}</div>
                         {/*
                           An icon per row, not a bullet.
 
@@ -207,7 +210,7 @@ export function RoomDetail({
                                 className="shrink-0"
                                 style={{ color: "hsl(var(--brand-text))" }}
                               />
-                              {a.label}
+                              {room.amenities[a.key] ?? a.label}
                             </li>
                           ))}
                         </ul>
@@ -220,8 +223,7 @@ export function RoomDetail({
                     has not written its content yet, not a room with nothing in it. */}
                 {!option.description && groups.length === 0 && photos.length === 0 && (
                   <p className="text-[13.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-                    The hotel hasn&apos;t added photos or a description for this room yet. Call them and
-                    they will tell you everything about it.
+                    {s.empty}
                   </p>
                 )}
               </div>
@@ -229,7 +231,7 @@ export function RoomDetail({
 
             <footer className="border-t px-5 py-3.5" style={{ borderColor: "hsl(var(--line))" }}>
               <button type="button" onClick={() => setOpen(false)} className="btn btn-primary w-full">
-                Choose a rate for this room
+                {s.chooseRate}
               </button>
             </footer>
           </div>
@@ -239,12 +241,12 @@ export function RoomDetail({
   );
 }
 
-function GalleryNav({ side, onClick }: { side: "left" | "right"; onClick: () => void }) {
+function GalleryNav({ side, label, onClick }: { side: "left" | "right"; label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={side === "left" ? "Previous photo" : "Next photo"}
+      aria-label={label}
       className={`absolute top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full ${
         side === "left" ? "left-2" : "right-2"
       }`}
@@ -256,11 +258,11 @@ function GalleryNav({ side, onClick }: { side: "left" | "right"; onClick: () => 
 }
 
 /** The affordance on the card: says there is more to see, and how much. */
-export function RoomDetailTrigger({ photoCount }: { photoCount: number }) {
+export function RoomDetailTrigger({ label }: { label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: "hsl(var(--brand-text))" }}>
       <Maximize2 size={13} aria-hidden />
-      {photoCount > 1 ? `Room details & ${photoCount} photos` : "Room details"}
+      {label}
     </span>
   );
 }

@@ -37,7 +37,8 @@ export async function emailGuestAbout(reservationId: string, key: StayEmailKey):
     const line = r.lines[0];
     if (!line) return "failed";
 
-    const locale = r.property.defaultLanguage || "en";
+    // The language the guest booked in (RevioDirect records it); the hotel's default otherwise.
+    const locale = r.guestLanguage || r.property.defaultLanguage || "en";
     const reference = bookingReference(r.id);
     const checkIn = line.checkIn.toISOString().slice(0, 10);
     const checkOut = line.checkOut.toISOString().slice(0, 10);

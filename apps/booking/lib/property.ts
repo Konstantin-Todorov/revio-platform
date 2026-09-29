@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { forSystem } from "@revio/db";
-import { BOOKING_COPY_DEFAULTS, heroFocalY, heroScrim, resolveBrandLogo } from "@revio/core";
+import { heroFocalY, heroScrim, resolveBrandLogo } from "@revio/core";
 import { getObjectStore } from "@revio/storage";
 
 /**
@@ -51,8 +51,8 @@ export interface PublicProperty {
   logoUrl: string | null;
   font: string;
   preset: string;
-  headline: string;
-  subheadline: string;
+  headline: string | null;
+  subheadline: string | null;
   showTrust: boolean;
   /**
    * The hotel's own photograph behind the headline, ready to render.
@@ -138,8 +138,10 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
     // serif headings are the closest honest equivalent here.
     font: property.bookingFont ?? (property.emailFont === "sans" ? "sans" : "serif"),
     preset: property.bookingPreset,
-    headline: property.bookingHeadline?.trim() || BOOKING_COPY_DEFAULTS.headline,
-    subheadline: property.bookingSubheadline?.trim() || BOOKING_COPY_DEFAULTS.subheadline,
+    // Null when the hotel wrote none: the page then shows OUR default copy in the guest's language
+    // (`guest.hero`). The hotel's own words are shown as written, in whatever language they wrote.
+    headline: property.bookingHeadline?.trim() || null,
+    subheadline: property.bookingSubheadline?.trim() || null,
     showTrust: property.bookingShowTrust,
     hero: property.bookingHeroKey
       ? {

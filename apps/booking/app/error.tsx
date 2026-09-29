@@ -1,5 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { negotiateGuestLanguage } from "@revio/core";
+import type { Locale } from "@revio/ui/i18n";
+import { GUEST_LANG_COOKIE, guestKit } from "@/lib/i18n/kit";
+
 /**
  * What a GUEST sees when something breaks mid-booking.
  *
@@ -29,13 +34,20 @@ export default function BookingError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // The boundary sits above the hotel's layout, so the language is read from the browser itself:
+  // the guest's own pick, else their browser's languages. English until that is known.
+  const [locale, setLocale] = useState<Locale>("en");
+  useEffect(() => {
+    const chosen = document.cookie.split("; ").find((c) => c.startsWith(`${GUEST_LANG_COOKIE}=`))?.split("=")[1] ?? null;
+    setLocale(negotiateGuestLanguage({ chosen, acceptLanguage: navigator.languages.join(",") }) as Locale);
+  }, []);
+  const s = guestKit(locale).s.page;
   return (
-    <main className="mx-auto flex min-h-screen max-w-[34rem] flex-col items-center justify-center px-6 text-center">
-      <p className="eyebrow">Booking</p>
-      <h1 className="display mt-3 text-[2rem]">Something went wrong on our side</h1>
+    <main lang={locale} className="mx-auto flex min-h-screen max-w-[34rem] flex-col items-center justify-center px-6 text-center">
+      <p className="eyebrow">{s.eyebrow}</p>
+      <h1 className="display mt-3 text-[2rem]">{s.errorTitle}</h1>
       <p className="mt-4 text-[15px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>
-        This page didn&rsquo;t load properly. If you had already confirmed a booking, it is safe —
-        check your email for the confirmation before trying again.
+        {s.errorBody}
       </p>
 
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
@@ -44,7 +56,7 @@ export default function BookingError({
           className="rounded-lg px-5 py-2.5 text-[14px] font-semibold"
           style={{ background: "hsl(var(--brand))", color: "hsl(var(--brand-ink))" }}
         >
-          Try again
+          {s.retry}
         </button>
       </div>
 
@@ -52,7 +64,7 @@ export default function BookingError({
           it identifies the failure in our logs and reveals nothing about the hotel or its data. */}
       {error.digest && (
         <p className="mt-6 text-[12px]" style={{ color: "hsl(var(--ink-soft))" }}>
-          If you contact the hotel about this, quote reference{" "}
+          {s.digest}{" "}
           <span className="font-semibold">{error.digest}</span>.
         </p>
       )}
