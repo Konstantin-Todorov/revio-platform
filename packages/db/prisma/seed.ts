@@ -133,8 +133,8 @@ async function main() {
   // --- Cancellation policies & meal plans ---------------------------------
   const [fc1, fc3, nrPolicy] = await Promise.all([
     prisma.cancellationPolicy.create({ data: { ...t, name: "Free Cancellation 1 day", code: "FC1", description: "Free cancellation up to 1 day before arrival" } }),
-    prisma.cancellationPolicy.create({ data: { ...t, name: "Free Cancellation 3 days", code: "FC3", description: "Free cancellation up to 3 days before arrival" } }),
-    prisma.cancellationPolicy.create({ data: { ...t, name: "Non Refundable", code: "NR", description: "100% charge on booking, non-refundable" } }),
+    prisma.cancellationPolicy.create({ data: { ...t, name: "Free Cancellation 3 days", code: "FC3", description: "Free cancellation up to 3 days before arrival", freeCancelDays: 3 } }),
+    prisma.cancellationPolicy.create({ data: { ...t, name: "Non Refundable", code: "NR", description: "100% charge on booking, non-refundable", payment: "prepay", refundable: false, noShowFee: "full" } }),
   ]);
   const [roomOnly, breakfastIncl] = await Promise.all([
     prisma.mealPlan.create({ data: { ...t, name: "Room Only", code: "RO" } }),

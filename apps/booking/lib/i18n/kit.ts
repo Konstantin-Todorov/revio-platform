@@ -1,6 +1,7 @@
 import { LOCALE_LABELS, translate, type Locale } from "@revio/ui/i18n";
 import { dateWords } from "@revio/ui/date-words";
 import { roomContentStrings } from "@revio/ui/room-content-strings";
+import { stayTermsWords, type StayTerms } from "@revio/core";
 import { guest } from "./guest";
 
 /** The cookie the language switcher writes. Read on the server by `serverKit`. A year: a guest's language does not change. */
@@ -36,6 +37,14 @@ export function guestKit(locale: Locale) {
         maximumFractionDigits: 2,
       }).format(minor / 100),
   };
+}
+
+/**
+ * The rate's terms in the guest's words — the SAME sentences on the results, the card step and the
+ * confirmation, because they come from one function with one set of numbers.
+ */
+export function termsWords(kit: GuestKit, t: StayTerms, currency: string) {
+  return stayTermsWords(t, kit.locale === "bg" ? "bg" : "en", (m) => kit.money(m, currency), kit.fmtDay);
 }
 
 export type GuestKit = ReturnType<typeof guestKit>;

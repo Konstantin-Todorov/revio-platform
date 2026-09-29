@@ -17,12 +17,13 @@ import {
   hasChanges, hydrateGuestContact, isAdvancePurchaseClosed, isOtaAliasEmail, recogniseGuest,
   resolveChosenExtras, resolveRestriction, type SellableExtra,
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type RestrictionType,
-  resolveRate, toResolvablePlan, type PriceLookup,
+  resolveRate, toResolvablePlan, type PriceLookup, stayTerms, withoutCard, type StayTerms,
 } from "@revio/core";
+import { sellableTerms, termsPolicyOf } from "./stay-terms.js";
 import { recordAvailabilityPush, syncRealChannels, stayScope } from "@revio/connectivity";
 
 type Db = ReturnType<typeof forTenant>;
-type PropertyRow = { id: string; tenantId: string; name: string; baseCurrency: string; timezone: string };
+type PropertyRow = { id: string; tenantId: string; name: string; baseCurrency: string; timezone: string; /** Stripe says the hotel can accept charges (`stripeChargesEnabled`). Absent = no. */ paymentReady?: boolean };
 
 /**
  * A concurrent confirm converted the hold first (R1).
@@ -75,6 +76,12 @@ export interface PublicPlanQuote {
   currency: string;
   mealPlan: string | null;
   cancellationPolicy: string | null;
+  /**
+   * What the guest pays now, later and at the hotel, and what cancelling costs — from the plan's
+   * policy, through `stayTerms`. Null when the plan has no policy: the engine then holds the card as
+   * a guarantee and states no terms it was never given.
+   */
+  terms: StayTerms | null;
 }
 
 /** One photograph, already resized. Object KEYS — the caller turns them into URLs, because only the
@@ -342,6 +349,18 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
         currency: property.baseCurrency,
         mealPlan: rp.mealPlan?.name ?? null,
         cancellationPolicy: rp.cancellationPolicy?.name ?? null,
+        terms: rp.cancellationPolicy
+          ? (() => {
+              const t = stayTerms(sellableTerms(termsPolicyOf(rp.cancellationPolicy), property.paymentReady ?? false), {
+                totalMinor: charged.totalMinor,
+                firstNightMinor: priceFor(rt, rp, nights[0]!, q.guests) ?? 0,
+                arrival: q.checkIn,
+                today: todayInTz(property.timezone),
+              });
+              // Request-to-book takes no card, so nothing on the page may say a card guarantees it.
+              return property.paymentReady ? t : withoutCard(t);
+            })()
+          : null,
       });
     }
     if (quotes.length > 0) {

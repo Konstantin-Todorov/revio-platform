@@ -1,8 +1,8 @@
 import type { PublicPlanQuote, PublicRoomOption } from "@revio/booking";
-import { BedDouble, ChevronDown, Coffee, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { BedDouble, ChevronDown, Coffee, CreditCard, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, headlineAmenities } from "@revio/core";
 import { AmenityIcon } from "@revio/ui/amenity-icon";
-import type { GuestKit } from "@/lib/i18n/kit";
+import { termsWords, type GuestKit } from "@/lib/i18n/kit";
 import { RoomPhoto } from "./RoomPhoto";
 import { RoomDetail, RoomDetailTrigger } from "./RoomDetail";
 
@@ -262,7 +262,24 @@ function RateRow({
               {plan.mealPlan}
             </span>
           )}
-          {plan.cancellationPolicy && (
+          {plan.terms ? (
+            <>
+              {/* The two facts a guest compares rates by, said beside the price rather than behind a
+                  link: how much leaves their card today, and whether they can change their mind. */}
+              <span className="flex items-center gap-1.5">
+                <CreditCard size={13} aria-hidden style={{ color: "hsl(var(--ink-faint))" }} />
+                {termsWords(kit, plan.terms, plan.currency).payment}
+              </span>
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck
+                  size={13}
+                  aria-hidden
+                  style={{ color: plan.terms.freeCancelUntil ? "hsl(var(--positive))" : "hsl(var(--ink-faint))" }}
+                />
+                {termsWords(kit, plan.terms, plan.currency).cancellation}
+              </span>
+            </>
+          ) : plan.cancellationPolicy && (
             <span className="flex items-center gap-1.5">
               <ShieldCheck size={13} aria-hidden style={{ color: "hsl(var(--positive))" }} />
               {plan.cancellationPolicy}

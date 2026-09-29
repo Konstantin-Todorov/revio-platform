@@ -119,6 +119,7 @@ export interface GuestStrings {
     guaranteeBold: string; guaranteeBody: string; guaranteeStrong: string; guaranteeTail: string;
     requestBold: string; requestBody: string;
     cancellation: string;
+    terms: string;
     accept: string; acceptCard: string;
     confirming: string; sending: string; confirm: string; request: string;
     confirmHint: string; requestHint: string;
@@ -317,6 +318,7 @@ export const guest: Translations<GuestStrings> = {
       requestBold: "No card needed — the hotel confirms this one.",
       requestBody: "Your room is held while they check, and you’ll get an email as soon as it’s confirmed. Nothing is charged now, and nothing is charged online at all — you settle the whole amount at the hotel.",
       cancellation: "Cancellation:",
+      terms: "Payment and cancellation",
       accept: "I accept the booking conditions and the cancellation policy above",
       acceptCard: ", and I understand my card is used as a guarantee",
       confirming: "Confirming…", sending: "Sending…", confirm: "Confirm booking", request: "Request this room",
@@ -521,6 +523,7 @@ export const guest: Translations<GuestStrings> = {
       requestBold: "Не е нужна карта — хотелът потвърждава тази резервация.",
       requestBody: "Стаята Ви е задържана, докато хотелът провери, и ще получите имейл веднага щом бъде потвърдена. Сега нищо не се плаща, а онлайн изобщо не се плаща — цялата сума плащате в хотела.",
       cancellation: "Анулиране:",
+      terms: "Плащане и анулиране",
       accept: "Приемам условията за резервация и правилата за анулиране по-горе",
       acceptCard: " и разбирам, че картата ми се използва като гаранция",
       confirming: "Потвърждаваме…", sending: "Изпращаме…", confirm: "Потвърди резервацията", request: "Изпрати заявка",

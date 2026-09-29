@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/ui/primitives";
 import { getProperty } from "@/lib/data";
 import { i18n } from "@/lib/i18n/server";
 import { rates as ratesDict } from "@/lib/i18n/rates";
+import { terms as termsDict } from "@/lib/i18n/terms";
 
 /**
  * Rooms & Rates — what the property sells, grouped by the thing a hotelier thinks about: "the
@@ -19,10 +20,13 @@ import { rates as ratesDict } from "@/lib/i18n/rates";
  */
 export default async function RoomsRatesLayout({ children }: { children: ReactNode }) {
   const property = await getProperty();
-  const s = (await i18n()).t(ratesDict);
+  const { t } = await i18n();
+  const s = t(ratesDict);
+  const tr = t(termsDict);
   const SECTIONS: SettingsSection[] = [
     { href: "/rooms-rates/rooms", label: s.nav.rooms, blurb: s.nav.roomsBlurb, prefix: true },
     { href: "/rooms-rates/plans", label: s.nav.plans, blurb: s.nav.plansBlurb, prefix: true },
+    { href: "/rooms-rates/terms", label: tr.nav, blurb: tr.navBlurb, prefix: true },
     { href: "/rooms-rates/closures", label: s.nav.closures, blurb: s.nav.closuresBlurb },
   ];
   const ELSEWHERE: SettingsSection[] = [

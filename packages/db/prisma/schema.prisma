@@ -1093,6 +1093,19 @@ model CancellationPolicy {
   name        String
   code        String
   description String?
+  // The terms themselves — what a guest pays and when, and what cancelling costs — computed by
+  // `stayTerms` in @revio/core. Every screen that states them (results, card step, confirmation,
+  // the CRS) reads these, never the free-text description.
+  payment           String  @default("guarantee") // guarantee | deposit | prepay
+  depositKind       String? // percent | first_night | fixed
+  depositValue      Int? // percent 1–100, or minor units for fixed
+  balanceDaysBefore Int? // charge the rest N days before arrival; null = paid at the hotel
+  refundable        Boolean @default(true)
+  freeCancelDays    Int     @default(1) // free until this many days before arrival
+  lateFee           String  @default("first_night") // first_night | full | percent
+  lateFeePct        Int?
+  noShowFee         String  @default("first_night")
+  noShowFeePct      Int?
 
   property  Property   @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   ratePlans RatePlan[]

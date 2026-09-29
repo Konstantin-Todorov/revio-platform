@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getRatesData, getSetupData } from "@/lib/data";
+import { getRatesData, getSetupData, getStayPolicies } from "@/lib/data";
+import { PlanTermsCard } from "@/components/rates/PlanTermsCard";
+import { addDays, stayTerms, stayTermsWords } from "@revio/core";
+import { termsPolicyOf } from "@revio/booking";
+import { terms as termsDict } from "@/lib/i18n/terms";
 import { deleteRatePlan } from "@/lib/actions-rates";
 import { RatePlanEditor } from "@/components/rates/RatePlanForm";
 import { PlanLinkageCard, PlanPricingCard } from "@/components/rates/PlanSections";
@@ -17,7 +21,7 @@ import { rates as ratesDict } from "@/lib/i18n/rates";
 
 export const dynamic = "force-dynamic";
 
-const TABS = ["plan", "price", "rooms"] as const;
+const TABS = ["plan", "price", "terms", "rooms"] as const;
 type Tab = (typeof TABS)[number];
 
 /**
@@ -31,7 +35,7 @@ export default async function RatePlanPage({ params, searchParams }: {
 }) {
   const [{ id }, { blocked, tab: rawTab }] = await Promise.all([params, searchParams]);
   const tab: Tab = (TABS as readonly string[]).includes(rawTab ?? "") ? (rawTab as Tab) : "plan";
-  const [{ ratePlans, defaults }, { roomTypes }] = await Promise.all([getRatesData(), getSetupData()]);
+  const [{ ratePlans, defaults }, { roomTypes }, { property, policies, todayIso }] = await Promise.all([getRatesData(), getSetupData(), getStayPolicies()]);
   const rp = ratePlans.find((p) => p.id === id);
   if (!rp) notFound();
   const { t, locale } = await i18n();
@@ -58,6 +62,14 @@ export default async function RatePlanPage({ params, searchParams }: {
     roomCount: rp._count.roomTypeLinks,
   };
   const base = `/rooms-rates/plans/${rp.id}`;
+  const tr = t(termsDict);
+  const lang = locale === "bg" ? "bg" : "en";
+  const fmt = (m: number) => new Intl.NumberFormat(lang === "bg" ? "bg-BG" : "en-GB", { style: "currency", currency: property.baseCurrency, maximumFractionDigits: 2 }).format(m / 100);
+  const fday = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString(lang === "bg" ? "bg-BG" : "en-GB", { day: "numeric", month: "long", timeZone: "UTC" });
+  const termOptions = policies.map((p) => {
+    const w = stayTermsWords(stayTerms(termsPolicyOf(p), { totalMinor: 30000, firstNightMinor: 10000, arrival: addDays(todayIso, 30), today: todayIso }), lang, fmt, fday);
+    return { id: p.id, name: p.name, summary: `${w.payment} · ${w.cancellation}` };
+  });
 
   return (
     <>
@@ -79,6 +91,7 @@ export default async function RatePlanPage({ params, searchParams }: {
         tabs={[
           { href: base, label: s.plans.tabs.plan, active: tab === "plan" },
           { href: `${base}?tab=price`, label: s.plans.tabs.price, active: tab === "price" },
+          { href: `${base}?tab=terms`, label: tr.planTab, active: tab === "terms" },
           { href: `${base}?tab=rooms`, label: s.plans.tabs.rooms, active: tab === "rooms", badge: String(rooms.length) },
         ]}
       />
@@ -100,6 +113,10 @@ export default async function RatePlanPage({ params, searchParams }: {
           <PlanLinkageCard plan={toLink(rp)} options={ratePlans.map(toLink)} dependents={dependents} />
           <PlanPricingCard plan={pricing} propertyModel={propertyModel} />
         </>
+      )}
+
+      {tab === "terms" && (
+        <PlanTermsCard ratePlanId={rp.id} currentId={rp.cancellationPolicyId} options={termOptions} />
       )}
 
       {tab === "rooms" && (

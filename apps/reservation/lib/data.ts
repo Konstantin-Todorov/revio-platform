@@ -1241,3 +1241,14 @@ export async function getBookingFunnel(fromIso: string, toIso: string) {
     inferred: fromIso < HOLD_SOURCE_RECORDED_FROM,
   };
 }
+
+/** Payment & cancellation terms for the active property, with how many rate plans use each. */
+export async function getStayPolicies() {
+  const property = await getProperty();
+  const policies = await prisma.cancellationPolicy.findMany({
+    where: { propertyId: property.id },
+    include: { ratePlans: { select: { id: true, name: true } } },
+    orderBy: { name: "asc" },
+  });
+  return { property, policies, todayIso: todayInTimeZone(property.timezone) };
+}

@@ -104,3 +104,4 @@ export * from "./email/guest-schedule.js";
 export * from "./email/staff-emails.js";
 export * from "./forms/submit-token.js";
 export * from "./booking/guest-language.js";
+export * from "./booking/stay-terms.js";

@@ -10,6 +10,7 @@ import { getPublicProperty } from "@/lib/property";
 import { searchAvailability } from "@/lib/availability";
 import { isValidISO, nightsBetween } from "@/lib/dates";
 import { serverKit } from "@/lib/i18n/server";
+import { termsWords } from "@/lib/i18n/kit";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
@@ -100,7 +101,9 @@ export default async function BookPage({
   }
 
   const cover = option.photos[0];
-  const { s, fmtDay, money } = await serverKit(property);
+  const kit = await serverKit(property);
+  const { s, fmtDay, money } = kit;
+  const termsDetails = plan.terms ? termsWords(kit, plan.terms, plan.currency).details : null;
 
   return (
     <>
@@ -122,6 +125,7 @@ export default async function BookPage({
           <BookingForm
             stay={{ slug, checkIn, checkOut, guests, roomTypeId, ratePlanId, holdId: hold.id }}
             cancellationPolicy={plan.cancellationPolicy}
+            termsDetails={termsDetails}
             expiresAt={hold.expiresAt.toISOString()}
             paymentReady={property.paymentReady}
             extras={extras}

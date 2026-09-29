@@ -35,6 +35,7 @@ export interface StaySelection {
 export function BookingForm({
   stay,
   cancellationPolicy,
+  termsDetails,
   expiresAt,
   paymentReady,
   extras,
@@ -43,6 +44,8 @@ export function BookingForm({
 }: {
   stay: StaySelection;
   cancellationPolicy: string | null;
+  /** The rate's terms, already in the guest's words (`termsWords`). Null when the plan states none. */
+  termsDetails: string[] | null;
   /** When the hold lapses. Drives the countdown, and the reason this screen has any urgency at all. */
   expiresAt: string;
   /**
@@ -189,7 +192,17 @@ export function BookingForm({
           </div>
         </div>
 
-        {cancellationPolicy && (
+        {termsDetails ? (
+          <div className="mt-3 flex items-start gap-2 text-[13px]" style={{ color: "hsl(var(--ink-soft))" }}>
+            <ShieldCheck size={15} aria-hidden className="mt-0.5 shrink-0" style={{ color: "hsl(var(--positive))" }} />
+            <div>
+              <strong className="font-semibold" style={{ color: "hsl(var(--ink))" }}>{s.terms}</strong>
+              <ul className="mt-1 space-y-0.5">
+                {termsDetails.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            </div>
+          </div>
+        ) : cancellationPolicy && (
           <p className="mt-3 flex items-start gap-2 text-[13px]" style={{ color: "hsl(var(--ink-soft))" }}>
             <ShieldCheck size={15} aria-hidden className="mt-0.5 shrink-0" style={{ color: "hsl(var(--positive))" }} />
             <span>
