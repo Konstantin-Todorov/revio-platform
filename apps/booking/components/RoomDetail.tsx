@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Ruler, Users, X } from "lucide-react";
 import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, groupAmenities } from "@revio/core";
 import { AmenityIcon } from "@revio/ui/amenity-icon";
@@ -28,6 +28,8 @@ export function RoomDetail({
   option,
   photos,
   children,
+  rates,
+  fromLabel,
 }: {
   option: PublicRoomOption;
   /**
@@ -40,6 +42,15 @@ export function RoomDetail({
   photos: DetailPhoto[];
   /** The trigger — rendered by the caller so the card owns its own layout. */
   children: React.ReactNode;
+  /**
+   * The room's rates for the guest's dates, rendered on the server by the card — the SAME rows the
+   * card shows, so the dialog can never quote a different price. Choosing happens here now: the
+   * dialog used to end in "Choose a rate", which closed it and left the guest to find the room
+   * again in the list.
+   */
+  rates?: React.ReactNode;
+  /** "from €272.97 total" — the cheapest rate, for the footer that stays in view. */
+  fromLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
@@ -66,6 +77,20 @@ export function RoomDetail({
   }, [open, photos.length]);
 
   const current = photos[index];
+  const ratesRef = useRef<HTMLDivElement>(null);
+  // Swipe on a phone: a horizontal flick of more than 40px changes the photo; the arrows stay for
+  // everyone else (a gallery that only swipes is one a mouse or a keyboard cannot use).
+  const touchX = useRef<number | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => { touchX.current = e.touches[0]?.clientX ?? null; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchX.current;
+    touchX.current = null;
+    const end = e.changedTouches[0]?.clientX;
+    if (start == null || end == null || photos.length < 2) return;
+    const dx = end - start;
+    if (Math.abs(dx) < 40) return;
+    setIndex((i) => (dx < 0 ? (i + 1) % photos.length : (i - 1 + photos.length) % photos.length));
+  };
 
   return (
     <>
@@ -143,7 +168,12 @@ export function RoomDetail({
                     letting the image set its own height made the dialog jump between portrait and
                     landscape shots, which is the distortion that was visible before.
                   */}
-                  <div className="relative aspect-[16/9] w-full" style={{ backgroundColor: "hsl(var(--ink) / 0.06)" }}>
+                  <div
+                    className="relative aspect-[16/9] w-full touch-pan-y select-none"
+                    style={{ backgroundColor: "hsl(var(--ink) / 0.06)" }}
+                    onTouchStart={onTouchStart}
+                    onTouchEnd={onTouchEnd}
+                  >
                     <img
                       src={current.full}
                       alt={current.alt || s.photoN(option.name, index + 1)}
@@ -219,6 +249,13 @@ export function RoomDetail({
                   </div>
                 )}
 
+                {rates && (
+                  <div ref={ratesRef} className="scroll-mt-4">
+                    <div className="eyebrow mb-2">{s.ratesForDates}</div>
+                    <div className="card overflow-hidden">{rates}</div>
+                  </div>
+                )}
+
                 {/* Honest about an empty room rather than pretending: silence here is a hotel that
                     has not written its content yet, not a room with nothing in it. */}
                 {!option.description && groups.length === 0 && photos.length === 0 && (
@@ -229,10 +266,23 @@ export function RoomDetail({
               </div>
             </div>
 
-            <footer className="border-t px-5 py-3.5" style={{ borderColor: "hsl(var(--line))" }}>
-              <button type="button" onClick={() => setOpen(false)} className="btn btn-primary w-full">
-                {s.chooseRate}
-              </button>
+            <footer className="flex items-center justify-between gap-3 border-t px-5 py-3.5" style={{ borderColor: "hsl(var(--line))" }}>
+              {rates ? (
+                <>
+                  {fromLabel && <span className="price text-[1.05rem]">{fromLabel}</span>}
+                  <button
+                    type="button"
+                    onClick={() => ratesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    className="btn btn-brand shrink-0"
+                  >
+                    {s.seeRates}
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => setOpen(false)} className="btn btn-primary w-full">
+                  {s.chooseRate}
+                </button>
+              )}
             </footer>
           </div>
         </div>

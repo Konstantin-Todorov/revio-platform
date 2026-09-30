@@ -103,6 +103,8 @@ export interface GuestStrings {
     prevPhoto: string; nextPhoto: string;
     empty: string;
     chooseRate: string;
+    ratesForDates: string; seeRates: string; from: (total: string) => string;
+    stickySelect: string; stickyTotal: string;
   };
   book: {
     title: string;
@@ -299,6 +301,11 @@ export const guest: Translations<GuestStrings> = {
       prevPhoto: "Previous photo", nextPhoto: "Next photo",
       empty: "The hotel hasn't added photos or a description for this room yet. Call them and they will tell you everything about it.",
       chooseRate: "Choose a rate for this room",
+      ratesForDates: "Rates for your dates",
+      seeRates: "See rates",
+      from: (t) => `from ${t} total`,
+      stickySelect: "Select",
+      stickyTotal: "total",
     },
     book: {
       title: "Almost there",
@@ -516,6 +523,11 @@ export const guest: Translations<GuestStrings> = {
       prevPhoto: "Предишна снимка", nextPhoto: "Следваща снимка",
       empty: "Хотелът още не е добавил снимки или описание на тази стая. Обадете се — ще Ви разкажат всичко за нея.",
       chooseRate: "Изберете цена за тази стая",
+      ratesForDates: "Цени за Вашите дати",
+      seeRates: "Виж цените",
+      from: (t) => `от ${t} общо`,
+      stickySelect: "Избери",
+      stickyTotal: "общо",
     },
     book: {
       title: "Почти готово",

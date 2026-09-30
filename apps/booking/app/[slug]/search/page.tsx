@@ -12,6 +12,7 @@ import type { GuestKit } from "@/lib/i18n/kit";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { RoomOption } from "@/components/RoomOption";
+import { StickyRoomBar } from "@/components/StickyRoomBar";
 import { bookingPreset } from "@revio/core";
 import { SearchBar } from "@/components/SearchBar";
 import { StepBar } from "@/components/StepBar";
@@ -203,9 +204,10 @@ async function Results({
           />
         ))}
       </div>
-      <p className="mt-8 text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-faint))" }}>
+      <p className="mt-8 pb-20 text-[12.5px] leading-relaxed sm:pb-0" style={{ color: "hsl(var(--ink-faint))" }}>
         {property.paymentReady ? s.search.footnote : s.search.footnoteRequest}
       </p>
+      <StickyRoomBar selectLabel={s.room.stickySelect} totalLabel={s.room.stickyTotal} />
     </>
   );
 }

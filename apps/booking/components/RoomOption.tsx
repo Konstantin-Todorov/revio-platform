@@ -49,13 +49,19 @@ export function RoomOption({
 
   const headline = headlineAmenities(option.amenities);
   const gallery = layout === "gallery";
-  const { s, room } = kit;
+  const { s, room, money } = kit;
 
   const href = (plan: PublicPlanQuote) =>
     `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
 
   return (
-    <article className="card-raised overflow-hidden">
+    <article
+      className="card-raised overflow-hidden"
+      data-room-card
+      data-room-name={option.name}
+      data-room-total={money(best.totalMinor, best.currency)}
+      data-room-href={href(best)}
+    >
       <div className={gallery ? "grid grid-cols-1" : "grid grid-cols-1 sm:grid-cols-[minmax(0,13.5rem)_1fr]"}>
         {cover ? (
           /*
@@ -163,6 +169,12 @@ export function RoomOption({
                       component, and the URL shape is this app's business anyway. */}
                   <RoomDetail
                     option={option}
+                    fromLabel={s.room.from(money(best.totalMinor, best.currency))}
+                    rates={plans.map((plan, i) => (
+                      <div key={plan.ratePlanId} className={`pt-4 ${i > 0 ? "border-t" : ""}`} style={{ borderColor: "hsl(var(--line))" }}>
+                        <RateRow plan={plan} nights={nights} href={href(plan)} highlight={i === 0 && plans.length > 1} kit={kit} stacked />
+                      </div>
+                    ))}
                     photos={option.photos.map((p) => ({
                       full: mediaUrl(p.fullKey),
                       thumb: mediaUrl(p.thumbKey),
@@ -186,7 +198,7 @@ export function RoomOption({
             )}
           </header>
 
-          <div className="mt-4">
+          <div className="mt-4" data-best-rate>
             <RateRow plan={best} nights={nights} href={href(best)} highlight={rest.length > 0} kit={kit} stacked={gallery} />
           </div>
         </div>
