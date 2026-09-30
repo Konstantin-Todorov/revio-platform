@@ -515,7 +515,31 @@ export async function syncChannel(
         inScopeHere = true;
         const cell = planCellMap.get(planCellKey(rt.id, rp.id, k)) ?? roomCell;
         const price = priceFor(rt.id, rp, k);
-        if (price == null) continue;
+        if (price == null) {
+          /*
+           * ⚠️ UNPRICED IS CLOSED, not "say nothing".
+           *
+           * A plan the hotel never priced for this date used to be skipped — and Channex then kept
+           * selling it at its OWN default rate. Found 2026-09-30 in the sandbox rehearsal: a new
+           * "With breakfast" plan, no price entered in Revio, published at €100 on every night the
+           * moment it was sent. Connected to Booking.com, that sells rooms at a price nobody chose.
+           * So a mapped pair with no price is pushed as stop-sold for that date; the first price the
+           * hotel enters re-opens it on the next push, which sends `stopSell` with the price.
+           */
+          const unpricedRateId = resolveExternalRateId(rateIndex, rm.roomTypeId, pm.ratePlanId);
+          if (unpricedRateId && wants("stopSell")) {
+            updates.push({
+              externalRoomId: rm.externalRoomId!,
+              externalRateId: unpricedRateId,
+              date: k,
+              currency: property.baseCurrency,
+              restrictions: { stopSell: true },
+            });
+            // Not counted in `emitted`: this carries no room count, so the availability fallback
+            // below must still run for this room and date.
+          }
+          continue;
+        }
 
         // Two-tier resolution per (room type, rate plan, date): date-scoped cell → rule →
         // rate-plan default → property default. Flags treat false as "unset" at every tier.
@@ -1973,9 +1997,11 @@ export async function verifyPublished(
         lookup, plans, plan, roomTypeId: room.id, maxOccupancy: room.maxGuests,
         roomDefaultOccupancy: room.defaultOccupancy, propertyModel: defaults?.pricingModel ?? "per_room", dateKey: k,
       });
-      if (shown.minor == null) continue;
+      // An unpriced night is still EXPECTED — as "no price from us". The push stop-sells it, so a
+      // default rate the channel shows there is not a price anyone can book, and must not be
+      // reported as one we "never sent".
       expected.push({
-        externalRateId: m.externalRateId!, date: k, priceMinor: shown.minor,
+        externalRateId: m.externalRateId!, date: k, priceMinor: shown.minor ?? null,
         roomTypeName: room.name, ratePlanName: m.ratePlan.name,
       });
     }

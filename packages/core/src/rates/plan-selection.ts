@@ -306,3 +306,12 @@ export function plansPerRoom(
   }
   return out;
 }
+
+/**
+ * The name of the first rate plan every new hotel gets, in the hotel's own language. It is what a
+ * guest reads on the booking page and what Channex (and so the OTA mapping screen) is sent, so an
+ * English "Standard Rate" on a Bulgarian hotel is a word the hotel then has to find and rename.
+ */
+export function defaultRatePlanName(language: string | null | undefined): string {
+  return language === "bg" ? "Стандартна цена" : "Standard Rate";
+}

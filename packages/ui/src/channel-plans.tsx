@@ -54,7 +54,7 @@ export const channelPlansStrings: Translations<ChannelPlansStrings> = {
   en: {
     title: (c) => `Every plan in ${c}, and where its price comes from`,
     lead: (c) => `${c} always holds more plans than you map: plans it calculates from another, and its own copy of a plan for each OTA it sends to (named “… - BookingCom …”). Those work automatically — they follow the plan above them and are never mapped. Only the plans marked “Price from Revio” need a mapping.`,
-    allGood: (r, a) => `Everything works: ${r} plan${r === 1 ? "" : "s"} take${r === 1 ? "s" : ""} the price from Revio${a ? `, ${a} follow${a === 1 ? "s" : ""} automatically` : ""}. Nothing to do.`,
+    allGood: (r, a) => `${r} plan${r === 1 ? "" : "s"} on the channel take${r === 1 ? "s" : ""} the price from Revio${a ? `, ${a} follow${a === 1 ? "s" : ""} automatically` : ""}.`,
     toDecide: (n) => `${n} plan${n === 1 ? " needs" : "s need"} a decision — marked in amber or red below.`,
     roomless: "Plans the channel did not place in a room",
     count: (n) => `${n} plan${n === 1 ? "" : "s"}`,
@@ -69,7 +69,7 @@ export const channelPlansStrings: Translations<ChannelPlansStrings> = {
   bg: {
     title: (c) => `Всички планове в ${c} и откъде идва цената им`,
     lead: (c) => `В ${c} винаги има повече планове, отколкото свързвате: планове, които ${c} изчислява от друг, и негово копие на план за всяка OTA, към която изпраща (с име „… - BookingCom …“). Те работят автоматично — следват плана над тях и никога не се свързват. Свързване трябва само на плановете с „Цена от Revio“.`,
-    allGood: (r, a) => `Всичко работи: ${bgPlans(r)} ${r === 1 ? "взима" : "взимат"} цената от Revio${a ? `, ${bgPlans(a)} ${a === 1 ? "следва" : "следват"} автоматично` : ""}. Няма какво да правите.`,
+    allGood: (r, a) => `${bgPlans(r)} в канала ${r === 1 ? "взима" : "взимат"} цената от Revio${a ? `, ${bgPlans(a)} ${a === 1 ? "следва" : "следват"} автоматично` : ""}.`,
     toDecide: (n) => `${bgPlans(n)} ${n === 1 ? "изисква" : "изискват"} решение — отбелязани в жълто или червено по-долу.`,
     roomless: "Планове, които каналът не е поставил в стая",
     count: (n) => bgPlans(n),

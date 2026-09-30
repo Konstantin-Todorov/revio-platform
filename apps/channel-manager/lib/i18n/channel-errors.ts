@@ -60,6 +60,8 @@ export interface ChannelErrorStrings {
     adopted: (n: number) => string;
     skipped: (n: number, detail: string) => string;
     nothing: string;
+    pushed: string;
+    pushFailed: (why: string) => string;
   };
   verify: {
     notHere: string;
@@ -150,6 +152,8 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
       adopted: (n) => `${n} already existed and ${n === 1 ? "was" : "were"} linked`,
       skipped: (n, d) => `${n} skipped (${d})`,
       nothing: "Nothing to send.",
+      pushed: "prices and availability sent",
+      pushFailed: (w) => `but prices and availability could not be sent yet (${w}) — open Sync to resend`,
     },
     verify: {
       notHere: "That channel is not on this property.",
@@ -236,6 +240,8 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
       adopted: (n) => `${n} вече ${n === 1 ? "съществуваше и беше свързан" : "съществуваха и бяха свързани"}`,
       skipped: (n, d) => `${n} ${n === 1 ? "пропуснат" : "пропуснати"} (${d})`,
       nothing: "Няма нищо за изпращане.",
+      pushed: "цените и наличността са изпратени",
+      pushFailed: (w) => `но цените и наличността още не са изпратени (${w}) — изпратете ги отново от „Синхронизация“`,
     },
     verify: {
       notHere: "Този канал не е към този обект.",
@@ -244,7 +250,7 @@ export const channelErrors: Translations<ChannelErrorStrings> = {
       couldNotReadRooms: "Броят стаи не можа да бъде прочетен.",
       prices: {
         nothing: "Няма какво да се провери — за тези дати още няма цени със съответствие.",
-        exact: (m) => `Каналът публикува точно това, което изпратихме — проверени: ${m}.`,
+        exact: (m) => `Каналът публикува точно това, което изпратихме — проверени цени: ${m}`,
         mismatched: (n) => `${n} публикувани на различна цена`,
         missing: (n) => `${n} не са пристигнали`,
         unexpected: (n) => `${n} публикувани, без да сме ги изпратили`,

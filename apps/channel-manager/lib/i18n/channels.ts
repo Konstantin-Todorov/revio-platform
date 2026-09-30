@@ -17,7 +17,8 @@ export interface CmChannelsStrings {
   notLiveYet: string;
   empty: { title: string; body: string };
   card: {
-    meta: (currency: string, commission: number, lastPush: string) => string;
+    /** `commission` null = not an OTA (Channex, the connection itself), so no commission is shown. */
+    meta: (currency: string, commission: number | null, lastPush: string) => string;
     errors: (n: number) => string;
     stuck: (n: number) => string;
     pull: string;
@@ -128,7 +129,7 @@ export const channels: Translations<CmChannelsStrings> = {
       body: "Connecting a channel is what puts your rooms on sale. Add Booking.com, Expedia or any other OTA you work with, then map your room types to their listings.",
     },
     card: {
-      meta: (c, pct, last) => `${c} · ${pct}% commission · last push ${last}`,
+      meta: (c, pct, last) => `${c}${pct != null ? ` · ${pct}% commission` : ""} · last push ${last}`,
       errors: (x) => `${x} error`,
       stuck: (x) => `${x} booking${x === 1 ? "" : "s"} not imported`,
       pull: "Pull bookings",
@@ -268,7 +269,7 @@ export const channels: Translations<CmChannelsStrings> = {
       body: "Свързването на канал пуска стаите Ви в продажба. Добавете Booking.com, Expedia или друга OTA, с която работите, после свържете типовете стаи с техните обяви.",
     },
     card: {
-      meta: (c, pct, last) => `${c} · ${pct}% комисиона · последно изпращане ${last}`,
+      meta: (c, pct, last) => `${c}${pct != null ? ` · ${pct}% комисиона` : ""} · последно изпращане ${last}`,
       errors: (x) => n(x, "грешка", "грешки"),
       stuck: (x) => `${n(x, "резервация не е внесена", "резервации не са внесени")}`,
       pull: "Изтегли резервации",

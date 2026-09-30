@@ -1,5 +1,7 @@
 "use server";
 
+import { defaultRatePlanName } from "@revio/core";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { claimSubmitToken, deleteClientCompletely, describeBilling, forSystem, issueToken, recordAppError, withSystemTransaction } from "@revio/db";
@@ -123,7 +125,7 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
       },
     });
     await tx.ratePlan.create({
-      data: { tenantId: tenant.id, propertyId: property.id, name: "Standard Rate", code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 },
+      data: { tenantId: tenant.id, propertyId: property.id, name: defaultRatePlanName(language), code: "BAR", tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0 },
     });
   });
 
@@ -141,7 +143,15 @@ export async function createClient(_prev: ActionResult | null, fd: FormData): Pr
       url: `${product.origin}/accept-invite/${token}`,
       locale: language,
     });
-    await sendEmail({ to: [ownerEmail], subject: mail.subject, text: mail.text, html: mail.html });
+    const sent = await sendEmail({ to: [ownerEmail], subject: mail.subject, text: mail.text, html: mail.html });
+    // Say what happened. The dialog used to close with no word at all, so an operator could not tell
+    // whether the owner had been invited — the one thing they have to be able to tell the client.
+    await setFlash(
+      sent.ok ? "success" : "error",
+      sent.ok
+        ? `${name} created. The invitation went to ${ownerEmail} — the link opens ${product.name}, where they set their own password.`
+        : `${name} created, but the invitation email did not go out (${sent.error ?? "no answer from the mail service"}). Send it again from the client's People tab.`,
+    );
   }
 
   revalidatePath("/clients");

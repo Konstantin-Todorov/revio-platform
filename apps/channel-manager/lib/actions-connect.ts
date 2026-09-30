@@ -537,6 +537,8 @@ export async function syncChannexStructure(): Promise<StructureSyncResult> {
       },
     );
 
+    // Same reason as the single-product send: new products start on Channex's defaults.
+    await fullSyncChannel(ctx.channel.id);
     revalidatePath("/channels");
     revalidatePath("/mapping");
     return { ok: true, sentence: describeStructureOutcome(outcome) };
@@ -673,14 +675,24 @@ export async function sendProductToChannex(fd: FormData): Promise<CatchupOutcome
       newValue: describeCatchup(result),
       source: "mapping",
     });
-    revalidatePath("/mapping");
     const c = (await sayCh()).catchup;
     // Core's `describeCatchup`, worded for the reader; a skip's reason stays core's.
     const made = result.steps.filter((st) => !st.adopted).length;
     const adopted = result.steps.filter((st) => st.adopted).length;
+    /*
+     * ⚠️ Then send the calendar for it — straight away, the whole horizon.
+     *
+     * A room or plan created on Channex starts on Channex's own defaults: found 2026-09-30 in the
+     * sandbox rehearsal, a Studio sent from this button published €100 and 0 rooms against our €90
+     * and 3, and stayed that way until somebody happened to edit a price. Provisioning already
+     * pushes for the same reason; the catch-up did not.
+     */
+    const pushed = made + adopted > 0 ? await fullSyncChannel(channel.id) : null;
+    revalidatePath("/mapping");
     const parts = [
       made > 0 ? c.sent(made) : null,
       adopted > 0 ? c.adopted(adopted) : null,
+      pushed ? (pushed.ok ? c.pushed : c.pushFailed(pushed.error ?? "no answer")) : null,
       result.skipped.length > 0 ? c.skipped(result.skipped.length, result.skipped.map((x) => `${x.name}: ${x.why}`).join("; ")) : null,
     ].filter(Boolean);
     return { ok: true, message: parts.length > 0 ? `${parts.join(" · ")}.` : c.nothing };

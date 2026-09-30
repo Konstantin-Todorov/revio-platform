@@ -1,3 +1,4 @@
+import { defaultRatePlanName } from "@revio/core";
 import { forSystem, withSystemTransaction } from "./rls.js";
 import { issueToken } from "./auth-tokens.js";
 import {
@@ -207,7 +208,7 @@ export async function createPublicSignup(args: {
   const property = tenant.properties[0]!;
   await prisma.ratePlan.create({
     data: {
-      tenantId: tenant.id, propertyId: property.id, name: "Standard Rate", code: "BAR",
+      tenantId: tenant.id, propertyId: property.id, name: defaultRatePlanName(language), code: "BAR",
       tags: ["flexible"], priceLogic: "manual", defMinLos: 1, sortOrder: 0,
     },
   });

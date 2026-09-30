@@ -170,7 +170,7 @@ export default async function ChannelsPage() {
                     <StatusPill tone={STATUS_TONE[ch.status] ?? "neutral"}>{s.status[ch.status as keyof typeof s.status] ?? ch.status}</StatusPill>
                   </div>
                   <div className="mt-0.5 text-[12px] text-ink-400">
-                    {s.card.meta(ch.currency, ch.commissionPct, relativeTime(ch.lastSyncAt))}
+                    {s.card.meta(ch.currency, ch.code === "channex" ? null : ch.commissionPct, relativeTime(ch.lastSyncAt))}
                   </div>
                   <div className="mt-1">
                     <StatusPill tone={ch.connectivityMode === "mock" ? "neutral" : "info"}>{s.modes[ch.connectivityMode as keyof typeof s.modes] ?? ch.connectivityMode}</StatusPill>
