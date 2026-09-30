@@ -132,7 +132,8 @@ async function run({ name, url }) {
     const ms = Date.now() - started;
     if (!res.ok) {
       console.error(`FAIL  ${name} — HTTP ${res.status} in ${ms}ms · ${body.slice(0, 300)}`);
-      return { name, ok: false };
+      // 502/503/504 is the service not answering (restarting, deploying) — not the job failing.
+      return { name, ok: false, transient: res.status >= 502 && res.status <= 504 };
     }
 
     /**
@@ -167,7 +168,8 @@ async function run({ name, url }) {
     const ms = Date.now() - started;
     const reason = err?.name === "AbortError" ? `timed out after ${TIMEOUT_MS}ms` : String(err);
     console.error(`FAIL  ${name} — ${reason} (${ms}ms)`);
-    return { name, ok: false };
+    // No answer at all (timeout, connection refused/reset) — usually the target was mid-deploy.
+    return { name, ok: false, transient: true };
   } finally {
     clearTimeout(timer);
   }
@@ -181,6 +183,26 @@ async function run({ name, url }) {
  */
 const results = [];
 for (const job of JOBS) results.push(await run(job));
+
+/*
+ * One retry for a job that got NO ANSWER, after a pause.
+ *
+ * On 2026-09-30 a tick ran while the apps were being redeployed: every call took ~15s and
+ * `mapping-audit` did not answer in 120s, so the runner exited 1 and Railway emailed "Deployment
+ * crashed" about a job that was fine. A job that ANSWERED with a failure is not retried — that is a
+ * real fault and must stay loud. Retrying is safe: every job holds a lease, and a second call while
+ * the first still runs is told so rather than running twice.
+ */
+const RETRY_AFTER_MS = 45_000;
+const transient = results.filter((r) => r.ok === false && r.transient);
+if (transient.length > 0) {
+  console.info(`\nrun-jobs: ${transient.length} job(s) got no answer — retrying once in ${RETRY_AFTER_MS / 1000}s: ${transient.map((t) => t.name).join(", ")}`);
+  await new Promise((r) => setTimeout(r, RETRY_AFTER_MS));
+  for (const t of transient) {
+    const again = await run(JOBS.find((j) => j.name === t.name));
+    results[results.indexOf(t)] = again;
+  }
+}
 
 const failed = results.filter((r) => r.ok === false);
 const ran = results.filter((r) => !r.skipped);
