@@ -1,5 +1,7 @@
 "use client";
 
+import { SkewNotice, useReloadOnSkew } from "@revio/ui/version-skew";
+
 import { useEffect, useState } from "react";
 import { negotiateGuestLanguage } from "@revio/core";
 import type { Locale } from "@revio/ui/i18n";
@@ -34,6 +36,8 @@ export default function BookingError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // A tab opened before a deploy: load the new version instead of showing a crash.
+  const reloading = useReloadOnSkew(error);
   // The boundary sits above the hotel's layout, so the language is read from the browser itself:
   // the guest's own pick, else their browser's languages. English until that is known.
   const [locale, setLocale] = useState<Locale>("en");
@@ -42,6 +46,7 @@ export default function BookingError({
     setLocale(negotiateGuestLanguage({ chosen, acceptLanguage: navigator.languages.join(",") }) as Locale);
   }, []);
   const s = guestKit(locale).s.page;
+  if (reloading) return <SkewNotice />;
   return (
     <main lang={locale} className="mx-auto flex min-h-screen max-w-[34rem] flex-col items-center justify-center px-6 text-center">
       <p className="eyebrow">{s.eyebrow}</p>

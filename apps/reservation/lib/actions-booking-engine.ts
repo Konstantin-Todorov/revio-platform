@@ -4,7 +4,7 @@ import { withTenantTransaction } from "@revio/db";
 import { revalidatePath } from "next/cache";
 import { BOOKING_PRESET_BY_KEY, HERO_OVERLAY_LEVELS, heroFocalY } from "@revio/core";
 import { getObjectStore, heroImageKey, photoToken } from "@revio/storage";
-import { createConnectAccount, createOnboardingLink, getConnectStatus } from "@revio/payments";
+import { connectMode, createConnectAccount, createOnboardingLink, getConnectStatus, isMockAccount } from "@revio/payments";
 import { syncRealChannels, stayScope } from "@revio/connectivity";
 import { SLUG_MAX_LEN, slugifyPropertyName, slugRejectionReason } from "@revio/booking";
 import { prisma } from "./db";
@@ -422,7 +422,9 @@ export async function startStripeOnboarding(): Promise<{ ok: boolean; url?: stri
   if (scopeError) return { ok: false, error: scopeError };
   const property = await getProperty();
 
-  let accountId = property.stripeAccountId;
+  // A demo-mode id ("acct_mock_…") is not an account Stripe has ever heard of: once real keys are in
+  // place, start a real one rather than sending the hotel to a link for an account that is not there.
+  let accountId = isMockAccount(property.stripeAccountId) && connectMode() !== "mock" ? null : property.stripeAccountId;
   if (!accountId) {
     const created = await createConnectAccount({
       propertyName: property.name,

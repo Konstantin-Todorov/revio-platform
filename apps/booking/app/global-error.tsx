@@ -1,5 +1,7 @@
 "use client";
 
+import { useReloadOnSkew } from "@revio/ui/version-skew";
+
 import { useEffect } from "react";
 import { reportClientError } from "@revio/ui/report-client-error";
 
@@ -26,6 +28,8 @@ export default function BookingGlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // A tab opened before a deploy: load the new version instead of showing a crash.
+  useReloadOnSkew(error);
   /*
    * A deploy replaced the bundle this tab is running, so something it fetched no longer exists. The
    * app is fine; this tab is stale, and a reload is the entire fix.

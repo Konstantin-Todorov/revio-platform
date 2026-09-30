@@ -3,6 +3,13 @@ import { securityHeaders } from "../../config/security-headers.mjs";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  /**
+   * Version-skew protection. With the build's commit as its id, a page from the previous deploy that
+   * navigates or loads code after a new one goes out gets a clean reload to the new version instead of
+   * mixing old and new files. Server actions are covered by `@revio/ui/version-skew` in the error
+   * boundaries — see there for why a stale tab used to look like a crash.
+   */
+  deploymentId: process.env.RAILWAY_GIT_COMMIT_SHA || undefined,
   experimental: {
     /**
      * Y3's promise — a live screen never shows a stale number — rests on this, so it is stated

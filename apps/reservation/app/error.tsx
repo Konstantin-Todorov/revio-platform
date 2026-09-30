@@ -1,5 +1,7 @@
 "use client";
 
+import { SkewNotice, useReloadOnSkew } from "@revio/ui/version-skew";
+
 import { useEffect } from "react";
 import Link from "next/link";
 import { StatusPage, statusPrimaryCls, statusSecondaryCls } from "@revio/ui/status-page";
@@ -35,6 +37,8 @@ export default function ReservationError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // A tab opened before a deploy: load the new version instead of showing a crash.
+  const reloading = useReloadOnSkew(error);
   const stale = useStaleDeployment(error);
   const t = translate(pages, useLocale()).status;
 
@@ -54,6 +58,7 @@ export default function ReservationError({
     );
   }
 
+  if (reloading) return <SkewNotice />;
   return (
     <StatusPage
       tone="error"

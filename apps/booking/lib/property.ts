@@ -1,5 +1,5 @@
 import "server-only";
-import { guestPaymentsConfigured, testChargesOnPlatform } from "@revio/payments";
+import { guestPaymentsConfigured, isMockAccount, testChargesOnPlatform } from "@revio/payments";
 import { cache } from "react";
 import { forSystem } from "@revio/db";
 import { heroFocalY, heroScrim, resolveBrandLogo } from "@revio/core";
@@ -163,8 +163,8 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
     // that account exists, and this deployment is configured to take guest payments at all. Any one
     // missing is request-to-book — never a card form that cannot charge.
     paymentReady:
-      (property.stripeChargesEnabled && !!property.stripeAccountId && guestPaymentsConfigured()) || testChargesOnPlatform(),
-    paymentAccountId: property.stripeChargesEnabled && property.stripeAccountId ? property.stripeAccountId : null,
+      (property.stripeChargesEnabled && !!property.stripeAccountId && !isMockAccount(property.stripeAccountId) && guestPaymentsConfigured()) || testChargesOnPlatform(),
+    paymentAccountId: property.stripeChargesEnabled && property.stripeAccountId && !isMockAccount(property.stripeAccountId) ? property.stripeAccountId : null,
   };
 });
 

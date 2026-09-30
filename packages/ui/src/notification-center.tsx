@@ -1,5 +1,7 @@
 "use client";
 
+import { isVersionSkew } from "./version-skew";
+
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Bell, CheckCheck, Loader2 } from "lucide-react";
 import { groupByDay, relativeTime, type AttentionItem, type NotificationFeed } from "@revio/core";
@@ -86,6 +88,7 @@ export function NotificationCenter({
   const ref = useRef<HTMLDivElement>(null);
   /** Only the newest poll may write. Same reason the palette has one. */
   const gen = useRef(0);
+  const stopped = useRef(false);
 
   const refresh = useCallback(async () => {
     const mine = ++gen.current;
@@ -94,13 +97,15 @@ export function NotificationCenter({
       // ⚠️ A slower earlier poll must never overwrite a newer one, and a failed poll must leave the
       // screen alone — showing "nothing" when the truth is "could not ask" is the worse lie.
       if (gen.current === mine) setFeed(next);
-    } catch {
-      /* keep what is on screen */
+    } catch (e) {
+      /* keep what is on screen — and after a deploy, stop asking a server that no longer knows this
+         page's actions; the next click reloads to the new version (see version-skew). */
+      if (isVersionSkew(e)) stopped.current = true;
     }
   }, [load]);
 
   useEffect(() => {
-    const t = setInterval(() => void refresh(), POLL_MS);
+    const t = setInterval(() => { if (!stopped.current) void refresh(); }, POLL_MS);
     return () => clearInterval(t);
   }, [refresh]);
 

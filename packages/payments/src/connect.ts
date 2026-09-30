@@ -30,7 +30,25 @@ export type ConnectStatus = {
   detailsSubmitted: boolean;
   mode: "mock" | "stripe_test";
   error?: string;
+  /** Stripe pays the hotel's balance out to its bank. */
+  payoutsEnabled?: boolean;
+  /** Who the account belongs to, as Stripe knows it — so the hotel can see it is THEIR account. */
+  businessName?: string | null;
+  email?: string | null;
+  /** What Stripe still needs, as its own requirement codes (see `describeRequirement`). */
+  currentlyDue?: string[];
+  /** Due already — the account is or will be restricted until these arrive. */
+  pastDue?: string[];
+  /** Stripe's reason the account is restricted, if it is. */
+  disabledReason?: string | null;
+  /** An id left from demo mode ("acct_mock_…") while a real key is configured — not a real account. */
+  stale?: boolean;
 };
+
+/** A demo-mode account id cannot exist at Stripe. With a real key it means "connect again". */
+export function isMockAccount(accountId: string | null | undefined): boolean {
+  return !!accountId && accountId.startsWith("acct_mock_");
+}
 
 function stripeKey(): string | null {
   const k = process.env.STRIPE_SECRET_KEY;
@@ -129,6 +147,9 @@ export async function getConnectStatus(accountId: string): Promise<ConnectStatus
   if (!key) {
     return { accountId, chargesEnabled: true, detailsSubmitted: true, mode: "mock" };
   }
+  if (isMockAccount(accountId)) {
+    return { accountId, chargesEnabled: false, detailsSubmitted: false, mode: "stripe_test", stale: true };
+  }
   try {
     const { json } = await stripeCall(`accounts/${encodeURIComponent(accountId)}`, key);
     if (json?.error) {
@@ -145,6 +166,12 @@ export async function getConnectStatus(accountId: string): Promise<ConnectStatus
       chargesEnabled: !!json.charges_enabled,
       detailsSubmitted: !!json.details_submitted,
       mode: "stripe_test",
+      payoutsEnabled: !!json.payouts_enabled,
+      businessName: json.business_profile?.name ?? json.settings?.dashboard?.display_name ?? null,
+      email: json.email ?? null,
+      currentlyDue: json.requirements?.currently_due ?? [],
+      pastDue: json.requirements?.past_due ?? [],
+      disabledReason: json.requirements?.disabled_reason ?? null,
     };
   } catch (e) {
     // Fail CLOSED: an unreachable Stripe means we do not know, and "we do not know" must degrade to

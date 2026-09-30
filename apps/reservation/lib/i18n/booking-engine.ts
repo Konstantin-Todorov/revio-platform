@@ -171,6 +171,11 @@ export interface BookingEngineStrings {
     demo: string;
     lastChecked: (when: string) => string;
     failed: string;
+    stale: string; account: string; yes: string; no: string;
+    check: { details: string; charges: string; payouts: string };
+    dueTitle: string; pastDueTitle: string; dueHow: string;
+    req: Record<"bank" | "terms" | "business" | "identity" | "person" | "company" | "owners" | "other", string>;
+    stripeSaid: (m: string) => string; storedBehind: string; testMode: string;
   };
   extras: {
     title: string;
@@ -370,7 +375,7 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       sub: "Whether a guest gets an instant confirmation, or sends you a request to accept. Either way your page sells.",
       instant: "Guests book instantly",
       requests: "Guests send requests",
-      connectedLead: "Your Stripe account is connected, so a guest’s card guarantees the room and the booking is confirmed on the spot. ",
+      connectedLead: "Your Stripe account is connected, so bookings are confirmed on the spot and guests pay by the terms of each rate plan (Rooms & Rates → Payment & cancellation). ",
       connectedBold: "The money goes straight to you",
       connectedTail: " — it never passes through Revio.",
       verifying: "Stripe is still checking your details. Until it finishes, bookings arrive as requests for you to accept — the room is held for the guest in the meantime, so nothing is lost.",
@@ -383,6 +388,26 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       demo: "Demo mode — no Stripe key is configured, so connecting is simulated and no real account is created.",
       lastChecked: (w) => `Last checked with Stripe ${w}.`,
       failed: "Stripe could not start onboarding.",
+      stale: "This page was connected in demo mode, which never created a real Stripe account. Connect Stripe again — it takes a few minutes and your bookings keep arriving as requests meanwhile.",
+      account: "Stripe account",
+      yes: "done", no: "not yet",
+      check: { details: "Your details are with Stripe", charges: "Guests can pay by card", payouts: "Stripe pays out to your bank" },
+      dueTitle: "Stripe still needs from you:",
+      pastDueTitle: "Overdue — Stripe needs these before it lets payments continue:",
+      dueHow: "Press “Continue on Stripe” to add them. Stripe usually confirms within minutes, sometimes a day.",
+      req: {
+        bank: "Your bank account for payouts (IBAN)",
+        terms: "Accepting Stripe's terms",
+        business: "Your website and what the business does",
+        identity: "A photo of an identity document",
+        person: "Personal details of the person who represents the company",
+        company: "Company details (registration number, address)",
+        owners: "Owners and directors",
+        other: "Other details Stripe asks for on its page",
+      },
+      stripeSaid: (m) => `Stripe answered: ${m}`,
+      storedBehind: "Your booking page has not caught up with this yet — press “Check again”.",
+      testMode: "Test mode — cards are Stripe's test cards and no real money moves.",
     },
     extras: {
       title: "Extras you sell",
@@ -585,7 +610,7 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       sub: "Дали гостът получава незабавно потвърждение или Ви изпраща заявка за приемане. И в двата случая страницата Ви продава.",
       instant: "Гостите резервират незабавно",
       requests: "Гостите изпращат заявки",
-      connectedLead: "Вашият Stripe акаунт е свързан, така че картата на госта гарантира стаята и резервацията се потвърждава веднага. ",
+      connectedLead: "Вашият Stripe акаунт е свързан, така че резервациите се потвърждават веднага, а гостите плащат по условията на всеки ценови план (Стаи и цени → Плащане и анулиране). ",
       connectedBold: "Парите отиват директно при Вас",
       connectedTail: " — никога не минават през Revio.",
       verifying: "Stripe все още проверява данните Ви. Докато приключи, резервациите пристигат като заявки за приемане — стаята междувременно е задържана за госта, така че нищо не се губи.",
@@ -598,6 +623,26 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       demo: "Демо режим — няма зададен ключ за Stripe, така че свързването е симулирано и не се създава истински акаунт.",
       lastChecked: (w) => `Последна проверка в Stripe: ${w}.`,
       failed: "Stripe не можа да започне регистрацията.",
+      stale: "Тази страница е свързана в демо режим, който не създава истински Stripe акаунт. Свържете Stripe отново — отнема няколко минути, а резервациите междувременно продължават да идват като заявки.",
+      account: "Stripe акаунт",
+      yes: "готово", no: "още не",
+      check: { details: "Данните Ви са при Stripe", charges: "Гостите могат да плащат с карта", payouts: "Stripe изплаща към банковата Ви сметка" },
+      dueTitle: "Stripe още иска от Вас:",
+      pastDueTitle: "Просрочено — Stripe ги иска, за да продължат плащанията:",
+      dueHow: "Натиснете „Продължи в Stripe“, за да ги добавите. Stripe обикновено потвърждава до минути, понякога до ден.",
+      req: {
+        bank: "Банкова сметка за изплащанията (IBAN)",
+        terms: "Приемане на условията на Stripe",
+        business: "Уебсайт и описание на дейността",
+        identity: "Снимка на документ за самоличност",
+        person: "Лични данни на представляващия фирмата",
+        company: "Данни за фирмата (ЕИК, адрес)",
+        owners: "Собственици и управители",
+        other: "Други данни, които Stripe иска на своята страница",
+      },
+      stripeSaid: (m) => `Stripe отговори: ${m}`,
+      storedBehind: "Страницата за резервации още не е отразила това — натиснете „Провери отново“.",
+      testMode: "Тестов режим — картите са тестовите карти на Stripe и не се движат реални пари.",
     },
     extras: {
       title: "Допълнителни услуги, които продавате",

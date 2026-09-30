@@ -1,5 +1,7 @@
 "use client";
 
+import { SkewNotice, useReloadOnSkew } from "@revio/ui/version-skew";
+
 import Link from "next/link";
 import { StatusPage, statusPrimaryCls, statusSecondaryCls } from "@revio/ui/status-page";
 
@@ -16,6 +18,9 @@ export default function ProtectedError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // A tab opened before a deploy: load the new version instead of showing a crash.
+  const reloading = useReloadOnSkew(error);
+  if (reloading) return <SkewNotice />;
   return (
     <StatusPage
       tone="error"

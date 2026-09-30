@@ -1,5 +1,7 @@
 "use client";
 
+import { useReloadOnSkew } from "@revio/ui/version-skew";
+
 import { useEffect } from "react";
 import { reportClientError } from "@revio/ui/report-client-error";
 
@@ -18,6 +20,8 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // A tab opened before a deploy: load the new version instead of showing a crash.
+  useReloadOnSkew(error);
   /*
    * A deploy replaced the bundle this tab is running, so a form it submitted used an action id the
    * new server has never seen. The app is fine; this tab is stale. Saying "temporarily unavailable"
