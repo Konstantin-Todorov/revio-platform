@@ -424,6 +424,9 @@ importers:
       '@revio/db':
         specifier: workspace:*
         version: link:../db
+      '@revio/payments':
+        specifier: workspace:*
+        version: link:../payments
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

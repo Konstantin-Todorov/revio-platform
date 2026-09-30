@@ -286,6 +286,36 @@
     color: hsl(var(--brand-ink));
     font-weight: 700;
   }
+  /* With prices: a taller cell carrying the date and the night's lowest price beneath it. */
+  .day[data-priced="true"] {
+    height: 50px;
+  }
+  .day-price {
+    margin-top: 4px;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: hsl(var(--ink-faint));
+    white-space: nowrap;
+  }
+  .day-price[data-lowest="true"] {
+    color: hsl(var(--positive));
+    font-weight: 700;
+  }
+  /* A night with nothing free is still a valid departure, so it stays clickable — only quieter. */
+  .day[data-full="true"]:not([data-selected]) {
+    color: hsl(var(--ink-faint) / 0.6);
+  }
+  .day[data-selected="true"] .day-price {
+    color: inherit;
+    opacity: 0.85;
+  }
+  /* The price line takes the space the today-dot used; today is shown by weight instead. */
+  .day[data-priced="true"][data-today="true"] {
+    font-weight: 700;
+  }
+  .day[data-priced="true"][data-today="true"]::after {
+    display: none;
+  }
   .day[data-today="true"]::after {
     content: "";
     position: absolute;

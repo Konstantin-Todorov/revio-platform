@@ -1620,6 +1620,10 @@ model Reservation {
   balanceChargeError String?
   feeChargedMinor    Int?
   refundedOnlineMinor Int?
+  /// The guest's key to manage this booking on RevioDirect (cancel, change dates) — sent in the
+  /// confirmation email's link and nowhere else. The reference alone only SHOWS a booking; changing
+  /// one needs this, because a reference is six characters and printed on paper.
+  guestManageToken String? @unique
   notes              String?
   cancelledAt        DateTime?
   // The stay ended. A PMS-owned OPERATIONAL fact, deliberately not a `status` value: `status` is the

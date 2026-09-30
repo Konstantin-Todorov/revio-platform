@@ -1,7 +1,8 @@
-import "server-only";
 import { cancellationSettlement, noShowSettlement, type Settlement, type StayTerms } from "@revio/core";
 import { chargeSavedCard, refundGuestPayment } from "@revio/payments";
-import { prisma } from "./db";
+import type { forTenant } from "@revio/db";
+
+type Db = ReturnType<typeof forTenant>;
 
 /**
  * Money after a RevioDirect booking ends early — a cancellation or a no-show — settled by the terms
@@ -11,6 +12,10 @@ import { prisma } from "./db";
  * difference goes back to the guest or onto the saved card, never both. Each movement carries an
  * idempotency key per reservation, so pressing Cancel twice (or a retried request) moves money once.
  * `waive` is the hotel's choice to forgive the fee — then everything paid comes back.
+ *
+ * Shared by RevioCRS (staff cancel / no-show) and RevioDirect (the guest cancelling their own
+ * booking): the same terms must move the same money whoever pressed the button, and two copies of
+ * this would be the second copy that forgets the idempotency key.
  */
 export interface SettledOnline extends Settlement {
   refunded: boolean;
@@ -30,12 +35,13 @@ export function previewSettlement(
 }
 
 export async function settleOnline(
+  db: Db,
   reservationId: string,
   kind: "cancel" | "no_show",
   today: string,
   waive: boolean,
 ): Promise<SettledOnline | null> {
-  const r = await prisma.reservation.findFirst({
+  const r = await db.reservation.findFirst({
     where: { id: reservationId },
     select: {
       id: true, currency: true, stayTerms: true, onlinePaidMinor: true, onlinePaymentRef: true,
@@ -90,7 +96,7 @@ export async function settleOnline(
     if (!res.ok) error = `${res.reason}: ${res.message}`;
   }
 
-  await prisma.reservation.update({
+  await db.reservation.update({
     where: { id: r.id },
     data: {
       ...(charged ? { feeChargedMinor: s.chargeMinor } : {}),

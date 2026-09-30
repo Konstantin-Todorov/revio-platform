@@ -9,6 +9,7 @@ import { PAY_AT_HOTEL_LABEL, stayDetails, type StayTerms } from "@revio/core";
 import { claimSubmitToken, forSystem } from "@revio/db";
 import { serverKit } from "./i18n/server";
 import { getPublicProperty } from "./property";
+import { manageUrl } from "./manage";
 import { nightsBetween } from "./dates";
 
 /**
@@ -239,6 +240,10 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
       key: requestOnly ? "booking_requested" : "booking_confirmation",
       to: [email],
       locale,
+      // The way back to the booking — to read it, and to change or cancel it without phoning anyone.
+      ...(result.manageToken
+        ? { cta: { label: s.manage.linkEmailCta, url: await manageUrl(property, result.reservationId, result.manageToken) } }
+        : {}),
       vars: {
         guestName: firstName,
         propertyName: property.name,
@@ -277,7 +282,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
 
   // Outside any try/catch on purpose: `redirect` throws by design in Next, and swallowing it would
   // leave the guest sitting on the form after their booking had already succeeded.
-  redirect(`/${property.slug}/booking/${reference}`);
+  redirect(`/${property.slug}/booking/${reference}${result.manageToken ? `?k=${encodeURIComponent(result.manageToken)}` : ""}`);
 }
 
 /** Abandoning the form. Best-effort — the hold expires on its own if this never runs. */

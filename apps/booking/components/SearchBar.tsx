@@ -212,7 +212,7 @@ export function SearchBar({
 
       {panel === "dates" && (
         <Sheet title={s.yourDates} closeLabel={s.close} onClose={close}>
-          <DateRangePanel checkIn={checkIn} checkOut={checkOut} onSelect={onSelect} onDone={close} />
+          <DateRangePanel checkIn={checkIn} checkOut={checkOut} onSelect={onSelect} onDone={close} prices={{ slug, guests }} />
         </Sheet>
       )}
 

@@ -11,6 +11,7 @@
  * Engine (category "direct"); bypasses RevioLink/Channex on the way in; only rate plans flagged
  * `directChannelEnabled` are exposed (selection, not mapping).
  */
+import { randomBytes } from "node:crypto";
 import { claimHold, withTenantTransaction, type forTenant } from "@revio/db";
 import {
   computeStayCharges, computeWaterfall, expandInventoryPeriods, extrasTotalMinor,
@@ -147,7 +148,7 @@ async function loadStayContext(
   db: Db,
   property: PropertyRow,
   q: PublicStayQuery,
-  opts: { excludeHoldId?: string } = {},
+  opts: { excludeHoldId?: string; excludeReservationId?: string } = {},
 ) {
   const start = utcDay(q.checkIn);
   const end = utcDay(q.checkOut); // exclusive
@@ -185,7 +186,15 @@ async function loadStayContext(
       },
     }),
     db.reservationLine.findMany({
-      where: { reservation: { propertyId: property.id, status: { in: [...ROOM_OCCUPYING_STATUSES] } }, checkIn: { lt: end }, checkOut: { gt: start } },
+      where: {
+        reservation: {
+          propertyId: property.id, status: { in: [...ROOM_OCCUPYING_STATUSES] },
+          // A guest moving their own dates must not be counted against themselves — the same rule as
+          // the excluded hold above, for the reservation the change is replacing.
+          ...(opts.excludeReservationId ? { NOT: { id: opts.excludeReservationId } } : {}),
+        },
+        checkIn: { lt: end }, checkOut: { gt: start },
+      },
       select: { roomTypeId: true, quantity: true, checkIn: true, checkOut: true },
     }),
     db.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
@@ -261,6 +270,10 @@ async function loadStayContext(
     });
   };
 
+  /** Rooms left per night — the price calendar needs each night, not the stay's minimum. */
+  const remainingByNight = (rtId: string, totalRooms: number): Map<string, number> =>
+    new Map(waterfallFor(rtId, totalRooms).map((n) => [n.date, Math.max(0, n.remaining)]));
+
   const remainingFor = (rtId: string, totalRooms: number): number => {
     const rem = waterfallFor(rtId, totalRooms).map((n) => n.remaining);
     return Math.max(0, rem.length === 0 ? 0 : Math.min(...rem));
@@ -274,6 +287,15 @@ async function loadStayContext(
    */
   const sellableByNightFor = (rtId: string, totalRooms: number): Record<string, number> =>
     Object.fromEntries(waterfallFor(rtId, totalRooms).map((n) => [n.date, n.available]));
+
+  /** Stop-sell for one night — the part of `stayBlocked` that belongs to a night rather than a stay. */
+  const stopSoldOn = (rtId: string, rp: (typeof plans)[number], k: string): boolean =>
+    Boolean(resolveRestriction("stop_sell", {
+      ...(cellOf(rtId, k)?.stopSell ? { dateScoped: true } : {}),
+      matchingRules: ruleHits("stop_sell", rtId, rp.id, k),
+      ...(rp.defStopSell ? { ratePlanDefault: true } : {}),
+      ...(defaults?.defStopSell ? { propertyDefault: true } : {}),
+    }).value);
 
   /** Two-tier restriction gate for one (room type, plan) over the stay. Null = bookable. */
   const stayBlocked = (rtId: string, rp: (typeof plans)[number]): string | null => {
@@ -295,7 +317,7 @@ async function loadStayContext(
       return r.source === "none" ? null : Number(r.value);
     };
     for (const k of nights) {
-      if (flag("stop_sell", k, cellOf(rtId, k)?.stopSell, rp.defStopSell, defaults?.defStopSell)) return "closed to sale";
+      if (stopSoldOn(rtId, rp, k)) return "closed to sale";
     }
     const arrival = q.checkIn;
     if (flag("cta", arrival, cellOf(rtId, arrival)?.cta, rp.defCta, defaults?.defCta)) return "closed to arrival";
@@ -309,7 +331,7 @@ async function loadStayContext(
     return null;
   };
 
-  return { nights, roomTypes, plans, priceFor, remainingFor, sellableByNightFor, stayBlocked, fees, defaults };
+  return { nights, roomTypes, plans, priceFor, remainingFor, remainingByNight, sellableByNightFor, stayBlocked, stopSoldOn, fees, defaults };
 }
 
 /** GET /api/public/availability — the widget's search. */
@@ -385,6 +407,60 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
     }
   }
   return { options };
+}
+
+/**
+ * The lowest price per night, for the calendar — "which dates are cheap, and which are full?"
+ * answered before the guest searches, the way Booking.com and Google Hotels show it.
+ *
+ * Each night is priced as a one-night stay from that date: the cheapest room type that fits the
+ * party, has a room left that night and is not stop-sold, on the cheapest direct rate that is priced
+ * — all-in, through the same `computeStayCharges` the results page uses, so the calendar's number is
+ * the number the results page shows for one night. A length-of-stay rule can still refuse a
+ * particular stay; the calendar says "from", and the search remains the authority.
+ *
+ * `null` means nothing is bookable that night. It is still a valid DEPARTURE date, which is why the
+ * calendar greys it rather than disabling it.
+ */
+export const PRICE_CALENDAR_MAX_NIGHTS = 62;
+
+export async function publicPriceCalendar(
+  db: Db, property: PropertyRow, q: { from: string; to: string; guests: number },
+): Promise<{ currency: string; days: Record<string, number | null> } | null> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(q.from) || !/^\d{4}-\d{2}-\d{2}$/.test(q.to) || q.to <= q.from) return null;
+  if (!Number.isInteger(q.guests) || q.guests < 1 || q.guests > 12) return null;
+  const today = todayInTz(property.timezone);
+  const from = q.from < today ? today : q.from;
+  const span = (utcDay(q.to).getTime() - utcDay(from).getTime()) / DAY_MS;
+  if (span < 1) return { currency: property.baseCurrency, days: {} };
+  const to = span > PRICE_CALENDAR_MAX_NIGHTS ? ymd(new Date(utcDay(from).getTime() + PRICE_CALENDAR_MAX_NIGHTS * DAY_MS)) : q.to;
+
+  const { nights, roomTypes, plans, priceFor, remainingByNight, stopSoldOn, fees, defaults } =
+    await loadStayContext(db, property, { checkIn: from, checkOut: to, guests: q.guests });
+  const cityTaxIncluded = defaults?.cityTaxMode === "included";
+  const left = new Map(roomTypes.map((rt) => [rt.id, remainingByNight(rt.id, rt.totalRooms)]));
+
+  const days: Record<string, number | null> = {};
+  for (const k of nights) {
+    let lowest: number | null = null;
+    for (const rt of roomTypes) {
+      if (rt.maxGuests < q.guests || (left.get(rt.id)?.get(k) ?? 0) < 1) continue;
+      for (const rp of plans) {
+        if (rp.roomTypeLinks.length > 0 && !rp.roomTypeLinks.some((l) => l.roomTypeId === rt.id)) continue;
+        if (stopSoldOn(rt.id, rp, k)) continue;
+        const price = priceFor(rt, rp, k, q.guests);
+        if (price == null) continue;
+        const allIn = computeStayCharges({
+          stay: { accommodationMinor: price, nights: 1, rooms: 1, guests: q.guests },
+          fees,
+          cityTaxIncluded,
+        }).totalMinor;
+        if (lowest == null || allIn < lowest) lowest = allIn;
+      }
+    }
+    days[k] = lowest;
+  }
+  return { currency: property.baseCurrency, days };
 }
 
 export interface PublicBookingPayload extends PublicStayQuery {
@@ -494,6 +570,65 @@ export async function publicQuoteStay(
   return { totalMinor: charged.totalMinor, currency: property.baseCurrency, terms: terms && (property.paymentReady ? terms : withoutCard(terms)) };
 }
 
+/**
+ * Re-price an existing direct booking on new dates — the guest's own "change dates".
+ *
+ * Same room, same rate, same party: a date change, not a rebooking, so nothing the guest chose is
+ * silently swapped. Priced by the same resolver as a new booking, with THIS reservation left out of
+ * the availability count (it is the stay being replaced — counting it would tell the guest holding
+ * the last room that there is none). The extras they bought are re-totalled for the new length
+ * from their stored prices, never today's catalogue.
+ *
+ * Returns the facts a confirm needs to write, so the write cannot re-derive a different answer.
+ */
+export type ChangeQuoteRefusal = "invalid" | "unavailable" | "sold_out" | "too_long";
+
+export async function publicChangeQuote(
+  db: Db, property: PropertyRow,
+  p: { reservationId: string; roomTypeId: string; ratePlanId: string; guests: number; checkIn: string; checkOut: string;
+       extras: { priceMinor: number; basis: "per_night" | "per_stay" }[] },
+): Promise<
+  | { ok: true; accommodationMinor: number; totalMinor: number; currency: string; terms: StayTerms | null;
+      nights: { date: string; occupancy: number; rateMinor: number }[]; sellableByNight: Record<string, number> }
+  | { ok: false; code: ChangeQuoteRefusal }
+> {
+  const bad = validStay(p);
+  if (bad) return { ok: false, code: bad === TOO_LONG ? "too_long" : "invalid" };
+  const { nights, roomTypes, plans, priceFor, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
+    await loadStayContext(db, property, p, { excludeReservationId: p.reservationId });
+  const rt = roomTypes.find((r) => r.id === p.roomTypeId);
+  const rp = plans.find((r) => r.id === p.ratePlanId);
+  if (!rt || !rp || rt.maxGuests < p.guests || stayBlocked(rt.id, rp)) return { ok: false, code: "unavailable" };
+  if (remainingFor(rt.id, rt.totalRooms) < 1) return { ok: false, code: "sold_out" };
+  const quoted: { date: string; occupancy: number; rateMinor: number }[] = [];
+  let accommodationMinor = 0;
+  for (const k of nights) {
+    const price = priceFor(rt, rp, k, p.guests);
+    if (price == null) return { ok: false, code: "unavailable" };
+    accommodationMinor += price;
+    quoted.push({ date: k, occupancy: p.guests, rateMinor: price });
+  }
+  const charged = computeStayCharges({
+    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: p.guests },
+    fees,
+    cityTaxIncluded: defaults?.cityTaxMode === "included",
+    extrasMinor: extrasTotalMinor(p.extras, nights.length),
+  });
+  const terms = rp.cancellationPolicy
+    ? stayTerms(sellableTerms(termsPolicyOf(rp.cancellationPolicy), property.paymentReady ?? false), {
+        totalMinor: charged.totalMinor,
+        firstNightMinor: quoted[0]!.rateMinor,
+        arrival: p.checkIn,
+        today: todayInTz(property.timezone),
+      })
+    : null;
+  return {
+    ok: true, accommodationMinor, totalMinor: charged.totalMinor, currency: property.baseCurrency,
+    terms: terms && (property.paymentReady ? terms : withoutCard(terms)),
+    nights: quoted, sellableByNight: sellableByNightFor(rt.id, rt.totalRooms),
+  };
+}
+
 /** POST /api/public/reservations — the widget's create. Writes the ONE shared reservation record. */
 export async function publicCreateReservation(
   db: Db, property: PropertyRow, p: PublicBookingPayload,
@@ -502,6 +637,8 @@ export async function publicCreateReservation(
   /** What went wrong, for a screen to say in the guest's language — never match `error` itself. */
   code?: PublicBookingErrorCode;
   reservationId?: string;
+  /** For the confirmation link — the only way the guest can later cancel or change the booking. */
+  manageToken?: string;
   status?: string;
   /** Rooms only — what the reservation stores, and what room-revenue metrics are built on. */
   accommodationMinor?: number;
@@ -614,6 +751,7 @@ export async function publicCreateReservation(
   const totalMinor = accommodationMinor;
 
   const email = p.guest.email.trim().toLowerCase();
+  const manageToken = randomBytes(24).toString("base64url");
 
   /*
    * R1 — ONE transaction, and the hold's conversion is the claim that decides who won.
@@ -728,6 +866,8 @@ export async function publicCreateReservation(
         ...(p.guestLanguage ? { guestLanguage: p.guestLanguage } : {}),
         propertyCurrency: property.baseCurrency, propertyTotalMinor: totalMinor, fxRate: 1, fxAt: new Date(),
         guestId: guest.id, bookingSourceId: source.id,
+        // The guest's key to cancel or move this booking themselves — see guest-manage.ts.
+        guestManageToken: manageToken,
         // A LABEL plus a gateway token — never a card number. `card_on_file` is what the front desk
         // reads as "we can charge a no-show"; the ref is what actually lets them.
         paymentGuarantee: p.guarantee?.ref ? "card_on_file" : "none",
@@ -858,6 +998,7 @@ export async function publicCreateReservation(
 
   return {
     reservationId: written.id,
+    manageToken,
     status: written.status,
     roomTypeName: rt.name,
     accommodationMinor,

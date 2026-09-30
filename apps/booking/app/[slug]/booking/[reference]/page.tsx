@@ -1,7 +1,7 @@
 import { extrasTotalMinor, type StayTerms } from "@revio/core";
 import { termsWords } from "@/lib/i18n/kit";
 import { notFound } from "next/navigation";
-import { CalendarCheck, Check, Clock, MapPin, Phone } from "lucide-react";
+import { CalendarCheck, Check, Clock, MapPin, Phone, X } from "lucide-react";
 import { forTenant } from "@revio/db";
 import { computeStayCharges, recogniseGuest, SOLD_STATUSES } from "@revio/core";
 import { getPublicProperty, type PublicProperty } from "@/lib/property";
@@ -11,6 +11,10 @@ import type { GuestKit } from "@/lib/i18n/kit";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
+import { AskManageLink, ManagePanel } from "@/components/ManageBooking";
+import { manageAbility, previewSettlement } from "@revio/booking";
+import { todayInTimeZone } from "@revio/core";
+import { mayManage } from "@/lib/manage";
 
 export const dynamic = "force-dynamic";
 
@@ -24,10 +28,13 @@ export const dynamic = "force-dynamic";
  */
 export default async function ConfirmationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; reference: string }>;
+  searchParams: Promise<{ k?: string; error?: string; changed?: string }>;
 }) {
   const { slug, reference } = await params;
+  const sp = await searchParams;
   const property = await getPublicProperty(slug);
   if (!property) notFound();
 
@@ -117,6 +124,30 @@ export default async function ConfirmationPage({
   // so no card guarantee could be taken and an instant confirmation would be a promise nobody made.
   const requested = reservation.status === "requested";
 
+  /*
+   * Managing it. The reference only SHOWS a booking; the key from the email link is what lets this
+   * visitor change it. Without the key, the page offers to email that link — never the buttons.
+   */
+  const today = todayInTimeZone(property.timezone);
+  const canManage = mayManage(reservation, sp.k);
+  const ability = manageAbility({ ...reservation, checkIn, today });
+  const m = t.manage;
+  const settlement = previewSettlement(reservation, "cancel", today);
+  const cancelWords = !settlement
+    ? m.noTerms
+    : settlement.feeMinor === 0
+      ? settlement.refundMinor > 0 ? m.freeRefund(money(settlement.refundMinor, reservation.currency)) : m.free
+      : [
+          m.fee(money(settlement.feeMinor, reservation.currency)),
+          settlement.refundMinor > 0 ? m.refundPart(money(settlement.refundMinor, reservation.currency)) : null,
+          settlement.chargeMinor > 0 ? m.chargePart(money(settlement.chargeMinor, reservation.currency)) : null,
+        ].filter(Boolean).join(" ");
+  const changeBlockText =
+    ability.changeBlock === "paid_online" ? m.blockedPaid(property.phone)
+    : ability.changeBlock === "not_confirmed" && requested ? m.blockedRequested
+    : null;
+  const errorText = sp.error === "in_house" ? m.inHouse : sp.error ? m.notAllowed : null;
+
   return (
     <>
       <PropertyHeader property={property} />
@@ -133,7 +164,7 @@ export default async function ConfirmationPage({
                 : { backgroundColor: "hsl(var(--positive) / 0.12)", color: "hsl(var(--positive))" }
             }
           >
-            <Check size={26} strokeWidth={2.6} aria-hidden />
+            {cancelled ? <X size={26} strokeWidth={2.6} aria-hidden /> : <Check size={26} strokeWidth={2.6} aria-hidden />}
           </span>
           {/*
             Three outcomes, three headlines. A request-to-book is NOT a confirmation and must never
@@ -162,6 +193,30 @@ export default async function ConfirmationPage({
              style={{ backgroundColor: "hsl(var(--brand-wash))", color: "hsl(var(--brand-text))" }}>
             {s.reference(reference.toUpperCase())}
           </p>
+
+          {sp.changed && !cancelled && (
+            <p className="mx-auto mt-4 max-w-md rounded-lg px-4 py-2.5 text-[13.5px] font-semibold" role="status"
+               style={{ backgroundColor: "hsl(var(--positive) / 0.1)", color: "hsl(var(--positive))" }}>
+              {m.changedNotice}
+            </p>
+          )}
+          {errorText && (
+            <p className="mx-auto mt-4 max-w-md rounded-lg px-4 py-2.5 text-[13.5px] font-semibold" role="alert"
+               style={{ backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}>
+              {errorText}
+            </p>
+          )}
+          {/* What the cancellation did with their money — from what actually moved, not the terms. */}
+          {cancelled && (reservation.refundedOnlineMinor ?? 0) > 0 && (
+            <p className="mt-3 text-[13.5px]" style={{ color: "hsl(var(--ink-soft))" }}>
+              {m.cancelledRefund(money(reservation.refundedOnlineMinor!, reservation.currency))}
+            </p>
+          )}
+          {cancelled && (reservation.feeChargedMinor ?? 0) > 0 && (
+            <p className="mt-2 text-[13.5px]" style={{ color: "hsl(var(--ink-soft))" }}>
+              {m.cancelledFee(money(reservation.feeChargedMinor!, reservation.currency))}
+            </p>
+          )}
 
           {/* K6. Computed server-side from the shared guest record, never passed in a query param a
               stranger could fake — this page is reachable by reference alone, so anything shown here
@@ -206,8 +261,11 @@ export default async function ConfirmationPage({
               ))}
             </dl>
             <div className="mt-3 flex items-baseline justify-between border-t pt-3" style={{ borderColor: "hsl(var(--line))" }}>
-              <span className="text-[13.5px] font-semibold">{paidMinor > 0 ? s.total : s.totalAtHotel}</span>
-              <span className="price text-[1.5rem]">{money(charged.totalMinor, reservation.currency)}</span>
+              <span className="text-[13.5px] font-semibold">{cancelled ? s.cancelledTotal : paidMinor > 0 ? s.total : s.totalAtHotel}</span>
+              <span className={`price ${cancelled ? "text-[1.1rem] line-through" : "text-[1.5rem]"}`}
+                    style={cancelled ? { color: "hsl(var(--ink-faint))" } : undefined}>
+                {money(charged.totalMinor, reservation.currency)}
+              </span>
             </div>
             {/* What was taken, what will be, and what is left for the hotel — from what was
                 actually recorded at booking, never recomputed from today's policy. */}
@@ -237,7 +295,23 @@ export default async function ConfirmationPage({
           </div>
         </section>
 
-        {!cancelled && <WhatNext property={property} requested={requested} paid={paidMinor > 0} kit={kit} />}
+        {!cancelled && (ability.canCancel || ability.canChange) && (
+          canManage ? (
+            <ManagePanel
+              slug={property.slug}
+              reference={reference.toUpperCase()}
+              manageKey={sp.k!}
+              canChange={ability.canChange}
+              changeBlockText={changeBlockText}
+              canCancel={ability.canCancel}
+              cancelWords={cancelWords}
+            />
+          ) : (
+            <AskManageLink slug={property.slug} reference={reference.toUpperCase()} />
+          )
+        )}
+
+        {!cancelled && <WhatNext property={property} requested={requested} paid={paidMinor > 0} managed={canManage && (ability.canCancel || ability.canChange)} kit={kit} />}
       </main>
 
       <PropertyFooter property={property} />
@@ -246,7 +320,7 @@ export default async function ConfirmationPage({
 }
 
 /** The questions a guest actually has once the booking is done — or once they have asked for it. */
-function WhatNext({ property, requested, paid, kit }: { property: PublicProperty; requested: boolean; paid: boolean; kit: GuestKit }) {
+function WhatNext({ property, requested, paid, managed, kit }: { property: PublicProperty; requested: boolean; paid: boolean; managed: boolean; kit: GuestKit }) {
   const s = kit.s.done;
   const phone = property.phone ? <> {s.on} <strong className="font-semibold">{property.phone}</strong></> : null;
   return (
@@ -273,10 +347,11 @@ function WhatNext({ property, requested, paid, kit }: { property: PublicProperty
           <>
             <Next>{s.bookedNext}</Next>
             <Next>{paid ? s.bookedArrivePaid(property.checkInTime) : s.bookedArrive(property.checkInTime)}</Next>
+            {/* With the manage panel above, "call to change or cancel" would contradict two buttons. */}
             <Next>
-              {s.bookedCall}
+              {managed ? s.bookedCallOther : s.bookedCall}
               {phone}
-              {s.bookedCallTail}
+              {managed ? s.bookedCallOtherTail : s.bookedCallTail}
             </Next>
           </>
         )}

@@ -99,6 +99,22 @@ export function clientIp(headers: Headers): string {
   return headers.get("x-real-ip")?.trim() || "unknown";
 }
 
+/** The price calendar: one call per two months paged, so a guest browsing a year is ~6. */
+export const CALENDAR_LIMIT: RateLimitRule = { limit: 40, windowMs: 60_000 };
+/**
+ * Asking for a manage link by email. Low on purpose: each one can send a mail, and the answer is the
+ * same whether the address matched or not, so a script learns nothing by trying more.
+ */
+export const MANAGE_LINK_LIMIT: RateLimitRule = { limit: 5, windowMs: 10 * 60_000 };
+
+export function checkCalendar(ip: string, propertySlug: string): RateLimitResult {
+  return hit(`calendar:${propertySlug}:${ip}`, CALENDAR_LIMIT);
+}
+
+export function checkManageLink(ip: string, propertySlug: string): RateLimitResult {
+  return hit(`manage:${propertySlug}:${ip}`, MANAGE_LINK_LIMIT);
+}
+
 /** Guard a search request. */
 export function checkSearch(ip: string, propertySlug: string): RateLimitResult {
   return hit(`search:${propertySlug}:${ip}`, SEARCH_LIMIT);

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { addDays, monthGrid, nightsBetween, parseISO, todayISO } from "@/lib/dates";
 import { useGuestKit } from "@/lib/i18n/use-kit";
+import { loadPriceCalendar } from "@/lib/actions-calendar";
 
 /**
  * The date-range calendar.
@@ -20,16 +21,23 @@ import { useGuestKit } from "@/lib/i18n/use-kit";
 
 const MAX_MONTHS_AHEAD = 18;
 
+/** Per-night lowest prices, keyed `YYYY-MM-DD`; null = nothing free that night. */
+type PriceDays = Record<string, number | null>;
+const isoOf = (y: number, m: number) => new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+
 export function DateRangePanel({
   checkIn,
   checkOut,
   onSelect,
   onDone,
+  prices,
 }: {
   checkIn: string | null;
   checkOut: string | null;
   onSelect: (checkIn: string | null, checkOut: string | null) => void;
   onDone: () => void;
+  /** Show the lowest price under each night. Absent on a surface that has no hotel to price. */
+  prices?: { slug: string; guests: number };
 }) {
   const today = useMemo(todayISO, []);
   const anchor = checkIn ?? today;
@@ -43,6 +51,45 @@ export function DateRangePanel({
   }));
   const [hover, setHover] = useState<string | null>(null);
   const [focusISO, setFocusISO] = useState<string>(anchor);
+
+  /*
+   * The prices for the two months on screen, fetched as the guest pages. Cached per window and party
+   * size, so paging back is instant and changing the guest count re-prices (a per-person rate is a
+   * different number for three). A failed fetch leaves the calendar exactly as it was without prices.
+   */
+  const [priceDays, setPriceDays] = useState<PriceDays>({});
+  const [currency, setCurrency] = useState<string | null>(null);
+  const priceCache = useRef(new Map<string, { currency: string; days: PriceDays }>());
+  useEffect(() => {
+    if (!prices) return;
+    const from = isoOf(cursor.year, cursor.month);
+    const to = isoOf(cursor.year, cursor.month + 2);
+    const key = `${from}:${prices.guests}`;
+    const hit = priceCache.current.get(key);
+    if (hit) { setCurrency(hit.currency); setPriceDays((d) => ({ ...d, ...hit.days })); return; }
+    let live = true;
+    loadPriceCalendar(prices.slug, from, to, prices.guests).then((r) => {
+      if (!r) return;
+      priceCache.current.set(key, r);
+      if (live) { setCurrency(r.currency); setPriceDays((d) => ({ ...d, ...r.days })); }
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [prices?.slug, prices?.guests, cursor.year, cursor.month]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A new party size is a different set of prices; the old ones must not linger under the new count.
+  useEffect(() => { setPriceDays({}); }, [prices?.guests]);
+
+  /** The cheapest night on screen — marked, because "where is it cheap" is the question. */
+  const visibleLowest = useMemo(() => {
+    const from = isoOf(cursor.year, cursor.month);
+    const to = isoOf(cursor.year, cursor.month + 2);
+    let low: number | null = null;
+    for (const [k, v] of Object.entries(priceDays)) {
+      if (k >= from && k < to && v != null && (low == null || v < low)) low = v;
+    }
+    return low;
+  }, [priceDays, cursor.year, cursor.month]);
+  const priced = !!prices && currency != null;
 
   const dayRefs = useRef(new Map<string, HTMLButtonElement>());
   const gridRef = useRef<HTMLDivElement>(null);
@@ -163,6 +210,9 @@ export function DateRangePanel({
             checkOut={checkOut}
             provisionalEnd={provisionalEnd}
             focusISO={focusISO}
+            priceDays={priced ? priceDays : null}
+            currency={currency}
+            lowest={visibleLowest}
             className={offset === 1 ? "hidden sm:block" : undefined}
             onPick={pick}
             onHover={setHover}
@@ -173,6 +223,16 @@ export function DateRangePanel({
           />
         ))}
       </div>
+
+      {priced && (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pb-1 pt-2 text-[11.5px] sm:px-5" style={{ color: "hsl(var(--ink-faint))" }}>
+          <span>{s.priceLegend}</span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: "hsl(var(--positive))" }} aria-hidden />
+            {s.lowest}
+          </span>
+        </p>
+      )}
 
       <div className="mt-1 flex items-center justify-between gap-4 border-t px-4 py-3 sm:px-5"
            style={{ borderColor: "hsl(var(--line))" }}>
@@ -216,7 +276,7 @@ export function DateRangePanel({
 }
 
 function Month({
-  year, month, today, checkIn, checkOut, provisionalEnd, focusISO, className, onPick, onHover, registerRef,
+  year, month, today, checkIn, checkOut, provisionalEnd, focusISO, priceDays, currency, lowest, className, onPick, onHover, registerRef,
 }: {
   year: number;
   month: number;
@@ -225,6 +285,9 @@ function Month({
   checkOut: string | null;
   provisionalEnd: string | null;
   focusISO: string;
+  priceDays: PriceDays | null;
+  currency: string | null;
+  lowest: number | null;
   className?: string;
   onPick: (iso: string) => void;
   onHover: (iso: string | null) => void;
@@ -234,7 +297,7 @@ function Month({
   const y = year + Math.floor(month / 12);
   const m = ((month % 12) + 12) % 12;
   const cells = monthGrid(y, m);
-  const { weekdays, fmtDayLong } = useGuestKit();
+  const { weekdays, fmtDayLong, moneyWhole, s: t } = useGuestKit();
 
   return (
     <div className={className}>
@@ -254,6 +317,9 @@ function Month({
           const isEnd = iso === checkOut;
           const inRange = !!checkIn && !!provisionalEnd && iso > checkIn && iso < provisionalEnd;
           const isProvisionalEnd = !checkOut && iso === provisionalEnd;
+          // `undefined` = not priced (yet, or at all); null = nothing free that night.
+          const price = priceDays && !isPast ? priceDays[iso] : undefined;
+          const priceText = price != null && currency ? moneyWhole(price, currency) : null;
 
           return (
             <button
@@ -266,15 +332,31 @@ function Month({
               onClick={() => onPick(iso)}
               onMouseEnter={() => onHover(iso)}
               onFocus={() => onHover(iso)}
-              aria-label={fmtDayLong(iso)}
+              aria-label={
+                priceText ? `${fmtDayLong(iso)}, ${t.calendar.dayFrom(priceText)}`
+                : price === null ? `${fmtDayLong(iso)}, ${t.calendar.dayFull}`
+                : fmtDayLong(iso)
+              }
               aria-pressed={isStart || isEnd}
               className="day"
               data-selected={isStart || isEnd || isProvisionalEnd ? "true" : undefined}
               data-in-range={inRange ? "true" : undefined}
               data-edge={isStart ? "start" : isEnd || isProvisionalEnd ? "end" : undefined}
               data-today={iso === today ? "true" : undefined}
+              data-priced={priceDays ? "true" : undefined}
+              data-full={price === null ? "true" : undefined}
             >
-              {Number(iso.slice(8))}
+              {priceDays ? (
+                <span className="flex flex-col items-center leading-none">
+                  <span>{Number(iso.slice(8))}</span>
+                  {/* Always rendered, so a row keeps its height while a month's prices load. */}
+                  <span className="day-price" data-lowest={price != null && price === lowest ? "true" : undefined}>
+                    {priceText ?? (price === null ? "—" : "\u00a0")}
+                  </span>
+                </span>
+              ) : (
+                Number(iso.slice(8))
+              )}
             </button>
           );
         })}

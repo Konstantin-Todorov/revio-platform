@@ -17,7 +17,8 @@
   "dependencies": {
     "@revio/connectivity": "workspace:*",
     "@revio/core": "workspace:*",
-    "@revio/db": "workspace:*"
+    "@revio/db": "workspace:*",
+    "@revio/payments": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

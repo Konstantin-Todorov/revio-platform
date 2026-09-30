@@ -192,7 +192,38 @@ authorise → write the reservation → capture; a failed booking cancels the au
 re-derives the amount (`publicQuoteStay`) and refuses an intent that is not THIS hold's, not in the
 expected state, or not for exactly that amount. The terms agreed are frozen on the reservation
 (`stayTerms`, `onlinePaidMinor`, `balanceChargeMinor/On`) and the PMS folio shows the online payment.
-Not built yet: charging the scheduled balance, the no-show button, a pay link for requests.
+Not built yet: a pay link for requests.
+
+## The guest manages their own booking (2026-09-30)
+
+`/booking/<reference>` shows a booking to anyone holding the reference, but **changing** it needs
+`Reservation.guestManageToken` — minted at booking, carried as `?k=` in the confirmation email's
+"Manage my booking" button and in the redirect after booking. A reference is six characters printed
+on paper; a key is 24 random bytes (32 characters) in the guest’s inbox. Without the key the page offers to email the
+link, and answers the same whether the address matched or not (no guest-enumeration oracle).
+Bookings made before keys existed get one minted on that request.
+
+The rules live in `@revio/booking/guest-manage.ts`, never in the page:
+
+- **Cancel** until the arrival day, through `settleOnline` — the same function RevioCRS's Cancel
+  button calls, so the refund or fee is what the agreed terms say whoever pressed it. The panel states
+  that money *before* the confirm button. Refused while the guest is in house.
+- **Change dates**: same room, rate and party; re-priced (`publicChangeQuote`, excluding this booking
+  from availability) and **claimed with `claimHold` before any row changes**; the confirm carries the
+  total the guest saw and is refused if the price moved. Offered only while nothing was taken online
+  and not on the arrival day — moving a paid stay means a refund or a difference, which is the
+  hotel's call. The terms are re-derived for the new arrival (a new free-cancellation date).
+
+Both write an audit entry, push availability, mail the guest (the hotel's own template) and alert
+the hotel's reservation mailbox in the team's language.
+
+## The price calendar
+
+The date picker shows the lowest all-in price per night under each date (`publicPriceCalendar`):
+the cheapest room that fits the party and has a room left that night, on the cheapest priced direct
+rate, through the same `computeStayCharges` as the results. A night with nothing free shows "—" and
+stays clickable, because it is still a valid departure. Length-of-stay rules can still refuse a
+particular stay — the calendar says "from", the search stays the authority. Rate-limited per IP.
 
 **The countdown is real.** The room genuinely is held and genuinely is released at zero. Everything
 else on this site is honest, so a fake timer here would cost all of it.

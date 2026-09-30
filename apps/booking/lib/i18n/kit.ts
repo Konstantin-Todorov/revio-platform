@@ -36,6 +36,13 @@ export function guestKit(locale: Locale) {
         minimumFractionDigits: minor % 100 === 0 ? 0 : 2,
         maximumFractionDigits: 2,
       }).format(minor / 100),
+    /**
+     * Whole units, for a space the width of a calendar day ("€98"). Rounded UP: a "from" price that
+     * reads a cent cheaper than the room is a small untruth, and this page does not tell those.
+     */
+    moneyWhole: (minor: number, currency: string) =>
+      new Intl.NumberFormat(intl, { style: "currency", currency, maximumFractionDigits: 0, minimumFractionDigits: 0 })
+        .format(Math.ceil(minor / 100)),
   };
 }
 

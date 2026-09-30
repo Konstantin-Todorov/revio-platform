@@ -4,7 +4,7 @@ import { AlertTriangle, PencilLine } from "lucide-react";
 import { getReservationDetail, getCreateFormData, PAYMENT_GUARANTEES } from "@/lib/data";
 import { earliestSelectable } from "@revio/core";
 import { cancelCrsReservation, markNoShow, modifyReservation } from "@/lib/actions-reservations";
-import { previewSettlement } from "@/lib/settle-online";
+import { previewSettlement } from "@revio/booking";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { i18n } from "@/lib/i18n/server";
 import { reservations as reservationsDict } from "@/lib/i18n/reservations";

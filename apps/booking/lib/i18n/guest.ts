@@ -68,6 +68,10 @@ export interface GuestStrings {
   };
   calendar: {
     prev: string; next: string; chooseCheckOut: string; chooseCheckIn: string; clear: string; done: string;
+    /** Under the grid when prices show: what the small numbers are. */
+    priceLegend: string; lowest: string;
+    /** Screen-reader day label additions. */
+    dayFrom: (price: string) => string; dayFull: string;
   };
   steps: { names: [string, string, string, string]; progress: string; back: string };
   search: {
@@ -164,7 +168,44 @@ export interface GuestStrings {
     bookedArrive: (time: string) => string;
     bookedArrivePaid: (time: string) => string;
     bookedCall: string; bookedCallTail: string;
+    /** When the manage panel is on screen: the phone is for everything else. */
+    bookedCallOther: string; bookedCallOtherTail: string;
+    /** A cancelled booking's total row — the figure stays for reference, the words say nothing is owed. */
+    cancelledTotal: string;
     on: string;
+  };
+  manage: {
+    title: string;
+    changeDates: string; changeDatesSub: string;
+    cancel: string; cancelSub: string;
+    cancelConfirm: string; keep: string; cancelling: string;
+    /** The money, before they press — from the terms they agreed to. */
+    freeRefund: (amount: string) => string;
+    free: string;
+    fee: (fee: string) => string;
+    refundPart: (amount: string) => string;
+    chargePart: (amount: string) => string;
+    noTerms: string;
+    blockedPaid: (phone: string | null) => string;
+    blockedRequested: string;
+    inHouse: string;
+    notAllowed: string;
+    /** After it happened. */
+    cancelledRefund: (amount: string) => string;
+    cancelledFee: (amount: string) => string;
+    changedNotice: string;
+    /** No key in the link: ask for the email, send the link. */
+    askTitle: string; askBody: string; askEmail: string; askSend: string; askSending: string;
+    askSent: string; askLimited: string;
+    linkEmailSubject: (hotel: string) => string;
+    linkEmailBody: string; linkEmailCta: string;
+    /** The change-dates page. */
+    changeTitle: string; changeLead: (room: string) => string;
+    current: string; proposed: string;
+    pickDates: string; checking: string;
+    newTotal: string; difference: (sign: string, amount: string) => string; sameTotal: string;
+    confirmChange: string; changing: string; back: string;
+    refusal: Record<"invalid" | "unavailable" | "sold_out" | "too_long" | "not_allowed" | "same_dates" | "needs_payment" | "price_changed", string>;
   };
   waitlist: {
     joinedTitle: string;
@@ -263,6 +304,8 @@ export const guest: Translations<GuestStrings> = {
       prev: "Previous month", next: "Next month",
       chooseCheckOut: "Now choose your check-out", chooseCheckIn: "Choose your check-in date",
       clear: "Clear", done: "Done",
+      priceLegend: "Price per night from, taxes included", lowest: "lowest on screen",
+      dayFrom: (p) => `from ${p} a night`, dayFull: "no rooms",
     },
     steps: { names: ["Dates", "Room", "Details", "Confirm"], progress: "Booking progress", back: "Back" },
     search: {
@@ -401,8 +444,54 @@ export const guest: Translations<GuestStrings> = {
       bookedArrive: (t) => `Arrive any time after ${t}. Nothing to print, nothing to pay in advance.`,
       bookedArrivePaid: (t) => `Arrive any time after ${t}. Nothing to print — what you paid is already with the hotel.`,
       bookedCall: "Need to change or cancel? Call the hotel directly",
+      bookedCallOther: "Anything else — an early check-in, a cot, a special occasion? Call the hotel",
+      bookedCallOtherTail: ".",
+      cancelledTotal: "Nothing to pay — cancelled",
       bookedCallTail: " — you’re booked with them, not through an agency, so they can just do it.",
       on: "on",
+    },
+    manage: {
+      title: "Manage your booking",
+      changeDates: "Change dates", changeDatesSub: "Same room and rate — see the new price before anything changes.",
+      cancel: "Cancel booking", cancelSub: "See exactly what it costs before you confirm.",
+      cancelConfirm: "Yes, cancel my booking", keep: "Keep my booking", cancelling: "Cancelling…",
+      freeRefund: (a) => `Cancelling is free — ${a} goes back to your card.`,
+      free: "Cancelling is free.",
+      fee: (f) => `Cancelling now costs ${f}, under the terms you booked with.`,
+      refundPart: (a) => `${a} goes back to your card.`,
+      chargePart: (a) => `${a} will be charged to your card.`,
+      noTerms: "Nothing has been charged online for this booking.",
+      blockedPaid: (p) => `This stay was paid online, so the hotel changes its dates for you${p ? ` — call ${p}` : ""}.`,
+      blockedRequested: "The hotel hasn’t confirmed this request yet. You can still cancel it.",
+      inHouse: "You’ve already checked in — please speak to reception.",
+      notAllowed: "This booking can no longer be changed online.",
+      cancelledRefund: (a) => `${a} is on its way back to your card — banks usually show it within 5–10 days.`,
+      cancelledFee: (a) => `A cancellation fee of ${a} was charged, as agreed when you booked.`,
+      changedNotice: "Your dates are changed. We’ve emailed you the new confirmation.",
+      askTitle: "Need to change or cancel?",
+      askBody: "For your security we send a private link to the email you booked with.",
+      askEmail: "Email you booked with", askSend: "Send me the link", askSending: "Sending…",
+      askSent: "If that’s the email on this booking, the link is on its way. Check your inbox.",
+      askLimited: "Too many tries just now — please wait a few minutes.",
+      linkEmailSubject: (h) => `Manage your booking at ${h}`,
+      linkEmailBody: "Here is your private link to change or cancel your booking. Anyone with it can manage the booking, so please don’t forward it.",
+      linkEmailCta: "Manage my booking",
+      changeTitle: "Change your dates",
+      changeLead: (r) => `${r} — same room, same rate. Pick new dates and you’ll see the new price before anything changes.`,
+      current: "Now", proposed: "New dates",
+      pickDates: "Choose new dates on the calendar.", checking: "Checking availability…",
+      newTotal: "New total", difference: (sign, a) => `${sign}${a} compared with now`, sameTotal: "Same price as now",
+      confirmChange: "Change my dates", changing: "Changing…", back: "Back to my booking",
+      refusal: {
+        invalid: "Please choose dates from tomorrow on.",
+        unavailable: "This room and rate can’t be booked for those dates. Try other dates.",
+        sold_out: "The room is full on those dates. Try other dates.",
+        too_long: "Stays longer than 30 nights can’t be booked online.",
+        not_allowed: "This booking can no longer be changed online.",
+        same_dates: "Those are the dates you already have.",
+        needs_payment: "Those dates need a payment up front — please contact the hotel to move to them.",
+        price_changed: "The price changed while you were deciding. Here is the new one.",
+      },
     },
     waitlist: {
       joinedTitle: "You’re on the list",
@@ -485,6 +574,8 @@ export const guest: Translations<GuestStrings> = {
       prev: "Предишен месец", next: "Следващ месец",
       chooseCheckOut: "Сега изберете дата на напускане", chooseCheckIn: "Изберете дата на настаняване",
       clear: "Изчисти", done: "Готово",
+      priceLegend: "Цена за нощувка от, с включени такси", lowest: "най-ниска в показаното",
+      dayFrom: (p) => `от ${p} на нощувка`, dayFull: "няма наличност",
     },
     steps: { names: ["Дати", "Стая", "Данни", "Потвърждение"], progress: "Стъпки на резервацията", back: "Назад" },
     search: {
@@ -623,8 +714,54 @@ export const guest: Translations<GuestStrings> = {
       bookedArrive: (t) => `Пристигнете по всяко време след ${t}. Нищо за печатане, нищо за плащане предварително.`,
       bookedArrivePaid: (t) => `Пристигнете по всяко време след ${t}. Нищо за печатане — платеното вече е при хотела.`,
       bookedCall: "Трябва да промените или анулирате? Обадете се директно на хотела",
+      bookedCallOther: "Нещо друго — ранно настаняване, детско легло, специален повод? Обадете се на хотела",
+      bookedCallOtherTail: ".",
+      cancelledTotal: "Нищо за плащане — отказана",
       bookedCallTail: " — резервацията е при тях, а не чрез агенция, така че те могат просто да го направят.",
       on: "на",
+    },
+    manage: {
+      title: "Управление на резервацията",
+      changeDates: "Промяна на датите", changeDatesSub: "Същата стая и цена — виждате новата сума, преди да се промени нещо.",
+      cancel: "Отказ от резервацията", cancelSub: "Виждате точно колко струва, преди да потвърдите.",
+      cancelConfirm: "Да, откажи резервацията", keep: "Запази резервацията", cancelling: "Отказваме…",
+      freeRefund: (a) => `Отказът е безплатен — ${a} се връщат по картата Ви.`,
+      free: "Отказът е безплатен.",
+      fee: (f) => `Отказ сега струва ${f} по условията, с които сте резервирали.`,
+      refundPart: (a) => `${a} се връщат по картата Ви.`,
+      chargePart: (a) => `${a} ще бъдат удържани от картата Ви.`,
+      noTerms: "За тази резервация нищо не е платено онлайн.",
+      blockedPaid: (p) => `Този престой е платен онлайн, затова хотелът ще промени датите вместо Вас${p ? ` — обадете се на ${p}` : ""}.`,
+      blockedRequested: "Хотелът още не е потвърдил заявката. Можете да я откажете.",
+      inHouse: "Вече сте настанени — моля, обърнете се към рецепцията.",
+      notAllowed: "Тази резервация вече не може да се променя онлайн.",
+      cancelledRefund: (a) => `${a} се връщат по картата Ви — банките обикновено ги показват до 5–10 дни.`,
+      cancelledFee: (a) => `Удържана е такса за отказ ${a}, както е договорено при резервацията.`,
+      changedNotice: "Датите са променени. Изпратихме Ви новото потвърждение по имейл.",
+      askTitle: "Искате да промените или откажете?",
+      askBody: "За Ваша сигурност изпращаме лична връзка на имейла, с който сте резервирали.",
+      askEmail: "Имейл, с който сте резервирали", askSend: "Изпратете ми връзката", askSending: "Изпращаме…",
+      askSent: "Ако това е имейлът на резервацията, връзката вече пътува към Вас. Проверете пощата си.",
+      askLimited: "Твърде много опити — моля, изчакайте няколко минути.",
+      linkEmailSubject: (h) => `Управление на резервацията Ви в ${h}`,
+      linkEmailBody: "Ето Вашата лична връзка за промяна или отказ на резервацията. Всеки, който я има, може да управлява резервацията, затова не я препращайте.",
+      linkEmailCta: "Управление на резервацията",
+      changeTitle: "Промяна на датите",
+      changeLead: (r) => `${r} — същата стая, същата цена. Изберете нови дати и ще видите новата сума, преди да се промени нещо.`,
+      current: "Сега", proposed: "Нови дати",
+      pickDates: "Изберете нови дати от календара.", checking: "Проверяваме наличността…",
+      newTotal: "Нова обща сума", difference: (sign, a) => `${sign}${a} спрямо сега`, sameTotal: "Същата цена като сега",
+      confirmChange: "Промени датите", changing: "Променяме…", back: "Обратно към резервацията",
+      refusal: {
+        invalid: "Моля, изберете дати от утре нататък.",
+        unavailable: "Тази стая и цена не могат да се резервират за тези дати. Опитайте други.",
+        sold_out: "Стаята е заета за тези дати. Опитайте други.",
+        too_long: "Престой над 30 нощувки не може да се резервира онлайн.",
+        not_allowed: "Тази резервация вече не може да се променя онлайн.",
+        same_dates: "Това са датите, които вече имате.",
+        needs_payment: "Тези дати изискват плащане предварително — моля, свържете се с хотела.",
+        price_changed: "Цената се промени, докато решавахте. Ето новата.",
+      },
     },
     waitlist: {
       joinedTitle: "В списъка сте",
