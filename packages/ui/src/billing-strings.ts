@@ -45,6 +45,7 @@ export interface BillingStrings {
     paid: string;
     due: string;
     payByCard: string;
+    download: string;
     testLink: string;
     wrongBefore: string;
     /** " or write to {email}" */
@@ -108,7 +109,8 @@ export const billingStrings: Translations<BillingStrings> = {
       refunded: "{amount} refunded",
       paid: "paid",
       due: "due",
-      payByCard: "Pay by card",
+      payByCard: "Pay",
+      download: "Download invoice",
       testLink: "test link — charges nothing",
       wrongBefore: "Something here looks wrong? Reply to any Revio email",
       wrongEmail: " or write to {email}",
@@ -197,7 +199,8 @@ export const billingStrings: Translations<BillingStrings> = {
       refunded: "{amount} възстановени",
       paid: "платена",
       due: "дължима",
-      payByCard: "Плати с карта",
+      payByCard: "Плати",
+      download: "Изтегли фактурата",
       testLink: "тестова връзка — нищо не се таксува",
       wrongBefore: "Нещо тук изглежда грешно? Отговорете на който и да е имейл от Revio",
       wrongEmail: " или пишете на {email}",

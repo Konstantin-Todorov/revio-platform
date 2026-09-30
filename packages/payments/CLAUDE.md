@@ -21,8 +21,8 @@ something that should be possible by pasting a key.
 
 A guarantee returns a **token** plus card brand and last4. That is enough to charge a no-show and
 useless to anyone who steals the database, and it keeps the platform outside PCI scope. **A PAN, CVV
-or expiry date must never reach our servers or our database.** RevioDirect's checkout has no card
-fields at all for this reason — which is why the page can say *your card details never reach us* as a
+or expiry date must never reach our servers or our database.** RevioDirect's card fields are Stripe's
+own iframe for this reason — which is why the page can say *your card details never reach us* as a
 statement of fact.
 
 **Since 2026-09-30 RevioDirect collects a real card — in Stripe's Payment Element**, an iframe served

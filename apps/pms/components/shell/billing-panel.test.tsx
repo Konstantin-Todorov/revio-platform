@@ -99,10 +99,16 @@ describe("what is owed", () => {
     expect(panel()).not.toMatch(/waiting to be paid/);
   });
 
-  it("offers a card button only where a live link exists", () => {
-    expect(panel()).not.toContain("Pay by card");
-    const live = panel({ invoices: [invoice({ status: "sent", paidAt: null, payUrl: "https://checkout.stripe.com/c/pay/cs_1" })] });
-    expect(live).toContain("Pay by card");
+  it("offers a pay button only where a link exists", () => {
+    expect(panel()).not.toMatch(/>Pay</);
+    const live = panel({ invoices: [invoice({ status: "sent", paidAt: null, payUrl: "https://operator.reviosoft.app/pay/tok" })] });
+    expect(live).toMatch(/>Pay</);
+  });
+
+  it("lets a paid invoice be downloaded, and never offers to pay it again", () => {
+    const html = panel({ invoices: [invoice({ status: "paid", payUrl: null, documentUrl: "https://operator.reviosoft.app/pay/tok/invoice" })] });
+    expect(html).toContain("Download invoice");
+    expect(html).not.toMatch(/>Pay</);
   });
 
   it("marks a test link as one, because it looks identical and takes no money", () => {

@@ -1,4 +1,4 @@
-import type { StayTerms } from "@revio/core";
+import { extrasTotalMinor, type StayTerms } from "@revio/core";
 import { termsWords } from "@/lib/i18n/kit";
 import { notFound } from "next/navigation";
 import { CalendarCheck, Check, Clock, MapPin, Phone } from "lucide-react";
@@ -87,10 +87,19 @@ export default async function ConfirmationPage({
     db.taxFee.findMany({ where: { propertyId: property.id, active: true } }),
     db.propertyDefaults.findFirst({ where: { propertyId: property.id } }),
   ]);
+  // The extras they chose are part of what they owe — the same all-in number the booking step and
+  // the email stated. Leaving them out made this page show a smaller total than the one agreed.
+  const extras = await db.stayExtra.findMany({
+    where: { reservationId: reservation.id, active: true },
+    select: { name: true, priceMinor: true, basis: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const extraBasis = (b: string) => (b === "per_stay" ? "per_stay" : "per_night") as "per_stay" | "per_night";
   const charged = computeStayCharges({
     stay: { accommodationMinor: line.priceMinor ?? 0, nights, rooms: 1, guests: line.guestsCount ?? 2 },
     fees: fees as never,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
+    extrasMinor: extrasTotalMinor(extras.map((e) => ({ priceMinor: e.priceMinor, basis: extraBasis(e.basis) })), nights),
   });
 
   // The terms as agreed at booking, and what was taken — frozen facts, never today's policy.
@@ -188,6 +197,10 @@ export default async function ConfirmationPage({
             <dl className="space-y-1.5 text-[13px]">
               <Row label={t.room.roomsFor(nights)}
                    value={money(charged.accommodationMinor, reservation.currency)} />
+              {extras.map((e) => (
+                <Row key={e.name} label={e.name}
+                     value={money(extrasTotalMinor([{ priceMinor: e.priceMinor, basis: extraBasis(e.basis) }], nights), reservation.currency)} />
+              ))}
               {charged.lines.map((l) => (
                 <Row key={l.name} label={l.name} value={money(l.amountMinor, reservation.currency)} />
               ))}

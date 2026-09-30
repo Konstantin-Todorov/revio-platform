@@ -44,6 +44,8 @@ export interface BillingInvoiceRow {
   lineItems: string | null;
   paidAt: Date | null;
   payUrl: string | null;
+  /** The document, to download and file — paid invoices included. */
+  documentUrl?: string | null;
   sandbox: boolean;
   refundedMinor: number;
 }
@@ -238,9 +240,14 @@ export function BillingPanel({
                       {i.payUrl && (
                         <a
                           href={i.payUrl}
-                          className="inline-block rounded-md bg-brand-800 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700"
+                          className="inline-block whitespace-nowrap rounded-md bg-brand-800 px-3 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-brand-700"
                         >
                           {s.payByCard}
+                        </a>
+                      )}
+                      {i.documentUrl && (
+                        <a href={i.documentUrl} className="mt-1.5 block whitespace-nowrap text-[12px] font-semibold text-brand-700 hover:underline">
+                          {s.download}
                         </a>
                       )}
                       {/* A test-mode link looks identical to a real one and takes no money. Somebody

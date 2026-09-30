@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import { forSystem, withSystemTransaction } from "@revio/db";
 import { decideVat, applyVat, registrationOf } from "./vat";
 import { formatAddress, formatInvoiceNumber, formatDemoNumber, chooseIdentity } from "./invoice-lines";
@@ -179,6 +180,9 @@ export async function issueInvoice(invoiceId: string): Promise<IssueResult> {
         buyerRepresentative: billing.representative ?? null,
         issuePlace: issuer.city,
         footerNote: company.footerNote ?? null,
+        // The invoice's own page exists from the moment it has a number, so the hotel's billing
+        // screen can offer "Pay" and "Download" before any email has been sent.
+        payToken: randomBytes(24).toString("base64url"),
       },
     });
 

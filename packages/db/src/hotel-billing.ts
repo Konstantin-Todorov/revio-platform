@@ -50,8 +50,13 @@ export interface HotelInvoice {
   lineItems: string | null;
   createdAt: Date;
   paidAt: Date | null;
-  /** A live Stripe Checkout link, or null when there is none or it has expired. */
+  /**
+   * Where to pay: the invoice's own page (`/pay/<token>` on the Operator origin — never expires,
+   * card and bank transfer, the document), else a live Stripe Checkout link, else null.
+   */
   payUrl: string | null;
+  /** The invoice document itself, to download and file. Null before its page exists. */
+  documentUrl: string | null;
   /** Test-mode links charge nothing. The screen has to be able to say so. */
   sandbox: boolean;
   refundedMinor: number;
@@ -68,11 +73,12 @@ export async function hotelInvoices(tenantId: string, limit = 24): Promise<Hotel
       id: true, period: true, amountMinor: true, currency: true, status: true,
       lineItems: true, createdAt: true, paidAt: true,
       stripeCheckoutUrl: true, stripeCheckoutExpires: true, stripeMode: true,
-      refundedMinor: true, refundedAt: true,
+      refundedMinor: true, refundedAt: true, payToken: true,
     },
   });
 
   const now = new Date();
+  const origin = (process.env.OPERATOR_URL?.trim() || "https://operator.reviosoft.app").replace(/\/+$/, "");
   return rows.map((r) => ({
     id: r.id,
     period: r.period,
@@ -89,9 +95,14 @@ export async function hotelInvoices(tenantId: string, limit = 24): Promise<Hotel
      * A paid invoice never offers one either; paying twice is not a thing to make easy.
      */
     payUrl:
-      r.status !== "paid" && r.stripeCheckoutUrl && (!r.stripeCheckoutExpires || r.stripeCheckoutExpires > now)
-        ? r.stripeCheckoutUrl
-        : null,
+      r.status === "paid"
+        ? null
+        : r.payToken
+          ? `${origin}/pay/${r.payToken}`
+          : r.stripeCheckoutUrl && (!r.stripeCheckoutExpires || r.stripeCheckoutExpires > now)
+            ? r.stripeCheckoutUrl
+            : null,
+    documentUrl: r.payToken ? `${origin}/pay/${r.payToken}/invoice` : null,
     sandbox: r.stripeMode === "test",
     refundedMinor: r.refundedMinor,
     refundedAt: r.refundedAt,
