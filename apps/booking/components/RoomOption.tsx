@@ -24,8 +24,10 @@ import { RoomDetail, RoomDetailTrigger } from "./RoomDetail";
  * can go live before its photo shoot and still look finished rather than broken.
  */
 export function RoomOption({
-  option, nights, slug, checkIn, checkOut, guests, mediaUrl, kit,
+  option, nights, slug, checkIn, checkOut, guests, mediaUrl, kit, layout = "list",
 }: {
+  /** `gallery` (the Editorial preset): photograph on top and shown on a phone too, rates stacked. */
+  layout?: "list" | "gallery";
   /** The guest's language — words, room-content labels and money. */
   kit: GuestKit;
   option: PublicRoomOption;
@@ -46,6 +48,7 @@ export function RoomOption({
   const cover = option.photos[0];
 
   const headline = headlineAmenities(option.amenities);
+  const gallery = layout === "gallery";
   const { s, room } = kit;
 
   const href = (plan: PublicPlanQuote) =>
@@ -53,7 +56,7 @@ export function RoomOption({
 
   return (
     <article className="card-raised overflow-hidden">
-      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,13.5rem)_1fr]">
+      <div className={gallery ? "grid grid-cols-1" : "grid grid-cols-1 sm:grid-cols-[minmax(0,13.5rem)_1fr]"}>
         {cover ? (
           /*
             The photo FILLS its column, and the column is now height-bounded.
@@ -70,8 +73,8 @@ export function RoomOption({
             past the point where it reads as a photograph of a room.
           */
           <div
-            className="relative hidden min-h-[13rem] max-h-[20rem] sm:block"
-            style={{ borderRight: "1px solid hsl(var(--line))", backgroundColor: "hsl(var(--surface))" }}
+            className={gallery ? "relative aspect-[16/10] w-full" : "relative hidden min-h-[13rem] max-h-[20rem] sm:block"}
+            style={{ [gallery ? "borderBottom" : "borderRight"]: "1px solid hsl(var(--line))", backgroundColor: "hsl(var(--surface))" }}
           >
             {/* Not next/image: this is already our own resized WebP, so a second optimisation pass
                 would burn CPU to produce the same bytes. */}
@@ -93,10 +96,10 @@ export function RoomOption({
           /* No photo is a normal state, not a failure: a hotel can go live before its photo shoot,
              and a designed panel reads as intentional where a grey box reads as broken. */
           <div
-            className="relative hidden min-h-[11rem] items-center justify-center sm:flex"
+            className={gallery ? "relative flex h-32 items-center justify-center" : "relative hidden min-h-[11rem] items-center justify-center sm:flex"}
             style={{
               background: "linear-gradient(150deg, hsl(var(--brand-wash)), hsl(var(--brand-soft) / 0.65))",
-              borderRight: "1px solid hsl(var(--line))",
+              [gallery ? "borderBottom" : "borderRight"]: "1px solid hsl(var(--line))",
             }}
             aria-hidden
           >
@@ -184,7 +187,7 @@ export function RoomOption({
           </header>
 
           <div className="mt-4">
-            <RateRow plan={best} nights={nights} href={href(best)} highlight={rest.length > 0} kit={kit} />
+            <RateRow plan={best} nights={nights} href={href(best)} highlight={rest.length > 0} kit={kit} stacked={gallery} />
           </div>
         </div>
       </div>
@@ -219,7 +222,7 @@ export function RoomOption({
           </summary>
           {rest.map((plan) => (
             <div key={plan.ratePlanId} className="border-t" style={{ borderColor: "hsl(var(--line))" }}>
-              <RateRow plan={plan} nights={nights} href={href(plan)} kit={kit} />
+              <RateRow plan={plan} nights={nights} href={href(plan)} kit={kit} stacked={gallery} />
             </div>
           ))}
         </details>
@@ -229,9 +232,11 @@ export function RoomOption({
 }
 
 function RateRow({
-  plan, nights, href, highlight = false, kit,
+  plan, nights, href, highlight = false, kit, stacked = false,
 }: {
   kit: GuestKit;
+  /** Half-width gallery cards: price and button under the details rather than beside them. */
+  stacked?: boolean;
   plan: PublicPlanQuote;
   nights: number;
   href: string;
@@ -240,7 +245,7 @@ function RateRow({
 }) {
   const { s, money } = kit;
   return (
-    <div className="grid grid-cols-1 gap-4 px-5 pb-5 pt-1 sm:grid-cols-[1fr_auto] sm:gap-8">
+    <div className={`grid grid-cols-1 gap-4 px-5 pb-5 pt-1 ${stacked ? "" : "sm:grid-cols-[1fr_auto] sm:gap-8"}`}>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-[14.5px] font-bold">{plan.name}</h3>

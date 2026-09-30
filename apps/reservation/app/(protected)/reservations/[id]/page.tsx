@@ -4,6 +4,7 @@ import { AlertTriangle, PencilLine } from "lucide-react";
 import { getReservationDetail, getCreateFormData, PAYMENT_GUARANTEES } from "@/lib/data";
 import { earliestSelectable } from "@revio/core";
 import { cancelCrsReservation, markNoShow, modifyReservation } from "@/lib/actions-reservations";
+import { previewSettlement } from "@/lib/settle-online";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { i18n } from "@/lib/i18n/server";
 import { reservations as reservationsDict } from "@/lib/i18n/reservations";
@@ -57,6 +58,11 @@ export default async function ReservationDetailPage({
    * See `packages/core/src/stays/past-dates.ts` for the four intents and which screens take which.
    */
   const stayFloor = earliestSelectable(todayIso, checkInIso || null);
+  // RevioDirect money: what was taken, what comes back or is charged if the stay ends early — from
+  // the terms frozen at booking, the same rule `settleOnline` will apply.
+  const cancelPreview = previewSettlement(r, "cancel", todayIso);
+  const noShowPreview = previewSettlement(r, "no_show", todayIso);
+  const m = (minor: number) => money(minor, r.currency);
   const guarantee = r.paymentGuarantee
     ? tr(reservationsDict).guarantees[r.paymentGuarantee] ?? PAYMENT_GUARANTEES.find((g) => g.value === r.paymentGuarantee)?.label ?? "—"
     : "—";
@@ -138,6 +144,13 @@ export default async function ReservationDetailPage({
             <dt className="text-ink-400">{t.booked}</dt>
             <dd className="tnum text-ink-700">{day(r.importedAt.toISOString().slice(0, 10))}</dd>
             {r.cancelledAt && (<><dt className="text-ink-400">{t.cancelled}</dt><dd className="tnum text-ink-700">{day(r.cancelledAt.toISOString().slice(0, 10))}</dd></>)}
+            {(r.onlinePaidMinor ?? 0) > 0 && (<><dt className="text-ink-400">{t.online.paid}</dt><dd className="tnum text-ink-700">{m(r.onlinePaidMinor!)}</dd></>)}
+            {r.balanceChargeMinor && r.balanceChargeOn && !r.balanceChargedAt && !r.balanceChargeError && (
+              <><dt className="text-ink-400" /><dd className="text-ink-700">{t.online.balance(m(r.balanceChargeMinor), day(r.balanceChargeOn.toISOString().slice(0, 10)))}</dd></>
+            )}
+            {r.balanceChargeError && (<><dt className="text-ink-400" /><dd className="font-semibold text-danger-600">{t.online.balanceFailed}: {r.balanceChargeError}</dd></>)}
+            {(r.refundedOnlineMinor ?? 0) > 0 && (<><dt className="text-ink-400">{t.online.refunded}</dt><dd className="tnum text-ink-700">{m(r.refundedOnlineMinor!)}</dd></>)}
+            {(r.feeChargedMinor ?? 0) > 0 && (<><dt className="text-ink-400">{t.online.fee}</dt><dd className="tnum text-ink-700">{m(r.feeChargedMinor!)}</dd></>)}
             {r.notes && (<><dt className="text-ink-400">{t.notes}</dt><dd className="text-ink-700">{r.notes}</dd></>)}
           </dl>
           {isLive && (
@@ -153,13 +166,39 @@ export default async function ReservationDetailPage({
                     {t.emailGuest}
                   </label>
                 )}
+                {cancelPreview && (
+                  <>
+                    <span className="basis-full text-[12px] text-ink-500">
+                      {t.online.cancelWill(cancelPreview.refundMinor ? m(cancelPreview.refundMinor) : "", cancelPreview.chargeMinor ? m(cancelPreview.chargeMinor) : "")}
+                    </span>
+                    {cancelPreview.feeMinor > 0 && (
+                      <label className="flex items-center gap-1.5 text-[12px] text-ink-600">
+                        <input type="checkbox" name="waiveFee" className="h-3.5 w-3.5 rounded border-surface-border" />
+                        {t.online.waive}
+                      </label>
+                    )}
+                  </>
+                )}
               </form>
               {canNoShow && (
-                <form action={markNoShow}>
+                <form action={markNoShow} className="flex flex-wrap items-center gap-2">
                   <input type="hidden" name="id" value={r.id} />
                   <button className="rounded-md border border-warning-500/40 px-3 py-1.5 text-[12.5px] font-semibold text-warning-600 transition-colors hover:bg-warning-50">
                     {t.noShow}
                   </button>
+                  {noShowPreview && (
+                    <>
+                      <span className="text-[12px] text-ink-500">
+                        {t.online.noShowWill(noShowPreview.refundMinor ? m(noShowPreview.refundMinor) : "", noShowPreview.chargeMinor ? m(noShowPreview.chargeMinor) : "")}
+                      </span>
+                      {noShowPreview.feeMinor > 0 && (
+                        <label className="flex items-center gap-1.5 text-[12px] text-ink-600">
+                          <input type="checkbox" name="waiveFee" className="h-3.5 w-3.5 rounded border-surface-border" />
+                          {t.online.waive}
+                        </label>
+                      )}
+                    </>
+                  )}
                 </form>
               )}
             </div>

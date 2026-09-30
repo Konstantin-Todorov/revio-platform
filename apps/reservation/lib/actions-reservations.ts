@@ -1,5 +1,6 @@
 "use server";
 
+import { settleOnline } from "./settle-online";
 import { pressedTwice } from "./submit-once";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -418,6 +419,9 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
       });
     }
   });
+  // Money paid online on RevioDirect is settled by the terms the guest agreed to — refunded, or the
+  // fee charged to the saved card — AFTER the cancellation commits (Stripe is not in our transaction).
+  const settled = await settleOnline(id, "cancel", todayInTz(property.timezone), fd.get("waiveFee") != null);
   await logAudit(property.id, property.tenantId, {
     entity: tag(id, reservation!.guestName),
     field: "cancelled",
@@ -434,6 +438,7 @@ export async function cancelCrsReservation(fd: FormData): Promise<void> {
     "cancelled",
     fd.get("emailGuest") != null ? await emailGuestAbout(id, "booking_cancelled") : null,
   );
+  if (settled?.error) redirect(`/reservations/${id}?error=${encodeURIComponent((await say()).settleFailed(settled.error))}`);
   redirect(`/reservations/${id}`);
 }
 
@@ -465,6 +470,7 @@ export async function markNoShow(fd: FormData): Promise<void> {
   // channel is told. Neither happened, so a no-show kept its remaining nights off sale everywhere.
   await releaseRoomsForCancellation(prisma, id);
   await recordPush(property.id, property.tenantId, "Availability restored — no-show", stayScope(reservation!.lines));
+  const settled = await settleOnline(id, "no_show", todayIso, fd.get("waiveFee") != null);
   await logAudit(property.id, property.tenantId, {
     entity: tag(id, reservation!.guestName),
     field: "no-show",
@@ -473,6 +479,7 @@ export async function markNoShow(fd: FormData): Promise<void> {
   });
   revalidateReservations();
   revalidatePath(`/reservations/${id}`);
+  if (settled?.error) redirect(`/reservations/${id}?error=${encodeURIComponent((await say()).settleFailed(settled.error))}`);
   redirect(`/reservations/${id}`);
 }
 

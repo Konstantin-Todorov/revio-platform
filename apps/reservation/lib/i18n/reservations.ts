@@ -118,6 +118,7 @@ export interface ReservationsStrings {
     notes: string;
     cancel: string;
     emailGuest: string;
+    online: { paid: string; refunded: string; fee: string; balance: (amount: string, day: string) => string; balanceFailed: string; cancelWill: (refund: string, charge: string) => string; noShowWill: (refund: string, charge: string) => string; waive: string };
     noShow: string;
     guest: string;
     name: string;
@@ -158,6 +159,7 @@ export interface ReservationsStrings {
     inHouseCancel: string;
     noShowTooEarly: string;
     noShowCheckedIn: string;
+    settleFailed: (reason: string) => string;
   };
   /** Why a stay cannot be sold — the restriction gate. */
   violations: {
@@ -302,6 +304,16 @@ export const reservations: Translations<ReservationsStrings> = {
       notes: "Notes",
       cancel: "Cancel reservation",
       emailGuest: "Email the guest",
+      online: {
+        paid: "Paid online",
+        refunded: "Refunded online",
+        fee: "Fee charged to the card",
+        balance: (a, d) => `${a} to be charged automatically on ${d}`,
+        balanceFailed: "The automatic balance charge was refused",
+        cancelWill: (r, c) => [r ? `${r} goes back to the guest` : "", c ? `${c} is charged to their card` : ""].filter(Boolean).join(" · ") || "Nothing to refund or charge",
+        noShowWill: (r, c) => [c ? `${c} no-show fee charged to the card` : "", r ? `${r} goes back to the guest` : ""].filter(Boolean).join(" · ") || "Nothing to refund or charge",
+        waive: "Waive the fee (refund everything paid)",
+      },
       noShow: "Mark no-show",
       guest: "Guest",
       name: "Name",
@@ -342,6 +354,7 @@ export const reservations: Translations<ReservationsStrings> = {
       inHouseCancel: "This guest has already checked in. Check them out in RevioPMS to end the stay — cancelling would put an occupied room back on sale.",
       noShowTooEarly: "No-show can only be set after the check-in date has passed.",
       noShowCheckedIn: "This guest has already checked in, so they are not a no-show. End the stay with a check-out in RevioPMS.",
+      settleFailed: (r) => `Done — but Stripe refused the money movement: ${r}. Settle it in the hotel's Stripe dashboard.`,
     },
     violations: {
       stopSell: (d) => `Closed to sale on ${d}.`,
@@ -483,6 +496,16 @@ export const reservations: Translations<ReservationsStrings> = {
       notes: "Бележки",
       cancel: "Анулирай резервацията",
       emailGuest: "Уведоми госта по имейл",
+      online: {
+        paid: "Платено онлайн",
+        refunded: "Върнато онлайн",
+        fee: "Удържана такса от картата",
+        balance: (a, d) => `${a} ще се удържат автоматично на ${d}`,
+        balanceFailed: "Автоматичната удръжка на остатъка беше отказана",
+        cancelWill: (r, c) => [r ? `${r} се връщат на госта` : "", c ? `${c} се удържат от картата му` : ""].filter(Boolean).join(" · ") || "Няма нищо за връщане или удръжка",
+        noShowWill: (r, c) => [c ? `${c} такса за неявяване се удържат от картата` : "", r ? `${r} се връщат на госта` : ""].filter(Boolean).join(" · ") || "Няма нищо за връщане или удръжка",
+        waive: "Без такса (връщане на всичко платено)",
+      },
       noShow: "Отбележи като неявил се",
       guest: "Гост",
       name: "Име",
@@ -523,6 +546,7 @@ export const reservations: Translations<ReservationsStrings> = {
       inHouseCancel: "Този гост вече е настанен. Отпишете го в RevioPMS, за да приключите престоя — анулирането би пуснало заета стая обратно в продажба.",
       noShowTooEarly: "„Неявил се“ може да се отбележи само след като датата на настаняване е минала.",
       noShowCheckedIn: "Този гост вече е настанен, така че не е неявил се. Приключете престоя с отписване в RevioPMS.",
+      settleFailed: (r) => `Готово — но Stripe отказа движението на парите: ${r}. Уредете го в Stripe акаунта на хотела.`,
     },
     violations: {
       stopSell: (d) => `Затворена за продажба на ${d}.`,

@@ -63,6 +63,7 @@ export async function startCardPayment(fd: FormData): Promise<StartPaymentResult
     description: `${property.name} · ${str(fd, "checkIn")} → ${str(fd, "checkOut")}`,
     // What the confirm step checks the intent against — it must be THIS hold's payment.
     metadata: { holdId, propertyId: property.id, ratePlanId: str(fd, "ratePlanId"), source: "reviodirect" },
+    guest: { email: str(fd, "email"), name: `${str(fd, "firstName")} ${str(fd, "lastName")}` },
   });
   if (!intent.ok) return { ok: false, error: e.card };
   return { ok: true, clientSecret: intent.clientSecret, kind: payNow > 0 ? "payment" : "setup" };
@@ -147,7 +148,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
    * not happen.
    */
   let guarantee: { ref: string; brand?: string; last4?: string } | null = null;
-  let payment: { intentId: string; paidMinor: number; accountId: string | null } | null = null;
+  let payment: { intentId: string; paidMinor: number; accountId: string | null; customerId: string | null } | null = null;
   let terms: StayTerms | null = null;
   if (!requestOnly) {
     const intentId = str(fd, "intentId");
@@ -164,7 +165,8 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
       return { ok: false, error: quote && intent && intent.kind === "payment" && intent.capturableMinor !== payNow ? e.priceMoved : e.card };
     }
     guarantee = { ref: intent!.paymentMethodId ?? intentId, ...(intent!.brand ? { brand: intent!.brand } : {}), ...(intent!.last4 ? { last4: intent!.last4 } : {}) };
-    if (intent!.kind === "payment") payment = { intentId, paidMinor: payNow, accountId: property.paymentAccountId };
+    // A guarantee takes no money but still needs the Customer, or the saved card cannot be charged later.
+    payment = { intentId, paidMinor: intent!.kind === "payment" ? payNow : 0, accountId: property.paymentAccountId, customerId: intent!.customerId };
     terms = quote!.terms;
   }
 
@@ -216,7 +218,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
    * after a successful authorisation) the booking stands and the hotel sees no online payment on it,
    * because a stay the guest was told is booked must not silently disappear.
    */
-  if (payment) {
+  if (payment && payment.paidMinor > 0) {
     const captured = await captureGuestIntent(payment.intentId, payment.accountId);
     if (!captured.ok) {
       await db.reservation.update({ where: { id: result.reservationId }, data: { onlinePaidMinor: 0 } });
@@ -262,7 +264,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
         totalMinor: result.totalMinor ?? 0,
         currency: result.currency ?? property.baseCurrency,
         // "Pay at the hotel" is only true when nothing was taken online.
-        totalLabel: payment
+        totalLabel: payment && payment.paidMinor > 0
           ? (locale === "bg"
               ? `Общо · платено сега ${formatMoney(payment.paidMinor, property.baseCurrency, locale)}`
               : `Total · paid now ${formatMoney(payment.paidMinor, property.baseCurrency, locale)}`)

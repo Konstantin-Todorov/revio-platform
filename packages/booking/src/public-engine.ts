@@ -410,7 +410,7 @@ export interface PublicBookingPayload extends PublicStayQuery {
    * against Stripe and against `publicQuoteStay` BEFORE this runs, and captured only after it
    * succeeds. Stored as facts: the intent, the account it lives on, the amount.
    */
-  payment?: { intentId: string; paidMinor: number; accountId: string | null };
+  payment?: { intentId: string; paidMinor: number; accountId: string | null; customerId: string | null };
   /** The terms the guest agreed to, frozen onto the reservation. */
   terms?: StayTerms | null;
   /** Anything the guest typed in "requests". Stored on the reservation, shown to the front desk. */
@@ -737,6 +737,7 @@ export async function publicCreateReservation(
         onlinePaidMinor: p.payment?.paidMinor ?? null,
         onlinePaymentRef: p.payment?.intentId ?? null,
         paymentAccountId: p.payment?.accountId ?? null,
+        paymentCustomerId: p.payment?.customerId ?? null,
         ...(p.terms ? { stayTerms: p.terms as unknown as object } : {}),
         balanceChargeMinor: p.terms?.scheduled?.amountMinor ?? null,
         balanceChargeOn: p.terms?.scheduled ? utcDay(p.terms.scheduled.on) : null,

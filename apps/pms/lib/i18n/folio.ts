@@ -60,6 +60,7 @@ export interface FolioStrings {
     methods: { cash: string; card: string; company_account: string; bank_transfer: string };
     amount: (currency: string) => string;
     reference: string;
+    chargeOnFile: (last4: string) => string;
     recording: string;
     take: string;
     note: (gateway: string) => string;
@@ -236,6 +237,7 @@ export const folio: Translations<FolioStrings> = {
       methods: { cash: "Cash", card: "Card", company_account: "Company account", bank_transfer: "Bank transfer" },
       amount: (c) => `Amount (${c})`,
       reference: "Reference (optional)",
+      chargeOnFile: (l) => `Charge the card saved at booking${l ? ` (•••• ${l})` : ""} — otherwise take it on your terminal`,
       recording: "Recording…",
       take: "Take",
       note: (g) => `Cash / company / bank are drawer entries. Card runs through the payment gateway (${g}) — only a token is stored, never a card number.`,
@@ -405,6 +407,7 @@ export const folio: Translations<FolioStrings> = {
       methods: { cash: "В брой", card: "Карта", company_account: "Фирмена сметка", bank_transfer: "Банков превод" },
       amount: (c) => `Сума (${c})`,
       reference: "Основание (по желание)",
+      chargeOnFile: (l) => `Удържи от картата, записана при резервацията${l ? ` (•••• ${l})` : ""} — иначе я прекарайте на терминала`,
       recording: "Записване…",
       take: "Приеми",
       note: (g) => `В брой, фирмена сметка и банков превод са записи в касата. Картата минава през платежната система (${g}) — пази се само токен, никога номерът на картата.`,

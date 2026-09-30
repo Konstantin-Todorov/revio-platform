@@ -1611,6 +1611,15 @@ model Reservation {
   stayTerms          Json?
   balanceChargeMinor Int?
   balanceChargeOn    DateTime? @db.Date
+  // The guest as a Customer on the hotel's Stripe account — what makes the saved card chargeable
+  // again. Then what happened after booking: the balance taken (or why not), fees charged
+  // (no-show, late cancellation) and money returned. Facts, each set once by the action that did it.
+  paymentCustomerId  String?
+  balanceChargedAt   DateTime?
+  balancePaymentRef  String?
+  balanceChargeError String?
+  feeChargedMinor    Int?
+  refundedOnlineMinor Int?
   notes              String?
   cancelledAt        DateTime?
   // The stay ended. A PMS-owned OPERATIONAL fact, deliberately not a `status` value: `status` is the

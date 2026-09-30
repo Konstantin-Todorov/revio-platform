@@ -37,10 +37,17 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
    * hotel's brand colour over their own photograph, which is the one combination neither choice was
    * designed for.
    */
-  const hero = photo ? "image" : bookingPreset(property.preset).tokens.hero;
+  const tokens = bookingPreset(property.preset).tokens;
+  const hero = photo ? "image" : tokens.hero;
   const solid = hero === "solid";
+  /**
+   * Editorial: a tall, left-aligned hero built for the photograph. Without one it is a deep INK band
+   * (white text) rather than the brand colour — the brand stays for the buttons, as the preset says.
+   */
+  const tall = tokens.hero === "tall";
+  const inkBand = !photo && tall;
   /** White text over the photo. `--brand-ink` is the ink for the brand FILL and is a different job. */
-  const onPhoto = hero === "image";
+  const onPhoto = hero === "image" || inkBand;
   const reversed = solid || onPhoto;
 
   return (
@@ -110,7 +117,8 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
             </div>
           )}
 
-          {!photo && hero !== "plain" && (
+          {inkBand && <div aria-hidden className="absolute inset-0" style={{ backgroundColor: "hsl(var(--ink))" }} />}
+          {!photo && !tall && hero !== "plain" && (
             <div
               aria-hidden
               className="absolute inset-0"
@@ -129,10 +137,12 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
               with an image, too little height turns a hotel's view of the sea into a letterbox strip. */}
           <div
             className={`relative mx-auto w-full max-w-[72rem] px-5 pb-14 pt-14 sm:px-8 sm:pb-20 sm:pt-24 ${
-              photo ? "flex min-h-[30rem] flex-col justify-center sm:min-h-[34rem]" : ""
+              tall
+                ? `flex flex-col justify-end ${photo ? "min-h-[34rem] sm:min-h-[44rem]" : "min-h-[26rem] sm:min-h-[32rem]"}`
+                : photo ? "flex min-h-[30rem] flex-col justify-center sm:min-h-[34rem]" : ""
             }`}
           >
-            <div className="mx-auto max-w-[46rem] text-center">
+            <div className={tall ? "max-w-[44rem] text-left" : "mx-auto max-w-[46rem] text-center"}>
               <p
                 className="eyebrow rise"
                 style={{
@@ -147,7 +157,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
                 {s.home.eyebrow(property.name)}
               </p>
               <h1
-                className="display rise mt-4 text-[2.4rem] sm:text-[3.75rem]"
+                className={`display rise mt-4 ${tall ? "text-[2.7rem] leading-[1.05] sm:text-[4.5rem]" : "text-[2.4rem] sm:text-[3.75rem]"}`}
                 style={{
                   animationDelay: "100ms",
                   ...(onPhoto
@@ -160,7 +170,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
                 {property.headline ?? s.hero.headline}
               </h1>
               <p
-                className="rise mx-auto mt-5 max-w-[46ch] text-[15.5px] leading-relaxed sm:text-[17px]"
+                className={`rise mt-5 max-w-[46ch] text-[15.5px] leading-relaxed sm:text-[17px] ${tall ? "" : "mx-auto"}`}
                 style={{
                   animationDelay: "160ms",
                   color: onPhoto
@@ -175,7 +185,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
               </p>
             </div>
 
-            <div className="rise mx-auto mt-10 w-full max-w-[58rem] sm:mt-12" style={{ animationDelay: "220ms" }}>
+            <div className={`rise mt-10 w-full max-w-[58rem] sm:mt-12 ${tall ? "" : "mx-auto"}`} style={{ animationDelay: "220ms" }}>
               <SearchBar slug={property.slug} onDark={reversed} />
             </div>
           </div>

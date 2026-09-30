@@ -227,3 +227,31 @@ export function stayTermsWords(
   if (t.noShowFeeMinor > 0) details.push(w.noShow(money(t.noShowFeeMinor)));
   return { payment, cancellation, details };
 }
+
+/**
+ * What cancelling — or not arriving — settles to, under the terms the guest agreed.
+ *
+ * `paidMinor` is everything already taken online (the booking payment plus any balance since
+ * charged). The fee is what the terms say is owed; the difference either goes back to the guest or
+ * is charged to the saved card. Never both, and never more than the fee: a guest who paid €300 on a
+ * rate whose late-cancellation fee is one night gets the rest back.
+ */
+export interface Settlement {
+  feeMinor: number;
+  refundMinor: number;
+  chargeMinor: number;
+}
+
+export function cancellationSettlement(t: StayTerms, today: string, paidMinor: number): Settlement {
+  const free = t.freeCancelUntil !== null && today <= t.freeCancelUntil;
+  return settle(free ? 0 : t.lateCancelFeeMinor, paidMinor);
+}
+
+export function noShowSettlement(t: StayTerms, paidMinor: number): Settlement {
+  return settle(t.noShowFeeMinor, paidMinor);
+}
+
+function settle(feeMinor: number, paidMinor: number): Settlement {
+  const paid = Math.max(0, paidMinor);
+  return { feeMinor, refundMinor: Math.max(0, paid - feeMinor), chargeMinor: Math.max(0, feeMinor - paid) };
+}

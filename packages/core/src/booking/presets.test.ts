@@ -23,7 +23,7 @@ describe("booking presets", () => {
   it.each(BOOKING_PRESETS.map((p) => [p.key, p] as const))(
     "%s emits colour tokens in the space-separated HSL form CSS expects",
     (_key, preset) => {
-      const { radius, hero, ...colours } = preset.tokens;
+      const { radius, hero, rooms: _rooms, ...colours } = preset.tokens;
       for (const [name, value] of Object.entries(colours)) {
         expect(value, name).toMatch(HSL);
       }
@@ -33,7 +33,8 @@ describe("booking presets", () => {
   it.each(BOOKING_PRESETS.map((p) => [p.key, p] as const))("%s has a usable radius and hero", (_key, preset) => {
     expect(preset.tokens.radius).toBeGreaterThanOrEqual(6);
     expect(preset.tokens.radius).toBeLessThanOrEqual(28);
-    expect(["wash", "solid", "plain"]).toContain(preset.tokens.hero);
+    expect(["wash", "solid", "plain", "tall"]).toContain(preset.tokens.hero);
+    expect([undefined, "list", "gallery"]).toContain(preset.tokens.rooms);
   });
 
   it.each(BOOKING_PRESETS.map((p) => [p.key, p] as const))(

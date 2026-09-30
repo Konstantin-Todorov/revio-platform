@@ -10,7 +10,7 @@ import { roleHasCapability, roleHome, type Capability } from "./roles";
 import { ensureFolio, createSplitFolio, folioBalance } from "./folio";
 import { assessMoveForReservation } from "./move-reconciliation";
 import { postFolioLine } from "./posting";
-import { chargeCard, refundCard } from "@revio/payments";
+import { chargeSavedCard, refundGuestPayment } from "@revio/payments";
 import { logAudit, str, int } from "./mutation-helpers";
 import { flashError, setFlash } from "@revio/ui/flash";
 import { resolutionConfirmation } from "./folio-outcomes";
@@ -26,6 +26,30 @@ async function stayMoney(reservationId: string): Promise<{ currency: string; say
   const currency = r?.currency || "EUR";
   const { money } = await i18n();
   return { currency, say: (minor) => money(minor, currency) };
+}
+
+
+/**
+ * A card at the desk, on the HOTEL's account — never ours.
+ *
+ * If the guest booked on RevioDirect, their card is saved on the hotel's Stripe account and can be
+ * charged here (merchant-initiated). Otherwise a card payment is taken on the hotel's own terminal
+ * and this screen only records it. The earlier path charged a Stripe test fixture through the
+ * PLATFORM's key — harmless in test mode, and in live mode it would have put a hotel's guest money
+ * in Revio's balance.
+ */
+async function chargeAtDesk(reservationId: string, amountMinor: number, currency: string, what: string, key: string):
+  Promise<{ ok: true; ref: string | null; onFile: boolean; last4: string | null } | { ok: false }> {
+  const r = await prisma.reservation.findUnique({
+    where: { id: reservationId },
+    select: { paymentAccountId: true, paymentCustomerId: true, guaranteeRef: true, guaranteeLast4: true },
+  });
+  if (!r?.paymentCustomerId || !r.guaranteeRef?.startsWith("pm_")) return { ok: true, ref: null, onFile: false, last4: null };
+  const res = await chargeSavedCard({
+    account: r.paymentAccountId, customerId: r.paymentCustomerId, paymentMethodId: r.guaranteeRef,
+    amountMinor, currency, description: what, metadata: { reservationId, source: "reviopms" }, idempotencyKey: key,
+  });
+  return res.ok ? { ok: true, ref: res.intentId, onFile: true, last4: r.guaranteeLast4 } : { ok: false };
 }
 
 /** What this file's refusals say, in the reader's language — see `i18n/flash.ts`. */
@@ -117,11 +141,10 @@ export async function postPayment(fd: FormData): Promise<void> {
   // never a card number. Cash / company / bank are drawer/manual entries and skip the gateway.
   let description = PAY_METHODS[method]!;
   let gwRef = ref;
-  if (method === "card") {
-    const g = await chargeCard(amountMinor, (await stayMoney(reservationId)).currency, `Folio ${reservationId.slice(-6)}`);
+  if (method === "card" && fd.get("chargeOnFile") != null) {
+    const g = await chargeAtDesk(reservationId, amountMinor, (await stayMoney(reservationId)).currency, `Folio ${reservationId.slice(-6)}`, `desk-pay-${fd.get("submitToken") ?? Date.now()}`);
     if (!g.ok) return flashError((await flashSay()).folio.cardDeclined);
-    gwRef = g.ref;
-    description = g.mode === "stripe_test" ? `Card •••• ${g.last4 ?? "4242"} (test)` : "Card (mock gateway)";
+    if (g.onFile) { gwRef = g.ref; description = `Card on file •••• ${g.last4 ?? ""}`.trim(); }
   }
   await postFolioLine({ tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!, kind: "payment", description, amountMinor, method, ref: gwRef, postedById: session.userId });
   await logAudit(session.activePropertyId, session.tenantId, { entity: "folio_payment", field: PAY_METHODS[method], newValue: `-${amountMinor}${gwRef ? ` · ${gwRef}` : ""}`, userId: session.userId });
@@ -191,8 +214,8 @@ export async function captureDeposit(fd: FormData): Promise<void> {
 
   // Card deposits are gateway transactions against the token; cash is a drawer entry (spec §4.5).
   let depositRef: string | null = null;
-  if (method === "card") {
-    const g = await chargeCard(amountMinor, (await stayMoney(reservationId)).currency, `${type!.name} deposit ${reservationId.slice(-6)}`);
+  if (method === "card" && fd.get("chargeOnFile") != null) {
+    const g = await chargeAtDesk(reservationId, amountMinor, (await stayMoney(reservationId)).currency, `${type!.name} deposit ${reservationId.slice(-6)}`, `desk-deposit-${fd.get("submitToken") ?? Date.now()}`);
     if (!g.ok) return flashError((await flashSay()).folio.depositDeclined);
     depositRef = g.ref;
   }
@@ -258,9 +281,14 @@ export async function refundDeposit(fd: FormData): Promise<void> {
   let refundRef: string | null = null;
   if (method === "card") {
     const held = await prisma.folioLine.findFirst({ where: { folioId: folioId!, kind: "deposit_held", ref: { not: null } }, orderBy: { postedAt: "desc" }, select: { ref: true } });
-    const g = await refundCard(held?.ref ?? "mock_", amountMinor);
-    if (!g.ok) return flashError((await flashSay()).folio.refundFailed);
-    refundRef = g.ref;
+    // Only a deposit taken on the saved card goes back through Stripe (on the hotel's account); a
+    // terminal payment is refunded on the terminal and recorded here.
+    if (held?.ref?.startsWith("pi_")) {
+      const acct = (await prisma.reservation.findUnique({ where: { id: reservationId }, select: { paymentAccountId: true } }))?.paymentAccountId ?? null;
+      const g = await refundGuestPayment({ account: acct, intentId: held.ref, amountMinor, idempotencyKey: `desk-refund-${fd.get("submitToken") ?? Date.now()}` });
+      if (!g.ok) return flashError((await flashSay()).folio.refundFailed);
+      refundRef = held.ref;
+    }
   }
   await postFolioLine({
     tenantId: session.tenantId, propertyId: session.activePropertyId, folioId: folioId!,

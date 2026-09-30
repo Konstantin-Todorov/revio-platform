@@ -171,14 +171,16 @@ least 20 September**: Ventsi Group's reads `catalogueStatus = property_missing` 
 property Channex has deleted. The other, DesManagement 2015's, reads `ok` and last synced today.
 Hotel Sofia Group's is `channex_sandbox`, a different account, and is not billed.
 
-**FIFTEEN scheduled jobs.** <!-- status: count jobs 15 --> *Thirteen checked at `/api/health/jobs` on 2026-09-22, every one `ok`
+**SIXTEEN scheduled jobs.** <!-- status: count jobs 16 --> *Thirteen checked at `/api/health/jobs` on 2026-09-22, every one `ok`
 and between 201 and 717 seconds old:* `hold-expiry` · `pickup-snapshot` · `channex-pull` ·
 `arrivals-digest` · `auto-assign` · `auto-close-day` · `waitlist-sweep` · `trial-sweep` ·
 `support-inbox` · `mapping-audit` · `invoice-run` · `operator-alerts` · `demo-refresh`. The fourteenth,
 `guest-mail` (2026-09-25 — "Before arrival" / "After departure", for hotels that switch them on), is
 **not yet seen running in production**; check it at the same endpoint after the deploy. The fifteenth,
 `channel-read-back` (2026-09-29), runs **once a day** — the route answers "not due" on the other
-ticks, and `/api/health/jobs` allows it its interval plus six hours before calling it stale.
+ticks, and `/api/health/jobs` allows it its interval plus six hours before calling it stale. The
+sixteenth, `balance-charges` (2026-09-30), charges a RevioDirect guest's agreed balance on its date,
+in the hotel's own day, once — proven locally against a Stripe test connected account.
 
 ⚠️ This said **nine**, then **ten**. Four jobs were added and the number was never moved. It is now
 the same number `jobs-lint` asserts, so the two cannot drift apart again without CI failing.
@@ -347,6 +349,12 @@ says who can move it. Details sit where the link points.
       presses** — nobody competent charges it automatically on status alone.
    e. **A payment-request link** for request-to-book and for a failed or re-authenticated charge — the
       same never-expiring page shape as our invoice `/pay/<token>`.
+   **2026-09-30:** b ✅ (card in Stripe's Payment Element on the hotel's connected account; authorise →
+   book → capture; the card saved to a Customer so it can be charged again), d ✅ (`balance-charges`
+   job; a no-show and a cancellation settle by the frozen terms in RevioCRS — refund or fee — with a
+   "waive the fee" option), and RevioPMS desk card charges moved off OUR account onto the card on file.
+   All proven locally on a Stripe test connected account. Left: e (pay link), a pre-arrival email
+   naming the coming charge, and the founder's live-mode decision for guests.
    Needs the founder's live-mode decision for guests (a different decision from our own invoicing).
 7. **Invoices, the next small steps** — the paid receipt should fall back to the account owner like
    the invoice mail does; a SEPA/EPC QR code for the bank transfer on the pay page; a coverage test for

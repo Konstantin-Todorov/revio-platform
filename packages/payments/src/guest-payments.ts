@@ -58,7 +58,9 @@ interface StripeObject {
   currency?: string;
   metadata?: Record<string, string>;
   payment_method?: string | { id?: string; card?: { brand?: string; last4?: string } } | null;
-  error?: { message?: string };
+  customer?: string | { id?: string } | null;
+  last_payment_error?: { code?: string; message?: string } | null;
+  error?: { message?: string; code?: string; payment_intent?: { id?: string; status?: string } };
 }
 
 async function call(
@@ -82,7 +84,7 @@ async function call(
   return { status: res.status, json: (await res.json()) as StripeObject };
 }
 
-export type CreatedIntent = { ok: true; id: string; clientSecret: string } | { ok: false; error: string };
+export type CreatedIntent = { ok: true; id: string; clientSecret: string; customerId: string } | { ok: false; error: string };
 
 export async function createGuestIntent(opts: {
   account: string | null;
@@ -91,7 +93,16 @@ export async function createGuestIntent(opts: {
   currency: string;
   description: string;
   metadata: Record<string, string>;
+  /** The guest, as a Customer on the hotel's account. A card can only be charged again — the
+   *  balance before arrival, a no-show fee — if it is attached to a Customer; Stripe refuses to
+   *  reuse a payment method that was saved without one. */
+  guest: { email: string; name: string };
 }): Promise<CreatedIntent> {
+  const cust = await call("POST", "customers", opts.account, {
+    email: opts.guest.email, name: opts.guest.name, "metadata[source]": "reviodirect",
+  });
+  if (cust.status !== 200 || !cust.json.id) return { ok: false, error: cust.json.error?.message ?? `Stripe answered ${cust.status}` };
+  const customer = cust.json.id;
   const meta = Object.fromEntries(Object.entries(opts.metadata).map(([k, v]) => [`metadata[${k}]`, v]));
   const body: Record<string, string> =
     opts.kind === "payment"
@@ -103,13 +114,14 @@ export async function createGuestIntent(opts: {
           // Cards (Apple Pay and Google Pay are cards) — no method that redirects away mid-booking.
           "payment_method_types[]": "card",
           description: opts.description,
+          customer,
           ...meta,
         }
-      : { usage: "off_session", "payment_method_types[]": "card", description: opts.description, ...meta };
+      : { usage: "off_session", "payment_method_types[]": "card", description: opts.description, customer, ...meta };
   const { status, json } = await call("POST", opts.kind === "payment" ? "payment_intents" : "setup_intents", opts.account, body);
   // The status code decides, never the shape: an error body is valid JSON too.
   if (status !== 200 || !json?.id || !json?.client_secret) return { ok: false, error: json?.error?.message ?? `Stripe answered ${status}` };
-  return { ok: true, id: json.id, clientSecret: json.client_secret };
+  return { ok: true, id: json.id, clientSecret: json.client_secret, customerId: customer };
 }
 
 export interface RetrievedIntent {
@@ -121,6 +133,7 @@ export interface RetrievedIntent {
   currency: string;
   metadata: Record<string, string>;
   paymentMethodId: string | null;
+  customerId: string | null;
   brand: string | null;
   last4: string | null;
 }
@@ -139,6 +152,7 @@ export async function retrieveGuestIntent(id: string, account: string | null): P
     currency: (json.currency ?? "").toUpperCase(),
     metadata: json.metadata ?? {},
     paymentMethodId: pm?.id ?? (typeof json.payment_method === "string" ? json.payment_method : null),
+    customerId: typeof json.customer === "string" ? json.customer : json.customer?.id ?? null,
     brand: pm?.card?.brand ?? null,
     last4: pm?.card?.last4 ?? null,
   };
@@ -153,4 +167,81 @@ export async function captureGuestIntent(id: string, account: string | null): Pr
 /** Release an authorisation the booking could not use. The guest is never charged. */
 export async function cancelGuestIntent(id: string, account: string | null): Promise<void> {
   if (id.startsWith("pi_")) await call("POST", `payment_intents/${encodeURIComponent(id)}/cancel`, account, {});
+}
+
+export type OffSessionResult =
+  | { ok: true; intentId: string }
+  | { ok: false; intentId: string | null; reason: "authentication_required" | "declined" | "not_configured" | "error"; message: string };
+
+/**
+ * Charge a saved card with the guest NOT present — the balance before arrival, a no-show fee, a
+ * late-cancellation fee. Merchant-initiated, on the hotel's account, against the card the guest
+ * authenticated at booking.
+ *
+ * It can still be refused: the bank may ask for the guest again (`authentication_required`), or
+ * decline. Neither is a failure of ours to hide — the caller records it and asks the guest to pay
+ * through a link. Idempotent by `idempotencyKey`, so a retried job never charges twice.
+ */
+export async function chargeSavedCard(opts: {
+  account: string | null;
+  customerId: string;
+  paymentMethodId: string;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+}): Promise<OffSessionResult> {
+  const k = key();
+  if (!k) return { ok: false, intentId: null, reason: "not_configured", message: "Online payments are not configured." };
+  const meta = Object.fromEntries(Object.entries(opts.metadata).map(([m, v]) => [`metadata[${m}]`, v]));
+  const res = await fetch("https://api.stripe.com/v1/payment_intents", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${k}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Idempotency-Key": opts.idempotencyKey,
+      ...(opts.account ? { "Stripe-Account": opts.account } : {}),
+    },
+    body: new URLSearchParams({
+      amount: String(opts.amountMinor),
+      currency: opts.currency.toLowerCase(),
+      customer: opts.customerId,
+      payment_method: opts.paymentMethodId,
+      off_session: "true",
+      confirm: "true",
+      description: opts.description,
+      ...meta,
+    }).toString(),
+  });
+  const json = (await res.json()) as StripeObject;
+  if (res.status === 200 && json.status === "succeeded" && json.id) return { ok: true, intentId: json.id };
+  const code = json.error?.code ?? json.last_payment_error?.code ?? "";
+  const intentId = json.error?.payment_intent?.id ?? json.id ?? null;
+  return {
+    ok: false,
+    intentId,
+    reason: code === "authentication_required" ? "authentication_required" : code === "card_declined" ? "declined" : "error",
+    message: json.error?.message ?? json.last_payment_error?.message ?? `Stripe answered ${res.status}`,
+  };
+}
+
+/** Return money to the guest, on the hotel's account. Partial refunds are allowed. */
+export async function refundGuestPayment(opts: {
+  account: string | null; intentId: string; amountMinor: number; idempotencyKey: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const k = key();
+  if (!k) return { ok: false, error: "Online payments are not configured." };
+  const res = await fetch("https://api.stripe.com/v1/refunds", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${k}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Idempotency-Key": opts.idempotencyKey,
+      ...(opts.account ? { "Stripe-Account": opts.account } : {}),
+    },
+    body: new URLSearchParams({ payment_intent: opts.intentId, amount: String(opts.amountMinor) }).toString(),
+  });
+  const json = (await res.json()) as StripeObject;
+  return res.status === 200 ? { ok: true } : { ok: false, error: json.error?.message ?? `Stripe answered ${res.status}` };
 }

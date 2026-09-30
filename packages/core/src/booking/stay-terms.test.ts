@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stayTerms, stayTermsProblems, stayTermsWords, withoutCard, type StayTermsPolicy, type StayFacts } from "./stay-terms";
+import { cancellationSettlement, noShowSettlement, stayTerms, stayTermsProblems, stayTermsWords, withoutCard, type StayTermsPolicy, type StayFacts } from "./stay-terms";
 
 const flexible: StayTermsPolicy = { payment: "guarantee", refundable: true, freeCancelDays: 1, lateFee: "first_night", noShowFee: "first_night" };
 const facts: StayFacts = { totalMinor: 30000, firstNightMinor: 10000, arrival: "2026-10-20", today: "2026-10-01" };
@@ -77,5 +77,24 @@ describe("stayTermsProblems", () => {
     expect(stayTermsProblems({ ...flexible, payment: "prepay", balanceDaysBefore: 3 })).toContain("prepay_with_balance");
     expect(stayTermsProblems({ ...flexible, lateFee: "percent", lateFeePct: null })).toContain("late_fee_percent_range");
     expect(stayTermsProblems(flexible)).toEqual([]);
+  });
+});
+
+describe("settling a cancellation or a no-show", () => {
+  const deposit = stayTerms({ ...flexible, payment: "deposit", depositKind: "percent", depositValue: 30 }, facts);
+  it("inside the free window, everything paid comes back", () => {
+    expect(cancellationSettlement(deposit, "2026-10-05", 9000)).toEqual({ feeMinor: 0, refundMinor: 9000, chargeMinor: 0 });
+  });
+  it("after it, the fee is kept and only the difference moves — back, or onto the card", () => {
+    expect(cancellationSettlement(deposit, "2026-10-20", 9000)).toMatchObject({ feeMinor: 10000, refundMinor: 0, chargeMinor: 1000 });
+    expect(cancellationSettlement(deposit, "2026-10-20", 30000)).toMatchObject({ feeMinor: 10000, refundMinor: 20000, chargeMinor: 0 });
+  });
+  it("a non-refundable rate keeps the whole stay", () => {
+    const nr = stayTerms({ ...flexible, payment: "prepay", refundable: false, noShowFee: "full" }, facts);
+    expect(cancellationSettlement(nr, "2026-10-01", 30000)).toEqual({ feeMinor: 30000, refundMinor: 0, chargeMinor: 0 });
+    expect(noShowSettlement(nr, 30000)).toEqual({ feeMinor: 30000, refundMinor: 0, chargeMinor: 0 });
+  });
+  it("a no-show on a guarantee charges the fee to the card", () => {
+    expect(noShowSettlement(stayTerms(flexible, facts), 0)).toEqual({ feeMinor: 10000, refundMinor: 0, chargeMinor: 10000 });
   });
 });

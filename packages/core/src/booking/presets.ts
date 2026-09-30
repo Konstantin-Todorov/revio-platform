@@ -28,8 +28,16 @@ export interface BookingPresetTokens {
    *  - `wash`  a soft radial tint of the hotel's colour fading into the page
    *  - `solid` a full-bleed band in the hotel's colour, headline reversed out of it
    *  - `plain` no hero treatment at all; the search bar carries the page
+   *  - `tall`  a tall, left-aligned editorial hero built for the hotel's own photograph; without
+   *            one it is a deep ink band — never a slab of the brand colour, which stays for buttons
    */
-  hero: "wash" | "solid" | "plain";
+  hero: "wash" | "solid" | "plain" | "tall";
+  /**
+   * How rooms are laid out on the results.
+   *  - `list`    one wide card per room, photo to the side (the familiar OTA list)
+   *  - `gallery` two large cards per row on a desktop, the photograph on top and shown on a phone too
+   */
+  rooms?: "list" | "gallery";
 }
 
 export interface BookingPreset {
@@ -89,6 +97,24 @@ export const BOOKING_PRESETS: readonly BookingPreset[] = [
       lineStrong: "220 12% 76%",
       radius: 10,
       hero: "solid",
+    },
+  },
+  {
+    key: "editorial",
+    label: "Editorial",
+    blurb: "Your photograph, tall and quiet, with rooms as a gallery. For boutique hotels whose pictures do the selling.",
+    tokens: {
+      ground: "36 20% 97%",
+      surface: "0 0% 100%",
+      surfaceSunk: "36 16% 94%",
+      ink: "24 14% 11%",
+      inkSoft: "24 8% 35%",
+      inkFaint: "24 7% 44%",
+      line: "32 14% 89%",
+      lineStrong: "30 12% 79%",
+      radius: 6,
+      hero: "tall",
+      rooms: "gallery",
     },
   },
 ] as const;

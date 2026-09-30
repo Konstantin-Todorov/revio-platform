@@ -12,6 +12,7 @@ import type { GuestKit } from "@/lib/i18n/kit";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { RoomOption } from "@/components/RoomOption";
+import { bookingPreset } from "@revio/core";
 import { SearchBar } from "@/components/SearchBar";
 import { StepBar } from "@/components/StepBar";
 import { WaitlistJoin } from "@/components/WaitlistJoin";
@@ -180,14 +181,16 @@ async function Results({
     );
   }
 
+  const gallery = bookingPreset(property.preset).tokens.rooms === "gallery";
   return (
     <>
       <p className="mb-4 text-[13px] font-semibold" style={{ color: "hsl(var(--ink-soft))" }}>
         {s.search.available(options.length)}
       </p>
-      <div className="space-y-4">
+      <div className={gallery ? "grid grid-cols-1 gap-5 lg:grid-cols-2" : "space-y-4"}>
         {options.map((option) => (
           <RoomOption
+            layout={gallery ? "gallery" : "list"}
             key={option.roomTypeId}
             option={option}
             nights={nights}

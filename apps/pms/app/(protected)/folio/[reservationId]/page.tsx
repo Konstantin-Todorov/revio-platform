@@ -57,6 +57,8 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   // Only present while a cross-type move is unreconciled (§2.5).
   const move = await assessMoveForReservation(reservationId);
 
+  // The card the guest saved on RevioDirect, chargeable here on the hotel's own Stripe account.
+  const cardOnFile = r.paymentCustomerId && r.guaranteeRef?.startsWith("pm_") ? (r.guaranteeLast4 ?? "") : null;
   const guestName = r.guest ? `${r.guest.firstName} ${r.guest.lastName}`.trim() : r.guestName;
   const rooms = r.assignments.map((a) => a.unit.label).join(", ");
   const open = folios.some((f) => f.status === "open");
@@ -310,6 +312,12 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 </select>
                 <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} flex-1`} />
               </div>
+              {cardOnFile !== null && (
+                <label className="flex items-center gap-2 text-[12px] text-ink-600">
+                  <input type="checkbox" name="chargeOnFile" className="h-3.5 w-3.5 rounded border-surface-border" />
+                  {s.payment.chargeOnFile(cardOnFile)}
+                </label>
+              )}
               <div className="flex gap-2">
                 <input name="ref" type="text" placeholder={s.payment.reference} className={`${inputCls} flex-1`} />
                 <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50" pendingLabel={s.payment.recording}>
@@ -553,6 +561,12 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   </select>
                 </label>
                 <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} w-32`} />
+                {cardOnFile !== null && (
+                  <label className="flex items-center gap-2 self-end pb-2 text-[12px] text-ink-600">
+                    <input type="checkbox" name="chargeOnFile" className="h-3.5 w-3.5 rounded border-surface-border" />
+                    {s.payment.chargeOnFile(cardOnFile)}
+                  </label>
+                )}
                 <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel={s.deposits.capturing}>
                   <ShieldCheck className="h-3.5 w-3.5" /> {s.deposits.take}
                 </SubmitButton>

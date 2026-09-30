@@ -111,5 +111,5 @@ function CardFields({ kind, amountMinor, payRef, notReady }: {
     return () => { payRef.current = null; };
   }, [stripe, elements, payRef, notReady]);
 
-  return <PaymentElement options={{ layout: "tabs", wallets: { applePay: "auto", googlePay: "auto" } }} />;
+  return <PaymentElement options={{ layout: "tabs", wallets: { applePay: "auto", googlePay: "auto", link: "never" } }} />;
 }

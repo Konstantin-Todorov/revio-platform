@@ -318,6 +318,7 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       clean: { label: "Clean", blurb: "Cool neutrals, white cards, a soft wash of your colour. Reads as modern and precise." },
       warm: { label: "Warm", blurb: "Sand ground, cream cards, softer corners. Reads as hospitable rather than technical." },
       bold: { label: "Bold", blurb: "Your colour as a full banner with the headline reversed out of it. Confident, high contrast." },
+      editorial: { label: "Editorial", blurb: "Your photograph, tall and quiet, with rooms as a gallery. For boutique hotels whose pictures do the selling." },
     },
     fonts: { sans: "Sans", serif: "Serif headings" },
     logo: {
@@ -532,6 +533,7 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       clean: { label: "Изчистена", blurb: "Студени неутрални тонове, бели карти, лек оттенък на Вашия цвят. Изглежда модерно и прецизно." },
       warm: { label: "Топла", blurb: "Пясъчен фон, кремави карти, по-меки ъгли. Изглежда гостоприемно, а не технично." },
       bold: { label: "Смела", blurb: "Вашият цвят като цял банер със заглавието върху него. Уверено, с висок контраст." },
+      editorial: { label: "Редакционна", blurb: "Вашата снимка — висока и спокойна, а стаите като галерия. За бутикови хотели, в които снимките продават." },
     },
     fonts: { sans: "Безсерифен", serif: "Серифни заглавия" },
     logo: {

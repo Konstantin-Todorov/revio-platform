@@ -190,6 +190,12 @@ export const JOB = {
    */
   guestMail: "guest-mail",
   /**
+   * RevioDirect: charges the balance a guest agreed to pay before arrival, on its date. Leased
+   * because it moves money — two runners must never both charge the same stay (Stripe's
+   * idempotency key would stop the second, but the lease stops it asking).
+   */
+  balanceCharges: "balance-charges",
+  /**
    * Warns a hotel that a trial is ending, then stops access when it does.
    *
    * Leased because it sends email and revokes access: two runners could warn twice or revoke the

@@ -37,6 +37,9 @@ export function EnginePreview({
    * the photo replaces one band, not the design.
    */
   const solid = !hero && p.hero === "solid";
+  // Editorial: tall and left-aligned; without a photo, a deep ink band (the brand stays for buttons).
+  const tall = p.hero === "tall";
+  const white = !!hero || tall;
   const display = font === "serif" ? "Georgia, 'Times New Roman', serif" : "inherit";
 
   return (
@@ -61,11 +64,13 @@ export function EnginePreview({
 
       {/* Hero */}
       <div
-        className="relative px-4 py-5 text-center"
+        className={tall ? "relative px-4 pb-5 pt-12 text-left" : "relative px-4 py-5 text-center"}
         style={
           hero
             ? {}
-            : solid
+            : tall
+              ? { backgroundColor: hsl(p.ink) }
+              : solid
               ? { backgroundColor: brand }
               : p.hero === "wash"
                 ? { background: `linear-gradient(${brand}1F, ${hsl(p.ground)} 70%)` }
@@ -87,26 +92,26 @@ export function EnginePreview({
         )}
         <div
           className="relative text-[7px] font-bold uppercase tracking-[0.14em]"
-          style={{ color: hero ? "rgba(255,255,255,0.75)" : solid ? `${ink}B3` : hsl(p.inkFaint) }}
+          style={{ color: white ? "rgba(255,255,255,0.75)" : solid ? `${ink}B3` : hsl(p.inkFaint) }}
         >
           Official booking
         </div>
         <div
           className="relative mt-1.5 text-[15px] font-extrabold leading-tight"
-          style={{ color: hero ? "#ffffff" : solid ? ink : hsl(p.ink), fontFamily: display, letterSpacing: font === "serif" ? "-0.01em" : "-0.035em", fontWeight: font === "serif" ? 400 : 800 }}
+          style={{ color: white ? "#ffffff" : solid ? ink : hsl(p.ink), fontFamily: display, letterSpacing: font === "serif" ? "-0.01em" : "-0.035em", fontWeight: font === "serif" ? 400 : 800 }}
         >
           {headline.trim() || BOOKING_COPY_DEFAULTS.headline}
         </div>
         <div
-          className="relative mx-auto mt-1.5 max-w-[26ch] text-[7.5px] leading-relaxed"
-          style={{ color: hero ? "rgba(255,255,255,0.88)" : solid ? `${ink}D9` : hsl(p.inkSoft) }}
+          className={`relative mt-1.5 max-w-[26ch] text-[7.5px] leading-relaxed ${tall ? "" : "mx-auto"}`}
+          style={{ color: white ? "rgba(255,255,255,0.88)" : solid ? `${ink}D9` : hsl(p.inkSoft) }}
         >
           {(subheadline.trim() || BOOKING_COPY_DEFAULTS.subheadline).slice(0, 110)}…
         </div>
 
         {/* Search bar */}
         <div
-          className="relative mx-auto mt-3 flex max-w-[240px] items-stretch gap-1 p-1 shadow-sm"
+          className={`relative mt-3 flex max-w-[240px] items-stretch gap-1 p-1 shadow-sm ${tall ? "" : "mx-auto"}`}
           style={{ backgroundColor: hsl(p.surface), borderRadius: p.radius, border: `1px solid ${hsl(p.line)}` }}
         >
           {["Check in", "Check out", "Guests"].map((l) => (

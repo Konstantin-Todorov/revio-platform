@@ -59,6 +59,8 @@ const OPERATOR = serviceUrl("OPERATOR_URL", "RAILWAY_SERVICE_OPERATOR_URL");
 const JOBS = [
   { name: "hold-expiry", url: CRS && `${CRS}/api/jobs/holds` },
   { name: "pickup-snapshot", url: CRS && `${CRS}/api/jobs/pickup` },
+  // RevioDirect balances, charged on the date the guest agreed to — in each hotel's own day.
+  { name: "balance-charges", url: CRS && `${CRS}/api/jobs/balance-charges` },
   { name: "channex-pull", url: CM && `${CM}/api/jobs/pull` },
   { name: "arrivals-digest", url: CM && `${CM}/api/jobs/arrivals` },
   // Nightly is plenty: a mapping only changes when a person changes it. What it catches does
