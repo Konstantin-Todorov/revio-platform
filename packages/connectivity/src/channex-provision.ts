@@ -42,6 +42,9 @@ export interface ProvisionProperty {
   address: string | null;
   contactEmail: string | null;
   phone: string | null;
+  /** The hotel company's own address, from its billing details — used where the property's
+   *  single address line does not say the city or post code. */
+  billing?: { addressLine: string | null; city: string | null; postCode: string | null; country: string | null } | null;
 }
 
 export interface ProvisionRoomType {
@@ -128,6 +131,45 @@ const FALLBACK = {
   zip: "7002",
   address: "—",
 };
+
+/**
+ * The property's address in the shape Channex wants — street, city, post code, country — from what
+ * the hotel actually told us.
+ *
+ * A property has ONE address line ("бул. Приморски 10, 9000 Варна"). Channex needs the parts, and
+ * until 2026-09-30 every hotel was sent with city "Ruse" and post code 7002 — ours — whatever town it
+ * was in. So: read the parts out of the line (a Bulgarian address writes the post code before the
+ * town: "9000 Варна"; a western one may write the town first), then fill any gap from the hotel's
+ * billing identity, and only then from the fallback. A fallback is never mixed into a line the hotel
+ * wrote themselves.
+ */
+export function channexAddress(
+  line: string | null | undefined,
+  billing?: ProvisionProperty["billing"],
+): { address: string; city: string; zip: string; country: string; state: string } {
+  const raw = (line ?? "").trim();
+  let street = raw, city = "", zip = "";
+  const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const m = parts[i]!.match(/^(\d{4,5})\s+(.+)$/) ?? parts[i]!.match(/^(.+?)\s+(\d{4,5})$/);
+    if (m) {
+      const [a, b] = [m[1]!, m[2]!];
+      zip = /^\d+$/.test(a) ? a : b;
+      city = /^\d+$/.test(a) ? b : a;
+      street = parts.filter((_, j) => j !== i).join(", ");
+      break;
+    }
+  }
+  if (!city && parts.length > 1) {
+    city = parts[parts.length - 1]!;
+    street = parts.slice(0, -1).join(", ");
+  }
+  const country = (billing?.country || FALLBACK.country).toUpperCase();
+  city = city || billing?.city?.trim() || FALLBACK.city;
+  zip = zip || billing?.postCode?.trim() || FALLBACK.zip;
+  street = street || billing?.addressLine?.trim() || FALLBACK.address;
+  return { address: street, city, zip, country, state: city };
+}
 
 /**
  * A refusal written for the person who pressed the button. `code` lets each product say it in the
@@ -272,11 +314,10 @@ export async function provisionChannexProperty(
       currency: property.baseCurrency,
       email: property.contactEmail || FALLBACK.email,
       phone: property.phone || FALLBACK.phone,
-      country: FALLBACK.country,
-      state: FALLBACK.state,
-      city: FALLBACK.city,
-      address: property.address || FALLBACK.address,
-      zip_code: FALLBACK.zip,
+      ...(() => {
+        const a = channexAddress(property.address, property.billing);
+        return { country: a.country, state: a.state, city: a.city, address: a.address, zip_code: a.zip };
+      })(),
       timezone: property.timezone,
       property_type: "hotel",
     },

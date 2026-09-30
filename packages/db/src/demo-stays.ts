@@ -347,3 +347,57 @@ export async function closeStaleDemoStays({ apply = false }: { apply?: boolean }
   if (!apply && staysClosed === 0 && lines[0] !== "No stale demo stays.") lines.push("Nothing was written. Re-run with --apply.");
   return { lines, staysClosed, foliosClosed };
 }
+
+/**
+ * Keep a demo hotel priced a year ahead.
+ *
+ * The nightly refresh kept the demo's STAYS current but never its PRICES, so the calendar quietly
+ * emptied from the far end: on 2026-09-30 Hotel Sofia had prices only to 30 October, and a search for
+ * November on the live booking page answered "no rooms free" — in the middle of a sales demo, that
+ * reads as a broken product. This repeats each (room, plan, occupancy)'s last priced week forward,
+ * weekday for weekday, to a year out. Demo tenants only; only dates with NO price are written
+ * (`skipDuplicates`), so nothing a person set by hand is ever overwritten.
+ */
+export async function extendDemoPrices({ apply = false, horizonDays = 365 }: { apply?: boolean; horizonDays?: number } = {}): Promise<{ written: number }> {
+  const prisma = forSystem();
+  const demos = await prisma.tenant.findMany({
+    where: { accountType: "demo" },
+    select: { id: true, properties: { select: { id: true } } },
+  });
+  const horizon = new Date(Date.now() + horizonDays * 86_400_000);
+  horizon.setUTCHours(0, 0, 0, 0);
+  let written = 0;
+  for (const t of demos) {
+    for (const p of t.properties) {
+      const last = await prisma.ratePrice.findMany({
+        where: { propertyId: p.id },
+        orderBy: { date: "desc" },
+        select: { roomTypeId: true, ratePlanId: true, occupancy: true, date: true, priceMinor: true },
+        take: 5000,
+      });
+      // The newest week per series: weekday → price.
+      const series = new Map<string, { roomTypeId: string; ratePlanId: string; occupancy: number | null; lastDate: Date; byWeekday: Map<number, number> }>();
+      for (const r of last) {
+        const k = `${r.roomTypeId}|${r.ratePlanId}|${r.occupancy ?? ""}`;
+        let s = series.get(k);
+        if (!s) { s = { roomTypeId: r.roomTypeId, ratePlanId: r.ratePlanId, occupancy: r.occupancy, lastDate: r.date, byWeekday: new Map() }; series.set(k, s); }
+        if (s.lastDate.getTime() - r.date.getTime() < 7 * 86_400_000 && !s.byWeekday.has(r.date.getUTCDay())) s.byWeekday.set(r.date.getUTCDay(), r.priceMinor);
+      }
+      for (const s of series.values()) {
+        const fallback = [...s.byWeekday.values()][0];
+        if (fallback == null) continue;
+        const rows = [];
+        for (let d = new Date(s.lastDate.getTime() + 86_400_000); d <= horizon; d = new Date(d.getTime() + 86_400_000)) {
+          rows.push({
+            tenantId: t.id, propertyId: p.id, roomTypeId: s.roomTypeId, ratePlanId: s.ratePlanId,
+            occupancy: s.occupancy, date: d, priceMinor: s.byWeekday.get(d.getUTCDay()) ?? fallback, source: "seed",
+          });
+        }
+        if (rows.length === 0) continue;
+        if (apply) written += (await prisma.ratePrice.createMany({ data: rows, skipDuplicates: true })).count;
+        else written += rows.length;
+      }
+    }
+  }
+  return { written };
+}

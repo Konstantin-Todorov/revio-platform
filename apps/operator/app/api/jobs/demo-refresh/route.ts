@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { JOB, withJobLease, refreshDemoStays, closeStaleDemoStays } from "@revio/db";
+import { JOB, withJobLease, refreshDemoStays, closeStaleDemoStays, extendDemoPrices } from "@revio/db";
 
 /**
  * Scheduled entry point for the demo refresh.
@@ -38,6 +38,9 @@ export async function POST(req: NextRequest) {
       // And the hand-made stays it does not own: checked out once they are days past departure, so
       // the demo front desk never shows a guest "overstaying" since a rehearsal in July.
       const closed = await closeStaleDemoStays({ apply: true });
+      // And prices a year ahead, so a demo search in any month finds rooms (see `extendDemoPrices`).
+      const prices = await extendDemoPrices({ apply: true });
+      if (prices.written > 0) console.info(`[demo-refresh] priced ${prices.written} more demo night(s) ahead`);
       for (const l of closed.lines) console.info(`[demo-refresh] stale: ${l}`);
       return { ok: true, tenantsTouched, staysWritten, staleClosed: closed.staysClosed };
     });

@@ -77,7 +77,7 @@ export {
   type ChannexApiConfig, type ConnectionTest,
 } from "./channex-channel-api.js";
 export {
-  provisionChannexProperty, ChannexProvisionError,
+  provisionChannexProperty, ChannexProvisionError, channexAddress,
   type ProvisionInput, type ProvisionResult, type ProvisionWrites,
 } from "./channex-provision.js";
 export * from "./channex-catchup.js";

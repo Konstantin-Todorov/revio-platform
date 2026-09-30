@@ -22,7 +22,7 @@ import {
   type ChannelField,
   ChannexProvisionError,
 } from "@revio/connectivity";
-import { recordAppError } from "@revio/db";
+import { hotelBillingIdentity, recordAppError } from "@revio/db";
 import { setFlash } from "@revio/ui/flash";
 import { fullSyncChannel } from "./connectivity";
 import { prisma } from "./db";
@@ -291,6 +291,11 @@ export async function provisionChannex(): Promise<ProvisionOutcome> {
           address: property.address ?? null,
           contactEmail: property.contactEmail ?? null,
           phone: property.phone ?? null,
+          // The company's own address fills whatever the property's one line does not say.
+          billing: await (async () => {
+            const b = await hotelBillingIdentity(property.tenantId);
+            return b ? { addressLine: b.addressLine || null, city: b.city || null, postCode: b.postCode || null, country: b.country || null } : null;
+          })(),
         },
         roomTypes,
         ratePlans: ratePlans.map((r) => ({
