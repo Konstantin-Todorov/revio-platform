@@ -128,7 +128,9 @@ export async function requestManageLink(fd: FormData): Promise<LinkRequestResult
   const property = await getPublicProperty(str(fd, "slug"));
   if (!property) return { ok: true };
   if (!checkManageLink(clientIp(await headers()), property.slug).ok) return { ok: false, limited: true };
-  const r = await findByReference(property, str(fd, "reference"));
+  // Typed by a person: "rv 7q2k9m", "RV-7Q2K9M " and "7Q2K9M" all mean the same booking.
+  const typedRef = str(fd, "reference").replace(/\s+/g, "").replace(/^RV-?/i, "");
+  const r = await findByReference(property, typedRef);
   const typed = str(fd, "email").toLowerCase();
   const onFile = r?.guest?.email?.trim().toLowerCase();
   if (!r || !onFile || typed !== onFile || r.status === "cancelled") return { ok: true };

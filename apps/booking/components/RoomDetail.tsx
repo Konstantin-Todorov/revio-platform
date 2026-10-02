@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Ruler, Users, X } from "lucide-react";
 import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, groupAmenities } from "@revio/core";
 import { AmenityIcon } from "@revio/ui/amenity-icon";
@@ -24,6 +24,35 @@ export interface DetailPhoto {
   alt: string;
 }
 
+/**
+ * Anything inside the card can open the dialog — the photograph AND the "Room details" link.
+ *
+ * A guest's first instinct is to tap the picture; every engine they have used opens the gallery
+ * when they do. The card used to answer only the small text link beside it, so the tap on the
+ * photo — the most natural one — did nothing.
+ */
+const OpenCtx = createContext<((photo?: number) => void) | null>(null);
+
+export function RoomDetailOpen({
+  children, photo, label, className, style,
+}: {
+  children: React.ReactNode;
+  /** Which photo to open on — the one tapped. */
+  photo?: number;
+  /** Accessible name when the content is only an image. */
+  label?: string;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  const open = useContext(OpenCtx);
+  return (
+    // A real box, never `display: contents` — a button without a box stops being clickable.
+    <button type="button" onClick={() => open?.(photo)} aria-label={label} className={className} style={style}>
+      {children}
+    </button>
+  );
+}
+
 export function RoomDetail({
   option,
   photos,
@@ -40,7 +69,7 @@ export function RoomDetail({
    * runtime. Resolving the keys on the server is also simply where that belongs.
    */
   photos: DetailPhoto[];
-  /** The trigger — rendered by the caller so the card owns its own layout. */
+  /** The card itself. Any `RoomDetailOpen` inside it opens the dialog. */
   children: React.ReactNode;
   /**
    * The room's rates for the guest's dates, rendered on the server by the card — the SAME rows the
@@ -92,22 +121,14 @@ export function RoomDetail({
     setIndex((i) => (dx < 0 ? (i + 1) % photos.length : (i - 1 + photos.length) % photos.length));
   };
 
-  return (
-    <>
-      {/*
-        A real inline-flex box, NOT `display: contents`.
+  const openAt = (photo?: number) => {
+    setIndex(photo != null && photo < photos.length ? photo : 0);
+    setOpen(true);
+  };
 
-        `display: contents` removes the button's own box, and a form control without a box stops
-        being interactive — the trigger rendered perfectly and simply never fired. Worth remembering:
-        it typechecks, it looks right, and only a click proves it.
-      */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--r-sm)] text-left"
-      >
-        {children}
-      </button>
+  return (
+    <OpenCtx.Provider value={openAt}>
+      {children}
 
       {open && (
         <div
@@ -161,19 +182,26 @@ export function RoomDetail({
               {photos.length > 0 && current && (
                 <div>
                   {/*
-                    A FIXED 16:9 stage with `object-contain`, not `cover`.
+                    A FIXED stage, the whole photo shown (`contain`), and the space either side
+                    filled with the same photograph, blurred.
 
-                    This is the one place the whole photo matters — the guest opened it to look at
-                    the room. `cover` crops to fill, which is right on a card and wrong here; and
-                    letting the image set its own height made the dialog jump between portrait and
-                    landscape shots, which is the distortion that was visible before.
+                    The guest opened this to look at the room, so nothing may be cropped away — and a
+                    fixed shape stops the dialog jumping between portrait and landscape shots. But a
+                    letterbox of flat grey either side read as empty, unfinished space. Filling it
+                    with the picture's own colours makes every photo look edge-to-edge without
+                    cutting a centimetre of it.
                   */}
                   <div
-                    className="relative aspect-[16/9] w-full touch-pan-y select-none"
-                    style={{ backgroundColor: "hsl(var(--ink) / 0.06)" }}
+                    className="relative aspect-[4/3] w-full touch-pan-y select-none overflow-hidden sm:aspect-[16/9]"
+                    style={{ backgroundColor: "hsl(var(--ink))" }}
                     onTouchStart={onTouchStart}
                     onTouchEnd={onTouchEnd}
                   >
+                    <div
+                      aria-hidden
+                      className="absolute inset-0 scale-125 bg-cover bg-center opacity-70 blur-2xl"
+                      style={{ backgroundImage: `url("${current.thumb}")` }}
+                    />
                     <img
                       src={current.full}
                       alt={current.alt || s.photoN(option.name, index + 1)}
@@ -287,7 +315,7 @@ export function RoomDetail({
           </div>
         </div>
       )}
-    </>
+    </OpenCtx.Provider>
   );
 }
 
@@ -307,12 +335,14 @@ function GalleryNav({ side, label, onClick }: { side: "left" | "right"; label: s
   );
 }
 
-/** The affordance on the card: says there is more to see, and how much. */
+/** The link on the card: says there is more to see, and how much. */
 export function RoomDetailTrigger({ label }: { label: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: "hsl(var(--brand-text))" }}>
-      <Maximize2 size={13} aria-hidden />
-      {label}
-    </span>
+    <RoomDetailOpen className="inline-flex items-center gap-1.5 rounded-[var(--r-sm)] text-[13px] font-semibold">
+      <span className="inline-flex items-center gap-1.5" style={{ color: "hsl(var(--brand-text))" }}>
+        <Maximize2 size={13} aria-hidden />
+        {label}
+      </span>
+    </RoomDetailOpen>
   );
 }

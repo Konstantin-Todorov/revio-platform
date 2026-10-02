@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Phone, ShieldCheck } from "lucide-react";
+import { Phone, ShieldCheck, Ticket } from "lucide-react";
 import type { PublicProperty } from "@/lib/property";
 import { serverKit } from "@/lib/i18n/server";
 import { LanguageSwitch } from "./LanguageSwitch";
@@ -42,8 +42,17 @@ export async function PropertyHeader({ property }: { property: PublicProperty })
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-4">
           <LanguageSwitch />
+          {/* Where a guest comes back to: the one thing every booking site keeps in its top bar. */}
+          <Link
+            href={`/${property.slug}/my-booking`}
+            className="inline-flex min-h-[38px] items-center gap-1.5 rounded-[var(--r-sm)] px-2 text-[13px] font-semibold transition-colors hover:bg-[hsl(var(--surface-sunk))] sm:px-2.5"
+            aria-label={s.header.myBooking}
+          >
+            <Ticket size={15} aria-hidden />
+            <span className="hidden md:inline">{s.header.myBooking}</span>
+          </Link>
           <span
-            className="hidden items-center gap-1.5 text-[12.5px] font-semibold sm:flex"
+            className="hidden items-center gap-1.5 text-[12.5px] font-semibold lg:flex"
             style={{ color: "hsl(var(--positive))" }}
           >
             <ShieldCheck size={14} aria-hidden />

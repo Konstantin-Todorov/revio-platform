@@ -158,3 +158,41 @@ export function AskManageLink({ slug, reference }: { slug: string; reference: st
     </section>
   );
 }
+
+/** The "My booking" form: reference + email → the private link by email. */
+export function FindBooking({ slug }: { slug: string }) {
+  const { s } = useGuestKit();
+  const m = s.myBooking;
+  const [state, setState] = useState<"idle" | "sent" | "limited">("idle");
+  const [pending, start] = useTransition();
+  const field = "h-11 w-full rounded-[var(--r-sm)] border px-3 text-[15px] outline-none focus:border-[hsl(var(--brand))]";
+  const fieldStyle = { borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" };
+  if (state === "sent") {
+    return (
+      <p className="card mt-6 p-5 text-[14px] font-semibold" style={{ color: "hsl(var(--positive))" }} role="status">{m.sent}</p>
+    );
+  }
+  return (
+    <form
+      className="card mt-6 flex flex-col gap-4 p-5"
+      action={(fd) => start(async () => {
+        const r = await requestManageLink(fd);
+        setState(r.ok ? "sent" : "limited");
+      })}
+    >
+      <input type="hidden" name="slug" value={slug} />
+      <div>
+        <label className="mb-1 block text-[13px] font-semibold" htmlFor="fb-ref">{m.reference}</label>
+        <input id="fb-ref" name="reference" required autoComplete="off" autoCapitalize="characters"
+               placeholder="RV-XXXXXX" className={`${field} uppercase`} style={fieldStyle} />
+        <p className="mt-1 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>{m.referenceHint}</p>
+      </div>
+      <div>
+        <label className="mb-1 block text-[13px] font-semibold" htmlFor="fb-email">{m.email}</label>
+        <input id="fb-email" name="email" type="email" required autoComplete="email" className={field} style={fieldStyle} />
+      </div>
+      <button type="submit" disabled={pending} className="btn btn-brand w-full">{pending ? m.sending : m.send}</button>
+      {state === "limited" && <p className="text-[12.5px]" style={{ color: "hsl(var(--caution))" }} role="alert">{m.limited}</p>}
+    </form>
+  );
+}

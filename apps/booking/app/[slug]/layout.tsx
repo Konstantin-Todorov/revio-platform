@@ -31,10 +31,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
      * because the whole claim of a direct booking page is that it belongs to the hotel. A guest with
      * this tab open beside the hotel's own website should see the same little square in both.
      *
-     * A hotel that has uploaded nothing gets the browser's default rather than ours: an anonymous
-     * tab is honest, a Revio tab on someone else's booking page is not.
+     * A hotel that has uploaded nothing gets its own initial on its own colour (the favicon route),
+     * never ours: a Revio tab on someone else's booking page would not be honest, and the browser's
+     * blank globe beside a card form reads as an unfinished page.
      */
-    icons: property.logoUrl ? { icon: property.logoUrl } : undefined,
+    icons: { icon: property.logoUrl ?? `/api/brand/${property.id}/favicon` },
   };
 }
 

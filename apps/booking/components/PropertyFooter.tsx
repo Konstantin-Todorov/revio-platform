@@ -1,8 +1,11 @@
+import Link from "next/link";
+import { Clock, CreditCard, MapPin, Phone, Mail, ShieldCheck, Ticket } from "lucide-react";
 import type { PublicProperty } from "@/lib/property";
 import { serverKit } from "@/lib/i18n/server";
 
 /**
- * The hotel's own details, closing every page.
+ * The hotel's own details, closing every page — in three columns a guest scans for one thing each:
+ * how to reach the hotel, what to know about the stay, and where to go when they need their booking.
  *
  * There is no Revio branding here on purpose. This is the hotel's booking page, and a platform
  * byline at the bottom of it would tell a guest they are transacting with someone other than the
@@ -10,35 +13,75 @@ import { serverKit } from "@/lib/i18n/server";
  */
 export async function PropertyFooter({ property }: { property: PublicProperty }) {
   const { s } = await serverKit(property);
+  const f = s.footer;
+  const muted = { color: "hsl(var(--ink-soft))" };
+  const mapUrl = property.address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${property.name}, ${property.address}`)}`
+    : null;
   return (
     <footer className="border-t" style={{ borderColor: "hsl(var(--line))", backgroundColor: "hsl(var(--surface))" }}>
-      <div className="mx-auto flex w-full max-w-[72rem] flex-wrap items-start justify-between gap-x-10 gap-y-6 px-5 py-10 sm:px-8">
-        <div className="min-w-0">
-          <p className="display text-[1.05rem]">{property.name}</p>
-          {property.address && (
-            <p className="mt-1.5 max-w-[34ch] text-[13px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>
-              {property.address}
-            </p>
-          )}
-          <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px]" style={{ color: "hsl(var(--ink-soft))" }}>
+      <div className="mx-auto grid w-full max-w-[72rem] grid-cols-1 gap-8 px-5 py-10 text-[13px] sm:grid-cols-3 sm:px-8">
+        <section>
+          <p className="display text-[1.1rem]">{property.name}</p>
+          <ul className="mt-3 space-y-2" style={muted}>
+            {property.address && (
+              <li className="flex items-start gap-2">
+                <MapPin size={14} aria-hidden className="mt-0.5 shrink-0" />
+                <span>
+                  {property.address}
+                  {mapUrl && (
+                    <>
+                      {" · "}
+                      <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="link-quiet font-semibold">{f.directions}</a>
+                    </>
+                  )}
+                </span>
+              </li>
+            )}
             {property.phone && (
-              <a href={`tel:${property.phone.replace(/\s+/g, "")}`} className="link-quiet">
-                {property.phone}
-              </a>
+              <li className="flex items-center gap-2">
+                <Phone size={14} aria-hidden className="shrink-0" />
+                <a href={`tel:${property.phone.replace(/\s+/g, "")}`} className="link-quiet">{property.phone}</a>
+              </li>
             )}
             {property.contactEmail && (
-              <a href={`mailto:${property.contactEmail}`} className="link-quiet">
-                {property.contactEmail}
-              </a>
+              <li className="flex items-center gap-2">
+                <Mail size={14} aria-hidden className="shrink-0" />
+                <a href={`mailto:${property.contactEmail}`} className="link-quiet break-all">{property.contactEmail}</a>
+              </li>
             )}
-          </p>
-        </div>
+          </ul>
+        </section>
 
-        <p className="text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-faint))" }}>
-          {s.footer.times(property.checkInTime, property.checkOutTime)}
-          <br />
-          {s.footer.allIn}
-        </p>
+        <section>
+          <p className="eyebrow">{f.stay}</p>
+          <ul className="mt-3 space-y-2" style={muted}>
+            <li className="flex items-start gap-2">
+              <Clock size={14} aria-hidden className="mt-0.5 shrink-0" />
+              {f.times(property.checkInTime, property.checkOutTime)}
+            </li>
+            <li className="flex items-start gap-2">
+              <ShieldCheck size={14} aria-hidden className="mt-0.5 shrink-0" />
+              <span>{f.allIn} {f.directBenefit}</span>
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <p className="eyebrow">{f.help}</p>
+          <ul className="mt-3 space-y-2" style={muted}>
+            <li className="flex items-start gap-2">
+              <Ticket size={14} aria-hidden className="mt-0.5 shrink-0" />
+              <Link href={`/${property.slug}/my-booking`} className="link-quiet font-semibold">{f.myBooking}</Link>
+            </li>
+            {property.paymentReady && (
+              <li className="flex items-start gap-2">
+                <CreditCard size={14} aria-hidden className="mt-0.5 shrink-0" />
+                {f.securePay}
+              </li>
+            )}
+          </ul>
+        </section>
       </div>
     </footer>
   );

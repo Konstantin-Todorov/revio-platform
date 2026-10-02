@@ -43,7 +43,7 @@ export interface GuestStrings {
     digest: string;
   };
   hero: { headline: string; subheadline: string };
-  header: { official: string; call: (hotel: string) => string; language: string };
+  header: { official: string; call: (hotel: string) => string; language: string; myBooking: string };
   home: {
     eyebrow: (hotel: string) => string;
     goodToKnow: string;
@@ -58,7 +58,14 @@ export interface GuestStrings {
     liveTitle: string; liveBody: string;
     times: (checkIn: string, checkOut: string) => string;
   };
-  footer: { times: (checkIn: string, checkOut: string) => string; allIn: string };
+  footer: {
+    times: (checkIn: string, checkOut: string) => string; allIn: string;
+    contact: string; stay: string; help: string; myBooking: string; directions: string; securePay: string; directBenefit: string;
+  };
+  myBooking: {
+    title: string; body: string; reference: string; referenceHint: string; email: string;
+    send: string; sending: string; sent: string; limited: string;
+  };
   bar: {
     dates: string; addDates: string; guests: string; guestsCount: (n: number) => string;
     search: string; checkIn: string; checkOut: string; addDate: string;
@@ -108,6 +115,8 @@ export interface GuestStrings {
     empty: string;
     chooseRate: string;
     ratesForDates: string; seeRates: string; from: (total: string) => string;
+    /** Under a rate's price: "total for 3 nights", and what it holds beyond the room. */
+    totalFor: (nights: number) => string; includes: (what: string) => string;
     stickySelect: string; stickyTotal: string;
   };
   book: {
@@ -270,7 +279,7 @@ export const guest: Translations<GuestStrings> = {
       headline: "Book direct. Pay less.",
       subheadline: "No commission goes to a travel site, so the rate you see is the one the hotel actually wants to give you — with taxes and fees already in the number.",
     },
-    header: { official: "Official site", call: (h) => `Call ${h}`, language: "Language" },
+    header: { official: "Official site", call: (h) => `Call ${h}`, language: "Language", myBooking: "My booking" },
     home: {
       eyebrow: (h) => `Official booking · ${h}`,
       goodToKnow: "Good to know",
@@ -288,7 +297,20 @@ export const guest: Translations<GuestStrings> = {
       liveBody: "Rooms shown here are genuinely free right now — not a cached copy.",
       times: (i, o) => `Check-in from ${i}, check-out by ${o}.`,
     },
-    footer: { times: (i, o) => `Check-in from ${i} · Check-out by ${o}`, allIn: "Prices include all taxes and fees." },
+    footer: {
+      times: (i, o) => `Check-in from ${i} · Check-out by ${o}`, allIn: "Prices include all taxes and fees.",
+      contact: "Contact", stay: "Your stay", help: "Help", myBooking: "Find, change or cancel my booking",
+      directions: "Directions", securePay: "Card payments are processed securely by Stripe — we never see your card number.",
+      directBenefit: "Booking here, you book directly with the hotel.",
+    },
+    myBooking: {
+      title: "My booking",
+      body: "Enter your booking reference and the email you booked with. We will send you a private link to see, change or cancel your booking.",
+      reference: "Booking reference", referenceHint: "In your confirmation email, e.g. RV-7Q2K9M", email: "Email you booked with",
+      send: "Send me the link", sending: "Sending…",
+      sent: "If the reference and email match a booking, the link is on its way. Check your inbox (and the spam folder).",
+      limited: "Too many tries just now — please wait a few minutes.",
+    },
     bar: {
       dates: "Dates", addDates: "Add dates", guests: "Guests", guestsCount: (n) => en1(n, "guest", "guests"),
       search: "Search", checkIn: "Check in", checkOut: "Check out", addDate: "Add date",
@@ -345,6 +367,8 @@ export const guest: Translations<GuestStrings> = {
       empty: "The hotel hasn't added photos or a description for this room yet. Call them and they will tell you everything about it.",
       chooseRate: "Choose a rate for this room",
       ratesForDates: "Rates for your dates",
+      totalFor: (n) => `total for ${n === 1 ? "1 night" : `${n} nights`}`,
+      includes: (w) => `incl. ${w}`,
       seeRates: "See rates",
       from: (t) => `from ${t} total`,
       stickySelect: "Select",
@@ -540,7 +564,7 @@ export const guest: Translations<GuestStrings> = {
       headline: "Резервирайте директно. Платете по-малко.",
       subheadline: "Никаква комисиона не отива към сайт за пътувания, затова цената, която виждате, е тази, която хотелът наистина иска да Ви даде — с данъците и таксите вече включени.",
     },
-    header: { official: "Официален сайт", call: (h) => `Обадете се на ${h}`, language: "Език" },
+    header: { official: "Официален сайт", call: (h) => `Обадете се на ${h}`, language: "Език", myBooking: "Моята резервация" },
     home: {
       eyebrow: (h) => `Официални резервации · ${h}`,
       goodToKnow: "Добре е да знаете",
@@ -558,7 +582,20 @@ export const guest: Translations<GuestStrings> = {
       liveBody: "Стаите тук наистина са свободни в момента — не е стар списък.",
       times: (i, o) => `Настаняване от ${i}, напускане до ${o}.`,
     },
-    footer: { times: (i, o) => `Настаняване от ${i} · Напускане до ${o}`, allIn: "Цените включват всички данъци и такси." },
+    footer: {
+      times: (i, o) => `Настаняване от ${i} · Напускане до ${o}`, allIn: "Цените включват всички данъци и такси.",
+      contact: "Контакти", stay: "Вашият престой", help: "Помощ", myBooking: "Намерете, променете или откажете резервация",
+      directions: "Упътване", securePay: "Плащанията с карта се обработват сигурно от Stripe — ние не виждаме номера на картата Ви.",
+      directBenefit: "Резервирайки тук, резервирате директно с хотела.",
+    },
+    myBooking: {
+      title: "Моята резервация",
+      body: "Въведете номера на резервацията и имейла, с който сте резервирали. Ще Ви изпратим лична връзка, за да видите, промените или откажете резервацията си.",
+      reference: "Номер на резервацията", referenceHint: "От имейла за потвърждение, напр. RV-7Q2K9M", email: "Имейл, с който сте резервирали",
+      send: "Изпратете ми връзката", sending: "Изпращаме…",
+      sent: "Ако номерът и имейлът съвпадат с резервация, връзката вече пътува към Вас. Проверете пощата си (и папката за спам).",
+      limited: "Твърде много опити — моля, изчакайте няколко минути.",
+    },
     bar: {
       dates: "Дати", addDates: "Изберете дати", guests: "Гости", guestsCount: (n) => `${n} ${n === 1 ? "гост" : "гости"}`,
       search: "Търсене", checkIn: "Настаняване", checkOut: "Напускане", addDate: "Изберете дата",
@@ -615,6 +652,8 @@ export const guest: Translations<GuestStrings> = {
       empty: "Хотелът още не е добавил снимки или описание на тази стая. Обадете се — ще Ви разкажат всичко за нея.",
       chooseRate: "Изберете цена за тази стая",
       ratesForDates: "Цени за Вашите дати",
+      totalFor: (n) => `общо за ${n === 1 ? "1 нощувка" : `${n} нощувки`}`,
+      includes: (w) => `вкл. ${w}`,
       seeRates: "Виж цените",
       from: (t) => `от ${t} общо`,
       stickySelect: "Избери",

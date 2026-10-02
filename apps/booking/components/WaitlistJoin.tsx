@@ -41,7 +41,7 @@ export function WaitlistJoin({
   if (state?.ok) {
     return (
       <div
-        className="mt-5 rounded-[var(--r-md)] border p-4 text-[13.5px]"
+        className="mx-auto mt-5 w-full max-w-md rounded-[var(--r)] border p-4 text-left text-[13.5px]"
         style={{ borderColor: "hsl(var(--line))", backgroundColor: "hsl(var(--surface-sunk))" }}
         role="status"
       >
@@ -56,7 +56,7 @@ export function WaitlistJoin({
   return (
     <ActionForm
       action={action} state={state}
-      className="mt-5 rounded-[var(--r-md)] border p-4"
+      className="mx-auto mt-5 w-full max-w-md rounded-[var(--r)] border p-5 text-left"
       style={{ borderColor: "hsl(var(--line))", backgroundColor: "hsl(var(--surface-sunk))" }}
     >
       <input type="hidden" name="slug" value={slug} />
@@ -71,34 +71,35 @@ export function WaitlistJoin({
         {s.body(nights)}
       </p>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-        <label className="sr-only" htmlFor="wl-name">{s.name}</label>
-        <input
-          id="wl-name"
-          name="name"
-          required
-          autoComplete="name"
-          placeholder={s.name}
-          className="h-10 w-full rounded-[var(--r-sm)] border px-3 text-[14px] outline-none transition-colors focus:border-[hsl(var(--brand))]"
-          style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
-        />
-        <label className="sr-only" htmlFor="wl-email">{s.email}</label>
-        <input
-          id="wl-email"
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="you@example.com"
-          className="h-10 w-full rounded-[var(--r-sm)] border px-3 text-[14px] outline-none transition-colors focus:border-[hsl(var(--brand))]"
-          style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          className="h-10 rounded-[var(--r-sm)] px-4 text-[14px] font-semibold text-white transition-colors disabled:opacity-60"
-          style={{ backgroundColor: "hsl(var(--brand))" }}
-        >
+      {/* Fields one under the other with their names on top: side by side in a centred column they
+          were squeezed to a few characters, and a placeholder that cut off ("Вашето…") left a guest
+          guessing what to type. */}
+      <div className="mt-4 space-y-3">
+        <div>
+          <label className="mb-1 block text-[12.5px] font-semibold" htmlFor="wl-name">{s.name}</label>
+          <input
+            id="wl-name"
+            name="name"
+            required
+            autoComplete="name"
+            className="h-11 w-full rounded-[var(--r-sm)] border px-3 text-[15px] outline-none transition-colors focus:border-[hsl(var(--brand))]"
+            style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-[12.5px] font-semibold" htmlFor="wl-email">{s.email}</label>
+          <input
+            id="wl-email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@example.com"
+            className="h-11 w-full rounded-[var(--r-sm)] border px-3 text-[15px] outline-none transition-colors focus:border-[hsl(var(--brand))]"
+            style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
+          />
+        </div>
+        <button type="submit" disabled={pending} className="btn btn-brand w-full disabled:opacity-60">
           {pending ? s.adding : s.tellMe}
         </button>
       </div>

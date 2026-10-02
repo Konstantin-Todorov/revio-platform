@@ -1,33 +1,33 @@
 import type { PublicPlanQuote, PublicRoomOption } from "@revio/booking";
-import { BedDouble, ChevronDown, Coffee, CreditCard, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
+import { BedDouble, ChevronDown, Coffee, CreditCard, Expand, Images, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, headlineAmenities } from "@revio/core";
 import { AmenityIcon } from "@revio/ui/amenity-icon";
 import { termsWords, type GuestKit } from "@/lib/i18n/kit";
 import { RoomPhoto } from "./RoomPhoto";
-import { RoomDetail, RoomDetailTrigger } from "./RoomDetail";
+import { RoomDetail, RoomDetailOpen, RoomDetailTrigger } from "./RoomDetail";
+
+/** Rates shown before "More rates" — enough to compare the usual choices (cheapest, refundable,
+ *  breakfast) without a hotel's whole rate sheet becoming the page. */
+const OPEN_RATES = 3;
 
 /**
- * One room type and its rates.
+ * One room type and its rates — the shape Booking.com and Expedia taught every guest.
  *
- * The headline number is the ALL-IN total for the whole stay. Per-night sits underneath in small
- * type — the opposite of an OTA, which leads with a nightly figure that grows once taxes appear.
- * Leading with the true total is the entire point of this product, so it gets the emphasis, and the
- * itemised breakdown sits beside it in plain sight rather than behind a tooltip.
+ * The ROOM is described once: photograph, name, size, beds, the amenities that set it apart. The
+ * RATES are compact rows beneath it, each saying the three things a guest compares rates by — what
+ * is included, what leaves their card today, whether they can change their mind — with the total on
+ * the right and the button beside it. A rate used to be a block the height of a phone screen, with a
+ * grey breakdown box, a big price and a button stacked under each other; four of those made a room
+ * card two screens tall and turned choosing into scrolling.
  *
- * Only the cheapest rate is open. A hotel with four rate plans across four room types produces
- * sixteen near-identical rows, and a guest scrolling past all of them is doing the hotel's pricing
- * homework. The best price is the answer to the question they actually asked; the rest are there
- * for anyone who wants breakfast or a refundable rate, one click away.
+ * The number is still the ALL-IN total for the stay. What it includes beyond the room (a city tax)
+ * is said in one short line under it, never hidden behind a tooltip.
  *
- * The media panel shows the room's cover photograph — the one the hotel dragged to the front of its
- * gallery. A hotel that has uploaded nothing gets a brand-tinted panel instead of a grey box, so it
- * can go live before its photo shoot and still look finished rather than broken.
+ * The photograph opens the room's details and gallery — the first thing anyone taps.
  */
 export function RoomOption({
-  option, nights, slug, checkIn, checkOut, guests, mediaUrl, kit, layout = "list",
+  option, nights, slug, checkIn, checkOut, guests, mediaUrl, kit,
 }: {
-  /** `gallery` (the Editorial preset): photograph on top and shown on a phone too, rates stacked. */
-  layout?: "list" | "gallery";
   /** The guest's language — words, room-content labels and money. */
   kit: GuestKit;
   option: PublicRoomOption;
@@ -41,20 +41,45 @@ export function RoomOption({
 }) {
   // Cheapest first — the rate most guests want, and the fairest comparison against an OTA listing.
   const plans = [...option.plans].sort((a, b) => a.totalMinor - b.totalMinor);
-  const [best, ...rest] = plans;
+  const best = plans[0];
   if (!best) return null;
+  const shown = plans.slice(0, OPEN_RATES);
+  const more = plans.slice(OPEN_RATES);
 
   // Cover = lowest sortOrder, which is exactly what the hotel dragged to the front.
   const cover = option.photos[0];
-
   const headline = headlineAmenities(option.amenities);
-  const gallery = layout === "gallery";
   const { s, room, money } = kit;
+  const hasDetail = option.photos.length > 0 || !!option.description || option.amenities.length > 0;
 
   const href = (plan: PublicPlanQuote) =>
     `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
+  const row = (plan: PublicPlanQuote, i: number) => (
+    <RateRow key={plan.ratePlanId} plan={plan} nights={nights} href={href(plan)} best={i === 0 && plans.length > 1} kit={kit} />
+  );
 
-  return (
+  const media = cover ? (
+    <>
+      <RoomPhoto src={mediaUrl(cover.thumbKey)} alt={cover.alt || s.room.photoAlt(option.name)} />
+      <span
+        className="absolute bottom-2.5 left-2.5 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold"
+        style={{ backgroundColor: "hsl(var(--ink) / 0.66)", color: "#fff" }}
+      >
+        {option.photos.length > 1 ? <Images size={12} aria-hidden /> : <Expand size={12} aria-hidden />}
+        {option.photos.length > 1 ? option.photos.length : s.room.details}
+      </span>
+    </>
+  ) : (
+    /* No photo is a normal state, not a failure: a hotel can go live before its photo shoot. */
+    <div
+      className="flex h-full w-full items-center justify-center"
+      style={{ background: "linear-gradient(150deg, hsl(var(--brand-wash)), hsl(var(--brand-soft) / 0.65))" }}
+    >
+      <BedDouble size={30} strokeWidth={1.4} style={{ color: "hsl(var(--brand-text) / 0.35)" }} />
+    </div>
+  );
+
+  const card = (
     <article
       className="card-raised overflow-hidden"
       data-room-card
@@ -62,278 +87,174 @@ export function RoomOption({
       data-room-total={money(best.totalMinor, best.currency)}
       data-room-href={href(best)}
     >
-      <div className={gallery ? "grid grid-cols-1" : "grid grid-cols-1 sm:grid-cols-[minmax(0,13.5rem)_1fr]"}>
-        {cover ? (
-          /*
-            The photo FILLS its column, and the column is now height-bounded.
-
-            It used to hold a 4:3 shape, on the theory that cropping a landscape photo into a tall
-            column would show a strip of wall rather than a room. In practice the empty surface under
-            the photo read as a broken image, and the crop does not: a room photograph is mostly bed
-            and window through the middle, which is exactly the band a centred cover crop keeps. The
-            filled column is also what every engine a guest has already used looks like.
-
-            Filling only works while the column stays a sane shape, which is why the expanded rates
-            were moved out of this grid — see the comment below. `max-h` is the belt to that braces:
-            a room with a very long name or five headline amenities still cannot stretch the crop
-            past the point where it reads as a photograph of a room.
-          */
-          <div
-            className={gallery ? "relative aspect-[16/10] w-full" : "relative hidden min-h-[13rem] max-h-[20rem] sm:block"}
-            style={{ [gallery ? "borderBottom" : "borderRight"]: "1px solid hsl(var(--line))", backgroundColor: "hsl(var(--surface))" }}
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(0,19rem)_1fr]">
+        {/* The photograph: on top on a phone (a guest chooses a room by looking at it), a column on
+            a wider screen. It fills its box — a centred crop keeps the bed and the window. */}
+        {cover && hasDetail ? (
+          <RoomDetailOpen
+            photo={0}
+            label={s.room.detailsWithPhotos(option.photos.length)}
+            className="group relative block aspect-[16/10] w-full overflow-hidden text-left md:aspect-auto md:min-h-[15rem]"
           >
-            {/* Not next/image: this is already our own resized WebP, so a second optimisation pass
-                would burn CPU to produce the same bytes. */}
-            <RoomPhoto
-              src={mediaUrl(cover.thumbKey)}
-              alt={cover.alt || s.room.photoAlt(option.name)}
-            />
-            {option.photos.length > 1 && (
-              <span
-                className="absolute left-2 top-2 flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold"
-                style={{ backgroundColor: "hsl(var(--ink) / 0.62)", color: "#fff" }}
-              >
-                <Images size={11} aria-hidden />
-                {option.photos.length}
-              </span>
-            )}
-          </div>
+            <span className="absolute inset-0 block transition-transform duration-500 group-hover:scale-[1.03]">{media}</span>
+          </RoomDetailOpen>
         ) : (
-          /* No photo is a normal state, not a failure: a hotel can go live before its photo shoot,
-             and a designed panel reads as intentional where a grey box reads as broken. */
-          <div
-            className={gallery ? "relative flex h-32 items-center justify-center" : "relative hidden min-h-[11rem] items-center justify-center sm:flex"}
-            style={{
-              background: "linear-gradient(150deg, hsl(var(--brand-wash)), hsl(var(--brand-soft) / 0.65))",
-              [gallery ? "borderBottom" : "borderRight"]: "1px solid hsl(var(--line))",
-            }}
-            aria-hidden
-          >
-            <BedDouble size={30} strokeWidth={1.4} style={{ color: "hsl(var(--brand-text) / 0.35)" }} />
+          <div className="relative aspect-[16/10] w-full overflow-hidden md:aspect-auto md:min-h-[12rem]" aria-hidden={!cover}>
+            {media}
           </div>
         )}
 
-        <div className="min-w-0">
-          <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 px-5 pt-5">
-            <div className="min-w-0">
-              <h2 className="display text-[1.3rem] sm:text-[1.5rem]">{option.name}</h2>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                <span className="chip">
-                  <Users size={13} aria-hidden />
-                  {s.room.sleeps(option.maxGuests)}
-                </span>
-                {option.sizeSqm && <span className="chip">{option.sizeSqm} m²</span>}
-                {option.bedSetup && BED_SETUP_BY_KEY[option.bedSetup] && (
-                  <span className="chip">
-                    <AmenityIcon name={BED_SETUP_ICON_BY_KEY[option.bedSetup]} size={13} />
-                    {room.bedSetups[option.bedSetup] ?? BED_SETUP_BY_KEY[option.bedSetup]}
-                  </span>
-                )}
-                {rest.length > 0 && (
-                  <span className="chip">
-                    {s.count.rates(plans.length)}
-                  </span>
-                )}
-              </div>
-
-              {/*
-                The four amenities that actually separate this room from the one below it.
-
-                Chosen by `headlineAmenities`, which ranks a sea view above air conditioning — the
-                obvious alternative, showing the first four of the list, would print "Air
-                conditioning · Heating · WiFi · TV" on every card in the hotel and help nobody
-                choose. The rest live one click away in the detail view.
-              */}
-              {headline.length > 0 && (
-                <div
-                  className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[12.5px]"
-                  style={{ color: "hsl(var(--ink-soft))" }}
+        <div className="flex min-w-0 flex-col">
+          <header className="px-5 pb-3 pt-4">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="display text-[1.3rem] leading-tight sm:text-[1.45rem]">{option.name}</h2>
+              {/* Honest scarcity only — a real count, and only when it is genuinely low. */}
+              {option.remaining <= 3 && (
+                <span
+                  className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-bold"
+                  style={{ backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}
                 >
-                  {headline.map((a) => (
-                    <span key={a.key} className="inline-flex items-center gap-1.5">
-                      <AmenityIcon name={a.icon} size={14} style={{ color: "hsl(var(--brand-text))" }} />
-                      {room.amenities[a.key] ?? a.label}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/*
-                The way into everything else. Only shown when there IS something else — a room with
-                no photos, no description and no amenities has nothing behind this link, and offering
-                it anyway teaches a guest that our links go nowhere.
-              */}
-              {(option.photos.length > 0 || option.description || option.amenities.length > 0) && (
-                <div className="mt-2.5">
-                  {/* Keys resolved here, on the server — a function cannot cross into a client
-                      component, and the URL shape is this app's business anyway. */}
-                  <RoomDetail
-                    option={option}
-                    fromLabel={s.room.from(money(best.totalMinor, best.currency))}
-                    rates={plans.map((plan, i) => (
-                      <div key={plan.ratePlanId} className={`pt-4 ${i > 0 ? "border-t" : ""}`} style={{ borderColor: "hsl(var(--line))" }}>
-                        <RateRow plan={plan} nights={nights} href={href(plan)} highlight={i === 0 && plans.length > 1} kit={kit} stacked />
-                      </div>
-                    ))}
-                    photos={option.photos.map((p) => ({
-                      full: mediaUrl(p.fullKey),
-                      thumb: mediaUrl(p.thumbKey),
-                      alt: p.alt || "",
-                    }))}
-                  >
-                    <RoomDetailTrigger label={option.photos.length > 1 ? s.room.detailsWithPhotos(option.photos.length) : s.room.details} />
-                  </RoomDetail>
-                </div>
+                  {option.remaining === 1 ? s.room.lastRoom : s.room.onlyLeft(option.remaining)}
+                </span>
               )}
             </div>
-
-            {/* Honest scarcity only — a real count, and only when it is genuinely low. */}
-            {option.remaining <= 3 && (
-              <span
-                className="rounded-full px-2.5 py-1 text-[12px] font-bold"
-                style={{ backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}
-              >
-                {option.remaining === 1 ? s.room.lastRoom : s.room.onlyLeft(option.remaining)}
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12.5px]" style={{ color: "hsl(var(--ink-soft))" }}>
+              <span className="inline-flex items-center gap-1.5">
+                <Users size={13} aria-hidden /> {s.room.sleeps(option.maxGuests)}
               </span>
+              {option.sizeSqm && <span>{option.sizeSqm} m²</span>}
+              {option.bedSetup && BED_SETUP_BY_KEY[option.bedSetup] && (
+                <span className="inline-flex items-center gap-1.5">
+                  <AmenityIcon name={BED_SETUP_ICON_BY_KEY[option.bedSetup]} size={13} />
+                  {room.bedSetups[option.bedSetup] ?? BED_SETUP_BY_KEY[option.bedSetup]}
+                </span>
+              )}
+              {/* The amenities that set this room apart (`headlineAmenities` ranks a sea view above
+                  air conditioning); the full list is one tap away in the details. */}
+              {headline.map((a) => (
+                <span key={a.key} className="inline-flex items-center gap-1.5">
+                  <AmenityIcon name={a.icon} size={13} style={{ color: "hsl(var(--brand-text))" }} />
+                  {room.amenities[a.key] ?? a.label}
+                </span>
+              ))}
+            </div>
+            {hasDetail && (
+              <div className="mt-2">
+                <RoomDetailTrigger label={option.photos.length > 1 ? s.room.detailsWithPhotos(option.photos.length) : s.room.details} />
+              </div>
             )}
           </header>
 
-          <div className="mt-4" data-best-rate>
-            <RateRow plan={best} nights={nights} href={href(best)} highlight={rest.length > 0} kit={kit} stacked={gallery} />
+          <div className="border-t" style={{ borderColor: "hsl(var(--line))" }}>
+            <div data-best-rate>{row(best, 0)}</div>
+            {shown.slice(1).map((p, i) => row(p, i + 1))}
           </div>
+
+          {more.length > 0 && (
+            /* Native <details>: no JavaScript, works before hydration, keyboard and screen readers free. */
+            <details className="group border-t" style={{ borderColor: "hsl(var(--line))" }}>
+              <summary
+                className="flex cursor-pointer list-none items-center justify-between px-5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-[hsl(var(--surface-sunk))] [&::-webkit-details-marker]:hidden"
+                style={{ color: "hsl(var(--brand-text))" }}
+              >
+                <span>{s.room.otherRates(more.length)}</span>
+                <ChevronDown size={16} aria-hidden className="transition-transform duration-200 group-open:rotate-180" />
+              </summary>
+              {more.map((p, i) => row(p, OPEN_RATES + i))}
+            </details>
+          )}
         </div>
       </div>
-
-      {/*
-        The other rates sit OUTSIDE the photo/detail grid, spanning the whole card.
-
-        They used to live in the right-hand column, which quietly made the photograph responsible for
-        matching their height: open four extra rates and the media column grew to ~800px, so a
-        `cover` crop of a landscape room photo became a tall narrow slice of duvet. The photo was not
-        the problem — being asked to be 216px wide and 800px tall was.
-
-        Out here the media column is only ever as tall as the header plus one rate row, which is a
-        shape a room photograph actually suits. The rates get the full card width as a bonus, which
-        is more readable than the squeezed column they were in.
-
-        Native <details>: no JavaScript, works before hydration, and the browser gives us keyboard
-        and screen-reader behaviour for free.
-      */}
-      {rest.length > 0 && (
-        <details className="group border-t" style={{ borderColor: "hsl(var(--line))" }}>
-          <summary
-            className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-[13px] font-semibold transition-colors hover:bg-[hsl(var(--surface-sunk))] [&::-webkit-details-marker]:hidden"
-            style={{ color: "hsl(var(--brand-text))" }}
-          >
-            <span>{s.room.otherRates(rest.length)}</span>
-            <ChevronDown
-              size={16}
-              aria-hidden
-              className="transition-transform duration-200 group-open:rotate-180"
-            />
-          </summary>
-          {rest.map((plan) => (
-            <div key={plan.ratePlanId} className="border-t" style={{ borderColor: "hsl(var(--line))" }}>
-              <RateRow plan={plan} nights={nights} href={href(plan)} kit={kit} stacked={gallery} />
-            </div>
-          ))}
-        </details>
-      )}
     </article>
+  );
+
+  if (!hasDetail) return card;
+  return (
+    // Keys resolved here, on the server — a function cannot cross into a client component.
+    <RoomDetail
+      option={option}
+      fromLabel={s.room.from(money(best.totalMinor, best.currency))}
+      rates={plans.map(row)}
+      photos={option.photos.map((p) => ({ full: mediaUrl(p.fullKey), thumb: mediaUrl(p.thumbKey), alt: p.alt || "" }))}
+    >
+      {card}
+    </RoomDetail>
   );
 }
 
+/**
+ * One rate: what it includes and its terms on the left, the all-in total and the button on the right.
+ * The same row in the card and in the room's details, so the two can never quote different prices.
+ */
 function RateRow({
-  plan, nights, href, highlight = false, kit, stacked = false,
+  plan, nights, href, best = false, kit,
 }: {
   kit: GuestKit;
-  /** Half-width gallery cards: price and button under the details rather than beside them. */
-  stacked?: boolean;
   plan: PublicPlanQuote;
   nights: number;
   href: string;
   /** The cheapest rate, when there is something to be cheaper than. */
-  highlight?: boolean;
+  best?: boolean;
 }) {
   const { s, money } = kit;
+  const words = plan.terms ? termsWords(kit, plan.terms, plan.currency) : null;
+  const refundable = !!plan.terms?.freeCancelUntil;
+  // What the total holds beyond the room, said in a few words under it: "incl. City tax €3".
+  const extras = plan.charges.map((c) => `${c.name} ${money(c.amountMinor, plan.currency)}`).join(" · ");
   return (
-    <div className={`grid grid-cols-1 gap-4 px-5 pb-5 pt-1 ${stacked ? "" : "sm:grid-cols-[1fr_auto] sm:gap-8"}`}>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-[14.5px] font-bold">{plan.name}</h3>
-          {highlight && (
+    <div
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2.5 border-t px-5 py-3.5 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+      style={{ borderColor: "hsl(var(--line))" }}
+    >
+      {/* What you get — on a phone it takes the full width, and price + button sit under it. */}
+      <div className="col-span-2 min-w-0 sm:col-span-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h3 className="text-[14px] font-bold leading-snug">{plan.name}</h3>
+          {best && (
             <span className="badge-brand">
               <Sparkles size={11} aria-hidden />
               {s.room.bestPrice}
             </span>
           )}
         </div>
-
-        <div
-          className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px]"
-          style={{ color: "hsl(var(--ink-soft))" }}
-        >
+        <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12.5px]" style={{ color: "hsl(var(--ink-soft))" }}>
           {plan.mealPlan && (
-            <span className="flex items-center gap-1.5">
-              <Coffee size={13} aria-hidden style={{ color: "hsl(var(--positive))" }} />
+            <li className="inline-flex items-center gap-1">
+              <Coffee size={12.5} aria-hidden style={{ color: "hsl(var(--positive))" }} />
               {plan.mealPlan}
-            </span>
+            </li>
           )}
-          {plan.terms ? (
+          {words ? (
             <>
-              {/* The two facts a guest compares rates by, said beside the price rather than behind a
-                  link: how much leaves their card today, and whether they can change their mind. */}
-              <span className="flex items-center gap-1.5">
-                <CreditCard size={13} aria-hidden style={{ color: "hsl(var(--ink-faint))" }} />
-                {termsWords(kit, plan.terms, plan.currency).payment}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck
-                  size={13}
-                  aria-hidden
-                  style={{ color: plan.terms.freeCancelUntil ? "hsl(var(--positive))" : "hsl(var(--ink-faint))" }}
-                />
-                {termsWords(kit, plan.terms, plan.currency).cancellation}
-              </span>
+              <li className="inline-flex items-center gap-1" style={refundable ? { color: "hsl(var(--positive))", fontWeight: 600 } : undefined}>
+                <ShieldCheck size={12.5} aria-hidden style={{ color: refundable ? "hsl(var(--positive))" : "hsl(var(--ink-faint))" }} />
+                {words.cancellation}
+              </li>
+              <li className="inline-flex items-center gap-1">
+                <CreditCard size={12.5} aria-hidden style={{ color: "hsl(var(--ink-faint))" }} />
+                {words.payment}
+              </li>
             </>
           ) : plan.cancellationPolicy && (
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck size={13} aria-hidden style={{ color: "hsl(var(--positive))" }} />
+            <li className="inline-flex items-center gap-1">
+              <ShieldCheck size={12.5} aria-hidden style={{ color: "hsl(var(--positive))" }} />
               {plan.cancellationPolicy}
-            </span>
+            </li>
           )}
-        </div>
-
-        {/* Always visible. A total you have to hunt for is only marginally better than one that
-            surprises you at the end. */}
-        <dl
-          className="mt-3 inline-flex flex-wrap gap-x-5 gap-y-1 rounded-[var(--r-sm)] px-3 py-2 text-[12px]"
-          style={{ backgroundColor: "hsl(var(--surface-sunk))", color: "hsl(var(--ink-soft))" }}
-        >
-          <div className="flex gap-1.5">
-            <dt>{s.room.roomsFor(nights)}</dt>
-            <dd className="nums font-semibold">{money(plan.accommodationMinor, plan.currency)}</dd>
-          </div>
-          {plan.charges.map((c) => (
-            <div key={c.name} className="flex gap-1.5">
-              <dt>{c.name}</dt>
-              <dd className="nums font-semibold">{money(c.amountMinor, plan.currency)}</dd>
-            </div>
-          ))}
-        </dl>
+        </ul>
       </div>
 
-      <div className="flex items-end justify-between gap-4 sm:flex-col sm:items-end sm:justify-center">
-        <div className="text-left sm:text-right">
-          <div className="price text-[1.6rem]">{money(plan.totalMinor, plan.currency)}</div>
-          <div className="nums mt-1.5 text-[12px]" style={{ color: "hsl(var(--ink-faint))" }}>
-            {s.room.totalPerNight(money(plan.perNightMinor, plan.currency))}
-          </div>
+      <div className="text-left sm:text-right">
+        <div className="price text-[1.3rem] leading-none sm:text-[1.4rem]">{money(plan.totalMinor, plan.currency)}</div>
+        <div className="nums mt-1 text-[11.5px] leading-tight" style={{ color: "hsl(var(--ink-faint))" }}>
+          {s.room.totalFor(nights)}
+          {extras && <> · {s.room.includes(extras)}</>}
         </div>
-        <a href={href} className="btn btn-brand shrink-0 sm:w-[9rem]">
-          {s.room.select}
-        </a>
       </div>
+
+      <a href={href} className="btn btn-brand shrink-0 px-5">
+        {s.room.select}
+      </a>
     </div>
   );
 }
