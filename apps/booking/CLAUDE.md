@@ -192,7 +192,13 @@ authorise → write the reservation → capture; a failed booking cancels the au
 re-derives the amount (`publicQuoteStay`) and refuses an intent that is not THIS hold's, not in the
 expected state, or not for exactly that amount. The terms agreed are frozen on the reservation
 (`stayTerms`, `onlinePaidMinor`, `balanceChargeMinor/On`) and the PMS folio shows the online payment.
-Not built yet: a pay link for requests.
+**Payment links (2026-10-02).** The desk asks for a payment from RevioCRS (reservation → Request a
+payment): a `PaymentRequest` with a fixed amount and a 14-day token, mailed with the hotel's
+`payment_request` template. The guest pays at `/<slug>/pay/<token>` — charged at once (`mode:
+"charge"`, nothing saved), on the hotel's account; the server checks the intent is this request's,
+for exactly its amount, before marking it paid. RevioPMS folios reconcile every online payment
+(booking, balance, links) by Stripe reference each time they open (`expectedOnlinePayments` /
+`missingOnlinePayments` in core) — a folio opened before the money arrived used to never show it.
 
 ## The guest manages their own booking (2026-09-30)
 

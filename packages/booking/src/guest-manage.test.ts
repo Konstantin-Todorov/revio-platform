@@ -51,3 +51,16 @@ describe("manage token", () => {
     expect(manageTokenMatches("", "")).toBe(false);
   });
 });
+
+import { paymentRequestState } from "./payment-requests.js";
+
+describe("paymentRequestState", () => {
+  const future = new Date(Date.now() + 86_400_000);
+  const past = new Date(Date.now() - 1000);
+  it("is open until its date, expired after, and final once paid or cancelled", () => {
+    expect(paymentRequestState({ status: "open", expiresAt: future })).toBe("open");
+    expect(paymentRequestState({ status: "open", expiresAt: past })).toBe("expired");
+    expect(paymentRequestState({ status: "paid", expiresAt: past })).toBe("paid");
+    expect(paymentRequestState({ status: "cancelled", expiresAt: future })).toBe("cancelled");
+  });
+});

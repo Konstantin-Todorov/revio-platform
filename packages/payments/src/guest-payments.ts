@@ -97,6 +97,12 @@ export async function createGuestIntent(opts: {
    *  balance before arrival, a no-show fee — if it is attached to a Customer; Stripe refuses to
    *  reuse a payment method that was saved without one. */
   guest: { email: string; name: string };
+  /**
+   * `authorise` (default) for a booking: hold the money, capture once the reservation exists.
+   * `charge` for a payment link: the booking already exists, so the money is taken when the guest
+   * confirms, and the card is not saved — they paid once, for one thing.
+   */
+  mode?: "authorise" | "charge";
 }): Promise<CreatedIntent> {
   const cust = await call("POST", "customers", opts.account, {
     email: opts.guest.email, name: opts.guest.name, "metadata[source]": "reviodirect",
@@ -109,8 +115,9 @@ export async function createGuestIntent(opts: {
       ? {
           amount: String(opts.amountMinor),
           currency: opts.currency.toLowerCase(),
-          capture_method: "manual",
-          setup_future_usage: "off_session",
+          ...(opts.mode === "charge"
+            ? {}
+            : { capture_method: "manual", setup_future_usage: "off_session" }),
           // Cards (Apple Pay and Google Pay are cards) — no method that redirects away mid-booking.
           "payment_method_types[]": "card",
           description: opts.description,

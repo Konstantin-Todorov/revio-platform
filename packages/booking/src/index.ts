@@ -15,3 +15,4 @@ export * from "./stay-terms.js";
 export * from "./settle-online.js";
 export * from "./guest-manage.js";
 export * from "./stay-total.js";
+export * from "./payment-requests.js";

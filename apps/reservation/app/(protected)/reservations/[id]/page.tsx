@@ -11,6 +11,7 @@ import { reservations as reservationsDict } from "@/lib/i18n/reservations";
 import { common } from "@/lib/i18n/common";
 import { relativeTimeIn } from "@/lib/i18n/relative";
 import { DateField } from "@revio/ui/date-field";
+import { PaymentLinkCard } from "@/components/reservations/PaymentLinkCard";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function ReservationDetailPage({
   params, searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; payLink?: string }>;
 }) {
   const { id } = await params;
   const sp = await searchParams;
@@ -219,6 +220,10 @@ export default async function ReservationDetailPage({
           </dl>
         </Card>
       </div>
+
+      {(isLive || r.status === "requested") && !r.channelId && (
+        <PaymentLinkCard reservation={r} flash={sp.payLink} />
+      )}
 
       {isLive && line && (
         <Card>

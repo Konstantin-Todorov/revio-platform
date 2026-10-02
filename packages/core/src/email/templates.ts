@@ -123,6 +123,30 @@ With warm regards,
   },
   {
     /*
+     * The hotel asks for a payment after the booking — a deposit on a phone booking, the rest of a
+     * stay. The button is the whole point: it opens the hotel's own page where the guest pays by
+     * card, on the hotel's Stripe account.
+     */
+    key: "payment_request",
+    label: "Payment request",
+    description: "Sent when you ask a guest to pay online with a link (RevioCRS → reservation → Request a payment).",
+    audience: "guest",
+    canDisable: false,
+    variables: { ...GUEST_COMMON, amount: "€150", note: "Deposit for your stay", deadline: "16 October" },
+    defaultSubject: "Payment for your stay — {{amount}} — {{reference}}",
+    defaultBody: `Dear {{guestName}},
+
+To complete your reservation, please pay {{amount}} ({{note}}) securely by card using the button below. The link is valid until {{deadline}}.
+
+{{details}}
+
+If you have any question, simply reply to this message.
+
+With warm regards,
+{{propertyName}}`,
+  },
+  {
+    /*
      * The day before a balance is taken from the guest's saved card. The guest agreed to it at
      * booking, often weeks earlier; a charge nobody remembers is how a hotel earns a chargeback.
      * One line of warning, with the amount and the card, turns that into "yes, I expected it".
@@ -701,6 +725,19 @@ export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string
 С уважение,
 {{propertyName}}`,
     },
+    payment_request: {
+      subject: "Плащане за престоя Ви — {{amount}} — {{reference}}",
+      body: `Уважаеми {{guestName}},
+
+За да завършим резервацията Ви, моля, платете {{amount}} ({{note}}) сигурно с карта чрез бутона по-долу. Връзката е валидна до {{deadline}}.
+
+{{details}}
+
+Ако имате въпрос, просто отговорете на това съобщение.
+
+С уважение,
+{{propertyName}}`,
+    },
     balance_reminder: {
       subject: "Утре ще удържим {{amount}} за престоя Ви — {{reference}}",
       body: `Уважаеми {{guestName}},
@@ -828,6 +865,7 @@ export const EMAIL_STAGE_OF: Record<string, EmailStage> = {
   booking_modified: "booking",
   booking_cancelled: "booking",
   balance_reminder: "before",
+  payment_request: "booking",
   pre_arrival: "before",
   folio_receipt: "after",
   post_stay: "after",
@@ -854,6 +892,7 @@ export const EMAIL_SENT_BY: Record<string, readonly EmailSender[]> = {
   booking_modified: ["crs", "direct"],
   booking_cancelled: ["crs", "direct"],
   balance_reminder: ["direct"],
+  payment_request: ["crs"],
   pre_arrival: ["schedule"],
   folio_receipt: ["pms"],
   post_stay: ["schedule"],

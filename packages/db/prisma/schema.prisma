@@ -1651,6 +1651,7 @@ model Reservation {
   assignments   RoomAssignment[]
   folios        Folio[]
   stayExtras    StayExtra[]
+  paymentRequests PaymentRequest[]
 
   waitlistEntries WaitlistEntry[]
   guestFeedback   GuestFeedback?
@@ -3030,4 +3031,38 @@ model SubmitToken {
   tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([createdAt])
+}
+
+/// A payment the hotel asks a guest for after booking — a deposit on a phone booking, the rest of a
+/// stay, a request-to-book the hotel has now accepted. Staff create it in RevioCRS; the guest pays it
+/// on RevioDirect (`/<slug>/pay/<token>`) with their card, on the HOTEL's own Stripe account.
+///
+/// Its own record rather than another bump of `Reservation.onlinePaidMinor`: the folio reconciles
+/// every online payment by its Stripe reference, and a request is a separate payment with its own
+/// reference, date and amount. `token` is the guest's link — unguessable, single purpose.
+model PaymentRequest {
+  id               String    @id @default(cuid())
+  tenantId         String
+  propertyId       String
+  reservationId    String
+  amountMinor      Int
+  currency         String
+  /// Shown to the guest above the amount: "Deposit for your stay", "Balance".
+  note             String?
+  token            String    @unique
+  /// open | paid | cancelled
+  status           String    @default("open")
+  createdByName    String?
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime
+  emailedAt        DateTime?
+  paidAt           DateTime?
+  paymentRef       String?
+  paymentAccountId String?
+  cardLast4        String?
+
+  reservation Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+
+  @@index([reservationId])
+  @@index([tenantId, status])
 }

@@ -62,6 +62,13 @@ export interface GuestStrings {
     times: (checkIn: string, checkOut: string) => string; allIn: string;
     contact: string; stay: string; help: string; myBooking: string; directions: string; securePay: string; directBenefit: string;
   };
+  pay: {
+    title: (hotel: string) => string; lead: string; amount: string; forStay: string;
+    pay: (amount: string) => string; paying: string;
+    paidTitle: string; paidBody: (amount: string) => string;
+    expiredTitle: string; expiredBody: string; cancelledTitle: string; cancelledBody: string;
+    notOpen: string; notReady: string; failed: string; secure: string;
+  };
   myBooking: {
     title: string; body: string; reference: string; referenceHint: string; email: string;
     send: string; sending: string; sent: string; limited: string;
@@ -302,6 +309,18 @@ export const guest: Translations<GuestStrings> = {
       contact: "Contact", stay: "Your stay", help: "Help", myBooking: "Find, change or cancel my booking",
       directions: "Directions", securePay: "Card payments are processed securely by Stripe — we never see your card number.",
       directBenefit: "Booking here, you book directly with the hotel.",
+    },
+    pay: {
+      title: (h) => `Payment to ${h}`,
+      lead: "The hotel has asked for this payment for your booking. You pay by card, securely, directly to the hotel.",
+      amount: "Amount", forStay: "For your stay",
+      pay: (a) => `Pay ${a}`, paying: "Paying…",
+      paidTitle: "Thank you — it's paid", paidBody: (a) => `${a} has been paid to the hotel. Your bank statement will show the hotel's name.`,
+      expiredTitle: "This payment link has expired", expiredBody: "Please contact the hotel — they can send you a new one.",
+      cancelledTitle: "This payment is no longer needed", cancelledBody: "The hotel withdrew this request. If you think that's a mistake, please contact them.",
+      notOpen: "This payment link is no longer valid.", notReady: "The hotel can't take card payments right now. Please contact them.",
+      failed: "The payment did not go through. Nothing was charged — please try again.",
+      secure: "Card payments are processed securely by Stripe — the hotel and we never see your card number.",
     },
     myBooking: {
       title: "My booking",
@@ -587,6 +606,18 @@ export const guest: Translations<GuestStrings> = {
       contact: "Контакти", stay: "Вашият престой", help: "Помощ", myBooking: "Намерете, променете или откажете резервация",
       directions: "Упътване", securePay: "Плащанията с карта се обработват сигурно от Stripe — ние не виждаме номера на картата Ви.",
       directBenefit: "Резервирайки тук, резервирате директно с хотела.",
+    },
+    pay: {
+      title: (h) => `Плащане към ${h}`,
+      lead: "Хотелът поиска това плащане за Вашата резервация. Плащате с карта, сигурно и директно на хотела.",
+      amount: "Сума", forStay: "За Вашия престой",
+      pay: (a) => `Платете ${a}`, paying: "Плащане…",
+      paidTitle: "Благодарим — платено е", paidBody: (a) => `${a} са платени на хотела. В банковото Ви извлечение ще се вижда името на хотела.`,
+      expiredTitle: "Тази връзка за плащане е изтекла", expiredBody: "Моля, свържете се с хотела — те могат да Ви изпратят нова.",
+      cancelledTitle: "Това плащане вече не е нужно", cancelledBody: "Хотелът оттегли тази заявка. Ако смятате, че е грешка, свържете се с тях.",
+      notOpen: "Тази връзка за плащане вече не е валидна.", notReady: "Хотелът не може да приема плащания с карта в момента. Моля, свържете се с тях.",
+      failed: "Плащането не мина. Нищо не е удържано — опитайте отново.",
+      secure: "Плащанията с карта се обработват сигурно от Stripe — нито хотелът, нито ние виждаме номера на картата Ви.",
     },
     myBooking: {
       title: "Моята резервация",

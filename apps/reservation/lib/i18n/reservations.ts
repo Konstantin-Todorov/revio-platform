@@ -119,6 +119,14 @@ export interface ReservationsStrings {
     cancel: string;
     emailGuest: string;
     online: { paid: string; refunded: string; fee: string; balance: (amount: string, day: string) => string; balanceFailed: string; cancelWill: (refund: string, charge: string) => string; noShowWill: (refund: string, charge: string) => string; waive: string };
+    payLink: {
+      title: string; hint: string; amount: (currency: string) => string; note: string; notePlaceholder: string; send: string; sending: string;
+      outstanding: (amount: string) => string;
+      notReady: string; noEmail: string; amountError: string; sent: string; mailFailed: string;
+      status: { open: string; paid: string; cancelled: string; expired: string };
+      paidWith: (last4: string, day: string) => string; until: (day: string) => string; cancel: string; copy: string;
+      refundNote: string;
+    };
     noShow: string;
     guest: string;
     name: string;
@@ -314,6 +322,20 @@ export const reservations: Translations<ReservationsStrings> = {
         noShowWill: (r, c) => [c ? `${c} no-show fee charged to the card` : "", r ? `${r} goes back to the guest` : ""].filter(Boolean).join(" · ") || "Nothing to refund or charge",
         waive: "Waive the fee (refund everything paid)",
       },
+      payLink: {
+        title: "Request a payment",
+        hint: "Email the guest a secure link to pay by card — a deposit, the balance, or a request you accepted. The money goes to your Stripe account.",
+        amount: (c) => `Amount (${c})`, note: "Shown to the guest", notePlaceholder: "e.g. Deposit for your stay", send: "Send payment link", sending: "Sending…",
+        outstanding: (a) => `Still to pay: ${a}`,
+        notReady: "Payment links need the booking page switched on and Stripe connected (Booking Engine → Payments).",
+        noEmail: "This guest has no email address — add one first.",
+        amountError: "Enter an amount greater than zero.",
+        sent: "Payment link sent to the guest.",
+        mailFailed: "The link was created but the email did not go out — check the guest's address.",
+        status: { open: "Waiting", paid: "Paid", cancelled: "Withdrawn", expired: "Expired" },
+        paidWith: (l, d) => `card •••• ${l} · ${d}`, until: (d) => `valid until ${d}`, cancel: "Withdraw", copy: "Link",
+        refundNote: "Refunds of link payments are made from your Stripe dashboard.",
+      },
       noShow: "Mark no-show",
       guest: "Guest",
       name: "Name",
@@ -505,6 +527,20 @@ export const reservations: Translations<ReservationsStrings> = {
         cancelWill: (r, c) => [r ? `${r} се връщат на госта` : "", c ? `${c} се удържат от картата му` : ""].filter(Boolean).join(" · ") || "Няма нищо за връщане или удръжка",
         noShowWill: (r, c) => [c ? `${c} такса за неявяване се удържат от картата` : "", r ? `${r} се връщат на госта` : ""].filter(Boolean).join(" · ") || "Няма нищо за връщане или удръжка",
         waive: "Без такса (връщане на всичко платено)",
+      },
+      payLink: {
+        title: "Поискай плащане",
+        hint: "Изпратете на госта сигурна връзка за плащане с карта — депозит, остатък или приета заявка. Парите постъпват във Вашия Stripe акаунт.",
+        amount: (c) => `Сума (${c})`, note: "Текст за госта", notePlaceholder: "напр. Депозит за престоя", send: "Изпрати връзка за плащане", sending: "Изпращаме…",
+        outstanding: (a) => `Остава за плащане: ${a}`,
+        notReady: "Връзките за плащане изискват включена страница за директни резервации и свързан Stripe (Система за директни резервации → Плащания).",
+        noEmail: "Гостът няма имейл — добавете го първо.",
+        amountError: "Въведете сума, по-голяма от нула.",
+        sent: "Връзката за плащане е изпратена на госта.",
+        mailFailed: "Връзката е създадена, но имейлът не тръгна — проверете адреса на госта.",
+        status: { open: "Очаква плащане", paid: "Платено", cancelled: "Оттеглено", expired: "Изтекло" },
+        paidWith: (l, d) => `карта •••• ${l} · ${d}`, until: (d) => `валидна до ${d}`, cancel: "Оттегли", copy: "Връзка",
+        refundNote: "Връщане на плащания по връзка се прави от таблото на Stripe.",
       },
       noShow: "Отбележи като неявил се",
       guest: "Гост",

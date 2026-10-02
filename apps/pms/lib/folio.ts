@@ -1,6 +1,6 @@
 import "server-only";
 import { withTenantTransaction, type TenantTx } from "@revio/db";
-import { computeStayCharges, isCityTax, averageNightlyPrice } from "@revio/core";
+import { computeStayCharges, isCityTax, averageNightlyPrice, expectedOnlinePayments, missingOnlinePayments } from "@revio/core";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { postFolioLineWith } from "./posting";
@@ -209,19 +209,45 @@ async function seedPrimaryFolio(client: TenantTx, tenantId: string, propertyId: 
     if (charges > 0) await postFolioLineWith(client, { ...base, kind: "payment", description: "Prepaid via OTA", amountMinor: charges, method: "prepaid_ota" });
   }
 
-  /*
-   * Paid online on RevioDirect. That money is already in the hotel's Stripe balance, so the folio
-   * must show it as paid — otherwise the desk sees the whole stay outstanding and charges the guest
-   * a second time for the part they paid when they booked. The intent id is the ref, so the line
-   * reconciles against the hotel's own Stripe dashboard.
-   */
-  if ((reservation.onlinePaidMinor ?? 0) > 0) {
+  // Online payments (at booking, the balance, payment links) — see `reconcileOnlinePayments`.
+  await reconcileOnlinePayments(client, tenantId, propertyId, reservationId, folioId);
+  return folioId;
+}
+
+/**
+ * Put every online payment the stay has received on its folio, once.
+ *
+ * Money already in the hotel's Stripe balance must show as paid, or the desk sees it outstanding and
+ * charges the guest twice. The folio is opened lazily, so money that arrived AFTER it was opened —
+ * the balance charged before arrival, a payment link paid later — was never posted. Called when the
+ * folio is created and every time it is viewed; `missingOnlinePayments` (core) makes it idempotent.
+ */
+export async function reconcileOnlinePayments(
+  client: TenantTx | typeof prisma, tenantId: string, propertyId: string, reservationId: string, folioId: string,
+): Promise<void> {
+  const db = client as Pick<TenantTx, "reservation" | "folioLine" | "paymentRequest">;
+  const r = await db.reservation.findFirst({
+    where: { id: reservationId },
+    select: { onlinePaidMinor: true, onlinePaymentRef: true, balanceChargeMinor: true, balanceChargedAt: true, balancePaymentRef: true },
+  });
+  if (!r) return;
+  const links = await db.paymentRequest.findMany({
+    where: { reservationId, status: "paid" },
+    select: { paymentRef: true, amountMinor: true },
+  });
+  const expected = expectedOnlinePayments(r, links);
+  if (expected.length === 0) return;
+  const posted = await db.folioLine.findMany({
+    where: { folio: { reservationId }, kind: "payment", voided: false },
+    select: { ref: true, amountMinor: true },
+  });
+  const words = { booking: "Paid online (RevioDirect)", balance: "Balance charged online (RevioDirect)", link: "Paid by payment link (RevioDirect)" };
+  for (const m of missingOnlinePayments(expected, posted)) {
     await postFolioLineWith(client, {
-      ...base, kind: "payment", description: "Paid online (RevioDirect)",
-      amountMinor: reservation.onlinePaidMinor!, method: "card", ref: reservation.onlinePaymentRef ?? null,
+      tenantId, propertyId, folioId, kind: "payment", description: words[m.kind],
+      amountMinor: m.amountMinor, method: "card", ref: m.ref,
     });
   }
-  return folioId;
 }
 
 /** The folio view for /folio/[reservationId]: ensures the primary folio exists, returns reservation +
@@ -234,7 +260,9 @@ export async function getFolioView(reservationId: string) {
   });
   if (!reservation) return null;
 
-  await ensureFolio(session.tenantId, property.id, reservationId);
+  const primaryId = await ensureFolio(session.tenantId, property.id, reservationId);
+  // Money that reached Stripe after the folio was opened (the balance, a payment link).
+  if (primaryId) await reconcileOnlinePayments(prisma, session.tenantId, property.id, reservationId, primaryId);
   const folioRows = await prisma.folio.findMany({
     where: { reservationId },
     orderBy: [{ isPrimary: "desc" }, { openedAt: "asc" }],

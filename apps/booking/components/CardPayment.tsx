@@ -27,14 +27,14 @@ export interface CardConfig {
 }
 
 const cache = new Map<string, Promise<Stripe | null>>();
-function stripeFor(pk: string, account: string | null): Promise<Stripe | null> {
+export function stripeFor(pk: string, account: string | null): Promise<Stripe | null> {
   const k = `${pk}:${account ?? ""}`;
   if (!cache.has(k)) cache.set(k, loadStripe(pk, account ? { stripeAccount: account } : undefined));
   return cache.get(k)!;
 }
 
 /** Reads the page's own brand colour so the card fields wear the hotel's colour, not Stripe's blue. */
-function cssVar(name: string, fallback: string): string {
+export function cssVar(name: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v ? `hsl(${v.replace(/\s+/g, " ")})` : fallback;

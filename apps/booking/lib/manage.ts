@@ -108,7 +108,7 @@ export async function mailGuest(
  * the reservation mailbox the hotel gave us, in the team's language, beside the audit entry and the
  * CRS notification. A REQUEST says so in its subject: nothing happens until somebody accepts it.
  */
-export type HotelAlert = "new" | "requested" | "cancelled" | "changed";
+export type HotelAlert = "new" | "requested" | "cancelled" | "changed" | "paid";
 
 /** One extra line for the hotel's mail, in both team languages — the mail picks one. */
 export type AlertLine = { en: string; bg: string };
@@ -130,6 +130,7 @@ export async function alertHotel(property: PublicProperty, what: HotelAlert, r: 
       requested: bg ? `Заявка за потвърждение: ${ref} · ${who}` : `Booking request to confirm: ${ref} · ${who}`,
       cancelled: bg ? `Отказана от госта: ${ref} · ${who}` : `Cancelled by the guest: ${ref} · ${who}`,
       changed: bg ? `Променена от госта: ${ref} · ${who}` : `Changed by the guest: ${ref} · ${who}`,
+      paid: bg ? `Получено плащане по връзка: ${ref} · ${who}` : `Payment received by link: ${ref} · ${who}`,
     };
     const leads = {
       new: bg ? `${who} резервира от сайта Ви за директни резервации.` : `${who} booked on your direct booking page.`,
@@ -138,6 +139,7 @@ export async function alertHotel(property: PublicProperty, what: HotelAlert, r: 
         : `${who} sent a request on your direct booking page. The room is held, but the booking is NOT confirmed — accept or decline it in RevioCRS.`,
       cancelled: bg ? `${who} отказа резервация ${ref} от сайта за директни резервации.` : `${who} cancelled booking ${ref} on your direct booking page.`,
       changed: bg ? `${who} промени датите на резервация ${ref} от сайта за директни резервации.` : `${who} changed the dates of booking ${ref} on your direct booking page.`,
+      paid: bg ? `${who} плати по връзката за плащане, която изпратихте. Парите са във Вашия Stripe акаунт.` : `${who} paid the payment link you sent. The money is in your Stripe account.`,
     };
     const subject = subjects[what];
     const line = r.lines[0];
@@ -147,7 +149,7 @@ export async function alertHotel(property: PublicProperty, what: HotelAlert, r: 
           `${bg ? "Престой" : "Stay"}: ${day(line.checkIn)} → ${day(line.checkOut)}`,
           `${bg ? "Стая" : "Room"}: ${line.roomType?.name ?? ""}${line.ratePlan?.name ? ` · ${line.ratePlan.name}` : ""}`,
           `${bg ? "Гости" : "Guests"}: ${line.guestsCount ?? ""}`,
-          ...(what === "cancelled" ? [] : [`${bg ? "Общо" : "Total"}: ${formatMoney(await allInTotal(property, r), r.currency, bg ? "bg" : "en")}`]),
+          ...(what === "cancelled" || what === "paid" ? [] : [`${bg ? "Общо" : "Total"}: ${formatMoney(await allInTotal(property, r), r.currency, bg ? "bg" : "en")}`]),
           ...(r.guest?.email ? [`E-mail: ${r.guest.email}`] : []),
           ...(r.guest?.phone ? [`${bg ? "Телефон" : "Phone"}: ${r.guest.phone}`] : []),
         ]
