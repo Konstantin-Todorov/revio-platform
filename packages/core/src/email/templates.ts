@@ -122,6 +122,30 @@ With warm regards,
 {{propertyName}}`,
   },
   {
+    /*
+     * The day before a balance is taken from the guest's saved card. The guest agreed to it at
+     * booking, often weeks earlier; a charge nobody remembers is how a hotel earns a chargeback.
+     * One line of warning, with the amount and the card, turns that into "yes, I expected it".
+     */
+    key: "balance_reminder",
+    label: "Balance charge reminder",
+    description: "Sent the day before the agreed balance is charged to the guest's saved card.",
+    audience: "guest",
+    canDisable: true,
+    variables: { ...GUEST_COMMON, amount: "€254.10", chargeDate: "3 November", cardLast4: "4242" },
+    defaultSubject: "Tomorrow we will charge {{amount}} for your stay — {{reference}}",
+    defaultBody: `Dear {{guestName}},
+
+As agreed when you booked, tomorrow, {{chargeDate}}, we will charge {{amount}} to your card ending {{cardLast4}} for your stay with us.
+
+{{details}}
+
+You do not need to do anything. If you would like to use a different card, or have any question, simply reply to this message.
+
+With warm regards,
+{{propertyName}}`,
+  },
+  {
     key: "pre_arrival",
     label: "Before arrival",
     description: "A friendly note a few days before check-in — directions, check-in time, extras.",
@@ -677,6 +701,19 @@ export const EMAIL_TRANSLATIONS: Record<string, Record<string, { subject: string
 С уважение,
 {{propertyName}}`,
     },
+    balance_reminder: {
+      subject: "Утре ще удържим {{amount}} за престоя Ви — {{reference}}",
+      body: `Уважаеми {{guestName}},
+
+Както се договорихме при резервацията, утре, {{chargeDate}}, ще удържим {{amount}} от картата Ви, завършваща на {{cardLast4}}, за престоя Ви при нас.
+
+{{details}}
+
+Не е нужно да правите нищо. Ако желаете да използвате друга карта или имате въпрос, просто отговорете на това съобщение.
+
+С уважение,
+{{propertyName}}`,
+    },
     pre_arrival: {
       subject: "Очакваме Ви в {{propertyName}}",
       body: `Уважаеми {{guestName}},
@@ -790,6 +827,7 @@ export const EMAIL_STAGE_OF: Record<string, EmailStage> = {
   booking_requested: "booking",
   booking_modified: "booking",
   booking_cancelled: "booking",
+  balance_reminder: "before",
   pre_arrival: "before",
   folio_receipt: "after",
   post_stay: "after",
@@ -812,8 +850,10 @@ export type EmailSender = "direct" | "crs" | "pms" | "schedule";
 export const EMAIL_SENT_BY: Record<string, readonly EmailSender[]> = {
   booking_confirmation: ["direct", "crs"],
   booking_requested: ["direct"],
-  booking_modified: ["crs"],
-  booking_cancelled: ["crs"],
+  // "direct" too: a guest changing or cancelling on the booking page is sent the same mail.
+  booking_modified: ["crs", "direct"],
+  booking_cancelled: ["crs", "direct"],
+  balance_reminder: ["direct"],
   pre_arrival: ["schedule"],
   folio_receipt: ["pms"],
   post_stay: ["schedule"],

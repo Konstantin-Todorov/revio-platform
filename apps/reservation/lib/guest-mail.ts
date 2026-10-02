@@ -1,6 +1,6 @@
 import "server-only";
 import { sendTemplatedEmail } from "@revio/email";
-import { bookingReference } from "@revio/booking";
+import { bookingReference, storedStayTotal } from "@revio/booking";
 import { stayDetails } from "@revio/core";
 import { setFlash } from "@revio/ui/flash";
 import { prisma } from "./db";
@@ -42,6 +42,8 @@ export async function emailGuestAbout(reservationId: string, key: StayEmailKey):
     const reference = bookingReference(r.id);
     const checkIn = line.checkIn.toISOString().slice(0, 10);
     const checkOut = line.checkOut.toISOString().slice(0, 10);
+    // All in — rooms, extras, taxes and fees — the same figure the guest's confirmation stated.
+    const total = key === "booking_cancelled" ? null : await storedStayTotal(prisma, r.id);
     const res = await sendTemplatedEmail(prisma, {
       propertyId: r.propertyId,
       key,
@@ -66,7 +68,7 @@ export async function emailGuestAbout(reservationId: string, key: StayEmailKey):
         checkOutTime: r.property.checkOutTime,
         guests: line.guestsCount ?? null,
         // A cancellation states no total: there is nothing left to pay, and a figure there reads as a charge.
-        ...(key === "booking_cancelled" ? {} : { totalMinor: r.totalMinor, currency: r.currency }),
+        ...(total ? { totalMinor: total.totalMinor, currency: total.currency } : {}),
       }),
     });
     if (res.skipped) return "switched-off";

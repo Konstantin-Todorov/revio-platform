@@ -47,12 +47,24 @@ export async function cancelMyBooking(fd: FormData): Promise<void> {
   if (fresh) {
     await mailGuest(property, fresh, "booking_cancelled", null);
     const s = res.ok ? res.settled : null;
-    const money = (m: number) => formatMoney(m, r.currency, "en");
+    const m = (x: number, l: string) => formatMoney(x, r.currency, l);
     await alertHotel(property, "cancelled", fresh, [
-      s && s.feeMinor > 0 ? `Cancellation fee: ${money(s.feeMinor)}` : "No cancellation fee.",
-      s && s.refundMinor > 0 ? `Refunded to the guest's card: ${money(s.refundMinor)}${s.refunded ? "" : " — REFUND FAILED, please check Stripe"}` : null,
-      s && s.chargeMinor > 0 ? `Charged to the guest's card: ${money(s.chargeMinor)}${s.charged ? "" : " — CHARGE FAILED, please check Stripe"}` : null,
-    ].filter(Boolean).join("\n"));
+      s && s.feeMinor > 0
+        ? { en: `Cancellation fee: ${m(s.feeMinor, "en")}`, bg: `Такса за анулиране: ${m(s.feeMinor, "bg")}` }
+        : { en: "No cancellation fee.", bg: "Без такса за анулиране." },
+      ...(s && s.refundMinor > 0
+        ? [{
+            en: `Refunded to the guest's card: ${m(s.refundMinor, "en")}${s.refunded ? "" : " — REFUND FAILED, check Stripe"}`,
+            bg: `Върнати по картата на госта: ${m(s.refundMinor, "bg")}${s.refunded ? "" : " — ВРЪЩАНЕТО НЕ МИНА, проверете в Stripe"}`,
+          }]
+        : []),
+      ...(s && s.chargeMinor > 0
+        ? [{
+            en: `Charged to the guest's card: ${m(s.chargeMinor, "en")}${s.charged ? "" : " — CHARGE FAILED, check Stripe"}`,
+            bg: `Удържани от картата на госта: ${m(s.chargeMinor, "bg")}${s.charged ? "" : " — УДЪРЖАНЕТО НЕ МИНА, проверете в Stripe"}`,
+          }]
+        : []),
+    ]);
   }
   redirect(back);
 }
@@ -100,7 +112,7 @@ export async function changeMyBooking(fd: FormData): Promise<PreviewResult> {
       label: kit.s.manage.linkEmailCta,
       url: await manageUrl(property, fresh.id, fresh.guestManageToken),
     });
-    await alertHotel(property, "changed", fresh, `Was: ${was}\nNow: ${res.preview.checkIn} → ${res.preview.checkOut}\nNew total: ${formatMoney(res.preview.totalMinor, res.preview.currency, "en")}`);
+    await alertHotel(property, "changed", fresh, [{ en: `Previous dates: ${was}`, bg: `Предишни дати: ${was}` }]);
   }
   redirect(`/${property.slug}/booking/${bookingReference(r.id)}?k=${encodeURIComponent(str(fd, "k"))}&changed=1`);
 }

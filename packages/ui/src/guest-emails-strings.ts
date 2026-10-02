@@ -118,8 +118,9 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
     templates: {
       booking_confirmation: { label: "Booking confirmation", when: "When a booking is made on your booking page, or confirmed in RevioCRS" },
       booking_requested: { label: "Booking request received", when: "When a guest asks for a room on your booking page and you confirm it yourself — the confirmation follows when you accept" },
-      booking_modified: { label: "Booking changed", when: "When the dates, room or price of a booking change in RevioCRS" },
-      booking_cancelled: { label: "Booking cancelled", when: "When a booking is cancelled in RevioCRS" },
+      booking_modified: { label: "Booking changed", when: "When the dates, room or price of a booking change in RevioCRS, or the guest changes the dates on your booking page" },
+      booking_cancelled: { label: "Booking cancelled", when: "When a booking is cancelled in RevioCRS, or by the guest on your booking page" },
+      balance_reminder: { label: "Balance charge reminder", when: "The day before the agreed balance is charged to the guest's saved card" },
       pre_arrival: { label: "Before arrival", when: "Three days before check-in, in the morning at the hotel" },
       folio_receipt: { label: "Bill / receipt", when: "At check-out in RevioPMS, with the itemised bill" },
       post_stay: { label: "After departure", when: "The day after check-out, in the morning at the hotel" },
@@ -217,8 +218,9 @@ export const guestEmailsStrings: Translations<GuestEmailsStrings> = {
     templates: {
       booking_confirmation: { label: "Потвърждение на резервация", when: "При резервация от системата за директни резервации или потвърждение в RevioCRS" },
       booking_requested: { label: "Получена заявка за резервация", when: "Когато гост поиска стая от системата за директни резервации и Вие я потвърждавате — потвърждението тръгва, когато я приемете" },
-      booking_modified: { label: "Променена резервация", when: "Когато датите, стаята или цената на резервация се променят в RevioCRS" },
-      booking_cancelled: { label: "Анулирана резервация", when: "Когато резервация се анулира в RevioCRS" },
+      booking_modified: { label: "Променена резервация", when: "Когато датите, стаята или цената на резервация се променят в RevioCRS или гостът смени датите в системата за директни резервации" },
+      booking_cancelled: { label: "Анулирана резервация", when: "Когато резервация се анулира в RevioCRS или от госта в системата за директни резервации" },
+      balance_reminder: { label: "Напомняне за удържане на остатъка", when: "Ден преди договореният остатък да бъде удържан от запазената карта на госта" },
       pre_arrival: { label: "Преди пристигане", when: "Три дни преди настаняването, сутринта по часа на хотела" },
       folio_receipt: { label: "Сметка", when: "При напускане в RevioPMS, с подробната сметка" },
       post_stay: { label: "Благодарност след престоя", when: "На следващия ден след напускане, сутринта по часа на хотела" },

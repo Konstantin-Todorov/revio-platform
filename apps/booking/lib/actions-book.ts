@@ -9,7 +9,7 @@ import { PAY_AT_HOTEL_LABEL, stayDetails, type StayTerms } from "@revio/core";
 import { claimSubmitToken, forSystem } from "@revio/db";
 import { serverKit } from "./i18n/server";
 import { getPublicProperty } from "./property";
-import { manageUrl } from "./manage";
+import { alertHotel, findByReference, manageUrl } from "./manage";
 import { nightsBetween } from "./dates";
 
 /**
@@ -278,6 +278,21 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
     });
   } catch {
     /* logged by the transport; the guest already has their confirmation on screen */
+  }
+
+  // The hotel hears about it too — a request most of all, because nothing happens until they accept.
+  const booked = await findByReference(property, reference);
+  if (booked) {
+    const paid = payment && payment.paidMinor > 0 ? payment.paidMinor : 0;
+    const money = (m: number, l: string) => formatMoney(m, property.baseCurrency, l);
+    await alertHotel(property, requestOnly ? "requested" : "new", booked, [
+      ...(paid > 0
+        ? [{ en: `Paid online now: ${money(paid, "en")}`, bg: `Платено онлайн сега: ${money(paid, "bg")}` }]
+        : booked.guaranteeLast4
+          ? [{ en: `Card on file as a guarantee (•••• ${booked.guaranteeLast4})`, bg: `Карта за гаранция (•••• ${booked.guaranteeLast4})` }]
+          : [{ en: "Nothing paid online — payment at the hotel.", bg: "Нищо не е платено онлайн — плащане в хотела." }]),
+      ...(str(fd, "note") ? [{ en: `Guest note: ${str(fd, "note")}`, bg: `Бележка от госта: ${str(fd, "note")}` }] : []),
+    ]);
   }
 
   // Outside any try/catch on purpose: `redirect` throws by design in Next, and swallowing it would

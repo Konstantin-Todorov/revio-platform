@@ -1618,6 +1618,9 @@ model Reservation {
   balanceChargedAt   DateTime?
   balancePaymentRef  String?
   balanceChargeError String?
+  /// When the guest was told the balance comes off their card tomorrow (template `balance_reminder`).
+  /// Stamped once, so a job running every hour mails once.
+  balanceReminderSentAt DateTime?
   feeChargedMinor    Int?
   refundedOnlineMinor Int?
   /// The guest's key to manage this booking on RevioDirect (cancel, change dates) — sent in the

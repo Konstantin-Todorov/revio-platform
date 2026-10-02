@@ -1,10 +1,11 @@
 import "server-only";
 import { headers } from "next/headers";
 import { forSystem, forTenant, teamLocale } from "@revio/db";
-import { bookingReference, manageTokenMatches } from "@revio/booking";
-import { computeStayCharges, extrasTotalMinor, stayDetails } from "@revio/core";
+import { bookingReference, manageTokenMatches, storedStayTotal } from "@revio/booking";
+import { stayDetails } from "@revio/core";
 import { sendEmail, sendTemplatedEmail } from "@revio/email";
 import type { PublicProperty } from "./property";
+import { productOrigin } from "@revio/ui/product-links";
 
 /**
  * The pieces the manage page and its actions share: finding a booking by its reference, checking
@@ -54,23 +55,9 @@ export function formatMoney(minor: number, currency: string, locale = "en"): str
   return new Intl.NumberFormat(locale === "bg" ? "bg-BG" : "en-GB", { style: "currency", currency }).format(minor / 100);
 }
 
-/** The all-in total for a stored reservation — rebuilt the way the confirmation page does it. */
+/** The all-in total for a stored reservation — the shared implementation, see `storedStayTotal`. */
 export async function allInTotal(property: PublicProperty, r: FoundReservation): Promise<number> {
-  const db = forTenant(property.tenantId);
-  const line = r.lines[0];
-  if (!line) return 0;
-  const nights = Math.round((line.checkOut.getTime() - line.checkIn.getTime()) / 86_400_000);
-  const [fees, defaults, extras] = await Promise.all([
-    db.taxFee.findMany({ where: { propertyId: property.id, active: true } }),
-    db.propertyDefaults.findFirst({ where: { propertyId: property.id } }),
-    db.stayExtra.findMany({ where: { reservationId: r.id, active: true }, select: { priceMinor: true, basis: true } }),
-  ]);
-  return computeStayCharges({
-    stay: { accommodationMinor: line.priceMinor ?? 0, nights, rooms: 1, guests: line.guestsCount ?? 2 },
-    fees: fees as never,
-    cityTaxIncluded: defaults?.cityTaxMode === "included",
-    extrasMinor: extrasTotalMinor(extras.map((e) => ({ priceMinor: e.priceMinor, basis: e.basis === "per_stay" ? "per_stay" as const : "per_night" as const })), nights),
-  }).totalMinor;
+  return (await storedStayTotal(forTenant(property.tenantId), r.id))?.totalMinor ?? 0;
 }
 
 /**
@@ -116,11 +103,17 @@ export async function mailGuest(
 }
 
 /**
- * Tell the hotel. A guest changing their own booking is exactly the event a hotel must not learn
- * about from an empty room — so it goes to the reservation mailbox the hotel gave us, in the team's
- * language, beside the audit entry and the CRS notification.
+ * Tell the hotel. A booking arriving on the hotel's own page — or a guest changing one — is exactly
+ * the event a hotel must not learn about from an empty room or a guest at the desk. So it goes to
+ * the reservation mailbox the hotel gave us, in the team's language, beside the audit entry and the
+ * CRS notification. A REQUEST says so in its subject: nothing happens until somebody accepts it.
  */
-export async function alertHotel(property: PublicProperty, what: "cancelled" | "changed", r: FoundReservation, detail: string): Promise<void> {
+export type HotelAlert = "new" | "requested" | "cancelled" | "changed";
+
+/** One extra line for the hotel's mail, in both team languages — the mail picks one. */
+export type AlertLine = { en: string; bg: string };
+
+export async function alertHotel(property: PublicProperty, what: HotelAlert, r: FoundReservation, extra: AlertLine[] = []): Promise<void> {
   try {
     const p = await forSystem().property.findUnique({
       where: { id: property.id },
@@ -131,12 +124,43 @@ export async function alertHotel(property: PublicProperty, what: "cancelled" | "
     const bg = (await teamLocale(property.tenantId, to)) === "bg";
     const ref = bookingReference(r.id);
     const who = r.guestName ?? "";
-    const subject = bg
-      ? `${what === "cancelled" ? "Отказана" : "Променена"} от госта: ${ref} · ${who}`
-      : `${what === "cancelled" ? "Cancelled" : "Changed"} by the guest: ${ref} · ${who}`;
-    const text = bg
-      ? `${who} ${what === "cancelled" ? "отказа" : "промени датите на"} резервация ${ref} от сайта за директни резервации.\n\n${detail}\n\nНаличността вече е обновена навсякъде. Подробностите са в RevioCRS → Резервации.`
-      : `${who} ${what === "cancelled" ? "cancelled" : "changed the dates of"} booking ${ref} on your direct booking page.\n\n${detail}\n\nAvailability is already updated everywhere. Details are in RevioCRS → Reservations.`;
+    const link = `${productOrigin("crs")}/reservations/${r.id}`;
+    const subjects = {
+      new: bg ? `Нова директна резервация: ${ref} · ${who}` : `New direct booking: ${ref} · ${who}`,
+      requested: bg ? `Заявка за потвърждение: ${ref} · ${who}` : `Booking request to confirm: ${ref} · ${who}`,
+      cancelled: bg ? `Отказана от госта: ${ref} · ${who}` : `Cancelled by the guest: ${ref} · ${who}`,
+      changed: bg ? `Променена от госта: ${ref} · ${who}` : `Changed by the guest: ${ref} · ${who}`,
+    };
+    const leads = {
+      new: bg ? `${who} резервира от сайта Ви за директни резервации.` : `${who} booked on your direct booking page.`,
+      requested: bg
+        ? `${who} изпрати заявка от сайта Ви за директни резервации. Стаята е задържана, но резервацията НЕ е потвърдена — потвърдете или откажете я в RevioCRS.`
+        : `${who} sent a request on your direct booking page. The room is held, but the booking is NOT confirmed — accept or decline it in RevioCRS.`,
+      cancelled: bg ? `${who} отказа резервация ${ref} от сайта за директни резервации.` : `${who} cancelled booking ${ref} on your direct booking page.`,
+      changed: bg ? `${who} промени датите на резервация ${ref} от сайта за директни резервации.` : `${who} changed the dates of booking ${ref} on your direct booking page.`,
+    };
+    const subject = subjects[what];
+    const line = r.lines[0];
+    const day = (d: Date) => d.toLocaleDateString(bg ? "bg-BG" : "en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    const facts = line
+      ? [
+          `${bg ? "Престой" : "Stay"}: ${day(line.checkIn)} → ${day(line.checkOut)}`,
+          `${bg ? "Стая" : "Room"}: ${line.roomType?.name ?? ""}${line.ratePlan?.name ? ` · ${line.ratePlan.name}` : ""}`,
+          `${bg ? "Гости" : "Guests"}: ${line.guestsCount ?? ""}`,
+          ...(what === "cancelled" ? [] : [`${bg ? "Общо" : "Total"}: ${formatMoney(await allInTotal(property, r), r.currency, bg ? "bg" : "en")}`]),
+          ...(r.guest?.email ? [`E-mail: ${r.guest.email}`] : []),
+          ...(r.guest?.phone ? [`${bg ? "Телефон" : "Phone"}: ${r.guest.phone}`] : []),
+        ]
+      : [];
+    const text = [
+      leads[what],
+      "",
+      ...facts,
+      ...extra.map((x) => (bg ? x.bg : x.en)),
+      "",
+      bg ? "Наличността вече е обновена навсякъде." : "Availability is already updated everywhere.",
+      bg ? `Отворете резервацията: ${link}` : `Open the booking: ${link}`,
+    ].join("\n");
     await sendEmail({ to, subject, text });
   } catch {
     /* never blocks the guest */
