@@ -19,4 +19,17 @@ describe("channexAddress", () => {
   it("never sends Ruse for a hotel that told us its town", () => {
     expect(channexAddress("Main square 1, 5000 Велико Търново").city).toBe("Велико Търново");
   });
+
+  it("finds a post code written as its own part, and keeps the town", () => {
+    expect(channexAddress("Boyam Bachvarov str. 109, 9007, Chaika, Varna")).toEqual({
+      address: "Boyam Bachvarov str. 109, Chaika", city: "Varna", zip: "9007", country: "BG", state: "Varna",
+    });
+  });
+
+  it("does not mistake a lone post code for the town", () => {
+    const a = channexAddress("ул. Морска 5, 8000");
+    expect(a.zip).toBe("8000");
+    expect(a.address).toBe("ул. Морска 5");
+    expect(a.city).not.toBe("8000");
+  });
 });

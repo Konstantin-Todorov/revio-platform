@@ -160,7 +160,22 @@ export function channexAddress(
       break;
     }
   }
-  if (!city && parts.length > 1) {
+  // A post code written as its own part — "…str. 109, 9007, Chaika, Varna" — is still the post code.
+  // Without this the 9007 stayed in the street and OUR fallback 7002 (Ruse) went to Channex.
+  if (!zip) {
+    const zi = parts.findIndex((p) => /^\d{4,5}$/.test(p));
+    if (zi >= 0) {
+      zip = parts[zi]!;
+      const rest = parts.filter((_, j) => j !== zi);
+      if (!city && rest.length > 1) {
+        city = rest[rest.length - 1]!;
+        street = rest.slice(0, -1).join(", ");
+      } else {
+        street = rest.join(", ");
+      }
+    }
+  }
+  if (!city && !zip && parts.length > 1) {
     city = parts[parts.length - 1]!;
     street = parts.slice(0, -1).join(", ");
   }
