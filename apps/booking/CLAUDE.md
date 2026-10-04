@@ -223,6 +223,25 @@ The rules live in `@revio/booking/guest-manage.ts`, never in the page:
 Both write an audit entry, push availability, mail the guest (the hotel's own template) and alert
 the hotel's reservation mailbox in the team's language.
 
+## Children and several rooms (2026-10-04)
+
+**Children** are asked by AGE (`ages=5,1`), and the hotel's bands (`PropertyDefaults.ageInfantMax`
+/ `ageChildMax`) decide the rest through `partyOf` in core: an infant takes a cot (not counted against
+`maxGuests`, the rate's infant fee), a child takes a bed (the rate's child fee per night, set in
+RevioCRS → the rate plan → Price → Children and infants), anyone older is priced and taxed as an
+adult. Adult occupancy and children stay separate axes (OBP §6.9). A line stores `guestsCount` (priced
+adults) plus `childrenCount`, `infantsCount` and `childAges` (only the young ones — an older child is
+already in `guestsCount`, so re-pricing never counts them twice).
+
+**Several rooms** (`rooms=2-5.1|2`): the guest picks one room per slot on the results page, each
+searched with its own party (`GroupSteps`, `lib/group.ts`); a type picked earlier counts against the
+same type later. Every room is held, then becomes **its own reservation** sharing `bookingGroupId` —
+so cancelling, changing, billing and channel pushes work per room with no new rules. One card payment
+covers the group (authorise the sum → write every room → capture); a room that cannot be written voids
+the ones already written (`voidGroupReservations`) and releases the money. Each reservation records its
+own share (`onlinePaidMinor`) of the shared intent, so cancelling one room refunds exactly its share.
+The first room's manage key opens every room of the group. One confirmation email lists all rooms.
+
 ## The price calendar
 
 The date picker shows the lowest all-in price per night under each date (`publicPriceCalendar`):

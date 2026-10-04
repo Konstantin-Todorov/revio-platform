@@ -25,7 +25,7 @@ async function load(slug: string, reference: string, key: string) {
   const property = await getPublicProperty(slug);
   if (!property) return null;
   const r = await findByReference(property, reference);
-  if (!r || !mayManage(r, key)) return null;
+  if (!r || !(await mayManage(r, key))) return null;
   return { property, r };
 }
 

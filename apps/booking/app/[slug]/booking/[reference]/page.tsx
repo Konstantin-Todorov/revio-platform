@@ -12,7 +12,7 @@ import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
 import { AskManageLink, ManagePanel } from "@/components/ManageBooking";
-import { manageAbility, previewSettlement } from "@revio/booking";
+import { bookingReference, manageAbility, previewSettlement } from "@revio/booking";
 import { todayInTimeZone } from "@revio/core";
 import { mayManage } from "@/lib/manage";
 
@@ -65,6 +65,8 @@ export default async function ConfirmationPage({
           guestId: reservation.guest.id,
           id: { not: reservation.id },
           status: { in: [...SOLD_STATUSES] },
+          // Rooms booked together with this one are not earlier stays.
+          ...(reservation.bookingGroupId ? { NOT: { bookingGroupId: reservation.bookingGroupId } } : {}),
         },
         select: { lines: { select: { checkIn: true }, orderBy: { checkIn: "desc" }, take: 1 } },
       })
@@ -129,7 +131,15 @@ export default async function ConfirmationPage({
    * visitor change it. Without the key, the page offers to email that link — never the buttons.
    */
   const today = todayInTimeZone(property.timezone);
-  const canManage = mayManage(reservation, sp.k);
+  const canManage = await mayManage(reservation, sp.k);
+  // Rooms booked together: the others in the group, each its own reservation and reference.
+  const siblings = reservation.bookingGroupId
+    ? await db.reservation.findMany({
+        where: { propertyId: property.id, bookingGroupId: reservation.bookingGroupId, id: { not: reservation.id } },
+        select: { id: true, status: true, lines: { select: { roomType: { select: { name: true } }, guestsCount: true, childrenCount: true, infantsCount: true }, take: 1 } },
+        orderBy: { importedAt: "asc" },
+      })
+    : [];
   const ability = manageAbility({ ...reservation, checkIn, today });
   const m = t.manage;
   const settlement = previewSettlement(reservation, "cancel", today);
@@ -294,6 +304,28 @@ export default async function ConfirmationPage({
             )}
           </div>
         </section>
+
+        {siblings.length > 0 && (
+          <section className="card mt-5 p-5">
+            <h2 className="eyebrow">{t.group.othersTitle}</h2>
+            <ul className="mt-2 space-y-1.5 text-[13.5px]">
+              {siblings.map((sib) => {
+                const l = sib.lines[0];
+                const ref = bookingReference(sib.id);
+                return (
+                  <li key={sib.id} className="flex flex-wrap items-baseline justify-between gap-2">
+                    <a href={`/${property.slug}/booking/${ref}${sp.k ? `?k=${encodeURIComponent(sp.k)}` : ""}`} className="link-quiet font-semibold">
+                      {l?.roomType.name ?? ref} · {ref}
+                    </a>
+                    <span style={{ color: "hsl(var(--ink-soft))" }}>
+                      {sib.status === "cancelled" ? t.group.cancelled : t.bar.party(l?.guestsCount ?? 2, (l?.childrenCount ?? 0) + (l?.infantsCount ?? 0))}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {!cancelled && (ability.canCancel || ability.canChange) && (
           canManage ? (

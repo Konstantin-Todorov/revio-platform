@@ -40,6 +40,7 @@ export function SearchBar({
   defaultCheckOut,
   defaultGuests = 2,
   defaultChildAges = [],
+  defaultRooms = [],
   compact = false,
   onDark = false,
 }: {
@@ -49,6 +50,8 @@ export function SearchBar({
   defaultGuests?: number;
   /** Children's ages from the URL (`ages=4,7`). */
   defaultChildAges?: number[];
+  /** Several rooms (`rooms=2-5.1|2`) — when present, wins over guests/ages. */
+  defaultRooms?: { adults: number; childAges: number[] }[];
   /** The results-page variant: shorter segments, no helper line — it sits above live results. */
   compact?: boolean;
   /**
@@ -71,9 +74,16 @@ export function SearchBar({
   const [checkOut, setCheckOut] = useState<string | null>(
     isValidISO(defaultCheckOut) ? defaultCheckOut : addDays(todayISO(), 3),
   );
-  const [guests, setGuests] = useState(defaultGuests);
-  // One entry per child; null until the guest picks the age — a guessed age misprices silently.
-  const [ages, setAges] = useState<(number | null)[]>(defaultChildAges);
+  /*
+   * One entry per room, each with its own adults and children. A child's age is null until the guest
+   * picks it — a guessed age misprices silently. One room is still sent as plain `guests`/`ages`, so
+   * every link already in an email keeps working.
+   */
+  const [rooms, setRooms] = useState<RoomState[]>(
+    defaultRooms.length > 1 ? defaultRooms.map((r) => ({ adults: r.adults, ages: r.childAges })) : [{ adults: defaultGuests, ages: defaultChildAges }],
+  );
+  const guests = rooms[0]!.adults;
+  const ages = rooms[0]!.ages;
   const [panel, setPanel] = useState<"dates" | "guests" | null>(null);
   const { s: t, fmtDay } = useGuestKit();
   const s = t.bar;
@@ -82,9 +92,11 @@ export function SearchBar({
   const ref = useDismiss<HTMLDivElement>(panel !== null, close);
 
   const nights = checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 0;
-  const agesKnown = ages.every((a) => a != null);
+  const agesKnown = rooms.every((r) => r.ages.every((a) => a != null));
   const ready = !!checkIn && !!checkOut && nights > 0 && agesKnown;
-  const partyLabel = s.party(guests, ages.length);
+  const totalAdults = rooms.reduce((n, r) => n + r.adults, 0);
+  const totalKids = rooms.reduce((n, r) => n + r.ages.length, 0);
+  const partyLabel = rooms.length > 1 ? s.roomsParty(rooms.length, totalAdults, totalKids) : s.party(guests, ages.length);
 
   function onSelect(nextIn: string | null, nextOut: string | null) {
     setCheckIn(nextIn);
@@ -102,8 +114,14 @@ export function SearchBar({
       <form action={`/${slug}/search`} method="GET">
         <input type="hidden" name="checkIn" value={checkIn ?? ""} />
         <input type="hidden" name="checkOut" value={checkOut ?? ""} />
-        <input type="hidden" name="guests" value={guests} />
-        {ages.length > 0 && <input type="hidden" name="ages" value={ages.join(",")} />}
+        {rooms.length > 1 ? (
+          <input type="hidden" name="rooms" value={rooms.map((r) => (r.ages.length ? `${r.adults}-${r.ages.join(".")}` : String(r.adults))).join("|")} />
+        ) : (
+          <>
+            <input type="hidden" name="guests" value={guests} />
+            {ages.length > 0 && <input type="hidden" name="ages" value={ages.join(",")} />}
+          </>
+        )}
 
         {/*
           The results page keeps this bar pinned, and three stacked segments plus a button is over
@@ -136,7 +154,7 @@ export function SearchBar({
                 <Users size={13} aria-hidden />
                 {s.guests}
               </span>
-              <span className="seg-value">{guests + ages.length}</span>
+              <span className="seg-value">{totalAdults + totalKids}</span>
             </button>
             <button type="submit" disabled={!ready} aria-label={s.search} className="btn btn-brand shrink-0 px-4">
               <Search size={17} aria-hidden />
@@ -222,7 +240,7 @@ export function SearchBar({
 
       {panel === "guests" && (
         <Sheet title={s.guests} closeLabel={s.close} onClose={close} align="right">
-          <GuestPanel guests={guests} onChange={setGuests} ages={ages} onAges={setAges} onDone={close} s={s} />
+          <GuestPanel rooms={rooms} onRooms={setRooms} onDone={close} s={s} />
         </Sheet>
       )}
     </div>
@@ -295,51 +313,62 @@ function Sheet({
   );
 }
 
+type RoomState = { adults: number; ages: (number | null)[] };
+
 function GuestPanel({
-  guests, onChange, ages, onAges, onDone, s,
+  rooms, onRooms, onDone, s,
 }: {
   s: GuestKit["s"]["bar"];
-  guests: number;
-  onChange: (n: number) => void;
-  ages: (number | null)[];
-  onAges: (a: (number | null)[]) => void;
+  rooms: RoomState[];
+  onRooms: (r: RoomState[]) => void;
   onDone: () => void;
 }) {
-  const missing = ages.some((a) => a == null);
+  const missing = rooms.some((r) => r.ages.some((a) => a == null));
+  const setRoom = (i: number, next: RoomState) => onRooms(rooms.map((r, j) => (j === i ? next : r)));
   return (
-    <div className="w-full p-4 sm:w-[21rem] sm:p-5">
+    <div className="max-h-[70vh] w-full overflow-y-auto p-4 sm:w-[22rem] sm:p-5">
       <Stepper
-        label={s.adults} hint={s.adultsHint} value={guests}
-        min={1} max={MAX_GUESTS} fewer={s.fewer} more={s.more} onChange={onChange}
+        label={s.rooms} hint={s.roomsHint} value={rooms.length}
+        min={1} max={5} fewer={s.fewerRooms} more={s.moreRooms}
+        onChange={(n) => onRooms(n > rooms.length ? [...rooms, { adults: 2, ages: [] }] : rooms.slice(0, n))}
       />
-      <div className="mt-4">
-        <Stepper
-          label={s.children} hint={s.childrenHint} value={ages.length}
-          min={0} max={6} fewer={s.fewerChildren} more={s.moreChildren}
-          onChange={(n) => onAges(n > ages.length ? [...ages, null] : ages.slice(0, n))}
-        />
-      </div>
-
-      {/* Each child's age, as Booking.com asks: the hotel's bands decide who is an infant in a cot,
-          who is a child with a bed and who already counts as an adult. */}
-      {ages.length > 0 && (
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          {ages.map((a, i) => (
-            <label key={i} className="block">
-              <span className="mb-1 block text-[12px] font-semibold" style={{ color: "hsl(var(--ink-soft))" }}>{s.childAge(i + 1)}</span>
-              <select
-                value={a ?? ""}
-                onChange={(e) => onAges(ages.map((x, j) => (j === i ? (e.target.value === "" ? null : Number(e.target.value)) : x)))}
-                className="h-10 w-full rounded-[var(--r-sm)] border px-2 text-[14px]"
-                style={{ borderColor: a == null ? "hsl(var(--caution))" : "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
-              >
-                <option value="">{s.agePick}</option>
-                {Array.from({ length: 18 }, (_, n) => <option key={n} value={n}>{s.ageOption(n)}</option>)}
-              </select>
-            </label>
-          ))}
+      {rooms.map((room, ri) => (
+        <div key={ri} className="mt-4 border-t pt-4" style={{ borderColor: "hsl(var(--line))" }}>
+          {rooms.length > 1 && <p className="eyebrow mb-2">{s.roomN(ri + 1)}</p>}
+          <Stepper
+            label={s.adults} hint={s.adultsHint} value={room.adults}
+            min={1} max={MAX_GUESTS} fewer={s.fewer} more={s.more}
+            onChange={(n) => setRoom(ri, { ...room, adults: n })}
+          />
+          <div className="mt-3">
+            <Stepper
+              label={s.children} hint={s.childrenHint} value={room.ages.length}
+              min={0} max={6} fewer={s.fewerChildren} more={s.moreChildren}
+              onChange={(n) => setRoom(ri, { ...room, ages: n > room.ages.length ? [...room.ages, null] : room.ages.slice(0, n) })}
+            />
+          </div>
+          {/* Each child's age, as Booking.com asks: the hotel's bands decide who is an infant in a cot,
+              who is a child with a bed and who already counts as an adult. */}
+          {room.ages.length > 0 && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {room.ages.map((a, i) => (
+                <label key={i} className="block">
+                  <span className="mb-1 block text-[12px] font-semibold" style={{ color: "hsl(var(--ink-soft))" }}>{s.childAge(i + 1)}</span>
+                  <select
+                    value={a ?? ""}
+                    onChange={(e) => setRoom(ri, { ...room, ages: room.ages.map((x, j) => (j === i ? (e.target.value === "" ? null : Number(e.target.value)) : x)) })}
+                    className="h-10 w-full rounded-[var(--r-sm)] border px-2 text-[14px]"
+                    style={{ borderColor: a == null ? "hsl(var(--caution))" : "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
+                  >
+                    <option value="">{s.agePick}</option>
+                    {Array.from({ length: 18 }, (_, n) => <option key={n} value={n}>{s.ageOption(n)}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      ))}
 
       <p className="mt-4 text-[12.5px] leading-relaxed" style={{ color: missing ? "hsl(var(--caution))" : "hsl(var(--ink-soft))" }}>
         {missing ? s.needAges : s.guestsNote}

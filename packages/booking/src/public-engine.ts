@@ -487,6 +487,8 @@ export async function publicPriceCalendar(
 export interface PublicBookingPayload extends PublicStayQuery {
   roomTypeId: string;
   ratePlanId: string;
+  /** Rooms booked together share this id — see `Reservation.bookingGroupId`. */
+  bookingGroupId?: string;
   guest: { firstName: string; lastName: string; email: string; phone?: string };
   /** The hold taken when the guest opened the form. Converted on success, so the room is never
    *  released between "I am filling this in" and "it is mine". */
@@ -854,7 +856,11 @@ export async function publicCreateReservation(
      * wrongness that makes a hotel distrust the whole feature.
      */
     const priorStays = await tx.reservation.findMany({
-      where: { propertyId: property.id, guestId: guest.id, status: { in: [...SOLD_STATUSES] } },
+      // The other rooms of THIS booking are not earlier stays.
+      where: {
+        propertyId: property.id, guestId: guest.id, status: { in: [...SOLD_STATUSES] },
+        ...(p.bookingGroupId ? { NOT: { bookingGroupId: p.bookingGroupId } } : {}),
+      },
       select: { lines: { select: { checkIn: true }, orderBy: { checkIn: "desc" }, take: 1 } },
     });
     const lastStay = priorStays
@@ -889,6 +895,7 @@ export async function publicCreateReservation(
         guestId: guest.id, bookingSourceId: source.id,
         // The guest's key to cancel or move this booking themselves — see guest-manage.ts.
         guestManageToken: manageToken,
+        ...(p.bookingGroupId ? { bookingGroupId: p.bookingGroupId } : {}),
         // A LABEL plus a gateway token — never a card number. `card_on_file` is what the front desk
         // reads as "we can charge a no-show"; the ref is what actually lets them.
         paymentGuarantee: p.guarantee?.ref ? "card_on_file" : "none",

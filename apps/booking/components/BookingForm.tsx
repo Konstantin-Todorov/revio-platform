@@ -47,7 +47,13 @@ export function BookingForm({
   card = null,
   termsPolicy = null,
   base,
+  group = null,
+  fixedPayNowMinor,
 }: {
+  /** Several rooms: the slots, their picks and their holds, posted with the form. */
+  group?: { rooms: string; sel: string; holds: string } | null;
+  /** Several rooms: what leaves the card today, summed on the server from each room's own terms. */
+  fixedPayNowMinor?: number;
   stay: StaySelection;
   cancellationPolicy: string | null;
   /** The rate's terms, already in the guest's words (`termsWords`). Null when the plan states none. */
@@ -112,9 +118,11 @@ export function BookingForm({
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const extrasMinor = extrasTotalMinor(extras.filter((e) => chosen.has(e.id)), nights);
   // What leaves the card today — the same function the server charges by, on the same total.
-  const payNowMinor = termsPolicy && base
-    ? stayTerms(termsPolicy, { ...base, totalMinor: base.totalMinor + extrasMinor }).payNowMinor
-    : 0;
+  const payNowMinor = fixedPayNowMinor != null
+    ? fixedPayNowMinor
+    : termsPolicy && base
+      ? stayTerms(termsPolicy, { ...base, totalMinor: base.totalMinor + extrasMinor }).payNowMinor
+      : 0;
   const toggleExtra = (id: string) =>
     setChosen((prev) => {
       const next = new Set(prev);
@@ -127,6 +135,13 @@ export function BookingForm({
 
   return (
     <ActionForm action={action} state={state} className="space-y-5">
+      {group && (
+        <>
+          <input type="hidden" name="rooms" value={group.rooms} />
+          <input type="hidden" name="sel" value={group.sel} />
+          <input type="hidden" name="holds" value={group.holds} />
+        </>
+      )}
       {(Object.keys(stay) as (keyof StaySelection)[]).map((k) => (
         <input key={k} type="hidden" name={k} value={String(stay[k])} />
       ))}

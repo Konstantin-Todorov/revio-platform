@@ -33,3 +33,22 @@ describe("parseChildAges", () => {
     expect(parseChildAges("")).toEqual([]);
   });
 });
+
+import { parseRoomParties, parseRoomPicks, serializeRoomParties, serializeRoomPicks } from "./party";
+
+describe("room parties", () => {
+  it("round-trips several rooms with their children", () => {
+    const rooms = [{ adults: 2, childAges: [5, 1] }, { adults: 2, childAges: [] }];
+    expect(serializeRoomParties(rooms)).toBe("2-5.1|2");
+    expect(parseRoomParties("2-5.1|2")).toEqual(rooms);
+  });
+
+  it("repairs nonsense instead of trusting it", () => {
+    expect(parseRoomParties("x|3-4.99")).toEqual([{ adults: 2, childAges: [] }, { adults: 3, childAges: [4] }]);
+  });
+
+  it("parses picks and drops malformed ones", () => {
+    expect(parseRoomPicks("abc123def~xyz789uvw,bad")).toEqual([{ roomTypeId: "abc123def", ratePlanId: "xyz789uvw" }]);
+    expect(serializeRoomPicks([{ roomTypeId: "a1b2c3d4", ratePlanId: "e5f6g7h8" }])).toBe("a1b2c3d4~e5f6g7h8");
+  });
+});

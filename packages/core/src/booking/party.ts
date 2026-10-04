@@ -71,3 +71,48 @@ export function parseChildAges(raw: string | null | undefined): number[] {
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 17)
     .slice(0, MAX_CHILDREN);
 }
+
+/**
+ * Several rooms in one search — each with its own party, the way every booking site asks.
+ *
+ * In a URL as `rooms=2-5.1|2`: rooms separated by `|`, each "adults" optionally followed by
+ * `-` and the children's ages joined by `.`. One room keeps the plain `guests`/`ages` parameters,
+ * so every link already in an email or a bookmark still works.
+ */
+export interface RoomParty {
+  adults: number;
+  childAges: number[];
+}
+
+export const MAX_ROOMS = 5;
+
+export function parseRoomParties(raw: string | null | undefined): RoomParty[] {
+  if (!raw) return [];
+  return raw.split("|").slice(0, MAX_ROOMS).map((part) => {
+    const [a, kids] = part.split("-");
+    const adults = Number(a);
+    return {
+      adults: Number.isInteger(adults) && adults >= 1 && adults <= 10 ? adults : 2,
+      childAges: parseChildAges((kids ?? "").replace(/\./g, ",")),
+    };
+  });
+}
+
+export function serializeRoomParties(rooms: readonly RoomParty[]): string {
+  return rooms.map((r) => (r.childAges.length ? `${r.adults}-${r.childAges.join(".")}` : String(r.adults))).join("|");
+}
+
+/** A chosen room for one slot of a multi-room search: `roomTypeId~ratePlanId`, joined by `,`. */
+export interface RoomPick { roomTypeId: string; ratePlanId: string }
+
+export function parseRoomPicks(raw: string | null | undefined): RoomPick[] {
+  if (!raw) return [];
+  return raw.split(",").slice(0, MAX_ROOMS).map((p) => {
+    const [roomTypeId, ratePlanId] = p.split("~");
+    return { roomTypeId: roomTypeId ?? "", ratePlanId: ratePlanId ?? "" };
+  }).filter((p) => /^[a-z0-9]{6,40}$/i.test(p.roomTypeId) && /^[a-z0-9]{6,40}$/i.test(p.ratePlanId));
+}
+
+export function serializeRoomPicks(picks: readonly RoomPick[]): string {
+  return picks.map((p) => `${p.roomTypeId}~${p.ratePlanId}`).join(",");
+}

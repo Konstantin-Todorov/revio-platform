@@ -34,7 +34,7 @@ export default async function ChangeDatesPage({
   const back = `/${property.slug}/booking/${reference.toUpperCase()}${k ? `?k=${encodeURIComponent(k)}` : ""}`;
   const checkIn = line.checkIn.toISOString().slice(0, 10);
   const checkOut = line.checkOut.toISOString().slice(0, 10);
-  if (!mayManage(r, k) || !manageAbility({ ...r, checkIn, today: todayInTimeZone(property.timezone) }).canChange) {
+  if (!(await mayManage(r, k)) || !manageAbility({ ...r, checkIn, today: todayInTimeZone(property.timezone) }).canChange) {
     redirect(back);
   }
 

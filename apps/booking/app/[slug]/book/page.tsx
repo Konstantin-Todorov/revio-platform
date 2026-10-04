@@ -13,7 +13,8 @@ import { serverKit } from "@/lib/i18n/server";
 import { termsWords } from "@/lib/i18n/kit";
 import { PaySplitNote } from "@/components/PaySplitNote";
 import { guestPublishableKey } from "@revio/payments";
-import { todayInTimeZone, parseChildAges } from "@revio/core";
+import { todayInTimeZone, parseChildAges, parseRoomParties } from "@revio/core";
+import { GroupBook } from "./GroupBook";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
@@ -40,6 +41,8 @@ export default async function BookPage({
   const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const property = await getPublicProperty(slug);
   if (!property) notFound();
+  // Several rooms take their own page — see GroupBook.
+  if (parseRoomParties(sp.rooms).length > 1) return <GroupBook property={property} sp={sp} />;
 
   const checkIn = isValidISO(sp.checkIn) ? sp.checkIn : null;
   const checkOut = isValidISO(sp.checkOut) ? sp.checkOut : null;

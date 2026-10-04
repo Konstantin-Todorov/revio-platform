@@ -27,9 +27,22 @@ export async function findByReference(property: PublicProperty, reference: strin
 
 export type FoundReservation = NonNullable<Awaited<ReturnType<typeof findByReference>>>;
 
-/** The key from the link — the only thing that lets a visitor change a booking. */
-export function mayManage(r: { guestManageToken: string | null }, key: string | null | undefined): boolean {
-  return manageTokenMatches(r.guestManageToken, key ?? null);
+/**
+ * The key from the link — the only thing that lets a visitor change a booking. For rooms booked
+ * together, the key of the FIRST room (the one in the confirmation email) opens every room of the
+ * group: the guest booked them as one, and one link is what they were given.
+ */
+export async function mayManage(
+  r: { guestManageToken: string | null; bookingGroupId?: string | null; id?: string; tenantId?: string },
+  key: string | null | undefined,
+): Promise<boolean> {
+  if (manageTokenMatches(r.guestManageToken, key ?? null)) return true;
+  if (!r.bookingGroupId || !r.tenantId || r.bookingGroupId === r.id) return false;
+  const leader = await forTenant(r.tenantId).reservation.findFirst({
+    where: { id: r.bookingGroupId },
+    select: { guestManageToken: true },
+  });
+  return manageTokenMatches(leader?.guestManageToken ?? null, key ?? null);
 }
 
 /**

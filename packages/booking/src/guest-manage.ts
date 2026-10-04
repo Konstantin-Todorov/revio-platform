@@ -284,3 +284,30 @@ export async function guestChangeDates(
   });
   return { ok: true, preview: { checkIn: p.checkIn, checkOut: p.checkOut, totalMinor: q.totalMinor, currency: q.currency, terms: q.terms } };
 }
+
+/**
+ * Undo the rooms already written when a later room of the same booking could not be — the guest is
+ * told nothing was booked, so nothing may stay booked. Cancelled (never deleted, the audit keeps
+ * them), rooms released, availability pushed back. No money moves: the payment is only captured
+ * after EVERY room exists, and the caller releases the authorisation.
+ */
+export async function voidGroupReservations(db: Db, property: PropertyRow, reservationIds: string[]): Promise<void> {
+  if (reservationIds.length === 0) return;
+  const lines = await db.reservationLine.findMany({
+    where: { reservationId: { in: reservationIds } },
+    select: { roomTypeId: true, checkIn: true, checkOut: true },
+  });
+  await withTenantTransaction(property.tenantId, async (tx) => {
+    await tx.reservation.updateMany({
+      where: { id: { in: reservationIds }, propertyId: property.id },
+      data: { status: "cancelled", cancelledAt: new Date(), onlinePaidMinor: 0 },
+    });
+    for (const id of reservationIds) await releaseRoomsForCancellation(tx, id);
+  });
+  await recordAvailabilityPush(db, {
+    tenantId: property.tenantId,
+    propertyId: property.id,
+    summary: "Availability restored — a multi-room booking could not be completed (Booking Engine)",
+    scope: stayScope(lines),
+  });
+}

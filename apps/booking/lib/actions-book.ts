@@ -10,6 +10,7 @@ import { claimSubmitToken, forSystem } from "@revio/db";
 import { serverKit } from "./i18n/server";
 import { getPublicProperty } from "./property";
 import { alertHotel, findByReference, manageUrl } from "./manage";
+import { confirmGroup, isGroupForm, startGroupPayment } from "./group-booking";
 import { nightsBetween } from "./dates";
 
 /**
@@ -48,6 +49,9 @@ export async function startCardPayment(fd: FormData): Promise<StartPaymentResult
   if (!str(fd, "firstName") || !str(fd, "lastName")) return { ok: false, error: e.name };
   if (!/.+@.+\..+/.test(str(fd, "email"))) return { ok: false, error: e.email };
   if (fd.get("acceptTerms") == null) return { ok: false, error: e.terms };
+
+  // Several rooms: one payment for all of them — see group-booking.ts.
+  if (isGroupForm(fd)) return startGroupPayment(property, fd);
 
   const db = forTenant(property.tenantId);
   const holdId = str(fd, "holdId");
@@ -140,6 +144,13 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
    */
   if (!(await claimSubmitToken(db, fd, property.tenantId, "confirmBooking"))) {
     redirect(`/${property.slug}`);
+  }
+
+  // Several rooms: each its own reservation, one payment — see group-booking.ts.
+  if (isGroupForm(fd)) {
+    const done = await confirmGroup(property, fd, { firstName, lastName, email, phone }, locale);
+    if (!done.ok) return { ok: false, error: done.error };
+    redirect(`/${property.slug}/booking/${done.reference}${done.manageToken ? `?k=${encodeURIComponent(done.manageToken)}` : ""}`);
   }
 
   /*

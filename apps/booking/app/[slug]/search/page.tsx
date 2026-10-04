@@ -1,7 +1,9 @@
-import { parseChildAges } from "@revio/core";
+import { parseChildAges, parseRoomParties, parseRoomPicks, type RoomParty, type RoomPick } from "@revio/core";
+import { groupQuery } from "@/lib/group";
+import { GroupSteps } from "@/components/GroupSteps";
 import { Suspense } from "react";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CalendarSearch, Phone } from "lucide-react";
 import { clientIp, type AlternativeStay } from "@revio/booking";
 import { getObjectStore } from "@revio/storage";
@@ -49,13 +51,29 @@ export default async function SearchPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string; ages?: string }>;
+  searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string; ages?: string; rooms?: string; sel?: string }>;
 }) {
   const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const property = await getPublicProperty(slug);
   if (!property) notFound();
 
   const q = parseQuery(sp);
+  /*
+   * Several rooms: the guest chooses one room per slot, in order. The slot being chosen is the
+   * number already picked; its own party drives this search. Once every slot has a room, on to the
+   * booking step with all of them.
+   */
+  const rooms = parseRoomParties(sp.rooms);
+  const multi = rooms.length > 1;
+  const picks = multi ? parseRoomPicks(sp.sel).slice(0, rooms.length) : [];
+  if (multi && q.checkIn && q.checkOut && picks.length === rooms.length) {
+    redirect(`/${property.slug}/book?${groupQuery({ checkIn: q.checkIn, checkOut: q.checkOut, rooms, picks })}`);
+  }
+  if (multi) {
+    const slot = rooms[picks.length]!;
+    q.guests = slot.adults;
+    q.childAges = slot.childAges;
+  }
   const kit = await serverKit(property);
   const { s, fmtDay } = kit;
   const nights = q.checkIn && q.checkOut ? nightsBetween(q.checkIn, q.checkOut) : 0;
@@ -80,8 +98,9 @@ export default async function SearchPage({
             compact
             {...(q.checkIn ? { defaultCheckIn: q.checkIn } : {})}
             {...(q.checkOut ? { defaultCheckOut: q.checkOut } : {})}
-            defaultGuests={q.guests}
-            defaultChildAges={q.childAges}
+            defaultGuests={multi ? rooms[0]!.adults : q.guests}
+            defaultChildAges={multi ? rooms[0]!.childAges : q.childAges}
+            defaultRooms={multi ? rooms : []}
           />
         </div>
       </div>
@@ -96,8 +115,18 @@ export default async function SearchPage({
                 {fmtDay(q.checkIn!)} — {fmtDay(q.checkOut!)}
               </h1>
               <p className="nums mt-2 text-[14px]" style={{ color: "hsl(var(--ink-soft))" }}>
-                {s.search.summary(nights, q.guests + q.childAges.length)}
+                {s.search.summary(nights, multi ? rooms.reduce((n, r) => n + r.adults + r.childAges.length, 0) : q.guests + q.childAges.length)}
               </p>
+              {multi && (
+                <GroupSteps
+                  property={property}
+                  rooms={rooms}
+                  picks={picks}
+                  checkIn={q.checkIn!}
+                  checkOut={q.checkOut!}
+                  kit={kit}
+                />
+              )}
             </>
           ) : (
             <>
@@ -117,6 +146,7 @@ export default async function SearchPage({
               <Results
                 property={property}
                 q={{ checkIn: q.checkIn!, checkOut: q.checkOut!, guests: q.guests, childAges: q.childAges }}
+                group={multi ? { rooms, picks } : null}
                 nights={nights}
                 kit={kit}
               />
@@ -135,18 +165,31 @@ async function Results({
   q,
   nights,
   kit,
+  group = null,
 }: {
   property: PublicProperty;
   q: { checkIn: string; checkOut: string; guests: number; childAges: number[] };
   nights: number;
   kit: GuestKit;
+  /** Several rooms: the slots and what is already picked for them. */
+  group?: { rooms: RoomParty[]; picks: RoomPick[] } | null;
 }) {
   const { s } = kit;
   const [outcome, store] = await Promise.all([
     searchAvailability(property, clientIp(await headers()), q),
     getObjectStore(),
   ]);
-  const options = outcome.options ?? [];
+  /*
+   * A type already picked for an earlier slot counts against this one — the last room is offered to
+   * one slot, not to every slot. Each pick links back here with itself appended, until all are chosen.
+   */
+  const options = (outcome.options ?? [])
+    .map((o) => group ? { ...o, remaining: o.remaining - group.picks.filter((p) => p.roomTypeId === o.roomTypeId).length } : o)
+    .filter((o) => o.remaining >= 1);
+  const pickHref = group
+    ? (roomTypeId: string) => (ratePlanId: string) =>
+        `/${property.slug}/search?${groupQuery({ checkIn: q.checkIn, checkOut: q.checkOut, rooms: group.rooms, picks: [...group.picks, { roomTypeId, ratePlanId }] })}`
+    : null;
   const mediaUrl = (key: string) => store.publicUrl(key);
 
   // Said in the guest's language, by what went wrong — never the engine's English sentence.
@@ -203,6 +246,7 @@ async function Results({
             checkOut={q.checkOut}
             guests={q.guests}
             childAges={q.childAges}
+            {...(pickHref ? { pickHref: pickHref(option.roomTypeId) } : {})}
             mediaUrl={mediaUrl}
             kit={kit}
           />

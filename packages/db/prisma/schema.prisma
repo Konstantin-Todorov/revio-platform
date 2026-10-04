@@ -1627,6 +1627,10 @@ model Reservation {
   /// confirmation email's link and nowhere else. The reference alone only SHOWS a booking; changing
   /// one needs this, because a reference is six characters and printed on paper.
   guestManageToken String? @unique
+  /// Rooms booked together on RevioDirect share this id (the first room's reservation id). Each room
+  /// is its own reservation — cancelled, changed, billed and pushed on its own — and the group is
+  /// only what lets the guest and the desk see them as one booking.
+  bookingGroupId   String?
   notes              String?
   cancelledAt        DateTime?
   // The stay ended. A PMS-owned OPERATIONAL fact, deliberately not a `status` value: `status` is the
@@ -1656,6 +1660,7 @@ model Reservation {
   waitlistEntries WaitlistEntry[]
   guestFeedback   GuestFeedback?
 
+  @@index([bookingGroupId])
   @@index([propertyId])
   @@index([channelId])
   /// One row per booking a channel sent. Two concurrent pulls of one new revision each found no

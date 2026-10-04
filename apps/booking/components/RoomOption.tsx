@@ -26,8 +26,10 @@ const OPEN_RATES = 3;
  * The photograph opens the room's details and gallery — the first thing anyone taps.
  */
 export function RoomOption({
-  option, nights, slug, checkIn, checkOut, guests, childAges = [], mediaUrl, kit,
+  option, nights, slug, checkIn, checkOut, guests, childAges = [], pickHref, mediaUrl, kit,
 }: {
+  /** Several rooms: choosing a rate picks it for the current slot instead of going to the form. */
+  pickHref?: (ratePlanId: string) => string;
   /** Children's ages, carried to the booking step so it prices the same party. */
   childAges?: number[];
   /** The guest's language — words, room-content labels and money. */
@@ -54,7 +56,7 @@ export function RoomOption({
   const { s, room, money } = kit;
   const hasDetail = option.photos.length > 0 || !!option.description || option.amenities.length > 0;
 
-  const href = (plan: PublicPlanQuote) =>
+  const href = (plan: PublicPlanQuote) => pickHref ? pickHref(plan.ratePlanId) :
     `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${childAges.length ? `&ages=${childAges.join(",")}` : ""}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
   const row = (plan: PublicPlanQuote, i: number) => (
     <RateRow key={plan.ratePlanId} plan={plan} nights={nights} href={href(plan)} best={i === 0 && plans.length > 1} kit={kit} />

@@ -69,6 +69,7 @@ export interface GuestStrings {
     expiredTitle: string; expiredBody: string; cancelledTitle: string; cancelledBody: string;
     notOpen: string; notReady: string; failed: string; secure: string;
   };
+  group: { title: string; change: string; chooseNow: string; next: string; summary: (n: number) => string; roomsTotal: string; othersTitle: string; cancelled: string };
   myBooking: {
     title: string; body: string; reference: string; referenceHint: string; email: string;
     send: string; sending: string; sent: string; limited: string;
@@ -83,6 +84,8 @@ export interface GuestStrings {
     fewerChildren: string; moreChildren: string;
     childAge: (n: number) => string; agePick: string; ageOption: (age: number) => string;
     party: (adults: number, children: number) => string; needAges: string;
+    rooms: string; roomsHint: string; fewerRooms: string; moreRooms: string; roomN: (n: number) => string;
+    roomsParty: (rooms: number, adults: number, children: number) => string;
   };
   calendar: {
     prev: string; next: string; chooseCheckOut: string; chooseCheckIn: string; clear: string; done: string;
@@ -326,6 +329,11 @@ export const guest: Translations<GuestStrings> = {
       failed: "The payment did not go through. Nothing was charged — please try again.",
       secure: "Card payments are processed securely by Stripe — the hotel and we never see your card number.",
     },
+    group: {
+      title: "Your rooms", change: "Change", chooseNow: "Choose a room below", next: "Next",
+      summary: (n) => `${n} rooms`, roomsTotal: "Total for all rooms",
+      othersTitle: "Booked together with", cancelled: "cancelled",
+    },
     myBooking: {
       title: "My booking",
       body: "Enter your booking reference and the email you booked with. We will send you a private link to see, change or cancel your booking.",
@@ -348,6 +356,9 @@ export const guest: Translations<GuestStrings> = {
       childAge: (n) => `Age of child ${n}`, agePick: "Age", ageOption: (a) => (a === 0 ? "under 1" : `${a} ${a === 1 ? "year" : "years"}`),
       party: (a, c) => `${en1(a, "adult", "adults")}${c ? ` · ${en1(c, "child", "children")}` : ""}`,
       needAges: "Choose each child's age — the hotel prices and fits children by age.",
+      rooms: "Rooms", roomsHint: "Each room with its own guests", fewerRooms: "One room fewer", moreRooms: "One more room",
+      roomN: (n) => `Room ${n}`,
+      roomsParty: (r, a, c) => `${en1(r, "room", "rooms")} · ${en1(a, "adult", "adults")}${c ? ` · ${en1(c, "child", "children")}` : ""}`,
       done: "Done",
     },
     calendar: {
@@ -628,6 +639,11 @@ export const guest: Translations<GuestStrings> = {
       failed: "Плащането не мина. Нищо не е удържано — опитайте отново.",
       secure: "Плащанията с карта се обработват сигурно от Stripe — нито хотелът, нито ние виждаме номера на картата Ви.",
     },
+    group: {
+      title: "Вашите стаи", change: "Промени", chooseNow: "Изберете стая по-долу", next: "Следва",
+      summary: (n) => `${n} стаи`, roomsTotal: "Общо за всички стаи",
+      othersTitle: "Резервирана заедно с", cancelled: "отказана",
+    },
     myBooking: {
       title: "Моята резервация",
       body: "Въведете номера на резервацията и имейла, с който сте резервирали. Ще Ви изпратим лична връзка, за да видите, промените или откажете резервацията си.",
@@ -650,6 +666,9 @@ export const guest: Translations<GuestStrings> = {
       childAge: (n) => `Възраст на дете ${n}`, agePick: "Възраст", ageOption: (a) => (a === 0 ? "под 1 г." : `${a} г.`),
       party: (a, c) => `${a} ${a === 1 ? "възрастен" : "възрастни"}${c ? ` · ${c} ${c === 1 ? "дете" : "деца"}` : ""}`,
       needAges: "Изберете възрастта на всяко дете — хотелът настанява и таксува децата според възрастта им.",
+      rooms: "Стаи", roomsHint: "Всяка стая със своите гости", fewerRooms: "Една стая по-малко", moreRooms: "Още една стая",
+      roomN: (n) => `Стая ${n}`,
+      roomsParty: (r, a, c) => `${r} ${r === 1 ? "стая" : "стаи"} · ${a} ${a === 1 ? "възрастен" : "възрастни"}${c ? ` · ${c} ${c === 1 ? "дете" : "деца"}` : ""}`,
       done: "Готово",
     },
     calendar: {
