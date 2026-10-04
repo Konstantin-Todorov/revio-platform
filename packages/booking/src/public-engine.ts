@@ -19,6 +19,7 @@ import {
   resolveChosenExtras, resolveRestriction, type SellableExtra,
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type RestrictionType,
   resolveRate, toResolvablePlan, type PriceLookup, stayTerms, withoutCard, type StayTerms, type StayTermsPolicy,
+  partyOf, childrenNightMinor, MAX_CHILDREN,
 } from "@revio/core";
 import { sellableTerms, termsPolicyOf } from "./stay-terms.js";
 import { recordAvailabilityPush, syncRealChannels, stayScope } from "@revio/connectivity";
@@ -53,7 +54,10 @@ function todayInTz(tz: string): string {
 export interface PublicStayQuery {
   checkIn: string; // YYYY-MM-DD
   checkOut: string;
+  /** Adults. */
   guests: number;
+  /** Each child's age (0–17), as the guest gave them. Priced by the hotel's age bands — `partyOf`. */
+  childAges?: number[];
 }
 
 export interface PublicPlanQuote {
@@ -138,6 +142,9 @@ function validStay(q: PublicStayQuery): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(q.checkIn) || !/^\d{4}-\d{2}-\d{2}$/.test(q.checkOut)) return "Dates must be YYYY-MM-DD.";
   if (q.checkOut <= q.checkIn) return "Check-out must be after check-in.";
   if (!Number.isInteger(q.guests) || q.guests < 1 || q.guests > 12) return "Guests must be 1-12.";
+  if ((q.childAges ?? []).length > MAX_CHILDREN || (q.childAges ?? []).some((a) => !Number.isInteger(a) || a < 0 || a > 17)) {
+    return "Children's ages must be 0-17.";
+  }
   const nights = (utcDay(q.checkOut).getTime() - utcDay(q.checkIn).getTime()) / DAY_MS;
   if (nights > 30) return TOO_LONG;
   return null;
@@ -331,20 +338,34 @@ async function loadStayContext(
     return null;
   };
 
-  return { nights, roomTypes, plans, priceFor, remainingFor, remainingByNight, sellableByNightFor, stayBlocked, stopSoldOn, fees, defaults };
+  /*
+   * The party, by the hotel's age bands: adults (and children older than the child band) are priced
+   * through the per-occupancy resolver; children and infants are added on top at the plan's fees —
+   * never folded into adult occupancy (§6.9). `nightPrice` is the one price of one night for THIS party.
+   */
+  const party = partyOf(q.guests, q.childAges ?? [], {
+    infantMax: defaults?.ageInfantMax ?? 2,
+    childMax: defaults?.ageChildMax ?? 11,
+  });
+  const nightPrice = (rt: (typeof roomTypes)[number], rp: (typeof plans)[number], k: string): number | null => {
+    const base = priceFor(rt, rp, k, party.pricedAdults);
+    return base == null ? null : base + childrenNightMinor(party, rp);
+  };
+
+  return { nights, roomTypes, plans, priceFor, nightPrice, party, remainingFor, remainingByNight, sellableByNightFor, stayBlocked, stopSoldOn, fees, defaults };
 }
 
 /** GET /api/public/availability — the widget's search. */
 export async function publicAvailability(db: Db, property: PropertyRow, q: PublicStayQuery): Promise<{ error?: string; code?: PublicBookingErrorCode; options?: PublicRoomOption[] }> {
   const bad = validStay(q);
   if (bad) return { error: bad, code: stayRefusalCode(bad) };
-  const { nights, roomTypes, plans, priceFor, remainingFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, nightPrice, party, remainingFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, q);
   const cityTaxIncluded = defaults?.cityTaxMode === "included";
 
   const options: PublicRoomOption[] = [];
   for (const rt of roomTypes) {
-    if (rt.maxGuests < q.guests) continue;
+    if (rt.maxGuests < party.occupancy) continue;
     const remaining = remainingFor(rt.id, rt.totalRooms);
     if (remaining < 1) continue;
     const quotes: PublicPlanQuote[] = [];
@@ -354,7 +375,7 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
       let total = 0;
       let complete = true;
       for (const k of nights) {
-        const p = priceFor(rt, rp, k, q.guests);
+        const p = nightPrice(rt, rp, k);
         if (p == null) { complete = false; break; }
         total += p;
       }
@@ -362,7 +383,7 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
       // All-in from here on: the same fee engine the folio bills with, so this total is the
       // total — on this screen, at checkout, and on the bill at the hotel.
       const charged = computeStayCharges({
-        stay: { accommodationMinor: total, nights: nights.length, rooms: 1, guests: q.guests },
+        stay: { accommodationMinor: total, nights: nights.length, rooms: 1, guests: party.pricedAdults },
         fees,
         cityTaxIncluded,
       });
@@ -376,12 +397,12 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
         mealPlan: rp.mealPlan?.name ?? null,
         cancellationPolicy: rp.cancellationPolicy?.name ?? null,
         termsPolicy: rp.cancellationPolicy ? sellableTerms(termsPolicyOf(rp.cancellationPolicy), property.paymentReady ?? false) : null,
-        firstNightMinor: priceFor(rt, rp, nights[0]!, q.guests) ?? 0,
+        firstNightMinor: nightPrice(rt, rp, nights[0]!) ?? 0,
         terms: rp.cancellationPolicy
           ? (() => {
               const t = stayTerms(sellableTerms(termsPolicyOf(rp.cancellationPolicy), property.paymentReady ?? false), {
                 totalMinor: charged.totalMinor,
-                firstNightMinor: priceFor(rt, rp, nights[0]!, q.guests) ?? 0,
+                firstNightMinor: nightPrice(rt, rp, nights[0]!) ?? 0,
                 arrival: q.checkIn,
                 today: todayInTz(property.timezone),
               });
@@ -425,7 +446,7 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
 export const PRICE_CALENDAR_MAX_NIGHTS = 62;
 
 export async function publicPriceCalendar(
-  db: Db, property: PropertyRow, q: { from: string; to: string; guests: number },
+  db: Db, property: PropertyRow, q: { from: string; to: string; guests: number; childAges?: number[] },
 ): Promise<{ currency: string; days: Record<string, number | null> } | null> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(q.from) || !/^\d{4}-\d{2}-\d{2}$/.test(q.to) || q.to <= q.from) return null;
   if (!Number.isInteger(q.guests) || q.guests < 1 || q.guests > 12) return null;
@@ -435,8 +456,8 @@ export async function publicPriceCalendar(
   if (span < 1) return { currency: property.baseCurrency, days: {} };
   const to = span > PRICE_CALENDAR_MAX_NIGHTS ? ymd(new Date(utcDay(from).getTime() + PRICE_CALENDAR_MAX_NIGHTS * DAY_MS)) : q.to;
 
-  const { nights, roomTypes, plans, priceFor, remainingByNight, stopSoldOn, fees, defaults } =
-    await loadStayContext(db, property, { checkIn: from, checkOut: to, guests: q.guests });
+  const { nights, roomTypes, plans, nightPrice, party, remainingByNight, stopSoldOn, fees, defaults } =
+    await loadStayContext(db, property, { checkIn: from, checkOut: to, guests: q.guests, childAges: q.childAges ?? [] });
   const cityTaxIncluded = defaults?.cityTaxMode === "included";
   const left = new Map(roomTypes.map((rt) => [rt.id, remainingByNight(rt.id, rt.totalRooms)]));
 
@@ -444,14 +465,14 @@ export async function publicPriceCalendar(
   for (const k of nights) {
     let lowest: number | null = null;
     for (const rt of roomTypes) {
-      if (rt.maxGuests < q.guests || (left.get(rt.id)?.get(k) ?? 0) < 1) continue;
+      if (rt.maxGuests < party.occupancy || (left.get(rt.id)?.get(k) ?? 0) < 1) continue;
       for (const rp of plans) {
         if (rp.roomTypeLinks.length > 0 && !rp.roomTypeLinks.some((l) => l.roomTypeId === rt.id)) continue;
         if (stopSoldOn(rt.id, rp, k)) continue;
-        const price = priceFor(rt, rp, k, q.guests);
+        const price = nightPrice(rt, rp, k);
         if (price == null) continue;
         const allIn = computeStayCharges({
-          stay: { accommodationMinor: price, nights: 1, rooms: 1, guests: q.guests },
+          stay: { accommodationMinor: price, nights: 1, rooms: 1, guests: party.pricedAdults },
           fees,
           cityTaxIncluded,
         }).totalMinor;
@@ -541,20 +562,20 @@ export async function publicQuoteStay(
   p: PublicStayQuery & { roomTypeId: string; ratePlanId: string; holdId?: string; extraIds?: string[] },
 ): Promise<{ totalMinor: number; currency: string; terms: StayTerms | null } | null> {
   if (validStay(p)) return null;
-  const { nights, roomTypes, plans, priceFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, nightPrice, party, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, p, p.holdId ? { excludeHoldId: p.holdId } : {});
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
-  if (!rt || !rp || stayBlocked(rt.id, rp)) return null;
+  if (!rt || !rp || rt.maxGuests < party.occupancy || stayBlocked(rt.id, rp)) return null;
   let accommodationMinor = 0;
   for (const k of nights) {
-    const price = priceFor(rt, rp, k, p.guests);
+    const price = nightPrice(rt, rp, k);
     if (price == null) return null;
     accommodationMinor += price;
   }
   const chosen = resolveChosenExtras(await publicSellableExtras(db, property.id), p.extraIds ?? []);
   const charged = computeStayCharges({
-    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: p.guests },
+    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults },
     fees,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
     extrasMinor: extrasTotalMinor(chosen, nights.length),
@@ -562,7 +583,7 @@ export async function publicQuoteStay(
   const terms = rp.cancellationPolicy
     ? stayTerms(sellableTerms(termsPolicyOf(rp.cancellationPolicy), property.paymentReady ?? false), {
         totalMinor: charged.totalMinor,
-        firstNightMinor: priceFor(rt, rp, nights[0]!, p.guests) ?? 0,
+        firstNightMinor: nightPrice(rt, rp, nights[0]!) ?? 0,
         arrival: p.checkIn,
         today: todayInTz(property.timezone),
       })
@@ -585,7 +606,7 @@ export type ChangeQuoteRefusal = "invalid" | "unavailable" | "sold_out" | "too_l
 
 export async function publicChangeQuote(
   db: Db, property: PropertyRow,
-  p: { reservationId: string; roomTypeId: string; ratePlanId: string; guests: number; checkIn: string; checkOut: string;
+  p: { reservationId: string; roomTypeId: string; ratePlanId: string; guests: number; childAges?: number[]; checkIn: string; checkOut: string;
        extras: { priceMinor: number; basis: "per_night" | "per_stay" }[] },
 ): Promise<
   | { ok: true; accommodationMinor: number; totalMinor: number; currency: string; terms: StayTerms | null;
@@ -594,22 +615,22 @@ export async function publicChangeQuote(
 > {
   const bad = validStay(p);
   if (bad) return { ok: false, code: bad === TOO_LONG ? "too_long" : "invalid" };
-  const { nights, roomTypes, plans, priceFor, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, nightPrice, party, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, p, { excludeReservationId: p.reservationId });
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
-  if (!rt || !rp || rt.maxGuests < p.guests || stayBlocked(rt.id, rp)) return { ok: false, code: "unavailable" };
+  if (!rt || !rp || rt.maxGuests < party.occupancy || stayBlocked(rt.id, rp)) return { ok: false, code: "unavailable" };
   if (remainingFor(rt.id, rt.totalRooms) < 1) return { ok: false, code: "sold_out" };
   const quoted: { date: string; occupancy: number; rateMinor: number }[] = [];
   let accommodationMinor = 0;
   for (const k of nights) {
-    const price = priceFor(rt, rp, k, p.guests);
+    const price = nightPrice(rt, rp, k);
     if (price == null) return { ok: false, code: "unavailable" };
     accommodationMinor += price;
-    quoted.push({ date: k, occupancy: p.guests, rateMinor: price });
+    quoted.push({ date: k, occupancy: party.pricedAdults, rateMinor: price });
   }
   const charged = computeStayCharges({
-    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: p.guests },
+    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults },
     fees,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
     extrasMinor: extrasTotalMinor(p.extras, nights.length),
@@ -660,12 +681,12 @@ export async function publicCreateReservation(
   if (!p.guest?.firstName?.trim() || !p.guest?.lastName?.trim() || !/.+@.+\..+/.test(p.guest?.email ?? "")) {
     return { error: "Guest first name, last name and a valid email are required.", code: "guest_details" };
   }
-  const { nights, roomTypes, plans, priceFor, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, nightPrice, party, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, p, p.holdId ? { excludeHoldId: p.holdId } : {});
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
   if (!rt || !rp) return { error: "Unknown room type or rate plan (or not bookable on the direct channel).", code: "unavailable" };
-  if (rt.maxGuests < p.guests) return { error: `${rt.name} sleeps at most ${rt.maxGuests} guests.`, code: "too_many_guests" };
+  if (rt.maxGuests < party.occupancy) return { error: `${rt.name} sleeps at most ${rt.maxGuests} guests.`, code: "too_many_guests" };
   if (rp.roomTypeLinks.length > 0 && !rp.roomTypeLinks.some((l) => l.roomTypeId === rt.id)) return { error: "That rate isn't sold on that room.", code: "unavailable" };
   const blocked = stayBlocked(rt.id, rp);
   if (blocked) return { error: `Not bookable: ${blocked}.`, code: "unavailable" };
@@ -715,10 +736,10 @@ export async function publicCreateReservation(
    */
   const quotedNights: { date: string; occupancy: number; rateMinor: number }[] = [];
   for (const k of nights) {
-    const price = priceFor(rt, rp, k, p.guests);
+    const price = nightPrice(rt, rp, k);
     if (price == null) return { error: "This rate isn't fully priced for those dates.", code: "unavailable" };
     accommodationMinor += price;
-    quotedNights.push({ date: k, occupancy: p.guests, rateMinor: price });
+    quotedNights.push({ date: k, occupancy: party.pricedAdults, rateMinor: price });
   }
 
   /**
@@ -743,7 +764,7 @@ export async function publicCreateReservation(
   const extrasMinor = extrasTotalMinor(chosenExtras, nights.length);
 
   const charged = computeStayCharges({
-    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: p.guests },
+    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults },
     fees,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
     extrasMinor,
@@ -894,7 +915,8 @@ export async function publicCreateReservation(
         lines: {
           create: [{
             roomTypeId: rt.id, ratePlanId: rp.id, quantity: 1, checkIn, checkOut,
-            priceMinor: totalMinor, guestsCount: p.guests,
+            priceMinor: totalMinor, guestsCount: party.pricedAdults,
+            childrenCount: party.children, infantsCount: party.infants, childAges: party.youngAges,
             // The per-night snapshot, written with the line so a stay can never exist without the
             // rates it was sold at.
             nightRates: {
@@ -1087,7 +1109,7 @@ export async function publicAlternativeStays(
     const results = await Promise.all(
       batch.map(async (c) => {
         const res = await publicAvailability(db, property, {
-          checkIn: c.checkIn, checkOut: c.checkOut, guests: q.guests,
+          checkIn: c.checkIn, checkOut: c.checkOut, guests: q.guests, childAges: q.childAges ?? [],
         });
         const totals = (res.options ?? []).flatMap((o) => o.plans.map((p) => p.totalMinor));
         if (totals.length === 0) return null;

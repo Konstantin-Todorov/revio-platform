@@ -133,7 +133,12 @@ export default async function ReservationDetailPage({
             <dt className="text-ink-400">{t.dates}</dt>
             <dd className="tnum text-ink-700">{line ? `${day(checkInIso)} → ${day(line.checkOut.toISOString().slice(0, 10))}` : "—"}</dd>
             <dt className="text-ink-400">{t.guests}</dt>
-            <dd className="text-ink-700">{line?.guestsCount ?? "—"}</dd>
+            <dd className="text-ink-700">
+              {line?.guestsCount ?? "—"}
+              {line && (line.childrenCount > 0 || line.infantsCount > 0) && (
+                <span className="text-ink-500"> {t.kids(line.childrenCount, line.infantsCount, line.childAges.join(", "))}</span>
+              )}
+            </dd>
             <dt className="text-ink-400">{t.ratePlan}</dt>
             <dd className="text-ink-700">{line?.ratePlan.name ?? "—"}</dd>
             <dt className="text-ink-400">{t.total}</dt>

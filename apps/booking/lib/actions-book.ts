@@ -5,7 +5,7 @@ import { forTenant } from "@revio/db";
 import { bookingReference, publicCreateReservation, publicGetHold, publicQuoteStay, publicReleaseHold } from "@revio/booking";
 import { cancelGuestIntent, captureGuestIntent, createGuestIntent, retrieveGuestIntent } from "@revio/payments";
 import { sendTemplatedEmail } from "@revio/email";
-import { PAY_AT_HOTEL_LABEL, stayDetails, type StayTerms } from "@revio/core";
+import { PAY_AT_HOTEL_LABEL, parseChildAges, stayDetails, type StayTerms } from "@revio/core";
 import { claimSubmitToken, forSystem } from "@revio/db";
 import { serverKit } from "./i18n/server";
 import { getPublicProperty } from "./property";
@@ -77,6 +77,7 @@ function stayOf(fd: FormData) {
     checkIn: str(fd, "checkIn"),
     checkOut: str(fd, "checkOut"),
     guests: Number.isFinite(guests) ? guests : 0,
+    childAges: parseChildAges(str(fd, "ages")),
     roomTypeId: str(fd, "roomTypeId"),
     ratePlanId: str(fd, "ratePlanId"),
     holdId: str(fd, "holdId"),
@@ -189,6 +190,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
     checkIn: str(fd, "checkIn"),
     checkOut: str(fd, "checkOut"),
     guests: guestCount,
+    childAges: parseChildAges(str(fd, "ages")),
     roomTypeId: str(fd, "roomTypeId"),
     ratePlanId: str(fd, "ratePlanId"),
     guest: { firstName, lastName, email, ...(phone ? { phone } : {}) },
@@ -265,7 +267,7 @@ export async function confirmBooking(_prev: BookResult | null, fd: FormData): Pr
         checkOut: str(fd, "checkOut"),
         checkInTime: property.checkInTime,
         checkOutTime: property.checkOutTime,
-        guests: guestCount,
+        guests: guestCount + parseChildAges(str(fd, "ages")).length,
         totalMinor: result.totalMinor ?? 0,
         currency: result.currency ?? property.baseCurrency,
         // "Pay at the hotel" is only true when nothing was taken online.

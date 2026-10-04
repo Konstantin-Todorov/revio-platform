@@ -56,6 +56,11 @@ export interface TermsStrings {
   planNoneHint: string;
   manage: string;
   notLive: string;
+  children: {
+    title: string; subtitle: (infantMax: number, childMax: number) => string;
+    childFee: (currency: string) => string; infantFee: (currency: string) => string; perNight: string;
+    note: string;
+  };
 }
 
 export const terms: Translations<TermsStrings> = {
@@ -114,6 +119,12 @@ export const terms: Translations<TermsStrings> = {
     deleteText: "Delete these terms. Rate plans that use them go back to a card guarantee with no stated terms.",
     deleteNote: "Rate plans using these terms will have none.",
     planTab: "Payment & cancellation",
+    children: {
+      title: "Children and infants",
+      subtitle: (i, c) => `Added per night on top of the adults' price. Infants are 0–${i} years (a cot, not counted against the room's capacity); children ${i + 1}–${c} (a bed each); anyone older is priced as an adult.`,
+      childFee: (c) => `Per child, per night (${c})`, infantFee: (c) => `Per infant, per night (${c})`, perNight: "per night",
+      note: "0 means children (or infants) stay free on this rate. RevioDirect asks each child's age and applies this.",
+    },
     planTitle: "Payment & cancellation",
     planSubtitle: "The terms this rate is sold on — shown next to its price on your booking page.",
     planNone: "No terms",
@@ -176,6 +187,12 @@ export const terms: Translations<TermsStrings> = {
     deleteText: "Изтриване на условията. Ценовите планове, които ги използват, се връщат към гаранция с карта без посочени условия.",
     deleteNote: "Ценовите планове с тези условия ще останат без условия.",
     planTab: "Плащане и анулиране",
+    children: {
+      title: "Деца и бебета",
+      subtitle: (i, c) => `Добавя се на нощувка към цената за възрастните. Бебета са от 0 до ${i} г. (кошара, не заемат място в стаята); деца — от ${i + 1} до ${c} г. (легло всяко); по-големите се таксуват като възрастни.`,
+      childFee: (c) => `На дете, на нощувка (${c})`, infantFee: (c) => `На бебе, на нощувка (${c})`, perNight: "на нощувка",
+      note: "0 означава, че децата (или бебетата) нощуват безплатно по тази тарифа. RevioDirect пита за възрастта на всяко дете и прилага това.",
+    },
     planTitle: "Плащане и анулиране",
     planSubtitle: "Условията, при които се продава този план — показват се до цената му на страницата за резервации.",
     planNone: "Без условия",

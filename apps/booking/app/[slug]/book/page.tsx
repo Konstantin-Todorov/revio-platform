@@ -13,7 +13,7 @@ import { serverKit } from "@/lib/i18n/server";
 import { termsWords } from "@/lib/i18n/kit";
 import { PaySplitNote } from "@/components/PaySplitNote";
 import { guestPublishableKey } from "@revio/payments";
-import { todayInTimeZone } from "@revio/core";
+import { todayInTimeZone, parseChildAges } from "@revio/core";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
@@ -45,6 +45,9 @@ export default async function BookPage({
   const checkOut = isValidISO(sp.checkOut) ? sp.checkOut : null;
   const guestsRaw = Number.parseInt(sp.guests ?? "2", 10);
   const guests = Number.isFinite(guestsRaw) && guestsRaw >= 1 && guestsRaw <= 10 ? guestsRaw : 2;
+  const childAges = parseChildAges(sp.ages);
+  // Carried on every link back, so the party the guest described is never silently dropped.
+  const agesQ = childAges.length ? `&ages=${childAges.join(",")}` : "";
   const roomTypeId = sp.roomTypeId ?? "";
   const ratePlanId = sp.ratePlanId ?? "";
 
@@ -58,7 +61,7 @@ export default async function BookPage({
   const nights = nightsBetween(checkIn, checkOut);
 
   const [outcome, store] = await Promise.all([
-    searchAvailability(property, ip, { checkIn, checkOut, guests }),
+    searchAvailability(property, ip, { checkIn, checkOut, guests, childAges }),
     getObjectStore(),
   ]);
 
@@ -66,7 +69,7 @@ export default async function BookPage({
   const plan = option?.plans.find((p) => p.ratePlanId === ratePlanId);
   // Gone while they were deciding. Back to the results, where the alternatives already live.
   if (!option || !plan) {
-    redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`);
+    redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${agesQ}`);
   }
 
   /**
@@ -84,21 +87,21 @@ export default async function BookPage({
   if (!hold) {
     // Same limiter as the public API: holds are the one anonymous action with real inventory cost.
     if (!checkHold(ip, property.id).ok) {
-      redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`);
+      redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${agesQ}`);
     }
     // The browsing session this hold belongs to — see `middleware.ts`. Without it, opening a second
     // room to compare reads as a second guest who then abandoned.
     const sessionId = (await cookies()).get(BOOKING_SESSION_COOKIE)?.value ?? null;
     const created = await publicCreateHold(db, { ...property, id: property.id }, {
-      checkIn, checkOut, guests, roomTypeId,
+      checkIn, checkOut, guests, childAges, roomTypeId,
     }, sessionId);
     if (created.error || !created.hold) {
-      redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`);
+      redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${agesQ}`);
     }
     hold = created.hold;
     // Put the hold in the URL so a refresh finds it instead of taking a second room.
     redirect(
-      `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}` +
+      `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${agesQ}` +
         `&roomTypeId=${roomTypeId}&ratePlanId=${ratePlanId}&hold=${hold.id}`,
     );
   }
@@ -120,18 +123,18 @@ export default async function BookPage({
       <main className="mx-auto w-full max-w-[62rem] px-5 pb-20 pt-6 sm:px-8">
         <StepBar
           current="Details"
-          backHref={`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`}
+          backHref={`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${agesQ}`}
           s={s.steps}
         />
 
         <h1 className="display mt-6 text-[1.85rem] sm:mt-8 sm:text-[2.4rem]">{s.book.title}</h1>
         <p className="mt-2 text-[14px]" style={{ color: "hsl(var(--ink-soft))" }}>
-          {fmtDay(checkIn)} — {fmtDay(checkOut)} · {s.book.summary(nights, guests)}
+          {fmtDay(checkIn)} — {fmtDay(checkOut)} · {s.book.summary(nights, guests + childAges.length)}
         </p>
 
         <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_21rem] lg:items-start">
           <BookingForm
-            stay={{ slug, checkIn, checkOut, guests, roomTypeId, ratePlanId, holdId: hold.id }}
+            stay={{ slug, checkIn, checkOut, guests, ages: childAges.join(","), roomTypeId, ratePlanId, holdId: hold.id }}
             cancellationPolicy={plan.cancellationPolicy}
             termsDetails={termsDetails}
             card={card}

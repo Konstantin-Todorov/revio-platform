@@ -119,6 +119,7 @@ export interface ReservationsStrings {
     cancel: string;
     emailGuest: string;
     online: { paid: string; refunded: string; fee: string; balance: (amount: string, day: string) => string; balanceFailed: string; cancelWill: (refund: string, charge: string) => string; noShowWill: (refund: string, charge: string) => string; waive: string };
+    kids: (children: number, infants: number, ages: string) => string;
     payLink: {
       title: string; hint: string; amount: (currency: string) => string; note: string; notePlaceholder: string; send: string; sending: string;
       outstanding: (amount: string) => string;
@@ -322,6 +323,7 @@ export const reservations: Translations<ReservationsStrings> = {
         noShowWill: (r, c) => [c ? `${c} no-show fee charged to the card` : "", r ? `${r} goes back to the guest` : ""].filter(Boolean).join(" · ") || "Nothing to refund or charge",
         waive: "Waive the fee (refund everything paid)",
       },
+      kids: (c, i, a) => [c ? `+ ${c} ${c === 1 ? "child" : "children"}` : "", i ? `+ ${i} ${i === 1 ? "infant" : "infants"}` : ""].filter(Boolean).join(" ") + (a ? ` (ages ${a})` : ""),
       payLink: {
         title: "Request a payment",
         hint: "Email the guest a secure link to pay by card — a deposit, the balance, or a request you accepted. The money goes to your Stripe account.",
@@ -528,6 +530,7 @@ export const reservations: Translations<ReservationsStrings> = {
         noShowWill: (r, c) => [c ? `${c} такса за неявяване се удържат от картата` : "", r ? `${r} се връщат на госта` : ""].filter(Boolean).join(" · ") || "Няма нищо за връщане или удръжка",
         waive: "Без такса (връщане на всичко платено)",
       },
+      kids: (c, i, a) => [c ? `+ ${c} ${c === 1 ? "дете" : "деца"}` : "", i ? `+ ${i} ${i === 1 ? "бебе" : "бебета"}` : ""].filter(Boolean).join(" ") + (a ? ` (на ${a} г.)` : ""),
       payLink: {
         title: "Поискай плащане",
         hint: "Изпратете на госта сигурна връзка за плащане с карта — депозит, остатък или приета заявка. Парите постъпват във Вашия Stripe акаунт.",

@@ -39,6 +39,7 @@ export function SearchBar({
   defaultCheckIn,
   defaultCheckOut,
   defaultGuests = 2,
+  defaultChildAges = [],
   compact = false,
   onDark = false,
 }: {
@@ -46,6 +47,8 @@ export function SearchBar({
   defaultCheckIn?: string;
   defaultCheckOut?: string;
   defaultGuests?: number;
+  /** Children's ages from the URL (`ages=4,7`). */
+  defaultChildAges?: number[];
   /** The results-page variant: shorter segments, no helper line — it sits above live results. */
   compact?: boolean;
   /**
@@ -69,6 +72,8 @@ export function SearchBar({
     isValidISO(defaultCheckOut) ? defaultCheckOut : addDays(todayISO(), 3),
   );
   const [guests, setGuests] = useState(defaultGuests);
+  // One entry per child; null until the guest picks the age — a guessed age misprices silently.
+  const [ages, setAges] = useState<(number | null)[]>(defaultChildAges);
   const [panel, setPanel] = useState<"dates" | "guests" | null>(null);
   const { s: t, fmtDay } = useGuestKit();
   const s = t.bar;
@@ -77,7 +82,9 @@ export function SearchBar({
   const ref = useDismiss<HTMLDivElement>(panel !== null, close);
 
   const nights = checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 0;
-  const ready = !!checkIn && !!checkOut && nights > 0;
+  const agesKnown = ages.every((a) => a != null);
+  const ready = !!checkIn && !!checkOut && nights > 0 && agesKnown;
+  const partyLabel = s.party(guests, ages.length);
 
   function onSelect(nextIn: string | null, nextOut: string | null) {
     setCheckIn(nextIn);
@@ -96,6 +103,7 @@ export function SearchBar({
         <input type="hidden" name="checkIn" value={checkIn ?? ""} />
         <input type="hidden" name="checkOut" value={checkOut ?? ""} />
         <input type="hidden" name="guests" value={guests} />
+        {ages.length > 0 && <input type="hidden" name="ages" value={ages.join(",")} />}
 
         {/*
           The results page keeps this bar pinned, and three stacked segments plus a button is over
@@ -122,13 +130,13 @@ export function SearchBar({
               onClick={() => setPanel((p) => (p === "guests" ? null : "guests"))}
               data-open={panel === "guests"}
               className="seg min-h-[50px] shrink-0"
-              aria-label={s.guestsCount(guests)}
+              aria-label={partyLabel}
             >
               <span className="seg-label flex items-center gap-1.5">
                 <Users size={13} aria-hidden />
                 {s.guests}
               </span>
-              <span className="seg-value">{guests}</span>
+              <span className="seg-value">{guests + ages.length}</span>
             </button>
             <button type="submit" disabled={!ready} aria-label={s.search} className="btn btn-brand shrink-0 px-4">
               <Search size={17} aria-hidden />
@@ -175,7 +183,7 @@ export function SearchBar({
             />
             <Segment
               label={s.guests}
-              value={s.guestsCount(guests)}
+              value={partyLabel}
               open={panel === "guests"}
               icon={<Users size={15} aria-hidden />}
               onClick={() => setPanel((p) => (p === "guests" ? null : "guests"))}
@@ -200,11 +208,7 @@ export function SearchBar({
           className="mt-3 text-center text-[13px] sm:text-left"
           style={{ color: onDark ? "hsl(var(--brand-ink) / 0.8)" : "hsl(var(--ink-faint))" }}
         >
-          {ready ? (
-            <>{s.ready(nights)}</>
-          ) : (
-            <>{s.empty}</>
-          )}
+          {!agesKnown ? <>{s.needAges}</> : ready ? <>{s.ready(nights)}</> : <>{s.empty}</>}
         </p>
       )}
 
@@ -212,13 +216,13 @@ export function SearchBar({
 
       {panel === "dates" && (
         <Sheet title={s.yourDates} closeLabel={s.close} onClose={close}>
-          <DateRangePanel checkIn={checkIn} checkOut={checkOut} onSelect={onSelect} onDone={close} prices={{ slug, guests }} />
+          <DateRangePanel checkIn={checkIn} checkOut={checkOut} onSelect={onSelect} onDone={close} prices={agesKnown ? { slug, guests, childAges: ages as number[] } : { slug, guests }} />
         </Sheet>
       )}
 
       {panel === "guests" && (
         <Sheet title={s.guests} closeLabel={s.close} onClose={close} align="right">
-          <GuestPanel guests={guests} onChange={setGuests} onDone={close} s={s} />
+          <GuestPanel guests={guests} onChange={setGuests} ages={ages} onAges={setAges} onDone={close} s={s} />
         </Sheet>
       )}
     </div>
@@ -292,44 +296,84 @@ function Sheet({
 }
 
 function GuestPanel({
-  guests, onChange, onDone, s,
+  guests, onChange, ages, onAges, onDone, s,
 }: {
   s: GuestKit["s"]["bar"];
   guests: number;
   onChange: (n: number) => void;
+  ages: (number | null)[];
+  onAges: (a: (number | null)[]) => void;
   onDone: () => void;
 }) {
+  const missing = ages.some((a) => a == null);
   return (
-    <div className="w-full p-4 sm:w-[19rem] sm:p-5">
-      <div className="flex items-center justify-between gap-6">
-        <div>
-          <p className="text-[14.5px] font-semibold">{s.guests}</p>
-          <p className="mt-0.5 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>
-            {s.guestsHint}
-          </p>
-        </div>
-        {/* A stepper, not a dropdown: adjusting by one is the only thing anyone ever does here, and
-            it takes one tap instead of open-scan-select. */}
-        <div className="flex items-center gap-1">
-          <StepButton label={s.fewer} disabled={guests <= 1} onClick={() => onChange(guests - 1)}>
-            <Minus size={16} aria-hidden />
-          </StepButton>
-          <span className="nums w-9 text-center text-[17px] font-bold" aria-live="polite">
-            {guests}
-          </span>
-          <StepButton label={s.more} disabled={guests >= MAX_GUESTS} onClick={() => onChange(guests + 1)}>
-            <Plus size={16} aria-hidden />
-          </StepButton>
-        </div>
+    <div className="w-full p-4 sm:w-[21rem] sm:p-5">
+      <Stepper
+        label={s.adults} hint={s.adultsHint} value={guests}
+        min={1} max={MAX_GUESTS} fewer={s.fewer} more={s.more} onChange={onChange}
+      />
+      <div className="mt-4">
+        <Stepper
+          label={s.children} hint={s.childrenHint} value={ages.length}
+          min={0} max={6} fewer={s.fewerChildren} more={s.moreChildren}
+          onChange={(n) => onAges(n > ages.length ? [...ages, null] : ages.slice(0, n))}
+        />
       </div>
 
-      <p className="mt-4 text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>
-        {s.guestsNote}
+      {/* Each child's age, as Booking.com asks: the hotel's bands decide who is an infant in a cot,
+          who is a child with a bed and who already counts as an adult. */}
+      {ages.length > 0 && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {ages.map((a, i) => (
+            <label key={i} className="block">
+              <span className="mb-1 block text-[12px] font-semibold" style={{ color: "hsl(var(--ink-soft))" }}>{s.childAge(i + 1)}</span>
+              <select
+                value={a ?? ""}
+                onChange={(e) => onAges(ages.map((x, j) => (j === i ? (e.target.value === "" ? null : Number(e.target.value)) : x)))}
+                className="h-10 w-full rounded-[var(--r-sm)] border px-2 text-[14px]"
+                style={{ borderColor: a == null ? "hsl(var(--caution))" : "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
+              >
+                <option value="">{s.agePick}</option>
+                {Array.from({ length: 18 }, (_, n) => <option key={n} value={n}>{s.ageOption(n)}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-4 text-[12.5px] leading-relaxed" style={{ color: missing ? "hsl(var(--caution))" : "hsl(var(--ink-soft))" }}>
+        {missing ? s.needAges : s.guestsNote}
       </p>
 
-      <button type="button" onClick={onDone} className="btn btn-brand mt-4 w-full">
+      <button type="button" onClick={onDone} disabled={missing} className="btn btn-brand mt-4 w-full">
         {s.done}
       </button>
+    </div>
+  );
+}
+
+function Stepper({
+  label, hint, value, min, max, fewer, more, onChange,
+}: {
+  label: string; hint: string; value: number; min: number; max: number; fewer: string; more: string;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6">
+      <div>
+        <p className="text-[14.5px] font-semibold">{label}</p>
+        <p className="mt-0.5 text-[12.5px]" style={{ color: "hsl(var(--ink-faint))" }}>{hint}</p>
+      </div>
+      {/* A stepper, not a dropdown: adjusting by one is the only thing anyone does here. */}
+      <div className="flex items-center gap-1">
+        <StepButton label={fewer} disabled={value <= min} onClick={() => onChange(value - 1)}>
+          <Minus size={16} aria-hidden />
+        </StepButton>
+        <span className="nums w-9 text-center text-[17px] font-bold" aria-live="polite">{value}</span>
+        <StepButton label={more} disabled={value >= max} onClick={() => onChange(value + 1)}>
+          <Plus size={16} aria-hidden />
+        </StepButton>
+      </div>
     </div>
   );
 }

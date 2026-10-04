@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { BED_SETUPS, earliestSelectable, ROOM_AMENITY_BY_KEY, MAX_MAIN_GUESTS, pastDateRefusal, pastRangeRefusal, planBulkOccupancy, plansPerRoom, roomTypeRemoval, todayInTimeZone, type Capability } from "@revio/core";
 import { prisma } from "./db";
 import { getProperty } from "./data";
-import { eachDate, logAudit, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
+import { eachDate, logAudit, money, recordPush, str, int, strList, utcDay } from "./mutation-helpers";
 import { ymd } from "./format";
 import { guard, requireCapability } from "./authz";
 import { occupancyKeyFor, occupancyKeysFor } from "@revio/db";
@@ -154,6 +154,26 @@ export async function saveRatePlan(_prev: ActionResult | null, fd: FormData): Pr
     return { ok: true, id: rp.id };
   }
   revalidateRates();
+  return { ok: true };
+}
+
+/** What children and infants add per night on this rate — the §6.9 axis beside adult occupancy. */
+export async function saveChildFees(_prev: ActionResult | null, fd: FormData): Promise<ActionResult> {
+  const _g = await guard("manageRates");
+  if (!_g.ok) return { ok: false, error: _g.error };
+  const property = await getProperty();
+  const id = str(fd, "id");
+  const childrenFeeMinor = money(fd, "childrenFee", 0);
+  const infantFeeMinor = money(fd, "infantFee", 0);
+  if (!Number.isFinite(childrenFeeMinor) || !Number.isFinite(infantFeeMinor) || childrenFeeMinor < 0 || infantFeeMinor < 0) {
+    return { ok: false, error: (await say()).badPrice };
+  }
+  const { count } = await prisma.ratePlan.updateMany({
+    where: { id, propertyId: property.id },
+    data: { childrenFeeMinor, infantFeeMinor },
+  });
+  if (count !== 1) return { ok: false, error: (await say()).badPrice };
+  revalidatePath(`/rooms-rates/plans/${id}`);
   return { ok: true };
 }
 

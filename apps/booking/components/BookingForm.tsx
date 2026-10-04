@@ -28,6 +28,8 @@ export interface StaySelection {
   checkIn: string;
   checkOut: string;
   guests: number;
+  /** Children's ages, "4,7" — empty when none. */
+  ages: string;
   roomTypeId: string;
   ratePlanId: string;
   holdId: string;

@@ -79,6 +79,10 @@ export interface GuestStrings {
     ready: (nights: number) => string; empty: string;
     yourDates: string; close: string;
     guestsHint: string; fewer: string; more: string; guestsNote: string; done: string;
+    adults: string; adultsHint: string; children: string; childrenHint: string;
+    fewerChildren: string; moreChildren: string;
+    childAge: (n: number) => string; agePick: string; ageOption: (age: number) => string;
+    party: (adults: number, children: number) => string; needAges: string;
   };
   calendar: {
     prev: string; next: string; chooseCheckOut: string; chooseCheckIn: string; clear: string; done: string;
@@ -339,6 +343,11 @@ export const guest: Translations<GuestStrings> = {
       guestsHint: "Everyone staying in the room",
       fewer: "One fewer guest", more: "One more guest",
       guestsNote: "We only show rooms that genuinely sleep this many — nothing you would have to argue about at the front desk.",
+      adults: "Adults", adultsHint: "Ages 18 and over", children: "Children", childrenHint: "Ages 0–17",
+      fewerChildren: "One child fewer", moreChildren: "One more child",
+      childAge: (n) => `Age of child ${n}`, agePick: "Age", ageOption: (a) => (a === 0 ? "under 1" : `${a} ${a === 1 ? "year" : "years"}`),
+      party: (a, c) => `${en1(a, "adult", "adults")}${c ? ` · ${en1(c, "child", "children")}` : ""}`,
+      needAges: "Choose each child's age — the hotel prices and fits children by age.",
       done: "Done",
     },
     calendar: {
@@ -636,6 +645,11 @@ export const guest: Translations<GuestStrings> = {
       guestsHint: "Всички, които ще отседнат в стаята",
       fewer: "Един гост по-малко", more: "Един гост повече",
       guestsNote: "Показваме само стаи, в които наистина се побират толкова гости — без изненади на рецепцията.",
+      adults: "Възрастни", adultsHint: "На 18 и повече години", children: "Деца", childrenHint: "От 0 до 17 години",
+      fewerChildren: "Едно дете по-малко", moreChildren: "Още едно дете",
+      childAge: (n) => `Възраст на дете ${n}`, agePick: "Възраст", ageOption: (a) => (a === 0 ? "под 1 г." : `${a} г.`),
+      party: (a, c) => `${a} ${a === 1 ? "възрастен" : "възрастни"}${c ? ` · ${c} ${c === 1 ? "дете" : "деца"}` : ""}`,
+      needAges: "Изберете възрастта на всяко дете — хотелът настанява и таксува децата според възрастта им.",
       done: "Готово",
     },
     calendar: {

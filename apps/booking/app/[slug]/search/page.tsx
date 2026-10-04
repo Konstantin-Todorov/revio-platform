@@ -1,3 +1,4 @@
+import { parseChildAges } from "@revio/core";
 import { Suspense } from "react";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
@@ -23,20 +24,24 @@ interface Query {
   checkIn: string | null;
   checkOut: string | null;
   guests: number;
+  /** Children's ages (`ages=4,7`) — priced and fitted by the hotel's age bands. */
+  childAges: number[];
 }
 
 /** A guest can type anything into a URL; treat every parameter as hostile until parsed. */
-function parseQuery(sp: { checkIn?: string; checkOut?: string; guests?: string }): Query {
+function parseQuery(sp: { checkIn?: string; checkOut?: string; guests?: string; ages?: string }): Query {
   const guests = Number.parseInt(sp.guests ?? "2", 10);
   return {
     checkIn: isValidISO(sp.checkIn) ? sp.checkIn : null,
     checkOut: isValidISO(sp.checkOut) ? sp.checkOut : null,
     guests: Number.isFinite(guests) && guests >= 1 && guests <= 10 ? guests : 2,
+    childAges: parseChildAges(sp.ages),
   };
 }
 
-function searchHref(slug: string, q: { checkIn: string; checkOut: string; guests: number }): string {
-  return `/${slug}/search?checkIn=${q.checkIn}&checkOut=${q.checkOut}&guests=${q.guests}`;
+function searchHref(slug: string, q: { checkIn: string; checkOut: string; guests: number; childAges?: number[] }): string {
+  const ages = q.childAges?.length ? `&ages=${q.childAges.join(",")}` : "";
+  return `/${slug}/search?checkIn=${q.checkIn}&checkOut=${q.checkOut}&guests=${q.guests}${ages}`;
 }
 
 export default async function SearchPage({
@@ -44,7 +49,7 @@ export default async function SearchPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string }>;
+  searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string; ages?: string }>;
 }) {
   const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const property = await getPublicProperty(slug);
@@ -76,6 +81,7 @@ export default async function SearchPage({
             {...(q.checkIn ? { defaultCheckIn: q.checkIn } : {})}
             {...(q.checkOut ? { defaultCheckOut: q.checkOut } : {})}
             defaultGuests={q.guests}
+            defaultChildAges={q.childAges}
           />
         </div>
       </div>
@@ -90,7 +96,7 @@ export default async function SearchPage({
                 {fmtDay(q.checkIn!)} — {fmtDay(q.checkOut!)}
               </h1>
               <p className="nums mt-2 text-[14px]" style={{ color: "hsl(var(--ink-soft))" }}>
-                {s.search.summary(nights, q.guests)}
+                {s.search.summary(nights, q.guests + q.childAges.length)}
               </p>
             </>
           ) : (
@@ -107,10 +113,10 @@ export default async function SearchPage({
           {valid ? (
             // Keyed on the query so changing dates shows the skeleton again rather than leaving the
             // previous stay's prices on screen while the new ones are fetched.
-            <Suspense key={`${q.checkIn}-${q.checkOut}-${q.guests}`} fallback={<ResultsSkeleton label={s.search.checking} />}>
+            <Suspense key={`${q.checkIn}-${q.checkOut}-${q.guests}-${q.childAges.join(".")}`} fallback={<ResultsSkeleton label={s.search.checking} />}>
               <Results
                 property={property}
-                q={{ checkIn: q.checkIn!, checkOut: q.checkOut!, guests: q.guests }}
+                q={{ checkIn: q.checkIn!, checkOut: q.checkOut!, guests: q.guests, childAges: q.childAges }}
                 nights={nights}
                 kit={kit}
               />
@@ -131,7 +137,7 @@ async function Results({
   kit,
 }: {
   property: PublicProperty;
-  q: { checkIn: string; checkOut: string; guests: number };
+  q: { checkIn: string; checkOut: string; guests: number; childAges: number[] };
   nights: number;
   kit: GuestKit;
 }) {
@@ -159,7 +165,7 @@ async function Results({
         {alternatives.length ? (
           <>
             {s.search.altBody(nights)}
-            <AlternativeDates slug={property.slug} guests={q.guests} alternatives={alternatives} kit={kit} />
+            <AlternativeDates slug={property.slug} guests={q.guests} childAges={q.childAges} alternatives={alternatives} kit={kit} />
           </>
         ) : (
           <>
@@ -196,6 +202,7 @@ async function Results({
             checkIn={q.checkIn}
             checkOut={q.checkOut}
             guests={q.guests}
+            childAges={q.childAges}
             mediaUrl={mediaUrl}
             kit={kit}
           />
@@ -222,11 +229,13 @@ async function Results({
 function AlternativeDates({
   slug,
   guests,
+  childAges,
   alternatives,
   kit,
 }: {
   slug: string;
   guests: number;
+  childAges: number[];
   alternatives: AlternativeStay[];
   kit: GuestKit;
 }) {
@@ -236,7 +245,7 @@ function AlternativeDates({
       {alternatives.map((alt) => (
         <a
           key={alt.checkIn}
-          href={searchHref(slug, { checkIn: alt.checkIn, checkOut: alt.checkOut, guests })}
+          href={searchHref(slug, { checkIn: alt.checkIn, checkOut: alt.checkOut, guests, childAges })}
           className="card flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:border-[hsl(var(--brand))]"
         >
           <span className="min-w-0">

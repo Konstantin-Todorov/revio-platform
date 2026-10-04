@@ -191,6 +191,12 @@ export default async function ReservationViewPage({
                     <button type="submit" className="rounded-md border border-surface-border px-2.5 py-1 text-[12px] font-semibold text-ink-600 transition-colors hover:border-brand-600 hover:text-brand-700">
                       {s.update}
                     </button>
+                    {/* Children beside the adults — a cot to prepare, a child to register. */}
+                    {(l.childrenCount > 0 || l.infantsCount > 0) && (
+                      <span className="w-full text-[12px] font-semibold text-ink-700">
+                        {s.kids(l.childrenCount, l.infantsCount, l.childAges.join(", "))}
+                      </span>
+                    )}
                   </form>
                 ))}
               </dd>

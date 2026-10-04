@@ -37,7 +37,7 @@ export function DateRangePanel({
   onSelect: (checkIn: string | null, checkOut: string | null) => void;
   onDone: () => void;
   /** Show the lowest price under each night. Absent on a surface that has no hotel to price. */
-  prices?: { slug: string; guests: number };
+  prices?: { slug: string; guests: number; childAges?: number[] };
 }) {
   const today = useMemo(todayISO, []);
   const anchor = checkIn ?? today;
@@ -64,20 +64,21 @@ export function DateRangePanel({
     if (!prices) return;
     const from = isoOf(cursor.year, cursor.month);
     const to = isoOf(cursor.year, cursor.month + 2);
-    const key = `${from}:${prices.guests}`;
+    const agesKey = (prices.childAges ?? []).join(",");
+    const key = `${from}:${prices.guests}:${agesKey}`;
     const hit = priceCache.current.get(key);
     if (hit) { setCurrency(hit.currency); setPriceDays((d) => ({ ...d, ...hit.days })); return; }
     let live = true;
-    loadPriceCalendar(prices.slug, from, to, prices.guests).then((r) => {
+    loadPriceCalendar(prices.slug, from, to, prices.guests, prices.childAges ?? []).then((r) => {
       if (!r) return;
       priceCache.current.set(key, r);
       if (live) { setCurrency(r.currency); setPriceDays((d) => ({ ...d, ...r.days })); }
     }).catch(() => {});
     return () => { live = false; };
-  }, [prices?.slug, prices?.guests, cursor.year, cursor.month]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prices?.slug, prices?.guests, (prices?.childAges ?? []).join(","), cursor.year, cursor.month]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A new party size is a different set of prices; the old ones must not linger under the new count.
-  useEffect(() => { setPriceDays({}); }, [prices?.guests]);
+  useEffect(() => { setPriceDays({}); }, [prices?.guests, (prices?.childAges ?? []).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The cheapest night on screen — marked, because "where is it cheap" is the question. */
   const visibleLowest = useMemo(() => {

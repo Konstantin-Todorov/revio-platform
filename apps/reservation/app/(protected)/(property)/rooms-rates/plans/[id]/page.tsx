@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getRatesData, getSetupData, getStayPolicies } from "@/lib/data";
 import { PlanTermsCard } from "@/components/rates/PlanTermsCard";
+import { ChildFeesCard } from "@/components/rates/ChildFeesCard";
 import { addDays, stayTerms, stayTermsWords } from "@revio/core";
 import { termsPolicyOf } from "@revio/booking";
 import { terms as termsDict } from "@/lib/i18n/terms";
@@ -112,6 +113,13 @@ export default async function RatePlanPage({ params, searchParams }: {
         <>
           <PlanLinkageCard plan={toLink(rp)} options={ratePlans.map(toLink)} dependents={dependents} />
           <PlanPricingCard plan={pricing} propertyModel={propertyModel} />
+          <ChildFeesCard
+            ratePlanId={rp.id}
+            currency={property.baseCurrency}
+            childrenFeeMinor={rp.childrenFeeMinor}
+            infantFeeMinor={rp.infantFeeMinor}
+            bands={{ infantMax: defaults?.ageInfantMax ?? 2, childMax: defaults?.ageChildMax ?? 11 }}
+          />
         </>
       )}
 

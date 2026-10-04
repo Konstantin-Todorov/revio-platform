@@ -30,7 +30,7 @@ export interface SearchOutcome {
 export async function searchAvailability(
   property: PublicProperty,
   ip: string,
-  q: { checkIn: string; checkOut: string; guests: number },
+  q: { checkIn: string; checkOut: string; guests: number; childAges?: number[] },
 ): Promise<SearchOutcome> {
   if (!checkSearch(ip, property.slug).ok) {
     return { rateLimited: true, error: "Too many searches just now. Please wait a moment and try again." };

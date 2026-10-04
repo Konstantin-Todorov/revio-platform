@@ -245,7 +245,7 @@ export default async function ConfirmationPage({
                   value={fmtDay(checkOut)} sub={s.by(property.checkOutTime)} />
             <Cell icon={<Clock size={15} aria-hidden />} term={s.length}
                   value={t.count.nights(nights)}
-                  sub={t.count.guests(line.guestsCount ?? 2)} />
+                  sub={t.bar.party(line.guestsCount ?? 2, line.childrenCount + line.infantsCount)} />
           </dl>
 
           <div className="px-5 py-4 sm:px-6">

@@ -1682,6 +1682,13 @@ model ReservationLine {
   /// Adults on this line — the occupancy the stay is PRICED at (OBP §6.9: children and infants are a
   /// separate axis and must never be folded in here).
   guestsCount   Int?
+  /// Children in the hotel's child band on this line (a bed each, the plan's child fee). Separate
+  /// from `guestsCount` by design (§6.9) — see `partyOf` in @revio/core.
+  childrenCount Int      @default(0)
+  /// Infants (a cot; not counted against capacity).
+  infantsCount  Int      @default(0)
+  /// The ages the guest gave, for the front desk (a cot to prepare, a child to register).
+  childAges     Int[]    @default([])
 
   reservation Reservation            @relation(fields: [reservationId], references: [id], onDelete: Cascade)
   nightRates  ReservationNightRate[]

@@ -154,7 +154,7 @@ async function loadForChange(db: Db, property: PropertyRow, reservationId: strin
     select: {
       id: true, status: true, guestName: true, onlinePaidMinor: true, balanceChargedAt: true, departedAt: true,
       guaranteeRef: true, paymentCustomerId: true,
-      lines: { select: { id: true, roomTypeId: true, ratePlanId: true, checkIn: true, checkOut: true, guestsCount: true } },
+      lines: { select: { id: true, roomTypeId: true, ratePlanId: true, checkIn: true, checkOut: true, guestsCount: true, childAges: true } },
       stayExtras: { where: { active: true }, select: { priceMinor: true, basis: true } },
     },
   });
@@ -174,7 +174,7 @@ async function quoteChange(
     return { ok: false as const, code: "same_dates" as const };
   }
   const q = await publicChangeQuote(db, property, {
-    reservationId: r.id, roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, guests: line.guestsCount ?? 2,
+    reservationId: r.id, roomTypeId: line.roomTypeId, ratePlanId: line.ratePlanId, guests: line.guestsCount ?? 2, childAges: line.childAges,
     checkIn, checkOut,
     extras: r.stayExtras.map((e) => ({ priceMinor: e.priceMinor, basis: e.basis === "per_stay" ? "per_stay" : "per_night" })),
   });

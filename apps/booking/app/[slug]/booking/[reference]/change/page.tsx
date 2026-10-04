@@ -54,6 +54,7 @@ export default async function ChangeDatesPage({
           manageKey={k!}
           current={{ checkIn, checkOut, totalMinor: await allInTotal(property, r) }}
           guests={line.guestsCount ?? 2}
+          childAges={line.childAges}
           currency={r.currency}
         />
       </main>

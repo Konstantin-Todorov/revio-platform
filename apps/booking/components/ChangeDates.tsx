@@ -14,8 +14,9 @@ import { changeMyBooking, previewMyChange, type PreviewResult } from "@/lib/acti
  * moves until the guest presses the button under a number they have read.
  */
 export function ChangeDates({
-  slug, reference, manageKey, current, guests, currency,
+  slug, reference, manageKey, current, guests, childAges = [], currency,
 }: {
+  childAges?: number[];
   slug: string;
   reference: string;
   manageKey: string;
@@ -57,7 +58,7 @@ export function ChangeDates({
           checkOut={checkOut}
           onSelect={onSelect}
           onDone={() => { if (checkIn && checkOut) preview(checkIn, checkOut); }}
-          prices={{ slug, guests }}
+          prices={{ slug, guests, childAges }}
         />
       </div>
 

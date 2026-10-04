@@ -27,6 +27,8 @@ export interface ReservationStrings {
   stayState: string;
   guestsInRoom: string;
   ofMax: (n: number) => string;
+  /** Children and infants beside the adults, with their ages. */
+  kids: (children: number, infants: number, ages: string) => string;
   update: string;
   occupancyNote: string;
   folioBalance: string;
@@ -81,6 +83,7 @@ export const reservation: Translations<ReservationStrings> = {
     stayState: "Stay state",
     guestsInRoom: "Guests in the room",
     ofMax: (n) => `of ${n} max`,
+    kids: (c, i, a) => [c ? `+ ${c} ${c === 1 ? "child" : "children"}` : "", i ? `+ ${i} ${i === 1 ? "infant (cot)" : "infants (cots)"}` : ""].filter(Boolean).join(" ") + (a ? ` · ages ${a}` : ""),
     update: "Update",
     occupancyNote: "Changing this reprices the remaining nights on a per-person rate. Nights already stayed keep what they were sold at.",
     folioBalance: "Folio balance",
@@ -133,6 +136,7 @@ export const reservation: Translations<ReservationStrings> = {
     stayState: "Състояние на престоя",
     guestsInRoom: "Гости в стаята",
     ofMax: (n) => `от максимум ${n}`,
+    kids: (c, i, a) => [c ? `+ ${c} ${c === 1 ? "дете" : "деца"}` : "", i ? `+ ${i} ${i === 1 ? "бебе (кошара)" : "бебета (кошари)"}` : ""].filter(Boolean).join(" ") + (a ? ` · възраст ${a} г.` : ""),
     update: "Обнови",
     occupancyNote: "Промяната преизчислява оставащите нощувки при цена на човек. Вече изминалите нощувки остават на цената, на която са продадени.",
     folioBalance: "Салдо по сметката",

@@ -17,13 +17,13 @@ import { getPublicProperty } from "./property";
  * that works without it, never a reason for the date picker to fail.
  */
 export async function loadPriceCalendar(
-  slug: string, from: string, to: string, guests: number,
+  slug: string, from: string, to: string, guests: number, childAges: number[] = [],
 ): Promise<{ currency: string; days: Record<string, number | null> } | null> {
   const property = await getPublicProperty(slug);
   if (!property) return null;
   if (!checkCalendar(clientIp(await headers()), property.slug).ok) return null;
   try {
-    return await publicPriceCalendar(forTenant(property.tenantId), { ...property, id: property.id }, { from, to, guests });
+    return await publicPriceCalendar(forTenant(property.tenantId), { ...property, id: property.id }, { from, to, guests, childAges: childAges.filter((a) => Number.isInteger(a) && a >= 0 && a <= 17).slice(0, 6) });
   } catch {
     return null;
   }
