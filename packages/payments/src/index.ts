@@ -8,3 +8,4 @@
 export * from "./gateway.js";
 export * from "./connect.js";
 export * from "./guest-payments.js";
+export * from "./stripe-mode.js";

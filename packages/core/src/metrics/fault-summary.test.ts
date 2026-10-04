@@ -69,4 +69,12 @@ describe("summariseFault — a stack trace routes a fault nowhere", () => {
   it("omits the route when there isn't one", () => {
     expect(summariseFault(PRISMA_NAN).headline).not.toContain(" on ");
   });
+
+  it("calls a database outage what it is — not our defect, not 'could not be saved'", () => {
+    const msg = "\nInvalid `prisma.user.findUnique()` invocation:\n\n\nCan't reach database server at `postgres.railway.internal:5432`";
+    const f = summariseFault(msg, "/booking-engine/payments");
+    expect(f.ourBug).toBe(false);
+    expect(f.kind).toBe("upstream");
+    expect(f.headline).toBe("The database was briefly unreachable on /booking-engine/payments");
+  });
 });

@@ -1,3 +1,4 @@
+import { guestSecretKey, stripeGuestMode } from "./stripe-mode.js";
 /**
  * Stripe Connect — the hotel's own account, not ours (booking-engine spec §2.5③).
  *
@@ -28,7 +29,7 @@ export type ConnectStatus = {
   chargesEnabled: boolean;
   /** Onboarding form submitted. True with chargesEnabled false = Stripe is still verifying. */
   detailsSubmitted: boolean;
-  mode: "mock" | "stripe_test";
+  mode: ConnectMode;
   error?: string;
   /** Stripe pays the hotel's balance out to its bank. */
   payoutsEnabled?: boolean;
@@ -50,13 +51,12 @@ export function isMockAccount(accountId: string | null | undefined): boolean {
   return !!accountId && accountId.startsWith("acct_mock_");
 }
 
-function stripeKey(): string | null {
-  const k = process.env.STRIPE_SECRET_KEY;
-  return k && k.startsWith("sk_test_") ? k : null; // TEST keys only — never a live key
-}
+// Test or live by explicit choice (`STRIPE_GUEST_MODE`) — see `stripe-mode.ts`.
+const stripeKey = guestSecretKey;
 
-export function connectMode(): "mock" | "stripe_test" {
-  return stripeKey() ? "stripe_test" : "mock";
+export type ConnectMode = "mock" | "stripe_test" | "stripe_live";
+export function connectMode(): ConnectMode {
+  return stripeKey() ? (stripeGuestMode() === "live" ? "stripe_live" : "stripe_test") : "mock";
 }
 
 async function stripeCall(
@@ -82,7 +82,7 @@ export async function createConnectAccount(opts: {
   propertyName: string;
   email: string | null;
   country: string;
-}): Promise<{ ok: boolean; accountId?: string; mode: "mock" | "stripe_test"; error?: string }> {
+}): Promise<{ ok: boolean; accountId?: string; mode: ConnectMode; error?: string }> {
   const key = stripeKey();
   if (!key) {
     const rand = Math.random().toString(36).slice(2, 10);
@@ -95,10 +95,10 @@ export async function createConnectAccount(opts: {
       ...(opts.email ? { email: opts.email } : {}),
       "business_profile[name]": opts.propertyName,
     });
-    if (json?.error) return { ok: false, mode: "stripe_test", error: json.error.message };
-    return { ok: true, accountId: json.id, mode: "stripe_test" };
+    if (json?.error) return { ok: false, mode: connectMode(), error: json.error.message };
+    return { ok: true, accountId: json.id, mode: connectMode() };
   } catch (e) {
-    return { ok: false, mode: "stripe_test", error: e instanceof Error ? e.message : "connect error" };
+    return { ok: false, mode: connectMode(), error: e instanceof Error ? e.message : "connect error" };
   }
 }
 
@@ -112,7 +112,7 @@ export async function createConnectAccount(opts: {
 export async function createOnboardingLink(
   accountId: string,
   urls: { refreshUrl: string; returnUrl: string },
-): Promise<{ ok: boolean; url?: string; mode: "mock" | "stripe_test"; error?: string }> {
+): Promise<{ ok: boolean; url?: string; mode: ConnectMode; error?: string }> {
   const key = stripeKey();
   // In mock mode we send the hotel straight back to the return URL: there is no Stripe to visit, and
   // a dead link would make the demo look broken rather than mocked.
@@ -124,10 +124,10 @@ export async function createOnboardingLink(
       return_url: urls.returnUrl,
       type: "account_onboarding",
     });
-    if (json?.error) return { ok: false, mode: "stripe_test", error: json.error.message };
-    return { ok: true, url: json.url, mode: "stripe_test" };
+    if (json?.error) return { ok: false, mode: connectMode(), error: json.error.message };
+    return { ok: true, url: json.url, mode: connectMode() };
   } catch (e) {
-    return { ok: false, mode: "stripe_test", error: e instanceof Error ? e.message : "connect error" };
+    return { ok: false, mode: connectMode(), error: e instanceof Error ? e.message : "connect error" };
   }
 }
 
@@ -148,7 +148,7 @@ export async function getConnectStatus(accountId: string): Promise<ConnectStatus
     return { accountId, chargesEnabled: true, detailsSubmitted: true, mode: "mock" };
   }
   if (isMockAccount(accountId)) {
-    return { accountId, chargesEnabled: false, detailsSubmitted: false, mode: "stripe_test", stale: true };
+    return { accountId, chargesEnabled: false, detailsSubmitted: false, mode: connectMode(), stale: true };
   }
   try {
     const { json } = await stripeCall(`accounts/${encodeURIComponent(accountId)}`, key);
@@ -157,7 +157,7 @@ export async function getConnectStatus(accountId: string): Promise<ConnectStatus
         accountId,
         chargesEnabled: false,
         detailsSubmitted: false,
-        mode: "stripe_test",
+        mode: connectMode(),
         error: json.error.message,
       };
     }
@@ -165,7 +165,7 @@ export async function getConnectStatus(accountId: string): Promise<ConnectStatus
       accountId,
       chargesEnabled: !!json.charges_enabled,
       detailsSubmitted: !!json.details_submitted,
-      mode: "stripe_test",
+      mode: connectMode(),
       payoutsEnabled: !!json.payouts_enabled,
       businessName: json.business_profile?.name ?? json.settings?.dashboard?.display_name ?? null,
       email: json.email ?? null,
@@ -180,7 +180,7 @@ export async function getConnectStatus(accountId: string): Promise<ConnectStatus
       accountId,
       chargesEnabled: false,
       detailsSubmitted: false,
-      mode: "stripe_test",
+      mode: connectMode(),
       error: e instanceof Error ? e.message : "connect error",
     };
   }

@@ -1,7 +1,8 @@
 # Package: Payments (`@revio/payments`)
 
 > Part of the **Revio platform** — read the root `CLAUDE.md` first. Founder decision, standing:
-> **payments are mocked; Stripe TEST mode only; never live.** (`docs/specs/PMS-GUIDE-V1.md` §4.5, F2.)
+> **Guest payments go live only by explicit choice** (founder, 2026-10-04: identity verified, "продължавай"):
+> `STRIPE_GUEST_MODE=live` plus a live key. The desk terminal (`gateway.ts`) stays TEST/mock — see below.
 
 The **only** path by which any Revio product touches a card. RevioPMS charges and refunds folios;
 RevioDirect takes a card guarantee. Both go through here.
@@ -29,11 +30,19 @@ statement of fact.
 by Stripe, so the number goes browser → Stripe and still never through us (`guest-payments.ts`). It is
 charged on the **hotel's connected account** (`Stripe-Account` header), authorised first
 (`capture_method=manual`), captured only after the reservation exists, and cancelled if the booking
-fails — so a guest is never charged for a booking that did not happen. The same `sk_test_`-only rule
-applies: going live for guests is still a founder decision, separate from our own invoicing.
+fails — so a guest is never charged for a booking that did not happen.
 
-⚠️ `chargeCard`/`refundCard` (RevioPMS at the desk) do **not** send `Stripe-Account` — in live mode
-they would charge OUR account for a hotel's guest. Fix before any live guest payment.
+**Test or live is a CHOICE (`stripe-mode.ts`, 2026-10-04).** `STRIPE_GUEST_MODE=live` on a service
+makes guest payments, saved-card charges, refunds, payment links and Connect onboarding use a LIVE
+key; without it only a `sk_test_`/`pk_test_` key is accepted. A key whose prefix disagrees with the
+chosen mode is refused, in both directions — pasting a live key never starts charging cards, and a
+test key left behind after going live never silently stops taking money. `stripe-mode.test.ts` pins it.
+
+⚠️ `chargeCard`/`refundCard` in `gateway.ts` (RevioPMS terminal at the desk) do **not** send
+`Stripe-Account` — live, they would charge OUR account for a hotel's guest. So `gateway.ts` keeps its
+own `sk_test_`-only key and falls back to the mock in live mode (a desk card payment is then a record
+of the terminal payment, which is what it is). Charging a card ON FILE from the folio goes through
+`chargeSavedCard` here, on the hotel's account, and is correct live.
 
 ## Mock behaviour worth knowing
 

@@ -39,6 +39,16 @@ export function summariseFault(message: string, route?: string | null): FaultSum
   const first = (message ?? "").split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "Unknown error";
   const where = route ? ` on ${route}` : "";
 
+  /*
+   * The database itself was unreachable — a restart or network blip at the host, not our code.
+   * Checked BEFORE the Prisma pattern: Prisma wraps it in the same "Invalid `prisma.x()` invocation"
+   * dump, so a 30-second outage read as "A user could not be saved · our defect" and sent somebody
+   * looking for a bug that does not exist (found 2026-10-03).
+   */
+  if (/Can't reach database server|Timed out fetching a new connection|Server has closed the connection|P1001|P1017/i.test(message ?? "")) {
+    return { headline: `The database was briefly unreachable${where}`, kind: "upstream", ourBug: false };
+  }
+
   // Prisma's invocation dumps are the common case and the one that started this.
   const prisma = /Invalid `prisma\.(\w+)\.(\w+)\(\)` invocation/i.exec(message ?? "");
   if (prisma) {

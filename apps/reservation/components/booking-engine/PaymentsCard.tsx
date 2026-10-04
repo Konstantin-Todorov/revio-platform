@@ -65,7 +65,7 @@ export function PaymentsCard({
   hasAccount: boolean;
   checkedAt: Date | null;
   /** "mock" when no Stripe test key is configured — say so rather than implying a real connection. */
-  mode: "mock" | "stripe_test";
+  mode: "mock" | "stripe_test" | "stripe_live";
 }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);

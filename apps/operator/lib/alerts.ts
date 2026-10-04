@@ -1,6 +1,6 @@
 import "server-only";
 import { forSystem } from "@revio/db";
-import { crossWiredFromRecord, type AlertCandidate } from "@revio/core";
+import { crossWiredFromRecord, summariseFault, type AlertCandidate } from "@revio/core";
 
 /**
  * Everything across the portfolio that a person should be told about, in one list.
@@ -265,11 +265,16 @@ export async function alertCandidates(): Promise<AlertCandidate[]> {
     select: { id: true, service: true, message: true, route: true, count: true },
   });
   for (const e of appErrors) {
+    // The same classification as the Error log screen: a database or network blip is not "an error
+    // in our code" and must not send somebody hunting for a bug (the empty-headline alert of 2026-10-03).
+    const f = summariseFault(e.message, e.route);
     out.push({
       key: `app_error:${e.id}`,
       clientName: `Revio · ${PRODUCT[e.service] ?? e.service}`,
-      summary: `Error in our code${e.route ? ` on ${e.route}` : ""}: ${e.message.split("\n")[0]!.trim().slice(0, 140)}${e.count > 1 ? ` (${e.count}×)` : ""}`,
-      action: "Open Error log in the Operator, find the cause, fix it, then mark it resolved. If it happens again it reopens by itself.",
+      summary: `${f.ourBug ? "Error in our code" : "Infrastructure"}: ${f.headline}${e.count > 1 ? ` (${e.count}×)` : ""}`,
+      action: f.ourBug
+        ? "Open Error log in the Operator, find the cause, fix it, then mark it resolved. If it happens again it reopens by itself."
+        : "Usually a short outage at the host — check it has not repeated, then mark it resolved in the Error log. If it keeps happening, look at the host.",
       severity: "soon",
     });
   }

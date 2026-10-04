@@ -25,12 +25,12 @@
  * exercising the form before Connect is enabled. It can never apply in live mode.
  */
 
+import { guestPublishableKeyForMode, guestSecretKey, stripeGuestMode } from "./stripe-mode.js";
+
 export type GuestIntentKind = "payment" | "setup";
 
-function key(): string | null {
-  const k = process.env.STRIPE_SECRET_KEY;
-  return k && k.startsWith("sk_test_") ? k : null;
-}
+// Test or live by explicit choice — see `stripe-mode.ts`.
+const key = guestSecretKey;
 
 /** Whether guests can pay online at all from this deployment. */
 export function guestPaymentsConfigured(): boolean {
@@ -39,13 +39,12 @@ export function guestPaymentsConfigured(): boolean {
 
 /** Local development: charge the platform sandbox when a hotel has no connected account. Test keys only. */
 export function testChargesOnPlatform(): boolean {
-  return key() !== null && process.env.STRIPE_TEST_CHARGE_PLATFORM === "1";
+  return key() !== null && stripeGuestMode() === "test" && process.env.STRIPE_TEST_CHARGE_PLATFORM === "1";
 }
 
 /** The publishable key the browser loads Stripe.js with. */
 export function guestPublishableKey(): string | null {
-  const pk = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? process.env.STRIPE_PUBLISHABLE_KEY;
-  return pk && pk.startsWith("pk_test_") ? pk : null;
+  return guestPublishableKeyForMode();
 }
 
 /** The fields of a Stripe object this module reads — nothing else is trusted to exist. */
