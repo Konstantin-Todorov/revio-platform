@@ -17,6 +17,7 @@ import { PropertyFooter } from "@/components/PropertyFooter";
 import { RoomOption } from "@/components/RoomOption";
 import { StickyRoomBar } from "@/components/StickyRoomBar";
 import { SearchBar } from "@/components/SearchBar";
+import { RatingBadges } from "@/components/RatingBadges";
 import { StepBar } from "@/components/StepBar";
 import { WaitlistJoin } from "@/components/WaitlistJoin";
 
@@ -122,6 +123,9 @@ export default async function SearchPage({
               <p className="nums mt-2 text-[14px]" style={{ color: "hsl(var(--ink-soft))" }}>
                 {s.search.summary(nights, multi ? rooms.reduce((n, r) => n + r.adults + r.childAges.length, 0) : q.guests + q.childAges.length)}
               </p>
+              {property.ratings.length > 0 && (
+                <div className="mt-3"><RatingBadges ratings={property.ratings} s={s.ratings} locale={kit.locale} align="start" /></div>
+              )}
               {multi && (
                 <GroupSteps
                   property={property}

@@ -6,6 +6,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
 import { TrustRow } from "@/components/TrustRow";
+import { RatingBadges } from "@/components/RatingBadges";
 import { serverKit } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
   const { slug } = await params;
   const property = await getPublicProperty(slug);
   if (!property) notFound();
-  const { s } = await serverKit(property);
+  const { s, locale } = await serverKit(property);
 
   const photo = property.hero;
   /*
@@ -187,6 +188,11 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
 
             <div className={`rise mt-10 w-full max-w-[58rem] sm:mt-12 ${tall ? "" : "mx-auto"}`} style={{ animationDelay: "220ms" }}>
               <SearchBar slug={property.slug} onDark={reversed} />
+              {property.ratings.length > 0 && (
+                <div className="mt-4">
+                  <RatingBadges ratings={property.ratings} s={s.ratings} locale={locale} onDark={reversed} align={tall ? "start" : "center"} />
+                </div>
+              )}
             </div>
           </div>
         </section>

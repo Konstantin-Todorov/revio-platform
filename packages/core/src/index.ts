@@ -109,3 +109,4 @@ export * from "./booking/online-payments.js";
 export * from "./booking/party.js";
 export * from "./booking/calendar.js";
 export * from "./booking/promo.js";
+export * from "./booking/ratings.js";

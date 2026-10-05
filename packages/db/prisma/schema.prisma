@@ -973,6 +973,7 @@ model Property {
   waitlistEntries WaitlistEntry[]
   guestFeedback   GuestFeedback[]
   supportRequests SupportRequest[]
+  publicRatings   PublicRating[]
   promoCodes      PromoCode[]
 
   @@index([tenantId])
@@ -3113,5 +3114,25 @@ model PromoCode {
   property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@unique([propertyId, code])
+  @@index([tenantId])
+}
+
+/// The hotel's public review scores (Booking.com, Google), entered by the hotel from its public page
+/// and shown on RevioDirect as a trust badge. Never collected from guests — see core/booking/ratings.ts.
+model PublicRating {
+  id          String   @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  /// booking | google
+  source      String
+  /// In tenths: 91 = 9.1/10 on Booking.com, 47 = 4.7/5 on Google.
+  scoreTenths Int
+  reviewCount Int?
+  url         String?
+  /// When a person last confirmed the number against the source. Old ones are hidden.
+  confirmedAt DateTime @default(now())
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, source])
   @@index([tenantId])
 }

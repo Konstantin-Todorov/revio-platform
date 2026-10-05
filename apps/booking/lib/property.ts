@@ -2,7 +2,7 @@ import "server-only";
 import { guestPaymentsConfigured, isMockAccount, testChargesOnPlatform } from "@revio/payments";
 import { cache } from "react";
 import { forSystem } from "@revio/db";
-import { heroFocalY, heroScrim, resolveBrandLogo } from "@revio/core";
+import { heroFocalY, heroScrim, resolveBrandLogo, RATING_SOURCES, ratingShown, type RatingSource } from "@revio/core";
 import { getObjectStore } from "@revio/storage";
 
 /**
@@ -55,6 +55,8 @@ export interface PublicProperty {
   headline: string | null;
   subheadline: string | null;
   showTrust: boolean;
+  /** Public review scores the hotel quoted, already filtered to the ones shown (see core/booking/ratings). */
+  ratings: { source: RatingSource; scoreTenths: number; reviewCount: number | null; url: string | null }[];
   /**
    * The hotel's own photograph behind the headline, ready to render.
    *
@@ -110,6 +112,7 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
       bookingHeroKey: true, bookingHeroWidth: true, bookingHeroHeight: true,
       bookingHeroLuminance: true, bookingHeroFocalY: true, bookingHeroOverlay: true,
       tenant: { select: { status: true, hasReservation: true } },
+      publicRatings: { select: { source: true, scoreTenths: true, reviewCount: true, url: true, confirmedAt: true } },
     },
   });
 
@@ -150,6 +153,12 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
     headline: property.bookingHeadline?.trim() || null,
     subheadline: property.bookingSubheadline?.trim() || null,
     showTrust: property.bookingShowTrust,
+    ratings: RATING_SOURCES.flatMap((source) => {
+      const r = property.publicRatings.find((x) => x.source === source);
+      return r && ratingShown({ source, scoreTenths: r.scoreTenths, confirmedAt: r.confirmedAt }, new Date())
+        ? [{ source, scoreTenths: r.scoreTenths, reviewCount: r.reviewCount, url: r.url }]
+        : [];
+    }),
     hero: property.bookingHeroKey
       ? {
           url: (await getObjectStore()).publicUrl(property.bookingHeroKey),

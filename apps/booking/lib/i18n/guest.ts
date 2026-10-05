@@ -76,6 +76,7 @@ export interface GuestStrings {
     code: (code: string) => string;
     refusal: Record<"unknown" | "inactive" | "dates" | "nights" | "used_up", (code: string) => string>;
   };
+  ratings: { label: string; reviews: (n: number) => string };
   direct: {
     badge: (pct: number) => string;
     saving: (amount: string) => string;
@@ -357,6 +358,7 @@ export const guest: Translations<GuestStrings> = {
         used_up: (c) => `The code ${c} has been used up.`,
       },
     },
+    ratings: { label: "Review scores", reviews: (n) => `${n.toLocaleString("en-GB")} reviews` },
     direct: {
       badge: (p) => `Direct −${p}%`,
       saving: (a) => `${a} less than on booking sites`,
@@ -688,6 +690,7 @@ export const guest: Translations<GuestStrings> = {
         used_up: (c) => `Кодът ${c} е изчерпан.`,
       },
     },
+    ratings: { label: "Оценки от отзиви", reviews: (n) => `${n.toLocaleString("bg-BG")} ${n === 1 ? "отзив" : "отзива"}` },
     direct: {
       badge: (p) => `Директно −${p}%`,
       saving: (a) => `С ${a} по-евтино от сайтовете за резервации`,
