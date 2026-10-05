@@ -1,4 +1,5 @@
 import type { Translations } from "@revio/ui/i18n";
+import type { FiscalReportStrings } from "@/components/fiscal/FiscalReportCard";
 
 /** Maintenance and Close Day — the back office of running a property. */
 export interface OperationsStrings {
@@ -66,6 +67,7 @@ export interface OperationsStrings {
     openBalance: (amount: string) => string;
     folio: string;
     closingWill: (n: number, date: string) => string;
+    fiscal: FiscalReportStrings;
     close: (date: string) => string;
   };
 }
@@ -141,6 +143,26 @@ export const operations: Translations<OperationsStrings> = {
       openBalance: (a) => `open balance ${a}`,
       folio: "Folio",
       closingWill: (n, d) => `Closing will mark the ${n} un-arrived reservation${n === 1 ? "" : "s"} as no-show, accrue tonight’s stay extras, and roll the business date to ${d} + 1 day.`,
+      fiscal: {
+        title: "Fiscal device — daily report",
+        lead: "The Z report closes the fiscal device's day and zeroes its turnover. Print it once, at the end of the day — ideally before you close the day here.",
+        zDone: "Today's Z report is printed.",
+        zDoneAt: "Today's Z report was printed at {t}.",
+        zNotYet: "Today's Z report has not been printed yet.",
+        printZ: "Print Z report",
+        confirmZ: "This zeroes the device's day. Print the Z report now?",
+        confirmYes: "Yes, print Z",
+        cancel: "Cancel",
+        printX: "X report (no reset)",
+        xDone: "X report printed.",
+        xDoneAt: "Last X report at {t}.",
+        printing: "Printing…",
+        noPrinter: "No fiscal printer is chosen on this computer — choose one in Configuration → Compliance.",
+        unreachable: "The fiscal printer did not answer. Is ErpNet.FP running on this computer?",
+        uncertain: "Not sure the report printed — look at the printer before trying again.",
+        deviceSaid: "The printer said: {m}",
+        onTill: "Print the daily Z report on your fiscal device at the end of the day, as usual.",
+      },
       close: (d) => `Close ${d}`,
     },
   },
@@ -214,6 +236,26 @@ export const operations: Translations<OperationsStrings> = {
       openBalance: (a) => `неплатено салдо ${a}`,
       folio: "Сметка",
       closingWill: (n, d) => `Затварянето ще отбележи ${n} ${n === 1 ? "непристигнала резервация" : "непристигнали резервации"} като неявили се, ще начисли допълнителните услуги за нощта и ще премести работната дата от ${d} с един ден напред.`,
+      fiscal: {
+        title: "Фискално устройство — дневен отчет",
+        lead: "Z-отчетът приключва деня на фискалното устройство и нулира оборота му. Отпечатва се веднъж, в края на деня — най-добре преди да затворите деня тук.",
+        zDone: "Днешният Z-отчет е отпечатан.",
+        zDoneAt: "Днешният Z-отчет е отпечатан в {t}.",
+        zNotYet: "Днешният Z-отчет още не е отпечатан.",
+        printZ: "Отпечатай Z-отчет",
+        confirmZ: "Това нулира деня на устройството. Да отпечатам ли Z-отчета сега?",
+        confirmYes: "Да, отпечатай Z",
+        cancel: "Отказ",
+        printX: "X-отчет (без нулиране)",
+        xDone: "X-отчетът е отпечатан.",
+        xDoneAt: "Последен X-отчет в {t}.",
+        printing: "Печат…",
+        noPrinter: "На този компютър не е избран фискален принтер — изберете го в Конфигурация → Съответствие.",
+        unreachable: "Фискалният принтер не отговори. Пуснат ли е ErpNet.FP на този компютър?",
+        uncertain: "Не е сигурно, че отчетът е отпечатан — погледнете принтера, преди да опитате пак.",
+        deviceSaid: "Принтерът казва: {m}",
+        onTill: "Отпечатайте дневния Z-отчет на фискалното устройство в края на деня, както обикновено.",
+      },
       close: (d) => `Затвори ${d}`,
     },
   },

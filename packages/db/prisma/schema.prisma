@@ -2275,6 +2275,15 @@ model FolioLine {
   fiscalDeviceSerial  String?
   /// `printed` (through ErpNet.FP from the PMS) | `manual` (typed in from the till)
   fiscalSource        String?
+  /// Exactly what was sent to and returned by the device — lines, payment type, the device's own
+  /// local timestamp — so a storno can mirror the original receipt line for line. Printed only.
+  fiscalReceiptData   Json?
+  /// The storno (reversal) receipt for a voided payment that had a fiscal receipt. Same rules: the
+  /// number is the device's; `operator_error` | `refund`; `printed` | `manual`.
+  fiscalStornoNo      String?
+  fiscalStornoAt      DateTime?
+  fiscalStornoReason  String?
+  fiscalStornoSource  String?
   voided        Boolean  @default(false)
   postedById    String?
   postedAt      DateTime @default(now())

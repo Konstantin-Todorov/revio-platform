@@ -7,6 +7,7 @@ import { postFolioLineWith } from "./posting";
 import { MANAGER_ROLES } from "./roles";
 import { fiscalGroupsFor, receiptForPayment } from "./fiscal";
 import type { FiscalReceipt } from "@revio/core";
+import type { StornoOriginal } from "@/components/fiscal/FiscalReceiptRow";
 import { ymd, todayInTz, hmInTz } from "./format";
 import type { HkStatus } from "./hk-meta";
 import { summariseOutcomes, outcomeHeadline, type OutcomeTotal } from "./folio-outcomes";
@@ -301,16 +302,30 @@ export async function getFolioView(reservationId: string) {
   const groups = fiscalGroupsFor(defaults);
   const stayLines = folios.flatMap((f) => f.lines);
   const now = Date.now();
-  const fiscal = new Map<string, { receipt: FiscalReceipt | null; recorded: { no: string; source: string | null } | null; autoPrint: boolean }>();
+  type StornoView = { done: { no: string; source: string | null } | null; original: StornoOriginal | null };
+  const fiscal = new Map<string, { receipt: FiscalReceipt | null; recorded: { no: string; source: string | null } | null; autoPrint: boolean; storno: StornoView | null }>();
   if (fiscalOn) {
     for (const l of stayLines) {
-      if (l.kind !== "payment" || l.voided) continue;
+      if (l.kind !== "payment") continue;
+      // A voided payment that had a receipt owes a storno: the void fixed our record, not the device's.
+      if (l.voided) {
+        if (!l.fiscalReceiptNo) continue;
+        const d = l.fiscalReceiptData as StornoOriginal | null;
+        fiscal.set(l.id, {
+          receipt: null, recorded: null, autoPrint: false,
+          storno: {
+            done: l.fiscalStornoNo ? { no: l.fiscalStornoNo, source: l.fiscalStornoSource } : null,
+            original: d && Array.isArray(d.items) && d.items.length ? d : null,
+          },
+        });
+        continue;
+      }
       const recorded = l.fiscalReceiptNo ? { no: l.fiscalReceiptNo, source: l.fiscalSource } : null;
       const receipt = recorded ? null : receiptForPayment(l, stayLines, defaults!.jurisdiction, groups);
       if (!recorded && !receipt) continue;
       // Print by itself only for the person who just took the money, in the minute they took it.
       const autoPrint = !recorded && l.postedById === session.userId && now - l.postedAt.getTime() < 120_000;
-      fiscal.set(l.id, { receipt, recorded, autoPrint });
+      fiscal.set(l.id, { receipt, recorded, autoPrint, storno: null });
     }
   }
   // `isManager` is returned so the folio screen can show the manager-only resolutions to EVERYONE and

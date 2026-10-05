@@ -207,14 +207,15 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 const isCredit = isPayment || l.kind === "deposit_use";
                 const fr = fiscal.get(l.id);
                 return (
-                  <li key={l.id} className={`flex flex-wrap items-center justify-between gap-x-3 px-4 py-2.5 ${l.voided ? "opacity-50" : ""}`}>
-                    <div className="flex min-w-0 items-center gap-2.5">
+                  <li key={l.id} className="flex flex-wrap items-center justify-between gap-x-3 px-4 py-2.5">
+                    {/* Only the line itself fades when voided — a storno still owed under it must not. */}
+                    <div className={`flex min-w-0 items-center gap-2.5 ${l.voided ? "opacity-50" : ""}`}>
                       <StatusPill tone={KIND_TONE[l.kind] ?? "neutral"}>{s.kinds[l.kind] ?? l.kind}</StatusPill>
                       <span className={`truncate text-[13px] ${l.voided ? "text-ink-400 line-through" : "text-ink-800"}`}>{s.systemText[l.description] ?? l.description}</span>
                       {l.outlet && !isPayment && <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">{s.outlets[l.outlet] ?? l.outlet}</span>}
                       {l.voided && <span className="text-[10.5px] font-semibold uppercase tracking-wide text-danger-500">{s.void}</span>}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className={`flex items-center gap-2 ${l.voided ? "opacity-50" : ""}`}>
                       <span className={`tnum text-[13px] font-semibold ${isCredit ? "text-success-600" : isDeposit ? "text-brand-700" : "text-ink-900"} ${l.voided ? "line-through" : ""}`}>
                         {isCredit ? "−" : ""}{money(l.amountMinor, currency)}
                       </span>
@@ -243,7 +244,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                     </div>
                     {fr && (
                       <div className="w-full">
-                        <FiscalReceiptRow lineId={l.id} receipt={fr.receipt} recorded={fr.recorded} device={fiscalDevice} autoPrint={fr.autoPrint} s={s.fiscal} />
+                        <FiscalReceiptRow lineId={l.id} receipt={fr.receipt} recorded={fr.recorded} storno={fr.storno} device={fiscalDevice} autoPrint={fr.autoPrint} s={s.fiscal} />
                       </div>
                     )}
                   </li>

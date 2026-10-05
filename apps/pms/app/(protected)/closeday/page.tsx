@@ -5,6 +5,10 @@ import { getCloseDayView } from "@/lib/closeday";
 import { markNoShow, closeDay } from "@/lib/actions-closeday";
 import { i18n } from "@/lib/i18n/server";
 import { operations } from "@/lib/i18n/operations";
+import { FiscalReportCard } from "@/components/fiscal/FiscalReportCard";
+import { prisma } from "@/lib/db";
+import { hmInTz } from "@/lib/format";
+import { dayBoundsInTimeZone } from "@revio/core";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +20,17 @@ export default async function CloseDayPage({ searchParams }: { searchParams: Pro
   const { t, money, day } = await i18n();
   const c = t(operations).closeday;
   const pretty = (d: string) => day(d);
+
+  // The fiscal device's daily report — shown for a Bulgarian property, printed only if it prints
+  // through ErpNet.FP; otherwise a reminder to do it on the till (docs/specs/FISCAL-PRINTER.md).
+  const fiscalDefaults = await prisma.propertyDefaults.findUnique({ where: { propertyId: property.id }, select: { jurisdiction: true, fiscalDevice: true } });
+  const showFiscal = fiscalDefaults?.jurisdiction === "bg";
+  const { start } = dayBoundsInTimeZone(today, property.timezone);
+  const reports = showFiscal
+    ? await prisma.auditEntry.findMany({ where: { propertyId: property.id, entity: "fiscal_report", createdAt: { gte: start } }, orderBy: { createdAt: "desc" }, select: { field: true, createdAt: true } })
+    : [];
+  const lastZ = reports.find((r) => r.field === "z");
+  const lastX = reports.find((r) => r.field === "x");
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -141,6 +156,21 @@ export default async function CloseDayPage({ searchParams }: { searchParams: Pro
               </li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {showFiscal && (
+        <Card className="mb-4">
+          <CardHeader title={c.fiscal.title} />
+          <div className="p-4">
+            <FiscalReportCard
+              device={fiscalDefaults?.fiscalDevice === "erpnet" ? "erpnet" : "none"}
+              zAt={lastZ ? hmInTz(lastZ.createdAt, property.timezone) : null}
+              xAt={lastX ? hmInTz(lastX.createdAt, property.timezone) : null}
+              day={today}
+              s={c.fiscal}
+            />
+          </div>
         </Card>
       )}
 

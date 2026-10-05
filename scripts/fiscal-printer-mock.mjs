@@ -47,7 +47,21 @@ http.createServer(async (req, res) => {
   }
   if (req.method === "GET" && url.pathname === "/printed") return send(res, 200, printed, origin);
 
-  if (req.method === "POST" && parts[0] === "printers" && parts[2] === "receipt") {
+  // Z / X reports: nothing comes back but the status, as with the real one.
+  if (req.method === "POST" && parts[0] === "printers" && (parts[2] === "zreport" || parts[2] === "xreport")) {
+    const taskId = url.searchParams.get("taskId") || `t${Date.now()}`;
+    if (!tasks.has(taskId)) {
+      tasks.set(taskId, { status: "running" });
+      setTimeout(() => {
+        tasks.set(taskId, { status: "finished", result: FAIL === "paper" ? { ok: "false", messages: [{ type: "error", code: "E301", text: "Няма хартия" }] } : { ok: "true", messages: [] } });
+        printed.push({ taskId, report: parts[2] });
+        console.log(`printed ${parts[2]}`);
+      }, 900);
+    }
+    return send(res, 200, { taskId }, origin);
+  }
+
+  if (req.method === "POST" && parts[0] === "printers" && (parts[2] === "receipt" || parts[2] === "reversalreceipt")) {
     if (!PRINTERS[parts[1]]) return send(res, 404, { ok: "false", messages: [{ type: "error", code: "E404", text: "Printer not found" }] }, origin);
     let raw = "";
     for await (const chunk of req) raw += chunk;
@@ -59,7 +73,9 @@ http.createServer(async (req, res) => {
       setTimeout(() => {
         const sum = (body.items ?? []).reduce((a, i) => a + Math.round((i.unitPrice ?? 0) * 100) * (i.quantity ?? 1), 0);
         const paid = (body.payments ?? []).reduce((a, p) => a + Math.round(p.amount * 100), 0);
-        if (FAIL === "paper") {
+        if (parts[2] === "reversalreceipt" && !(body.receiptNumber && body.fiscalMemorySerialNumber && body.reason)) {
+          tasks.set(taskId, { status: "finished", result: { ok: "false", messages: [{ type: "error", code: "E405", text: "Reversal needs the original receipt number, date, FM serial and a reason" }] } });
+        } else if (FAIL === "paper") {
           tasks.set(taskId, { status: "finished", result: { ok: "false", messages: [{ type: "error", code: "E301", text: "Няма хартия" }] } });
         } else if (sum !== paid) {
           tasks.set(taskId, { status: "finished", result: { ok: "false", messages: [{ type: "error", code: "E410", text: `Items ${sum} ≠ payments ${paid}` }] } });
@@ -68,7 +84,7 @@ http.createServer(async (req, res) => {
           const result = { ok: "true", messages: [], receiptNumber: `MOCK${String(counter).padStart(6, "0")}`, receiptDateTime: new Date().toISOString().slice(0, 19), receiptAmount: paid / 100, fiscalMemorySerialNumber: PRINTERS[parts[1]].fiscalMemorySerialNumber };
           printed.push({ taskId, ...body, ...result });
           tasks.set(taskId, { status: "finished", result });
-          console.log(`printed ${result.receiptNumber}: ${(body.items ?? []).map((i) => `${i.text} ${i.unitPrice} [${i.taxGroup}]`).join(" | ")} = ${paid / 100} ${body.payments?.[0]?.paymentType}`);
+          console.log(`printed ${parts[2] === "reversalreceipt" ? `STORNO of ${body.receiptNumber} (${body.reason}) ` : ""}${result.receiptNumber}: ${(body.items ?? []).map((i) => `${i.text} ${i.unitPrice} [${i.taxGroup}]`).join(" | ")} = ${paid / 100} ${body.payments?.[0]?.paymentType}`);
         }
       }, 900);
     }
