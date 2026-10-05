@@ -4,7 +4,7 @@ import { withTenantTransaction } from "@revio/db";
 import { revalidatePath } from "next/cache";
 import { BOOKING_PRESET_BY_KEY, HERO_OVERLAY_LEVELS, heroFocalY } from "@revio/core";
 import { getObjectStore, heroImageKey, photoToken } from "@revio/storage";
-import { connectMode, createConnectAccount, createOnboardingLink, getConnectStatus, isMockAccount } from "@revio/payments";
+import { connectMode, createConnectAccount, createOnboardingLink, ensureWalletDomain, getConnectStatus, isMockAccount } from "@revio/payments";
 import { syncRealChannels, stayScope } from "@revio/connectivity";
 import { SLUG_MAX_LEN, slugifyPropertyName, slugRejectionReason } from "@revio/booking";
 import { prisma } from "./db";
@@ -480,6 +480,11 @@ export async function refreshStripeStatus(): Promise<void> {
     where: { id: property.id },
     data: { stripeChargesEnabled: status.chargesEnabled, stripeCheckedAt: new Date() },
   });
+  // Apple Pay / Google Pay on the booking page need the page's domain registered on THIS account.
+  if (status.chargesEnabled) {
+    const origin = process.env.BOOKING_ENGINE_ORIGIN?.trim();
+    if (origin) await ensureWalletDomain(property.stripeAccountId, new URL(origin).hostname);
+  }
   revalidatePath("/booking-engine", "layout");
 }
 

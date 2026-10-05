@@ -79,6 +79,7 @@ export * from "./waitlist/waitlist.js";
 export * from "./registry/tourist-register.js";
 export * from "./registry/countries.js";
 export * from "./registry/tourist-tax.js";
+export * from "./registry/esti.js";
 export * from "./export/xlsx.js";
 export * from "./email/system-shell.js";
 export * from "./adapters/channex-hosts.js";

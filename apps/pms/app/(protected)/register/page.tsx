@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, Download, FileSpreadsheet } from "lucide-react";
-import { validateRegisterEntry, DOCUMENT_TYPE_BG } from "@revio/core";
+import { validateRegisterEntry, DOCUMENT_TYPE_BG, estiProblems, estiSubmittedFingerprint } from "@revio/core";
 import { LOCALE_LABELS } from "@revio/ui/i18n";
 import { roleHasCapability } from "@/lib/roles";
 import { activeProperty } from "@/lib/data";
-import { getRegisterEntries, getTouristTax } from "@/lib/register";
+import { getRegisterEntries, getTouristTax, getEstiPending } from "@/lib/register";
+import { getConfiguration } from "@/lib/config";
+import { markEstiSent } from "@/lib/actions-register";
 import { todayInTz } from "@/lib/format";
 import { i18n } from "@/lib/i18n/server";
 import { register } from "@/lib/i18n/register";
@@ -33,10 +35,18 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
   const anchor = /^\d{4}-\d{2}$/.test(month ?? "") ? `${month}-01` : today;
   const { from, to } = monthBounds(anchor);
 
-  const [entries, tax] = await Promise.all([
+  const [entries, tax, estiPending, config] = await Promise.all([
     getRegisterEntries(property.id, property.timezone, from, to),
     getTouristTax(property.id, property.timezone, anchor.slice(0, 7)),
+    getEstiPending(property.id, property.timezone, today),
+    getConfiguration(),
   ]);
+  const estiUin = config.defaults?.estiPlaceUin ?? null;
+  const estiReady = estiPending.filter((p) => estiProblems(p.entry, estiUin).length === 0);
+  const estiBlocked = estiPending.filter((p) => estiProblems(p.entry, estiUin).length > 0);
+  const estiCounts = { NEW: 0, UPD: 0, DEL: 0 };
+  for (const p of estiReady) estiCounts[p.change]++;
+  const estiRows = JSON.stringify(estiReady.map((p) => ({ id: p.entry.id, fp: estiSubmittedFingerprint(p.entry, p.change) })));
   const incomplete = entries.filter((e) => validateRegisterEntry(e).length > 0);
   const nights = entries.reduce((n, e) => n + (e.cancelled ? 0 : e.nights), 0);
 
@@ -91,6 +101,51 @@ export default async function RegisterPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
       )}
+
+      <Card className="mb-4">
+        <CardHeader title={t.esti.title} subtitle={t.esti.subtitle} />
+        <div className="space-y-3 px-4 py-4 text-[13px]">
+          {!estiUin ? (
+            <p className="text-warning-700">
+              {t.esti.noUin}{" "}
+              <Link href="/configuration/compliance" className="font-semibold text-accent-600 hover:underline">{t.esti.noUinLink}</Link>
+            </p>
+          ) : estiReady.length === 0 && estiBlocked.length === 0 ? (
+            <p className="text-success-600 font-semibold">{t.esti.upToDate}</p>
+          ) : (
+            <>
+              {estiReady.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-ink-900">{t.esti.pending(estiCounts)}</span>
+                  <a href="/api/register/esti" className="inline-flex items-center gap-1.5 rounded-md bg-brand-700 px-3.5 py-2 text-[13px] font-semibold text-white hover:bg-brand-800">
+                    <Download className="h-4 w-4" /> {t.esti.download}
+                  </a>
+                  <form action={markEstiSent}>
+                    <input type="hidden" name="rows" value={estiRows} />
+                    <button className="rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 hover:border-brand-600 hover:text-brand-700">{t.esti.confirm}</button>
+                  </form>
+                </div>
+              )}
+              {estiReady.length > 0 && <p className="text-[11.5px] text-ink-400">{t.esti.confirmHint}</p>}
+              {estiBlocked.length > 0 && (
+                <div className="rounded-md border border-warning-600/30 bg-warning-50 px-3 py-2.5 text-warning-700">
+                  <p className="font-semibold">{t.esti.blocked(estiBlocked.length)}</p>
+                  <ul className="mt-1.5 space-y-0.5 text-[12.5px]">
+                    {estiBlocked.slice(0, 12).map((p) => (
+                      <li key={p.entry.id}>
+                        <Link href={`/reservation/${p.entry.reservationId}`} className="font-semibold hover:underline">
+                          №{p.entry.registerNo} {[p.entry.firstName, p.entry.lastName].filter(Boolean).join(" ") || "—"}
+                        </Link>{" — "}
+                        {estiProblems(p.entry, estiUin).filter((x) => x !== "place_uin").map((x) => t.esti.problems[x] ?? x).join(", ")}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </Card>
 
       <Card className="mb-4">
         <CardHeader

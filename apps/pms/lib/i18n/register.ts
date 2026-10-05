@@ -12,6 +12,19 @@ export interface RegisterStrings {
   subtitle: string;
   export: (month: string) => string;
   counts: (registrations: number, nights: number) => string;
+  esti: {
+    title: string;
+    subtitle: string;
+    noUin: string;
+    noUinLink: string;
+    upToDate: string;
+    pending: (n: { NEW: number; UPD: number; DEL: number }) => string;
+    blocked: (n: number) => string;
+    download: string;
+    confirm: string;
+    confirmHint: string;
+    problems: Record<string, string>;
+  };
   notReady: (incomplete: number, total: number) => string;
   notReadyBody: string;
   tax: {
@@ -90,6 +103,19 @@ export interface RegisterStrings {
 
 export const register: Translations<RegisterStrings> = {
   en: {
+    esti: {
+      title: "ЕСТИ upload",
+      subtitle: "The file ЕСТИ imports — new, changed and cancelled registrations it does not have yet",
+      noUin: "Add this property’s National Tourist Register (НТР) number first — every row of the file carries it.",
+      noUinLink: "Configuration → Compliance",
+      upToDate: "ЕСТИ has every registration. Nothing to upload.",
+      pending: (n) => [n.NEW && `${n.NEW} new`, n.UPD && `${n.UPD} changed`, n.DEL && `${n.DEL} cancelled`].filter(Boolean).join(" · ") + " to upload",
+      blocked: (n) => `${n} left out until completed — ЕСТИ rejects the whole file for one incomplete row:`,
+      download: "Download ЕСТИ file",
+      confirm: "I uploaded it to ЕСТИ",
+      confirmHint: "Upload the file in ЕСТИ → Импорт, then confirm here so the next file sends only what changed.",
+      problems: { place_uin: "НТР number", first_name: "first name", last_name: "family name", birth_date: "birth date", sex: "sex", document_type: "document type (ID card or passport)", document_country: "issuing country", identity: "ЕГН/ЛНЧ or document number", check_out: "departure date" },
+    },
     title: "Guest register",
     subtitle: "Регистър на настанените туристи · every guest who stayed the night, in the order they were registered",
     export: (m) => `Export ${m}`,
@@ -193,6 +219,19 @@ export const register: Translations<RegisterStrings> = {
     },
   },
   bg: {
+    esti: {
+      title: "Подаване към ЕСТИ",
+      subtitle: "Файлът, който ЕСТИ импортира — новите, променените и анулираните регистрации, които още няма",
+      noUin: "Първо въведете номера на обекта в Националния туристически регистър (НТР) — всеки ред от файла го носи.",
+      noUinLink: "Конфигурация → Нормативни изисквания",
+      upToDate: "ЕСТИ има всички регистрации. Няма какво да се подава.",
+      pending: (n) => "За подаване: " + [n.NEW && `${n.NEW} нови`, n.UPD && `${n.UPD} променени`, n.DEL && `${n.DEL} анулирани`].filter(Boolean).join(" · "),
+      blocked: (n) => `${n} остават извън файла, докато не се попълнят — ЕСТИ отхвърля целия файл заради един непълен ред:`,
+      download: "Свали файла за ЕСТИ",
+      confirm: "Качих го в ЕСТИ",
+      confirmHint: "Качете файла в ЕСТИ → Импорт, после потвърдете тук, за да подаде следващият файл само промените.",
+      problems: { place_uin: "номер по НТР", first_name: "име", last_name: "фамилия", birth_date: "дата на раждане", sex: "пол", document_type: "тип документ (лична карта или паспорт)", document_country: "държава, издала документа", identity: "ЕГН/ЛНЧ или номер на документ", check_out: "дата на отпътуване" },
+    },
     title: "Регистър на гостите",
     subtitle: "Регистър на настанените туристи · всеки гост, нощувал в обекта, в реда на регистриране",
     export: (m) => `Експорт за ${m}`,

@@ -1,3 +1,4 @@
+import { estiChange, type EstiChange } from "@revio/core";
 import { claimRegisterNo, withTenantTransaction } from "@revio/db";
 import {
   averageNightlyPrice, registerNights, splitName, estimateBeds, monthlyTouristTax,
@@ -93,7 +94,7 @@ export async function getRegisterEntries(
   timezone: string,
   fromIso: string,
   toIso: string,
-): Promise<(TouristRegisterEntry & { id: string; reservationId: string })[]> {
+): Promise<(TouristRegisterEntry & { id: string; reservationId: string; estiFingerprint: string | null })[]> {
   const rows = await prisma.stayGuest.findMany({
     where: {
       propertyId,
@@ -158,6 +159,7 @@ export async function getRegisterEntries(
         nights,
       ),
       cancelled: g.cancelled,
+      estiFingerprint: g.estiFingerprint,
     };
   });
 }
@@ -249,3 +251,15 @@ export async function getTouristTax(
 }
 
 const MONTHS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"] as const;
+
+
+/**
+ * Every registration ЕСТИ does not yet have in its current form — NEW, UPD or DEL — over the last
+ * 400 days (a stay changed after a year is a correction for the inspector, not for the upload).
+ */
+export async function getEstiPending(propertyId: string, timezone: string, today: string) {
+  const entries = await getRegisterEntries(propertyId, timezone, addDaysYmd(today, -400), today);
+  return entries
+    .map((e) => ({ entry: e, change: estiChange(e, e.estiFingerprint ? { fingerprint: e.estiFingerprint } : null) }))
+    .filter((x): x is { entry: typeof x.entry; change: EstiChange } => x.change != null);
+}

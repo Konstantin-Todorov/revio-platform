@@ -54,6 +54,7 @@ export async function saveConfiguration(fd: FormData): Promise<void> {
       jurisdiction: ["generic", "bg", "eu"].includes(str(fd, "jurisdiction")) ? str(fd, "jurisdiction") : "generic",
       fiscalizationEnabled: fd.get("fiscalizationEnabled") != null,
       eInvoicingEnabled: fd.get("eInvoicingEnabled") != null,
+      estiPlaceUin: str(fd, "estiPlaceUin").slice(0, 500) || null,
     },
     // Close Day escalation (§3.4). Per-property because the business-day boundary already varies —
     // some properties audit at 03:00, some at midnight — so one fixed time fits nobody.

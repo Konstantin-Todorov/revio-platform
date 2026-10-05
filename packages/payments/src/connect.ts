@@ -73,6 +73,42 @@ async function stripeCall(
 }
 
 /**
+ * Register the booking page's domain on the hotel's own Stripe account, so the Payment Element
+ * shows Apple Pay and Google Pay there.
+ *
+ * ⚠️ Without this the wallets are configured (`wallets: { applePay: "auto", googlePay: "auto" }`)
+ * and never appear: with direct charges on Connect, Stripe only offers a wallet on a domain that is
+ * registered ON THE CONNECTED ACCOUNT, not on ours. Idempotent — an existing registration is
+ * found and validated rather than duplicated. Never throws: a wallet that cannot be enabled leaves
+ * card payments exactly as they were.
+ */
+type WalletStatus = { status?: string };
+type PmdResponse = { id?: string; apple_pay?: WalletStatus; google_pay?: WalletStatus; error?: { message: string }; data?: PmdResponse[] };
+
+export async function ensureWalletDomain(accountId: string, domain: string): Promise<{ ok: boolean; enabled?: boolean; error?: string }> {
+  const key = stripeKey();
+  if (!key || isMockAccount(accountId) || !domain) return { ok: true, enabled: false };
+  const call = async (path: string, body?: Record<string, string>) => {
+    const res = await fetch(`https://api.stripe.com/v1/${path}`, {
+      method: body ? "POST" : "GET",
+      headers: { Authorization: `Bearer ${key}`, "Stripe-Account": accountId, "Content-Type": "application/x-www-form-urlencoded" },
+      ...(body ? { body: new URLSearchParams(body).toString() } : {}),
+    });
+    return (await res.json()) as PmdResponse;
+  };
+  try {
+    const found = await call(`payment_method_domains?domain_name=${encodeURIComponent(domain)}`);
+    let pmd: PmdResponse | undefined = found?.data?.[0];
+    if (!pmd) pmd = await call("payment_method_domains", { domain_name: domain, enabled: "true" });
+    else if (pmd.apple_pay?.status !== "active") pmd = await call(`payment_method_domains/${pmd.id}/validate`, {});
+    if (pmd?.error) return { ok: false, error: pmd.error.message };
+    return { ok: true, enabled: pmd?.apple_pay?.status === "active" || pmd?.google_pay?.status === "active" };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "wallet domain error" };
+  }
+}
+
+/**
  * Create the hotel's connected account.
  *
  * In mock mode the id is stable-ish but unique, so two properties in a demo never collide on the

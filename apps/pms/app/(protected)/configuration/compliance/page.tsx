@@ -23,6 +23,11 @@ export default async function ConfigCompliancePage() {
             <option value="eu">{t.compliance.eu}</option>
           </select>
         </div>
+        <div className="max-w-sm">
+          <label className={labelCls}>{t.compliance.estiUin} <span className="text-ink-400">{t.compliance.estiUinAside}</span></label>
+          <input name="estiPlaceUin" defaultValue={d?.estiPlaceUin ?? ""} maxLength={500} className={`${inputCls} w-full`} />
+          <p className="mt-1 text-[10.5px] text-ink-400">{t.compliance.estiUinHint}</p>
+        </div>
         <label className="flex items-start gap-2 text-[12.5px] text-ink-700"><input type="checkbox" name="fiscalizationEnabled" defaultChecked={d?.fiscalizationEnabled ?? false} className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600" /> {t.compliance.fiscalization}</label>
         <label className="flex items-start gap-2 text-[12.5px] text-ink-700"><input type="checkbox" name="eInvoicingEnabled" defaultChecked={d?.eInvoicingEnabled ?? false} className="mt-0.5 h-4 w-4 rounded border-surface-border text-accent-600" /> {t.compliance.eInvoicing}</label>
         <p className="text-[11px] text-ink-400">{t.compliance.note}</p>

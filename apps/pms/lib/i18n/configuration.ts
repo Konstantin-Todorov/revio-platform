@@ -54,6 +54,9 @@ export interface ConfigurationStrings {
     fiscalization: string;
     eInvoicing: string;
     note: string;
+    estiUin: string;
+    estiUinAside: string;
+    estiUinHint: string;
   };
   save: string;
   deposits: {
@@ -144,6 +147,9 @@ export const configuration: Translations<ConfigurationStrings> = {
       fiscalization: "Real-time fiscalization (BG N-18) — routes receipts through a certified provider",
       eInvoicing: "Structured e-invoicing (EN 16931 / Peppol) for B2B",
       note: "The boundary is built (F3); flipping these on connects the certified provider — the invoice/receipt core stays generic.",
+      estiUin: "National Tourist Register number",
+      estiUinAside: "(НТР — for the ЕСТИ upload)",
+      estiUinHint: "The unique number of this accommodation in the Национален туристически регистър. Every row of the ЕСТИ file carries it.",
     },
     save: "Save changes",
     deposits: {
@@ -246,6 +252,9 @@ export const configuration: Translations<ConfigurationStrings> = {
       fiscalization: "Фискализация в реално време (Наредба Н-18) — касовите бележки минават през сертифициран доставчик",
       eInvoicing: "Структурирани електронни фактури (EN 16931 / Peppol) за B2B",
       note: "Връзката е изградена; включването на тези опции свързва сертифицирания доставчик — ядрото за фактури и бележки остава общо.",
+      estiUin: "Номер в Националния туристически регистър",
+      estiUinAside: "(НТР — за файла към ЕСТИ)",
+      estiUinHint: "Уникалният номер на мястото за настаняване в НТР. Всеки ред от файла за ЕСТИ го носи.",
     },
     save: "Запази промените",
     deposits: {

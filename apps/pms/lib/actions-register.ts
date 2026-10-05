@@ -214,3 +214,29 @@ export async function cancelStayGuest(fd: FormData): Promise<void> {
   revalidatePath(`/reservation/${row!.reservationId}`);
   revalidatePath("/register");
 }
+
+/**
+ * The desk confirms the ЕСТИ file was uploaded: record what ЕСТИ now holds for each row in it.
+ *
+ * The form carries the rows and fingerprints that were on screen when the file was offered, not a
+ * fresh read — a registration edited between the download and this click was NOT in the uploaded
+ * file in its new form, and recording the new form would hide the change from the next file.
+ */
+export async function markEstiSent(fd: FormData): Promise<void> {
+  const session = await ctx("frontDesk");
+  let rows: { id: string; fp: string }[] = [];
+  try { rows = JSON.parse(str(fd, "rows")); } catch { rows = []; }
+  if (!Array.isArray(rows) || rows.length === 0) return flashError("Nothing to mark as uploaded — the register has no rows waiting for ЕСТИ.");
+  const now = new Date();
+  for (const r of rows.slice(0, 5000)) {
+    if (typeof r?.id !== "string" || typeof r?.fp !== "string") continue;
+    await prisma.stayGuest.updateMany({
+      where: { id: r.id, propertyId: session.activePropertyId },
+      data: { estiFingerprint: r.fp, estiSentAt: now },
+    });
+  }
+  await logAudit(session.activePropertyId, session.tenantId, {
+    entity: "StayGuest", field: "esti", newValue: `${rows.length} registrations uploaded to ЕСТИ`, userId: session.userId,
+  });
+  revalidatePath("/register");
+}
