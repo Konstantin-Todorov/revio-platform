@@ -40,7 +40,7 @@ export async function startLinkPayment(slug: string, token: string): Promise<{ o
     currency: req.currency,
     description: `${property.name} · ${bookingReference(req.reservationId)}${req.note ? ` · ${req.note}` : ""}`,
     metadata: { paymentRequestId: req.id, reservationId: req.reservationId, source: "reviodirect-link" },
-    guest: { email: req.reservation.guest?.email ?? "", name: req.reservation.guestName ?? "" },
+    guest: { email: req.reservation.guest?.email ?? "", name: req.reservation.guestName ?? "", locale: (await serverKit(property)).locale },
   });
   if (!intent.ok) return { ok: false, error: intent.error };
   return { ok: true, clientSecret: intent.clientSecret };

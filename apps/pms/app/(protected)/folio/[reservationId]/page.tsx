@@ -8,7 +8,6 @@ import { Foldaway } from "@/components/folios/Foldaway";
 import { describeResolution } from "@/lib/folio-outcomes";
 import { assessMoveForReservation } from "@/lib/move-reconciliation";
 import { listInvoicesForReservation } from "@/lib/invoice";
-import { gatewayMode } from "@revio/payments";
 import { postCharge, postPayment, voidFolioLine, createFolio, removeFolio, resolveFolio, resolveMoveDifference, moveFolioLine, captureDeposit, useDeposit, refundDeposit, addStayExtra, removeStayExtra } from "@/lib/actions-folio";
 import { issueInvoice } from "@/lib/actions-invoice";
 import { checkOut } from "@/lib/actions-frontdesk";
@@ -325,7 +324,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 </SubmitButton>
               </div>
               <p className="text-[10.5px] text-ink-400">
-                {s.payment.note(gatewayMode() === "stripe_test" ? s.payment.gatewayTest : s.payment.gatewayMock)}
+                {s.payment.note}
               </p>
             </form>
           </Card>

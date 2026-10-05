@@ -63,9 +63,7 @@ export interface FolioStrings {
     chargeOnFile: (last4: string) => string;
     recording: string;
     take: string;
-    note: (gateway: string) => string;
-    gatewayTest: string;
-    gatewayMock: string;
+    note: string;
   };
   checkout: {
     title: string;
@@ -240,9 +238,7 @@ export const folio: Translations<FolioStrings> = {
       chargeOnFile: (l) => `Charge the card saved at booking${l ? ` (•••• ${l})` : ""} — otherwise take it on your terminal`,
       recording: "Recording…",
       take: "Take",
-      note: (g) => `Cash / company / bank are drawer entries. Card runs through the payment gateway (${g}) — only a token is stored, never a card number.`,
-      gatewayTest: "Stripe test-mode",
-      gatewayMock: "mock",
+      note: "This records a payment taken at the desk — card on your own terminal, cash, company account or bank transfer. Online payments from your booking page and payment links appear here by themselves.",
     },
     checkout: {
       title: "Check out",
@@ -410,9 +406,7 @@ export const folio: Translations<FolioStrings> = {
       chargeOnFile: (l) => `Удържи от картата, записана при резервацията${l ? ` (•••• ${l})` : ""} — иначе я прекарайте на терминала`,
       recording: "Записване…",
       take: "Приеми",
-      note: (g) => `В брой, фирмена сметка и банков превод са записи в касата. Картата минава през платежната система (${g}) — пази се само токен, никога номерът на картата.`,
-      gatewayTest: "Stripe тестов режим",
-      gatewayMock: "симулация",
+      note: "Тук записвате плащане, взето на рецепцията — карта на Вашия собствен терминал, в брой, по фирмена сметка или банков превод. Онлайн плащанията от страницата за директни резервации и от линковете за плащане се появяват тук сами.",
     },
     checkout: {
       title: "Напускане",

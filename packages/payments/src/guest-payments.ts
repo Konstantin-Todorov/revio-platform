@@ -19,8 +19,8 @@
  *
  * ## Keys
  *
- * Test keys only, like the rest of this package — a live key is refused by construction until the
- * founder decides guests pay for real. `STRIPE_TEST_CHARGE_PLATFORM=1` (local development only, and
+ * Test or live by explicit choice (`STRIPE_GUEST_MODE`, see `stripe-mode.ts`); a key whose prefix
+ * disagrees with that choice is refused. Live since 2026-10-05. `STRIPE_TEST_CHARGE_PLATFORM=1` (local development only, and
  * only with a test key) charges the platform's own sandbox when no connected account exists — for
  * exercising the form before Connect is enabled. It can never apply in live mode.
  */
@@ -95,7 +95,7 @@ export async function createGuestIntent(opts: {
   /** The guest, as a Customer on the hotel's account. A card can only be charged again — the
    *  balance before arrival, a no-show fee — if it is attached to a Customer; Stripe refuses to
    *  reuse a payment method that was saved without one. */
-  guest: { email: string; name: string };
+  guest: { email: string; name: string; /** The page's language — Stripe's own receipts, if the hotel turns them on, follow it. */ locale?: string };
   /**
    * `authorise` (default) for a booking: hold the money, capture once the reservation exists.
    * `charge` for a payment link: the booking already exists, so the money is taken when the guest
@@ -105,6 +105,7 @@ export async function createGuestIntent(opts: {
 }): Promise<CreatedIntent> {
   const cust = await call("POST", "customers", opts.account, {
     email: opts.guest.email, name: opts.guest.name, "metadata[source]": "reviodirect",
+    ...(opts.guest.locale ? { "preferred_locales[0]": opts.guest.locale } : {}),
   });
   if (cust.status !== 200 || !cust.json.id) return { ok: false, error: cust.json.error?.message ?? `Stripe answered ${cust.status}` };
   const customer = cust.json.id;

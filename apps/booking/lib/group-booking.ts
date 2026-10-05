@@ -58,7 +58,7 @@ export async function startGroupPayment(property: PublicProperty, fd: FormData) 
     description: `${property.name} · ${items.length} rooms · ${str(fd, "checkIn")} → ${str(fd, "checkOut")}`,
     // The confirm checks the intent is THIS set of holds' payment.
     metadata: { holdId: items.map((i) => i.holdId).join(","), propertyId: property.id, source: "reviodirect" },
-    guest: { email: str(fd, "email"), name: `${str(fd, "firstName")} ${str(fd, "lastName")}` },
+    guest: { email: str(fd, "email"), name: `${str(fd, "firstName")} ${str(fd, "lastName")}`, locale: (await serverKit(property)).locale },
   });
   if (!intent.ok) return { ok: false as const, error: s.errors.card };
   return { ok: true as const, clientSecret: intent.clientSecret, kind: payNow > 0 ? ("payment" as const) : ("setup" as const) };

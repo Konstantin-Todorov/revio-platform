@@ -68,7 +68,7 @@ export async function startCardPayment(fd: FormData): Promise<StartPaymentResult
     description: `${property.name} · ${str(fd, "checkIn")} → ${str(fd, "checkOut")}`,
     // What the confirm step checks the intent against — it must be THIS hold's payment.
     metadata: { holdId, propertyId: property.id, ratePlanId: str(fd, "ratePlanId"), source: "reviodirect" },
-    guest: { email: str(fd, "email"), name: `${str(fd, "firstName")} ${str(fd, "lastName")}` },
+    guest: { email: str(fd, "email"), name: `${str(fd, "firstName")} ${str(fd, "lastName")}`, locale: (await serverKit(property)).locale },
   });
   if (!intent.ok) return { ok: false, error: e.card };
   return { ok: true, clientSecret: intent.clientSecret, kind: payNow > 0 ? "payment" : "setup" };

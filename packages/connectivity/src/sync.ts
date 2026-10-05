@@ -12,7 +12,7 @@ import {
   channelSupports, computeWaterfall, expandInventoryPeriods, isAdvancePurchaseClosed,
   resolveRestriction, ROOM_OCCUPYING_STATUSES, type AriUpdate, type RestrictionRuleHit,
   type RestrictionType, type ChannelAdapter, type ExternalProduct, type RawReservation,
-  resolveRate, toResolvablePlan, displayedRate, todayInTimeZone, effectiveModel, effectivePrimary, type PriceLookup, pushedOf, importFailureEmail } from "@revio/core";
+  resolveRate, toResolvablePlan, displayedRate, todayInTimeZone, effectiveModel, effectivePrimary, type PriceLookup, pushedOf, importFailureEmail, hotelAlertRecipients } from "@revio/core";
 import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } from "./channex-channel-api.js";
 import { sendEmail, publicBaseUrl } from "@revio/email";
@@ -1365,11 +1365,15 @@ async function pullChannelNow(
       try {
         const prop = await prisma.property.findUnique({
           where: { id: propertyId },
-          select: { name: true, reservationEmailPrimary: true, reservationEmailSecondary: true, baseCurrency: true },
+          select: { name: true, reservationEmailPrimary: true, reservationEmailSecondary: true, contactEmail: true, baseCurrency: true, tenantId: true },
         });
-        const to = [prop?.reservationEmailPrimary, prop?.reservationEmailSecondary].filter(
-          (a): a is string => !!a,
-        );
+        // No mailbox set must not mean nobody hears — see `hotelAlertRecipients`.
+        const owners = prop && !prop.reservationEmailPrimary && !prop.reservationEmailSecondary && !prop.contactEmail
+          ? (await prisma.user.findMany({ where: { tenantId: prop.tenantId, role: "owner", active: true }, select: { email: true } })).map((u: { email: string }) => u.email)
+          : [];
+        const to = hotelAlertRecipients({
+          primary: prop?.reservationEmailPrimary, secondary: prop?.reservationEmailSecondary, contact: prop?.contactEmail, owners,
+        });
         if (prop && to.length > 0) {
           const mail = importFailureEmail({
             hotelName: prop.name,

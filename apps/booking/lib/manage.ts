@@ -2,7 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { forSystem, forTenant, teamLocale } from "@revio/db";
 import { bookingReference, manageTokenMatches, storedStayTotal } from "@revio/booking";
-import { stayDetails } from "@revio/core";
+import { hotelAlertRecipients, stayDetails } from "@revio/core";
 import { sendEmail, sendTemplatedEmail } from "@revio/email";
 import type { PublicProperty } from "./property";
 import { productOrigin } from "@revio/ui/product-links";
@@ -130,9 +130,12 @@ export async function alertHotel(property: PublicProperty, what: HotelAlert, r: 
   try {
     const p = await forSystem().property.findUnique({
       where: { id: property.id },
-      select: { reservationEmailPrimary: true, reservationEmailSecondary: true },
+      select: { reservationEmailPrimary: true, reservationEmailSecondary: true, contactEmail: true },
     });
-    const to = [p?.reservationEmailPrimary, p?.reservationEmailSecondary].filter((a): a is string => !!a);
+    const owners = p?.reservationEmailPrimary || p?.reservationEmailSecondary || p?.contactEmail
+      ? []
+      : (await forSystem().user.findMany({ where: { tenantId: property.tenantId, role: "owner", active: true }, select: { email: true } })).map((u) => u.email);
+    const to = hotelAlertRecipients({ primary: p?.reservationEmailPrimary, secondary: p?.reservationEmailSecondary, contact: p?.contactEmail, owners });
     if (to.length === 0) return;
     const bg = (await teamLocale(property.tenantId, to)) === "bg";
     const ref = bookingReference(r.id);
