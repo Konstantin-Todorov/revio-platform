@@ -1,6 +1,8 @@
 import { i18n } from "@/lib/i18n/server";
 import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
-import { ExternalLink, Power } from "lucide-react";
+import { ExternalLink, Power, Plus } from "lucide-react";
+import Link from "next/link";
+import { prisma } from "@/lib/db";
 import { slugifyPropertyName } from "@revio/booking";
 import { funnelSessions } from "@revio/core";
 import { getBookingFunnel, todayInTz } from "@/lib/data";
@@ -30,6 +32,12 @@ export default async function BookingEngineOverview() {
   const sessions = funnelSessions(funnel.holds);
   const s = (await i18n()).t(beDict);
   const o = s.overview;
+  // A booking page that sells only the room leaves the easiest upsell unasked. Said here, where the
+  // owner looks, rather than only on the Extras tab nobody opens until they already mean to.
+  const [sellingExtras, staffOnlyExtras] = await Promise.all([
+    prisma.posItem.count({ where: { propertyId: property.id, category: "extra", active: true, directSellable: true } }),
+    prisma.posItem.count({ where: { propertyId: property.id, category: "extra", active: true, directSellable: false } }),
+  ]);
 
   return (
     <>
@@ -70,6 +78,20 @@ export default async function BookingEngineOverview() {
           </div>
         )}
       </Card>
+
+      {published && sellingExtras === 0 && (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5">
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-ink-900">{o.noExtrasTitle}</p>
+              <p className="mt-0.5 text-[12px] text-ink-500">{staffOnlyExtras > 0 ? o.staffOnlyBody(staffOnlyExtras) : o.noExtrasBody}</p>
+            </div>
+            <Link href="/booking-engine/extras" className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-brand-700">
+              <Plus className="h-3.5 w-3.5" /> {staffOnlyExtras > 0 ? o.staffOnlyCta : o.noExtrasCta}
+            </Link>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <CardHeader

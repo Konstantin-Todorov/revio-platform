@@ -6,8 +6,9 @@ import { bookingEngine as beDict } from "@/lib/i18n/booking-engine";
 
 import { useActionState, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { saveBookingExtra, retireBookingExtra, type LookResult } from "@/lib/actions-booking-engine";
+import { saveBookingExtra, retireBookingExtra, setExtraSellable, type LookResult } from "@/lib/actions-booking-engine";
 import { ActionForm } from "@revio/ui/action-form";
+import { SubmitButton } from "@revio/ui/submit-button";
 
 export interface EditableExtra {
   id: string;
@@ -29,14 +30,24 @@ export interface EditableExtra {
  * staff-only lines — a corkage fee, a lost-key charge — and the safe default for "who can see this"
  * is nobody new.
  */
+/** What a new extra starts as. From this screen a new line is for sale unless the hotel says not. */
+type Draft = { name: string; basis: "per_night" | "per_stay"; description: string };
+
 export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; currency: string }) {
   const [state, formAction, pending] = useActionState<LookResult | null, FormData>(saveBookingExtra, null);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<Draft | null>(null);
   const locale = useLocale();
   const X = translate(beDict, locale).extras;
 
   const money = (minor: number) =>
     (minor / 100).toLocaleString(locale === "en" ? undefined : "bg-BG", { style: "currency", currency });
+
+  // The usual first sellers, offered until the hotel has one of the same name. A guest adds breakfast
+  // far more often than a hotel thinks to offer it; the empty catalogue is the reason, not the guest.
+  const have = new Set(extras.map((e) => e.name.trim().toLowerCase()));
+  // Only for an empty catalogue: beside a list the hotel already has, "Breakfast" next to their own
+  // "Breakfast (extra)" reads as a second breakfast.
+  const presets = extras.length === 0 ? X.presets.filter((p) => !have.has(p.name.toLowerCase())) : [];
 
   return (
     <div className="space-y-3">
@@ -44,6 +55,18 @@ export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; cu
         <p className="text-[12.5px] text-ink-500">
           {X.empty}
         </p>
+      )}
+
+      {!adding && presets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11.5px] font-semibold text-ink-500">{X.quickAdd}</span>
+          {presets.map((p) => (
+            <button key={p.name} type="button" onClick={() => setAdding({ name: p.name, basis: p.basis, description: p.description })}
+                    className="inline-flex items-center gap-1 rounded-full border border-surface-border bg-white px-2.5 py-1 text-[12px] font-semibold text-ink-700 transition-colors hover:border-brand-600 hover:text-brand-700">
+              <Plus className="h-3 w-3" /> {p.name}
+            </button>
+          ))}
+        </div>
       )}
 
       {extras.length > 0 && (
@@ -58,9 +81,9 @@ export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; cu
 
       {adding ? (
         <ActionForm action={formAction} state={state} className="rounded-md border border-surface-border bg-surface-muted/40 p-3.5">
-          <ExtraFields currency={currency} />
+          <ExtraFields currency={currency} draft={adding} />
           <div className="mt-3 flex justify-end gap-2">
-            <button type="button" onClick={() => setAdding(false)}
+            <button type="button" onClick={() => setAdding(null)}
                     className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-600">
               {X.cancel}
             </button>
@@ -71,7 +94,7 @@ export function ExtrasEditor({ extras, currency }: { extras: EditableExtra[]; cu
           </div>
         </ActionForm>
       ) : (
-        <button type="button" onClick={() => setAdding(true)}
+        <button type="button" onClick={() => setAdding({ name: "", basis: "per_stay", description: "" })}
                 className="inline-flex items-center gap-1.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted">
           <Plus className="h-3.5 w-3.5" /> {X.addOne}
         </button>
@@ -138,6 +161,13 @@ function ExtraRow({
         >
           {extra.directSellable ? X.onPage : X.staffOnly}
         </span>
+        <form action={setExtraSellable.bind(null, extra.id, !extra.directSellable)}>
+          <SubmitButton className={`rounded-md px-2 py-1 text-[11.5px] font-semibold transition-colors ${
+            extra.directSellable ? "text-ink-500 hover:bg-surface-muted" : "border border-brand-600 text-brand-700 hover:bg-brand-50"
+          }`}>
+            {extra.directSellable ? X.stopOffering : X.offerIt}
+          </SubmitButton>
+        </form>
         <form action={retireBookingExtra.bind(null, extra.id)}>
           <button type="submit" aria-label={X.retire(extra.name)}
                   className="flex h-7 w-7 items-center justify-center rounded-md text-ink-400 transition-colors hover:bg-surface-muted hover:text-danger-600">
@@ -152,23 +182,23 @@ function ExtraRow({
 const INPUT =
   "h-9 w-full rounded-md border border-surface-border bg-white px-3 text-[13px] text-ink-900 outline-none focus:border-brand-600";
 
-function ExtraFields({ currency, extra }: { currency: string; extra?: EditableExtra }) {
+function ExtraFields({ currency, extra, draft }: { currency: string; extra?: EditableExtra; draft?: Draft }) {
   const X = translate(beDict, useLocale()).extras;
   return (
     <div className="space-y-2.5">
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-[1fr_8rem_9rem]">
         <label className="block">
           <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">{X.name}</span>
-          <input name="name" defaultValue={extra?.name} required placeholder={X.namePlaceholder} className={INPUT} />
+          <input name="name" defaultValue={extra?.name ?? draft?.name} required autoFocus={Boolean(draft && !draft.name)} placeholder={X.namePlaceholder} className={INPUT} />
         </label>
         <label className="block">
           <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">{X.price(currency)}</span>
           <input name="price" defaultValue={extra ? (extra.priceMinor / 100).toFixed(2) : ""}
-                 inputMode="decimal" required placeholder="12.00" className={INPUT} />
+                 inputMode="decimal" required placeholder="12.00" autoFocus={Boolean(draft?.name)} className={INPUT} />
         </label>
         <label className="block">
           <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">{X.charged}</span>
-          <select name="basis" defaultValue={extra?.basis ?? "per_stay"} className={INPUT}>
+          <select name="basis" defaultValue={extra?.basis ?? draft?.basis ?? "per_stay"} className={INPUT}>
             <option value="per_stay">{X.oncePerStay}</option>
             <option value="per_night">{X.perNight}</option>
           </select>
@@ -178,11 +208,11 @@ function ExtraFields({ currency, extra }: { currency: string; extra?: EditableEx
         <span className="mb-1 block text-[11.5px] font-semibold text-ink-700">
           {X.line}<span className="font-normal text-ink-400">{X.optional}</span>
         </span>
-        <input name="description" defaultValue={extra?.description ?? ""}
+        <input name="description" defaultValue={extra?.description ?? draft?.description ?? ""}
                placeholder={X.linePlaceholder} className={INPUT} />
       </label>
       <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-medium text-ink-700">
-        <input type="checkbox" name="directSellable" defaultChecked={extra?.directSellable ?? false}
+        <input type="checkbox" name="directSellable" defaultChecked={extra ? extra.directSellable : true}
                className="h-4 w-4 rounded border-surface-border text-brand-600" />
         {X.sellIt}
       </label>

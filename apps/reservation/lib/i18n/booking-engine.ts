@@ -26,6 +26,11 @@ export interface BookingEngineStrings {
     label: string; elsewhere: string;
   };
   overview: {
+    noExtrasTitle: string;
+    noExtrasBody: string;
+    noExtrasCta: string;
+    staffOnlyBody: (n: number) => string;
+    staffOnlyCta: string;
     linkTitle: string;
     linkSub: string;
     taking: string;
@@ -201,6 +206,10 @@ export interface BookingEngineStrings {
     optional: string;
     linePlaceholder: string;
     sellIt: string;
+    quickAdd: string;
+    offerIt: string;
+    stopOffering: string;
+    presets: { name: string; basis: "per_night" | "per_stay"; description: string }[];
   };
   errors: {
     chooseHotel: string;
@@ -234,6 +243,11 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       label: "Settings sections", elsewhere: "Elsewhere",
     },
     overview: {
+      noExtrasTitle: "Your booking page sells only the room",
+      noExtrasBody: "Breakfast, parking or a late checkout, offered while the guest is booking — added in a click, with the new total in front of them.",
+      noExtrasCta: "Offer extras",
+      staffOnlyBody: (n) => `You have ${n} ${n === 1 ? "extra" : "extras"} in your catalogue, all set to staff only — a guest booking online never sees them.`,
+      staffOnlyCta: "Choose what to offer",
       linkTitle: "Your link",
       linkSub: "Where guests book. Printed on QR codes and pasted into bios, so treat it as permanent once you share it.",
       taking: "Taking bookings",
@@ -413,6 +427,16 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       title: "Extras you sell",
       sub: "Offered after a guest has picked a room, added to the same bill, and posted by your front desk from this same list.",
       empty: "Nothing yet. Breakfast, parking, an airport transfer, a late checkout — anything you already charge for is worth offering while a guest is booking.",
+      quickAdd: "Quick add:",
+      offerIt: "Offer on the page",
+      stopOffering: "Stop offering",
+      presets: [
+        { name: "Breakfast", basis: "per_night", description: "Served in the morning, every day of your stay" },
+        { name: "Parking", basis: "per_night", description: "A space for your car at the hotel" },
+        { name: "Late checkout", basis: "per_stay", description: "Keep the room until the afternoon on your last day" },
+        { name: "Airport transfer", basis: "per_stay", description: "We meet you at the airport" },
+        { name: "Pet", basis: "per_stay", description: "Your dog or cat stays with you" },
+      ],
       cancel: "Cancel",
       saving: "Saving…",
       add: "Add extra",
@@ -469,6 +493,11 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       label: "Раздели", elsewhere: "Другаде",
     },
     overview: {
+      noExtrasTitle: "Страницата Ви продава само стаята",
+      noExtrasBody: "Закуска, паркинг или късно напускане, предложени докато гостът резервира — добавят се с едно натискане и новата сума е пред него.",
+      noExtrasCta: "Предложете допълнителни услуги",
+      staffOnlyBody: (n) => `Имате ${n} ${n === 1 ? "допълнителна услуга" : "допълнителни услуги"} в каталога, всички само за персонала — гост, който резервира онлайн, не ги вижда.`,
+      staffOnlyCta: "Изберете какво да предлагате",
       linkTitle: "Вашият линк",
       linkSub: "Тук гостите резервират. Печата се на QR кодове и се слага в профили, затова го приемайте за постоянен, щом го споделите.",
       taking: "Приема резервации",
@@ -648,6 +677,16 @@ export const bookingEngine: Translations<BookingEngineStrings> = {
       title: "Допълнителни услуги, които продавате",
       sub: "Предлагат се, след като гостът е избрал стая, добавят се към същата сметка и рецепцията ги начислява от същия списък.",
       empty: "Все още няма. Закуска, паркинг, трансфер от летището, късно напускане — всичко, което вече таксувате, си струва да се предложи, докато гостът резервира.",
+      quickAdd: "Бързо добавяне:",
+      offerIt: "Предлагай на страницата",
+      stopOffering: "Спри да предлагаш",
+      presets: [
+        { name: "Закуска", basis: "per_night", description: "Сервира се сутрин, всеки ден от престоя" },
+        { name: "Паркинг", basis: "per_night", description: "Място за колата Ви в хотела" },
+        { name: "Късно напускане", basis: "per_stay", description: "Задържате стаята до следобед в последния ден" },
+        { name: "Трансфер от летището", basis: "per_stay", description: "Посрещаме Ви на летището" },
+        { name: "Домашен любимец", basis: "per_stay", description: "Кучето или котката Ви остават с Вас" },
+      ],
       cancel: "Отказ",
       saving: "Запазване…",
       add: "Добави услугата",

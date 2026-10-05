@@ -14,6 +14,7 @@ import { getSession } from "./session";
 import { logAudit, str } from "./mutation-helpers";
 import { ImageRejected, MAX_UPLOAD_BYTES, processHeroImage } from "./images";
 import { guard, requireCapability } from "./authz";
+import { flashError } from "@revio/ui/flash";
 import { i18n } from "./i18n/server";
 import { bookingEngine as beDict } from "./i18n/booking-engine";
 import { imageRefusal, rateErrors } from "./i18n/rate-errors";
@@ -615,9 +616,25 @@ export async function saveBookingExtra(_prev: LookResult | null, fd: FormData): 
  * of what a guest bought; removing the catalogue row would leave past bookings pointing at nothing and
  * break a bill somebody is going to be handed at checkout.
  */
+/**
+ * Offer a catalogue line on the booking page, or take it off — the one switch, without re-entering the
+ * price. Most hotels arrive with the desk's list already there and every line staff-only (the safe
+ * default); this is the one press between that and a guest being able to add breakfast.
+ */
+export async function setExtraSellable(id: string, sellable: boolean): Promise<void> {
+  await requireCapability("manageSettings");
+  const scopeError = await assertSingleProperty();
+  if (scopeError) return flashError(scopeError);
+  const { id: propertyId, tenantId } = await getProperty();
+  await prisma.posItem.updateMany({ where: { id, propertyId, category: "extra", active: true }, data: { directSellable: sellable } });
+  await logAudit(propertyId, tenantId, { entity: "Booking engine", field: "extra", newValue: sellable ? "on the booking page" : "staff only" });
+  revalidatePath("/booking-engine", "layout");
+}
+
 export async function retireBookingExtra(id: string): Promise<void> {
   await requireCapability("manageSettings");
-  if (await assertSingleProperty()) return;
+  const scopeError = await assertSingleProperty();
+  if (scopeError) return flashError(scopeError);
   const { id: propertyId, tenantId } = await getProperty();
   await prisma.posItem.updateMany({
     where: { id, propertyId, category: "extra" },
