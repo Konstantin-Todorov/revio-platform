@@ -1,7 +1,7 @@
 import { extrasTotalMinor, type StayTerms } from "@revio/core";
 import { termsWords } from "@/lib/i18n/kit";
 import { notFound } from "next/navigation";
-import { CalendarCheck, Check, Clock, MapPin, Phone, X } from "lucide-react";
+import { CalendarCheck, CalendarPlus, Check, Clock, MapPin, Navigation, Phone, X } from "lucide-react";
 import { forTenant } from "@revio/db";
 import { computeStayCharges, recogniseGuest, SOLD_STATUSES } from "@revio/core";
 import { getPublicProperty, type PublicProperty } from "@/lib/property";
@@ -13,7 +13,7 @@ import { PropertyFooter } from "@/components/PropertyFooter";
 import { StepBar } from "@/components/StepBar";
 import { AskManageLink, ManagePanel } from "@/components/ManageBooking";
 import { bookingReference, manageAbility, previewSettlement } from "@revio/booking";
-import { todayInTimeZone } from "@revio/core";
+import { directionsUrl, stayGoogleCalendarUrl, todayInTimeZone } from "@revio/core";
 import { mayManage } from "@/lib/manage";
 
 export const dynamic = "force-dynamic";
@@ -132,6 +132,11 @@ export default async function ConfirmationPage({
    */
   const today = todayInTimeZone(property.timezone);
   const canManage = await mayManage(reservation, sp.k);
+  const calEvent = {
+    uid: `${reference.toUpperCase()}@reviosoft.app`, title: property.name, checkIn, checkOut,
+    checkInTime: property.checkInTime, checkOutTime: property.checkOutTime, timezone: property.timezone,
+    location: property.address, description: `${reference.toUpperCase()} · ${line.roomType?.name ?? ""}`,
+  };
   // Rooms booked together: the others in the group, each its own reservation and reference.
   const siblings = reservation.bookingGroupId
     ? await db.reservation.findMany({
@@ -304,6 +309,27 @@ export default async function ConfirmationPage({
             )}
           </div>
         </section>
+
+        {/* What a guest does next with a booking: put it in the calendar, find the way there. */}
+        {!cancelled && !requested && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href={stayGoogleCalendarUrl(calEvent)}
+              target="_blank" rel="noopener noreferrer"
+              className="btn btn-outline min-h-[40px] px-4 text-[13.5px]"
+            >
+              <CalendarPlus size={15} aria-hidden /> {s.addGoogle}
+            </a>
+            <a href={`/${property.slug}/booking/${reference.toUpperCase()}/calendar`} className="btn btn-outline min-h-[40px] px-4 text-[13.5px]">
+              <CalendarPlus size={15} aria-hidden /> {s.addIcs}
+            </a>
+            {property.address && (
+              <a href={directionsUrl(property.name, property.address)} target="_blank" rel="noopener noreferrer" className="btn btn-outline min-h-[40px] px-4 text-[13.5px]">
+                <Navigation size={15} aria-hidden /> {s.directions}
+              </a>
+            )}
+          </div>
+        )}
 
         {siblings.length > 0 && (
           <section className="card mt-5 p-5">

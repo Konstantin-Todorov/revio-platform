@@ -184,6 +184,7 @@ export interface GuestStrings {
     nothingCharged: string;
     guaranteeOnly: (last4: string) => string;
     nextTitle: string;
+    addGoogle: string; addIcs: string; directions: string;
     requestNext: (hotel: string) => string;
     requestHeld: string;
     requestCall: string; requestCallTail: string;
@@ -510,7 +511,8 @@ export const guest: Translations<GuestStrings> = {
       bookedCallOther: "Anything else — an early check-in, a cot, a special occasion? Call the hotel",
       bookedCallOtherTail: ".",
       cancelledTotal: "Nothing to pay — cancelled",
-      bookedCallTail: " — you’re booked with them, not through an agency, so they can just do it.",
+      addGoogle: "Add to Google Calendar", addIcs: "Add to Apple / Outlook", directions: "Directions",
+    bookedCallTail: " — you’re booked with them, not through an agency, so they can just do it.",
       on: "on",
     },
     manage: {
@@ -820,6 +822,7 @@ export const guest: Translations<GuestStrings> = {
       bookedCallOther: "Нещо друго — ранно настаняване, детско легло, специален повод? Обадете се на хотела",
       bookedCallOtherTail: ".",
       cancelledTotal: "Нищо за плащане — отказана",
+      addGoogle: "Добави в Google Календар", addIcs: "Добави в Apple / Outlook", directions: "Упътване",
       bookedCallTail: " — резервацията е при тях, а не чрез агенция, така че те могат просто да го направят.",
       on: "на",
     },
