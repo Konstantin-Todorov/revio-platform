@@ -430,8 +430,10 @@ never through a live email lookup: on an unauthenticated page that endpoint is a
 oracle. `Guest.recognitionOptOut` silences it guest- *and* staff-facing, and is deliberately narrower
 than erasure. **Nothing open here.** ⚠️ `book.revio.app` was a vanity domain from an early plan on **revio.app, which we do not own** (it resolves to a third party; `book.revio.app` itself is NXDOMAIN). The brand domain is **reviosoft.app**, the booking engine is live and correct at `booking.reviosoft.app/<slug>`, and `BOOKING_ENGINE_ORIGIN` in production already points there. Dropped 2026-09-07 — there was never anything to do.
 **Not built
-and deliberately so:** real card collection (needs Stripe Elements + a live-mode decision), extras/upsell
-(the step-3 slot exists and is empty), and any Operator visibility into the booking engine.
+and deliberately so:** any Operator visibility into the booking engine. (This line used to list real
+card collection and extras/upsell as unbuilt; both shipped — the card via Stripe's Payment Element, the
+extras picker at K10 — and on 2026-10-05 it was found that no hotel offered a single extra because every
+catalogue line was staff-only. Booking Engine → Overview now says so. Check the code, not this line.)
 
 **→ ✅ BRAND IDENTITY (phase M) — SHIPPED 2026-08-03.** The founder's real marks replaced the placeholder
 SVGs in all four staff apps (`design/brand/` holds the source PNGs; each app serves `public/mark.png` +
