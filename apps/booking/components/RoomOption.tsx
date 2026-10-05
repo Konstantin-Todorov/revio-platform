@@ -251,14 +251,23 @@ function RateRow({
       </div>
 
       <div className="text-left sm:text-right">
-        {/* The code's saving, said where the price is: the old total struck through, the code named. */}
-        {plan.promo && (
-          <div className="mb-1 flex items-center gap-1.5 sm:justify-end">
-            <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ backgroundColor: "hsl(var(--positive) / 0.12)", color: "hsl(var(--positive))" }}>
-              {s.promo.badge(plan.promo.code, plan.promo.percentOff)}
-            </span>
-            <span className="nums text-[12px] line-through" style={{ color: "hsl(var(--ink-faint))" }}>
-              {money(plan.promo.originalTotalMinor, plan.currency)}
+        {/* The saving, said where the price is: what the booking sites charge (or the price before
+            the code) struck through, and what took it off named. */}
+        {(plan.direct || plan.promo) && (
+          <div className="mb-1 flex flex-wrap items-center gap-1.5 sm:justify-end">
+            {plan.direct && (
+              <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ backgroundColor: "hsl(var(--positive) / 0.12)", color: "hsl(var(--positive))" }}>
+                {s.direct.badge(plan.direct.percentOff)}
+              </span>
+            )}
+            {plan.promo && (
+              <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ backgroundColor: "hsl(var(--positive) / 0.12)", color: "hsl(var(--positive))" }}>
+                {s.promo.badge(plan.promo.code, plan.promo.percentOff)}
+              </span>
+            )}
+            <span className="nums text-[12px] line-through" style={{ color: "hsl(var(--ink-faint))" }}
+                  title={plan.direct ? s.direct.struckTitle : undefined}>
+              {money(plan.direct ? plan.direct.otaTotalMinor : plan.promo!.originalTotalMinor, plan.currency)}
             </span>
           </div>
         )}
@@ -267,6 +276,11 @@ function RateRow({
           {s.room.totalFor(nights)}
           {extras && <> · {s.room.includes(extras)}</>}
         </div>
+        {plan.direct && (
+          <div className="mt-0.5 text-[11.5px] font-semibold leading-tight" style={{ color: "hsl(var(--positive))" }}>
+            {s.direct.saving(money(plan.direct.otaTotalMinor - plan.totalMinor, plan.currency))}
+          </div>
+        )}
       </div>
 
       <a href={href} className="btn btn-brand shrink-0 px-5">

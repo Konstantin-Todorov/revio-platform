@@ -20,7 +20,7 @@ import {
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type RestrictionType,
   resolveRate, toResolvablePlan, type PriceLookup, stayTerms, withoutCard, type StayTerms, type StayTermsPolicy,
   partyOf, childrenNightMinor, MAX_CHILDREN,
-  normalisePromo, promoRefusal, promoPercentFor, discountedNight, type PromoRule, type PromoRefusal,
+  normalisePromo, promoRefusal, promoPercentFor, discountedNight, directDiscountPercent, type PromoRule, type PromoRefusal,
 } from "@revio/core";
 import { sellableTerms, termsPolicyOf } from "./stay-terms.js";
 import { recordAvailabilityPush, syncRealChannels, stayScope } from "@revio/connectivity";
@@ -96,6 +96,8 @@ export interface PublicPlanQuote {
   firstNightMinor: number;
   /** A promo code took something off this rate: the code, the percentage, and the all-in total without it. */
   promo?: { code: string; percentOff: number; originalTotalMinor: number };
+  /** The hotel's direct-booking discount on a rate also sold on a booking site: the percentage and the all-in total there. */
+  direct?: { percentOff: number; otaTotalMinor: number };
 }
 
 /** One photograph, already resized. Object KEYS — the caller turns them into URLs, because only the
@@ -167,7 +169,7 @@ async function loadStayContext(
   const nights: string[] = [];
   for (let t = start.getTime(); t < end.getTime(); t += DAY_MS) nights.push(ymd(new Date(t)));
 
-  const [roomTypes, plans, cells, prices, periods, holds, resLines, defaults, rules, fees] = await Promise.all([
+  const [roomTypes, plans, cells, prices, periods, holds, resLines, defaults, rules, fees, directRow, otaMapped] = await Promise.all([
     db.roomType.findMany({
       where: { propertyId: property.id, active: true },
       // Included rather than fetched per room: this is the guest's first paint, and a query per
@@ -212,6 +214,12 @@ async function loadStayContext(
     db.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
     db.restrictionRule.findMany({ where: { propertyId: property.id, active: true, dateFrom: { lte: end }, dateTo: { gte: start } } }),
     db.taxFee.findMany({ where: { propertyId: property.id, active: true } }),
+    db.property.findUnique({ where: { id: property.id }, select: { directDiscountPct: true } }),
+    // Which rates are on sale on a connected booking site — only those have an OTA price to beat.
+    db.channelRatePlanMapping.findMany({
+      where: { channel: { propertyId: property.id, status: "connected" }, ratePlan: { propertyId: property.id } },
+      select: { ratePlanId: true },
+    }),
   ]);
 
   const cellOf = (rtId: string, k: string) => cells.find((c) => c.roomTypeId === rtId && ymd(c.date) === k);
@@ -375,21 +383,34 @@ async function loadStayContext(
   const promoPct = (rp: (typeof plans)[number]): number =>
     promo && !promo.refusal && promo.rule ? promoPercentFor(promo.rule, rp.id) : 0;
 
-  const nightPrice = (rt: (typeof roomTypes)[number], rp: (typeof plans)[number], k: string, opts: { raw?: boolean } = {}): number | null => {
+  /*
+   * The direct-booking discount: the hotel's own "cheaper than on booking sites", applied only to
+   * rates that ARE on a connected booking site — the same rate there is sold at the undiscounted
+   * price we push, so the saving shown is true by construction. A direct-only rate has no OTA price
+   * to compare with and is left alone. The promo code, if any, comes off after it.
+   */
+  const otaPlanIds = new Set(otaMapped.map((m) => m.ratePlanId));
+  const directPct = (rp: (typeof plans)[number]): number =>
+    otaPlanIds.has(rp.id) ? directDiscountPercent(directRow?.directDiscountPct ?? 0) : 0;
+
+  /** `raw` = the price on the booking sites; `direct` = after the direct discount; default = what the guest pays. */
+  const nightPrice = (rt: (typeof roomTypes)[number], rp: (typeof plans)[number], k: string, opts: { raw?: boolean; stage?: "direct" } = {}): number | null => {
     const base = priceFor(rt, rp, k, party.pricedAdults);
     if (base == null) return null;
     const room = base + childrenNightMinor(party, rp);
-    return opts.raw ? room : discountedNight(room, promoPct(rp));
+    if (opts.raw) return room;
+    const direct = discountedNight(room, directPct(rp));
+    return opts.stage === "direct" ? direct : discountedNight(direct, promoPct(rp));
   };
 
-  return { nights, roomTypes, plans, priceFor, nightPrice, party, promo, promoPct, remainingFor, remainingByNight, sellableByNightFor, stayBlocked, stopSoldOn, fees, defaults };
+  return { nights, roomTypes, plans, priceFor, nightPrice, party, promo, promoPct, directPct, remainingFor, remainingByNight, sellableByNightFor, stayBlocked, stopSoldOn, fees, defaults };
 }
 
 /** GET /api/public/availability — the widget's search. */
 export async function publicAvailability(db: Db, property: PropertyRow, q: PublicStayQuery): Promise<{ error?: string; code?: PublicBookingErrorCode; options?: PublicRoomOption[]; promo?: { code: string; refusal: PromoRefusal | null } }> {
   const bad = validStay(q);
   if (bad) return { error: bad, code: stayRefusalCode(bad) };
-  const { nights, roomTypes, plans, nightPrice, party, promo, promoPct, remainingFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, nightPrice, party, promo, promoPct, directPct, remainingFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, q);
   const cityTaxIncluded = defaults?.cityTaxMode === "included";
 
@@ -417,19 +438,22 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
         fees,
         cityTaxIncluded,
       });
-      // What the guest would pay without the code — shown struck through beside the price.
+      // The all-in total at an earlier stage — what the booking sites charge, and what this guest
+      // would pay without the code — each shown struck through beside the price.
+      const totalAt = (opts: { raw?: boolean; stage?: "direct" }) => {
+        let acc = 0;
+        for (const k of nights) acc += nightPrice(rt, rp, k, opts) ?? 0;
+        return computeStayCharges({ stay: { accommodationMinor: acc, nights: nights.length, rooms: 1, guests: party.pricedAdults }, fees, cityTaxIncluded }).totalMinor;
+      };
       const pct = promoPct(rp);
-      let promoInfo: PublicPlanQuote["promo"];
-      if (pct > 0) {
-        let raw = 0;
-        for (const k of nights) raw += nightPrice(rt, rp, k, { raw: true }) ?? 0;
-        promoInfo = {
-          code: promo!.code, percentOff: pct,
-          originalTotalMinor: computeStayCharges({ stay: { accommodationMinor: raw, nights: nights.length, rooms: 1, guests: party.pricedAdults }, fees, cityTaxIncluded }).totalMinor,
-        };
-      }
+      const promoInfo: PublicPlanQuote["promo"] = pct > 0
+        ? { code: promo!.code, percentOff: pct, originalTotalMinor: totalAt({ stage: "direct" }) }
+        : undefined;
+      const dPct = directPct(rp);
+      const directInfo: PublicPlanQuote["direct"] = dPct > 0 ? { percentOff: dPct, otaTotalMinor: totalAt({ raw: true }) } : undefined;
       quotes.push({
         ...(promoInfo ? { promo: promoInfo } : {}),
+        ...(directInfo ? { direct: directInfo } : {}),
         ratePlanId: rp.id, name: rp.name, code: rp.code,
         accommodationMinor: total,
         charges: charged.lines.map((l) => ({ name: l.name, amountMinor: l.amountMinor })),
@@ -725,7 +749,7 @@ export async function publicCreateReservation(
   if (!p.guest?.firstName?.trim() || !p.guest?.lastName?.trim() || !/.+@.+\..+/.test(p.guest?.email ?? "")) {
     return { error: "Guest first name, last name and a valid email are required.", code: "guest_details" };
   }
-  const { nights, roomTypes, plans, nightPrice, party, promo, promoPct, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, nightPrice, party, promo, promoPct, directPct, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, p, p.holdId ? { excludeHoldId: p.holdId } : {});
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
@@ -804,10 +828,11 @@ export async function publicCreateReservation(
    * booked but never what it costs. This is the same rule the room price already follows.
    */
   // What the code took off the rooms — recorded on the reservation, so the hotel can see it.
+  const sumAt = (opts: { raw?: boolean; stage?: "direct" }) => nights.reduce((n, k) => n + (nightPrice(rt, rp, k, opts) ?? 0), 0);
   const promoApplied = promoPct(rp) > 0 ? promo!.code : null;
-  const promoDiscountMinor = promoApplied
-    ? nights.reduce((n, k) => n + (nightPrice(rt, rp, k, { raw: true }) ?? 0), 0) - accommodationMinor
-    : 0;
+  const promoDiscountMinor = promoApplied ? sumAt({ stage: "direct" }) - accommodationMinor : 0;
+  // And what booking direct took off — the hotel's own discount against its booking-site price.
+  const directDiscountMinor = directPct(rp) > 0 ? sumAt({ raw: true }) - sumAt({ stage: "direct" }) : 0;
 
   const offeredExtras = await publicSellableExtras(db, property.id);
   const chosenExtras = resolveChosenExtras(offeredExtras, p.extraIds ?? []);
@@ -945,6 +970,7 @@ export async function publicCreateReservation(
         guestManageToken: manageToken,
         ...(p.bookingGroupId ? { bookingGroupId: p.bookingGroupId } : {}),
         ...(promoApplied ? { promoCode: promoApplied, promoDiscountMinor } : {}),
+        ...(directDiscountMinor > 0 ? { directDiscountMinor } : {}),
         // A LABEL plus a gateway token — never a card number. `card_on_file` is what the front desk
         // reads as "we can charge a no-show"; the ref is what actually lets them.
         paymentGuarantee: p.guarantee?.ref ? "card_on_file" : "none",

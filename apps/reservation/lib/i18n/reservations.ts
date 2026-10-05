@@ -121,6 +121,7 @@ export interface ReservationsStrings {
     online: { paid: string; refunded: string; fee: string; balance: (amount: string, day: string) => string; balanceFailed: string; cancelWill: (refund: string, charge: string) => string; noShowWill: (refund: string, charge: string) => string; waive: string };
     kids: (children: number, infants: number, ages: string) => string;
     promo: string;
+    directDiscount: string;
     payLink: {
       title: string; hint: string; amount: (currency: string) => string; note: string; notePlaceholder: string; send: string; sending: string;
       outstanding: (amount: string) => string;
@@ -325,6 +326,7 @@ export const reservations: Translations<ReservationsStrings> = {
         waive: "Waive the fee (refund everything paid)",
       },
       promo: "Promo code",
+      directDiscount: "Direct booking discount",
       kids: (c, i, a) => [c ? `+ ${c} ${c === 1 ? "child" : "children"}` : "", i ? `+ ${i} ${i === 1 ? "infant" : "infants"}` : ""].filter(Boolean).join(" ") + (a ? ` (ages ${a})` : ""),
       payLink: {
         title: "Request a payment",
@@ -533,6 +535,7 @@ export const reservations: Translations<ReservationsStrings> = {
         waive: "Без такса (връщане на всичко платено)",
       },
       promo: "Промо код",
+      directDiscount: "Отстъпка за директна резервация",
       kids: (c, i, a) => [c ? `+ ${c} ${c === 1 ? "дете" : "деца"}` : "", i ? `+ ${i} ${i === 1 ? "бебе" : "бебета"}` : ""].filter(Boolean).join(" ") + (a ? ` (на ${a} г.)` : ""),
       payLink: {
         title: "Поискай плащане",

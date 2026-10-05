@@ -120,6 +120,9 @@ export default async function BookPage({
     ? { publishableKey, account: property.paymentAccountId, currency: plan.currency, locale: kit.locale }
     : null;
 
+  // The all-in total before the direct discount and before the code — so the summary can itemise both.
+  const afterDirect = plan.promo ? plan.promo.originalTotalMinor : plan.totalMinor;
+  const fullTotal = plan.direct ? plan.direct.otaTotalMinor : afterDirect;
   return (
     <>
       <PropertyHeader property={property} />
@@ -185,12 +188,16 @@ export default async function BookPage({
               </p>
 
               <dl className="mt-4 space-y-1.5 border-t pt-4 text-[13px]" style={{ borderColor: "hsl(var(--line))" }}>
-                {/* With a code, the rooms line is the price before it, so the lines add up to the total. */}
+                {/* With a discount, the rooms line is the price before it and each discount is its own
+                    line, so the lines add up to the total. */}
                 <Line label={s.room.roomsFor(nights)}
-                      value={money(plan.accommodationMinor + (plan.promo ? plan.promo.originalTotalMinor - plan.totalMinor : 0), plan.currency)} />
+                      value={money(plan.accommodationMinor + (fullTotal - plan.totalMinor), plan.currency)} />
                 {plan.charges.map((c) => (
                   <Line key={c.name} label={c.name} value={money(c.amountMinor, plan.currency)} />
                 ))}
+                {plan.direct && (
+                  <Line label={s.direct.line(plan.direct.percentOff)} value={`−${money(plan.direct.otaTotalMinor - afterDirect, plan.currency)}`} />
+                )}
                 {plan.promo && (
                   <Line label={s.promo.badge(plan.promo.code, plan.promo.percentOff)} value={`−${money(plan.promo.originalTotalMinor - plan.totalMinor, plan.currency)}`} />
                 )}

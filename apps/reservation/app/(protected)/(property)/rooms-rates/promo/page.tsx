@@ -2,7 +2,7 @@ import { TicketPercent } from "lucide-react";
 import { todayInTimeZone } from "@revio/core";
 import { getProperty } from "@/lib/data";
 import { prisma } from "@/lib/db";
-import { createPromoCode, deletePromoCode, togglePromoCode } from "@/lib/actions-promo";
+import { createPromoCode, deletePromoCode, saveDirectDiscount, togglePromoCode } from "@/lib/actions-promo";
 import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
 import { DeleteButton } from "@/components/ui/DeleteButton";
 import { SubmitButton } from "@revio/ui/submit-button";
@@ -21,15 +21,47 @@ export default async function PromoCodesPage() {
   const today = todayInTimeZone(property.timezone);
   const { t, day } = await i18n();
   const s = t(promoDict);
-  const [codes, plans] = await Promise.all([
+  const [codes, plans, otaMapped, directRow] = await Promise.all([
     prisma.promoCode.findMany({ where: { propertyId: property.id }, orderBy: { createdAt: "desc" } }),
     prisma.ratePlan.findMany({ where: { propertyId: property.id, active: true, directChannelEnabled: true }, select: { id: true, name: true }, orderBy: { sortOrder: "asc" } }),
+    // The same question the booking page asks: which rates have a booking-site price to beat.
+    prisma.channelRatePlanMapping.findMany({
+      where: { channel: { propertyId: property.id, status: "connected" }, ratePlan: { propertyId: property.id } },
+      select: { ratePlanId: true },
+    }),
+    prisma.property.findUnique({ where: { id: property.id }, select: { directDiscountPct: true } }),
   ]);
+  const onOta = new Set(otaMapped.map((m) => m.ratePlanId));
+  const dPlans = plans.filter((p) => onOta.has(p.id));
+  const directOnly = plans.filter((p) => !onOta.has(p.id));
   const planName = (id: string) => plans.find((p) => p.id === id)?.name ?? "—";
   const d = (x: Date | null) => (x ? day(x.toISOString().slice(0, 10)) : null);
 
   return (
     <div className="space-y-5">
+      <Card surface="flat">
+        <CardHeader surface="flat" title={s.direct.title} subtitle={s.direct.subtitle} />
+        <div className="space-y-3 px-4 pb-4 text-[13px] text-ink-700">
+          <form action={saveDirectDiscount} className="flex flex-wrap items-end gap-3">
+            <div className="w-40">
+              <label className={labelCls} htmlFor="dd-pct">{s.direct.label}</label>
+              <input id="dd-pct" name="directDiscountPct" type="number" min={0} max={30} step={1} required
+                     defaultValue={directRow?.directDiscountPct ?? 0} className={inputCls} />
+            </div>
+            <SubmitButton pendingLabel={s.direct.saving} className="h-[38px] rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white">{s.direct.save}</SubmitButton>
+            <span className="pb-2 text-[12px] text-ink-400">{s.direct.off}</span>
+          </form>
+          {dPlans.length === 0 ? (
+            <p className="text-ink-500">{s.direct.none}</p>
+          ) : (
+            <>
+              <p><span className="text-ink-500">{s.direct.appliesTo}</span> <strong>{dPlans.map((p) => p.name).join(", ")}</strong></p>
+              {directOnly.length > 0 && <p className="text-ink-500">{s.direct.notOn} {directOnly.map((p) => p.name).join(", ")}</p>}
+              <p className="text-[12px] text-ink-500">{s.direct.caution}</p>
+            </>
+          )}
+        </div>
+      </Card>
       <Card surface="flat">
         <CardHeader surface="flat" title={s.title} subtitle={s.subtitle} />
         <form action={createPromoCode} className="grid grid-cols-2 items-end gap-3 px-4 pb-4 lg:grid-cols-6">

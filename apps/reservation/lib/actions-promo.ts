@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { normalisePromo } from "@revio/core";
+import { DIRECT_DISCOUNT_MAX, normalisePromo } from "@revio/core";
 import { setFlash } from "@revio/ui/flash";
 import { requireCapability } from "./authz";
 import { getProperty } from "./data";
@@ -61,6 +61,23 @@ export async function deletePromoCode(fd: FormData): Promise<void> {
   await requireCapability("manageRates");
   const property = await getProperty();
   await prisma.promoCode.deleteMany({ where: { id: str(fd, "id"), propertyId: property.id } });
+  revalidatePath(PAGE);
+  redirect(PAGE);
+}
+
+/** The hotel's direct-booking discount: a percentage off rates also sold on a booking site. */
+export async function saveDirectDiscount(fd: FormData): Promise<void> {
+  await requireCapability("manageRates");
+  const property = await getProperty();
+  if (await pressedTwice(fd, property.tenantId, "saveDirectDiscount")) redirect(PAGE);
+  const s = (await i18n()).t(promoDict);
+  const pct = int(fd, "directDiscountPct", -1);
+  if (!Number.isInteger(pct) || pct < 0 || pct > DIRECT_DISCOUNT_MAX) {
+    await setFlash("error", s.direct.error);
+    redirect(PAGE);
+  }
+  await prisma.property.update({ where: { id: property.id }, data: { directDiscountPct: pct } });
+  await setFlash("success", s.direct.saved(pct));
   revalidatePath(PAGE);
   redirect(PAGE);
 }

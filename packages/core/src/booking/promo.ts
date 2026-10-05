@@ -44,3 +44,14 @@ export function promoPercentFor(p: PromoRule, ratePlanId: string): number {
 export function discountedNight(minor: number, percent: number): number {
   return percent > 0 ? Math.max(0, Math.round((minor * (100 - percent)) / 100)) : minor;
 }
+
+/**
+ * The hotel's direct-booking discount, as a usable percentage: 0–30. A hotel that types 50 has not
+ * made a pricing decision, it has made a typo — and a direct price half the OTA's is a parity breach
+ * that also undercuts its own revenue.
+ */
+export const DIRECT_DISCOUNT_MAX = 30;
+export function directDiscountPercent(raw: number | null | undefined): number {
+  const n = Math.round(Number(raw ?? 0));
+  return Number.isFinite(n) ? Math.min(DIRECT_DISCOUNT_MAX, Math.max(0, n)) : 0;
+}

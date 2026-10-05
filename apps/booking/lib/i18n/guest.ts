@@ -76,6 +76,13 @@ export interface GuestStrings {
     code: (code: string) => string;
     refusal: Record<"unknown" | "inactive" | "dates" | "nights" | "used_up", (code: string) => string>;
   };
+  direct: {
+    badge: (pct: number) => string;
+    saving: (amount: string) => string;
+    line: (pct: number) => string;
+    struckTitle: string;
+    saved: string;
+  };
   group: { title: string; change: string; chooseNow: string; next: string; summary: (n: number) => string; roomsTotal: string; othersTitle: string; cancelled: string };
   myBooking: {
     title: string; body: string; reference: string; referenceHint: string; email: string;
@@ -349,6 +356,13 @@ export const guest: Translations<GuestStrings> = {
         nights: (c) => `The code ${c} needs a longer stay.`,
         used_up: (c) => `The code ${c} has been used up.`,
       },
+    },
+    direct: {
+      badge: (p) => `Direct −${p}%`,
+      saving: (a) => `${a} less than on booking sites`,
+      line: (p) => `Booking direct −${p}%`,
+      struckTitle: "The same room and rate on booking sites",
+      saved: "Booked direct",
     },
     group: {
       title: "Your rooms", change: "Change", chooseNow: "Choose a room below", next: "Next",
@@ -673,6 +687,13 @@ export const guest: Translations<GuestStrings> = {
         nights: (c) => `Кодът ${c} изисква по-дълъг престой.`,
         used_up: (c) => `Кодът ${c} е изчерпан.`,
       },
+    },
+    direct: {
+      badge: (p) => `Директно −${p}%`,
+      saving: (a) => `С ${a} по-евтино от сайтовете за резервации`,
+      line: (p) => `Директна резервация −${p}%`,
+      struckTitle: "Същата стая и цена в сайтовете за резервации",
+      saved: "Директна резервация",
     },
     group: {
       title: "Вашите стаи", change: "Промени", chooseNow: "Изберете стая по-долу", next: "Следва",

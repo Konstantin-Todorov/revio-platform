@@ -267,7 +267,11 @@ export default async function ConfirmationPage({
             <dl className="space-y-1.5 text-[13px]">
               {/* With a code, the rooms line is the price before it, so the lines add up to the total. */}
               <Row label={t.room.roomsFor(nights)}
-                   value={money(charged.accommodationMinor + (reservation.promoDiscountMinor ?? 0), reservation.currency)} />
+                   value={money(charged.accommodationMinor + (reservation.promoDiscountMinor ?? 0) + (reservation.directDiscountMinor ?? 0), reservation.currency)} />
+              {(reservation.directDiscountMinor ?? 0) > 0 && (
+                <Row label={t.direct.saved}
+                     value={`−${money(reservation.directDiscountMinor!, reservation.currency)}`} />
+              )}
               {reservation.promoCode && (reservation.promoDiscountMinor ?? 0) > 0 && (
                 <Row label={t.promo.code(reservation.promoCode)}
                      value={`−${money(reservation.promoDiscountMinor!, reservation.currency)}`} />

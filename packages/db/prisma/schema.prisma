@@ -919,6 +919,10 @@ model Property {
   // opinion: onboarding can be "submitted" and still not accept charges, and only Stripe knows.
   // Until it is true the booking engine runs in REQUEST-TO-BOOK mode, so a hotel is never blocked
   // from selling while its paperwork clears.
+  /// RevioDirect: percent off rates that are ALSO sold on a connected booking site (0 = off, max 30).
+  /// The guest sees the booking-site price struck through; true by construction, since that is the
+  /// price we push. Direct-only rates are left alone — they have no OTA price to beat.
+  directDiscountPct    Int       @default(0)
   stripeAccountId      String?   @unique
   stripeChargesEnabled Boolean   @default(false)
   stripeCheckedAt      DateTime? // last time we asked Stripe, so the screen can say how fresh it is
@@ -1635,6 +1639,8 @@ model Reservation {
   /// The promo code the guest booked with on RevioDirect, and what it took off the rooms.
   promoCode             String?
   promoDiscountMinor    Int?
+  /// What booking direct took off the rooms (the hotel's direct discount), minor units.
+  directDiscountMinor   Int?
   notes                 String?
   cancelledAt           DateTime?
   // The stay ended. A PMS-owned OPERATIONAL fact, deliberately not a `status` value: `status` is the
