@@ -12,6 +12,7 @@ describe("stay calendar", () => {
     expect(ics).toContain("DTSTART;TZID=Europe/Sofia:20261020T140000");
     expect(ics).toContain("DTEND;TZID=Europe/Sofia:20261023T120000");
     expect(ics).toContain("SUMMARY:Hotel Sofia\\, Varna");
+    expect(stayIcs({ ...e, title: "A;B" })).toContain("SUMMARY:A\\;B");
     expect(ics.split("\r\n")[0]).toBe("BEGIN:VCALENDAR");
   });
 

@@ -20,7 +20,7 @@ export interface StayEvent {
 const stamp = (date: string, time: string) => `${date.replace(/-/g, "")}T${(/^\d{1,2}:\d{2}$/.test(time) ? time : "14:00").padStart(5, "0").replace(":", "")}00`;
 
 /** RFC 5545 text: escape \ ; , and newlines. */
-const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/;/g, "\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 
 export function stayIcs(e: StayEvent, now: Date = new Date()): string {
   const dtstamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
