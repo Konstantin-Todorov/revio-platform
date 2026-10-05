@@ -10,8 +10,8 @@ import { groupQuery } from "@/lib/group";
  * picked — with a way back to change an earlier choice. The guest always sees the whole booking
  * taking shape, the way a basket does.
  */
-export async function GroupSteps({ property, rooms, picks, checkIn, checkOut, kit }: {
-  property: PublicProperty; rooms: RoomParty[]; picks: RoomPick[]; checkIn: string; checkOut: string; kit: GuestKit;
+export async function GroupSteps({ property, rooms, picks, checkIn, checkOut, promo = "", kit }: {
+  property: PublicProperty; rooms: RoomParty[]; picks: RoomPick[]; checkIn: string; checkOut: string; promo?: string; kit: GuestKit;
 }) {
   const { s } = kit;
   const db = forTenant(property.tenantId);
@@ -45,7 +45,7 @@ export async function GroupSteps({ property, rooms, picks, checkIn, checkOut, ki
                 <span className="block" style={{ color: "hsl(var(--ink-soft))" }}>
                   {name(types, pick.roomTypeId)} · {name(plans, pick.ratePlanId)}{" "}
                   <a
-                    href={`/${property.slug}/search?${groupQuery({ checkIn, checkOut, rooms, picks: picks.slice(0, i) })}`}
+                    href={`/${property.slug}/search?${groupQuery({ checkIn, checkOut, rooms, picks: picks.slice(0, i), promo })}`}
                     className="link-quiet font-semibold"
                   >
                     {s.group.change}

@@ -13,7 +13,7 @@ import { serverKit } from "@/lib/i18n/server";
 import { termsWords } from "@/lib/i18n/kit";
 import { PaySplitNote } from "@/components/PaySplitNote";
 import { guestPublishableKey } from "@revio/payments";
-import { todayInTimeZone, parseChildAges, parseRoomParties } from "@revio/core";
+import { todayInTimeZone, parseChildAges, parseRoomParties, normalisePromo } from "@revio/core";
 import { GroupBook } from "./GroupBook";
 import { PropertyHeader } from "@/components/PropertyHeader";
 import { PropertyFooter } from "@/components/PropertyFooter";
@@ -49,8 +49,9 @@ export default async function BookPage({
   const guestsRaw = Number.parseInt(sp.guests ?? "2", 10);
   const guests = Number.isFinite(guestsRaw) && guestsRaw >= 1 && guestsRaw <= 10 ? guestsRaw : 2;
   const childAges = parseChildAges(sp.ages);
-  // Carried on every link back, so the party the guest described is never silently dropped.
-  const agesQ = childAges.length ? `&ages=${childAges.join(",")}` : "";
+  const promo = normalisePromo(sp.promo);
+  // Carried on every link back, so the party (and the code) the guest gave is never silently dropped.
+  const agesQ = (childAges.length ? `&ages=${childAges.join(",")}` : "") + (promo ? `&promo=${encodeURIComponent(promo)}` : "");
   const roomTypeId = sp.roomTypeId ?? "";
   const ratePlanId = sp.ratePlanId ?? "";
 
@@ -64,7 +65,7 @@ export default async function BookPage({
   const nights = nightsBetween(checkIn, checkOut);
 
   const [outcome, store] = await Promise.all([
-    searchAvailability(property, ip, { checkIn, checkOut, guests, childAges }),
+    searchAvailability(property, ip, { checkIn, checkOut, guests, childAges, promo }),
     getObjectStore(),
   ]);
 
@@ -137,7 +138,7 @@ export default async function BookPage({
 
         <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_21rem] lg:items-start">
           <BookingForm
-            stay={{ slug, checkIn, checkOut, guests, ages: childAges.join(","), roomTypeId, ratePlanId, holdId: hold.id }}
+            stay={{ slug, checkIn, checkOut, guests, ages: childAges.join(","), promo, roomTypeId, ratePlanId, holdId: hold.id }}
             cancellationPolicy={plan.cancellationPolicy}
             termsDetails={termsDetails}
             card={card}
@@ -184,11 +185,15 @@ export default async function BookPage({
               </p>
 
               <dl className="mt-4 space-y-1.5 border-t pt-4 text-[13px]" style={{ borderColor: "hsl(var(--line))" }}>
+                {/* With a code, the rooms line is the price before it, so the lines add up to the total. */}
                 <Line label={s.room.roomsFor(nights)}
-                      value={money(plan.accommodationMinor, plan.currency)} />
+                      value={money(plan.accommodationMinor + (plan.promo ? plan.promo.originalTotalMinor - plan.totalMinor : 0), plan.currency)} />
                 {plan.charges.map((c) => (
                   <Line key={c.name} label={c.name} value={money(c.amountMinor, plan.currency)} />
                 ))}
+                {plan.promo && (
+                  <Line label={s.promo.badge(plan.promo.code, plan.promo.percentOff)} value={`−${money(plan.promo.originalTotalMinor - plan.totalMinor, plan.currency)}`} />
+                )}
               </dl>
 
               {/* One total, and it follows the extras — see LiveTotal. */}

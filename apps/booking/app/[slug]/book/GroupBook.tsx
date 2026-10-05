@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { checkHold, clientIp, publicCreateHold, publicGetHold } from "@revio/booking";
 import { forTenant } from "@revio/db";
 import { guestPublishableKey } from "@revio/payments";
-import { parseRoomParties, parseRoomPicks, serializeRoomParties, serializeRoomPicks } from "@revio/core";
+import { normalisePromo, parseRoomParties, parseRoomPicks, serializeRoomParties, serializeRoomPicks } from "@revio/core";
 import { BOOKING_SESSION_COOKIE } from "@/middleware";
 import type { PublicProperty } from "@/lib/property";
 import { isValidISO, nightsBetween } from "@/lib/dates";
@@ -26,12 +26,13 @@ export async function GroupBook({ property, sp }: { property: PublicProperty; sp
   const checkOut = isValidISO(sp.checkOut) ? sp.checkOut : null;
   const rooms = parseRoomParties(sp.rooms);
   const picks = parseRoomPicks(sp.sel);
+  const promo = normalisePromo(sp.promo);
   if (!checkIn || !checkOut || nightsBetween(checkIn, checkOut) < 1) redirect(`/${slug}/search`);
-  const back = `/${slug}/search?${groupQuery({ checkIn, checkOut, rooms })}`;
+  const back = `/${slug}/search?${groupQuery({ checkIn, checkOut, rooms, promo })}`;
   if (picks.length !== rooms.length) redirect(back);
 
   const ip = clientIp(await headers());
-  const items = await loadGroup(property, ip, { checkIn, checkOut, rooms, picks });
+  const items = await loadGroup(property, ip, { checkIn, checkOut, rooms, picks, promo });
   // A room went while they chose the others: back to choosing, with nothing picked.
   if (!items) redirect(back);
 
@@ -53,7 +54,7 @@ export async function GroupBook({ property, sp }: { property: PublicProperty; sp
       if (created.error || !created.hold) redirect(back);
       made.push(created.hold.id);
     }
-    redirect(`/${slug}/book?${groupQuery({ checkIn, checkOut, rooms, picks })}&holds=${made.join(",")}`);
+    redirect(`/${slug}/book?${groupQuery({ checkIn, checkOut, rooms, picks, promo })}&holds=${made.join(",")}`);
   }
 
   const kit = await serverKit(property);
@@ -86,7 +87,7 @@ export async function GroupBook({ property, sp }: { property: PublicProperty; sp
         <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_21rem] lg:items-start">
           <BookingForm
             stay={{
-              slug, checkIn, checkOut, guests: first.party.adults, ages: first.party.childAges.join(","),
+              slug, checkIn, checkOut, guests: first.party.adults, ages: first.party.childAges.join(","), promo,
               roomTypeId: first.pick.roomTypeId, ratePlanId: first.pick.ratePlanId, holdId: holds[0]!.id,
             }}
             group={{ rooms: serializeRoomParties(rooms), sel: serializeRoomPicks(picks), holds: holds.map((h) => h.id).join(",") }}

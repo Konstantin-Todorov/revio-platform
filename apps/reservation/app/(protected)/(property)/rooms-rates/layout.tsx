@@ -5,6 +5,7 @@ import { getProperty } from "@/lib/data";
 import { i18n } from "@/lib/i18n/server";
 import { rates as ratesDict } from "@/lib/i18n/rates";
 import { terms as termsDict } from "@/lib/i18n/terms";
+import { promo as promoDict } from "@/lib/i18n/promo";
 
 /**
  * Rooms & Rates — what the property sells, grouped by the thing a hotelier thinks about: "the
@@ -23,11 +24,13 @@ export default async function RoomsRatesLayout({ children }: { children: ReactNo
   const { t } = await i18n();
   const s = t(ratesDict);
   const tr = t(termsDict);
+  const tp = t(promoDict);
   const SECTIONS: SettingsSection[] = [
     { href: "/rooms-rates/rooms", label: s.nav.rooms, blurb: s.nav.roomsBlurb, prefix: true },
     { href: "/rooms-rates/plans", label: s.nav.plans, blurb: s.nav.plansBlurb, prefix: true },
     { href: "/rooms-rates/terms", label: tr.nav, blurb: tr.navBlurb, prefix: true },
     { href: "/rooms-rates/closures", label: s.nav.closures, blurb: s.nav.closuresBlurb },
+    { href: "/rooms-rates/promo", label: tp.nav, blurb: tp.navBlurb },
   ];
   const ELSEWHERE: SettingsSection[] = [
     { href: "/inventory", label: s.nav.daily, blurb: s.nav.dailyBlurb },

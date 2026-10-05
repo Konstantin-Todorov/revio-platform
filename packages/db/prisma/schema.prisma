@@ -87,7 +87,7 @@ model Tenant {
   statusChangedAt DateTime?
   /// Set when closed; the retention window counts from here.
   closedAt        DateTime?
-  createdAt          DateTime  @default(now())
+  createdAt       DateTime  @default(now())
 
   properties Property[]
   users      User[]
@@ -637,10 +637,10 @@ model OperatorCompany {
   footerNote         String?
   updatedAt          DateTime @updatedAt
   /// МОЛ — who represents us; printed as "Съставил" on every invoice.
-  representative   String?
+  representative     String?
   /// The monthly run issues and emails each paying client's invoice, then reminds before and after
   /// the due date. Only while payments are LIVE — a test-mode card link must never reach a customer.
-  autoSendInvoices Boolean  @default(true)
+  autoSendInvoices   Boolean  @default(true)
 }
 
 /// The invoice counter. One row per independent run of numbers.
@@ -668,30 +668,30 @@ model OperatorInvoiceSeries {
 /// `Tenant.name` is the trading name the hotel uses ("Hotel Sofia Group"); `legalName` is the entity
 /// that actually owes the money, and they are routinely different.
 model ClientBilling {
-  id           String    @id @default(cuid())
-  tenantId     String    @unique
-  legalName    String
-  vatId        String?
-  companyId    String?
-  addressLine  String?
-  city         String?
-  postCode     String?
+  id             String    @id @default(cuid())
+  tenantId       String    @unique
+  legalName      String
+  vatId          String?
+  companyId      String?
+  addressLine    String?
+  city           String?
+  postCode       String?
   /// ISO 3166-1 alpha-2. Absent blocks issuing — see decideVat(), which refuses to guess.
-  country      String?
-  billingEmail String?
+  country        String?
+  billingEmail   String?
   /// Who the invoice should be addressed to — "Accounts payable", a finance manager's name.
-  attention    String?
+  attention      String?
   /// МОЛ — the person who represents the company (Bulgarian invoices print it under "Получател").
   representative String?
   /// ⚠️ OURS, about their finance department. The hotel writes every other field on this row from
   /// its own billing screen; this one is never in that payload. See `saveHotelBillingIdentity`.
-  notes        String?
+  notes          String?
   /// When the HOTEL last saved these details itself. Distinct from `updatedAt`, which also moves
   /// when we edit the row — the difference is whether a legal name is the customer's own answer or
   /// our transcription of a phone call.
-  selfServedAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  selfServedAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
@@ -969,6 +969,7 @@ model Property {
   waitlistEntries WaitlistEntry[]
   guestFeedback   GuestFeedback[]
   supportRequests SupportRequest[]
+  promoCodes      PromoCode[]
 
   @@index([tenantId])
 }
@@ -1087,12 +1088,12 @@ model RoomTypePhoto {
 }
 
 model CancellationPolicy {
-  id          String  @id @default(cuid())
-  tenantId    String
-  propertyId  String
-  name        String
-  code        String
-  description String?
+  id                String  @id @default(cuid())
+  tenantId          String
+  propertyId        String
+  name              String
+  code              String
+  description       String?
   // The terms themselves — what a guest pays and when, and what cancelling costs — computed by
   // `stayTerms` in @revio/core. Every screen that states them (results, card step, confirmation,
   // the CRS) reads these, never the free-text description.
@@ -1563,112 +1564,115 @@ model RestrictionRule {
 // --- Reservations ----------------------------------------------------------
 
 model Reservation {
-  id                 String    @id @default(cuid())
-  tenantId           String
-  propertyId         String
+  id                    String    @id @default(cuid())
+  tenantId              String
+  propertyId            String
   // Null for staff-entered bookings (Call Center / Direct / Corporate) — those never touch a CM.
-  channelId          String?
-  externalId         String?
-  guestName          String
+  channelId             String?
+  externalId            String?
+  guestName             String
   // CM statuses: confirmed|modified|cancelled|failed_import|overbooked ("modified" = confirmed that
   // was modified — a flag-as-status, still counts as sold). CRS lifecycle adds:
   // draft|hold|expired|failed|no_show|archived (docs/CRS-REFERENCE.md "Reservation lifecycle").
-  status             String    @default("confirmed")
+  status                String    @default("confirmed")
   // ORIGINAL booking values (what the guest was actually charged), captured at booking time.
-  totalMinor         Int
-  currency           String    @default("EUR")
+  totalMinor            Int
+  currency              String    @default("EUR")
   /// The language the GUEST booked in (RevioDirect's page, their pick or their browser). Every later
   /// mail to them — confirmation, before arrival, after departure — follows it; null means the
   /// booking came from somewhere that does not know (an OTA, the front desk) and the hotel's default
   /// applies. Added 2026-09-29 with RevioDirect in Bulgarian.
-  guestLanguage String?
+  guestLanguage         String?
   // CRS-compatible currency snapshot: the same amount converted to the property's base currency, plus
   // the FX rate + timestamp used. Stored at booking time so historical revenue reports stay reproducible
   // when exchange rates move (see docs/CRS-REFERENCE.md "Currency handling"). Null on legacy rows.
-  propertyCurrency   String?
-  propertyTotalMinor Int?
-  fxRate             Float?
-  fxAt               DateTime?
-  importedAt         DateTime  @default(now())
-  syncStatus         String    @default("imported")
+  propertyCurrency      String?
+  propertyTotalMinor    Int?
+  fxRate                Float?
+  fxAt                  DateTime?
+  importedAt            DateTime  @default(now())
+  syncStatus            String    @default("imported")
   // CRS fields (docs/CRS-REFERENCE.md). paymentGuarantee is a LABEL only — no card data in V1.
-  guestId            String?
-  bookingSourceId    String?
-  paymentGuarantee   String? // card_on_file | company_account | prepaid_ota | none
+  guestId               String?
+  bookingSourceId       String?
+  paymentGuarantee      String? // card_on_file | company_account | prepaid_ota | none
   // A card guarantee taken by the booking engine. The TOKEN only — never a card number, which stays
   // with the gateway (PCI scope). brand/last4 exist so the front desk can recognise the card the
   // guest will present, and so a no-show charge can be raised against the right instrument.
-  guaranteeRef       String?
-  guaranteeBrand     String?
-  guaranteeLast4     String?
+  guaranteeRef          String?
+  guaranteeBrand        String?
+  guaranteeLast4        String?
   // RevioDirect online payment. Money taken at booking settles to the hotel's OWN Stripe account
   // (`paymentAccountId`); we keep the intent id and the amount, never card data. `stayTerms` is the
   // terms the guest agreed to, frozen — a hotel editing its policy later must not rewrite a
   // booking already made. The balance fields are what the pre-arrival charge will take, and when.
-  onlinePaidMinor    Int?
-  onlinePaymentRef   String?
-  paymentAccountId   String?
-  stayTerms          Json?
-  balanceChargeMinor Int?
-  balanceChargeOn    DateTime? @db.Date
+  onlinePaidMinor       Int?
+  onlinePaymentRef      String?
+  paymentAccountId      String?
+  stayTerms             Json?
+  balanceChargeMinor    Int?
+  balanceChargeOn       DateTime? @db.Date
   // The guest as a Customer on the hotel's Stripe account — what makes the saved card chargeable
   // again. Then what happened after booking: the balance taken (or why not), fees charged
   // (no-show, late cancellation) and money returned. Facts, each set once by the action that did it.
-  paymentCustomerId  String?
-  balanceChargedAt   DateTime?
-  balancePaymentRef  String?
-  balanceChargeError String?
+  paymentCustomerId     String?
+  balanceChargedAt      DateTime?
+  balancePaymentRef     String?
+  balanceChargeError    String?
   /// When the guest was told the balance comes off their card tomorrow (template `balance_reminder`).
   /// Stamped once, so a job running every hour mails once.
   balanceReminderSentAt DateTime?
-  feeChargedMinor    Int?
-  refundedOnlineMinor Int?
+  feeChargedMinor       Int?
+  refundedOnlineMinor   Int?
   /// The guest's key to manage this booking on RevioDirect (cancel, change dates) — sent in the
   /// confirmation email's link and nowhere else. The reference alone only SHOWS a booking; changing
   /// one needs this, because a reference is six characters and printed on paper.
-  guestManageToken String? @unique
+  guestManageToken      String?   @unique
   /// Rooms booked together on RevioDirect share this id (the first room's reservation id). Each room
   /// is its own reservation — cancelled, changed, billed and pushed on its own — and the group is
   /// only what lets the guest and the desk see them as one booking.
-  bookingGroupId   String?
-  notes              String?
-  cancelledAt        DateTime?
+  bookingGroupId        String?
+  /// The promo code the guest booked with on RevioDirect, and what it took off the rooms.
+  promoCode             String?
+  promoDiscountMinor    Int?
+  notes                 String?
+  cancelledAt           DateTime?
   // The stay ended. A PMS-owned OPERATIONAL fact, deliberately not a `status` value: `status` is the
   // CRS's commercial record, read by the availability waterfall, the CM's ARI pushes and every
   // revenue metric, and a departed guest's stay is still sold and still earns. Keeping departure in
   // its own column means the question "has this stay ended?" has one authoritative answer without
   // touching any of that. Set only by check-out; cleared only by a manager reopening the stay.
-  departedAt         DateTime?
+  departedAt            DateTime?
   /// When the scheduled "Before arrival" / "After departure" guest email went out (or was decided
   /// against — switched off, no address). Set once, so a stay is never mailed twice by the job.
-  preArrivalMailedAt DateTime?
-  postStayMailedAt   DateTime?
-  createdById        String? // staff user who entered a manual booking
+  preArrivalMailedAt    DateTime?
+  postStayMailedAt      DateTime?
+  createdById           String? // staff user who entered a manual booking
 
-  property      Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  channel       Channel?          @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  guest         Guest?            @relation(fields: [guestId], references: [id])
-  bookingSource BookingSource?    @relation(fields: [bookingSourceId], references: [id])
-  lines         ReservationLine[]
-  stayGuests    StayGuest[]
-  holds         Hold[]
-  assignments   RoomAssignment[]
-  folios        Folio[]
-  stayExtras    StayExtra[]
+  property        Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  channel         Channel?          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  guest           Guest?            @relation(fields: [guestId], references: [id])
+  bookingSource   BookingSource?    @relation(fields: [bookingSourceId], references: [id])
+  lines           ReservationLine[]
+  stayGuests      StayGuest[]
+  holds           Hold[]
+  assignments     RoomAssignment[]
+  folios          Folio[]
+  stayExtras      StayExtra[]
   paymentRequests PaymentRequest[]
 
   waitlistEntries WaitlistEntry[]
   guestFeedback   GuestFeedback?
 
-  @@index([bookingGroupId])
-  @@index([propertyId])
-  @@index([channelId])
   /// One row per booking a channel sent. Two concurrent pulls of one new revision each found no
   /// existing row and could each create one — the same guest twice, a room off sale nobody sold.
   /// The pull is serialised per channel now (`withChannelPullLock`); this makes it impossible
   /// rather than unlikely. NULLs are distinct in Postgres, so direct and CRS bookings (no channel,
   /// no external id) are unaffected.
   @@unique([channelId, externalId])
+  @@index([bookingGroupId])
+  @@index([propertyId])
+  @@index([channelId])
   /// Front Desk asks "is this stay still in the house?" on every load. `departedAt` is the stay's
   /// ending — deliberately NOT a status value — so it is the column that question filters on.
   @@index([propertyId, departedAt])
@@ -3077,4 +3081,31 @@ model PaymentRequest {
 
   @@index([reservationId])
   @@index([tenantId, status])
+}
+
+/// A code a hotel hands out — a newsletter, a returning guest, a partner — for a percentage off the
+/// ROOMS on its own booking page. Never off taxes, fees or extras. Managed in RevioCRS → Rooms & Rates.
+model PromoCode {
+  id          String    @id @default(cuid())
+  tenantId    String
+  propertyId  String
+  /// Upper-case, as typed by the guest after normalising.
+  code        String
+  /// 1–90, off the room price of every night.
+  percentOff  Int
+  /// Arrivals from / to (inclusive); null = open on that side.
+  stayFrom    DateTime? @db.Date
+  stayTo      DateTime? @db.Date
+  minNights   Int?
+  /// Empty = every rate sold direct.
+  ratePlanIds String[]  @default([])
+  /// Null = unlimited.
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, code])
+  @@index([tenantId])
 }

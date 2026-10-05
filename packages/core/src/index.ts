@@ -108,3 +108,4 @@ export * from "./booking/stay-terms.js";
 export * from "./booking/online-payments.js";
 export * from "./booking/party.js";
 export * from "./booking/calendar.js";
+export * from "./booking/promo.js";

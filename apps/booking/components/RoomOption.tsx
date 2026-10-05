@@ -26,8 +26,10 @@ const OPEN_RATES = 3;
  * The photograph opens the room's details and gallery — the first thing anyone taps.
  */
 export function RoomOption({
-  option, nights, slug, checkIn, checkOut, guests, childAges = [], pickHref, mediaUrl, kit,
+  option, nights, slug, checkIn, checkOut, guests, childAges = [], promo = "", pickHref, mediaUrl, kit,
 }: {
+  /** The promo code, carried to the booking step. */
+  promo?: string;
   /** Several rooms: choosing a rate picks it for the current slot instead of going to the form. */
   pickHref?: (ratePlanId: string) => string;
   /** Children's ages, carried to the booking step so it prices the same party. */
@@ -57,7 +59,7 @@ export function RoomOption({
   const hasDetail = option.photos.length > 0 || !!option.description || option.amenities.length > 0;
 
   const href = (plan: PublicPlanQuote) => pickHref ? pickHref(plan.ratePlanId) :
-    `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${childAges.length ? `&ages=${childAges.join(",")}` : ""}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
+    `/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${childAges.length ? `&ages=${childAges.join(",")}` : ""}${promo ? `&promo=${encodeURIComponent(promo)}` : ""}&roomTypeId=${option.roomTypeId}&ratePlanId=${plan.ratePlanId}`;
   const row = (plan: PublicPlanQuote, i: number) => (
     <RateRow key={plan.ratePlanId} plan={plan} nights={nights} href={href(plan)} best={i === 0 && plans.length > 1} kit={kit} />
   );
@@ -249,6 +251,17 @@ function RateRow({
       </div>
 
       <div className="text-left sm:text-right">
+        {/* The code's saving, said where the price is: the old total struck through, the code named. */}
+        {plan.promo && (
+          <div className="mb-1 flex items-center gap-1.5 sm:justify-end">
+            <span className="rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ backgroundColor: "hsl(var(--positive) / 0.12)", color: "hsl(var(--positive))" }}>
+              {s.promo.badge(plan.promo.code, plan.promo.percentOff)}
+            </span>
+            <span className="nums text-[12px] line-through" style={{ color: "hsl(var(--ink-faint))" }}>
+              {money(plan.promo.originalTotalMinor, plan.currency)}
+            </span>
+          </div>
+        )}
         <div className="price text-[1.3rem] leading-none sm:text-[1.4rem]">{money(plan.totalMinor, plan.currency)}</div>
         <div className="nums mt-1 text-[11.5px] leading-tight" style={{ color: "hsl(var(--ink-faint))" }}>
           {s.room.totalFor(nights)}

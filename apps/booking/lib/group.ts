@@ -20,15 +20,16 @@ export interface GroupItem {
   plan: PublicPlanQuote;
 }
 
-export function groupQuery(q: { checkIn: string; checkOut: string; rooms: RoomParty[]; picks?: RoomPick[] }): string {
+export function groupQuery(q: { checkIn: string; checkOut: string; rooms: RoomParty[]; picks?: RoomPick[]; promo?: string }): string {
   const sel = q.picks?.length ? `&sel=${encodeURIComponent(serializeRoomPicks(q.picks))}` : "";
-  return `checkIn=${q.checkIn}&checkOut=${q.checkOut}&rooms=${encodeURIComponent(serializeRoomParties(q.rooms))}${sel}`;
+  const promo = q.promo ? `&promo=${encodeURIComponent(q.promo)}` : "";
+  return `checkIn=${q.checkIn}&checkOut=${q.checkOut}&rooms=${encodeURIComponent(serializeRoomParties(q.rooms))}${sel}${promo}`;
 }
 
 /** Every picked room re-priced for its own party now. Null when any of them is no longer bookable. */
 export async function loadGroup(
   property: PublicProperty, ip: string,
-  q: { checkIn: string; checkOut: string; rooms: RoomParty[]; picks: RoomPick[] },
+  q: { checkIn: string; checkOut: string; rooms: RoomParty[]; picks: RoomPick[]; promo?: string },
 ): Promise<GroupItem[] | null> {
   if (q.picks.length !== q.rooms.length) return null;
   const items: GroupItem[] = [];
@@ -37,6 +38,7 @@ export async function loadGroup(
     const pick = q.picks[i]!;
     const outcome = await searchAvailability(property, ip, {
       checkIn: q.checkIn, checkOut: q.checkOut, guests: party.adults, childAges: party.childAges,
+      ...(q.promo ? { promo: q.promo } : {}),
     });
     const option = (outcome.options ?? []).find((o) => o.roomTypeId === pick.roomTypeId);
     const plan = option?.plans.find((p) => p.ratePlanId === pick.ratePlanId);

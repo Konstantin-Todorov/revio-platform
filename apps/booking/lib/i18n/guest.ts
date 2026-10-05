@@ -69,6 +69,13 @@ export interface GuestStrings {
     expiredTitle: string; expiredBody: string; cancelledTitle: string; cancelledBody: string;
     notOpen: string; notReady: string; failed: string; secure: string;
   };
+  promo: {
+    have: string; label: string; apply: string; remove: string;
+    badge: (code: string, pct: number) => string;
+    applied: (code: string) => string;
+    code: (code: string) => string;
+    refusal: Record<"unknown" | "inactive" | "dates" | "nights" | "used_up", (code: string) => string>;
+  };
   group: { title: string; change: string; chooseNow: string; next: string; summary: (n: number) => string; roomsTotal: string; othersTitle: string; cancelled: string };
   myBooking: {
     title: string; body: string; reference: string; referenceHint: string; email: string;
@@ -329,6 +336,19 @@ export const guest: Translations<GuestStrings> = {
       notOpen: "This payment link is no longer valid.", notReady: "The hotel can't take card payments right now. Please contact them.",
       failed: "The payment did not go through. Nothing was charged — please try again.",
       secure: "Card payments are processed securely by Stripe — the hotel and we never see your card number.",
+    },
+    promo: {
+      have: "Have a promo code?", label: "Promo code", apply: "Apply", remove: "Remove",
+      badge: (c, p) => `${c} −${p}%`,
+      applied: (c) => `Code ${c} applied — the discount is already in the prices below.`,
+      code: (c) => `Promo code ${c}`,
+      refusal: {
+        unknown: (c) => `We don't recognise the code ${c}. Check it with the hotel.`,
+        inactive: (c) => `The code ${c} is no longer active.`,
+        dates: (c) => `The code ${c} isn't valid for these dates.`,
+        nights: (c) => `The code ${c} needs a longer stay.`,
+        used_up: (c) => `The code ${c} has been used up.`,
+      },
     },
     group: {
       title: "Your rooms", change: "Change", chooseNow: "Choose a room below", next: "Next",
@@ -640,6 +660,19 @@ export const guest: Translations<GuestStrings> = {
       notOpen: "Тази връзка за плащане вече не е валидна.", notReady: "Хотелът не може да приема плащания с карта в момента. Моля, свържете се с тях.",
       failed: "Плащането не мина. Нищо не е удържано — опитайте отново.",
       secure: "Плащанията с карта се обработват сигурно от Stripe — нито хотелът, нито ние виждаме номера на картата Ви.",
+    },
+    promo: {
+      have: "Имате промо код?", label: "Промо код", apply: "Приложи", remove: "Премахни",
+      badge: (c, p) => `${c} −${p}%`,
+      applied: (c) => `Кодът ${c} е приложен — отстъпката вече е в цените по-долу.`,
+      code: (c) => `Промо код ${c}`,
+      refusal: {
+        unknown: (c) => `Не разпознаваме кода ${c}. Проверете го с хотела.`,
+        inactive: (c) => `Кодът ${c} вече не е активен.`,
+        dates: (c) => `Кодът ${c} не важи за тези дати.`,
+        nights: (c) => `Кодът ${c} изисква по-дълъг престой.`,
+        used_up: (c) => `Кодът ${c} е изчерпан.`,
+      },
     },
     group: {
       title: "Вашите стаи", change: "Промени", chooseNow: "Изберете стая по-долу", next: "Следва",

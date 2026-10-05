@@ -150,6 +150,7 @@ export default async function ReservationDetailPage({
             <dt className="text-ink-400">{t.booked}</dt>
             <dd className="tnum text-ink-700">{day(r.importedAt.toISOString().slice(0, 10))}</dd>
             {r.cancelledAt && (<><dt className="text-ink-400">{t.cancelled}</dt><dd className="tnum text-ink-700">{day(r.cancelledAt.toISOString().slice(0, 10))}</dd></>)}
+            {r.promoCode && (<><dt className="text-ink-400">{t.promo}</dt><dd className="text-ink-700">{r.promoCode}{r.promoDiscountMinor ? ` · −${m(r.promoDiscountMinor)}` : ""}</dd></>)}
             {(r.onlinePaidMinor ?? 0) > 0 && (<><dt className="text-ink-400">{t.online.paid}</dt><dd className="tnum text-ink-700">{m(r.onlinePaidMinor!)}</dd></>)}
             {r.balanceChargeMinor && r.balanceChargeOn && !r.balanceChargedAt && !r.balanceChargeError && (
               <><dt className="text-ink-400" /><dd className="text-ink-700">{t.online.balance(m(r.balanceChargeMinor), day(r.balanceChargeOn.toISOString().slice(0, 10)))}</dd></>

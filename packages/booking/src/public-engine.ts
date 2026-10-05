@@ -20,6 +20,7 @@ import {
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type RestrictionType,
   resolveRate, toResolvablePlan, type PriceLookup, stayTerms, withoutCard, type StayTerms, type StayTermsPolicy,
   partyOf, childrenNightMinor, MAX_CHILDREN,
+  normalisePromo, promoRefusal, promoPercentFor, discountedNight, type PromoRule, type PromoRefusal,
 } from "@revio/core";
 import { sellableTerms, termsPolicyOf } from "./stay-terms.js";
 import { recordAvailabilityPush, syncRealChannels, stayScope } from "@revio/connectivity";
@@ -58,6 +59,8 @@ export interface PublicStayQuery {
   guests: number;
   /** Each child's age (0–17), as the guest gave them. Priced by the hotel's age bands — `partyOf`. */
   childAges?: number[];
+  /** A promo code the guest typed — see `promo.ts` in core. */
+  promo?: string;
 }
 
 export interface PublicPlanQuote {
@@ -91,6 +94,8 @@ export interface PublicPlanQuote {
    *  step can restate "pay now" as extras are ticked. A preview; the server re-derives it on submit. */
   termsPolicy: StayTermsPolicy | null;
   firstNightMinor: number;
+  /** A promo code took something off this rate: the code, the percentage, and the all-in total without it. */
+  promo?: { code: string; percentOff: number; originalTotalMinor: number };
 }
 
 /** One photograph, already resized. Object KEYS — the caller turns them into URLs, because only the
@@ -347,19 +352,44 @@ async function loadStayContext(
     infantMax: defaults?.ageInfantMax ?? 2,
     childMax: defaults?.ageChildMax ?? 11,
   });
-  const nightPrice = (rt: (typeof roomTypes)[number], rp: (typeof plans)[number], k: string): number | null => {
+  /*
+   * The promo code, if one was typed: loaded once, refused with a reason the page can say, and
+   * applied per night to the ROOM price (children included — they are part of the room's price;
+   * taxes and fees are added afterwards and are never discounted).
+   */
+  const promoCode = normalisePromo(q.promo);
+  const promoRow = promoCode
+    ? await db.promoCode.findFirst({ where: { propertyId: property.id, code: promoCode } })
+    : null;
+  const promoRule: PromoRule | null = promoRow
+    ? {
+        code: promoRow.code, percentOff: promoRow.percentOff,
+        stayFrom: promoRow.stayFrom ? ymd(promoRow.stayFrom) : null, stayTo: promoRow.stayTo ? ymd(promoRow.stayTo) : null,
+        minNights: promoRow.minNights, ratePlanIds: promoRow.ratePlanIds, maxUses: promoRow.maxUses,
+        usedCount: promoRow.usedCount, active: promoRow.active,
+      }
+    : null;
+  const promo: { code: string; refusal: PromoRefusal | null; rule: PromoRule | null; id: string | null } | null = promoCode
+    ? { code: promoCode, refusal: promoRefusal(promoRule, { arrival: q.checkIn, nights: nights.length }), rule: promoRule, id: promoRow?.id ?? null }
+    : null;
+  const promoPct = (rp: (typeof plans)[number]): number =>
+    promo && !promo.refusal && promo.rule ? promoPercentFor(promo.rule, rp.id) : 0;
+
+  const nightPrice = (rt: (typeof roomTypes)[number], rp: (typeof plans)[number], k: string, opts: { raw?: boolean } = {}): number | null => {
     const base = priceFor(rt, rp, k, party.pricedAdults);
-    return base == null ? null : base + childrenNightMinor(party, rp);
+    if (base == null) return null;
+    const room = base + childrenNightMinor(party, rp);
+    return opts.raw ? room : discountedNight(room, promoPct(rp));
   };
 
-  return { nights, roomTypes, plans, priceFor, nightPrice, party, remainingFor, remainingByNight, sellableByNightFor, stayBlocked, stopSoldOn, fees, defaults };
+  return { nights, roomTypes, plans, priceFor, nightPrice, party, promo, promoPct, remainingFor, remainingByNight, sellableByNightFor, stayBlocked, stopSoldOn, fees, defaults };
 }
 
 /** GET /api/public/availability — the widget's search. */
-export async function publicAvailability(db: Db, property: PropertyRow, q: PublicStayQuery): Promise<{ error?: string; code?: PublicBookingErrorCode; options?: PublicRoomOption[] }> {
+export async function publicAvailability(db: Db, property: PropertyRow, q: PublicStayQuery): Promise<{ error?: string; code?: PublicBookingErrorCode; options?: PublicRoomOption[]; promo?: { code: string; refusal: PromoRefusal | null } }> {
   const bad = validStay(q);
   if (bad) return { error: bad, code: stayRefusalCode(bad) };
-  const { nights, roomTypes, plans, nightPrice, party, remainingFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, nightPrice, party, promo, promoPct, remainingFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, q);
   const cityTaxIncluded = defaults?.cityTaxMode === "included";
 
@@ -387,7 +417,19 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
         fees,
         cityTaxIncluded,
       });
+      // What the guest would pay without the code — shown struck through beside the price.
+      const pct = promoPct(rp);
+      let promoInfo: PublicPlanQuote["promo"];
+      if (pct > 0) {
+        let raw = 0;
+        for (const k of nights) raw += nightPrice(rt, rp, k, { raw: true }) ?? 0;
+        promoInfo = {
+          code: promo!.code, percentOff: pct,
+          originalTotalMinor: computeStayCharges({ stay: { accommodationMinor: raw, nights: nights.length, rooms: 1, guests: party.pricedAdults }, fees, cityTaxIncluded }).totalMinor,
+        };
+      }
       quotes.push({
+        ...(promoInfo ? { promo: promoInfo } : {}),
         ratePlanId: rp.id, name: rp.name, code: rp.code,
         accommodationMinor: total,
         charges: charged.lines.map((l) => ({ name: l.name, amountMinor: l.amountMinor })),
@@ -427,7 +469,7 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
       });
     }
   }
-  return { options };
+  return { options, ...(promo ? { promo: { code: promo.code, refusal: promo.refusal } } : {}) };
 }
 
 /**
@@ -683,7 +725,7 @@ export async function publicCreateReservation(
   if (!p.guest?.firstName?.trim() || !p.guest?.lastName?.trim() || !/.+@.+\..+/.test(p.guest?.email ?? "")) {
     return { error: "Guest first name, last name and a valid email are required.", code: "guest_details" };
   }
-  const { nights, roomTypes, plans, nightPrice, party, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
+  const { nights, roomTypes, plans, nightPrice, party, promo, promoPct, remainingFor, sellableByNightFor, stayBlocked, fees, defaults } =
     await loadStayContext(db, property, p, p.holdId ? { excludeHoldId: p.holdId } : {});
   const rt = roomTypes.find((r) => r.id === p.roomTypeId);
   const rp = plans.find((r) => r.id === p.ratePlanId);
@@ -761,6 +803,12 @@ export async function publicCreateReservation(
    * the amount comes from the hotel's own row — so a tampered field can change which breakfast is
    * booked but never what it costs. This is the same rule the room price already follows.
    */
+  // What the code took off the rooms — recorded on the reservation, so the hotel can see it.
+  const promoApplied = promoPct(rp) > 0 ? promo!.code : null;
+  const promoDiscountMinor = promoApplied
+    ? nights.reduce((n, k) => n + (nightPrice(rt, rp, k, { raw: true }) ?? 0), 0) - accommodationMinor
+    : 0;
+
   const offeredExtras = await publicSellableExtras(db, property.id);
   const chosenExtras = resolveChosenExtras(offeredExtras, p.extraIds ?? []);
   const extrasMinor = extrasTotalMinor(chosenExtras, nights.length);
@@ -896,6 +944,7 @@ export async function publicCreateReservation(
         // The guest's key to cancel or move this booking themselves — see guest-manage.ts.
         guestManageToken: manageToken,
         ...(p.bookingGroupId ? { bookingGroupId: p.bookingGroupId } : {}),
+        ...(promoApplied ? { promoCode: promoApplied, promoDiscountMinor } : {}),
         // A LABEL plus a gateway token — never a card number. `card_on_file` is what the front desk
         // reads as "we can charge a no-show"; the ref is what actually lets them.
         paymentGuarantee: p.guarantee?.ref ? "card_on_file" : "none",
@@ -969,6 +1018,10 @@ export async function publicCreateReservation(
     // `claimedHoldId` rather than `p.holdId`: it is the guest's own hold when they had a live one, and
     // otherwise the one claimed a few lines above. Either way there is always exactly one, so a
     // reservation can never exist without the claim that reserved the room for it.
+    if (promoApplied && promo?.id) {
+      await tx.promoCode.update({ where: { id: promo.id }, data: { usedCount: { increment: 1 } } });
+    }
+
     const converted = await tx.hold.updateMany({
       where: { id: claimedHoldId, propertyId: property.id, status: "active" },
       data: { status: "converted", reservationId: reservation.id },

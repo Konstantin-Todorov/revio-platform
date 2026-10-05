@@ -41,6 +41,7 @@ export function SearchBar({
   defaultGuests = 2,
   defaultChildAges = [],
   defaultRooms = [],
+  defaultPromo = "",
   compact = false,
   onDark = false,
 }: {
@@ -50,6 +51,8 @@ export function SearchBar({
   defaultGuests?: number;
   /** Children's ages from the URL (`ages=4,7`). */
   defaultChildAges?: number[];
+  /** A promo code already applied (`promo=SUMMER10`). */
+  defaultPromo?: string;
   /** Several rooms (`rooms=2-5.1|2`) — when present, wins over guests/ages. */
   defaultRooms?: { adults: number; childAges: number[] }[];
   /** The results-page variant: shorter segments, no helper line — it sits above live results. */
@@ -85,6 +88,10 @@ export function SearchBar({
   const guests = rooms[0]!.adults;
   const ages = rooms[0]!.ages;
   const [panel, setPanel] = useState<"dates" | "guests" | null>(null);
+  // Promo code: a quiet link until the guest has one — an always-open field makes every guest
+  // without a code feel they are paying too much.
+  const [promo, setPromo] = useState(defaultPromo);
+  const [promoOpen, setPromoOpen] = useState(!!defaultPromo);
   const { s: t, fmtDay } = useGuestKit();
   const s = t.bar;
 
@@ -218,6 +225,33 @@ export function SearchBar({
               <span>{s.search}</span>
             </button>
           </div>
+        </div>
+        <div className={`mt-2 flex flex-wrap items-center gap-2 ${compact ? "justify-end" : ""}`}>
+          {promoOpen ? (
+            <>
+              <label className="sr-only" htmlFor="promo-code">{t.promo.label}</label>
+              <input
+                id="promo-code" name="promo" value={promo} onChange={(e) => setPromo(e.target.value.toUpperCase())}
+                placeholder={t.promo.label} autoComplete="off" maxLength={24}
+                className="h-9 w-40 rounded-[var(--r-sm)] border px-2.5 text-[13px] uppercase outline-none focus:border-[hsl(var(--brand))]"
+                style={{ borderColor: "hsl(var(--line-strong))", backgroundColor: "hsl(var(--surface))" }}
+              />
+              <button type="submit" disabled={!ready || !promo.trim()} className="btn btn-outline min-h-[36px] px-3 text-[13px]">{t.promo.apply}</button>
+              {defaultPromo && (
+                <button type="submit" onClick={() => setPromo("")} className="text-[12.5px] font-semibold underline" style={{ color: onDark ? "hsl(var(--brand-ink))" : "hsl(var(--ink-soft))" }}>
+                  {t.promo.remove}
+                </button>
+              )}
+            </>
+          ) : (
+            <button
+              type="button" onClick={() => setPromoOpen(true)}
+              className="text-[12.5px] font-semibold underline-offset-2 hover:underline"
+              style={{ color: onDark ? "hsl(var(--brand-ink) / 0.85)" : "hsl(var(--brand-text))" }}
+            >
+              {t.promo.have}
+            </button>
+          )}
         </div>
       </form>
 

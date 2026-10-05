@@ -265,8 +265,13 @@ export default async function ConfirmationPage({
 
           <div className="px-5 py-4 sm:px-6">
             <dl className="space-y-1.5 text-[13px]">
+              {/* With a code, the rooms line is the price before it, so the lines add up to the total. */}
               <Row label={t.room.roomsFor(nights)}
-                   value={money(charged.accommodationMinor, reservation.currency)} />
+                   value={money(charged.accommodationMinor + (reservation.promoDiscountMinor ?? 0), reservation.currency)} />
+              {reservation.promoCode && (reservation.promoDiscountMinor ?? 0) > 0 && (
+                <Row label={t.promo.code(reservation.promoCode)}
+                     value={`−${money(reservation.promoDiscountMinor!, reservation.currency)}`} />
+              )}
               {extras.map((e) => (
                 <Row key={e.name} label={e.name}
                      value={money(extrasTotalMinor([{ priceMinor: e.priceMinor, basis: extraBasis(e.basis) }], nights), reservation.currency)} />

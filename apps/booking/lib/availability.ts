@@ -25,12 +25,14 @@ export interface SearchOutcome {
   /** Why, for the page to say in the guest's language. */
   code?: PublicBookingErrorCode;
   rateLimited?: boolean;
+  /** The promo code typed, and why it does not apply (null = it does). */
+  promo?: { code: string; refusal: string | null };
 }
 
 export async function searchAvailability(
   property: PublicProperty,
   ip: string,
-  q: { checkIn: string; checkOut: string; guests: number; childAges?: number[] },
+  q: { checkIn: string; checkOut: string; guests: number; childAges?: number[]; promo?: string },
 ): Promise<SearchOutcome> {
   if (!checkSearch(ip, property.slug).ok) {
     return { rateLimited: true, error: "Too many searches just now. Please wait a moment and try again." };
@@ -42,11 +44,12 @@ export async function searchAvailability(
   if (result.error) return { error: result.error, ...(result.code ? { code: result.code } : {}) };
 
   const options = result.options ?? [];
+  const promo = result.promo ? { promo: result.promo } : {};
 
   // Only when the answer is "nothing". The extra queries are worth it precisely because this is the
   // screen where a guest otherwise leaves, and they are never spent on a search that succeeded.
   if (options.length === 0) {
-    return { options, alternatives: await publicAlternativeStays(db, scoped, q) };
+    return { options, alternatives: await publicAlternativeStays(db, scoped, q), ...promo };
   }
-  return { options };
+  return { options, ...promo };
 }

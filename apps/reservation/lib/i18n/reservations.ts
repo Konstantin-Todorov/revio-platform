@@ -120,6 +120,7 @@ export interface ReservationsStrings {
     emailGuest: string;
     online: { paid: string; refunded: string; fee: string; balance: (amount: string, day: string) => string; balanceFailed: string; cancelWill: (refund: string, charge: string) => string; noShowWill: (refund: string, charge: string) => string; waive: string };
     kids: (children: number, infants: number, ages: string) => string;
+    promo: string;
     payLink: {
       title: string; hint: string; amount: (currency: string) => string; note: string; notePlaceholder: string; send: string; sending: string;
       outstanding: (amount: string) => string;
@@ -323,6 +324,7 @@ export const reservations: Translations<ReservationsStrings> = {
         noShowWill: (r, c) => [c ? `${c} no-show fee charged to the card` : "", r ? `${r} goes back to the guest` : ""].filter(Boolean).join(" · ") || "Nothing to refund or charge",
         waive: "Waive the fee (refund everything paid)",
       },
+      promo: "Promo code",
       kids: (c, i, a) => [c ? `+ ${c} ${c === 1 ? "child" : "children"}` : "", i ? `+ ${i} ${i === 1 ? "infant" : "infants"}` : ""].filter(Boolean).join(" ") + (a ? ` (ages ${a})` : ""),
       payLink: {
         title: "Request a payment",
@@ -530,6 +532,7 @@ export const reservations: Translations<ReservationsStrings> = {
         noShowWill: (r, c) => [c ? `${c} такса за неявяване се удържат от картата` : "", r ? `${r} се връщат на госта` : ""].filter(Boolean).join(" · ") || "Няма нищо за връщане или удръжка",
         waive: "Без такса (връщане на всичко платено)",
       },
+      promo: "Промо код",
       kids: (c, i, a) => [c ? `+ ${c} ${c === 1 ? "дете" : "деца"}` : "", i ? `+ ${i} ${i === 1 ? "бебе" : "бебета"}` : ""].filter(Boolean).join(" ") + (a ? ` (на ${a} г.)` : ""),
       payLink: {
         title: "Поискай плащане",

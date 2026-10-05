@@ -1,4 +1,4 @@
-import { parseChildAges, parseRoomParties, parseRoomPicks, type RoomParty, type RoomPick } from "@revio/core";
+import { normalisePromo, parseChildAges, parseRoomParties, parseRoomPicks, type RoomParty, type RoomPick } from "@revio/core";
 import { groupQuery } from "@/lib/group";
 import { GroupSteps } from "@/components/GroupSteps";
 import { Suspense } from "react";
@@ -28,22 +28,26 @@ interface Query {
   guests: number;
   /** Children's ages (`ages=4,7`) — priced and fitted by the hotel's age bands. */
   childAges: number[];
+  /** A promo code (`promo=SUMMER10`). */
+  promo: string;
 }
 
 /** A guest can type anything into a URL; treat every parameter as hostile until parsed. */
-function parseQuery(sp: { checkIn?: string; checkOut?: string; guests?: string; ages?: string }): Query {
+function parseQuery(sp: { checkIn?: string; checkOut?: string; guests?: string; ages?: string; promo?: string }): Query {
   const guests = Number.parseInt(sp.guests ?? "2", 10);
   return {
     checkIn: isValidISO(sp.checkIn) ? sp.checkIn : null,
     checkOut: isValidISO(sp.checkOut) ? sp.checkOut : null,
     guests: Number.isFinite(guests) && guests >= 1 && guests <= 10 ? guests : 2,
     childAges: parseChildAges(sp.ages),
+    promo: normalisePromo(sp.promo),
   };
 }
 
-function searchHref(slug: string, q: { checkIn: string; checkOut: string; guests: number; childAges?: number[] }): string {
+function searchHref(slug: string, q: { checkIn: string; checkOut: string; guests: number; childAges?: number[]; promo?: string }): string {
   const ages = q.childAges?.length ? `&ages=${q.childAges.join(",")}` : "";
-  return `/${slug}/search?checkIn=${q.checkIn}&checkOut=${q.checkOut}&guests=${q.guests}${ages}`;
+  const promo = q.promo ? `&promo=${encodeURIComponent(q.promo)}` : "";
+  return `/${slug}/search?checkIn=${q.checkIn}&checkOut=${q.checkOut}&guests=${q.guests}${ages}${promo}`;
 }
 
 export default async function SearchPage({
@@ -51,7 +55,7 @@ export default async function SearchPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string; ages?: string; rooms?: string; sel?: string }>;
+  searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string; ages?: string; rooms?: string; sel?: string; promo?: string }>;
 }) {
   const [{ slug }, sp] = await Promise.all([params, searchParams]);
   const property = await getPublicProperty(slug);
@@ -67,7 +71,7 @@ export default async function SearchPage({
   const multi = rooms.length > 1;
   const picks = multi ? parseRoomPicks(sp.sel).slice(0, rooms.length) : [];
   if (multi && q.checkIn && q.checkOut && picks.length === rooms.length) {
-    redirect(`/${property.slug}/book?${groupQuery({ checkIn: q.checkIn, checkOut: q.checkOut, rooms, picks })}`);
+    redirect(`/${property.slug}/book?${groupQuery({ checkIn: q.checkIn, checkOut: q.checkOut, rooms, picks, promo: q.promo })}`);
   }
   if (multi) {
     const slot = rooms[picks.length]!;
@@ -101,6 +105,7 @@ export default async function SearchPage({
             defaultGuests={multi ? rooms[0]!.adults : q.guests}
             defaultChildAges={multi ? rooms[0]!.childAges : q.childAges}
             defaultRooms={multi ? rooms : []}
+            defaultPromo={q.promo}
           />
         </div>
       </div>
@@ -124,6 +129,7 @@ export default async function SearchPage({
                   picks={picks}
                   checkIn={q.checkIn!}
                   checkOut={q.checkOut!}
+                  promo={q.promo}
                   kit={kit}
                 />
               )}
@@ -142,10 +148,10 @@ export default async function SearchPage({
           {valid ? (
             // Keyed on the query so changing dates shows the skeleton again rather than leaving the
             // previous stay's prices on screen while the new ones are fetched.
-            <Suspense key={`${q.checkIn}-${q.checkOut}-${q.guests}-${q.childAges.join(".")}`} fallback={<ResultsSkeleton label={s.search.checking} />}>
+            <Suspense key={`${q.checkIn}-${q.checkOut}-${q.guests}-${q.childAges.join(".")}-${q.promo}`} fallback={<ResultsSkeleton label={s.search.checking} />}>
               <Results
                 property={property}
-                q={{ checkIn: q.checkIn!, checkOut: q.checkOut!, guests: q.guests, childAges: q.childAges }}
+                q={{ checkIn: q.checkIn!, checkOut: q.checkOut!, guests: q.guests, childAges: q.childAges, promo: q.promo }}
                 group={multi ? { rooms, picks } : null}
                 nights={nights}
                 kit={kit}
@@ -168,7 +174,7 @@ async function Results({
   group = null,
 }: {
   property: PublicProperty;
-  q: { checkIn: string; checkOut: string; guests: number; childAges: number[] };
+  q: { checkIn: string; checkOut: string; guests: number; childAges: number[]; promo: string };
   nights: number;
   kit: GuestKit;
   /** Several rooms: the slots and what is already picked for them. */
@@ -188,7 +194,7 @@ async function Results({
     .filter((o) => o.remaining >= 1);
   const pickHref = group
     ? (roomTypeId: string) => (ratePlanId: string) =>
-        `/${property.slug}/search?${groupQuery({ checkIn: q.checkIn, checkOut: q.checkOut, rooms: group.rooms, picks: [...group.picks, { roomTypeId, ratePlanId }] })}`
+        `/${property.slug}/search?${groupQuery({ checkIn: q.checkIn, checkOut: q.checkOut, rooms: group.rooms, picks: [...group.picks, { roomTypeId, ratePlanId }], promo: q.promo })}`
     : null;
   const mediaUrl = (key: string) => store.publicUrl(key);
 
@@ -208,7 +214,7 @@ async function Results({
         {alternatives.length ? (
           <>
             {s.search.altBody(nights)}
-            <AlternativeDates slug={property.slug} guests={q.guests} childAges={q.childAges} alternatives={alternatives} kit={kit} />
+            <AlternativeDates slug={property.slug} guests={q.guests} childAges={q.childAges} promo={q.promo} alternatives={alternatives} kit={kit} />
           </>
         ) : (
           <>
@@ -230,8 +236,21 @@ async function Results({
     );
   }
 
+  // The code the guest typed: applied, or why not — said before the prices, not discovered at checkout.
+  const promoNote = outcome.promo
+    ? outcome.promo.refusal
+      ? { ok: false, text: s.promo.refusal[outcome.promo.refusal as keyof typeof s.promo.refusal](outcome.promo.code) }
+      : { ok: true, text: s.promo.applied(outcome.promo.code) }
+    : null;
+
   return (
     <>
+      {promoNote && (
+        <p className="mb-4 rounded-[var(--r-sm)] px-3.5 py-2.5 text-[13px] font-semibold" role="status"
+           style={promoNote.ok ? { backgroundColor: "hsl(var(--positive) / 0.1)", color: "hsl(var(--positive))" } : { backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}>
+          {promoNote.text}
+        </p>
+      )}
       <p className="mb-4 text-[13px] font-semibold" style={{ color: "hsl(var(--ink-soft))" }}>
         {s.search.available(options.length)}
       </p>
@@ -246,6 +265,7 @@ async function Results({
             checkOut={q.checkOut}
             guests={q.guests}
             childAges={q.childAges}
+            promo={q.promo}
             {...(pickHref ? { pickHref: pickHref(option.roomTypeId) } : {})}
             mediaUrl={mediaUrl}
             kit={kit}
@@ -274,12 +294,14 @@ function AlternativeDates({
   slug,
   guests,
   childAges,
+  promo,
   alternatives,
   kit,
 }: {
   slug: string;
   guests: number;
   childAges: number[];
+  promo: string;
   alternatives: AlternativeStay[];
   kit: GuestKit;
 }) {
@@ -289,7 +311,7 @@ function AlternativeDates({
       {alternatives.map((alt) => (
         <a
           key={alt.checkIn}
-          href={searchHref(slug, { checkIn: alt.checkIn, checkOut: alt.checkOut, guests, childAges })}
+          href={searchHref(slug, { checkIn: alt.checkIn, checkOut: alt.checkOut, guests, childAges, promo })}
           className="card flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:border-[hsl(var(--brand))]"
         >
           <span className="min-w-0">

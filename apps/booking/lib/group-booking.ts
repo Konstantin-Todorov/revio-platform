@@ -36,7 +36,7 @@ async function quotes(property: PublicProperty, fd: FormData) {
     if (!(await publicGetHold(db, property.id, holds[i]!))) return null;
     const q = await publicQuoteStay(db, { ...property, id: property.id }, {
       checkIn: str(fd, "checkIn"), checkOut: str(fd, "checkOut"),
-      guests: rooms[i]!.adults, childAges: rooms[i]!.childAges,
+      guests: rooms[i]!.adults, childAges: rooms[i]!.childAges, promo: str(fd, "promo"),
       roomTypeId: picks[i]!.roomTypeId, ratePlanId: picks[i]!.ratePlanId, holdId: holds[i]!,
     });
     if (!q) return null;
@@ -104,7 +104,7 @@ export async function confirmGroup(
     const paid = intentKind === "payment" ? it.quote.terms?.payNowMinor ?? 0 : 0;
     const result = await publicCreateReservation(db, scoped, {
       checkIn: str(fd, "checkIn"), checkOut: str(fd, "checkOut"),
-      guests: it.party.adults, childAges: it.party.childAges,
+      guests: it.party.adults, childAges: it.party.childAges, promo: str(fd, "promo"),
       roomTypeId: it.pick.roomTypeId, ratePlanId: it.pick.ratePlanId,
       guest: { firstName: guest.firstName, lastName: guest.lastName, email: guest.email, ...(guest.phone ? { phone: guest.phone } : {}) },
       holdId: it.holdId,
