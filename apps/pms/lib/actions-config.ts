@@ -5,6 +5,7 @@ import { prisma } from "./db";
 import { getSession } from "./session";
 import { logAudit, str, int } from "./mutation-helpers";
 import { MANAGER_ROLES } from "./roles";
+import { FISCAL_TAX_GROUPS } from "@revio/core";
 
 async function requireManager() {
   const s = await getSession();
@@ -55,6 +56,8 @@ export async function saveConfiguration(fd: FormData): Promise<void> {
       fiscalizationEnabled: fd.get("fiscalizationEnabled") != null,
       eInvoicingEnabled: fd.get("eInvoicingEnabled") != null,
       estiPlaceUin: str(fd, "estiPlaceUin").slice(0, 500) || null,
+      fiscalDevice: str(fd, "fiscalDevice") === "erpnet" ? "erpnet" : "none",
+      fiscalTaxGroups: fiscalGroupsFrom(fd),
     },
     // Close Day escalation (§3.4). Per-property because the business-day boundary already varies —
     // some properties audit at 03:00, some at midnight — so one fixed time fits nobody.
@@ -125,4 +128,11 @@ function positiveOrNull(fd: FormData, key: string): number | null {
   if (raw === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+/** The four tax-category → Н-18 group choices, kept only when every one is a real group letter. */
+function fiscalGroupsFrom(fd: FormData): { standard: string; reduced: string; city_tax: string; exempt: string } | undefined {
+  const pick = (k: string) => str(fd, `fiscalGroup_${k}`);
+  const v = { standard: pick("standard"), reduced: pick("reduced"), city_tax: pick("city_tax"), exempt: pick("exempt") };
+  return Object.values(v).every((g) => (FISCAL_TAX_GROUPS as readonly string[]).includes(g)) ? v : undefined;
 }

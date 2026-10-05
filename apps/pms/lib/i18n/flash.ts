@@ -28,6 +28,8 @@ export interface FlashStrings {
     otherNotIn: string;
   };
   folio: {
+    receiptAlready: string;
+    receiptNumber: string;
     noPermission: string;
     chargeFields: string;
     closedCharge: string;
@@ -109,6 +111,8 @@ export const flash: Translations<FlashStrings> = {
       otherNotIn: "They are not clocked in, so there is no shift to end.",
     },
     folio: {
+      receiptAlready: "A fiscal receipt is already recorded for this payment, so nothing was changed.",
+      receiptNumber: "Type the receipt number exactly as it is printed on the receipt.",
       noPermission: "You don’t have permission to change this folio. Ask a manager or reception colleague.",
       chargeFields: "Add a description and an amount above zero before posting the charge.",
       closedCharge: "This folio is closed, so no new charge was posted. Reopen it first.",
@@ -211,6 +215,8 @@ export const flash: Translations<FlashStrings> = {
       otherNotIn: "Служителят не е на смяна, така че няма смяна за приключване.",
     },
     folio: {
+      receiptAlready: "За това плащане вече е записан касов бон, затова нищо не е променено.",
+      receiptNumber: "Въведете номера на бона точно както е отпечатан.",
       noPermission: "Нямате права да променяте тази сметка. Помолете управител или колега от рецепцията.",
       chargeFields: "Добавете описание и сума над нула, преди да начислите.",
       closedCharge: "Сметката е затворена, затова нищо не е начислено. Първо я отворете отново.",

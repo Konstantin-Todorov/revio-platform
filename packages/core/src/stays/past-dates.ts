@@ -165,3 +165,20 @@ export function dayBoundsInTimeZone(date: string, timeZone: string): { start: Da
   const next = new Date(nextWall - zoneOffsetMs(timeZone, nextFirst));
   return { start, next };
 }
+
+/**
+ * A wall-clock time with no zone (`2026-10-05T19:39:07`, as a fiscal printer reports it) read in the
+ * PROPERTY's timezone, as an instant.
+ *
+ * `new Date("2026-10-05T19:39:07")` reads it in the SERVER's zone: right on a laptop in Sofia, three
+ * hours wrong on Railway, which runs in UTC. Returns null for anything that is not that shape.
+ * DST-correct by the same one-pass correction as `dayBoundsInTimeZone`.
+ */
+export function wallClockToUtc(local: string, timeZone: string): Date | null {
+  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/.exec(local.trim());
+  if (!m) return null;
+  const wall = Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4] ?? "00"}Z`);
+  if (!Number.isFinite(wall)) return null;
+  const first = new Date(wall - zoneOffsetMs(timeZone, new Date(wall)));
+  return new Date(wall - zoneOffsetMs(timeZone, first));
+}

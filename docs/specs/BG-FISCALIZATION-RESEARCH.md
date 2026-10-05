@@ -4,6 +4,29 @@
 > was wrong in a way that mattered, and the correction is recorded below rather than quietly edited
 > out. Not tax advice — the hotel's accountant confirms, per property.
 
+## ⚠️ Second correction (2026-10-05) — "driving a device makes us СУПТО" was too strong
+
+The section *Revio does not fiscalize, deliberately and permanently* below rests on one claim: that
+software which drives a hotel's fiscal device thereby becomes СУПТО and drags the hotel into
+exclusivity and declaration. Re-checked against Н-18 and НАП guidance on 2026-10-05, that is **not**
+how the regime works:
+
+- The **listed-СУПТО regime is an election** (чл. 118, ал. 18 ЗДДС, voluntary since 12.12.2020). The
+  exclusivity rule (one software controls every device at the site, devices demoted to printers) and
+  the 7-day notification to НАП (Приложение № 32) apply **only to a hotel that chooses software from
+  НАП's list**.
+- Н-18 (amended 26.02.2021, чл. 26, ал. 12) expressly contemplates receipts issued through
+  **non-listed** software, and limits the mandatory **УНП** to listed software — a non-listed system
+  may print one voluntarily.
+- The April-2026 producer-declaration idea was in an early Budget 2026 draft and was **dropped**.
+- Competitors do exactly this: Clock prints to Datecs/Daisy through a local connector; Microinvest
+  ships separate СУПТО and non-СУПТО builds of the same hotel product.
+
+So Revio **may print the receipt on the hotel's own registered device** as ordinary, non-listed
+software, without the hotel electing СУПТО and without touching the restaurant's or spa's till. We
+still never declare ourselves СУПТО and never claim to be. Design: `docs/specs/FISCAL-PRINTER.md`.
+Still not tax advice — the hotel's accountant confirms the tax-group mapping.
+
 ## The correction
 
 The 2026-07-26 pass stated that Bulgaria requires every consumer sale — **"cash, card, bank

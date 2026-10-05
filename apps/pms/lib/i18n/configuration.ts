@@ -1,4 +1,5 @@
 import type { Translations } from "@revio/ui/i18n";
+import type { PrinterSetupStrings } from "@/components/fiscal/PrinterSetup";
 
 /** Configuration — the property's taxes, invoicing, housekeeping, end-of-day and deposit rules. */
 export interface ConfigurationStrings {
@@ -57,6 +58,18 @@ export interface ConfigurationStrings {
     estiUin: string;
     estiUinAside: string;
     estiUinHint: string;
+    fiscal: {
+      title: string;
+      lead: string;
+      device: string;
+      deviceNone: string;
+      deviceErpnet: string;
+      groups: string;
+      groupsHint: string;
+      cat: { standard: string; reduced: string; city_tax: string; exempt: string };
+      printer: PrinterSetupStrings;
+      guide: string;
+    };
   };
   save: string;
   deposits: {
@@ -144,12 +157,37 @@ export const configuration: Translations<ConfigurationStrings> = {
       generic: "Generic (EU)",
       bulgaria: "Bulgaria",
       eu: "EU (structured e-invoicing)",
-      fiscalization: "Real-time fiscalization (BG N-18) — routes receipts through a certified provider",
+      fiscalization: "Show whether each payment needs a fiscal receipt (Bulgaria, Наредба Н-18)",
       eInvoicing: "Structured e-invoicing (EN 16931 / Peppol) for B2B",
-      note: "The boundary is built (F3); flipping these on connects the certified provider — the invoice/receipt core stays generic.",
+      note: "Bank transfers, company accounts and OTA prepayments never need a fiscal receipt; cash and card at the desk do.",
       estiUin: "National Tourist Register number",
       estiUinAside: "(НТР — for the ЕСТИ upload)",
       estiUinHint: "The unique number of this accommodation in the Национален туристически регистър. Every row of the ЕСТИ file carries it.",
+      fiscal: {
+        title: "Fiscal receipts",
+        lead: "Cash and card at the desk need a receipt from your registered fiscal device. Revio can print it on that device for you, or you print it on your till and type the number in.",
+        device: "How receipts are printed",
+        deviceNone: "On our till — we type the receipt number into the payment",
+        deviceErpnet: "By Revio, on the fiscal printer at the desk (ErpNet.FP)",
+        groups: "Tax groups on the receipt",
+        groupsHint: "The usual mapping is pre-filled from your VAT registration. Your accountant has the last word.",
+        cat: { standard: "Standard VAT (food, drinks, services)", reduced: "Reduced VAT (accommodation)", city_tax: "Tourist tax", exempt: "No VAT" },
+        printer: {
+          title: "This computer's fiscal printer",
+          lead: "Each desk prints on its own device, so this choice is remembered on this computer only. ErpNet.FP must be running here.",
+          address: "ErpNet.FP address",
+          find: "Find printers",
+          finding: "Looking…",
+          none: "ErpNet.FP answered but sees no printer. Check the cable and that the printer is on.",
+          unreachable: "No answer from ErpNet.FP on this computer. Is it installed and running, and does it allow this site?",
+          choose: "Use this one",
+          current: "Printing on {p}",
+          notChosen: "No printer chosen on this computer yet.",
+          forget: "forget",
+          checked: "In use",
+        },
+        guide: "Setting up ErpNet.FP takes about ten minutes — the guide walks through it.",
+      },
     },
     save: "Save changes",
     deposits: {
@@ -249,12 +287,37 @@ export const configuration: Translations<ConfigurationStrings> = {
       generic: "Обща (ЕС)",
       bulgaria: "България",
       eu: "ЕС (структурирани е-фактури)",
-      fiscalization: "Фискализация в реално време (Наредба Н-18) — касовите бележки минават през сертифициран доставчик",
+      fiscalization: "Показвай дали всяко плащане изисква касов бон (Наредба Н-18)",
       eInvoicing: "Структурирани електронни фактури (EN 16931 / Peppol) за B2B",
-      note: "Връзката е изградена; включването на тези опции свързва сертифицирания доставчик — ядрото за фактури и бележки остава общо.",
+      note: "Банков превод, фирмена сметка и предплатено през сайт за резервации никога не изискват касов бон; в брой и с карта на рецепцията — изискват.",
       estiUin: "Номер в Националния туристически регистър",
       estiUinAside: "(НТР — за файла към ЕСТИ)",
       estiUinHint: "Уникалният номер на мястото за настаняване в НТР. Всеки ред от файла за ЕСТИ го носи.",
+      fiscal: {
+        title: "Касови бонове",
+        lead: "Плащане в брой и с карта на рецепцията изисква бон от Вашето регистрирано фискално устройство. Revio може да го отпечата на това устройство вместо Вас — или го печатате на касата и въвеждате номера.",
+        device: "Как се печатат боновете",
+        deviceNone: "На нашата каса — въвеждаме номера на бона към плащането",
+        deviceErpnet: "От Revio, на фискалния принтер на рецепцията (ErpNet.FP)",
+        groups: "Данъчни групи на бона",
+        groupsHint: "Попълнено е обичайното разпределение според регистрацията Ви по ДДС. Последната дума е на счетоводителя Ви.",
+        cat: { standard: "Стандартен ДДС (храна, напитки, услуги)", reduced: "Намален ДДС (нощувки)", city_tax: "Туристически данък", exempt: "Без ДДС" },
+        printer: {
+          title: "Фискалният принтер на този компютър",
+          lead: "Всяка рецепция печата на своето устройство, затова изборът се помни само на този компютър. На него трябва да работи ErpNet.FP.",
+          address: "Адрес на ErpNet.FP",
+          find: "Намери принтерите",
+          finding: "Търсене…",
+          none: "ErpNet.FP отговаря, но не вижда принтер. Проверете кабела и дали принтерът е включен.",
+          unreachable: "Няма отговор от ErpNet.FP на този компютър. Инсталиран и пуснат ли е, и разрешава ли този сайт?",
+          choose: "Избери",
+          current: "Печата на {p}",
+          notChosen: "На този компютър още не е избран принтер.",
+          forget: "забрави",
+          checked: "Избран",
+        },
+        guide: "Настройката на ErpNet.FP отнема около десет минути — ръководството минава през всяка стъпка.",
+      },
     },
     save: "Запази промените",
     deposits: {

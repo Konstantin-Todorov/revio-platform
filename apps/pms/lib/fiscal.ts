@@ -1,5 +1,8 @@
 import "server-only";
-import { fiscalRequirement, type PaymentMethod } from "@revio/core";
+import {
+  buildFiscalReceipt, defaultFiscalTaxGroups, fiscalRequirement, FISCAL_TAX_GROUPS,
+  type FiscalReceipt, type FiscalTaxGroupMap, type PaymentMethod,
+} from "@revio/core";
 
 /**
  * The fiscalization boundary (spec §4.7) — rewritten 2026-08-26 after reading the ordinance itself.
@@ -11,23 +14,16 @@ import { fiscalRequirement, type PaymentMethod } from "@revio/core";
  * legal document is not a placeholder, it is a document that misstates its own compliance. The mock
  * now refuses to run for a non-demo tenant.
  *
- * ## Revio does not fiscalize, deliberately and permanently
+ * ## Revio prints on the hotel's own device — as ordinary software, never as СУПТО
  *
- * Under Наредба Н-18 a fiscal receipt comes from a REGISTERED DEVICE (ФУ/ЕКАФП) or from software on
- * the НАП СУПТО register. Since чл. 118 ЗДДС was amended, using СУПТО is **voluntary** — so we have a
- * choice, and we are taking the other one, for a specific reason:
- *
- *   Software that drives a hotel's fiscal device BECOMES СУПТО, and the obligations then land on the
- *   HOTEL, not only on us. They must use that one software EXCLUSIVELY for sales at that site, every
- *   fiscal device there is demoted to a printer of ours, and they must declare us to НАП within 7
- *   days of installation along with the location of our database. That turns "add a channel manager"
- *   into "replace your entire till", and it makes Revio impossible to sell alongside the POS a
- *   restaurant or spa already runs.
- *
- * So: **the hotel's existing certified device stays the system of record for receipts.** Revio
- * records the receipt that device produced, and reconciles against it. We report the requirement; we
- * never satisfy it. That keeps us off the register, keeps the hotel's other systems working, and —
- * the part that actually unblocks sales — means a hotel can go live on Revio today.
+ * Until 2026-10-05 this file said Revio would never fiscalize, on the belief that software driving a
+ * fiscal device BECOMES СУПТО and drags the hotel into exclusivity and an НАП declaration. Re-checked
+ * against Н-18: the listed-СУПТО regime is an ELECTION the hotel makes (чл. 118 ал. 18 ЗДДС), and Н-18
+ * expressly allows receipts issued through non-listed software. So the PMS page may send the receipt
+ * to the hotel's registered device through ErpNet.FP on the desk PC (`fiscalDevice = "erpnet"`), and
+ * the hotel's restaurant or spa till is untouched. We never declare ourselves СУПТО and never say we
+ * are. The device remains the system of record: we store the number IT returned, never one we made.
+ * Design: `docs/specs/FISCAL-PRINTER.md`; the correction: `BG-FISCALIZATION-RESEARCH.md`.
  *
  * ## Most hotel money needs no receipt at all
  *
@@ -128,4 +124,38 @@ function mockSeal(input: string): string {
   let h = 0;
   for (let i = 0; i < input.length; i++) h = (Math.imul(31, h) + input.charCodeAt(i)) | 0;
   return Math.abs(h).toString(36).toUpperCase().padStart(8, "0").slice(0, 8);
+}
+
+/** The property's tax-category → Н-18 group mapping, falling back to the default for its VAT status. */
+export function fiscalGroupsFor(d: { fiscalTaxGroups?: unknown; invoiceVatId?: string | null } | null): FiscalTaxGroupMap {
+  const base = defaultFiscalTaxGroups(Boolean(d?.invoiceVatId));
+  const stored = (d?.fiscalTaxGroups ?? null) as Partial<Record<keyof FiscalTaxGroupMap, string>> | null;
+  if (!stored) return base;
+  const ok = (g: unknown): g is FiscalTaxGroupMap[keyof FiscalTaxGroupMap] => (FISCAL_TAX_GROUPS as readonly string[]).includes(String(g));
+  return {
+    standard: ok(stored.standard) ? stored.standard : base.standard,
+    reduced: ok(stored.reduced) ? stored.reduced : base.reduced,
+    city_tax: ok(stored.city_tax) ? stored.city_tax : base.city_tax,
+    exempt: ok(stored.exempt) ? stored.exempt : base.exempt,
+  };
+}
+
+/** Charge kinds whose lines a receipt is scaled against — everything that is not money moving. */
+const CHARGE_KINDS = new Set(["accommodation", "minibar", "extra", "fee", "tax"]);
+
+/**
+ * The receipt for one payment line, or null when that payment needs none (bank transfer, OTA…) or is
+ * not a payment. Charges come from every folio of the stay, so a split folio still prints the stay's mix.
+ */
+export function receiptForPayment(
+  payment: { kind: string; method: string | null; amountMinor: number; voided: boolean },
+  stayLines: { kind: string; amountMinor: number; taxCategory: string | null; outlet: string | null; voided: boolean }[],
+  jurisdiction: string,
+  groups: FiscalTaxGroupMap,
+): FiscalReceipt | null {
+  if (payment.kind !== "payment" || payment.voided || payment.amountMinor <= 0) return null;
+  if (payment.method !== "cash" && payment.method !== "card") return null;
+  if (!fiscalRequirement(jurisdiction, payment.method)?.required) return null;
+  const charges = stayLines.filter((l) => !l.voided && CHARGE_KINDS.has(l.kind));
+  return buildFiscalReceipt({ amountMinor: payment.amountMinor, method: payment.method, charges, groups });
 }

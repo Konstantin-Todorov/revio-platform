@@ -1,4 +1,5 @@
 import type { Translations } from "@revio/ui/i18n";
+import type { FiscalRowStrings } from "@/components/fiscal/FiscalReceiptRow";
 
 /**
  * The folio — the guest's bill — and the folio list. Accounting Bulgarian as a Bulgarian hotel's
@@ -65,6 +66,7 @@ export interface FolioStrings {
     take: string;
     note: string;
   };
+  fiscal: FiscalRowStrings;
   checkout: {
     title: string;
     stillHeld: (a: string) => string;
@@ -240,6 +242,22 @@ export const folio: Translations<FolioStrings> = {
       take: "Take",
       note: "This records a payment taken at the desk — card on your own terminal, cash, company account or bank transfer. Online payments from your booking page and payment links appear here by themselves.",
     },
+    fiscal: {
+      recorded: "Fiscal receipt № {n}",
+      recordedManual: "Fiscal receipt № {n} (from the till)",
+      printing: "Printing the fiscal receipt…",
+      needed: "This payment needs a fiscal receipt.",
+      print: "Print receipt",
+      printAgain: "Print again",
+      noPrinter: "No fiscal printer is chosen on this computer.",
+      setUp: "Choose one",
+      unreachable: "The fiscal printer did not answer. Is ErpNet.FP running on this computer?",
+      uncertain: "Not sure the receipt printed. Look at the printer before printing again — if it printed, type its number in.",
+      deviceSaid: "The printer said: {m}",
+      manualPlaceholder: "Receipt №",
+      manualSave: "Save",
+      orTypeIt: "or type the number:",
+    },
     checkout: {
       title: "Check out",
       stillHeld: (a) => `${a} still held.`,
@@ -407,6 +425,22 @@ export const folio: Translations<FolioStrings> = {
       recording: "Записване…",
       take: "Приеми",
       note: "Тук записвате плащане, взето на рецепцията — карта на Вашия собствен терминал, в брой, по фирмена сметка или банков превод. Онлайн плащанията от страницата за директни резервации и от линковете за плащане се появяват тук сами.",
+    },
+    fiscal: {
+      recorded: "Касов бон № {n}",
+      recordedManual: "Касов бон № {n} (от касата)",
+      printing: "Печат на касовия бон…",
+      needed: "За това плащане е нужен касов бон.",
+      print: "Отпечатай бона",
+      printAgain: "Отпечатай отново",
+      noPrinter: "На този компютър не е избран фискален принтер.",
+      setUp: "Изберете",
+      unreachable: "Фискалният принтер не отговори. Пуснат ли е ErpNet.FP на този компютър?",
+      uncertain: "Не е сигурно, че бонът е отпечатан. Погледнете принтера, преди да печатате отново — ако е излязъл, въведете номера му.",
+      deviceSaid: "Принтерът казва: {m}",
+      manualPlaceholder: "№ на бона",
+      manualSave: "Запази",
+      orTypeIt: "или въведете номера:",
     },
     checkout: {
       title: "Напускане",

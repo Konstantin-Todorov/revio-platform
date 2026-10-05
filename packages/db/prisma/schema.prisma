@@ -2010,6 +2010,13 @@ model PropertyDefaults {
   // code. The fiscalization/e-invoicing boundary (F3) is gated by these flags.
   jurisdiction             String  @default("generic") // generic | bg | eu
   fiscalizationEnabled     Boolean @default(false)
+  /// How desk receipts are printed: `none` (the hotel prints on its own till and types the number in)
+  /// or `erpnet` (the PMS page sends the receipt to ErpNet.FP on the front-desk PC). See
+  /// docs/specs/FISCAL-PRINTER.md — Revio prints as ordinary, non-listed software, never as СУПТО.
+  fiscalDevice             String  @default("none")
+  /// Tax category → Н-18 group letter, e.g. {"standard":"Б","reduced":"Г","city_tax":"А","exempt":"А"}.
+  /// Null = the default for the property's VAT registration. The accountant has the last word.
+  fiscalTaxGroups          Json?
   eInvoicingEnabled        Boolean @default(false)
 
   property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
@@ -2261,6 +2268,13 @@ model FolioLine {
   amountMinor   Int
   method        String? // for payments (label only): cash | card | company_account | bank_transfer | prepaid_ota
   ref           String?
+  /// The fiscal receipt the hotel's own device issued for this payment — its number, time and the
+  /// fiscal-memory serial, exactly as the device returned them. Never invented by us.
+  fiscalReceiptNo     String?
+  fiscalReceiptAt     DateTime?
+  fiscalDeviceSerial  String?
+  /// `printed` (through ErpNet.FP from the PMS) | `manual` (typed in from the till)
+  fiscalSource        String?
   voided        Boolean  @default(false)
   postedById    String?
   postedAt      DateTime @default(now())

@@ -15,6 +15,7 @@ import { i18n } from "@/lib/i18n/server";
 import { folio as folioDict } from "@/lib/i18n/folio";
 
 import { SubmitButton } from "@revio/ui/submit-button";
+import { FiscalReceiptRow } from "@/components/fiscal/FiscalReceiptRow";
 export const dynamic = "force-dynamic";
 
 const OUTCOME_TONE: Record<string, "success" | "danger" | "warning" | "neutral"> = {
@@ -51,7 +52,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const s = t(folioDict);
   const data = await getFolioView(reservationId);
   if (!data) redirect("/folios");
-  const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras, isManager } = data!;
+  const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras, isManager, fiscal, fiscalDevice } = data!;
   const invoices = await listInvoicesForReservation(reservationId);
   // Only present while a cross-type move is unreconciled (§2.5).
   const move = await assessMoveForReservation(reservationId);
@@ -204,8 +205,9 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 // Only a payment or an APPLIED deposit reduces the balance; a held/refunded deposit
                 // is a liability movement and shows plain (spec §4.4).
                 const isCredit = isPayment || l.kind === "deposit_use";
+                const fr = fiscal.get(l.id);
                 return (
-                  <li key={l.id} className={`flex items-center justify-between gap-3 px-4 py-2.5 ${l.voided ? "opacity-50" : ""}`}>
+                  <li key={l.id} className={`flex flex-wrap items-center justify-between gap-x-3 px-4 py-2.5 ${l.voided ? "opacity-50" : ""}`}>
                     <div className="flex min-w-0 items-center gap-2.5">
                       <StatusPill tone={KIND_TONE[l.kind] ?? "neutral"}>{s.kinds[l.kind] ?? l.kind}</StatusPill>
                       <span className={`truncate text-[13px] ${l.voided ? "text-ink-400 line-through" : "text-ink-800"}`}>{s.systemText[l.description] ?? l.description}</span>
@@ -239,6 +241,11 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                         </form>
                       )}
                     </div>
+                    {fr && (
+                      <div className="w-full">
+                        <FiscalReceiptRow lineId={l.id} receipt={fr.receipt} recorded={fr.recorded} device={fiscalDevice} autoPrint={fr.autoPrint} s={s.fiscal} />
+                      </div>
+                    )}
                   </li>
                 );
               })}

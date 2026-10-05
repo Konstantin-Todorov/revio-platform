@@ -5,6 +5,8 @@ import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { postFolioLineWith } from "./posting";
 import { MANAGER_ROLES } from "./roles";
+import { fiscalGroupsFor, receiptForPayment } from "./fiscal";
+import type { FiscalReceipt } from "@revio/core";
 import { ymd, todayInTz, hmInTz } from "./format";
 import type { HkStatus } from "./hk-meta";
 import { summariseOutcomes, outcomeHeadline, type OutcomeTotal } from "./folio-outcomes";
@@ -283,16 +285,41 @@ export async function getFolioView(reservationId: string) {
   );
   // Any other open folio of THIS stay a line could be moved to.
   const moveTargets = folios.map((f) => ({ id: f.id, label: f.label }));
-  const [depositTypes, stayExtras] = await Promise.all([
+  const [depositTypes, stayExtras, defaults] = await Promise.all([
     prisma.depositType.findMany({ where: { propertyId: property.id, active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.stayExtra.findMany({ where: { reservationId, active: true }, orderBy: { createdAt: "asc" } }),
+    prisma.propertyDefaults.findUnique({
+      where: { propertyId: property.id },
+      select: { jurisdiction: true, fiscalizationEnabled: true, fiscalDevice: true, fiscalTaxGroups: true, invoiceVatId: true },
+    }),
   ]);
+
+  // Fiscal receipts for desk payments (docs/specs/FISCAL-PRINTER.md). Shown when the property asked
+  // for it; the receipt is built from EVERY folio of the stay so a split folio prints the stay's mix.
+  const fiscalDevice = defaults?.fiscalDevice === "erpnet" ? ("erpnet" as const) : ("none" as const);
+  const fiscalOn = Boolean(defaults && (defaults.fiscalizationEnabled || fiscalDevice === "erpnet"));
+  const groups = fiscalGroupsFor(defaults);
+  const stayLines = folios.flatMap((f) => f.lines);
+  const now = Date.now();
+  const fiscal = new Map<string, { receipt: FiscalReceipt | null; recorded: { no: string; source: string | null } | null; autoPrint: boolean }>();
+  if (fiscalOn) {
+    for (const l of stayLines) {
+      if (l.kind !== "payment" || l.voided) continue;
+      const recorded = l.fiscalReceiptNo ? { no: l.fiscalReceiptNo, source: l.fiscalSource } : null;
+      const receipt = recorded ? null : receiptForPayment(l, stayLines, defaults!.jurisdiction, groups);
+      if (!recorded && !receipt) continue;
+      // Print by itself only for the person who just took the money, in the minute they took it.
+      const autoPrint = !recorded && l.postedById === session.userId && now - l.postedAt.getTime() < 120_000;
+      fiscal.set(l.id, { receipt, recorded, autoPrint });
+    }
+  }
   // `isManager` is returned so the folio screen can show the manager-only resolutions to EVERYONE and
   // merely disable them (§1.4). Hiding them would leave reception looking at a balance they cannot
   // explain; showing them locked says "this is handled, by someone else" — which is the true state.
   return {
     property, reservation, folios, currency, combined, moveTargets, depositTypes, stayExtras,
     isManager: MANAGER_ROLES.has(session.role),
+    fiscal, fiscalDevice,
   };
 }
 

@@ -52,6 +52,7 @@ export * from "./invoicing/numbering.js";
 export * from "./metrics/availability-pressure.js";
 export * from "./guests/sample.js";
 export * from "./fiscal/receipt-requirement.js";
+export * from "./fiscal/receipt.js";
 export * from "./guests/contact-hydration.js";
 export * from "./guests/merge.js";
 export * from "./stays/calendar.js";

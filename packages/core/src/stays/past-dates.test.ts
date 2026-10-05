@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  earliestSelectable, futureDateRefusal, pastDateRefusal, pastRangeRefusal, todayInTimeZone,
+  earliestSelectable, futureDateRefusal, pastDateRefusal, pastRangeRefusal, todayInTimeZone, wallClockToUtc,
 } from "./past-dates.js";
 
 describe("todayInTimeZone", () => {
@@ -121,5 +121,22 @@ describe("futureDateRefusal", () => {
   it("refuses a date of birth in the future", () => {
     const msg = futureDateRefusal({ label: "Date of birth", iso: "2026-09-14", today: "2026-09-13" });
     expect(msg).toContain("is in the future");
+  });
+});
+
+describe("wallClockToUtc", () => {
+  it("reads a printer's local time in the property's zone, not the server's", () => {
+    // Sofia is UTC+3 in October (summer time).
+    expect(wallClockToUtc("2026-10-05T19:39:07", "Europe/Sofia")!.toISOString()).toBe("2026-10-05T16:39:07.000Z");
+    // UTC+2 in winter.
+    expect(wallClockToUtc("2026-12-01T08:00:00", "Europe/Sofia")!.toISOString()).toBe("2026-12-01T06:00:00.000Z");
+  });
+  it("survives the night the clocks go back", () => {
+    // 25 Oct 2026, 04:00 summer → 03:00 winter in Sofia. 05:00 local is unambiguous winter time.
+    expect(wallClockToUtc("2026-10-25T05:00:00", "Europe/Sofia")!.toISOString()).toBe("2026-10-25T03:00:00.000Z");
+  });
+  it("refuses what is not a wall-clock time", () => {
+    expect(wallClockToUtc("yesterday", "Europe/Sofia")).toBeNull();
+    expect(wallClockToUtc("", "Europe/Sofia")).toBeNull();
   });
 });
