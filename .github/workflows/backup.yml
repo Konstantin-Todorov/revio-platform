@@ -68,6 +68,9 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-18
           echo "PG_DUMP=/usr/lib/postgresql/18/bin/pg_dump" >> "$GITHUB_ENV"
 
+      - name: Install age (backups are encrypted before upload)
+        run: sudo apt-get install -y -qq age
+
       - name: Decide the retention for this run
         id: keep
         # Sunday's copy is the one worth keeping for a season; the rest answer "undo yesterday".
@@ -91,6 +94,10 @@ jobs:
           STORAGE_ACCESS_KEY_ID: ${{ secrets.STORAGE_ACCESS_KEY_ID }}
           STORAGE_SECRET_ACCESS_KEY: ${{ secrets.STORAGE_SECRET_ACCESS_KEY }}
           BACKUP_REASON: ${{ inputs.reason || format('scheduled · {0}', steps.keep.outputs.label) }}
+          # The founder's age public key. Required: without it the script refuses to produce a backup,
+          # because the artifact store is GitHub's (US) and guest data must reach it only encrypted.
+          BACKUP_AGE_RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+          BACKUP_REQUIRE_ENCRYPTION: "1"
           # Nothing to prune: each run starts on a clean runner and GitHub owns retention.
           BACKUP_KEEP: "0"
         run: ./packages/db/scripts/backup.sh backups
@@ -104,6 +111,11 @@ jobs:
           SIZE=$(du -sk "$DIR" | cut -f1)
           echo "backup $DIR is ${SIZE} KB"
           [ "$SIZE" -ge 200 ] || { echo "::error::backup is only ${SIZE} KB — refusing to store it"; exit 1; }
+          # Nothing readable may leave: only the encrypted file and the manifest.
+          [ -s "$DIR/backup.tar.age" ] || { echo "::error::no encrypted backup in $DIR"; exit 1; }
+          if find "$DIR" -type f ! -name backup.tar.age ! -name MANIFEST.txt | grep -q .; then
+            echo "::error::plaintext files next to the encrypted backup — refusing to upload"; exit 1
+          fi
           echo "DIR=$DIR" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4

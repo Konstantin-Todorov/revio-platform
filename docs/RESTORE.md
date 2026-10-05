@@ -144,6 +144,30 @@ inspected with a `SELECT` first, scoped to single-line reservations only (a head
 split across two lines without guessing), and run inside a transaction. 10 rows, verified after. The
 manifest's reason field is what makes that backup findable later.
 
+## Encrypted backups (since 2026-10-05)
+
+The nightly backup is stored at GitHub — in the US, at a company that is not our processor for guest
+data. Since 2026-10-05 it reaches GitHub **only encrypted**: `backup.sh` packs the dump, the bucket
+and `rls-role.sql` into one file encrypted with [age](https://age-encryption.org) to the founder's
+key, and deletes the plaintext. The workflow sets `BACKUP_REQUIRE_ENCRYPTION=1`, so a missing key is a
+failed job, never a plaintext upload; a second check refuses to upload anything but
+`backup.tar.age` and `MANIFEST.txt`.
+
+| | |
+| --- | --- |
+| Public key (not secret) | `age1zf47gcz8we8h6yht4kdl35ec63r3fd9emutz7z8ydyc32z3qheyqresaem` — GitHub secret `BACKUP_AGE_RECIPIENT` |
+| **Private key** | `~/.config/revio/backup-age.key` on the founder's Mac — **keep a second copy in the password manager.** Without it no GitHub backup can be restored. |
+| Local pre-push backups | unchanged — plaintext under `backups/` on the machine that pushed (gitignored) |
+
+To restore an encrypted backup, decrypt first, then follow *Restoring* below unchanged:
+
+```bash
+age -d -i ~/.config/revio/backup-age.key backup.tar.age | tar -x -C ./restore
+```
+
+Proven 2026-10-05: an encrypted backup of production decrypted to 82 tables + 16 bucket objects;
+with the key withheld and encryption required, the script stopped and left nothing behind.
+
 ## Taking a backup manually
 
 ```bash

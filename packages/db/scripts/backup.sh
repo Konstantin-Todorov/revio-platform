@@ -75,6 +75,29 @@ cp "$(dirname "$0")/../prisma/rls-role.sql" "$DEST/rls-role.sql"
   echo "bucket objects:   $(find "$DEST/bucket" -type f 2>/dev/null | wc -l | tr -d ' ')"
 } > "$DEST/MANIFEST.txt"
 
+# Encrypt before the backup leaves this machine (docs/RESTORE.md → "Encrypted backups").
+#
+# The nightly copy is stored as a GitHub artifact — in the US, at a company that is not our
+# processor for guest data. With BACKUP_AGE_RECIPIENT set, everything with personal data in it (the
+# dump, the bucket, the role file) becomes ONE file encrypted to the founder's age key, and the
+# plaintext is deleted. GitHub then holds ciphertext it cannot read. MANIFEST.txt stays readable: it
+# holds sizes and a migration name, nothing about a guest.
+#
+# BACKUP_REQUIRE_ENCRYPTION=1 (set in the workflow) makes a missing key a hard stop — a backup job
+# that quietly fell back to plaintext would be the exact leak this exists to prevent.
+if [ -n "${BACKUP_AGE_RECIPIENT:-}" ]; then
+  command -v age >/dev/null || { echo "ABORT: BACKUP_AGE_RECIPIENT is set but age is not installed." >&2; exit 1; }
+  echo "→ encrypting to the backup key"
+  tar -C "$DEST" -cf - database.dump bucket rls-role.sql | age -r "$BACKUP_AGE_RECIPIENT" -o "$DEST/backup.tar.age"
+  [ -s "$DEST/backup.tar.age" ] || { echo "ABORT: encrypted backup is empty." >&2; exit 1; }
+  rm -rf "$DEST/database.dump" "$DEST/bucket" "$DEST/rls-role.sql"
+  echo "encrypted:        backup.tar.age ($(wc -c < "$DEST/backup.tar.age" | tr -d ' ') bytes, age)" >> "$DEST/MANIFEST.txt"
+elif [ "${BACKUP_REQUIRE_ENCRYPTION:-0}" = "1" ]; then
+  echo "ABORT: BACKUP_REQUIRE_ENCRYPTION=1 but BACKUP_AGE_RECIPIENT is empty — refusing to keep a plaintext backup." >&2
+  rm -rf "$DEST"
+  exit 1
+fi
+
 # Prune oldest, keeping $KEEP. Done AFTER the new backup is complete and verified non-empty, so a
 # failed run can never delete a good backup to make room for nothing.
 # `head -n -N` is a GNU extension and this runs on macOS, where it fails outright — which the pre-push
