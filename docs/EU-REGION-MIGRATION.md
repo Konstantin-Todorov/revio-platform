@@ -78,13 +78,21 @@ them. The `jobs` cron is paused for the window.
 
 ## Step A — the rehearsal ✅ done 2026-10-05 (results above)
 
-Still to rehearse before the night: the **bucket** copy (16 objects) into a temporary EU bucket, with
-counts and checksums compared.
+Also done the same night:
+
+- **Bucket copy** — `packages/db/scripts/bucket-copy.mjs` into a temporary Amsterdam bucket:
+  16/16 objects identical by SHA-256 and content type; a second run copied nothing (the delta pass
+  for the night works). Temporary bucket deleted.
+- **Channex and our IP address** — moving changes the address we call Channex from. Checked: their
+  API key is not IP-bound (the production key answers HTTP 200 with data from a laptop in Bulgaria),
+  their docs mention IP allowlisting only for webhooks *we* receive, and our webhook handler does not
+  filter by IP. Webhooks target our domains, which do not change. Stripe and Resend are the same:
+  keys and domains, no IP binding.
 
 ## Step B — before the night (no downtime)
 
-- Encrypt backups: `backup.sh` pipes through `age -r <founder's public key>`; RESTORE.md gains the
-  decrypt step; one restore drill from an encrypted artifact.
+- ✅ Backups encrypted (2026-10-05): GitHub now receives only `backup.tar.age` + `MANIFEST.txt`;
+  a CI run was downloaded and decrypted to 82 tables. RESTORE.md → *Encrypted backups*.
 - Create the EU bucket; first full copy.
 - Tell DesManagement the window a week ahead (one line: "a few minutes of maintenance, Tue 04:00").
 

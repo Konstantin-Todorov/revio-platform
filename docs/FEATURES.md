@@ -94,6 +94,19 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
   accurate — but never for a marginal gain, and never for a guest a person has already placed by hand.
 - **A guest's stay ends when they leave**, recorded as its own fact rather than as a status, because a
   departed guest's stay is still sold and still earns.
+- **ЕСТИ upload file from the guest register.** One click builds the file ЕСТИ accepts (19 columns,
+  `;`, UTF-8 with BOM) with every registration not yet sent — new ones as NEW, corrected ones as UPD —
+  and the hotel marks them sent after uploading. Needs the property's НТР number (Configuration →
+  Compliance). *`core/registry/esti.ts`, 7 tests; `apps/pms/app/api/register/esti`.* Live 2026-10-05.
+- **Fiscal receipts on the hotel's own device, optional per property.** A cash or card payment at the
+  desk prints its receipt on the registered fiscal printer (Datecs, Daisy, Tremol, Eltrade, Incotex,
+  ISL) through the free ErpNet.FP service on the front-desk PC, split by tax group to the cent; the
+  payment line shows the receipt number. Bank transfers, company accounts and OTA prepayments are
+  recognised as needing none. A voided payment asks for its **storno**, which mirrors the original
+  line for line; **Close Day** prints the device's Z and X reports. Revio works as ordinary software —
+  the hotel does not register it with НАП and its restaurant or spa till is untouched. Hotels that
+  keep printing on their own till type the receipt number in instead. *`core/fiscal/receipt.ts`,
+  `apps/pms/components/fiscal/`; guide reviosoft.app/guides/fiscal-printer.* Live 2026-10-05.
 
 ## 6. RevioDirect — the hotel's own booking page
 
@@ -105,6 +118,10 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
 - **Contrast is measured, not eyeballed.** The hotel picks a brand colour and uploads its own hero
   photograph; we measure the actual contrast of white text over that actual image and refuse to go
   below the accessibility floor — and we show the hotel the number.
+- **Extras while booking** — breakfast, parking, late checkout, an airport transfer — offered after the
+  room is chosen, nothing pre-ticked, the new total shown as it changes, and posted to the same folio
+  the front desk uses (one catalogue, so the price never differs). The Booking Engine overview tells a
+  hotel when its page sells only the room. *`ExtrasPicker`, `ExtrasEditor`, `core/pricing/extras.ts`.*
 - **Sold-out dates return real alternatives**, re-quoted from the same availability engine, rather
   than an apology.
 - **A returning guest is recognised after they submit, never by a live email lookup** — on a public
