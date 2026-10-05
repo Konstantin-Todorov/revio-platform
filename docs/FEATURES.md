@@ -110,6 +110,42 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
 - **A returning guest is recognised after they submit, never by a live email lookup** — on a public
   page that endpoint would let anyone test whether an address has stayed at the hotel.
 
+- **Guests pay the hotel directly — and the hotel never handles a key or a contract with us for it.**
+  The hotel presses *Connect Stripe* (RevioCRS → Booking Engine → Taking payment) and fills in its
+  company, ID and bank account **on Stripe's own page**. That creates the hotel's own Stripe account
+  (Connect *Standard*), linked to Revio. *`@revio/payments` connect.ts, guest-payments.ts.*
+  - The money goes **straight to the hotel's bank account**; it never passes through Revio, so we
+    hold no client money and need no payment licence.
+  - Documents and identity checks go **to Stripe**, not to us. Revio never sees them.
+  - Stripe's card fees are **the hotel's, deducted by Stripe** at the hotel's own Stripe rate. We
+    add no fee on the card payment and pay Stripe nothing per hotel; our 2% RevioDirect fee is on
+    our own invoice, separately.
+  - Disputes and chargebacks are handled by the hotel in its own Stripe dashboard.
+  - Until Stripe says the account can take charges, the page keeps selling as **request-to-book** —
+    a hotel is never blocked from selling while its paperwork clears.
+  - Qualifier: live since 2026-10-05; the first real hotel's live payment has not yet been seen.
+    Do not say "used by hotels" until it has.
+- **Card guarantee, deposit or full prepayment** — the hotel sets per rate what is taken now; a no-show
+  fee or a balance before arrival is charged to the saved card. **Payment links** from RevioCRS
+  collect any amount later. Every online payment appears on the RevioPMS folio by itself.
+- **Children by age** — the hotel's age bands decide who sleeps in a cot, who pays the child fee and
+  who counts as an adult.
+- **Several rooms in one booking, one payment** — each room its own reservation, so one can be
+  cancelled and refunded exactly its share.
+- **Promo codes** (RevioCRS → Rooms & Rates → Discounts) — a percentage off the rooms, never taxes.
+- **"Cheaper when booked direct"** — a percentage off rates that are also on a booking site, with the
+  booking-site price struck through. True by construction: it is the price we send those sites.
+- **The hotel's Booking.com and Google scores** under the search bar, linked to the source —
+  entered by the hotel, shown only if entered. Never collected from guests (see §7).
+- **Emails in the right language, to the right people** — the guest gets the confirmation in the
+  language they booked in, from the hotel's own template; the hotel gets an alert in its team's
+  language. With no reservation mailbox set, the alert goes to the hotel's contact address, then
+  its owners — a booking always reaches a person.
+- **Which products it needs:** RevioDirect is part of RevioCRS (it books into the CRS record). A
+  hotel on RevioPMS or RevioLink alone has no booking page and no online payments — nothing breaks,
+  those screens simply are not offered. Desk payments in RevioPMS are recorded, taken on the hotel's
+  own card terminal.
+
 ## 7. ⛔ Guest feedback — ON HOLD, do not put on the website
 
 **Pulled from the sellable list on 2026-09-05, before any of it reached a guest.**
