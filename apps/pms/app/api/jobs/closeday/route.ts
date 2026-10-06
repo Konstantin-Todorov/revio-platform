@@ -46,6 +46,9 @@ export async function POST(req: NextRequest) {
     if (!lease.ran) {
       return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
     }
+    // Some hotels closed and some did not: the ones that did are done, and the run is still a
+    // failure, so the runner exits red and the health page names it.
+    if (lease.result.failed > 0) return NextResponse.json({ ok: false, ...lease.result }, { status: 500 });
     return NextResponse.json({ ok: true, ...lease.result });
   } catch (err) {
     console.error("auto-close-day: failed", err);

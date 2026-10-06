@@ -388,7 +388,12 @@ says who can move it. Details sit where the link points.
   other rate of the same room and the room's availability untouched. Production read the same day: no
   switched-off plan is still mapped, and Cabacum's channel-derived "BookingCom" rates inherit stop-sell
   and rate from our mapped parents — nothing open outside Revio's control.
-- **Scale** — seed 50 and 200 properties and time the cron tick against its interval. `HANDOFF` §6.
+- ~~**Scale**~~ ✅ **2026-10-06, the automatic Close Day** (`apps/pms/lib/scale-closeday-db.test.ts`): every
+  Bulgarian hotel shares one time zone, so all fall due in ONE tick, closed inside one request the
+  runner abandons at 120 s. 50 hotels × 30 rooms: 14 s; **200 × 30: 66 s one at a time** — no margin
+  for Railway. Now 4 at a time (own transaction each): **200 × 30 in 12 s**. And one hotel that threw
+  used to end the sweep for every hotel after it; now it is named, the rest close, the run reports red.
+  Not yet measured at scale: `auto-assign` and the Channex pull.
 - **Multi-property and time zones** — a report that sums properties in two zones; the property switcher
   across every screen. `HANDOFF` §7.
 - **RevioLink's "every plan closed" rule** reads plan cells and defaults, not RevioCRS's date-ranged

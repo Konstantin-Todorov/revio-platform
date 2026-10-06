@@ -17,7 +17,7 @@ vi.mock("./close-day-run", () => ({
   InvalidCloseDayError: class extends Error {},
 }));
 import { closeDay } from "./actions-closeday";
-import { autoCloseOverdueDays } from "./auto-close";
+import { autoCloseOverdueDays, CLOSE_CONCURRENCY } from "./auto-close";
 import { DayAlreadyClosedError } from "./close-day-run";
 
 beforeEach(() => {
@@ -71,5 +71,40 @@ describe("Close Day caller intent", () => {
     expect(io.run).toHaveBeenCalledWith("tenant", "hotel", { kind: "system" }, "2026-09-07");
     expect(outcome.closed).toBe(result === "success" ? 1 : 0);
     expect(outcome.skipped).toBe(result === "success" ? 0 : 1);
+  });
+});
+
+describe("the automatic sweep at scale", () => {
+  const props = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `h${i}`, tenantId: `t${i}`, name: `Hotel ${i}`, timezone: "UTC", businessDate: new Date("2026-09-07T00:00:00Z") }));
+  const dbOf = (n: number) => ({
+    property: { findMany: vi.fn(async () => props(n)) },
+    propertyDefaults: { findMany: vi.fn(async () => []) },
+  }) as unknown as Parameters<typeof autoCloseOverdueDays>[0];
+
+  it("⚠️ one hotel that fails does not leave the others' day open", async () => {
+    io.run.mockImplementation(async (_t: string, id: string) => {
+      if (id === "h1") throw new Error("lock timeout");
+      return { businessDate: "2026-09-07", next: "2026-09-08", noShows: 0, accrued: 0, carriedForward: [] };
+    });
+    const out = await autoCloseOverdueDays(dbOf(6));
+    expect(io.run).toHaveBeenCalledTimes(6);
+    expect(out.closed).toBe(5);
+    expect(out.failed).toBe(1);
+    expect(out.details.some((d) => d.startsWith("Hotel 1: FAILED"))).toBe(true);
+  });
+
+  it("closes several at once, but never more than the pool allows, and each exactly once", async () => {
+    let inFlight = 0, peak = 0;
+    io.run.mockImplementation(async () => {
+      inFlight++; peak = Math.max(peak, inFlight);
+      await new Promise((r) => setImmediate(r));
+      inFlight--;
+      return { businessDate: "2026-09-07", next: "2026-09-08", noShows: 0, accrued: 0, carriedForward: [] };
+    });
+    const out = await autoCloseOverdueDays(dbOf(10));
+    expect(out.closed).toBe(10);
+    expect(new Set(io.run.mock.calls.map((c) => c[1])).size).toBe(10);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(CLOSE_CONCURRENCY);
   });
 });

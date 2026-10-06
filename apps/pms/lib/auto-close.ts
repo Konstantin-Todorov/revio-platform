@@ -24,15 +24,25 @@ import { ymd, todayInTz, minutesOfDayInTz } from "./format";
  * @param db a SYSTEM-perimeter client. This runs with no session, for tenants no request arrived
  *           for, so it cannot be tenant-scoped at the top the way a request can.
  */
+/**
+ * How many properties close at once. Each close is its own tenant transaction and touches only its
+ * own tenant's rows, so they do not contend; what bounds this is the connection pool, which every
+ * request on the service shares. Measured 2026-10-06 (`scale-closeday-db.test.ts`): 200 hotels ×
+ * 30 rooms took 66 s one at a time on loopback — inside the runner's 120 s, with no margin for
+ * Railway's network and CPU. Every Bulgarian hotel shares one time zone, so they all fall due in the
+ * same tick.
+ */
+export const CLOSE_CONCURRENCY = 4;
+
 export async function autoCloseOverdueDays(
   db: ReturnType<typeof forSystem>,
-): Promise<{ closed: number; skipped: number; details: string[] }> {
+): Promise<{ closed: number; skipped: number; failed: number; details: string[] }> {
   const properties = await db.property.findMany({
     where: { businessDate: { not: null } },
     select: { id: true, tenantId: true, name: true, timezone: true, businessDate: true },
   });
 
-  if (properties.length === 0) return { closed: 0, skipped: 0, details: [] };
+  if (properties.length === 0) return { closed: 0, skipped: 0, failed: 0, details: [] };
 
   const defaults = await db.propertyDefaults.findMany({
     where: { propertyId: { in: properties.map((p) => p.id) } },
@@ -42,9 +52,10 @@ export async function autoCloseOverdueDays(
 
   let closed = 0;
   let skipped = 0;
+  let failed = 0;
   const details: string[] = [];
 
-  for (const p of properties) {
+  const due = properties.filter((p) => {
     const d = byProperty.get(p.id);
     const escalation = closeDayEscalation({
       businessDate: ymd(p.businessDate!),
@@ -54,44 +65,53 @@ export async function autoCloseOverdueDays(
       reminderWindowHours: d?.closeReminderWindowHours ?? 22,
       autoCloseEnabled: d?.autoCloseEnabled ?? true,
     });
+    if (escalation.stage !== "auto_close") skipped++;
+    return escalation.stage === "auto_close";
+  });
 
-    if (escalation.stage !== "auto_close") {
-      skipped++;
-      continue;
-    }
-
-    /*
-     * ONE day per run, not a catch-up loop.
-     *
-     * A property that is genuinely several days behind gets one day closed per tick, and the next
-     * tick takes the next. Closing five days in a row inside one request would post five nights of
-     * extras and roll the date five times against a house whose occupancy nobody re-read in between
-     * — a lot of money written on an assumption. Draining it one day at a time keeps every close a
-     * close, and the backlog still disappears without anyone touching it.
-     */
-    let outcome;
+  /*
+   * ONE day per run, not a catch-up loop.
+   *
+   * A property that is genuinely several days behind gets one day closed per tick, and the next
+   * tick takes the next. Closing five days in a row inside one request would post five nights of
+   * extras and roll the date five times against a house whose occupancy nobody re-read in between
+   * — a lot of money written on an assumption. Draining it one day at a time keeps every close a
+   * close, and the backlog still disappears without anyone touching it.
+   */
+  async function closeOne(p: (typeof due)[number]): Promise<void> {
     try {
-      outcome = await runCloseDay(p.tenantId, p.id, { kind: "system" }, ymd(p.businessDate!));
-    } catch (err) {
-      // Somebody pressed Close Day while we were working through the list. Their close is a real
-      // close; ours would have been a second one. Counted as skipped, and one property's race must
-      // never abandon the rest of the sweep.
-      if (err instanceof DayAlreadyClosedError) {
-        skipped++;
-        details.push(`${p.name}: business date changed during this run`);
-        continue;
-      }
-      throw err;
-    }
-    if (!outcome) skipped++;
-    if (outcome) {
+      const outcome = await runCloseDay(p.tenantId, p.id, { kind: "system" }, ymd(p.businessDate!));
+      if (!outcome) { skipped++; return; }
       closed++;
       details.push(
         `${p.name}: closed ${outcome.businessDate} → ${outcome.next}` +
           (outcome.carriedForward.length ? ` (carried: ${outcome.carriedForward.join(", ")})` : ""),
       );
+    } catch (err) {
+      // Somebody pressed Close Day while we were working through the list. Their close is a real
+      // close; ours would have been a second one.
+      if (err instanceof DayAlreadyClosedError) {
+        skipped++;
+        details.push(`${p.name}: business date changed during this run`);
+        return;
+      }
+      /*
+       * ⚠️ One hotel's failure must not leave every other hotel's day open. This used to rethrow,
+       * so the first property that threw ended the sweep for all the properties after it. Its own
+       * transaction rolled back; it is named here and the run reports failure, so the runner and
+       * the health page still say so, and the next tick retries it.
+       */
+      failed++;
+      details.push(`${p.name}: FAILED — ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`auto-close-day: ${p.name} (${p.id}) failed`, err);
     }
   }
 
-  return { closed, skipped, details };
+  // A small worker pool: each worker takes the next due property until none are left.
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(CLOSE_CONCURRENCY, due.length) }, async () => {
+    while (next < due.length) await closeOne(due[next++]!);
+  }));
+
+  return { closed, skipped, failed, details };
 }
