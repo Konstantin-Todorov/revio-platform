@@ -59,6 +59,8 @@ export interface CmCalendarStrings {
     overCapPhysical: (inv: number, physical: number, unit: string, usable: number) => string;
     unit: (kind: "bed" | "room") => string;
     stopEverywhere: (remaining: number) => string;
+    /** The same closure, when a RevioCRS restriction rule is what closed it — the place to lift it differs. */
+    stopByRule: (remaining: number) => string;
     nothingLeft: string;
   };
   cell: { past: string; pastWithNote: (note: string) => string; pastFlag: string };
@@ -146,6 +148,7 @@ export const calendar: Translations<CmCalendarStrings> = {
       overCapPhysical: (inv, physical, unit, usable) => `${inv} allocated, but only ${physical} physical ${unit} exist — ${usable} is what the channel is sent`,
       unit: (kind) => (kind === "bed" ? "beds" : "rooms"),
       stopEverywhere: (r) => `Stop-sell on every rate plan — the channels are sent 0, although ${r} ${r === 1 ? "room is" : "rooms are"} free. Lift it in Bulk Update → Stop sell.`,
+      stopByRule: (r) => `Stop-sell on every rate plan, set by a restriction rule in RevioCRS — the channels are sent 0, although ${r} ${r === 1 ? "room is" : "rooms are"} free. Change it in RevioCRS → Bulk Rates & Availability → Your active restriction rules.`,
       nothingLeft: "Nothing left to sell on this date — the channel has been told 0",
     },
     cell: {
@@ -234,6 +237,7 @@ export const calendar: Translations<CmCalendarStrings> = {
       overCapPhysical: (inv, physical, unit, usable) => `Капацитет ${inv}, но физически съществуват само ${physical} ${unit} — към канала се изпраща ${usable}`,
       unit: (kind) => (kind === "bed" ? "легла" : "стаи"),
       stopEverywhere: (r) => `Стоп продажби за всички ценови планове — към каналите се изпраща 0, въпреки че ${r === 1 ? "1 стая е свободна" : `${r} стаи са свободни`}. Махнете го в Масови промени → Стоп продажби.`,
+      stopByRule: (r) => `Стоп продажби за всички ценови планове от правило за ограничения в RevioCRS — към каналите се изпраща 0, въпреки че ${r === 1 ? "1 стая е свободна" : `${r} стаи са свободни`}. Променете го в RevioCRS → Масови промени → Вашите активни правила за ограничения.`,
       nothingLeft: "За тази дата няма какво да се продава — към канала е изпратено 0",
     },
     cell: {

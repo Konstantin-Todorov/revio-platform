@@ -1,7 +1,7 @@
 import "server-only";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
-import { CAPABILITY_ERROR_CODE, dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, displayedRate, toResolvablePlan, type PriceLookup, expandInventoryPeriods, isAdvancePurchaseClosed, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type SetupFacts, type ProductName } from "@revio/core";
+import { CAPABILITY_ERROR_CODE, dayBoundsInTimeZone, todayInTimeZone, computeWaterfall, displayedRate, toResolvablePlan, type PriceLookup, expandInventoryPeriods, isAdvancePurchaseClosed, resolveRestriction, ratePlanIdsToLoad, ratePlanRows, ROOM_OCCUPYING_STATUSES, unsupportedRestrictions, type SetupFacts, type ProductName } from "@revio/core";
 import { collidingExternalIds, describeStructureGap, mappingRows, ratePlanMappingRows, structureGap } from "@revio/connectivity";
 import { getSession } from "./session";
 import { i18n } from "./i18n/server";
@@ -555,8 +555,12 @@ export async function getCalendarBoard(q: CalendarQuery) {
   /*
    * Is EVERY active plan closed on this night? Then the room is off every OTA — the push sends 0 —
    * whatever the room row says. Mirrors the push's per-plan resolution: a plan's own cell wins over
-   * the room's, then the plan default, then the property default. (Date-ranged restriction rules
-   * are a RevioCRS concept and are not read here.)
+   * the room's, then RevioCRS's date-ranged restriction rules, then the plan default, then the
+   * property default — `resolveRestriction`, the same two-tier resolution the push runs.
+   *
+   * Only rules that apply to EVERY channel and source count here: this grid is not one channel's, and
+   * a rule closing Booking.com alone does not take the room off every OTA. (These used not to be read
+   * at all, so a CRS rule stop-selling every plan left this row saying "Bookable 1".)
    *
    * Without this the grid said "Bookable 1" on nights a Bulk Update had stop-sold on both plans:
    * found on a real hotel on 2026-09-23 — Channex showing 0 for thirty days, RevioLink showing 1,
@@ -564,10 +568,33 @@ export async function getCalendarBoard(q: CalendarQuery) {
    */
   const planStop = new Map(planCells.filter((c) => c.ratePlanId).map((c) => [`${c.ratePlanId}:${c.roomTypeId}:${c.date.toISOString().slice(0, 10)}`, c.stopSell]));
   const propStopDefault = (await prisma.propertyDefaults.findUnique({ where: { propertyId }, select: { defStopSell: true } }))?.defStopSell ?? false;
-  const everyPlanClosed = (rt: string, k: string) => {
-    if (allPlans.length === 0) return false;
+  const stopRules = (await prisma.restrictionRule.findMany({
+    where: {
+      propertyId, active: true, type: "stop_sell",
+      dateFrom: { lte: dates[dates.length - 1] ?? new Date() }, dateTo: { gte: dates[0] ?? new Date() },
+    },
+  })).filter((r) => r.channelCodes.length === 0 && r.sourceCategories.length === 0);
+  /** Closed on every plan, and whether a CRS rule is what closed at least one — where to lift it differs. */
+  const everyPlanClosed = (rt: string, k: string): { closed: boolean; byRule: boolean } => {
+    if (allPlans.length === 0) return { closed: false, byRule: false };
     const roomStop = cellMap.get(priceKey(rt, k))?.stopSell ?? false;
-    return allPlans.every((p) => (planStop.get(`${p.id}:${rt}:${k}`) ?? roomStop) || p.defStopSell || propStopDefault);
+    let byRule = false;
+    const closed = allPlans.every((p) => {
+      const cellStop = planStop.get(`${p.id}:${rt}:${k}`) ?? roomStop;
+      const r = resolveRestriction("stop_sell", {
+        // Flags treat false as "unset" at every tier, exactly as the push's `flagOf` does.
+        ...(cellStop ? { dateScoped: true } : {}),
+        matchingRules: stopRules
+          .filter((r) => (r.roomTypeId == null || r.roomTypeId === rt) && (r.ratePlanId == null || r.ratePlanId === p.id)
+            && r.dateFrom.toISOString().slice(0, 10) <= k && r.dateTo.toISOString().slice(0, 10) >= k)
+          .map((r) => ({ priority: r.priority, value: (r.valueBool ?? true) as boolean })),
+        ...(p.defStopSell ? { ratePlanDefault: true } : {}),
+        ...(propStopDefault ? { propertyDefault: true } : {}),
+      });
+      if (r.value && r.source === "rule") byRule = true;
+      return Boolean(r.value);
+    });
+    return { closed, byRule };
   };
   const perPlanNote = (rt: string, k: string) =>
     planScoped.has(priceKey(rt, k))
@@ -657,12 +684,12 @@ export async function getCalendarBoard(q: CalendarQuery) {
           manualSellLimit: cellFor(k)?.inventory ?? null,
           holds: held, confirmed: sold,
         }).remaining;
-        const closedEverywhere = everyPlanClosed(roomType.id, k);
-        const bookable = closedEverywhere ? 0 : Math.max(0, remaining);
-        if (closedEverywhere && remaining > 0) {
+        const everywhere = everyPlanClosed(roomType.id, k);
+        const bookable = everywhere.closed ? 0 : Math.max(0, remaining);
+        if (everywhere.closed && remaining > 0) {
           return {
             date: k, value: "0",
-            warn: cal.warn.stopEverywhere(remaining),
+            warn: everywhere.byRule ? cal.warn.stopByRule(remaining) : cal.warn.stopEverywhere(remaining),
           };
         }
         return {
