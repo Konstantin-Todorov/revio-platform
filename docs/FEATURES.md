@@ -111,7 +111,7 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
   money is taken, and returning part of it asks for a **partial storno** that reverses each line of
   the original receipt in proportion; a security deposit (VAT at use) prints nothing when taken and
   is receipted when applied to the bill, in the method it was taken in. *`apps/pms/lib/fiscal-plan.ts`,
-  12 tests.* Built 2026-10-06.
+  12 tests.* Live 2026-10-06.
 
 ## 6. RevioDirect — the hotel's own booking page
 
