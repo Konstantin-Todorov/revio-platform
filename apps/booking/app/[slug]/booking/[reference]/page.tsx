@@ -44,13 +44,17 @@ export default async function ConfirmationPage({
   if (!/^[a-z0-9]{6}$/.test(suffix)) notFound();
 
   const db = forTenant(property.tenantId);
-  const reservation = await db.reservation.findFirst({
-    where: { propertyId: property.id, id: { endsWith: suffix } },
-    include: {
-      lines: { include: { roomType: true, ratePlan: { include: { cancellationPolicy: true } } } },
-      guest: true,
-    },
-  });
+  // The words need only the property, so they load beside the reservation rather than after it.
+  const [reservation, kit] = await Promise.all([
+    db.reservation.findFirst({
+      where: { propertyId: property.id, id: { endsWith: suffix } },
+      include: {
+        lines: { include: { roomType: true, ratePlan: { include: { cancellationPolicy: true } } } },
+        guest: true,
+      },
+    }),
+    serverKit(property),
+  ]);
   if (!reservation) notFound();
 
   const line = reservation.lines[0];
@@ -59,8 +63,13 @@ export default async function ConfirmationPage({
   // Returning-guest recognition (K6). Counted excluding THIS reservation, and silent when the guest
   // has opted out. Sold statuses only — a past cancellation is not a stay, and greeting someone as a
   // regular because they once cancelled is the kind of small wrongness that discredits the feature.
-  const priorStays = reservation.guest
-    ? await db.reservation.findMany({
+  /*
+   * Everything else this page reads depends on the reservation and on nothing else here — so it is
+   * one round trip, not six in a row. The guest is waiting on this page after paying.
+   */
+  const [priorStays, fees, defaults, extras, canManage, siblings] = await Promise.all([
+    reservation.guest
+    ? db.reservation.findMany({
         where: {
           propertyId: property.id,
           guestId: reservation.guest.id,
@@ -71,7 +80,30 @@ export default async function ConfirmationPage({
         },
         select: { lines: { select: { checkIn: true }, orderBy: { checkIn: "desc" }, take: 1 } },
       })
-    : [];
+    : Promise.resolve([]),
+    db.taxFee.findMany({ where: { propertyId: property.id, active: true } }),
+    db.propertyDefaults.findFirst({ where: { propertyId: property.id } }),
+    // The extras they chose are part of what they owe — the same all-in number the booking step and
+    // the email stated. Leaving them out made this page show a smaller total than the one agreed.
+    db.stayExtra.findMany({
+      where: { reservationId: reservation.id, active: true },
+      select: { name: true, priceMinor: true, basis: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    /*
+     * Managing it. The reference only SHOWS a booking; the key from the email link is what lets this
+     * visitor change it. Without the key, the page offers to email that link — never the buttons.
+     */
+    mayManage(reservation, sp.k),
+    // Rooms booked together: the others in the group, each its own reservation and reference.
+    reservation.bookingGroupId
+      ? db.reservation.findMany({
+          where: { propertyId: property.id, bookingGroupId: reservation.bookingGroupId, id: { not: reservation.id } },
+          select: { id: true, status: true, lines: { select: { roomType: { select: { name: true } }, guestsCount: true, childrenCount: true, infantsCount: true }, take: 1 } },
+          orderBy: { importedAt: "asc" },
+        })
+      : Promise.resolve([]),
+  ]);
   const lastPrior = priorStays
     .map((r) => r.lines[0]?.checkIn)
     .filter((d): d is Date => d != null)
@@ -93,17 +125,6 @@ export default async function ConfirmationPage({
    * showing the guest their real total means recomputing the fees — from one implementation, which
    * is exactly why they cannot disagree.
    */
-  const [fees, defaults] = await Promise.all([
-    db.taxFee.findMany({ where: { propertyId: property.id, active: true } }),
-    db.propertyDefaults.findFirst({ where: { propertyId: property.id } }),
-  ]);
-  // The extras they chose are part of what they owe — the same all-in number the booking step and
-  // the email stated. Leaving them out made this page show a smaller total than the one agreed.
-  const extras = await db.stayExtra.findMany({
-    where: { reservationId: reservation.id, active: true },
-    select: { name: true, priceMinor: true, basis: true },
-    orderBy: { createdAt: "asc" },
-  });
   const extraBasis = (b: string) => (b === "per_stay" ? "per_stay" : "per_night") as "per_stay" | "per_night";
   const charged = computeStayCharges({
     stay: { accommodationMinor: line.priceMinor ?? 0, nights, rooms: 1, guests: line.guestsCount ?? 2, persons: (line.guestsCount ?? 2) + (line.childrenCount ?? 0) + (line.infantsCount ?? 0) },
@@ -119,7 +140,6 @@ export default async function ConfirmationPage({
     ? agreedTerms.atHotelMinor
     : Math.max(0, charged.totalMinor - paidMinor - (reservation.balanceChargeMinor ?? 0));
 
-  const kit = await serverKit(property);
   const { s: t, fmtDay, money } = kit;
   const s = t.done;
   const cancelled = reservation.status === "cancelled";
@@ -127,25 +147,12 @@ export default async function ConfirmationPage({
   // so no card guarantee could be taken and an instant confirmation would be a promise nobody made.
   const requested = reservation.status === "requested";
 
-  /*
-   * Managing it. The reference only SHOWS a booking; the key from the email link is what lets this
-   * visitor change it. Without the key, the page offers to email that link — never the buttons.
-   */
   const today = todayInTimeZone(property.timezone);
-  const canManage = await mayManage(reservation, sp.k);
   const calEvent = {
     uid: `${reference.toUpperCase()}@reviosoft.app`, title: property.name, checkIn, checkOut,
     checkInTime: property.checkInTime, checkOutTime: property.checkOutTime, timezone: property.timezone,
     location: property.address, description: `${reference.toUpperCase()} · ${line.roomType?.name ?? ""}`,
   };
-  // Rooms booked together: the others in the group, each its own reservation and reference.
-  const siblings = reservation.bookingGroupId
-    ? await db.reservation.findMany({
-        where: { propertyId: property.id, bookingGroupId: reservation.bookingGroupId, id: { not: reservation.id } },
-        select: { id: true, status: true, lines: { select: { roomType: { select: { name: true } }, guestsCount: true, childrenCount: true, infantsCount: true }, take: 1 } },
-        orderBy: { importedAt: "asc" },
-      })
-    : [];
   const ability = manageAbility({ ...reservation, checkIn, today });
   const m = t.manage;
   const settlement = previewSettlement(reservation, "cancel", today);

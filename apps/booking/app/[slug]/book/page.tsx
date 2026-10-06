@@ -64,9 +64,16 @@ export default async function BookPage({
   const ip = clientIp(await headers());
   const nights = nightsBetween(checkIn, checkOut);
 
-  const [outcome, store] = await Promise.all([
+  const db = forTenant(property.tenantId);
+  // One round trip, not five: none of these waits for another. The quote decides whether the page
+  // renders at all, but the hold, the extras and the words can be read while it is being computed.
+  const [outcome, store, extras, existing, kit] = await Promise.all([
     searchAvailability(property, ip, { checkIn, checkOut, guests, childAges, promo }),
     getObjectStore(),
+    // What this hotel sells alongside the room. Empty is the normal case and renders nothing.
+    publicSellableExtras(db, property.id),
+    sp.hold ? publicGetHold(db, property.id, sp.hold) : Promise.resolve(null),
+    serverKit(property),
   ]);
 
   const option = (outcome.options ?? []).find((o) => o.roomTypeId === roomTypeId);
@@ -81,11 +88,6 @@ export default async function BookPage({
    * refreshes, or comes back via the browser's back button, must not accumulate holds — that would
    * let one indecisive person quietly take a small hotel's whole inventory off sale.
    */
-  const db = forTenant(property.tenantId);
-
-  // What this hotel sells alongside the room. Empty is the normal case and renders nothing.
-  const extras = await publicSellableExtras(db, property.id);
-  const existing = sp.hold ? await publicGetHold(db, property.id, sp.hold) : null;
   let hold = existing;
 
   if (!hold) {
@@ -111,7 +113,6 @@ export default async function BookPage({
   }
 
   const cover = option.photos[0];
-  const kit = await serverKit(property);
   const { s, fmtDay, money } = kit;
   const termsDetails = plan.terms ? termsWords(kit, plan.terms, plan.currency).details : null;
   const publishableKey = guestPublishableKey();

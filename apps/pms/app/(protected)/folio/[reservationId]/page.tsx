@@ -142,10 +142,10 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <div className="text-[11.5px] text-ink-500">{s.moveOptions[opt as keyof typeof s.moveOptions].detail}</div>
                 </div>
                 {opt === "custom" && (
-                  <input name="amountMinor" type="number" min="0" placeholder={s.move.amountCents} disabled={!isManager}
+                  <input autoComplete="off" name="amountMinor" type="number" min="0" placeholder={s.move.amountCents} disabled={!isManager}
                     className={`${inputCls} w-36 disabled:cursor-not-allowed disabled:bg-surface-muted`} />
                 )}
-                <input name="note" type="text" placeholder={s.move.reasonOptional} disabled={!isManager}
+                <input autoComplete="off" name="note" type="text" placeholder={s.move.reasonOptional} disabled={!isManager}
                   className={`${inputCls} w-44 disabled:cursor-not-allowed disabled:bg-surface-muted`} />
                 <button type="submit" disabled={!isManager}
                   title={isManager ? undefined : s.managerOnly}
@@ -289,7 +289,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
           {open && (
             <form action={createFolio} className="flex items-center gap-1.5">
               <input type="hidden" name="reservationId" value={reservationId} />
-              <input name="label" placeholder={s.companyPlaceholder} className={`${inputCls} w-28`} />
+              <input autoComplete="off" name="label" placeholder={s.companyPlaceholder} className={`${inputCls} w-28`} />
               <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-2.5 py-2 text-[12px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted" pendingLabel={s.opening}>
                 <SplitSquareHorizontal className="h-3.5 w-3.5" /> {s.split}
               </SubmitButton>
@@ -323,7 +323,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <option value="company_account">{s.payment.methods.company_account}</option>
                   <option value="bank_transfer">{s.payment.methods.bank_transfer}</option>
                 </select>
-                <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} min-w-0 flex-1`} />
+                <input autoComplete="off" name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} min-w-0 flex-1`} />
               </div>
               {cardOnFile !== null && (
                 <label className="flex items-center gap-2 text-[12px] text-ink-600">
@@ -332,7 +332,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 </label>
               )}
               <div className="flex gap-2">
-                <input name="ref" type="text" placeholder={s.payment.reference} className={`${inputCls} min-w-0 flex-1`} />
+                <input autoComplete="off" name="ref" type="text" placeholder={s.payment.reference} className={`${inputCls} min-w-0 flex-1`} />
                 <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50" pendingLabel={s.payment.recording}>
                   <CreditCard className="h-3.5 w-3.5" /> {s.payment.take}
                 </SubmitButton>
@@ -374,7 +374,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   {s.checkout.outstandingLead} <span className="font-bold text-danger-600">{money(combined.balance, currency)}</span> {s.checkout.outstandingTail(folios.length)}
                 </p>
                 <div className="flex gap-2">
-                  <input name="reason" type="text" placeholder={s.checkout.overridePlaceholder} className={`${inputCls} min-w-0 flex-1`} />
+                  <input autoComplete="off" name="reason" type="text" placeholder={s.checkout.overridePlaceholder} className={`${inputCls} min-w-0 flex-1`} />
                   <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-danger-500 px-3 py-2 text-[12.5px] font-semibold text-danger-600 transition-colors hover:bg-danger-50" pendingLabel={s.checkout.title + "…"}>
                     <LogOut className="h-3.5 w-3.5" /> {s.checkout.withBalance}
                   </SubmitButton>
@@ -403,10 +403,10 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <option value="extra">{s.charge.kinds.extra}</option>
                   <option value="fee">{s.charge.kinds.fee}</option>
                 </select>
-                <input name="description" required placeholder={s.charge.description} className={`${inputCls} min-w-0 flex-1`} />
+                <input autoComplete="off" name="description" required placeholder={s.charge.description} className={`${inputCls} min-w-0 flex-1`} />
               </div>
               <div className="flex gap-2">
-                <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} min-w-0 flex-1`} />
+                <input autoComplete="off" name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} min-w-0 flex-1`} />
                 <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel={s.charge.posting}>
                   <Plus className="h-3.5 w-3.5" /> {s.charge.add}
                 </SubmitButton>
@@ -446,8 +446,8 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
             )}
             <form action={addStayExtra} className="flex flex-wrap items-end gap-2">
               <input type="hidden" name="reservationId" value={reservationId} />
-              <input name="name" required placeholder={s.extras.namePlaceholder} className={`${inputCls} w-40`} />
-              <input name="price" type="text" inputMode="decimal" required placeholder={s.extras.pricePlaceholder(currency)} className={`${inputCls} w-32`} />
+              <input autoComplete="off" name="name" required placeholder={s.extras.namePlaceholder} className={`${inputCls} w-40`} />
+              <input autoComplete="off" name="price" type="text" inputMode="decimal" required placeholder={s.extras.pricePlaceholder(currency)} className={`${inputCls} w-32`} />
               <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50" pendingLabel={s.extras.adding}>
                 <Repeat className="h-3.5 w-3.5" /> {s.extras.add}
               </SubmitButton>
@@ -498,11 +498,11 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
               )}
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-semibold text-ink-600">{s.invoicing.billTo}</span>
-                <input name="buyerName" required defaultValue={guestName} className={`${inputCls} w-40`} />
+                <input autoComplete="off" name="buyerName" required defaultValue={guestName} className={`${inputCls} w-40`} />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-[11px] font-semibold text-ink-600">{s.invoicing.buyerVat}</span>
-                <input name="buyerVatId" placeholder={s.invoicing.company} className={`${inputCls} w-32`} />
+                <input autoComplete="off" name="buyerVatId" placeholder={s.invoicing.company} className={`${inputCls} w-32`} />
               </label>
               <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700" pendingLabel={s.invoicing.issuing}>
                 <FileText className="h-3.5 w-3.5" /> {s.invoicing.issue}
@@ -573,7 +573,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                     <option value="card">{s.payment.methods.card}</option>
                   </select>
                 </label>
-                <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} w-32`} />
+                <input autoComplete="off" name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} w-32`} />
                 {cardOnFile !== null && (
                   <label className="flex items-center gap-2 self-end pb-2 text-[12px] text-ink-600">
                     <input type="checkbox" name="chargeOnFile" className="h-3.5 w-3.5 rounded border-surface-border" />
@@ -589,14 +589,14 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 <div className="flex flex-wrap items-end gap-2 border-l border-surface-border pl-4">
                   <form action={useDeposit} className="flex items-end gap-1.5">
                     <input type="hidden" name="reservationId" value={reservationId} />
-                    <input name="amount" type="text" inputMode="decimal" placeholder={s.deposits.all} className={`${inputCls} w-20`} />
+                    <input autoComplete="off" name="amount" type="text" inputMode="decimal" placeholder={s.deposits.all} className={`${inputCls} w-20`} />
                     <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md border border-success-500 px-3 text-[12.5px] font-semibold text-success-600 transition-colors hover:bg-success-50" pendingLabel={s.deposits.applying}>
                       {s.deposits.use}
                     </SubmitButton>
                   </form>
                   <form action={refundDeposit} className="flex items-end gap-1.5">
                     <input type="hidden" name="reservationId" value={reservationId} />
-                    <input name="amount" type="text" inputMode="decimal" placeholder={s.deposits.all} className={`${inputCls} w-20`} />
+                    <input autoComplete="off" name="amount" type="text" inputMode="decimal" placeholder={s.deposits.all} className={`${inputCls} w-20`} />
                     <SubmitButton className="inline-flex h-9 items-center gap-1.5 rounded-md border border-surface-border px-3 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted" pendingLabel={s.deposits.refunding}>
                       {s.deposits.refund}
                     </SubmitButton>
@@ -701,7 +701,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                     <div className="text-[11.5px] text-ink-500">{s.resolutions[res.key].detail}</div>
                   </div>
                   {res.needsNote && (
-                    <input name="note" type="text" placeholder={s.resolutions[res.key].notePlaceholder} disabled={!isManager} className={`${inputCls} w-52 disabled:cursor-not-allowed disabled:bg-surface-muted`} />
+                    <input autoComplete="off" name="note" type="text" placeholder={s.resolutions[res.key].notePlaceholder} disabled={!isManager} className={`${inputCls} w-52 disabled:cursor-not-allowed disabled:bg-surface-muted`} />
                   )}
                   <button
                     type="submit"

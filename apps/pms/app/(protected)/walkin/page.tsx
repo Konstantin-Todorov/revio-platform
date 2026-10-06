@@ -38,11 +38,11 @@ export default async function WalkInPage({ searchParams }: { searchParams: Promi
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-ink-600">{s.walkin.firstName}</span>
-                <input name="firstName" required className={inputCls} placeholder={s.walkin.firstNamePlaceholder} />
+                <input autoComplete="off" name="firstName" required className={inputCls} placeholder={s.walkin.firstNamePlaceholder} />
               </label>
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-ink-600">{s.walkin.lastName}</span>
-                <input name="lastName" required className={inputCls} placeholder={s.walkin.lastNamePlaceholder} />
+                <input autoComplete="off" name="lastName" required className={inputCls} placeholder={s.walkin.lastNamePlaceholder} />
               </label>
             </div>
 
@@ -58,11 +58,11 @@ export default async function WalkInPage({ searchParams }: { searchParams: Promi
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-ink-600">{s.walkin.nights}</span>
-                <input name="nights" type="number" min={1} max={60} defaultValue={1} className={inputCls} />
+                <input autoComplete="off" name="nights" type="number" min={1} max={60} defaultValue={1} className={inputCls} />
               </label>
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-ink-600">{s.walkin.guests}</span>
-                <input name="guests" type="number" min={1} max={10} defaultValue={2} className={inputCls} />
+                <input autoComplete="off" name="guests" type="number" min={1} max={10} defaultValue={2} className={inputCls} />
               </label>
             </div>
 

@@ -438,6 +438,23 @@ says who can move it. Details sit where the link points.
   the tags but left `_ga`/`_fbp` in place; `clearTrackingCookies` (`apps/booking/lib/tags.ts`) now
   removes them on withdrawal and on any later visit that said no. Checked at phone width: nothing
   loads before consent, both tags load after it, the footer button reopens the choice.
+- ~~**Extending two stays into the last free night at once**~~ ✅ **2026-10-06** —
+  `apps/pms/lib/extend-race-db.test.ts` (opt-in, disposable `scale_verify`) runs the real `extendStay`
+  twice in the same instant for two guests and one free room-night: 80 rounds, always one `ok` and one
+  `sold_out`, never four rooms sold of three; a double press of one extension is taken once. Proven to
+  bite: with the sellable base inflated by one, it fails at once with `ok, ok`. One early run failed
+  with its message lost (old assertion) and did not recur in 80 rounds — recorded, not explained.
+- ~~**One invoice taken end to end by hand**~~ ✅ **2026-10-06** (local, test company data): draft →
+  issued (DEMO-000001, the demo series, no legal number used) → `/pay/<token>` with bank details and
+  the EPC QR → marked paid → the pay page says paid. Found: a DRAFT previewed and downloaded as one
+  English summary line while issuing writes the Bulgarian breakdown — `withDraftLines`
+  (`apps/operator/lib/invoice-run.ts`) now renders a draft through the same `billingFor`; and the paid
+  sentence read "2026 г.." Not covered: Stripe card payment (no keys locally) and the receipt email.
+  "Mark paid" records no method or reference — worth a field when the first real client pays by transfer.
+- ~~**RevioDirect performance pass**~~ ✅ **2026-10-06** (`react-best-practices`). The bundle is lean —
+  102 kB shared, 138–151 kB per page, nothing heavy to cut. The waits were in the database: the booking
+  step read extras, the hold and the words one after another, and the confirmation page made six
+  independent reads in a row after the reservation; each is now one parallel step.
 
 **Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
 1. RevioPMS, by who reads it — **✅ every screen RevioPMS owns** (2026-09-24): front desk, check-in, walk-in,
