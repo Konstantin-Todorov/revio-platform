@@ -332,8 +332,11 @@ says who can move it. Details sit where the link points.
    audit → tax invoice. **0 disagreements.** Its first run found **68**: the tourist tax was charged
    once per guest per STAY, not per night — 2 guests × 3 nights on 1.50 billed 3.00 while the hotel
    owed the council 9.00. New fee basis `per_person_night` (core `feeAmount`), the default in RevioCRS →
-   Taxes and what first-run setup writes. ⚠️ **DesManagement's City Tax (1.20) is still `per_person`** —
-   not changed (real client); the founder decides. Opt-in DB test: see its header. Still open: one
+   Taxes and what first-run setup writes. It counts **everyone**, children and infants too: ЗМДТ
+   чл. 61р–61с tax every нощувка, name no exemption, and the council assesses from ЕСТИ, which registers
+   every guest (read from the statute 2026-10-06). Only the RATE differs — by settlement and by the
+   property's category — and that is the hotel's own figure, per property. Every property's city tax
+   moved to `per_person_night` on 2026-10-06, DesManagement's at the founder's word. Opt-in DB test: see its header. Still open: one
    invoice taken by hand by a person.
 6. **RevioDirect takes real payments** (research 2026-09-29: Mews, Cloudbeds, SiteMinder/Little
    Hotelier, Apaleo, Lighthouse, SynXis, HotelRunner). Today the guarantee confirms Stripe's own test

@@ -59,6 +59,11 @@ export function partyOf(adults: number, childAges: readonly number[] = [], bands
   };
 }
 
+/** Everyone in the room — adults, children and infants. What the guest register lists, and what the tourist tax counts. */
+export function personsOf(party: Pick<Party, "adults" | "childAges">): number {
+  return party.adults + party.childAges.length;
+}
+
 /** The children's extra for ONE night on a plan: child fee × children + infant fee × infants. */
 export function childrenNightMinor(party: Party, fees: { childrenFeeMinor: number; infantFeeMinor: number }): number {
   return party.children * Math.max(0, fees.childrenFeeMinor) + party.infants * Math.max(0, fees.infantFeeMinor);

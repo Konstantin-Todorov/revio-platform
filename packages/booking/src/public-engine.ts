@@ -19,7 +19,7 @@ import {
   resolveChosenExtras, resolveRestriction, type SellableExtra,
   ROOM_OCCUPYING_STATUSES, SOLD_STATUSES, type RestrictionRuleHit, type RestrictionType,
   resolveRate, toResolvablePlan, type PriceLookup, stayTerms, withoutCard, type StayTerms, type StayTermsPolicy,
-  partyOf, childrenNightMinor, MAX_CHILDREN,
+  partyOf, personsOf, childrenNightMinor, MAX_CHILDREN,
   normalisePromo, promoRefusal, promoPercentFor, discountedNight, directDiscountPercent, type PromoRule, type PromoRefusal,
 } from "@revio/core";
 import { sellableTerms, termsPolicyOf } from "./stay-terms.js";
@@ -434,7 +434,7 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
       // All-in from here on: the same fee engine the folio bills with, so this total is the
       // total — on this screen, at checkout, and on the bill at the hotel.
       const charged = computeStayCharges({
-        stay: { accommodationMinor: total, nights: nights.length, rooms: 1, guests: party.pricedAdults },
+        stay: { accommodationMinor: total, nights: nights.length, rooms: 1, guests: party.pricedAdults, persons: personsOf(party) },
         fees,
         cityTaxIncluded,
       });
@@ -443,7 +443,7 @@ export async function publicAvailability(db: Db, property: PropertyRow, q: Publi
       const totalAt = (opts: { raw?: boolean; stage?: "direct" }) => {
         let acc = 0;
         for (const k of nights) acc += nightPrice(rt, rp, k, opts) ?? 0;
-        return computeStayCharges({ stay: { accommodationMinor: acc, nights: nights.length, rooms: 1, guests: party.pricedAdults }, fees, cityTaxIncluded }).totalMinor;
+        return computeStayCharges({ stay: { accommodationMinor: acc, nights: nights.length, rooms: 1, guests: party.pricedAdults, persons: personsOf(party) }, fees, cityTaxIncluded }).totalMinor;
       };
       const pct = promoPct(rp);
       const promoInfo: PublicPlanQuote["promo"] = pct > 0
@@ -538,7 +538,7 @@ export async function publicPriceCalendar(
         const price = nightPrice(rt, rp, k);
         if (price == null) continue;
         const allIn = computeStayCharges({
-          stay: { accommodationMinor: price, nights: 1, rooms: 1, guests: party.pricedAdults },
+          stay: { accommodationMinor: price, nights: 1, rooms: 1, guests: party.pricedAdults, persons: personsOf(party) },
           fees,
           cityTaxIncluded,
         }).totalMinor;
@@ -643,7 +643,7 @@ export async function publicQuoteStay(
   }
   const chosen = resolveChosenExtras(await publicSellableExtras(db, property.id), p.extraIds ?? []);
   const charged = computeStayCharges({
-    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults },
+    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults, persons: personsOf(party) },
     fees,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
     extrasMinor: extrasTotalMinor(chosen, nights.length),
@@ -698,7 +698,7 @@ export async function publicChangeQuote(
     quoted.push({ date: k, occupancy: party.pricedAdults, rateMinor: price });
   }
   const charged = computeStayCharges({
-    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults },
+    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults, persons: personsOf(party) },
     fees,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
     extrasMinor: extrasTotalMinor(p.extras, nights.length),
@@ -839,7 +839,7 @@ export async function publicCreateReservation(
   const extrasMinor = extrasTotalMinor(chosenExtras, nights.length);
 
   const charged = computeStayCharges({
-    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults },
+    stay: { accommodationMinor, nights: nights.length, rooms: 1, guests: party.pricedAdults, persons: personsOf(party) },
     fees,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
     extrasMinor,

@@ -105,7 +105,7 @@ export default async function ConfirmationPage({
   });
   const extraBasis = (b: string) => (b === "per_stay" ? "per_stay" : "per_night") as "per_stay" | "per_night";
   const charged = computeStayCharges({
-    stay: { accommodationMinor: line.priceMinor ?? 0, nights, rooms: 1, guests: line.guestsCount ?? 2 },
+    stay: { accommodationMinor: line.priceMinor ?? 0, nights, rooms: 1, guests: line.guestsCount ?? 2, persons: (line.guestsCount ?? 2) + (line.childrenCount ?? 0) + (line.infantsCount ?? 0) },
     fees: fees as never,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
     extrasMinor: extrasTotalMinor(extras.map((e) => ({ priceMinor: e.priceMinor, basis: extraBasis(e.basis) })), nights),

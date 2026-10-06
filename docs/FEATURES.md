@@ -120,7 +120,7 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
   the results page to the tax invoice — every occupancy, children, extras per night and per stay, every
   rate plan, tourist tax added or included — with not one cent of difference
   (*`apps/pms/lib/money-reconcile-db.test.ts`*, 2026-10-06). Tourist tax is charged per person **per
-  night**.
+  night**, children included — the same nights the guest register and ЕСТИ count.
 - **A booking lands everywhere at once**, with no integration step: the reservation, the guest
   profile and the front-desk arrival are one record, not three synchronised copies. Demonstrated end
   to end on production.

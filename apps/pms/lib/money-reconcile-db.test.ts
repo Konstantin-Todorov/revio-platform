@@ -157,11 +157,12 @@ describe.skipIf(!enabled)("money reconciles end to end", () => {
         say("folio", charges.reduce((s, l) => s + l.amountMinor, 0));
         // 6. The tax invoice the hotel issues from that folio.
         say("invoice gross", invoice.computeTaxSummary(lines, { standard: 20, reduced: 9 }).grossMinor);
-        // 7. The tourist tax specifically — every night of every adult (ЗМДТ чл. 61р), or none when it is in the rate.
+        // 7. The tourist tax specifically — every night of every guest, children too, because the council
+        //    assesses it from ЕСТИ and ЕСТИ registers everyone (ЗМДТ чл. 61р–61с); none when it is in the rate.
         const cityTax = charges.filter((l) => /city\s*tax/i.test(l.description)).reduce((s, l) => s + l.amountMinor, 0);
-        const party = (await db.reservationLine.findFirstOrThrow({ where: { id: line.id }, select: { guestsCount: true } })).guestsCount ?? c.adults;
+        const party = c.adults + c.childAges.length;
         const wantCityTax = c.cityTax === "included" ? 0 : cityTaxRate * party * c.nights;
-        if (cityTax !== wantCityTax) failures.push(`${label}: tourist tax ${cityTax} ≠ ${party} guests × ${c.nights} nights × ${cityTaxRate} = ${wantCityTax}`);
+        if (cityTax !== wantCityTax) failures.push(`${label}: tourist tax ${cityTax} ≠ ${party} people × ${c.nights} nights × ${cityTaxRate} = ${wantCityTax}`);
 
         // Leave the house as it was: this stay is over, so later audits must not accrue it.
         await db.roomAssignment.update({ where: { id: assignment.id }, data: { checkedOutAt: new Date() } });

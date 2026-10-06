@@ -137,7 +137,7 @@ async function seedPrimaryFolio(client: TenantTx, tenantId: string, propertyId: 
 
   const base = { tenantId, propertyId, folioId };
   let accomTotal = 0;
-  let nights = 1, rooms = 0, guests = 0;
+  let nights = 1, rooms = 0, guests = 0, persons = 0;
   const cis = reservation.lines.map((l) => l.checkIn.getTime());
   const cos = reservation.lines.map((l) => l.checkOut.getTime());
   if (cis.length) nights = Math.max(1, Math.round((Math.max(...cos) - Math.min(...cis)) / 86_400_000));
@@ -172,6 +172,7 @@ async function seedPrimaryFolio(client: TenantTx, tenantId: string, propertyId: 
     accomTotal += price;
     rooms += line.quantity;
     guests += line.guestsCount ?? line.quantity;
+    persons += (line.guestsCount ?? line.quantity) + (line.childrenCount ?? 0) + (line.infantsCount ?? 0);
 
     /*
      * The occupancy the room was priced at, on the folio line (K6).
@@ -199,7 +200,7 @@ async function seedPrimaryFolio(client: TenantTx, tenantId: string, propertyId: 
   // else on arrival — the one thing the booking flow promises cannot happen.
   const fees = await db.taxFee.findMany({ where: { propertyId, active: true, inclusion: "excluded" } });
   const charges = computeStayCharges({
-    stay: { accommodationMinor: accomTotal, nights, rooms, guests },
+    stay: { accommodationMinor: accomTotal, nights, rooms, guests, persons },
     fees,
     cityTaxIncluded,
   });

@@ -28,7 +28,14 @@ export interface StayShape {
   accommodationMinor: number;
   nights: number;
   rooms: number;
+  /** Guests the RATE is priced for — what `per_person` fees multiply. */
   guests: number;
+  /**
+   * Everyone who sleeps there, children and infants included — what `per_person_night` multiplies.
+   * The tourist tax is assessed from ЕСТИ, which registers every guest, so a child's night is a
+   * night the hotel owes for (ЗМДТ чл. 61р–61с name no exemption). Defaults to `guests`.
+   */
+  persons?: number;
 }
 
 export interface ChargeLine {
@@ -68,12 +75,13 @@ export function feeAmount(fee: StayFee, stay: StayShape): number {
    * every guest. It exists because `per_person` was the only person-based option, the first-run
    * screen asked for the tax "per person per night", and the guest was then charged it once per
    * stay: two guests for three nights paid 3.00 on a 1.50 rate and the hotel owed the council 9.00.
+   * It counts `persons`, not `guests`: the council counts the children too.
    */
   const multiplier =
     fee.basis === "per_night" ? stay.nights
     : fee.basis === "per_room" ? stay.rooms
     : fee.basis === "per_person" ? stay.guests
-    : fee.basis === "per_person_night" ? stay.guests * stay.nights
+    : fee.basis === "per_person_night" ? (stay.persons ?? stay.guests) * stay.nights
     : 1; // per_stay
   return unit * multiplier;
 }

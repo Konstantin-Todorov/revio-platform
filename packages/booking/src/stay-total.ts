@@ -17,7 +17,7 @@ export async function storedStayTotal(db: Db, reservationId: string): Promise<{ 
     where: { id: reservationId },
     select: {
       propertyId: true, currency: true,
-      lines: { select: { priceMinor: true, checkIn: true, checkOut: true, guestsCount: true, quantity: true } },
+      lines: { select: { priceMinor: true, checkIn: true, checkOut: true, guestsCount: true, childrenCount: true, infantsCount: true, quantity: true } },
     },
   });
   if (!r || r.lines.length === 0) return null;
@@ -34,6 +34,7 @@ export async function storedStayTotal(db: Db, reservationId: string): Promise<{ 
       nights,
       rooms: r.lines.reduce((s, l) => s + (l.quantity ?? 1), 0),
       guests: r.lines.reduce((s, l) => s + (l.guestsCount ?? 2), 0),
+      persons: r.lines.reduce((s, l) => s + (l.guestsCount ?? 2) + (l.childrenCount ?? 0) + (l.infantsCount ?? 0), 0),
     },
     fees: fees as never,
     cityTaxIncluded: defaults?.cityTaxMode === "included",
