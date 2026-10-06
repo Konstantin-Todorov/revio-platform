@@ -1992,10 +1992,6 @@ model PropertyDefaults {
   // per charge category (BG defaults: 20% standard, 9% reduced for accommodation) + issuer legal
   // identity for the tax document. Edited in Configuration (E7).
   // The tourist tax RATE is not here: it is the tourist-tax TaxFee row (`@revio/db` tourist-tax.ts).
-  /// DEPRECATED, `@ignore`d so no client reads it. Two steps on purpose: dropping the column in the
-  /// same deploy would break the old instances still running during the rollout, whose client
-  /// selects every column. Drop it with a migration in a LATER deploy.
-  touristTaxRateMinor      Int?    @ignore
   /// `Л` in the чл. 61с ал. 5 formula — the DECLARED bed base, which is a figure the hotel agreed
   /// with its municipality and not one we can derive. Seeded from room capacity as a suggestion.
   touristTaxBeds           Int?
