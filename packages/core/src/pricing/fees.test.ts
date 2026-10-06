@@ -112,13 +112,13 @@ describe("computeStayCharges", () => {
 
 describe("isCityTax", () => {
   it("matches the wordings a hotel actually types", () => {
-    for (const n of ["City Tax", "city tax", "CITY TAX", "Citytax", "Sofia City Tax"]) {
+    for (const n of ["City Tax", "city tax", "CITY TAX", "Citytax", "Sofia City Tax", "Tourist tax", "Туристически данък", "туристически данък", "Курортна такса"]) {
       expect(isCityTax(n), n).toBe(true);
     }
   });
 
   it("does not match unrelated fees", () => {
-    for (const n of ["VAT", "Cleaning", "Resort Fee", "Taxi"]) {
+    for (const n of ["VAT", "Cleaning", "Resort Fee", "Taxi", "ДДС", "Такса почистване"]) {
       expect(isCityTax(n), n).toBe(false);
     }
   });

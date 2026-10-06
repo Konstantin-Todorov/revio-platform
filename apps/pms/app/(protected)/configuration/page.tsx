@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 /** Configuration → Taxes: VAT, the tourist tax and how the city tax is shown to a guest. */
 export default async function ConfigTaxesPage() {
-  const { defaults: d, suggestedBeds } = await getConfiguration();
+  const { defaults: d, suggestedBeds, touristTaxMinor } = await getConfiguration();
   const { t: tr } = await i18n();
   const t = tr(configuration);
 
@@ -29,7 +29,7 @@ export default async function ConfigTaxesPage() {
               number we invented would eventually be filed as though we knew it. */}
           <input
             name="touristTaxRate" type="number" step="0.01" min={0} max={100}
-            defaultValue={d?.touristTaxRateMinor != null ? (d.touristTaxRateMinor / 100).toFixed(2) : ""}
+            defaultValue={touristTaxMinor != null ? (touristTaxMinor / 100).toFixed(2) : ""}
             placeholder={t.taxes.touristTaxPlaceholder} className={`${inputCls} w-full`}
           />
           <p className="mt-1 text-[10.5px] text-ink-400">{t.taxes.touristTaxHint}</p>

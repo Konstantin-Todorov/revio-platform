@@ -1,6 +1,7 @@
 import { i18n } from "@/lib/i18n/server";
 import { settings as settingsDict } from "@/lib/i18n/settings";
 import { prisma } from "@/lib/db";
+import { pickTouristTaxFee } from "@revio/db";
 import { getProperty } from "@/lib/data";
 import { deleteTaxFee, saveTaxFee } from "@/lib/actions-settings";
 import { Card, CardHeader, StatusPill } from "@/components/ui/primitives";
@@ -21,6 +22,8 @@ export default async function SettingsTaxesPage() {
     where: { propertyId: property.id },
     orderBy: { name: "asc" },
   });
+  // Which row is THE tourist tax — the same choice every product makes (`@revio/db` tourist-tax.ts).
+  const tourist = pickTouristTaxFee(taxes.filter((x) => x.active && x.type === "fixed" && ["per_person_night", "per_person"].includes(x.basis)));
 
   return (
     <>
@@ -38,7 +41,7 @@ export default async function SettingsTaxesPage() {
             <tbody>
               {taxes.map((tax) => (
                 <tr key={tax.id} className="group border-b border-surface-border/60 last:border-0">
-                  <td className="px-4 py-2.5 font-semibold text-ink-900">{tax.name}</td>
+                  <td className="px-4 py-2.5 font-semibold text-ink-900">{tax.name}{tourist?.id === tax.id && <span className="ml-1.5 rounded bg-surface-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-500">{t.touristTag}</span>}</td>
                   <td className="tnum px-4 py-2.5 text-ink-700">{tax.type === "percent" ? `${tax.pct}%` : money(tax.amountMinor ?? 0, property.baseCurrency)}</td>
                   <td className="px-4 py-2.5 text-ink-600">{t.basis[tax.basis as keyof typeof t.basis] ?? tax.basis.replace("_", " ")}</td>
                   <td className="px-4 py-2.5"><StatusPill tone={tax.inclusion === "included" ? "info" : "neutral"}>{t.inclusion[tax.inclusion as keyof typeof t.inclusion] ?? tax.inclusion}</StatusPill></td>
@@ -54,6 +57,7 @@ export default async function SettingsTaxesPage() {
           </table>
           </div>
         )}
+        <p className="border-t border-surface-border/60 px-4 py-2.5 text-[11.5px] text-ink-500">{t.touristNote}</p>
         <form action={saveTaxFee} className="grid grid-cols-2 items-end gap-3 border-t border-surface-border/60 p-4 lg:grid-cols-7">
           <div><label className={labelCls}>{t.name}</label><input name="name" required placeholder={t.namePlaceholder} className={inputCls} /></div>
           <div>

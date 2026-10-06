@@ -1,3 +1,4 @@
+import { writeTouristTax } from "./tourist-tax.js";
 import { todayInTimeZone } from "@revio/core";
 import { withTenantTransaction } from "./rls.js";
 
@@ -234,26 +235,8 @@ export async function writeWelcomeTaxes(
       create: { tenantId: scope.tenantId, propertyId: scope.propertyId, vatStandardPct: standard, vatReducedPct: reduced, ...invoice },
       update: { vatStandardPct: standard, vatReducedPct: reduced, ...invoice },
     });
-    // The screen asks for the tax per person PER NIGHT. A row written before 2026-10-06 says
-    // `per_person` (charged once per stay — the bug); saving this screen corrects it.
-    const existing = await tx.taxFee.findFirst({
-      where: { propertyId: scope.propertyId, basis: { in: ["per_person_night", "per_person"] }, type: "fixed", active: true },
-      orderBy: { basis: "desc" },
-    });
-    if (cityTaxMinor != null && cityTaxMinor > 0) {
-      if (existing) {
-        await tx.taxFee.update({ where: { id: existing.id }, data: { amountMinor: cityTaxMinor, basis: "per_person_night" } });
-      } else {
-        await tx.taxFee.create({
-          data: {
-            tenantId: scope.tenantId, propertyId: scope.propertyId, name: "City tax",
-            type: "fixed", amountMinor: cityTaxMinor, basis: "per_person_night", inclusion: "excluded",
-          },
-        });
-      }
-    } else if (existing) {
-      await tx.taxFee.update({ where: { id: existing.id }, data: { active: false } });
-    }
+    // The one tourist-tax rate every product reads — see `tourist-tax.ts`.
+    await writeTouristTax(tx, scope, cityTaxMinor);
   });
   return {};
 }

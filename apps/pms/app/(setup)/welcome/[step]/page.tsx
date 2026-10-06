@@ -1,3 +1,4 @@
+import { findTouristTaxFee } from "@revio/db";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { inheritedSteps, previousStep, skippedForSize, welcomeFlow } from "@revio/core";
@@ -44,9 +45,8 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
       select: { id: true, label: true, floor: true, roomTypeId: true, roomType: { select: { name: true } } },
     }),
     prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
-    prisma.taxFee.findFirst({
-      where: { propertyId: property.id, basis: { in: ["per_person_night", "per_person"] }, type: "fixed", active: true },
-    }),
+    // The one tourist-tax row every product reads — `@revio/db` tourist-tax.ts.
+    findTouristTaxFee(prisma, property.id),
   ]);
 
   // A URL naming a step this property never sees (or a typo) goes to the start rather than 404ing.

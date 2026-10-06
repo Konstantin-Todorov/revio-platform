@@ -1,5 +1,5 @@
 import { estiChange, type EstiChange } from "@revio/core";
-import { claimRegisterNo, withTenantTransaction } from "@revio/db";
+import { claimRegisterNo, readTouristTaxMinor, withTenantTransaction } from "@revio/db";
 import {
   averageNightlyPrice, registerNights, splitName, estimateBeds, monthlyTouristTax,
   annualTouristTaxFloor, monthlyTaxDueDate, annualDeclarationDueDate, annualTopUpDueDate, nightsInMonth,
@@ -200,12 +200,13 @@ export async function getTouristTax(
   const [defaults, roomTypes] = await Promise.all([
     prisma.propertyDefaults.findUnique({
       where: { propertyId },
-      select: { touristTaxRateMinor: true, touristTaxBeds: true },
+      select: { touristTaxBeds: true },
     }),
     prisma.roomType.findMany({ where: { propertyId, active: true }, select: { maxGuests: true, totalRooms: true } }),
   ]);
 
-  const rateMinor = defaults?.touristTaxRateMinor ?? null;
+  // The rate guests are charged by — one row, set in RevioPMS Configuration or RevioCRS Settings.
+  const rateMinor = await readTouristTaxMinor(prisma, propertyId);
   const suggestedBeds = estimateBeds(roomTypes);
   const beds = defaults?.touristTaxBeds ?? null;
 

@@ -54,9 +54,13 @@ export interface StayCharges {
   totalMinor: number;
 }
 
-/** City tax is identified by name — the same rule the PMS folio uses to suppress it. */
+/**
+ * City tax is identified by name — the same rule the PMS folio uses to suppress it when it is in the
+ * price. Bulgarian and English names both count: a hotel that typed "Туристически данък" in Settings
+ * → Taxes used to be charged it on top even with "included in the rate" selected.
+ */
 export function isCityTax(name: string): boolean {
-  return /city\s*tax/i.test(name);
+  return /city\s*tax|tourist\s*tax|туристическ\S*\s+данък|курортн\S*\s+такс/i.test(name);
 }
 
 /**

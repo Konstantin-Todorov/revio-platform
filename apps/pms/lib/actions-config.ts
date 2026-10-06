@@ -6,6 +6,7 @@ import { getSession } from "./session";
 import { logAudit, str, int } from "./mutation-helpers";
 import { MANAGER_ROLES } from "./roles";
 import { FISCAL_TAX_GROUPS } from "@revio/core";
+import { withTenantTransaction, writeTouristTax } from "@revio/db";
 
 async function requireManager() {
   const s = await getSession();
@@ -36,9 +37,6 @@ export async function saveConfiguration(fd: FormData): Promise<void> {
     taxes: {
       vatStandardPct: Math.max(0, Math.min(100, int(fd, "vatStandardPct", 20))),
       vatReducedPct: Math.max(0, Math.min(100, int(fd, "vatReducedPct", 9))),
-      // Null when cleared, rather than 0. A rate of zero is a rate somebody set; an empty field is a
-      // rate nobody has stated yet, and the register screen has to be able to say which.
-      touristTaxRateMinor: money2minor(fd, "touristTaxRate"),
       touristTaxBeds: positiveOrNull(fd, "touristTaxBeds"),
       cityTaxMode: str(fd, "cityTaxMode") === "included" ? "included" : "payable_on_spot",
     },
@@ -71,10 +69,15 @@ export async function saveConfiguration(fd: FormData): Promise<void> {
   };
   const data = bySection[section];
   if (!data) return;
-  await prisma.propertyDefaults.upsert({
-    where: { propertyId },
-    create: { tenantId: s.tenantId, propertyId, ...data },
-    update: data,
+  await withTenantTransaction(s.tenantId, async (tx) => {
+    await tx.propertyDefaults.upsert({
+      where: { propertyId },
+      create: { tenantId: s.tenantId, propertyId, ...data },
+      update: data,
+    });
+    // The tourist tax rate is not a PMS column: it is the one row the guest is charged by, which
+    // RevioCRS edits too (`@revio/db` tourist-tax.ts). Empty clears it — a rate nobody stated.
+    if (section === "taxes") await writeTouristTax(tx, { tenantId: s.tenantId, propertyId }, money2minor(fd, "touristTaxRate"));
   });
   await logAudit(propertyId, s.tenantId, { entity: "configuration", field: section, newValue: JSON.stringify(data), userId: s.userId });
   refresh();

@@ -1,4 +1,5 @@
 import "server-only";
+import { readTouristTaxMinor } from "@revio/db";
 import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { formatDocumentNumber, seriesKeyFor, seriesStartFor, estimateBeds, type InvoiceNumberScheme } from "@revio/core";
@@ -9,11 +10,13 @@ import { formatDocumentNumber, seriesKeyFor, seriesStartFor, estimateBeds, type 
 export async function getConfiguration() {
   const { session, property } = await activeProperty();
   const canManage = ["owner", "admin", "manager"].includes(session.role);
-  const [defaults, depositTypes, series, posItems] = await Promise.all([
+  const [defaults, depositTypes, series, posItems, touristTaxMinor] = await Promise.all([
     prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
     prisma.depositType.findMany({ where: { propertyId: property.id }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.invoiceSeries.findMany({ where: { propertyId: property.id } }),
     prisma.posItem.findMany({ where: { propertyId: property.id }, select: { outlet: true, active: true } }),
+    // The ONE rate — the same row RevioCRS charges guests by (`@revio/db` tourist-tax.ts).
+    readTouristTaxMinor(prisma, property.id),
   ]);
 
   // Outlet catalog counts.
@@ -45,5 +48,5 @@ export async function getConfiguration() {
   });
   const suggestedBeds = estimateBeds(roomTypes);
 
-  return { property, canManage, defaults, depositTypes, nextByDoc, outletCounts, suggestedBeds };
+  return { property, canManage, defaults, depositTypes, nextByDoc, outletCounts, suggestedBeds, touristTaxMinor };
 }

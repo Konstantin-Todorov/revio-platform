@@ -86,6 +86,8 @@ export interface SettingsStrings {
     active: string;
     off: string;
     deleteNote: string;
+    touristTag: string;
+    touristNote: string;
     name: string;
     namePlaceholder: string;
     type: string;
@@ -271,6 +273,8 @@ export const settings: Translations<SettingsStrings> = {
       active: "active",
       off: "off",
       deleteNote: "Existing reservations keep their recorded totals.",
+      touristTag: "tourist tax",
+      touristNote: "The tourist tax is one rate per property, per guest per night — children included. Guests are charged it here, and if you also run RevioPMS its council register uses the same rate.",
       name: "Name",
       namePlaceholder: "City tax",
       type: "Type",
@@ -456,6 +460,8 @@ export const settings: Translations<SettingsStrings> = {
       active: "активен",
       off: "изкл.",
       deleteNote: "Съществуващите резервации запазват записаните си суми.",
+      touristTag: "туристически данък",
+      touristNote: "Туристическият данък е една ставка за обекта, на човек на нощувка — и за децата. По нея се таксуват гостите, а ако ползвате и RevioPMS, по същата се смята и справката за общината.",
       name: "Име",
       namePlaceholder: "Туристически данък",
       type: "Вид",

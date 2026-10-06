@@ -336,7 +336,12 @@ says who can move it. Details sit where the link points.
    чл. 61р–61с tax every нощувка, name no exemption, and the council assesses from ЕСТИ, which registers
    every guest (read from the statute 2026-10-06). Only the RATE differs — by settlement and by the
    property's category — and that is the hotel's own figure, per property. Every property's city tax
-   moved to `per_person_night` on 2026-10-06, DesManagement's at the founder's word. Opt-in DB test: see its header. Still open: one
+   moved to `per_person_night` on 2026-10-06, DesManagement's at the founder's word.
+   **One rate, one row** (2026-10-06): RevioPMS kept its own copy for the council register
+   (`PropertyDefaults.touristTaxRateMinor`, now deprecated and unread); both products now read and
+   write the tourist-tax `TaxFee` row through `@revio/db` tourist-tax.ts — RevioPMS Configuration →
+   Taxes, RevioCRS Settings → Taxes and first-run setup all edit the same number. RevioLink alone needs
+   none: it bills no guest and keeps no register. Opt-in DB test: see its header. Still open: one
    invoice taken by hand by a person.
 6. **RevioDirect takes real payments** (research 2026-09-29: Mews, Cloudbeds, SiteMinder/Little
    Hotelier, Apaleo, Lighthouse, SynXis, HotelRunner). Today the guarantee confirms Stripe's own test

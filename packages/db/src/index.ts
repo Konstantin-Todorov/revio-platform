@@ -53,6 +53,7 @@ export {
   type WelcomeWrite,
   type WelcomeWriteCode,
 } from "./welcome-writes.js";
+export { findTouristTaxFee, pickTouristTaxFee, readTouristTaxMinor, writeTouristTax } from "./tourist-tax.js";
 export { recordUsage } from "./usage.js";
 export {
   recordAuthEvent,

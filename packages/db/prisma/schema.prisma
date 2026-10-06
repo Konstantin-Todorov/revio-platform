@@ -1991,6 +1991,8 @@ model PropertyDefaults {
   /// Per property because the council sets it per settlement AND per category, so two hotels of one
   /// owner in two towns owe different amounts on the same night. Null until the hotel states theirs;
   /// a default would be a number somebody files.
+  /// DEPRECATED 2026-10-06 — neither read nor written. The rate is the tourist-tax TaxFee row
+  /// (`@revio/db` tourist-tax.ts), one for every product. Drop in a later migration.
   touristTaxRateMinor      Int?
   /// `Л` in the чл. 61с ал. 5 formula — the DECLARED bed base, which is a figure the hotel agreed
   /// with its municipality and not one we can derive. Seeded from room capacity as a suggestion.
